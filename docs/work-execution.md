@@ -310,7 +310,13 @@ first time shows `attempt_count: 0` with one entry in `attempts`. An attempt tha
 a restart, and any attempt `cancelled` by a caller, never count.
 
 There is no separate inbox entity: what needs a human or a manager role is
-`jason workitem list --status failed --status expired`.
+`jason workitem list --status failed --status expired`. A listing takes an order and a window on the time it orders
+by: `--order due` lists soonest first with undated work last (`jason workitem list --status created --order due` is
+what is still to run), `--order finished` lists newest first and leaves open work out
+(`jason workitem list --order finished --since 2026-10-16T00:00:00Z` is what finished since that moment), and
+`--since` and `--until` (`now` is the command line's own clock) keep the items whose ordered time falls inside, an item
+without that time left out. `jason workitem count` takes the same filters and answers how many items the listing would
+return, without paging through them.
 
 ## Launching an executor
 

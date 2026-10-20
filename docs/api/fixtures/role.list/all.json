@@ -1,0 +1,110 @@
+{
+  "operation": "role.list",
+  "case": "all",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "rol_1",
+        "name": "manager",
+        "builtin": true,
+        "description": "Runs the campaign: reviews progress, repairs failed work, replans.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_2",
+        "name": "planner",
+        "builtin": true,
+        "description": "Plans the next short horizon of work.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_3",
+        "name": "researcher",
+        "builtin": true,
+        "description": "Finds and verifies facts about accounts and people.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_4",
+        "name": "copywriter",
+        "builtin": true,
+        "description": "Writes campaign-level messaging.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_5",
+        "name": "personalizer",
+        "builtin": true,
+        "description": "Adapts messaging to one contact.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_6",
+        "name": "critic",
+        "builtin": true,
+        "description": "Reviews drafts against the brief and the guardrails.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_7",
+        "name": "responder",
+        "builtin": true,
+        "description": "Handles replies.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_8",
+        "name": "analyst",
+        "builtin": true,
+        "description": "Reads outcomes and tells what is working.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "rol_9",
+        "name": "deliverability-specialist",
+        "builtin": true,
+        "description": "Warm-up and deliverability diagnosis.",
+        "entry_command": [],
+        "profile_defaults": {},
+        "execution_profile": null,
+        "created_at": "2026-09-14T00:00:00.000Z",
+        "updated_at": "2026-09-14T00:00:00.000Z"
+      }
+    ],
+    "next_cursor": null
+  }
+}

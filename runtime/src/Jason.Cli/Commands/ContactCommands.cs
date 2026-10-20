@@ -79,12 +79,14 @@ public static class ContactCommands
         var command = new Command("list", "List contacts, optionally only those reachable on a channel.");
         var channel = new Option<string?>("--channel") { Description = "Only contacts having this channel, for example email." };
         var value = new Option<string?>("--value") { Description = "Only contacts whose channel value is this one; needs --channel." };
+        var query = new Option<string?>("--query") { Description = "Only people whose name, company, title or any channel value contains this text; case and accents do not matter, a phone number matches however it is spaced, and a pasted LinkedIn link finds its profile." };
         var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived contacts, which are hidden by default." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
         command.Options.Add(channel);
         command.Options.Add(value);
+        command.Options.Add(query);
         command.Options.Add(includeArchived);
         command.Options.Add(limit);
         command.Options.Add(cursor);
@@ -96,6 +98,7 @@ public static class ContactCommands
             var body = RequestBody.Empty()
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("value", parseResult.GetValue(value))
+                .Set("query", parseResult.GetValue(query))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 

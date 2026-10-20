@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Reports;
 
@@ -56,7 +57,9 @@ public static class WorkItemMapper
             // Always sent: every item has an answer to where its profile would come from, and the answer that
             // blocks a claim is exactly the one a caller must be able to read without asking anywhere else.
             new LineageDto(item.LineageState, item.LineageProfileName, item.LineageProfileRevision, item.LineageFromAttemptId),
-            item.IdempotencyKey);
+            item.IdempotencyKey,
+            item.Campaign.Name,
+            ContactNames.Display(item.Contact));
     }
 
     public static WorkItemSummaryDto ToSummary(WorkItem item, DateTime now)
@@ -82,7 +85,10 @@ public static class WorkItemMapper
             item.LastError,
             Utc(item.CreatedAt),
             Utc(item.UpdatedAt),
-            Utc(item.FinishedAt));
+            Utc(item.FinishedAt),
+            item.Campaign.Name,
+            ContactNames.Display(item.Contact),
+            item.Status == WorkItemStatus.Processing ? Utc(WorkItemQueries.LiveAttempt(item)?.StartedAt) : null);
     }
 
     public static AttemptDto ToDto(Attempt attempt, bool includeSnapshot)

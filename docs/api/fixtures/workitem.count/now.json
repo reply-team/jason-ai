@@ -1,0 +1,16 @@
+{
+  "operation": "workitem.count",
+  "case": "now",
+  "request": {
+    "status": [
+      "processing",
+      "scheduled",
+      "awaiting_approval"
+    ],
+    "order": "created"
+  },
+  "status": 200,
+  "response": {
+    "total": 3
+  }
+}

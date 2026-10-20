@@ -52,8 +52,11 @@ public sealed record ContactCreateRequest(
 
 public sealed record ContactGetRequest(string? ContactId);
 
-/// <summary><c>value</c> without <c>channel</c> is a usage error; <c>channel</c> alone lists contacts reachable on that channel.</summary>
-public sealed record ContactListRequest(string? Channel, string? Value, bool? IncludeArchived, int? Limit, string? Cursor);
+/// <summary>
+/// <c>value</c> without <c>channel</c> is a usage error; <c>channel</c> alone lists contacts reachable on that channel.
+/// <c>query</c> finds people by any part of a name, company, title or channel value, and narrows together with them.
+/// </summary>
+public sealed record ContactListRequest(string? Channel, string? Value, bool? IncludeArchived, int? Limit, string? Cursor, string? Query = null);
 
 /// <summary>
 /// A partial patch: absent fields stay as they are, an explicit null clears one. <c>channels</c> and <c>custom</c>

@@ -86,6 +86,7 @@ public class SchemaTests
         Assert.Contains("ix_work_items_campaign_id_status", indexes);
         Assert.Contains("ix_work_items_status_not_before", indexes);
         Assert.Contains("ix_work_items_status_due_at", indexes);
+        Assert.Contains("ix_work_items_status_finished_at", indexes);
         Assert.Contains("ix_work_items_contact_id", indexes);
         Assert.Contains("ix_attempts_work_item_id_number", indexes);
         Assert.Contains("ix_attempts_status", indexes);

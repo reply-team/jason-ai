@@ -63,9 +63,15 @@ has been going.
 ```
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status scheduled --status processing --status awaiting_approval
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --order due
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --order finished
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+The three listings are what is in flight right now (claimed, running, or waiting for a person's approval — work you
+must not create a second time), what is still to run, soonest first and undated last, and what already finished,
+newest first.
 
 **There is no plan object in this build.** Nothing stores a plan, a horizon or a schedule: a plan is the work
 items you create and the note you leave, and nothing else remembers it. What you can say about *when* is said on

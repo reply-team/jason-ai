@@ -46,6 +46,24 @@ internal static class VerbOptions
         Description = "Continue a listing: the next_cursor of the previous page, verbatim.",
     };
 
+    /// <summary>A moment on the command line: ISO-8601 UTC as the runtime reads it, or <c>now</c>.</summary>
+    public static Option<string?> Moment(string name, string description) => new(name)
+    {
+        Description = description,
+    };
+
+    /// <summary>
+    /// <c>now</c> is this program's clock, sent as the moment it is: the runtime takes moments and never the word, so a
+    /// filter means the same thing whoever reads the request afterwards. Anything else goes as typed.
+    /// </summary>
+    public static string? ResolveMoment(string? value, TimeProvider clock)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return string.Equals(value?.Trim(), "now", StringComparison.OrdinalIgnoreCase)
+            ? clock.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture)
+            : value;
+    }
+
     /// <summary>A repeatable option: users write it once per value.</summary>
     public static Option<string[]> Repeatable(string name, string description) => new(name)
     {

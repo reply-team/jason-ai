@@ -43,13 +43,14 @@ export function dayKey(at: Date, zone: string): string {
     return `${p['year']}-${p['month']}-${p['day']}`;
 }
 
-/** Today, Yesterday, a weekday with its date inside the last week, else the date; the year only when it is not this one. */
+/** Today, Yesterday, Tomorrow, a weekday with its date inside the last week, else the date; the year only when it is not this one. */
 export function dayLabel(key: string, todayKey: string): string {
     if (key === todayKey) return 'Today';
     const day = new Date(key + 'T00:00:00Z');
     const today = new Date(todayKey + 'T00:00:00Z');
     const daysAgo = Math.round((today.getTime() - day.getTime()) / dayMs);
     if (daysAgo === 1) return 'Yesterday';
+    if (daysAgo === -1) return 'Tomorrow';
     const sameYear = key.slice(0, 4) === todayKey.slice(0, 4);
     const date = `${day.getUTCDate()} ${months[day.getUTCMonth()]}`;
     if (daysAgo > 1 && daysAgo < 7) return `${weekdays[day.getUTCDay()]} ${date}`;

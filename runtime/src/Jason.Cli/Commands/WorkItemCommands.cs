@@ -33,6 +33,7 @@ public static class WorkItemCommands
         workItem.Subcommands.Add(Create(env, actor));
         workItem.Subcommands.Add(Get(env, actor));
         workItem.Subcommands.Add(List(env, actor));
+        workItem.Subcommands.Add(Count(env, actor));
         workItem.Subcommands.Add(Update(env, actor));
         workItem.Subcommands.Add(Cancel(env, actor));
         workItem.Subcommands.Add(Heartbeat(env, actor));
@@ -145,24 +146,11 @@ public static class WorkItemCommands
 
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("list", "List work items, oldest first.");
-        var campaign = new Option<string?>("--campaign") { Description = "Only items of this campaign, as cmp_…." };
-        var contact = new Option<string?>("--contact") { Description = "Only items about this contact, as cnt_…." };
-        var status = VerbOptions.Repeatable("--status", "Only items in this status. Repeat the option to ask for more than one — for example failed and expired.");
-        var kind = new Option<string?>("--kind") { Description = "Only items of this kind: ai_role or provider_op." };
-        var role = new Option<string?>("--role") { Description = "Only items for this role." };
-        var eligible = new Option<bool>("--eligible") { Description = "Only items the dispatcher would claim right now." };
-        var notEligible = new Option<bool>("--not-eligible") { Description = "Only items the dispatcher would not claim right now." };
+        var command = new Command("list", "List work items: oldest first, or by due time or finish time with --order.");
+        var filter = new ListingFilter(command);
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
-        command.Options.Add(campaign);
-        command.Options.Add(contact);
-        command.Options.Add(status);
-        command.Options.Add(kind);
-        command.Options.Add(role);
-        command.Options.Add(eligible);
-        command.Options.Add(notEligible);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
@@ -170,13 +158,7 @@ public static class WorkItemCommands
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor));
-            var body = RequestBody.Empty()
-                .Set("campaign_id", parseResult.GetValue(campaign))
-                .Set("contact_id", parseResult.GetValue(contact))
-                .Set("status", VerbOptions.Strings(parseResult.GetValue(status)))
-                .Set("kind", parseResult.GetValue(kind))
-                .Set("role", parseResult.GetValue(role))
-                .Set("eligible", Eligibility(parseResult.GetValue(eligible), parseResult.GetValue(notEligible)))
+            var body = filter.Body(parseResult)
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 
@@ -184,6 +166,63 @@ public static class WorkItemCommands
         });
 
         return command;
+    }
+
+    private static Command Count(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command("count", "Count the work items a listing with the same filters would return, to its end.");
+        var filter = new ListingFilter(command);
+        var human = VerbOptions.Human();
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            return OperationRunner.RunAsync(env, Operations.WorkItemCount, filter.Body(parseResult), new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItemCount), cancellationToken);
+        });
+
+        return command;
+    }
+
+    /// <summary>The filters a listing and a count share, so the two verbs can never take different ones.</summary>
+    private sealed class ListingFilter
+    {
+        private readonly Option<string?> _campaign = new("--campaign") { Description = "Only items of this campaign, as cmp_…." };
+        private readonly Option<string?> _contact = new("--contact") { Description = "Only items about this contact, as cnt_…." };
+        private readonly Option<string[]> _status = VerbOptions.Repeatable("--status", "Only items in this status. Repeat the option to ask for more than one — for example failed and expired.");
+        private readonly Option<string?> _kind = new("--kind") { Description = "Only items of this kind: ai_role or provider_op." };
+        private readonly Option<string?> _role = new("--role") { Description = "Only items for this role." };
+        private readonly Option<bool> _eligible = new("--eligible") { Description = "Only items the dispatcher would claim right now." };
+        private readonly Option<bool> _notEligible = new("--not-eligible") { Description = "Only items the dispatcher would not claim right now." };
+        private readonly Option<string?> _since = VerbOptions.Moment("--since", "Only items whose ordered time (created, due or finished, as --order says) is at or after this moment, as ISO-8601 UTC, or now. An item without that time is left out.");
+        private readonly Option<string?> _until = VerbOptions.Moment("--until", "Only items whose ordered time is before this moment, as ISO-8601 UTC, or now.");
+        private readonly Option<string?> _order = new("--order") { Description = "created (the default, oldest first), due (soonest first, undated last) or finished (newest first; open items are left out)." };
+
+        public ListingFilter(Command command)
+        {
+            command.Options.Add(_campaign);
+            command.Options.Add(_contact);
+            command.Options.Add(_status);
+            command.Options.Add(_kind);
+            command.Options.Add(_role);
+            command.Options.Add(_eligible);
+            command.Options.Add(_notEligible);
+            command.Options.Add(_since);
+            command.Options.Add(_until);
+            command.Options.Add(_order);
+        }
+
+        public JsonObject Body(ParseResult parseResult) =>
+            RequestBody.Empty()
+                .Set("campaign_id", parseResult.GetValue(_campaign))
+                .Set("contact_id", parseResult.GetValue(_contact))
+                .Set("status", VerbOptions.Strings(parseResult.GetValue(_status)))
+                .Set("kind", parseResult.GetValue(_kind))
+                .Set("role", parseResult.GetValue(_role))
+                .Set("eligible", Eligibility(parseResult.GetValue(_eligible), parseResult.GetValue(_notEligible)))
+                .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(_since), TimeProvider.System))
+                .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(_until), TimeProvider.System))
+                .Set("order", parseResult.GetValue(_order));
     }
 
     private static Command Update(CliEnvironment env, Option<string?> actor)

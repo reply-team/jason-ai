@@ -1,0 +1,36 @@
+{
+  "operation": "contact.list",
+  "case": "query-email",
+  "request": {
+    "query": "aguilar@",
+    "limit": 10
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cnt_3",
+        "first_name": "Tomás",
+        "last_name": "Aguilar",
+        "company": "Andina Tech",
+        "title": "Director of Sales",
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "t.aguilar@andina.example",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-16T07:00:00.000Z",
+        "updated_at": "2026-10-16T07:00:00.000Z",
+        "archived_at": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

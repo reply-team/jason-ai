@@ -89,10 +89,12 @@ public static class CampaignCommands
     {
         var command = new Command("list", "List campaigns. Archived ones appear only when asked for by status.");
         var status = new Option<string?>("--status") { Description = "Only campaigns in this status: draft, active, paused or archived." };
+        var query = new Option<string?>("--query") { Description = "Only campaigns whose name contains this text; case and accents do not matter." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
         command.Options.Add(status);
+        command.Options.Add(query);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
@@ -102,6 +104,7 @@ public static class CampaignCommands
             ActorOption.Parse(parseResult.GetValue(actor));
             var body = RequestBody.Empty()
                 .Set("status", parseResult.GetValue(status))
+                .Set("query", parseResult.GetValue(query))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 

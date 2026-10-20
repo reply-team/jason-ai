@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
@@ -61,11 +62,22 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
             }
         }
 
+        var text = string.IsNullOrWhiteSpace(request.Query) ? null : request.Query.Trim();
+        if (text is { Length: > ContactSearch.MaxLength })
+        {
+            errors.Add("query", "too_long", string.Create(CultureInfo.InvariantCulture, $"query must be at most {ContactSearch.MaxLength} characters."));
+        }
+
         errors.ThrowIfAny();
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
         var query = db.Contacts.Include(contact => contact.Channels).Include(contact => contact.ExternalIds).AsQueryable();
+        if (text is not null)
+        {
+            query = ContactSearch.Apply(query, text);
+        }
+
         if (request.IncludeArchived != true)
         {
             query = query.Where(contact => contact.ArchivedAt == null);

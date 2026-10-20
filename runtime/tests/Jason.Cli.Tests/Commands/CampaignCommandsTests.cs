@@ -74,10 +74,10 @@ public class CampaignCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("campaign", "list", "--status", "active", "--limit", "5", "--cursor", "Y21wX0E");
+        var exit = await cli.RunAsync("campaign", "list", "--status", "active", "--query", "autumn", "--limit", "5", "--cursor", "Y21wX0E");
 
         Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.CampaignList, "{\"status\":\"active\",\"limit\":5,\"cursor\":\"Y21wX0E\"}");
+        cli.AssertPosted(Operations.CampaignList, "{\"status\":\"active\",\"query\":\"autumn\",\"limit\":5,\"cursor\":\"Y21wX0E\"}");
     }
 
     [Fact]

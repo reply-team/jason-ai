@@ -41,7 +41,8 @@ public sealed record CampaignCreateRequest(string? Name, JsonObject? Context, Ac
 
 public sealed record CampaignGetRequest(string? CampaignId);
 
-public sealed record CampaignListRequest(CampaignStatus? Status, int? Limit, string? Cursor);
+/// <summary><c>query</c> finds campaigns by any part of their name, whatever its case or accents.</summary>
+public sealed record CampaignListRequest(CampaignStatus? Status, int? Limit, string? Cursor, string? Query = null);
 
 /// <summary>
 /// A partial patch: an absent <c>name</c> leaves the campaign's name alone, and an absent

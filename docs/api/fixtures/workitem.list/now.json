@@ -1,0 +1,103 @@
+{
+  "operation": "workitem.list",
+  "case": "now",
+  "request": {
+    "status": [
+      "processing",
+      "scheduled",
+      "awaiting_approval"
+    ],
+    "order": "created",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "wi_1",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_1",
+        "kind": "ai_role",
+        "role": "researcher",
+        "operation": null,
+        "execution_profile": null,
+        "status": "processing",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": "att_1",
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace",
+        "running_since": "2026-10-16T08:55:00.000Z"
+      },
+      {
+        "id": "wi_2",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_1",
+        "kind": "provider_op",
+        "role": null,
+        "operation": "campaign.enroll",
+        "execution_profile": null,
+        "status": "scheduled",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": "att_2",
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace",
+        "running_since": null
+      },
+      {
+        "id": "wi_3",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_2",
+        "kind": "provider_op",
+        "role": null,
+        "operation": "campaign.enroll",
+        "execution_profile": null,
+        "status": "awaiting_approval",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-15T12:00:00.000Z",
+        "updated_at": "2026-10-15T12:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Grace Hopper",
+        "running_since": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

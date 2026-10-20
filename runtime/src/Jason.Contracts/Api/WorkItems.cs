@@ -197,7 +197,13 @@ public sealed record WorkItemDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] LineageDto? Lineage = null,
 
     /// <summary>The key the item was created with, when its creator gave one; absent otherwise.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null,
+
+    /// <summary>The campaign's name, so a reader need not resolve the id to know what this is part of.</summary>
+    string CampaignName = "",
+
+    /// <summary>The person's name, or null where the item is about nobody or the person has no name.</summary>
+    string? ContactName = null);
 
 /// <summary>A listing stays small: no context, no result, no attempts.</summary>
 public sealed record WorkItemSummaryDto(
@@ -220,7 +226,12 @@ public sealed record WorkItemSummaryDto(
     AttemptErrorDto? LastError,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? FinishedAt);
+    DateTimeOffset? FinishedAt,
+    string CampaignName = "",
+    string? ContactName = null,
+
+    /// <summary>When the live attempt started, while the item is processing; null otherwise.</summary>
+    DateTimeOffset? RunningSince = null);
 
 public sealed record WorkItemCreateRequest(
     string? CampaignId,
@@ -256,7 +267,31 @@ public sealed record WorkItemListRequest(
     string? Role,
     bool? Eligible,
     int? Limit,
-    string? Cursor);
+    string? Cursor,
+
+    /// <summary>The start of the window, inclusive, on the time the order sorts by.</summary>
+    DateTimeOffset? Since = null,
+
+    /// <summary>The end of the window, exclusive, on the same time.</summary>
+    DateTimeOffset? Until = null,
+    WorkItemListOrder? Order = null);
+
+/// <summary>
+/// How many rows the same listing would walk through to its end: the list's filters, its window and its order (which
+/// decides the time the window measures and, for <c>finished</c>, that open work is left out), and no page.
+/// </summary>
+public sealed record WorkItemCountRequest(
+    string? CampaignId,
+    string? ContactId,
+    IReadOnlyList<WorkItemStatus>? Status,
+    WorkItemKind? Kind,
+    string? Role,
+    bool? Eligible,
+    DateTimeOffset? Since,
+    DateTimeOffset? Until,
+    WorkItemListOrder? Order);
+
+public sealed record WorkItemCountResponse(int Total);
 
 /// <summary>Partial patch: absent fields leave the item alone; set/unset edit top-level context keys like the campaign context.</summary>
 public sealed record WorkItemUpdateRequest(

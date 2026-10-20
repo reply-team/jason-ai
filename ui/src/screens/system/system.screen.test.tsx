@@ -1,17 +1,17 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/preact';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { route } from '../../router';
 
-function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui') {
+function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'aged' = 'two') {
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/empty')
         .answer('decision.list', 'decision.list/empty')
         .answer('plugin.list', 'plugin.list/none')
         .answer('route.list', 'route.list/empty')
-        .answer('ui.tokens', 'ui.tokens/two');
+        .answer('ui.tokens', `ui.tokens/${tokens}`);
     const rendered = renderApp(fake);
     fake.answer('system.info', `system.info/${ui}`);
     route.value = { screen: 'system' };
@@ -41,6 +41,31 @@ describe('System', () => {
         fireEvent.click(within(other).getByRole('button', { name: 'Revoke' }));
         await waitFor(() => expect(fake.sent('ui.revoke')).toEqual(fixtures['ui.revoke/one'].request));
         await waitFor(() => expect(fake.calls.filter((c) => c.operation === 'ui.tokens').length).toBe(2));
+    });
+
+    it('lists the browsers used most recently first, dims the ones unused for a month, and revokes all but this one', async () => {
+        // The recording was made at 09:00 UTC on 16 October; how long ago a browser was used is read off the clock.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
+        try {
+            const { fake } = systemFake('with-ui', 'aged');
+            await waitFor(() => expect(screen.getAllByRole('button', { name: 'Revoke' }).length).toBe(3));
+            const rows = screen.getAllByRole('row').filter((r) => within(r).queryByRole('button', { name: 'Revoke' }));
+            expect(rows.map((r) => r.textContent?.includes('this browser'))).toEqual([true, false, false]);
+            expect(rows.map((r) => r.classList.contains('stale'))).toEqual([false, false, true]);
+            expect(rows[2]!.textContent).toContain('not used for a month');
+
+            fake.answer('ui.revoke', 'ui.revoke/one');
+            fireEvent.click(screen.getByRole('button', { name: 'Revoke all other browsers' }));
+            await waitFor(() => expect(fake.calls.filter((c) => c.operation === 'ui.revoke')).toHaveLength(2));
+            const others = fixtures['ui.tokens/aged'].response.items.map((t) => t.id).filter((id) => id !== 'uit_1');
+            expect(fake.calls.filter((c) => c.operation === 'ui.revoke').map((c) => c.body)).toEqual(
+                expect.arrayContaining(others.map((id) => ({ token_id: id }))),
+            );
+            await waitFor(() => expect(fake.calls.filter((c) => c.operation === 'ui.tokens').length).toBe(2));
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('says when no UI module is reported', async () => {

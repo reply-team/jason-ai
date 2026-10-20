@@ -5,6 +5,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Decisions;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -114,10 +115,23 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
     public async Task<Page<CampaignSummaryDto>> ListAsync(CampaignListRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var text = string.IsNullOrWhiteSpace(request.Query) ? null : request.Query.Trim();
+        if (text is { Length: > ContactSearch.MaxLength })
+        {
+            var errors = new ValidationErrors();
+            errors.Add("query", "too_long", string.Create(CultureInfo.InvariantCulture, $"query must be at most {ContactSearch.MaxLength} characters."));
+            errors.ThrowIfAny();
+        }
+
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
         var query = db.Campaigns.AsNoTracking();
+        if (text is not null)
+        {
+            var pattern = TextFold.Containing(text);
+            query = query.Where(c => EF.Functions.Like(TextFold.Fold(c.Name), pattern, TextFold.Escape));
+        }
 
         // Archived campaigns are the only ones a listing hides: a finished campaign should not crowd the work
         // in front of a role, but asking for them by status still shows them.

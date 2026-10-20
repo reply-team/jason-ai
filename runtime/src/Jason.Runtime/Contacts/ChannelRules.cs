@@ -104,6 +104,14 @@ public static partial class ChannelRules
             : null;
     }
 
+    /// <summary>A phone number as its digits, the way a stored one is kept, when the text is one once its separators go; null otherwise.</summary>
+    public static string? DigitsOfPhone(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var digits = PhoneSeparators().Replace(value.Trim(), string.Empty);
+        return PhoneDigits().IsMatch(digits) ? digits : null;
+    }
+
     private static string? NormalizePhoneNumber(string value)
     {
         var digits = PhoneSeparators().Replace(value, string.Empty);
@@ -142,6 +150,24 @@ public static partial class ChannelRules
     }
 
     /// <summary>linkedin.com itself, or a host under it; never a host that merely ends in the same letters.</summary>
+    /// <summary>
+    /// The profile path a pasted LinkedIn link names, lowercased and without its trailing slash, query or fragment, as a
+    /// stored link keeps it; null when the text is not a LinkedIn link. A link typed without its scheme counts too.
+    /// </summary>
+    public static string? LinkedInProfilePath(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var trimmed = text.Trim();
+        var absolute = trimmed.Contains("://", StringComparison.Ordinal) ? trimmed : "https://" + trimmed;
+        if (!Uri.TryCreate(absolute, UriKind.Absolute, out var uri) || !IsLinkedInHost(uri.Host.ToLowerInvariant()))
+        {
+            return null;
+        }
+
+        var path = uri.AbsolutePath.TrimEnd('/').ToLowerInvariant();
+        return path.Length > 1 ? path : null;
+    }
+
     private static bool IsLinkedInHost(string host) =>
         string.Equals(host, "linkedin.com", StringComparison.Ordinal) || host.EndsWith(".linkedin.com", StringComparison.Ordinal);
 
@@ -153,4 +179,7 @@ public static partial class ChannelRules
 
     [GeneratedRegex(@"^\+[1-9][0-9]{1,14}\z")]
     private static partial Regex E164();
+
+    [GeneratedRegex(@"^\+?[0-9]{3,}\z")]
+    private static partial Regex PhoneDigits();
 }

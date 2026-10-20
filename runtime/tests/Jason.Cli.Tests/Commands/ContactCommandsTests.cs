@@ -138,12 +138,12 @@ public class ContactCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("contact", "list", "--channel", "email", "--value", "ada@example.com", "--include-archived", "--limit", "5", "--cursor", "Y250X0E");
+        var exit = await cli.RunAsync("contact", "list", "--channel", "email", "--value", "ada@example.com", "--query", "ada@", "--include-archived", "--limit", "5", "--cursor", "Y250X0E");
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(
             Operations.ContactList,
-            "{\"channel\":\"email\",\"value\":\"ada@example.com\",\"include_archived\":true,\"limit\":5,\"cursor\":\"Y250X0E\"}");
+            "{\"channel\":\"email\",\"value\":\"ada@example.com\",\"query\":\"ada@\",\"include_archived\":true,\"limit\":5,\"cursor\":\"Y250X0E\"}");
     }
 
     [Fact]

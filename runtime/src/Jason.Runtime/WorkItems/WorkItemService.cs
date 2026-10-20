@@ -278,64 +278,35 @@ public sealed class WorkItemService(
             .Take(ReportService.MaxReportsOnWorkItem)
             .ToListAsync(cancellationToken);
 
+    public async Task<WorkItemCountResponse> CountAsync(WorkItemCountRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var query = await WorkItemListing.FilterAsync(db, WorkItemFilter.From(request), now, cancellationToken).ConfigureAwait(false);
+        return new WorkItemCountResponse(await query.CountAsync(cancellationToken).ConfigureAwait(false));
+    }
+
     public async Task<Page<WorkItemSummaryDto>> ListAsync(WorkItemListRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
         var now = clock.GetUtcNow().UtcDateTime;
+        var filter = WorkItemFilter.From(request);
+
+        var query = await WorkItemListing.FilterAsync(db, filter, now, cancellationToken).ConfigureAwait(false);
+        query = WorkItemListing.After(query, filter.Order, after);
 
         // Only the live attempt is fetched: a summary carries the current attempt id and nothing else about the
         // history, and a listing must not drag ten contexts per row along with it.
-        IQueryable<WorkItem> query = db.WorkItems
+        var fetched = await WorkItemListing.Order(query, filter.Order)
             .AsNoTracking()
             .WithNavigation()
-            .Include(w => w.Attempts.Where(a => a.Status == AttemptStatus.Scheduled || a.Status == AttemptStatus.Running));
-
-        if (!string.IsNullOrWhiteSpace(request.CampaignId))
-        {
-            var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
-            query = query.Where(w => w.CampaignId == campaign.Id);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.ContactId))
-        {
-            var contact = await ContactService.LoadAsync(db, request.ContactId, cancellationToken).ConfigureAwait(false);
-            query = query.Where(w => w.ContactId == contact.Id);
-        }
-
-        if (request.Status is { Count: > 0 } wanted)
-        {
-            var statuses = wanted.Distinct().ToArray();
-            query = query.Where(w => statuses.Contains(w.Status));
-        }
-
-        if (request.Kind is { } kind)
-        {
-            query = query.Where(w => w.Kind == kind);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Role))
-        {
-            var role = request.Role.Trim();
-            query = query.Where(w => w.Role == role);
-        }
-
-        if (request.Eligible is { } eligible)
-        {
-            var predicate = WorkItemQueries.Eligible(now);
-            query = query.Where(eligible
-                ? predicate
-                : Expression.Lambda<Func<WorkItem, bool>>(Expression.Not(predicate.Body), predicate.Parameters[0]));
-        }
-
-        if (after is not null)
-        {
-            query = query.Where(w => string.Compare(w.PublicId, after) > 0);
-        }
-
-        var fetched = await query.OrderBy(w => w.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return Paging.ToPage(fetched, limit, w => w.PublicId, w => WorkItemMapper.ToSummary(w, now));
+            .Include(w => w.Attempts.Where(a => a.Status == AttemptStatus.Scheduled || a.Status == AttemptStatus.Running))
+            .Take(limit + 1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return Paging.ToPage(fetched, limit, w => WorkItemListing.CursorKey(filter.Order, w), w => WorkItemMapper.ToSummary(w, now));
     }
 
     /// <summary>

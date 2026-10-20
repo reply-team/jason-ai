@@ -28,7 +28,8 @@
         "20261018190303_EventStore",
         "20261018230454_EventReads",
         "20261019053859_LinkedInSlugKeys",
-        "20261019060108_EventBackfills"
+        "20261019060108_EventBackfills",
+        "20261020003554_WorkItemsByFinish"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -47,7 +48,8 @@
         "20261018190303_EventStore",
         "20261018230454_EventReads",
         "20261019053859_LinkedInSlugKeys",
-        "20261019060108_EventBackfills"
+        "20261019060108_EventBackfills",
+        "20261020003554_WorkItemsByFinish"
       ],
       "backup_file": null
     },

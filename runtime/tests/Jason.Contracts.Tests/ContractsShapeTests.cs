@@ -104,6 +104,7 @@ public class ContractsShapeTests
         Assert.Equal("workitem.create", Operations.WorkItemCreate);
         Assert.Equal("workitem.get", Operations.WorkItemGet);
         Assert.Equal("workitem.list", Operations.WorkItemList);
+        Assert.Equal("workitem.count", Operations.WorkItemCount);
         Assert.Equal("workitem.update", Operations.WorkItemUpdate);
         Assert.Equal("workitem.cancel", Operations.WorkItemCancel);
         Assert.Equal("workitem.heartbeat", Operations.WorkItemHeartbeat);

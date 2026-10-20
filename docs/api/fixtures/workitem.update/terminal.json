@@ -1,0 +1,20 @@
+{
+  "operation": "workitem.update",
+  "case": "terminal",
+  "request": {
+    "work_item_id": "wi_9",
+    "priority": 5,
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "workitem_terminal",
+      "message": "Work item 'wi_9' is succeeded; finished items are not changed.",
+      "retryable": false
+    }
+  }
+}

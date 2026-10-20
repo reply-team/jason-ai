@@ -101,12 +101,13 @@ public static class WorkItemRenderers
             return null;
         }
 
-        var table = new HumanTable("ID", "CAMPAIGN", "KIND", "ROLE/OP", "STATUS", "ELIGIBLE", "PRIO", "ATTEMPTS", "CREATED");
+        var table = new HumanTable("ID", "CAMPAIGN", "PERSON", "KIND", "ROLE/OP", "STATUS", "ELIGIBLE", "PRIO", "ATTEMPTS", "CREATED");
         foreach (var item in page.Items)
         {
             table.Row(
                 item.Id,
-                item.CampaignId,
+                string.IsNullOrEmpty(item.CampaignName) ? item.CampaignId : item.CampaignName,
+                item.ContactName ?? item.ContactId,
                 RenderText.Snake(item.Kind),
                 item.Role ?? item.Operation,
                 RenderText.Snake(item.Status),
@@ -118,6 +119,10 @@ public static class WorkItemRenderers
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);
     }
+
+    /// <summary>A count, for a person: the number alone.</summary>
+    public static string? WorkItemCount(string json) =>
+        RenderText.Read<WorkItemCountResponse>(json) is { } count ? count.Total.ToString(CultureInfo.InvariantCulture) : null;
 
     /// <summary>The answer to a heartbeat: one line, because that is all an executor needs to read in a loop.</summary>
     public static string? Heartbeat(string json)

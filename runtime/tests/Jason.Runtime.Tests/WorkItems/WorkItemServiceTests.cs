@@ -543,17 +543,99 @@ public class WorkItemServiceTests
         Assert.Equal(250, seen.Distinct(StringComparer.Ordinal).Count());
     }
 
-    [Fact]
-    public async Task A_limit_outside_the_allowed_range_is_refused()
+    /// <summary>
+    /// Each order walks every row it lists exactly once: three items due at the same minute straddle the first page
+    /// boundary, undated work follows the dated, and a finished order leaves open work out.
+    /// </summary>
+    [Theory]
+    [InlineData(null, null, "a b c d e f g h i j k")]
+    [InlineData("due", "created", "b d e a c j k")]
+    [InlineData("finished", null, "g h f i")]
+    public async Task A_listing_walks_its_pages_in_the_order_asked_for(string? order, string? status, string expected)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
+        var letters = await SeedListingAsync(db);
+        var service = NewService(db, new FixedClock(Noon));
+        var statuses = status is null ? null : new[] { Enum.Parse<WorkItemStatus>(status, ignoreCase: true) };
+        var ordered = order is null ? (WorkItemListOrder?)null : Enum.Parse<WorkItemListOrder>(order, ignoreCase: true);
+
+        var walked = new List<string>();
+        string? cursor = null;
+        var first = true;
+        do
+        {
+            var page = await service.ListAsync(new WorkItemListRequest(null, null, statuses, null, null, null, 2, cursor, Order: ordered), Ct);
+            if (first && ordered is null)
+            {
+                Assert.Equal(Paging.EncodeCursor(page.Items[1].Id), page.NextCursor);
+            }
+
+            first = false;
+            walked.AddRange(page.Items.Select(i => letters[i.Id]));
+            cursor = page.NextCursor;
+        }
+        while (cursor is not null);
+
+        Assert.Equal(expected, string.Join(' ', walked));
+        Assert.Equal(walked.Count, (await service.CountAsync(new WorkItemCountRequest(null, null, statuses, null, null, null, null, null, ordered), Ct)).Total);
+    }
+
+    /// <summary>The window measures the time the order sorts by, from since inclusive to until exclusive; a row without that time is outside it.</summary>
+    [Theory]
+    [InlineData("due", "2026-09-14T12:30:00Z", "2026-09-14T13:00:00Z", "b d e")]
+    [InlineData("due", "2026-09-14T11:00:00Z", null, "b d e a")]
+    [InlineData("finished", "2026-09-14T11:00:00Z", null, "g h f")]
+    [InlineData("created", null, "2026-09-14T12:00:00Z", "")]
+    public async Task The_window_measures_the_field_the_order_sorts_by(string order, string? since, string? until, string expected)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var letters = await SeedListingAsync(db);
         var service = NewService(db, new FixedClock(Noon));
 
-        var error = await Assert.ThrowsAsync<ValidationException>(
-            () => service.ListAsync(new WorkItemListRequest(null, null, null, null, null, null, 0, null), Ct));
+        var ordered = Enum.Parse<WorkItemListOrder>(order, ignoreCase: true);
+        var page = await service.ListAsync(
+            new WorkItemListRequest(null, null, null, null, null, null, null, null, Moment(since), Moment(until), ordered),
+            Ct);
 
-        Assert.Equal("limit", Assert.Single(error.Details!).Field);
+        Assert.Equal(expected, string.Join(' ', page.Items.Select(i => letters[i.Id])));
+        var count = await service.CountAsync(new WorkItemCountRequest(null, null, null, null, null, null, Moment(since), Moment(until), ordered), Ct);
+        Assert.Equal(page.Items.Count, count.Total);
+    }
+
+    /// <summary>A page size out of range, a window that ends before it starts, and a cursor made under another order are each refused on their own field.</summary>
+    [Theory]
+    [InlineData("limit")]
+    [InlineData("until")]
+    [InlineData("cursor")]
+    public async Task A_listing_refuses_what_it_cannot_follow(string field)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        await SeedListingAsync(db);
+        var service = NewService(db, new FixedClock(Noon));
+        var request = field switch
+        {
+            "limit" => new WorkItemListRequest(null, null, null, null, null, null, 0, null),
+            "until" => new WorkItemListRequest(null, null, null, null, null, null, null, null, Moment("2026-09-14T13:00:00Z"), Moment("2026-09-14T12:00:00Z"), WorkItemListOrder.Due),
+            _ => new WorkItemListRequest(
+                null, null, null, null, null, null, null,
+                (await service.ListAsync(new WorkItemListRequest(null, null, null, null, null, null, 2, null, Order: WorkItemListOrder.Due), Ct)).NextCursor,
+                Order: WorkItemListOrder.Finished),
+        };
+
+        var error = await Assert.ThrowsAsync<ValidationException>(() => service.ListAsync(request, Ct));
+
+        Assert.Equal(field, Assert.Single(error.Details!).Field);
+
+        // A count takes the list's filter and refuses it the same way; it takes no page size and no cursor.
+        if (field == "until")
+        {
+            var refused = await Assert.ThrowsAsync<ValidationException>(() => service.CountAsync(
+                new WorkItemCountRequest(null, null, null, null, null, null, request.Since, request.Until, request.Order), Ct));
+            Assert.Equal(field, Assert.Single(refused.Details!).Field);
+        }
     }
 
     private static WorkItemService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestOptions.PluginSettings());
@@ -594,4 +676,48 @@ public class WorkItemServiceTests
             AddedAt = Noon.UtcDateTime,
             UpdatedAt = Noon.UtcDateTime,
         });
+
+    private static DateTimeOffset? Moment(string? text) => text is null ? null : DateTimeOffset.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Eleven items in one campaign, created at noon in letter order (so their ids ascend in that order): seven open ones
+    /// due 13:00, 12:30, never, 12:30, 12:30, never and never, and four finished at 11:00, 11:30, 11:30 and 10:00. With
+    /// two to a page, one page ends on an undated item, so the walk continues from an undated cursor too.
+    /// </summary>
+    private static async Task<Dictionary<string, string>> SeedListingAsync(JasonDbContext db)
+    {
+        var campaign = WorkItemFactory.NewCampaign();
+        var at = Noon.UtcDateTime;
+        (string Letter, WorkItemStatus Status, DateTime? Due, DateTime? Finished)[] rows =
+        [
+            ("a", WorkItemStatus.Created, at.AddHours(1), null),
+            ("b", WorkItemStatus.Created, at.AddMinutes(30), null),
+            ("c", WorkItemStatus.Created, null, null),
+            ("d", WorkItemStatus.Created, at.AddMinutes(30), null),
+            ("e", WorkItemStatus.Created, at.AddMinutes(30), null),
+            ("f", WorkItemStatus.Succeeded, null, at.AddHours(-1)),
+            ("g", WorkItemStatus.Failed, null, at.AddMinutes(-30)),
+            ("h", WorkItemStatus.Cancelled, null, at.AddMinutes(-30)),
+            ("i", WorkItemStatus.Expired, null, at.AddHours(-2)),
+            ("j", WorkItemStatus.Created, null, null),
+            ("k", WorkItemStatus.Created, null, null),
+        ];
+        var letters = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var n = 0; n < rows.Length; n++)
+        {
+            var row = rows[n];
+            var item = WorkItemFactory.NewAiRole(campaign, now: at, configure: w =>
+            {
+                w.PublicId = $"wi_01K7QN{n:D20}";
+                w.Status = row.Status;
+                w.DueAt = row.Due;
+                w.FinishedAt = row.Finished;
+            });
+            db.WorkItems.Add(item);
+            letters[item.PublicId] = row.Letter;
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return letters;
+    }
 }

@@ -271,7 +271,7 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
-    public async Task List_collects_every_status_and_the_eligibility_filter()
+    public async Task List_collects_every_filter()
     {
         using var cli = new CliRun();
 
@@ -291,6 +291,12 @@ public class WorkItemCommandsTests
             "--role",
             "researcher",
             "--eligible",
+            "--since",
+            "2026-10-16T09:00:00Z",
+            "--until",
+            "2026-10-17T00:00:00Z",
+            "--order",
+            "due",
             "--limit",
             "5",
             "--cursor",
@@ -300,7 +306,31 @@ public class WorkItemCommandsTests
         cli.AssertPosted(
             Operations.WorkItemList,
             "{\"campaign_id\":\"cmp_A\",\"contact_id\":\"cnt_A\",\"status\":[\"failed\",\"expired\"],\"kind\":\"ai_role\",\"role\":\"researcher\","
-                + "\"eligible\":true,\"limit\":5,\"cursor\":\"d2lfQQ\"}");
+                + "\"eligible\":true,\"since\":\"2026-10-16T09:00:00Z\",\"until\":\"2026-10-17T00:00:00Z\",\"order\":\"due\",\"limit\":5,\"cursor\":\"d2lfQQ\"}");
+    }
+
+    /// <summary>
+    /// The count takes every filter the listing takes and no page; <c>now</c> is this program's clock, sent as a moment,
+    /// because the runtime takes moments and nothing else; and for a person it is the number alone.
+    /// </summary>
+    [Fact]
+    public async Task Count_sends_the_lists_filters_reads_now_from_the_clock_and_prints_the_number()
+    {
+        using var cli = new CliRun("{\"total\":37}");
+        var before = DateTimeOffset.UtcNow;
+
+        var exit = await cli.RunAsync("workitem", "count", "--campaign", "cmp_A", "--status", "failed", "--order", "finished", "--since", "now", "--human");
+
+        var after = DateTimeOffset.UtcNow;
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("http://127.0.0.1:5000/v1/" + Operations.WorkItemCount, cli.Url);
+        var sent = JsonNode.Parse(cli.Sent!)!.AsObject();
+        Assert.Equal(["campaign_id", "order", "since", "status"], sent.Select(p => p.Key).Order(StringComparer.Ordinal));
+        var since = (string)sent["since"]!;
+        Assert.EndsWith("Z", since, StringComparison.Ordinal);
+        var moment = DateTimeOffset.Parse(since, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(moment, before.AddMilliseconds(-1), after);
+        Assert.Equal("37", cli.Text.Trim());
     }
 
     [Fact]
@@ -794,7 +824,9 @@ public class WorkItemCommandsTests
                     null,
                     Moment,
                     Moment,
-                    null),
+                    null,
+                    "Autumn outreach",
+                    "Ada Lovelace"),
             ],
             "d2lfQQ"));
         using var cli = new CliRun(page);
@@ -802,8 +834,8 @@ public class WorkItemCommandsTests
         var exit = await cli.RunAsync("workitem", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("ID    CAMPAIGN  KIND     ROLE/OP     STATUS   ELIGIBLE  PRIO  ATTEMPTS  CREATED", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("wi_A  cmp_A     ai_role  researcher  created  yes       5     0         2026-09-14 10:00:00 UTC", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("ID    CAMPAIGN         PERSON        KIND     ROLE/OP     STATUS   ELIGIBLE  PRIO  ATTEMPTS  CREATED", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("wi_A  Autumn outreach  Ada Lovelace  ai_role  researcher  created  yes       5     0         2026-09-14 10:00:00 UTC", cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: d2lfQQ", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }

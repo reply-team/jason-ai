@@ -6,24 +6,15 @@ public partial class InteractiveSkillTests
     /// A skill that teaches notifications and is verified is verified by the host that read it as it ships: the front
     /// matter, the body and the catalog's bullet say so, the catalog's row names that host, and the pack's own rule holds
     /// the row's digest to the text. The operating skill teaches them too, and was read as it ships, the ready
-    /// installation's one question between the wiring check and the real work included. The managed path and the
-    /// planner in a person's session teach none, and are held to the same rule in theories of their own beside this one,
-    /// through the same helper.
+    /// installation's one question between the wiring check and the real work included. The planner in a person's
+    /// session teaches none, and is held to the same rule in a theory of its own beside this one, through the same
+    /// helper. The managed path, which teaches none either, is a draft again: its text gained the planned and counted
+    /// reads and the search for a person after its reading, so it has no row until a host reads it again.
     /// </summary>
     [Theory]
     [InlineData("approvals-and-questions", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
     [InlineData("operating-the-installation", "Claude Code 2.1.302 (Opus 5.5) | 0.12.0")]
     public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading) =>
-        IsVerifiedByTheHostThatReadIt(name, reading);
-
-    /// <summary>
-    /// The managed path teaches no notifications, so it is held on its own to the same rule: verified by the host that
-    /// read it as it ships. It was read again after the person's brief became the campaign's context and its
-    /// description named a person's first question, so its row names that later reading.
-    /// </summary>
-    [Theory]
-    [InlineData("managed-campaign-work", "Claude Code 2.1.302 (Opus 5.5) | 0.12.0")]
-    public void The_managed_path_is_verified_by_the_host_that_read_it(string name, string reading) =>
         IsVerifiedByTheHostThatReadIt(name, reading);
 
     /// <summary>

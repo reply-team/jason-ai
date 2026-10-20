@@ -1,0 +1,137 @@
+{
+  "operation": "workitem.list",
+  "case": "done",
+  "request": {
+    "status": [
+      "succeeded",
+      "failed",
+      "cancelled",
+      "expired"
+    ],
+    "order": "finished",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "wi_9",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_1",
+        "kind": "provider_op",
+        "role": null,
+        "operation": "campaign.enroll",
+        "execution_profile": null,
+        "status": "succeeded",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": "2026-10-16T08:41:00.000Z",
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace",
+        "running_since": null
+      },
+      {
+        "id": "wi_10",
+        "campaign_id": "cmp_2",
+        "contact_id": null,
+        "kind": "ai_role",
+        "role": "researcher",
+        "operation": null,
+        "execution_profile": null,
+        "status": "cancelled",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": "2026-10-16T08:10:00.000Z",
+        "campaign_name": "SMB test",
+        "contact_name": null,
+        "running_since": null
+      },
+      {
+        "id": "wi_11",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_3",
+        "kind": "provider_op",
+        "role": null,
+        "operation": "campaign.enroll",
+        "execution_profile": null,
+        "status": "failed",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 2,
+        "current_attempt_id": null,
+        "last_error": {
+          "code": "reply.refused",
+          "message": "Invalid data: first name is required",
+          "retriable": false,
+          "class": "permanent"
+        },
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": "2026-10-16T07:58:00.000Z",
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Tomás Aguilar",
+        "running_since": null
+      },
+      {
+        "id": "wi_12",
+        "campaign_id": "cmp_1",
+        "contact_id": null,
+        "kind": "ai_role",
+        "role": "copywriter",
+        "operation": null,
+        "execution_profile": null,
+        "status": "expired",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": "2026-10-16T06:00:00.000Z",
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": "2026-10-16T06:00:00.000Z",
+        "campaign_name": "Autumn outreach",
+        "contact_name": null,
+        "running_since": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

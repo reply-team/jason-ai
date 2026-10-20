@@ -44,6 +44,7 @@ public static class Operations
     public const string WorkItemCreate = "workitem.create";
     public const string WorkItemGet = "workitem.get";
     public const string WorkItemList = "workitem.list";
+    public const string WorkItemCount = "workitem.count";
     public const string WorkItemUpdate = "workitem.update";
     public const string WorkItemCancel = "workitem.cancel";
     public const string WorkItemHeartbeat = "workitem.heartbeat";

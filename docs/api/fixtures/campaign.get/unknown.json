@@ -1,0 +1,15 @@
+{
+  "operation": "campaign.get",
+  "case": "unknown",
+  "request": {
+    "campaign_id": "cmp_3"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "campaign_not_found",
+      "message": "No campaign with id 'cmp_3'.",
+      "retryable": false
+    }
+  }
+}

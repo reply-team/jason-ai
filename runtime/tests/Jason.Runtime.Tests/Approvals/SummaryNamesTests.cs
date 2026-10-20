@@ -43,7 +43,7 @@ public class SummaryNamesTests
     }
 
     [Fact]
-    public async Task A_decision_carries_the_same_two_names()
+    public async Task A_decision_and_its_work_item_carry_the_same_two_names()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
@@ -57,12 +57,25 @@ public class SummaryNamesTests
         db.WorkItems.Add(item);
         db.Attempts.Add(attempt);
         db.Decisions.Add(new Decision { PublicId = PublicId.New("dec"), Campaign = campaign, WorkItem = item, Attempt = attempt, Question = "Keep calling this account?", Status = DecisionStatus.Pending, RaisedAt = Noon });
+        db.WorkItems.Add(WorkItemFactory.NewAiRole(campaign, now: Noon));
         await db.SaveChangesAsync(Ct);
 
         var page = await api.PostOkAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, null, Ct);
         var one = Assert.Single(page.Items);
         Assert.Equal("Autumn outreach", one.CampaignName);
         Assert.Equal("Grace Hopper", one.ContactName);
+
+        // The work item names the same two, and a running one says since when; one nobody is about names nobody.
+        var items = await api.PostOkAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, null, Ct);
+        var running = Assert.Single(items.Items, i => i.Status == WorkItemStatus.Processing);
+        Assert.Equal(("Autumn outreach", "Grace Hopper"), (running.CampaignName, running.ContactName));
+        Assert.Equal(new DateTimeOffset(Noon), running.RunningSince);
+        var waiting = Assert.Single(items.Items, i => i.Status == WorkItemStatus.Created);
+        Assert.Equal(("Autumn outreach", (string?)null), (waiting.CampaignName, waiting.ContactName));
+        Assert.Null(waiting.RunningSince);
+
+        var whole = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = running.Id }, Ct);
+        Assert.Equal(("Autumn outreach", "Grace Hopper"), (whole.CampaignName, whole.ContactName));
     }
 
     internal static async Task<string> SeedApprovalAsync(RuntimeApiFixture api, string? first, string? last)

@@ -1898,6 +1898,9 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.HasIndex("Status", "DueAt")
                         .HasDatabaseName("ix_work_items_status_due_at");
 
+                    b.HasIndex("Status", "FinishedAt")
+                        .HasDatabaseName("ix_work_items_status_finished_at");
+
                     b.HasIndex("Status", "NotBefore")
                         .HasDatabaseName("ix_work_items_status_not_before");
 

@@ -67,10 +67,12 @@ public class SkillSequenceTests
             + "{\\\"position\\\":\\\"first_step\\\"},\\\"first_touch\\\":\\\"authored_delay\\\"}\" --idempotency-key q3-latam-enrol-marta";
         const string Start = $"jason campaign start cmp_{Placeholder}";
         const string Follow = $"jason workitem list --campaign cmp_{Placeholder}";
+        const string Planned = $"jason workitem list --campaign cmp_{Placeholder} --status created --order due";
+        const string HowMany = $"jason workitem count --campaign cmp_{Placeholder}";
         const string Widened = "founders of seed-stage startups in Mexico, Colombia and Chile";
         const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason \"the person widened the audience\"";
 
-        foreach (var line in new[] { Create, Add, List, Work, Start, Follow, Change })
+        foreach (var line in new[] { Create, Add, List, Work, Start, Follow, Planned, HowMany, Change })
         {
             Assert.Contains(line, printed);
         }
@@ -144,6 +146,15 @@ public class SkillSequenceTests
 
         var parked = await GoldenPath.PollAsync(it, item, read => (string?)read["status"] == "awaiting_approval");
         Assert.Empty(parked["attempts"]!.AsArray());
+
+        // With the work parked nothing moves, so what is planned and how many there are can be read against a listing.
+        var planned = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Planned, ids)])))["items"]!.AsArray();
+        var all = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Follow, ids)])))["items"]!.AsArray();
+        Assert.Equal(
+            all.Where(listing => (string?)listing!["status"] == "created").Select(listing => (string?)listing!["id"]),
+            planned.Select(listing => (string?)listing!["id"]));
+        var count = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(HowMany, ids)])));
+        Assert.Equal(all.Count, (int)count["total"]!);
     }
 
     /// <summary>

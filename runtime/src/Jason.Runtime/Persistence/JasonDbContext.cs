@@ -83,7 +83,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         ArgumentNullException.ThrowIfNull(builder);
         return builder
             .UseSqlite(ConnectionString(databaseFile))
-            .AddInterceptors(new AppendOnlyInterceptor())
+            .AddInterceptors(new AppendOnlyInterceptor(), new TextFoldInterceptor())
             .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.QueryIterationFailed));
     }
 
@@ -123,6 +123,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
+
+        modelBuilder.HasDbFunction(typeof(TextFold).GetMethod(nameof(TextFold.Fold))!).HasName(TextFold.FunctionName);
 
         modelBuilder.Entity<Campaign>(campaign =>
         {
@@ -244,6 +246,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .HasDatabaseName("ix_work_items_one_open_check_in_per_campaign");
             item.HasIndex(w => new { w.Status, w.NotBefore });
             item.HasIndex(w => new { w.Status, w.DueAt });
+            item.HasIndex(w => new { w.Status, w.FinishedAt });
             item.HasIndex(w => w.ContactId);
             item.HasOne(w => w.Campaign).WithMany().HasForeignKey(w => w.CampaignId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne(w => w.Contact).WithMany().HasForeignKey(w => w.ContactId).OnDelete(DeleteBehavior.Restrict);

@@ -192,7 +192,7 @@ public class CampaignServiceTests
     }
 
     [Fact]
-    public async Task Archived_campaigns_are_hidden_from_a_listing_unless_they_are_asked_for()
+    public async Task Archived_campaigns_are_hidden_from_a_listing_unless_they_are_asked_for_and_any_is_found_by_its_name()
     {
         using var database = new TestDatabase();
         using var db = database.Open();
@@ -211,6 +211,14 @@ public class CampaignServiceTests
         Assert.Null(live.NextCursor);
         Assert.Equal(gone.Id, Assert.Single(archived.Items).Id);
         Assert.Equal(running.Id, Assert.Single(active.Items).Id);
+
+        // A part of the name finds a campaign whatever its case or accents, under the same status rule.
+        var cafe = await service.CreateAsync(new CampaignCreateRequest("Über Café founders", null, null, null), Ct);
+        Assert.Equal(running.Id, Assert.Single((await service.ListAsync(new CampaignListRequest(null, null, null, "RUN"), Ct)).Items).Id);
+        Assert.Equal(cafe.Id, Assert.Single((await service.ListAsync(new CampaignListRequest(null, null, null, "uber cafe"), Ct)).Items).Id);
+        Assert.Empty((await service.ListAsync(new CampaignListRequest(null, null, null, "gone"), Ct)).Items);
+        Assert.Equal(gone.Id, Assert.Single((await service.ListAsync(new CampaignListRequest(CampaignStatus.Archived, null, null, "go"), Ct)).Items).Id);
+        Assert.Equal([kept.Id, cafe.Id], (await service.ListAsync(new CampaignListRequest(CampaignStatus.Draft, null, null, "   "), Ct)).Items.Select(c => c.Id));
     }
 
     [Fact]

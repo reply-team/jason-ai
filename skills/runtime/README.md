@@ -21,9 +21,9 @@ verbs existed, correctly and incompletely.
 One per moment somebody asks for something, because a host chooses a skill by its description and a
 description that promises everything matches nothing.
 
-- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **verified.** Turning an objective into durable
-  campaign work and following it: the provider check, the campaign, the people it is about, provider
-  operations and AI role work, and what the runtime does with them afterwards.
+- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
+  Turning an objective into durable campaign work and following it: the provider check, the campaign, the people
+  it is about, provider operations and AI role work, and what the runtime does with them afterwards.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
@@ -165,6 +165,5 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `planner-in-session` | Claude Code 2.1.303 (Opus 5.5) | 0.12.0 | `sha256:5983d790a5953f506fed5a08ba464d2691f6453decd9817087c281f2845f5d37` |
 | `operating-the-installation` | Claude Code 2.1.302 (Opus 5.5) | 0.12.0 | `sha256:ae4b7b684541e5306f0bc9c1757b6bb9e7c2371e934ded229c935dd741038d90` |
-| `managed-campaign-work` | Claude Code 2.1.302 (Opus 5.5) | 0.12.0 | `sha256:7de35c2c37e63b8829d25bf4e72dc2649d40377ca50ce4c84826aff4182a011f` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |

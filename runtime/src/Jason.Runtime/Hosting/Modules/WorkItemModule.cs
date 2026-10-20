@@ -25,6 +25,8 @@ public static class WorkItemModule
             Operations.WorkItemGet, (service, request, cancellationToken) => service.GetAsync(request, cancellationToken));
         app.MapOperation<WorkItemService, WorkItemListRequest, Page<WorkItemSummaryDto>>(
             Operations.WorkItemList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
+        app.MapOperation<WorkItemService, WorkItemCountRequest, WorkItemCountResponse>(
+            Operations.WorkItemCount, (service, request, cancellationToken) => service.CountAsync(request, cancellationToken));
         app.MapOperation<WorkItemService, WorkItemUpdateRequest, WorkItemDto>(
             Operations.WorkItemUpdate, (service, request, cancellationToken) => service.UpdateAsync(request, cancellationToken));
         app.MapOperation<WorkItemService, WorkItemCancelRequest, WorkItemDto>(

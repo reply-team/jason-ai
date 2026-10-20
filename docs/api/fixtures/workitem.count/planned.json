@@ -1,0 +1,14 @@
+{
+  "operation": "workitem.count",
+  "case": "planned",
+  "request": {
+    "status": [
+      "created"
+    ],
+    "order": "due"
+  },
+  "status": 200,
+  "response": {
+    "total": 5
+  }
+}

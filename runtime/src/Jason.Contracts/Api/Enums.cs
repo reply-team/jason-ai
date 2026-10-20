@@ -99,6 +99,18 @@ public enum WorkItemKind
 }
 
 /// <summary>
+/// How a work item listing is ordered, each in the one direction its question needs: <c>created</c> oldest first (the
+/// order a listing always had), <c>due</c> soonest first with undated work last, <c>finished</c> newest first with
+/// unfinished work left out. The window a listing takes measures the same time.
+/// </summary>
+public enum WorkItemListOrder
+{
+    Created,
+    Due,
+    Finished,
+}
+
+/// <summary>
 /// Which of the four levels decided where an operation's work goes, most specific first. A campaign default
 /// hides every global operation override for that campaign: bringing one back takes an explicit campaign
 /// operation override, because a campaign that named its provider must not still be sending one operation

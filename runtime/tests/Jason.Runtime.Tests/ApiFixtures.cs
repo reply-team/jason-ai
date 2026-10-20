@@ -24,22 +24,56 @@ public static class ApiFixtures
         "approval.approve/already-decided",
         "approval.approve/approved",
         "approval.get/pending-with-preview",
+        "approval.list/by-work-item",
         "approval.list/decided",
         "approval.list/empty",
         "approval.list/pending",
         "approval.list/unauthorized",
         "approval.reject/rejected",
+        "campaign.get/one",
+        "campaign.get/unknown",
+        "campaign.list/first-page",
+        "campaign.list/query",
+        "contact.get/one",
+        "contact.list/first-page",
+        "contact.list/query-email",
+        "contact.list/query-none",
+        "contact.list/query-phone",
         "decision.answer/answered",
         "decision.get/pending-with-options",
         "decision.list/empty",
         "decision.list/pending",
+        "journal.list/by-work-item",
         "plugin.list/none",
+        "role.list/all",
         "route.list/empty",
         "system.info/with-ui",
         "system.info/without-ui",
         "ui.revoke/one",
+        "ui.tokens/aged",
         "ui.tokens/none",
         "ui.tokens/two",
+        "workitem.cancel/reason",
+        "workitem.count/done",
+        "workitem.count/failed",
+        "workitem.count/filtered",
+        "workitem.count/now",
+        "workitem.count/planned",
+        "workitem.count/zero",
+        "workitem.get/awaiting",
+        "workitem.get/expired",
+        "workitem.get/failed",
+        "workitem.get/open",
+        "workitem.get/succeeded",
+        "workitem.list/by-contact",
+        "workitem.list/done",
+        "workitem.list/empty",
+        "workitem.list/failed",
+        "workitem.list/now",
+        "workitem.list/planned",
+        "workitem.list/planned-next",
+        "workitem.update/dates",
+        "workitem.update/terminal",
     ];
 
     public static string Root => Path.Combine(Publication.RepositoryRoot(), "docs", "api", "fixtures");
@@ -124,10 +158,13 @@ public sealed partial class FixtureScrubber(string dataDir)
         switch (node)
         {
             case JsonObject obj:
+                // An attempt's moments were seeded by the recording test, not read off a running clock; only the
+                // runtime's own moments (when it started, when a plugin loaded) are volatile.
+                var seeded = obj.ContainsKey("claimed_at");
                 var scrubbed = new JsonObject();
                 foreach (var (name, child) in obj)
                 {
-                    scrubbed[name] = Scrub(child, name);
+                    scrubbed[name] = seeded && MomentKeys.Contains(name, StringComparer.Ordinal) ? child?.DeepClone() : Scrub(child, name);
                 }
 
                 return scrubbed;

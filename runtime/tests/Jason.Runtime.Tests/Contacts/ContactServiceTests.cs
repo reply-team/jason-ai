@@ -26,6 +26,9 @@ public class ContactServiceTests
     private static ChannelInput Channel(string channel, string value, string? label = null, bool? primary = null) =>
         new(channel, value, label, primary, null);
 
+    private static ContactCreateRequest Person(string first, string? last, string? company, string? title, params ChannelInput[] channels) =>
+        new(first, last, company, title, null, channels, null, null, null);
+
     [Fact]
     public async Task A_contact_needs_no_channel_at_all_and_is_journaled_globally()
     {
@@ -154,34 +157,76 @@ public class ContactServiceTests
         Assert.Equal("contact_not_found", unknown.Code);
     }
 
-    [Fact]
-    public async Task A_listing_finds_a_contact_by_the_normalized_value_of_a_channel()
+    /// <summary>
+    /// A listing narrows by one channel's normalized value, or by any part of what a person is known by — a name, a
+    /// company, a title, any channel value — whatever its case and accents, a phone however it is spaced, and with the
+    /// characters a pattern would read as wildcards taken as written. Both narrow together.
+    /// </summary>
+    [Theory]
+    [InlineData("Email", " FOO@bar.COM ", null, false, "Foo")]
+    [InlineData("email", null, null, false, "Ada Lovelace|Foo|Other")]
+    [InlineData(null, null, "kavali.ex", false, "Ada Lovelace")]
+    [InlineData(null, null, "ADA@KAVALI", false, "Ada Lovelace")]
+    [InlineData(null, null, "+48 601 234 567", false, "Ada Lovelace")]
+    [InlineData(null, null, "601-234-567", false, "Ada Lovelace")]
+    [InlineData(null, null, "in/ada-love", false, "Ada Lovelace")]
+    [InlineData(null, null, "https://www.linkedin.com/in/ada-lovelace/", false, "Ada Lovelace")]
+    [InlineData(null, null, "linkedin.com/in/Ada-Lovelace?trk=public_profile", false, "Ada Lovelace")]
+    [InlineData(null, null, "love", false, "Ada Lovelace")]
+    [InlineData(null, null, "ada lovelace", false, "Ada Lovelace")]
+    [InlineData(null, null, "andina", false, "Álvaro Núñez")]
+    [InlineData(null, null, "director of", false, "Álvaro Núñez")]
+    [InlineData(null, null, "álv", false, "Álvaro Núñez")]
+    [InlineData(null, null, "łuk", false, "Łukasz Zieliński")]
+    [InlineData(null, null, "alvaro", false, "Álvaro Núñez")]
+    [InlineData(null, null, "nunez", false, "Álvaro Núñez")]
+    [InlineData(null, null, "lukasz zielinski", false, "Łukasz Zieliński")]
+    [InlineData(null, null, "r&d", false, "Łukasz Zieliński")]
+    [InlineData(null, null, "a_b", false, "")]
+    [InlineData(null, null, "%", false, "")]
+    [InlineData(null, null, "\\", false, "")]
+    [InlineData(null, null, "grace", false, "")]
+    [InlineData(null, null, "grace", true, "Grace Hopper")]
+    [InlineData("email", "ada@kavali.example", "love", false, "Ada Lovelace")]
+    [InlineData("email", "foo@bar.com", "love", false, "")]
+    public async Task A_listing_finds_contacts_by_a_channel_value_or_by_any_text_they_hold(string? channel, string? value, string? query, bool archived, string expected)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
         var service = NewService(db, new FixedClock(Noon));
-        var wanted = await service.CreateAsync(Create(channels: [Channel("email", "foo@bar.com")]), TestContext.Current.CancellationToken);
-        await service.CreateAsync(Create(channels: [Channel("email", "other@bar.com")]), TestContext.Current.CancellationToken);
-        await service.CreateAsync(Create(channels: [Channel("linkedin", "https://example.com/in/x")]), TestContext.Current.CancellationToken);
+        var ct = TestContext.Current.CancellationToken;
+        await service.CreateAsync(Person("Foo", null, null, null, Channel("email", "foo@bar.com")), ct);
+        await service.CreateAsync(Person("Other", null, null, null, Channel("email", "other@bar.com")), ct);
+        await service.CreateAsync(Person("Link", null, null, null, Channel("linkedin", "https://example.com/in/x")), ct);
+        await service.CreateAsync(
+            Person("Ada", "Lovelace", "Kavali", "CTO", Channel("email", "ada@kavali.example"), Channel("phone", "+48601234567"), Channel("linkedin", "https://www.linkedin.com/in/ada-lovelace")),
+            ct);
+        await service.CreateAsync(Person("Álvaro", "Núñez", "Andina Tech", "Director of Sales"), ct);
+        await service.CreateAsync(Person("Łukasz", "Zieliński", "Vireo", "Head of R&D"), ct);
+        await service.CreateAsync(Person("Axel", "Bloom", "axb", null), ct);
+        var grace = await service.CreateAsync(Person("Grace", "Hopper", null, null, Channel("email", "grace@navy.example")), ct);
+        await service.ArchiveAsync(new ContactArchiveRequest(grace.Id, null, "left the navy"), ct);
 
-        var byValue = await service.ListAsync(new ContactListRequest("Email", " FOO@bar.COM ", null, null, null), TestContext.Current.CancellationToken);
-        Assert.Equal(wanted.Id, Assert.Single(byValue.Items).Id);
+        var page = await service.ListAsync(new ContactListRequest(channel, value, archived ? true : null, null, null, query), ct);
 
-        var byChannel = await service.ListAsync(new ContactListRequest("email", null, null, null, null), TestContext.Current.CancellationToken);
-        Assert.Equal(2, byChannel.Items.Count);
+        var names = page.Items.Select(c => string.Join(' ', new[] { c.FirstName, c.LastName }.Where(n => n is not null))).Order(StringComparer.Ordinal);
+        Assert.Equal(expected, string.Join('|', names));
     }
 
-    [Fact]
-    public async Task A_value_filter_without_a_channel_is_a_usage_error()
+    [Theory]
+    [InlineData(null, "foo@bar.com", 0, "value")]
+    [InlineData(null, null, 201, "query")]
+    public async Task A_listing_filter_it_cannot_use_is_refused_on_its_field(string? channel, string? value, int queryLength, string field)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
         var service = NewService(db, new FixedClock(Noon));
+        var query = queryLength == 0 ? null : new string('x', queryLength);
 
         var ex = await Assert.ThrowsAsync<ValidationException>(() =>
-            service.ListAsync(new ContactListRequest(null, "foo@bar.com", null, null, null), TestContext.Current.CancellationToken));
+            service.ListAsync(new ContactListRequest(channel, value, null, null, null, query), TestContext.Current.CancellationToken));
 
-        Assert.Equal("value", Assert.Single(ex.Details!).Field);
+        Assert.Equal(field, Assert.Single(ex.Details!).Field);
     }
 
     [Fact]
@@ -196,6 +241,10 @@ public class ContactServiceTests
 
         var visible = await service.ListAsync(new ContactListRequest(null, null, null, null, null), TestContext.Current.CancellationToken);
         Assert.Equal(kept.Id, Assert.Single(visible.Items).Id);
+
+        // A blank query is no query.
+        var blank = await service.ListAsync(new ContactListRequest(null, null, null, null, null, "   "), TestContext.Current.CancellationToken);
+        Assert.Equal(kept.Id, Assert.Single(blank.Items).Id);
 
         var all = await service.ListAsync(new ContactListRequest(null, null, true, null, null), TestContext.Current.CancellationToken);
         Assert.Equal(2, all.Items.Count);
