@@ -30,10 +30,10 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "urn:jason:operation:conversation.list:1:input",
     "title": "conversation.list input",
-    "description": "One page of conversation threads: one person's across the account when the work item names a person, otherwise one campaign's.",
+    "description": "One page of conversation threads: one person's across the account when a person is named, otherwise one campaign's. A person's threads need no campaign: a read on request names none, and a work item's campaign is context only.",
     "type": "object",
     "additionalProperties": false,
-    "required": ["args", "campaign"],
+    "required": ["args"],
     "properties": {
       "args": {
         "type": "object",

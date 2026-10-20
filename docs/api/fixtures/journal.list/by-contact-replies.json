@@ -1,0 +1,49 @@
+{
+  "operation": "journal.list",
+  "case": "by-contact-replies",
+  "request": {
+    "contact_id": "cnt_1",
+    "kinds": [
+      "inbound_reply_observed",
+      "provider_event_observed"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_1",
+        "ts": "2026-10-16T08:41:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": "dispatcher"
+        },
+        "kind": "inbound_reply_observed",
+        "campaign_id": "cmp_2",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": "reply-t_501",
+        "old": null,
+        "new": {
+          "plugin": "reply",
+          "thread": "t_501",
+          "channel": "email",
+          "last_activity_at": "2026-10-16T08:41:00.000Z",
+          "unread": true,
+          "has_meeting_intent": true,
+          "contact_id": "cnt_1"
+        },
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": "LatAm pilot",
+        "contact_name": "Mateo Ruiz",
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

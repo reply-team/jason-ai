@@ -556,6 +556,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.WorkItemId, e.PublicId });
             entry.HasIndex(e => e.Kind);
             entry.HasOne(e => e.Campaign).WithMany().HasForeignKey(e => e.CampaignId).OnDelete(DeleteBehavior.Restrict);
+
+            // One person's lines, newest first: their timeline, and the newest of them is their latest activity.
+            entry.HasIndex(e => new { e.ContactId, e.PublicId });
+            entry.HasOne(e => e.Contact).WithMany().HasForeignKey(e => e.ContactId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<EventSource>(source =>

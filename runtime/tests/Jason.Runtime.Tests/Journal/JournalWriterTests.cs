@@ -100,6 +100,55 @@ public class JournalWriterTests
         Assert.Equal("att_A", dto.AttemptId);
     }
 
+    [Theory]
+    [InlineData("work item's person")]
+    [InlineData("new contact")]
+    [InlineData("line's person over item's")]
+    [InlineData("nobody")]
+    public void A_line_carries_the_person_it_is_about(string about)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var writer = new JournalWriter(new FixedClock(Noon));
+        var campaign = new Campaign { PublicId = "cmp_P", Name = "p", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        var ada = new Contact { PublicId = "cnt_ADA", FirstName = "Ada", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        db.Campaigns.Add(campaign);
+        db.Contacts.Add(ada);
+        db.SaveChanges();
+        var item = new WorkItem
+        {
+            PublicId = "wi_P",
+            Campaign = campaign,
+            Contact = about == "work item's person" ? ada : null,
+            Kind = WorkItemKind.AiRole,
+            Role = "researcher",
+            CreatedAt = Noon.UtcDateTime,
+            UpdatedAt = Noon.UtcDateTime,
+        };
+        db.WorkItems.Add(item);
+        db.SaveChanges();
+        // A person created in this same save has no id yet: the line takes them by reference, as it takes a new campaign.
+        var grace = new Contact { PublicId = "cnt_GRACE", FirstName = "Grace", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        db.Contacts.Add(grace);
+
+        var entry = about switch
+        {
+            "work item's person" => writer.Append(db, Actors.Runtime, JournalKinds.WorkItemSucceeded, campaign: null, workItem: item),
+            "new contact" => writer.Append(db, Actors.Runtime, JournalKinds.ContactCreated, campaign: null, key: grace.PublicId, contact: grace),
+            "line's person over item's" => writer.Append(db, Actors.Runtime, JournalKinds.InboundReplyObserved, campaign: null, workItem: item, contactId: ada.Id),
+            _ => writer.Append(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null, key: "email"),
+        };
+        db.SaveChanges();
+
+        int? expected = about switch
+        {
+            "nobody" => null,
+            "new contact" => grace.Id,
+            _ => ada.Id,
+        };
+        Assert.Equal(expected, entry.ContactId);
+    }
+
     [Fact]
     public void An_entry_without_a_work_item_carries_neither_reference()
     {

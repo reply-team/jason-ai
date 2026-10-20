@@ -47,6 +47,7 @@ public class InboundSyncHarvestTests
         Assert.Equal(read.CampaignId, line.CampaignId);
         Assert.Equal(read.PublicId, line.WorkItemId);
         Assert.Equal(attempt, line.AttemptId);
+        Assert.Equal((await db.Contacts.SingleAsync(c => c.PublicId == ada, Ct)).Id, line.ContactId);
         Assert.Null(line.Old);
         Assert.Null(line.Reason);
         Assert.Equal(

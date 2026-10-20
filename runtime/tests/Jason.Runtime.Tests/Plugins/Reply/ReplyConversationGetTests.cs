@@ -49,6 +49,10 @@ public class ReplyConversationGetTests
         Assert.Equal("inbox get 501", call.Line);
         Assert.Equal(("20", "0"), (call.Option("--limit"), call.Option("--offset")));
         Assert.All(account.Calls, call => Assert.Null(call.Body));
+
+        // Read on a person's request, outside any work item, no campaign comes with the thread, and the answer is the same.
+        var unnamed = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input("501", limit: 20, offset: 0, campaign: false)));
+        Assert.Equal(answer.ToJsonString(), unnamed.ToJsonString());
     }
 
     [Fact]
@@ -340,22 +344,30 @@ public class ReplyConversationGetTests
         ["aiSentType"] = null,
     };
 
-    private static JsonObject Input(string thread, int limit, int offset) => new()
+    private static JsonObject Input(string thread, int limit, int offset, bool campaign = true)
     {
-        ["args"] = new JsonObject
+        var input = new JsonObject
         {
-            ["thread"] = new JsonObject { ["external_id"] = thread },
-            ["limit"] = limit,
-            ["offset"] = offset,
-        },
-        ["campaign"] = new JsonObject
+            ["args"] = new JsonObject
+            {
+                ["thread"] = new JsonObject { ["external_id"] = thread },
+                ["limit"] = limit,
+                ["offset"] = offset,
+            },
+        };
+        if (campaign)
         {
-            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
-            ["name"] = "Q3 LatAm founders",
-            ["status"] = "active",
-            ["external_ids"] = new JsonObject { ["campaign"] = "7" },
-        },
-    };
+            input["campaign"] = new JsonObject
+            {
+                ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                ["name"] = "Q3 LatAm founders",
+                ["status"] = "active",
+                ["external_ids"] = new JsonObject { ["campaign"] = "7" },
+            };
+        }
+
+        return input;
+    }
 
     private static Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, JsonObject input) =>
         ReplyOperations.InvokeAsync(api, Operation, input, Ct);

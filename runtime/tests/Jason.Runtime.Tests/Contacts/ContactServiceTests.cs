@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
@@ -46,10 +47,18 @@ public class ContactServiceTests
         Assert.Equal(Noon, contact.UpdatedAt);
         Assert.Null(contact.ArchivedAt);
 
+        Assert.Null(contact.Campaigns);
+        Assert.Null(contact.LastActivity);
+        var read = await service.GetAsync(new ContactGetRequest(contact.Id), TestContext.Current.CancellationToken);
+        Assert.Empty(read.Campaigns!);
+        Assert.Equal(JournalKinds.ContactCreated, read.LastActivity!.Kind);
+        Assert.Equal(contact.Id, read.LastActivity.ContactId);
+
         var entry = Assert.Single(await db.Journal.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Equal(JournalKinds.ContactCreated, entry.Kind);
         Assert.Null(entry.CampaignId);
         Assert.Equal(contact.Id, entry.Key);
+        Assert.Equal(db.Contacts.Single(c => c.PublicId == contact.Id).Id, entry.ContactId);
     }
 
     [Fact]
@@ -272,29 +281,80 @@ public class ContactServiceTests
         Assert.Equal(2, all.Items.Count);
     }
 
-    [Fact]
-    public async Task A_listing_walks_its_pages_in_creation_order()
+    [Theory]
+    [InlineData(null, null, "a b c d e")]
+    [InlineData("activity", null, "d b a c e")]
+    [InlineData("activity", "autumn", "b a")]
+    public async Task A_listing_walks_its_pages_in_the_order_asked_for(string? order, string? campaign, string expected)
     {
+        var ct = TestContext.Current.CancellationToken;
         using var database = new TestDatabase();
         using var db = database.Open();
-        var service = NewService(db, new FixedClock(Noon));
-        var created = new List<string>();
-        for (var i = 0; i < 5; i++)
+        var clock = new FixedClock(Noon);
+        var service = NewService(db, clock);
+        var writer = new JournalWriter(clock);
+
+        // a, b and d are created through the service; c and e arrive as an import does, with no line of their own.
+        var letters = new Dictionary<string, string>(StringComparer.Ordinal);
+        var people = new Dictionary<string, Contact>(StringComparer.Ordinal);
+        foreach (var letter in (string[])["a", "b", "c", "d", "e"])
         {
-            created.Add((await service.CreateAsync(Create(firstName: "c" + i), TestContext.Current.CancellationToken)).Id);
+            if (letter is "c" or "e")
+            {
+                var imported = new Contact { PublicId = PublicId.New("cnt"), FirstName = letter, CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+                db.Contacts.Add(imported);
+                await db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                await service.CreateAsync(Create(firstName: letter), ct);
+            }
+
+            var stored = db.Contacts.Single(c => c.FirstName == letter);
+            letters[stored.PublicId] = letter;
+            people[letter] = stored;
         }
 
-        var seen = new List<string>();
+        var autumn = new Campaign { PublicId = "cmp_AUTUMN", Name = "Autumn", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        db.Campaigns.Add(autumn);
+        db.CampaignContacts.AddRange(
+            new CampaignContact { Campaign = autumn, Contact = people["a"], AddedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime },
+            new CampaignContact { Campaign = autumn, Contact = people["b"], AddedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime },
+            new CampaignContact { Campaign = autumn, Contact = people["d"], State = MembershipState.Excluded, AddedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime.AddHours(1) });
+        foreach (var letter in (string[])["a", "b", "d"])
+        {
+            clock.Advance(TimeSpan.FromHours(1));
+            writer.Append(db, Actors.Runtime, JournalKinds.ContactUpdated, campaign: null, key: people[letter].PublicId, contact: people[letter]);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var walked = new List<ContactDto>();
         string? cursor = null;
+        string? firstCursor = null;
         do
         {
-            var page = await service.ListAsync(new ContactListRequest(null, null, null, 2, cursor), TestContext.Current.CancellationToken);
-            seen.AddRange(page.Items.Select(c => c.Id));
+            var request = new ContactListRequest(null, null, null, 2, cursor, CampaignId: campaign is null ? null : "cmp_AUTUMN", Order: order is null ? null : ContactListOrder.Activity);
+            var page = await service.ListAsync(request, ct);
+            walked.AddRange(page.Items);
             cursor = page.NextCursor;
+            firstCursor ??= cursor;
         }
         while (cursor is not null);
 
-        Assert.Equal(created.Order(StringComparer.Ordinal), seen);
+        Assert.Equal(expected, string.Join(' ', walked.Select(c => letters[c.Id])));
+        foreach (var contact in walked)
+        {
+            var letter = letters[contact.Id];
+            Assert.Equal(letter is "c" or "e" ? null : JournalKinds.ContactUpdated, contact.LastActivity?.Kind);
+            var memberships = string.Join(',', contact.Campaigns!.Select(m => $"{m.CampaignName}:{m.State}"));
+            Assert.Equal(letter switch { "a" or "b" => "Autumn:Enrolled", "d" => "Autumn:Excluded", _ => string.Empty }, memberships);
+        }
+
+        if (order is not null && firstCursor is not null)
+        {
+            var other = await Assert.ThrowsAsync<ValidationException>(() => service.ListAsync(new ContactListRequest(null, null, null, 2, firstCursor), ct));
+            Assert.Equal("cursor", Assert.Single(other.Details!).Field);
+        }
     }
 
     [Fact]
@@ -331,6 +391,7 @@ public class ContactServiceTests
 
         var entry = Assert.Single(await db.Journal.Where(e => e.Kind == JournalKinds.ContactUpdated).ToListAsync(TestContext.Current.CancellationToken));
         Assert.Equal(created.Id, entry.Key);
+        Assert.Equal(db.Contacts.Single(c => c.PublicId == created.Id).Id, entry.ContactId);
         Assert.Equal("cleanup", entry.Reason);
         Assert.Equal(["title", "channels", "custom"], entry.New!.AsArray().Select(n => (string?)n));
     }
@@ -441,5 +502,6 @@ public class ContactServiceTests
         Assert.Equal(first.ArchivedAt, second.ArchivedAt);
         var entry = Assert.Single(await db.Journal.Where(e => e.Kind == JournalKinds.ContactArchived).ToListAsync(TestContext.Current.CancellationToken));
         Assert.Equal("left", entry.Reason);
+        Assert.Equal(db.Contacts.Single(c => c.PublicId == created.Id).Id, entry.ContactId);
     }
 }

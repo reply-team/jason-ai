@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -26,7 +27,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         var contact = NewContact(draft, clock.GetUtcNow().UtcDateTime);
 
         db.Contacts.Add(contact);
-        journal.Append(db, actor, JournalKinds.ContactCreated, campaign: null, key: contact.PublicId, reason: request.Reason);
+        journal.Append(db, actor, JournalKinds.ContactCreated, campaign: null, key: contact.PublicId, reason: request.Reason, contact: contact);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return ContactMapper.ToDto(contact);
@@ -35,7 +36,8 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
     public async Task<ContactDto> GetAsync(ContactGetRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return ContactMapper.ToDto(await LoadAsync(db, request.ContactId, cancellationToken).ConfigureAwait(false));
+        var contact = await LoadAsync(db, request.ContactId, cancellationToken).ConfigureAwait(false);
+        return (await WithCampaignsAndLatestLineAsync([contact], cancellationToken).ConfigureAwait(false))[0];
     }
 
     public async Task<Page<ContactDto>> ListAsync(ContactListRequest request, CancellationToken cancellationToken)
@@ -72,7 +74,14 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
-        var query = db.Contacts.Include(contact => contact.Channels).Include(contact => contact.ExternalIds).AsQueryable();
+        var query = db.Contacts.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(request.CampaignId))
+        {
+            var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+            query = query.Where(contact => db.CampaignContacts.Any(member =>
+                member.ContactId == contact.Id && member.CampaignId == campaign.Id && member.State != MembershipState.Excluded));
+        }
+
         if (text is not null)
         {
             query = ContactSearch.Apply(query, text);
@@ -90,13 +99,66 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
                 : query.Where(contact => contact.Channels.Any(entry => entry.Channel == channel && entry.Value == value));
         }
 
-        if (after is not null)
+        if (request.Order == ContactListOrder.Activity)
         {
-            query = query.Where(contact => string.Compare(contact.PublicId, after) > 0);
+            var rows = await ContactActivity.Ordered(ContactActivity.After(ContactActivity.Rows(query, db), after))
+                .Take(limit + 1)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var page = Paging.ToPage(rows, limit, ContactActivity.CursorKey, row => row.PublicId);
+            var ids = page.Items.ToList();
+            var people = await WithChannelsAndPins(db.Contacts).Where(contact => ids.Contains(contact.PublicId)).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var inOrder = ids.Select(id => people.Single(contact => contact.PublicId == id)).ToList();
+            return new Page<ContactDto>(await WithCampaignsAndLatestLineAsync(inOrder, cancellationToken).ConfigureAwait(false), page.NextCursor);
         }
 
-        var fetched = await query.OrderBy(contact => contact.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return Paging.ToPage(fetched, limit, contact => contact.PublicId, ContactMapper.ToDto);
+        if (after is not null)
+        {
+            query = ContactActivity.IsActivityCursor(after)
+                ? throw ContactActivity.InvalidCursor()
+                : query.Where(contact => string.Compare(contact.PublicId, after) > 0);
+        }
+
+        var fetched = await WithChannelsAndPins(query).OrderBy(contact => contact.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var byId = Paging.ToPage(fetched, limit, contact => contact.PublicId, contact => contact);
+        return new Page<ContactDto>(await WithCampaignsAndLatestLineAsync(byId.Items, cancellationToken).ConfigureAwait(false), byId.NextCursor);
+    }
+
+    private static IQueryable<Contact> WithChannelsAndPins(IQueryable<Contact> contacts) =>
+        contacts.Include(contact => contact.Channels).Include(contact => contact.ExternalIds);
+
+    /// <summary>
+    /// The people as the two reads answer them: each with the campaigns they are on, in any state, and the newest line
+    /// about them. One query for the memberships and one for the lines of the whole page, never one per person.
+    /// </summary>
+    private async Task<IReadOnlyList<ContactDto>> WithCampaignsAndLatestLineAsync(IReadOnlyList<Contact> contacts, CancellationToken ct)
+    {
+        var keys = contacts.Select(contact => contact.Id).ToList();
+        var memberships = await db.CampaignContacts.AsNoTracking()
+            .Where(member => keys.Contains(member.ContactId))
+            .OrderBy(member => member.AddedAt)
+            .ThenBy(member => member.Id)
+            .Select(member => new { member.ContactId, member.Campaign!.PublicId, member.Campaign.Name, member.State, member.AddedAt, member.UpdatedAt })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var newest = await db.Journal.AsNoTracking()
+            .Where(entry => entry.ContactId != null && keys.Contains(entry.ContactId.Value))
+            .GroupBy(entry => entry.ContactId)
+            .Select(lines => lines.Max(entry => entry.PublicId))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var lines = await db.Journal.AsNoTracking().Where(entry => newest.Contains(entry.PublicId)).ToListAsync(ct).ConfigureAwait(false);
+        var latest = (await JournalEntries.ToDtosAsync(db, lines, ct).ConfigureAwait(false))
+            .Zip(lines)
+            .ToDictionary(pair => pair.Second.ContactId!.Value, pair => pair.First);
+
+        return contacts.Select(contact => ContactMapper.ToDto(contact) with
+        {
+            Campaigns = [.. memberships
+                .Where(member => member.ContactId == contact.Id)
+                .Select(member => new ContactCampaignDto(member.PublicId, member.Name, member.State, ContactMapper.ToOffset(member.AddedAt), ContactMapper.ToOffset(member.UpdatedAt)))],
+            LastActivity = latest.GetValueOrDefault(contact.Id),
+        }).ToList();
     }
 
     public async Task<ContactDto> UpdateAsync(ContactUpdateRequest request, CancellationToken cancellationToken)
@@ -156,7 +218,8 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
             campaign: null,
             key: contact.PublicId,
             updated: new JsonArray([.. changed.Select(field => (JsonNode?)JsonValue.Create(field))]),
-            reason: request.Reason);
+            reason: request.Reason,
+            contact: contact);
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return ContactMapper.ToDto(contact);
@@ -176,7 +239,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         var now = clock.GetUtcNow().UtcDateTime;
         contact.ArchivedAt = now;
         contact.UpdatedAt = now;
-        journal.Append(db, actor, JournalKinds.ContactArchived, campaign: null, key: contact.PublicId, reason: request.Reason);
+        journal.Append(db, actor, JournalKinds.ContactArchived, campaign: null, key: contact.PublicId, reason: request.Reason, contact: contact);
 
         // Archiving somebody means nothing may reach out to them any more, so work still open about them stops
         // wherever it lives rather than running one last time.

@@ -69,10 +69,12 @@ public class SkillSequenceTests
         const string Follow = $"jason workitem list --campaign cmp_{Placeholder}";
         const string Planned = $"jason workitem list --campaign cmp_{Placeholder} --status created --order due";
         const string HowMany = $"jason workitem count --campaign cmp_{Placeholder}";
+        const string History = $"jason journal list --contact cnt_{Placeholder}";
+        const string Moved = "jason contact list --order activity";
         const string Widened = "founders of seed-stage startups in Mexico, Colombia and Chile";
         const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason \"the person widened the audience\"";
 
-        foreach (var line in new[] { Create, Add, List, Work, Start, Follow, Planned, HowMany, Change })
+        foreach (var line in new[] { Create, Add, List, Work, Start, Follow, Planned, HowMany, History, Moved, Change })
         {
             Assert.Contains(line, printed);
         }
@@ -155,6 +157,15 @@ public class SkillSequenceTests
             planned.Select(listing => (string?)listing!["id"]));
         var count = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(HowMany, ids)])));
         Assert.Equal(all.Count, (int)count["total"]!);
+
+        // One person's history is the lines about them, and the people listed by what last happened to them start with her.
+        var person = ids["cnt_"];
+        var history = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(History, ids)])))["items"]!.AsArray();
+        Assert.NotEmpty(history);
+        Assert.All(history, line => Assert.Equal(person, (string?)line!["contact_id"]));
+        var moved = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Moved, ids)])))["items"]!.AsArray();
+        Assert.Equal(person, (string?)moved[0]!["id"]);
+        Assert.NotNull(moved[0]!["last_activity"]);
     }
 
     /// <summary>

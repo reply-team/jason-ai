@@ -1,0 +1,35 @@
+{
+  "operation": "campaign.add_contacts",
+  "case": "re-enrol-excluded",
+  "request": {
+    "campaign_id": "cmp_1",
+    "contacts": [
+      {
+        "contact_id": "cnt_1"
+      }
+    ],
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "summary": {
+      "added": 1,
+      "already_member": 0,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "added",
+        "contact_id": "cnt_1",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      }
+    ]
+  }
+}

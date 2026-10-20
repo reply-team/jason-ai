@@ -95,7 +95,8 @@ public sealed class ReportService(JasonDbContext db, JournalWriter journal, Time
             key: "report",
             updated: Names(report, campaign, contact, item),
             reason: submission.Reason,
-            workItem: item);
+            workItem: item,
+            contact: contact);
 
         try
         {

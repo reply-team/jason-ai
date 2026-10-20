@@ -4,6 +4,14 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Plugins;
+using Jason.Runtime.Tests.Contacts;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Journal;
+using Jason.Runtime.Domain;
+using Jason.Runtime.Contacts;
+using Jason.Contracts.Ids;
 using Jason.Runtime.Tests.Ui;
 using Jason.Runtime.Ui;
 using Microsoft.EntityFrameworkCore;
@@ -228,9 +236,306 @@ public class RecordedExchangesTests
         Assert.Equal(["workitem_cancelled", "workitem_updated", "workitem_updated"], history.Items.Select(e => e.Kind));
     }
 
+    /// <summary>
+    /// What the People screen reads — people by what last happened to them, by campaign, searched and with the archived,
+    /// a person with their campaigns, their open work, their journal under each chip, their threads and one thread from
+    /// the provider, and the refusals those reads can meet — and then what the card writes: adding a person to a
+    /// campaign, re-enrolling an excluded one, and the refusal an archived campaign answers with.
+    /// </summary>
+    [Fact]
+    public async Task People_exchanges_for_the_screen()
+    {
+        var reads = new FakeProviderReads();
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            clock: new FixedClock(Nine),
+            configureServices: services => services.AddSingleton<IProviderReadInvoker>(reads));
+        var seed = await Seed.PeopleAsync(api);
+        string[] replies = ["inbound_reply_observed", "provider_event_observed"];
+        string[] work = ["workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired", "external_effect_reported"];
+        string[] decisions = ["approval_requested", "approval_approved", "approval_rejected", "decision_raised", "decision_answered"];
+        string[] changes = ["contact_created", "contact_updated", "contact_archived"];
+        string[] all = [.. replies, .. work, .. decisions, .. changes];
+
+        var first = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity", new { order = "activity", limit = 3 }, Ct);
+        Assert.Equal([seed.Mateo, seed.Aguilar, seed.Paula], first.Items.Select(c => c.Id));
+        var rest = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-next", new { order = "activity", limit = 3, cursor = first.NextCursor }, Ct);
+        Assert.Equal([seed.Grace], rest.Items.Select(c => c.Id));
+        Assert.Equal([seed.Mateo, seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign", new { order = "activity", campaign_id = seed.LatAm, limit = 50 }, Ct)).Items.Select(c => c.Id));
+        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query", new { order = "activity", query = "mat", limit = 50 }, Ct)).Items.Select(c => c.Id));
+        Assert.Contains(seed.Marcos, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "archived", new { order = "activity", include_archived = true, limit = 50 }, Ct)).Items.Select(c => c.Id));
+
+        Assert.Equal(2, (await api.RecordAsync<ContactDto>(Operations.ContactGet, "with-campaigns", new { contact_id = seed.Mateo }, Ct)).Campaigns!.Count);
+        Assert.Null((await api.RecordAsync<ContactDto>(Operations.ContactGet, "no-first-name", new { contact_id = seed.Aguilar }, Ct)).FirstName);
+        Assert.NotNull((await api.RecordAsync<ContactDto>(Operations.ContactGet, "archived", new { contact_id = seed.Marcos }, Ct)).ArchivedAt);
+
+        Assert.Single((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-contact-open", new { contact_id = seed.Mateo, status = new[] { "created", "awaiting_approval", "scheduled", "processing" }, order = "due", limit = 50 }, Ct)).Items);
+
+        Assert.Equal(6, (await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact", new { contact_id = seed.Mateo, kinds = all, limit = 50 }, Ct)).Items.Count);
+        Assert.Single((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-replies", new { contact_id = seed.Mateo, kinds = replies, limit = 50 }, Ct)).Items);
+        Assert.Equal(2, (await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-work", new { contact_id = seed.Mateo, kinds = work, limit = 50 }, Ct)).Items.Count);
+        Assert.Single((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-decisions", new { contact_id = seed.Mateo, kinds = decisions, limit = 50 }, Ct)).Items);
+        Assert.Equal(2, (await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-changes", new { contact_id = seed.Mateo, kinds = changes, limit = 50 }, Ct)).Items.Count);
+        Assert.Equal(2, (await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-failed", new { contact_id = seed.Aguilar, kinds = all, limit = 50 }, Ct)).Items.Count);
+        Assert.Empty((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-empty", new { contact_id = seed.Grace, kinds = all, limit = 50 }, Ct)).Items);
+
+        reads.Answer(
+            FakeProviderReads.Result(Seed.Threads(more: false)),
+            FakeProviderReads.Result(Seed.Threads(more: true)),
+            FakeProviderReads.Failure("rate_limited", FailureClass.Transient),
+            FakeProviderReads.Result(Seed.Thread(owner: "16786993", more: false)),
+            FakeProviderReads.Result(Seed.Thread(owner: "16786993", more: true)),
+            FakeProviderReads.Result(Seed.Thread(owner: "999", more: false)));
+        var threads = new { contact_id = seed.Mateo, plugin_id = "reply", limit = 100 };
+        Assert.Equal(2, (await api.RecordAsync<ContactThreadsResponse>(Operations.ContactThreads, "two-threads", threads, Ct)).Items.Count);
+        Assert.True((await api.RecordAsync<ContactThreadsResponse>(Operations.ContactThreads, "has-more", threads, Ct)).HasMore);
+        Assert.Equal("rate_limited", (await api.RecordErrorAsync(Operations.ContactThreads, "provider-failed", threads, HttpStatusCode.BadGateway, Ct)).Code);
+        Assert.Equal("contact_not_linked", (await api.RecordErrorAsync(Operations.ContactThreads, "not-linked", new { contact_id = seed.Grace, limit = 100 }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.ContactThreads, "no-route", new { contact_id = seed.Paula, limit = 100 }, HttpStatusCode.NotFound, Ct)).Code);
+        var thread = new { contact_id = seed.Mateo, plugin_id = "reply", thread_id = "t_501", limit = 20 };
+        Assert.Equal(3, (await api.RecordAsync<ContactThreadResponse>(Operations.ContactThread, "messages", thread, Ct)).Messages.Count);
+        Assert.True((await api.RecordAsync<ContactThreadResponse>(Operations.ContactThread, "has-more", thread, Ct)).HasMore);
+        Assert.Equal("thread_not_this_contact", (await api.RecordErrorAsync(Operations.ContactThread, "not-this-contact", thread, HttpStatusCode.NotFound, Ct)).Code);
+
+        Assert.Equal(2, (await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "for-picker", new { limit = 10 }, Ct)).Items.Count);
+
+        var ada = new { type = "human", id = "ada" };
+        var added = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "one-person", new { campaign_id = seed.LatAm, contacts = new[] { new { contact_id = seed.Grace } }, reason = "Fits the pilot.", actor = ada }, Ct);
+        Assert.Equal(1, added.Summary.Added);
+        var reenrolled = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "re-enrol-excluded", new { campaign_id = seed.ReEngage, contacts = new[] { new { contact_id = seed.Mateo } }, actor = ada }, Ct);
+        Assert.Equal(1, reenrolled.Summary.Added);
+        var again = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "already-member", new { campaign_id = seed.LatAm, contacts = new[] { new { contact_id = seed.Mateo } }, actor = ada }, Ct);
+        Assert.Equal(1, again.Summary.AlreadyMember);
+        Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "archived-campaign", new { campaign_id = seed.OldList, contacts = new[] { new { contact_id = seed.Grace } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
+    }
+
     /// <summary>Rows written the way the claim and a role write them, with the ids fixed and a preview a person can read.</summary>
     private static class Seed
     {
+        internal sealed record PeopleIds(string LatAm, string ReEngage, string OldList, string Mateo, string Aguilar, string Grace, string Paula, string Marcos);
+
+        /// <summary>
+        /// Five people and three campaigns at fixed ids and moments. Mateo is on the LatAm pilot and was excluded from the
+        /// paused re-engagement, has history under every chip and planned work, and is known to the provider in the routed
+        /// account; Aguilar has no first name and a failed enrolment; Paula is known to the provider in an account no route
+        /// binds; Grace was imported and nothing has happened to her; Marcos is archived.
+        /// </summary>
+        public static async Task<PeopleIds> PeopleAsync(RuntimeApiFixture api)
+        {
+            static string Id(string prefix, int n) => $"{prefix}_01K7QN{n:D20}";
+            var day = new DateTime(2026, 10, 16, 0, 0, 0, DateTimeKind.Utc);
+            var routed = new JsonObject { ["workspace"] = "a" };
+            var unrouted = new JsonObject { ["workspace"] = "b" };
+
+            var plugins = api.Resolve<PluginRegistry>();
+            var schema = JsonNode.Parse("""{ "type": "object", "properties": { "workspace": { "type": "string" } } }""")!.AsObject();
+            plugins.Replace(
+                new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Nine.UtcDateTime, SnapshotSource.Startup, [TestPlugins.Loaded("reply", ["conversation.list", "conversation.get"], binding: schema)]),
+                new ReloadReport(Nine.UtcDateTime, SnapshotSource.Startup, Activated: true, [], []));
+            api.Resolve<RouteRegistry>().Replace(new RouteSnapshot(
+                PublicId.New(RouteSnapshot.IdPrefix),
+                Nine,
+                plugins.Snapshot.Id,
+                new RouteSet(new Route("reply", routed, BindingIdentity.Of(routed)), RouteSet.Empty.Operations),
+                new Dictionary<string, RouteSet>(StringComparer.Ordinal)));
+
+            using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+
+            Campaign Campaign(int n, string name, CampaignStatus status)
+            {
+                var campaign = WorkItemFactory.NewCampaign(name, status, day.AddDays(-30));
+                campaign.PublicId = Id("cmp", n);
+                campaign.ArchivedAt = status == CampaignStatus.Archived ? day.AddDays(-20) : null;
+                db.Campaigns.Add(campaign);
+                return campaign;
+            }
+
+            var latAm = Campaign(101, "LatAm pilot", CampaignStatus.Active);
+            var reEngage = Campaign(102, "Re-engage Q2 no-replies", CampaignStatus.Paused);
+            var oldList = Campaign(103, "Old list", CampaignStatus.Archived);
+
+            Contact Person(int n, string? first, string last, string company, string title, string zone, params (string Channel, string Value)[] channels)
+            {
+                var person = new Contact
+                {
+                    PublicId = Id("cnt", n),
+                    FirstName = first,
+                    LastName = last,
+                    Company = company,
+                    Title = title,
+                    TimeZone = zone,
+                    CreatedAt = day.AddDays(-15),
+                    UpdatedAt = day.AddDays(-15),
+                };
+                foreach (var (channel, value) in channels)
+                {
+                    person.Channels.Add(new ContactChannel { Channel = channel, Value = value, IsPrimary = channel == "email" });
+                }
+
+                db.Contacts.Add(person);
+                return person;
+            }
+
+            var mateo = Person(101, "Mateo", "Ruiz", "Soluna", "Head of Sales", "America/Mexico_City",
+                ("email", "mateo@soluna.example"), ("linkedin", "https://www.linkedin.com/in/mateo-ruiz-example"), ("phone", "+525512345678"));
+            mateo.Custom = new JsonObject { ["segment"] = "fintech-mx", ["source"] = "q2-list", ["series"] = "A, raised 2026-06" };
+            var aguilar = Person(102, null, "Aguilar", "Andina Tech", "Director of Sales", "America/Lima", ("email", "aguilar@andina.example"));
+            var grace = Person(103, "Grace", "Hopper", "Navy", "Rear Admiral", "America/New_York", ("email", "grace@navy.example"));
+            var paula = Person(104, "Paula", "Mendes", "Vela", "Head of Ops", "America/Sao_Paulo", ("email", "paula@vela.example"));
+            var marcos = Person(105, "Marcos", "Vidal", "Puerto Digital", "CEO", "America/Santiago", ("email", "marcos@puerto.example"));
+            marcos.ArchivedAt = day.AddDays(-2);
+
+            db.CampaignContacts.AddRange(
+                new CampaignContact { Campaign = latAm, Contact = mateo, AddedAt = day.AddDays(-13), UpdatedAt = day.AddDays(-13) },
+                new CampaignContact { Campaign = reEngage, Contact = mateo, State = MembershipState.Excluded, AddedAt = day.AddDays(-26), UpdatedAt = day.AddDays(-15).AddHours(9.5) },
+                new CampaignContact { Campaign = latAm, Contact = aguilar, AddedAt = day.AddDays(-1).AddHours(16), UpdatedAt = day.AddDays(-1).AddHours(16) });
+
+            WorkItem Item(int n, Campaign campaign, Contact contact, WorkItemStatus status, string? role, string? operation = null)
+            {
+                var item = operation is null ? WorkItemFactory.NewAiRole(campaign, role!, day.AddDays(-1)) : WorkItemFactory.NewProviderOp(campaign, operation, day.AddDays(-1));
+                item.PublicId = Id("wi", n);
+                item.Contact = contact;
+                item.Status = status;
+                db.WorkItems.Add(item);
+                return item;
+            }
+
+            Attempt Ran(WorkItem item, int n, AttemptStatus status, JsonObject? binding)
+            {
+                var attempt = WorkItemFactory.NewAttempt(item, 1, status, day.AddDays(-1));
+                attempt.PublicId = Id("att", n);
+                if (item.Kind == WorkItemKind.ProviderOp)
+                {
+                    attempt.Provenance = new AttemptProvenanceDto(
+                        "reply", "0.5.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion, item.Operation, 1,
+                        PluginProtocol.SnapshotIdPrefix + "_01K7QN00000000000000000001", "rts_01K7QN00000000000000000001", RouteScope.GlobalDefault,
+                        BindingIdentity.Of(binding), CorrelationId: attempt.PublicId);
+                }
+
+                db.Attempts.Add(attempt);
+                return attempt;
+            }
+
+            var mateoResearch = Item(101, latAm, mateo, WorkItemStatus.Succeeded, "researcher");
+            var mateoResearched = Ran(mateoResearch, 101, AttemptStatus.Succeeded, null);
+            var mateoWrite = Item(102, latAm, mateo, WorkItemStatus.Succeeded, "personalizer");
+            var mateoEnrol = Item(103, latAm, mateo, WorkItemStatus.Succeeded, null, "campaign.enroll");
+            var mateoEnrolled = Ran(mateoEnrol, 103, AttemptStatus.Succeeded, routed);
+            Item(104, latAm, mateo, WorkItemStatus.Created, "responder").NotBefore = day.AddHours(11.5);
+            var aguilarResearch = Item(105, latAm, aguilar, WorkItemStatus.Succeeded, "researcher");
+            var aguilarResearched = Ran(aguilarResearch, 105, AttemptStatus.Succeeded, null);
+            var aguilarEnrol = Item(106, latAm, aguilar, WorkItemStatus.Failed, null, "campaign.enroll");
+            aguilarEnrol.LastError = new AttemptErrorDto("provider_call_failed", "The route forbids deriving a first name.", false, Class: FailureClass.Permanent);
+            var aguilarFailed = Ran(aguilarEnrol, 106, AttemptStatus.Failed, routed);
+            var paulaEnrol = Item(107, reEngage, paula, WorkItemStatus.Succeeded, null, "campaign.enroll");
+            var paulaResearch = Item(108, reEngage, paula, WorkItemStatus.Processing, "researcher");
+            var paulaEnrolled = Ran(paulaEnrol, 107, AttemptStatus.Succeeded, unrouted);
+            db.ExternalIds.AddRange(
+                new ExternalId { Contact = mateo, PluginId = "reply", Kind = "contact", Value = "16786993", RecordedAt = day.AddDays(-13), RecordedByAttemptId = mateoEnrolled.PublicId },
+                new ExternalId { Contact = paula, PluginId = "reply", Kind = "contact", Value = "20441", RecordedAt = day.AddDays(-10), RecordedByAttemptId = paulaEnrolled.PublicId });
+            await db.SaveChangesAsync(Ct);
+
+            // The journal in the order it happened, at fixed ids: the order a person's latest line is found by is the ids',
+            // and a cursor carries one, so an id made from the machine's clock would change the recording on every run.
+            var line = 100;
+            async Task Line(DateTime at, ActorRef actor, string kind, string? key = null, JsonNode? updated = null, string? reason = null, WorkItem? item = null, Contact? about = null, Campaign? campaign = null)
+            {
+                db.Journal.Add(new JournalEntry
+                {
+                    PublicId = Id("jrn", ++line),
+                    Ts = at,
+                    ActorType = actor.Type,
+                    ActorId = actor.Id,
+                    Kind = kind,
+                    CampaignId = campaign?.Id ?? item?.CampaignId,
+                    WorkItemId = item?.PublicId,
+                    ContactId = about?.Id ?? item?.ContactId,
+                    Key = key,
+                    New = updated,
+                    Reason = reason,
+                });
+                await db.SaveChangesAsync(Ct);
+            }
+
+            await Line(day.AddDays(-15).AddHours(9.4), Actors.ForAttempt(mateoResearched), JournalKinds.ContactCreated, mateo.PublicId, reason: "imported from the Q2 list", about: mateo);
+            await Line(day.AddDays(-10), Actors.ForAttempt(paulaEnrolled), JournalKinds.ContactCreated, paula.PublicId, about: paula);
+            await Line(day.AddDays(-10).AddHours(1), Actors.Dispatcher, JournalKinds.WorkItemProcessing, "attempt", JsonValue.Create(1), item: paulaResearch);
+            await Line(day.AddDays(-1).AddHours(16), Actors.ForAttempt(aguilarResearched), JournalKinds.ContactCreated, aguilar.PublicId, about: aguilar);
+            await Line(day.AddDays(-1).AddHours(16).AddMinutes(40), Actors.ForAttempt(mateoResearched), JournalKinds.ContactUpdated, mateo.PublicId, new JsonArray("title", "company"), about: mateo);
+            await Line(day.AddDays(-1).AddHours(17).AddMinutes(20), Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), item: mateoWrite);
+            await Line(day.AddHours(7).AddMinutes(58), Actors.Runtime, JournalKinds.WorkItemFailed, aguilarFailed.PublicId, JsonNode.Parse("""{"code":"provider_call_failed","message":"The route forbids deriving a first name.","retriable":false,"class":"permanent"}"""), item: aguilarEnrol);
+            await Line(day.AddHours(8).AddMinutes(12), new ActorRef(ActorType.Human, "ada"), JournalKinds.ApprovalApproved, "approval", new JsonObject { ["id"] = Id("apr", 101), ["operation"] = "campaign.enroll" }, item: mateoEnrol);
+            await Line(day.AddHours(8).AddMinutes(15), Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), item: mateoEnrol);
+            await Line(day.AddHours(8).AddMinutes(41), Actors.Dispatcher, JournalKinds.InboundReplyObserved, "reply-t_501",
+                new JsonObject { ["plugin"] = "reply", ["thread"] = "t_501", ["channel"] = "email", ["last_activity_at"] = "2026-10-16T08:41:00.000Z", ["unread"] = true, ["has_meeting_intent"] = true, ["contact_id"] = mateo.PublicId },
+                about: mateo,
+                campaign: latAm);
+
+            return new PeopleIds(latAm.PublicId, reEngage.PublicId, oldList.PublicId, mateo.PublicId, aguilar.PublicId, grace.PublicId, paula.PublicId, marcos.PublicId);
+        }
+
+        /// <summary>Two of Mateo's threads as the provider lists them: the email he answered, and a LinkedIn one.</summary>
+        public static JsonObject Threads(bool more) => JsonNode.Parse(
+            $$"""
+            {
+              "items": [
+                {
+                  "external_id": "t_501", "channel": "email", "subject": "Re: Soluna's next quarter", "preview": "Thanks, could we talk on Thursday?",
+                  "last_activity_at": "2026-10-16T08:41:00.000Z", "unread": true, "contact": { "external_id": "16786993", "name": "Mateo Ruiz" },
+                  "campaign_external_id": "c_7714", "has_meeting_intent": true,
+                  "vendor": { "is_last_message_planned": false, "state": "needs_attention", "category": null }
+                },
+                {
+                  "external_id": "t_502", "channel": "linkedin", "subject": null, "preview": "Happy to connect.",
+                  "last_activity_at": "2026-10-03T18:02:44.000Z", "unread": false, "contact": { "external_id": "16786993", "name": "Mateo Ruiz" },
+                  "campaign_external_id": "c_7714", "has_meeting_intent": null,
+                  "vendor": { "is_last_message_planned": false, "state": "ok", "category": null }
+                }
+              ],
+              "has_more": {{(more ? "true" : "false")}},
+              "vendor": { "ordering": "last_activity_desc" }
+            }
+            """)!.AsObject();
+
+        /// <summary>
+        /// The email thread with its messages as the provider holds them: HTML with a quote and links, and everything the page
+        /// must never run or load — a script, a style, an inline style and handler, an image, a frame, a form, a script link —
+        /// then a message in plain text, which is what the page has to clean.
+        /// </summary>
+        public static JsonObject Thread(string owner, bool more) => JsonNode.Parse(
+            $$"""
+            {
+              "thread": {
+                "external_id": "t_501", "channel": "email", "subject": "Re: Soluna's next quarter",
+                "contact": { "external_id": "{{owner}}", "name": "Mateo Ruiz" }, "campaign_external_id": "c_7714", "unread": true,
+                "vendor": { "category": null, "has_ai_draft": false }
+              },
+              "messages": [
+                {
+                  "external_id": "<m1@mail.example.com>", "direction": "outbound", "sent_at": "2026-10-16T08:15:00.000Z",
+                  "from": "sdr@vendor.example", "to": ["mateo@soluna.example"], "cc": null, "bcc": null, "subject": "Soluna's next quarter",
+                  "body": "<p>Hi Mateo, congratulations on the Series A.</p><p style=\"color:red\" onclick=\"steal()\">Worth 20 minutes next week?</p><img src=\"https://t.example/p.gif\"><script>steal()</script><style>p { color: red }</style>",
+                  "truncated": false, "vendor": { "state": "ok", "status_code": null, "ai_sent_type": null }
+                },
+                {
+                  "external_id": "<m2@mail.example.com>", "direction": "inbound", "sent_at": "2026-10-16T08:41:00.000Z",
+                  "from": "mateo@soluna.example", "to": ["sdr@vendor.example"], "cc": null, "bcc": null, "subject": "Re: Soluna's next quarter",
+                  "body": "<p>Thanks, could we talk on Thursday? <a href=\"https://soluna.example/team\">Our team</a> or <a href=\"javascript:steal()\">this</a></p><blockquote>Worth 20 minutes next week?</blockquote><iframe src=\"https://frame.example\"></iframe><form><input name=\"q\"></form>",
+                  "truncated": false, "vendor": { "state": "needs_attention", "status_code": null, "ai_sent_type": null }
+                },
+                {
+                  "external_id": "<m3@mail.example.com>", "direction": "outbound", "sent_at": "2026-10-16T08:50:00.000Z",
+                  "from": "sdr@vendor.example", "to": ["mateo@soluna.example"], "cc": null, "bcc": null, "subject": "Re: Soluna's next quarter",
+                  "body": "Thursday works.\nTen in the morning, Mexico City time & no later?\n\nOn Thu, Mateo <mateo@soluna.example> wrote: <3",
+                  "truncated": false, "vendor": { "state": "ok", "status_code": null, "ai_sent_type": null }
+                }
+              ],
+              "has_more": {{(more ? "true" : "false")}},
+              "vendor": { "ordering": "oldest_first" }
+            }
+            """)!.AsObject();
+
         internal sealed record WorkItemIds(string Autumn, string SmbTest, string Ada, string Tomas, string Open, string Awaiting, string Succeeded, string Failed, string Expired);
 
         /// <summary>

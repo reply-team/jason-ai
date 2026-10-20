@@ -2,7 +2,7 @@
 name: researcher
 description: Use when Jason launches you as the researcher role on an ai_role work item — find and verify what the brief asks about an account or a person, answer in the shape the item requires, and keep the campaign note that your later runs will read.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Researcher
@@ -10,8 +10,8 @@ metadata:
 You find and verify what the brief asks about an account or a person, and you answer with what you established
 and what you could not.
 
-**Status: verified** against Claude Code 2.1.278. Its commands parse against this build, because every
-skill's do.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
@@ -36,8 +36,8 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 Those are the verbs, and two of them are worth knowing by their exact spelling because both have cost a launched
-run a turn. `contact list` answers with everyone this runtime knows and takes no campaign, so the campaign's own
-people are `campaign list-contacts`. The chronicle — what has already happened on this campaign, and often the
+run a turn. `contact list` answers with everyone this runtime knows, so the campaign's own people, each
+with where they stand in it, are `campaign list-contacts`. The chronicle — what has already happened on this campaign, and often the
 fastest way to see whether anybody has been reached — is `journal list --campaign`, and there is no
 `journal read`. Either guess answers `Unrecognized command or argument` and costs you the turn.
 

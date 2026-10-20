@@ -4,6 +4,7 @@ using Jason.Runtime.Contacts;
 using Jason.Runtime.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Jason.Runtime.Hosting.Modules;
 
@@ -15,6 +16,8 @@ public static class ContactModule
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddScoped<ContactService>();
+        services.AddScoped<ContactThreadService>();
+        services.TryAddScoped<IProviderReadInvoker, PluginProviderReadInvoker>();
         services.AddScoped<MembershipService>();
         services.AddScoped<SuppressionService>();
 
@@ -32,6 +35,8 @@ public static class ContactModule
         app.MapOperation<ContactService, ContactListRequest, Page<ContactDto>>(Operations.ContactList, (service, request, ct) => service.ListAsync(request, ct));
         app.MapOperation<ContactService, ContactUpdateRequest, ContactDto>(Operations.ContactUpdate, (service, request, ct) => service.UpdateAsync(request, ct));
         app.MapOperation<ContactService, ContactArchiveRequest, ContactDto>(Operations.ContactArchive, (service, request, ct) => service.ArchiveAsync(request, ct));
+        app.MapOperation<ContactThreadService, ContactThreadsRequest, ContactThreadsResponse>(Operations.ContactThreads, (service, request, ct) => service.ThreadsAsync(request, ct));
+        app.MapOperation<ContactThreadService, ContactThreadRequest, ContactThreadResponse>(Operations.ContactThread, (service, request, ct) => service.ThreadAsync(request, ct));
 
         // Membership is addressed as a campaign verb — the campaign is what the caller is changing — but it
         // belongs to the contact slice, which owns every rule about who a contact is.

@@ -26,6 +26,8 @@ public static class ContactCommands
         contact.Subcommands.Add(List(env, actor));
         contact.Subcommands.Add(Update(env, actor));
         contact.Subcommands.Add(Archive(env, actor));
+        contact.Subcommands.Add(Threads(env, actor));
+        contact.Subcommands.Add(Thread(env, actor));
         return contact;
     }
 
@@ -80,6 +82,8 @@ public static class ContactCommands
         var channel = new Option<string?>("--channel") { Description = "Only contacts having this channel, for example email." };
         var value = new Option<string?>("--value") { Description = "Only contacts whose channel value is this one; needs --channel." };
         var query = new Option<string?>("--query") { Description = "Only people whose name, company, title or any channel value contains this text; case and accents do not matter, a phone number matches however it is spaced, and a pasted LinkedIn link finds its profile." };
+        var campaign = new Option<string?>("--campaign") { Description = "Only people on this campaign, as cmp_…; excluded members are left out." };
+        var order = new Option<string?>("--order") { Description = "created (the default, oldest first) or activity (the person something last happened to first; people with nothing yet come last)." };
         var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived contacts, which are hidden by default." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
@@ -87,6 +91,8 @@ public static class ContactCommands
         command.Options.Add(channel);
         command.Options.Add(value);
         command.Options.Add(query);
+        command.Options.Add(campaign);
+        command.Options.Add(order);
         command.Options.Add(includeArchived);
         command.Options.Add(limit);
         command.Options.Add(cursor);
@@ -99,6 +105,8 @@ public static class ContactCommands
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("value", parseResult.GetValue(value))
                 .Set("query", parseResult.GetValue(query))
+                .Set("campaign_id", parseResult.GetValue(campaign))
+                .Set("order", parseResult.GetValue(order))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 
@@ -182,6 +190,70 @@ public static class ContactCommands
 
         return command;
     }
+
+    private static Command Threads(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command("threads", "Read a person's conversation threads from the provider now, the one that moved last first. Nothing is recorded: no work item, no journal line.");
+        var id = ContactId();
+        var plugin = Plugin();
+        var limit = new Option<int?>("--limit") { Description = "How many threads, from 1 to 100; 20 when absent." };
+        var offset = Offset();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(plugin);
+        command.Options.Add(limit);
+        command.Options.Add(offset);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            var body = RequestBody.Empty()
+                .Set("contact_id", parseResult.GetValue(id))
+                .Set("plugin_id", parseResult.GetValue(plugin))
+                .Set("limit", parseResult.GetValue(limit))
+                .Set("offset", parseResult.GetValue(offset));
+            return OperationRunner.RunAsync(env, Operations.ContactThreads, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Threads), cancellationToken);
+        });
+
+        return command;
+    }
+
+    private static Command Thread(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command("thread", "Read one of a person's threads from the provider now, its messages first written first. Nothing is recorded.");
+        var id = ContactId();
+        var thread = new Argument<string>("thread-id") { Description = "The thread, as the provider names it in the list of threads." };
+        var plugin = Plugin();
+        var limit = new Option<int?>("--limit") { Description = "How many messages, from 1 to 20; 20 when absent." };
+        var offset = Offset();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Arguments.Add(thread);
+        command.Options.Add(plugin);
+        command.Options.Add(limit);
+        command.Options.Add(offset);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            var body = RequestBody.Empty()
+                .Set("contact_id", parseResult.GetValue(id))
+                .Set("thread_id", parseResult.GetValue(thread))
+                .Set("plugin_id", parseResult.GetValue(plugin))
+                .Set("limit", parseResult.GetValue(limit))
+                .Set("offset", parseResult.GetValue(offset));
+            return OperationRunner.RunAsync(env, Operations.ContactThread, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Thread), cancellationToken);
+        });
+
+        return command;
+    }
+
+    private static Option<string?> Plugin() =>
+        new("--plugin") { Description = "The provider's plugin, as its id; needed only for a person several providers know." };
+
+    private static Option<int?> Offset() => new("--offset") { Description = "How many to skip, for the next page; 0 when absent." };
 
     private static Argument<string> ContactId() => new("contact-id") { Description = "The contact, as cnt_…." };
 

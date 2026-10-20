@@ -1,0 +1,30 @@
+{
+  "operation": "journal.list",
+  "case": "by-contact-empty",
+  "request": {
+    "contact_id": "cnt_4",
+    "kinds": [
+      "inbound_reply_observed",
+      "provider_event_observed",
+      "workitem_succeeded",
+      "workitem_failed",
+      "workitem_cancelled",
+      "workitem_expired",
+      "external_effect_reported",
+      "approval_requested",
+      "approval_approved",
+      "approval_rejected",
+      "decision_raised",
+      "decision_answered",
+      "contact_created",
+      "contact_updated",
+      "contact_archived"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

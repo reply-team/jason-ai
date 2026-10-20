@@ -1,7 +1,13 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
@@ -50,6 +56,35 @@ public class ReplyConversationListTests
         Assert.Equal(
             ["--json", "-q", "inbox", "list", "--contact-id", "1001", "--source", "inbox", "--limit", "20", "--offset", "0"],
             account.Calls[0].Args);
+
+        // Read on a person's request, outside any work item, no campaign is named, and the answer is the same.
+        var unnamed = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 20, offset: 0, pin: "1001", campaign: false)));
+        Assert.Equal(answer["items"]!.ToJsonString(), unnamed["items"]!.ToJsonString());
+        Assert.Equal(account.Calls[0].Args, account.Calls[2].Args);
+    }
+
+    /// <summary>
+    /// The same read made on a person's request through <c>contact.threads</c>: the package runs as a child, in the account
+    /// the person's identifier was learned in, with no campaign named, and nothing about the read is recorded.
+    /// </summary>
+    [Fact]
+    public async Task A_person_s_threads_read_on_request_run_through_the_package_and_record_nothing()
+    {
+        using var account = Planted();
+        account.WithThread(Thread(501, "2026-10-03T07:41:09Z"));
+        account.WithThread(Thread(504, "2026-10-04T10:00:00Z", contactId: 1002, name: "Lena Okafor"));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct, paths => TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(ReplyPlugins.PluginId, Account())));
+        var marta = await LinkedAsync(api, "1001");
+
+        var answer = await api.PostOkAsync<ContactThreadsResponse>(Operations.ContactThreads, new { contact_id = marta }, Ct);
+
+        Assert.Equal(ReplyPlugins.PluginId, answer.PluginId);
+        Assert.Equal(["501"], answer.Items.Select(thread => (string)thread!["external_id"]!));
+        Assert.All(account.Calls, call => Assert.Equal("1001", call.Option("--contact-id")));
+        await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
+        Assert.Equal((1, 1, 1), (await db.WorkItems.CountAsync(Ct), await db.Attempts.CountAsync(Ct), await db.ExternalIds.CountAsync(Ct)));
+        Assert.Empty(await db.Journal.Where(entry => entry.Kind.StartsWith("workitem_")).ToListAsync(Ct));
     }
 
     [Fact]
@@ -534,6 +569,32 @@ public class ReplyConversationListTests
         Assert.Empty(account.Calls);
     }
 
+    /// <summary>The binding of the global route: a settings file keeps no empty object, so the route names one setting.</summary>
+    private static JsonObject Account() => new() { ["derive_first_name"] = true };
+
+    /// <summary>A person pinned at Reply by an attempt that ran under the global route, as an enrolment leaves them.</summary>
+    private static async Task<string> LinkedAsync(RuntimeApiFixture api, string pin)
+    {
+        var now = DateTime.UtcNow;
+        await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
+        var campaign = WorkItemFactory.NewCampaign(now: now);
+        var person = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Marta", CreatedAt = now, UpdatedAt = now };
+        var enrol = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", now);
+        enrol.Contact = person;
+        var attempt = WorkItemFactory.NewAttempt(enrol, 1, AttemptStatus.Succeeded, now);
+        attempt.Provenance = new AttemptProvenanceDto(
+            ReplyPlugins.PluginId, "0.5.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
+            "campaign.enroll", 1, PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC", "rts_01K5B7Q2WE5X3M9T0YH4C6RDND",
+            RouteScope.GlobalDefault, BindingIdentity.Of(Account()), CorrelationId: attempt.PublicId);
+        db.Campaigns.Add(campaign);
+        db.Contacts.Add(person);
+        db.WorkItems.Add(enrol);
+        db.Attempts.Add(attempt);
+        db.ExternalIds.Add(new ExternalId { Contact = person, PluginId = ReplyPlugins.PluginId, Kind = "contact", Value = pin, RecordedAt = now, RecordedByAttemptId = attempt.PublicId });
+        await db.SaveChangesAsync(Ct);
+        return person.PublicId;
+    }
+
     private static ReplyAccount Planted() =>
         ReplyOperations.Plant(new ReplyAccount())
             .WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName, lastName: ReplyOperations.LastName)
@@ -605,7 +666,8 @@ public class ReplyConversationListTests
         string? supplied = null,
         string? pinned = null,
         string source = "all",
-        string? since = null)
+        string? since = null,
+        bool campaign = true)
     {
         var args = new JsonObject { ["limit"] = limit, ["offset"] = offset, ["source"] = source };
         if (supplied is not null)
@@ -618,17 +680,17 @@ public class ReplyConversationListTests
             args["since"] = since;
         }
 
-        var input = new JsonObject
+        var input = new JsonObject { ["args"] = args };
+        if (campaign)
         {
-            ["args"] = args,
-            ["campaign"] = new JsonObject
+            input["campaign"] = new JsonObject
             {
                 ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
                 ["name"] = "Q3 LatAm founders",
                 ["status"] = "active",
                 ["external_ids"] = pinned is null ? new JsonObject() : new JsonObject { ["campaign"] = pinned },
-            },
-        };
+            };
+        }
 
         if (pin is not null || person)
         {

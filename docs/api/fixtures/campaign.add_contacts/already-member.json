@@ -1,0 +1,35 @@
+{
+  "operation": "campaign.add_contacts",
+  "case": "already-member",
+  "request": {
+    "campaign_id": "cmp_2",
+    "contacts": [
+      {
+        "contact_id": "cnt_1"
+      }
+    ],
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_2",
+    "summary": {
+      "added": 0,
+      "already_member": 1,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "already_member",
+        "contact_id": "cnt_1",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      }
+    ]
+  }
+}

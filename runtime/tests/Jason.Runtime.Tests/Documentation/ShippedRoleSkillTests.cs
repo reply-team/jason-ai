@@ -107,7 +107,8 @@ public partial class ShippedRoleSkillTests
 
         // The verb that lists who is on a campaign. A launched role cannot ask what a command should have
         // been, so a verb it is likely to want and not told about is a turn spent on a usage error: the one
-        // gated run against a real host spent one guessing at `contact list --campaign`, which does not exist.
+        // gated run against a real host spent one guessing at `contact list --campaign`, which did not exist then;
+        // it lists the members who are not excluded now, and this verb is still the one that says where each stands.
         Assert.Contains("campaign list-contacts", skill, StringComparison.Ordinal);
 
         // Why the note is in the runtime's store at all, in the role's own terms: it is the scratch file it

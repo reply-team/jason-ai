@@ -197,12 +197,42 @@ export type JournalEntry = {
     old: unknown;
     new: unknown;
     reason: string | null;
+    campaign_id: string | null;
+    work_item_id: string | null;
+    contact_id: string | null;
+    campaign_name: string | null;
+    contact_name: string | null;
+    work_item_kind: string | null;
+    work_item_role: string | null;
+    work_item_operation: string | null;
+    actor_role: string | null;
 };
-export type JournalListRequest = { work_item_id?: string; limit?: number; cursor?: string };
+export type JournalListRequest = {
+    work_item_id?: string;
+    contact_id?: string;
+    kinds?: string[];
+    limit?: number;
+    cursor?: string;
+};
 export type CampaignSummary = { id: string; name: string; status: string };
 export type CampaignListRequest = { query?: string; limit?: number; cursor?: string };
 export type Role = { id: string; name: string; builtin: boolean };
 export type Channel = { channel: string; value: string; primary: boolean };
+export type ExternalId = {
+    plugin_id: string;
+    kind: string;
+    value: string;
+    recorded_at: string;
+    diverged_value?: string | null;
+    diverged_at?: string | null;
+};
+export type ContactCampaign = {
+    campaign_id: string;
+    campaign_name: string;
+    state: string;
+    added_at: string;
+    updated_at: string;
+};
 export type Contact = {
     id: string;
     first_name: string | null;
@@ -210,5 +240,67 @@ export type Contact = {
     company: string | null;
     title: string | null;
     channels: Channel[];
+    time_zone?: string | null;
+    custom?: Record<string, unknown>;
+    external_ids?: ExternalId[];
+    created_at?: string;
+    archived_at?: string | null;
+    /** Read beside the record by contact.get and contact.list only. */
+    campaigns?: ContactCampaign[] | null;
+    last_activity?: JournalEntry | null;
 };
-export type ContactListRequest = { query?: string; limit?: number; cursor?: string };
+export type ContactListRequest = {
+    query?: string;
+    campaign_id?: string;
+    order?: string;
+    include_archived?: boolean;
+    limit?: number;
+    cursor?: string;
+};
+/** A thread as the provider lists it; the runtime passes it through untouched. */
+export type Thread = {
+    external_id: string;
+    channel: string | null;
+    subject: string | null;
+    preview?: string | null;
+    last_activity_at?: string | null;
+    unread: boolean | null;
+    has_meeting_intent?: boolean | null;
+};
+export type Message = {
+    external_id: string | null;
+    direction: string;
+    sent_at: string | null;
+    from: string | null;
+    to: string[] | null;
+    subject: string | null;
+    body: string | null;
+    truncated: boolean;
+};
+export type ContactThreadsRequest = { contact_id: string; plugin_id?: string; limit?: number; offset?: number };
+export type ContactThreads = { plugin_id: string; items: Thread[]; has_more: boolean };
+export type ContactThreadRequest = {
+    contact_id: string;
+    plugin_id?: string;
+    thread_id: string;
+    limit?: number;
+    offset?: number;
+};
+export type ContactThread = { plugin_id: string; thread: Thread; messages: Message[]; has_more: boolean };
+export type AddContactsRequest = {
+    campaign_id: string;
+    contacts: { contact_id: string }[];
+    reason?: string;
+    actor?: ActorRef;
+};
+export type AddContactsResult = {
+    campaign_id: string;
+    summary: { added: number; already_member: number; rejected: number };
+    items: {
+        index: number;
+        status: string;
+        contact_id: string | null;
+        state: string | null;
+        error: { code: string; message: string } | null;
+    }[];
+};

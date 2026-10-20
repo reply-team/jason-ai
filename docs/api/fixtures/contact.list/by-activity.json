@@ -1,0 +1,222 @@
+{
+  "operation": "contact.list",
+  "case": "by-activity",
+  "request": {
+    "order": "activity",
+    "limit": 3
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cnt_1",
+        "first_name": "Mateo",
+        "last_name": "Ruiz",
+        "company": "Soluna",
+        "title": "Head of Sales",
+        "time_zone": "America/Mexico_City",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "mateo@soluna.example",
+            "label": null,
+            "primary": true,
+            "data": null
+          },
+          {
+            "channel": "linkedin",
+            "value": "https://www.linkedin.com/in/mateo-ruiz-example",
+            "label": null,
+            "primary": false,
+            "data": null
+          },
+          {
+            "channel": "phone",
+            "value": "+525512345678",
+            "label": null,
+            "primary": false,
+            "data": null
+          }
+        ],
+        "custom": {
+          "segment": "fintech-mx",
+          "source": "q2-list",
+          "series": "A, raised 2026-06"
+        },
+        "external_ids": [
+          {
+            "plugin_id": "reply",
+            "kind": "contact",
+            "value": "16786993",
+            "recorded_at": "2026-10-03T00:00:00.000Z",
+            "recorded_by_attempt_id": "att_1"
+          }
+        ],
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Re-engage Q2 no-replies",
+            "state": "excluded",
+            "added_at": "2026-09-20T00:00:00.000Z",
+            "updated_at": "2026-10-01T09:30:00.000Z"
+          },
+          {
+            "campaign_id": "cmp_2",
+            "campaign_name": "LatAm pilot",
+            "state": "enrolled",
+            "added_at": "2026-10-03T00:00:00.000Z",
+            "updated_at": "2026-10-03T00:00:00.000Z"
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_1",
+          "ts": "2026-10-16T08:41:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": "dispatcher"
+          },
+          "kind": "inbound_reply_observed",
+          "campaign_id": "cmp_2",
+          "work_item_id": null,
+          "attempt_id": null,
+          "key": "reply-t_501",
+          "old": null,
+          "new": {
+            "plugin": "reply",
+            "thread": "t_501",
+            "channel": "email",
+            "last_activity_at": "2026-10-16T08:41:00.000Z",
+            "unread": true,
+            "has_meeting_intent": true,
+            "contact_id": "cnt_1"
+          },
+          "reason": null,
+          "contact_id": "cnt_1",
+          "campaign_name": "LatAm pilot",
+          "contact_name": "Mateo Ruiz",
+          "work_item_kind": null,
+          "work_item_role": null,
+          "work_item_operation": null,
+          "actor_role": null
+        }
+      },
+      {
+        "id": "cnt_2",
+        "first_name": null,
+        "last_name": "Aguilar",
+        "company": "Andina Tech",
+        "title": "Director of Sales",
+        "time_zone": "America/Lima",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "aguilar@andina.example",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_2",
+            "campaign_name": "LatAm pilot",
+            "state": "enrolled",
+            "added_at": "2026-10-15T16:00:00.000Z",
+            "updated_at": "2026-10-15T16:00:00.000Z"
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_2",
+          "ts": "2026-10-16T07:58:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": "runtime"
+          },
+          "kind": "workitem_failed",
+          "campaign_id": "cmp_2",
+          "work_item_id": "wi_1",
+          "attempt_id": null,
+          "key": "att_2",
+          "old": null,
+          "new": {
+            "code": "provider_call_failed",
+            "message": "The route forbids deriving a first name.",
+            "retriable": false,
+            "class": "permanent"
+          },
+          "reason": null,
+          "contact_id": "cnt_2",
+          "campaign_name": "LatAm pilot",
+          "contact_name": "Aguilar",
+          "work_item_kind": "provider_op",
+          "work_item_role": null,
+          "work_item_operation": "campaign.enroll",
+          "actor_role": null
+        }
+      },
+      {
+        "id": "cnt_3",
+        "first_name": "Paula",
+        "last_name": "Mendes",
+        "company": "Vela",
+        "title": "Head of Ops",
+        "time_zone": "America/Sao_Paulo",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "paula@vela.example",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [
+          {
+            "plugin_id": "reply",
+            "kind": "contact",
+            "value": "20441",
+            "recorded_at": "2026-10-06T00:00:00.000Z",
+            "recorded_by_attempt_id": "att_3"
+          }
+        ],
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [],
+        "last_activity": {
+          "id": "jrn_3",
+          "ts": "2026-10-06T01:00:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": "dispatcher"
+          },
+          "kind": "workitem_processing",
+          "campaign_id": "cmp_1",
+          "work_item_id": "wi_2",
+          "attempt_id": null,
+          "key": "attempt",
+          "old": null,
+          "new": 1,
+          "reason": null,
+          "contact_id": "cnt_3",
+          "campaign_name": "Re-engage Q2 no-replies",
+          "contact_name": "Paula Mendes",
+          "work_item_kind": "ai_role",
+          "work_item_role": "researcher",
+          "work_item_operation": null,
+          "actor_role": null
+        }
+      }
+    ],
+    "next_cursor": "YWN0aXZpdHl8anJuXzAxSzdRTjAwMDAwMDAwMDAwMDAwMDAwMTAzfGNudF8wMUs3UU4wMDAwMDAwMDAwMDAwMDAwMDEwNA"
+  }
+}

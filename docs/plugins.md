@@ -626,7 +626,9 @@ The runtime composes it from the work item; a plugin never sees a work item's co
   The rest of a person's reachability is not yours to see, and widening that is a change to the
   document. An operation whose contact is `optional` runs with a person or without one, so look for
   `contacts` before reading it.
-- **`campaign`** is Jason's own record of the campaign the work item belongs to.
+- **`campaign`** is Jason's own record of the campaign the work item belongs to. A read a person asks
+  for — a person's threads, one thread's messages — runs outside any work item and carries no
+  `campaign`, so an operation whose document lets the campaign go unnamed must not expect one.
 - **`idempotency_key`** is the *work item's* own identifier, present when the operation requires one.
   It is stable across every attempt, which is what makes "what did the prior run under this key do"
   a question a provider's ledger can answer.

@@ -14,7 +14,9 @@ public sealed class JournalWriter(TimeProvider clock)
     /// <summary>
     /// Adds an entry to the context's change set (not saved here) so it commits with the change it describes.
     /// An entry about a work item inherits the item's campaign when no campaign is passed, so the campaign
-    /// chronicle stays one query.
+    /// chronicle stays one query; it inherits the item's person the same way, unless the line names its own:
+    /// <paramref name="contact"/> for a person in hand (perhaps still being inserted), <paramref name="contactId"/>
+    /// for one known by key.
     /// </summary>
     public JournalEntry Append(
         JasonDbContext db,
@@ -26,7 +28,9 @@ public sealed class JournalWriter(TimeProvider clock)
         JsonNode? updated = null,
         string? reason = null,
         WorkItem? workItem = null,
-        Attempt? attempt = null)
+        Attempt? attempt = null,
+        Contact? contact = null,
+        int? contactId = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(actor);
@@ -46,6 +50,8 @@ public sealed class JournalWriter(TimeProvider clock)
             Campaign = campaign,
             WorkItemId = workItem?.PublicId,
             AttemptId = attempt?.PublicId,
+            ContactId = contact is null ? contactId ?? workItem?.ContactId ?? workItem?.Contact?.Id : null,
+            Contact = contact,
             Key = key,
             Old = old,
             New = updated,

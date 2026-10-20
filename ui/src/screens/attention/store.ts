@@ -5,10 +5,8 @@ import type { Approval, ApprovalSummary, Decision, DecisionSummary, Page } from 
 import { mergePage } from '../../lists/paging';
 import { pendingMark } from '../../shell/attention-mark';
 
-export type Filter = 'pending' | 'decided';
 export type Kind = 'approvals' | 'questions';
 
-export const filter = signal<Filter>('pending');
 export const approvals = signal<ApprovalSummary[]>([]);
 export const approvalsCursor = signal<string | null>(null);
 export const questions = signal<DecisionSummary[]>([]);
@@ -26,8 +24,8 @@ export const refreshing = signal(false);
  * What each list is asked for under the filter: nothing (pending), or everything that no longer needs a person, several
  * statuses at once: decided by one, or ended without one (superseded by a changed input, cancelled with its work item).
  */
-function statusBody(kind: Kind): object {
-    if (filter.value === 'pending') return {};
+function statusBody(kind: Kind, decided: boolean): object {
+    if (!decided) return {};
     return kind === 'approvals'
         ? { statuses: ['approved', 'rejected', 'superseded', 'cancelled'] }
         : { statuses: ['answered'] };
@@ -41,29 +39,33 @@ function fail(error: unknown): void {
     failure.value = error instanceof ApiError ? error.message : String(error);
 }
 
-export async function load(api: Api): Promise<void> {
+/** Which list the screen shows, so the reload after an action reads the same one. */
+let shownDecided = false;
+
+export async function load(api: Api, decided: boolean): Promise<void> {
+    shownDecided = decided;
     failure.value = null;
     try {
         const [a, q] = await Promise.all([
-            api.call<Page<ApprovalSummary>>('approval.list', statusBody('approvals')),
-            api.call<Page<DecisionSummary>>('decision.list', statusBody('questions')),
+            api.call<Page<ApprovalSummary>>('approval.list', statusBody('approvals', decided)),
+            api.call<Page<DecisionSummary>>('decision.list', statusBody('questions', decided)),
         ]);
         approvals.value = a.items;
         approvalsCursor.value = a.next_cursor;
         questions.value = q.items;
         questionsCursor.value = q.next_cursor;
-        if (filter.value === 'pending') pendingMark.value = a.items.length + q.items.length > 0;
+        if (!decided) pendingMark.value = a.items.length + q.items.length > 0;
         loaded.value = true;
     } catch (error) {
         fail(error);
     }
 }
 
-export async function more(api: Api, kind: Kind): Promise<void> {
+export async function more(api: Api, kind: Kind, decided: boolean): Promise<void> {
     const cursor = kind === 'approvals' ? approvalsCursor.value : questionsCursor.value;
     if (!cursor) return;
     try {
-        const status = statusBody(kind);
+        const status = statusBody(kind, decided);
         if (kind === 'approvals') {
             const page = await api.call<Page<ApprovalSummary>>('approval.list', { ...status, cursor });
             approvals.value = mergePage(approvals.value, page.items, (i) => i.id);
@@ -117,10 +119,10 @@ export function stillPending(planned: { kind: Kind; id: string } | null): { kind
 }
 
 /** A refresh the person asked for, shown for at least a moment so the button is seen to do something. */
-export async function refresh(api: Api): Promise<void> {
+export async function refresh(api: Api, decided: boolean): Promise<void> {
     refreshing.value = true;
     try {
-        await Promise.all([load(api), new Promise((resolve) => setTimeout(resolve, 500))]);
+        await Promise.all([load(api, decided), new Promise((resolve) => setTimeout(resolve, 500))]);
     } finally {
         refreshing.value = false;
     }
@@ -138,7 +140,7 @@ async function act(api: Api, call: () => Promise<unknown>): Promise<boolean> {
     } finally {
         busy.value = false;
     }
-    await load(api);
+    await load(api, shownDecided);
     if (problem !== null) {
         fail(problem);
         return false;

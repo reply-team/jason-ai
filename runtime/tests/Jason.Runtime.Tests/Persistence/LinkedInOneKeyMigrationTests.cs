@@ -245,6 +245,7 @@ public partial class LinkedInOneKeyMigrationTests
               ('sup_key', 'linkedin', '{Key}', 'said stop', '2026-01-05 09:00:00'),
               ('sup_beside', 'linkedin', '{Beside}', 'said stop again', '2026-01-06 09:00:00');
             """);
+        UpToDate(dir);
         using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
         var register = Register(db);
 
@@ -628,6 +629,13 @@ public partial class LinkedInOneKeyMigrationTests
     {
         using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
         db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(ThisMigration);
+    }
+
+    /// <summary>The migrations after this one as well, for a case that goes on to write through today's services.</summary>
+    private static void UpToDate(TempDataDir dir)
+    {
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        db.Database.Migrate();
     }
 
     /// <summary>A database at the migration before this one, the rows given written into it, then this migration applied.</summary>

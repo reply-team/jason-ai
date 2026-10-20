@@ -43,6 +43,7 @@ public class EventLineTests
         Assert.Equal("dispatcher", lines[0].ActorId);
         Assert.Null(lines[0].WorkItemId);
         Assert.Null(lines[0].AttemptId);
+        Assert.Equal(marta.Id, lines[0].ContactId);
         Assert.Equal(
             new JsonObject
             {
@@ -152,10 +153,13 @@ public class EventLineTests
         using var store = new EventStoreFixture();
         var source = await store.SourceAsync();
         var campaign = await store.CampaignAsync(pins: (Reader, "p_1"));
+        var marta = await store.ContactAsync("c_1001");
 
-        await store.StoreAsync(source, null, Page("c-1", Detected(), Accepted(), Bounced()));
+        await store.StoreAsync(source, null, Page("c-1", Detected(), Accepted(), Bounced(contact: "c_nobody")));
 
         var lines = await store.LinesAsync(campaign, JournalKinds.ProviderEventObserved);
+        Assert.Equal(marta.Id, lines[0].ContactId);
+        Assert.Null(lines[2].ContactId);
         Assert.Equal(["reply_detected", "invitation_accepted", "bounce"], lines.Select(line => (string?)line.New!["kind"]));
         await using var db = store.Open();
         var events = await db.Events.AsNoTracking().OrderBy(e => e.Id).ToListAsync(Ct);

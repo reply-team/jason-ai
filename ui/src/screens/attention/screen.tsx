@@ -13,11 +13,13 @@ export function AttentionScreen() {
     const current = route.value;
     const selected =
         current.screen === 'attention' && current.kind && current.id ? { kind: current.kind, id: current.id } : null;
-    const currentFilter = store.filter.value;
+    // Pending or Decided lives in the address, so a refresh or a link keeps it.
+    const decided = current.screen === 'attention' && current.decided === true;
+    const keep = decided ? { decided: true as const } : {};
 
     useEffect(() => {
-        void store.load(api);
-    }, [api, currentFilter]);
+        void store.load(api, decided);
+    }, [api, decided]);
 
     useEffect(() => {
         if (selected) void store.open(api, selected.kind, selected.id);
@@ -30,8 +32,8 @@ export function AttentionScreen() {
     const remaining = selected ? remainingText(selected) : '';
 
     const go = (to: { kind: store.Kind; id: string } | null) =>
-        navigate(to ? { screen: 'attention', kind: to.kind, id: to.id } : { screen: 'attention' });
-    const close = () => navigate({ screen: 'attention' });
+        navigate(to ? { screen: 'attention', kind: to.kind, id: to.id, ...keep } : { screen: 'attention', ...keep });
+    const close = () => navigate({ screen: 'attention', ...keep });
 
     // The next item is chosen before the action, from the list as it is; after the reload it is the one the person lands on.
     const decide = (acted: { kind: store.Kind; id: string }, call: () => Promise<boolean>) => {
@@ -51,12 +53,15 @@ export function AttentionScreen() {
                             <button
                                 key={f}
                                 type="button"
-                                class={store.filter.value === f ? 'on' : ''}
-                                aria-pressed={store.filter.value === f}
+                                class={decided === (f === 'decided') ? 'on' : ''}
+                                aria-pressed={decided === (f === 'decided')}
                                 onClick={() => {
-                                    if (store.filter.value === f) return;
-                                    store.filter.value = f;
-                                    close();
+                                    if (decided === (f === 'decided')) return;
+                                    navigate(
+                                        f === 'decided'
+                                            ? { screen: 'attention', decided: true }
+                                            : { screen: 'attention' },
+                                    );
                                 }}
                             >
                                 {f === 'pending' ? 'Pending' : 'Decided'}
@@ -68,7 +73,7 @@ export function AttentionScreen() {
                         type="button"
                         title="Refresh"
                         disabled={store.refreshing.value}
-                        onClick={() => void store.refresh(api)}
+                        onClick={() => void store.refresh(api, decided)}
                     >
                         <span class="glyph">⟳</span>
                     </button>
@@ -81,16 +86,14 @@ export function AttentionScreen() {
                 {store.loaded.value && count === 0 ? (
                     <div class="empty">
                         <strong>Nothing needs you</strong>
-                        {store.filter.value === 'pending'
-                            ? 'No approval is waiting and no question is open.'
-                            : 'Nothing has been decided yet.'}
+                        {!decided ? 'No approval is waiting and no question is open.' : 'Nothing has been decided yet.'}
                     </div>
                 ) : (
                     <AttentionList
                         approvals={store.approvals.value}
                         questions={store.questions.value}
-                        moreApprovals={store.approvalsCursor.value ? () => store.more(api, 'approvals') : null}
-                        moreQuestions={store.questionsCursor.value ? () => store.more(api, 'questions') : null}
+                        moreApprovals={store.approvalsCursor.value ? () => store.more(api, 'approvals', decided) : null}
+                        moreQuestions={store.questionsCursor.value ? () => store.more(api, 'questions', decided) : null}
                         now={now}
                     />
                 )}

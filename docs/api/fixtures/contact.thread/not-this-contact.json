@@ -1,0 +1,18 @@
+{
+  "operation": "contact.thread",
+  "case": "not-this-contact",
+  "request": {
+    "contact_id": "cnt_1",
+    "plugin_id": "reply",
+    "thread_id": "t_501",
+    "limit": 20
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "thread_not_this_contact",
+      "message": "Thread 't_501' at 'reply' is not this person's.",
+      "retryable": false
+    }
+  }
+}

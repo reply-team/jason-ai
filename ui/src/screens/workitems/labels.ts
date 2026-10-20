@@ -26,17 +26,25 @@ export function what(item: Pick<WorkItemSummary, 'role' | 'operation'>): string 
     return item.role ?? (item.operation ? operationLabel(item.operation) : 'work');
 }
 
-/** When planned work runs, in the runtime's own terms: a start it may not pass, a retry it waits for, or as soon as it can. */
-export function plannedNote(item: WorkItemSummary, now: Date, zone: string): string {
+/**
+ * When planned work runs, in the runtime's own terms: a start it may not pass, a retry it waits for, or as soon as it
+ * can. Moments are clock times, for a list grouped by day; a list that is not says them with `at`.
+ */
+export function plannedNote(
+    item: WorkItemSummary,
+    now: Date,
+    zone: string,
+    at: (moment: Date) => string = (moment) => clock(moment, zone),
+): string {
     const notBefore = item.not_before ? new Date(item.not_before) : null;
     const retryAfter = item.retry_after ? new Date(item.retry_after) : null;
     const when =
         notBefore && notBefore > now
-            ? `not before ${clock(notBefore, zone)}`
+            ? `not before ${at(notBefore)}`
             : retryAfter && retryAfter > now
-              ? `retry after ${clock(retryAfter, zone)}`
+              ? `retry after ${at(retryAfter)}`
               : 'as soon as eligible';
-    return item.due_at ? `${when} · due ${clock(new Date(item.due_at), zone)}` : when;
+    return item.due_at ? `${when} · due ${at(new Date(item.due_at))}` : when;
 }
 
 /** How finished work ended, in one line. */

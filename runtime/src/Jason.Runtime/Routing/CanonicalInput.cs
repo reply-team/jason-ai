@@ -70,6 +70,26 @@ public static class CanonicalInput
     }
 
     /// <summary>
+    /// The input of a read made on a person's request rather than for a work item: the arguments the caller gave, and the
+    /// person exactly as <see cref="Compose"/> projects them where the operation reads one. No campaign: the contracts a read
+    /// on request performs let the campaign go unnamed.
+    /// </summary>
+    public static JsonObject ComposeRead(OperationContract contract, Contact? contact, IReadOnlyDictionary<string, string> contactPins, JsonObject args)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(contactPins);
+        ArgumentNullException.ThrowIfNull(args);
+
+        var input = new JsonObject { ["args"] = args };
+        if (contract.Preflight.Contact != ContactRequirement.NotUsed && contact is not null)
+        {
+            input["contacts"] = new JsonArray(Person(contract, contact, contactPins, channel: null));
+        }
+
+        return input;
+    }
+
+    /// <summary>
     /// The arguments as the planner wrote them, copied rather than shared: an edit to the item's context after
     /// the claim belongs to the next attempt, never to the one about to run.
     /// </summary>

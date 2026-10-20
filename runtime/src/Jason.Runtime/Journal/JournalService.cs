@@ -77,10 +77,15 @@ public sealed class JournalService(JasonDbContext db, JournalWriter journal)
     public async Task<Page<JournalEntryDto>> ListAsync(JournalListRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (!Blank(request.Kind) && request.Kinds is { Count: > 0 })
+        {
+            throw new ValidationException([new ErrorDetail("kinds", "invalid", "kinds and kind cannot be given together; put the one kind in kinds.")]);
+        }
+
         var limit = Paging.ResolveLimit(request.Limit);
         var before = Paging.DecodeCursor(request.Cursor);
 
-        IQueryable<JournalEntry> query = db.Journal.AsNoTracking().Include(e => e.Campaign);
+        IQueryable<JournalEntry> query = db.Journal.AsNoTracking();
 
         if (!Blank(request.CampaignId))
         {
@@ -96,10 +101,24 @@ public sealed class JournalService(JasonDbContext db, JournalWriter journal)
             query = query.Where(e => e.WorkItemId == workItemId);
         }
 
+        if (!Blank(request.ContactId))
+        {
+            var publicId = request.ContactId!.Trim();
+            var contactId = await db.Contacts.AsNoTracking().Where(c => c.PublicId == publicId).Select(c => (int?)c.Id).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw DomainErrors.ContactNotFound(publicId);
+            query = query.Where(e => e.ContactId == contactId);
+        }
+
         if (!Blank(request.Kind))
         {
             var kind = request.Kind!.Trim();
             query = query.Where(e => e.Kind == kind);
+        }
+
+        var kinds = request.Kinds?.Where(kind => !Blank(kind)).Select(kind => kind.Trim()).Distinct(StringComparer.Ordinal).ToList();
+        if (kinds is { Count: > 0 })
+        {
+            query = query.Where(e => kinds.Contains(e.Kind));
         }
 
         if (request.Since is { } since)
@@ -115,7 +134,8 @@ public sealed class JournalService(JasonDbContext db, JournalWriter journal)
         }
 
         var fetched = await query.OrderByDescending(e => e.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return Paging.ToPage(fetched, limit, e => e.PublicId, e => JournalWriter.ToDto(e, e.Campaign?.PublicId));
+        var page = Paging.ToPage(fetched, limit, e => e.PublicId, e => e);
+        return new Page<JournalEntryDto>(await JournalEntries.ToDtosAsync(db, page.Items, cancellationToken).ConfigureAwait(false), page.NextCursor);
     }
 
     private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);

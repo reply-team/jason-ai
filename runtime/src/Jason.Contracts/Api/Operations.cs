@@ -40,6 +40,8 @@ public static class Operations
     public const string ContactList = "contact.list";
     public const string ContactUpdate = "contact.update";
     public const string ContactArchive = "contact.archive";
+    public const string ContactThreads = "contact.threads";
+    public const string ContactThread = "contact.thread";
 
     public const string WorkItemCreate = "workitem.create";
     public const string WorkItemGet = "workitem.get";

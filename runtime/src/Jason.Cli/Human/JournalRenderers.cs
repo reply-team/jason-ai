@@ -52,10 +52,10 @@ public static class JournalRenderers
             return null;
         }
 
-        var table = new HumanTable("WHEN", "KIND", "ACTOR", "KEY", "REASON");
+        var table = new HumanTable("WHEN", "KIND", "ACTOR", "PERSON", "KEY", "REASON");
         foreach (var entry in page.Items)
         {
-            table.Row(RenderText.Moment(entry.Ts), entry.Kind, RenderText.Actor(entry.Actor), entry.Key, entry.Reason);
+            table.Row(RenderText.Moment(entry.Ts), entry.Kind, RenderText.Actor(entry.Actor), entry.ContactName, entry.Key, entry.Reason);
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);

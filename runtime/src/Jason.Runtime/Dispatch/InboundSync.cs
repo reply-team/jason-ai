@@ -245,6 +245,7 @@ public sealed class InboundSync(
         var people = await PeopleAsync(db, pluginId, fresh, ct).ConfigureAwait(false);
         foreach (var thread in fresh)
         {
+            var person = thread.Person is { } value && people.TryGetValue(value, out var found) ? found : null;
             journal.Append(
                 db,
                 Actors.Dispatcher,
@@ -259,10 +260,11 @@ public sealed class InboundSync(
                     ["last_activity_at"] = thread.Moment,
                     ["unread"] = thread.Unread,
                     ["has_meeting_intent"] = thread.HasMeetingIntent,
-                    ["contact_id"] = thread.Person is { } person && people.TryGetValue(person, out var contact) ? contact : null,
+                    ["contact_id"] = person?.PublicId,
                 },
                 workItem: item,
-                attempt: attempt);
+                attempt: attempt,
+                contactId: person?.Id);
         }
 
         // The provider holds more: the next page is asked for now, from where this one ended and with the same start, so
@@ -429,7 +431,7 @@ public sealed class InboundSync(
     /// The contact each person is, by the identifier the provider gave: the one contact pinned at this plugin with it, and
     /// nobody when none is or more than one is. A value recorded only beside a pin, as a divergence, is not a pin.
     /// </summary>
-    private static async Task<Dictionary<string, string>> PeopleAsync(
+    private static async Task<Dictionary<string, Person>> PeopleAsync(
         JasonDbContext db,
         string pluginId,
         List<Observation> threads,
@@ -438,13 +440,13 @@ public sealed class InboundSync(
         var values = threads.Select(thread => thread.Person).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
         if (values.Count == 0)
         {
-            return new Dictionary<string, string>(StringComparer.Ordinal);
+            return new Dictionary<string, Person>(StringComparer.Ordinal);
         }
 
         var pins = await db.ExternalIds
             .AsNoTracking()
             .Where(pin => pin.PluginId == pluginId && pin.Kind == ContactPin && pin.ContactId != null && values.Contains(pin.Value))
-            .Select(pin => new { pin.Value, Contact = pin.Contact!.PublicId })
+            .Select(pin => new { pin.Value, Contact = new Person(pin.Contact!.Id, pin.Contact.PublicId) })
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return pins
@@ -691,6 +693,9 @@ public sealed class InboundSync(
 
     /// <summary>A campaign this step will consider, and where its read stands as this step read it.</summary>
     private sealed record Live(int Id, string PublicId, DateTime? Watermark, DateTime? SyncedAt, int? ItemId, int Offset, int Failures);
+
+    /// <summary>The person a thread belongs to, by key for the line's column and by public id for what it says.</summary>
+    private sealed record Person(int Id, string PublicId);
 }
 
 /// <summary>Why a campaign was not read, one code per reason, in the order they are asked.</summary>

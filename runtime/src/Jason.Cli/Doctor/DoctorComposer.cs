@@ -1335,7 +1335,9 @@ public static partial class DoctorComposer
 
                 if (includeJournal && !entriesCut)
                 {
-                    var whole = JsonSerializer.SerializeToNode(entry, Dialect)!;
+                    // The runtime names the person a line is about when it is read; the journal itself holds only ids, and a
+                    // bundle carries no person's name.
+                    var whole = JsonSerializer.SerializeToNode(entry with { ContactName = null }, Dialect)!;
                     var size = Bytes(whole);
                     if (entryBytes + size > JournalEntriesBytes)
                     {

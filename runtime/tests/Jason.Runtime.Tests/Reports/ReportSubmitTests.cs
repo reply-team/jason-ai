@@ -196,6 +196,7 @@ public class ReportSubmitTests
         Assert.Equal(ActorType.Human, line.ActorType);
         Assert.Equal("person-1", line.ActorId);
         Assert.Equal(campaign.Id, line.CampaignId);
+        Assert.Equal(contact.Id, line.ContactId);
 
         var written = line.New!.AsObject();
         Assert.Equal(admitted.Id, written["id"]!.GetValue<string>());

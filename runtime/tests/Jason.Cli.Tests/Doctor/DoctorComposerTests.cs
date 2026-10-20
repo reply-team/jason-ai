@@ -44,7 +44,7 @@ public sealed class DoctorComposerTests
     /// <summary>And those no bundle ever carries, whatever it was asked.</summary>
     private static readonly string[] NeverSentinels =
     [
-        Token, "SENTINEL_WI_CONTEXT", "SENTINEL_WI_RESULT", "SENTINEL_ERROR_MESSAGE", "SENTINEL_CREATOR", "SENTINEL_PROBLEM_MESSAGE",
+        Token, "SENTINEL_WI_CONTEXT", "SENTINEL_WI_RESULT", "SENTINEL_ERROR_MESSAGE", "SENTINEL_CREATOR", "SENTINEL_PROBLEM_MESSAGE", "SENTINEL_CONTACT_NAME",
         "SENTINEL_SETTING_FEED", "SENTINEL_SETTING_COMMAND", "SENTINEL_ENV_FEED", "SENTINEL_ENV_NAME",
     ];
 
@@ -2475,7 +2475,9 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
             "SENTINEL_KEY",
             new JsonObject { ["note"] = "SENTINEL_OLD" },
             new JsonObject { ["context"] = "SENTINEL_CONTEXT", ["fields"] = new JsonObject { ["email"] = "SENTINEL_CONTACT_FIELD" }, ["decision"] = "SENTINEL_DECISION" },
-            "SENTINEL_REASON"),
+            "SENTINEL_REASON",
+            ContactId: "cnt_00000000000000000000000001",
+            ContactName: "SENTINEL_CONTACT_NAME"),
         JasonJson.Options)!.AsObject();
 
     /// <summary>An answer of <c>system.info</c> with a value in every field, a sentinel in each one a bundle withholds.</summary>

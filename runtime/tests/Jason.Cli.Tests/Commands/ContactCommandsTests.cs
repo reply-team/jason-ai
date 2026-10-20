@@ -138,12 +138,12 @@ public class ContactCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("contact", "list", "--channel", "email", "--value", "ada@example.com", "--query", "ada@", "--include-archived", "--limit", "5", "--cursor", "Y250X0E");
+        var exit = await cli.RunAsync("contact", "list", "--channel", "email", "--value", "ada@example.com", "--query", "ada@", "--campaign", "cmp_A", "--order", "activity", "--include-archived", "--limit", "5", "--cursor", "Y250X0E");
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(
             Operations.ContactList,
-            "{\"channel\":\"email\",\"value\":\"ada@example.com\",\"query\":\"ada@\",\"include_archived\":true,\"limit\":5,\"cursor\":\"Y250X0E\"}");
+            "{\"channel\":\"email\",\"value\":\"ada@example.com\",\"query\":\"ada@\",\"campaign_id\":\"cmp_A\",\"order\":\"activity\",\"include_archived\":true,\"limit\":5,\"cursor\":\"Y250X0E\"}");
     }
 
     [Fact]
@@ -220,7 +220,8 @@ public class ContactCommandsTests
                 [],
                 Moment,
                 Moment,
-                null),
+                null,
+                [new ContactCampaignDto("cmp_A", "LatAm pilot", MembershipState.Enrolled, Moment, Moment), new ContactCampaignDto("cmp_B", "Re-engage", MembershipState.Excluded, Moment, Moment)]),
             JasonJson.Options);
         using var cli = new CliRun(contact);
 
@@ -234,6 +235,8 @@ public class ContactCommandsTests
         Assert.Contains("CHANNEL", cli.Text, StringComparison.Ordinal);
         Assert.Contains("ada@example.com", cli.Text, StringComparison.Ordinal);
         Assert.Contains("source", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("LatAm pilot", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("excluded", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
@@ -255,7 +258,8 @@ public class ContactCommandsTests
                         [],
                         Moment,
                         Moment,
-                        null),
+                        null,
+                        LastActivity: new JournalEntryDto("jrn_A", Moment, new ActorRef(ActorType.System, "dispatcher"), "inbound_reply_observed", null, null, null, null, null, null, null)),
                 ],
                 "Y250X0E"),
             JasonJson.Options);
@@ -267,7 +271,43 @@ public class ContactCommandsTests
         Assert.Contains("COMPANY", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Ada Lovelace", cli.Text, StringComparison.Ordinal);
         Assert.Contains("ada@example.com", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("LAST", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("inbound_reply_observed", cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: Y250X0E", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
+    }
+    [Fact]
+    public async Task Threads_and_thread_send_the_person_and_print_the_conversation()
+    {
+        const string threads = """
+            {"plugin_id":"reply","items":[{"external_id":"t_1","channel":"email","subject":"Re: Q3","preview":"Thursday?","last_activity_at":"2026-10-16T08:41:00.000Z","unread":true}],"has_more":false}
+            """;
+        using (var cli = new CliRun(threads))
+        {
+            var exit = await cli.RunAsync("contact", "threads", "cnt_A", "--plugin", "reply", "--limit", "5", "--offset", "10", "--human");
+
+            Assert.Equal(ExitCodes.Success, exit);
+            cli.AssertPosted(Operations.ContactThreads, "{\"contact_id\":\"cnt_A\",\"plugin_id\":\"reply\",\"limit\":5,\"offset\":10}");
+            Assert.Contains("t_1", cli.Text, StringComparison.Ordinal);
+            Assert.Contains("Re: Q3", cli.Text, StringComparison.Ordinal);
+        }
+
+        const string thread = """
+            {"plugin_id":"reply","thread":{"external_id":"t_1","channel":"email","subject":"Re: Q3\u001b]0;owned\u0007"},"messages":[{"direction":"inbound","sent_at":"2026-10-16T08:41:00.000Z","from":"marta@example.com","to":["sdr@example.com"],"body":"<p>Thursday?</p>\n\u001b[2J\u009b31mred\tend"}],"has_more":false}
+            """;
+        using (var cli = new CliRun(thread))
+        {
+            var exit = await cli.RunAsync("contact", "thread", "cnt_A", "t_1", "--human");
+
+            Assert.Equal(ExitCodes.Success, exit);
+            cli.AssertPosted(Operations.ContactThread, "{\"contact_id\":\"cnt_A\",\"thread_id\":\"t_1\"}");
+            Assert.Contains("marta@example.com", cli.Text, StringComparison.Ordinal);
+            Assert.Contains("<p>Thursday?</p>", cli.Text, StringComparison.Ordinal);
+            Assert.Contains("[2J31mred\tend", cli.Text, StringComparison.Ordinal);
+            Assert.Contains("Re: Q3]0;owned", cli.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain('\u001b', cli.Text);
+            Assert.DoesNotContain('\u0007', cli.Text);
+            Assert.DoesNotContain('\u009b', cli.Text);
+        }
     }
 }

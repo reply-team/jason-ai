@@ -1,0 +1,54 @@
+{
+  "operation": "contact.threads",
+  "case": "two-threads",
+  "request": {
+    "contact_id": "cnt_1",
+    "plugin_id": "reply",
+    "limit": 100
+  },
+  "status": 200,
+  "response": {
+    "plugin_id": "reply",
+    "items": [
+      {
+        "external_id": "t_501",
+        "channel": "email",
+        "subject": "Re: Soluna's next quarter",
+        "preview": "Thanks, could we talk on Thursday?",
+        "last_activity_at": "2026-10-16T08:41:00.000Z",
+        "unread": true,
+        "contact": {
+          "external_id": "16786993",
+          "name": "Mateo Ruiz"
+        },
+        "campaign_external_id": "c_7714",
+        "has_meeting_intent": true,
+        "vendor": {
+          "is_last_message_planned": false,
+          "state": "needs_attention",
+          "category": null
+        }
+      },
+      {
+        "external_id": "t_502",
+        "channel": "linkedin",
+        "subject": null,
+        "preview": "Happy to connect.",
+        "last_activity_at": "2026-10-03T18:02:44.000Z",
+        "unread": false,
+        "contact": {
+          "external_id": "16786993",
+          "name": "Mateo Ruiz"
+        },
+        "campaign_external_id": "c_7714",
+        "has_meeting_intent": null,
+        "vendor": {
+          "is_last_message_planned": false,
+          "state": "ok",
+          "category": null
+        }
+      }
+    ],
+    "has_more": false
+  }
+}

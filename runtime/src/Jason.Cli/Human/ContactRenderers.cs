@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 
 namespace Jason.Cli.Human;
@@ -38,6 +39,18 @@ public static class ContactRenderers
         lines.Add(Line("Custom keys:", RenderText.Keys(contact.Custom)));
         lines.Add(string.Empty);
         lines.Add(Channels(contact.Channels));
+        if (contact.Campaigns is { Count: > 0 } campaigns)
+        {
+            var table = new HumanTable("CAMPAIGN", "NAME", "STATE", "ADDED");
+            foreach (var campaign in campaigns)
+            {
+                table.Row(campaign.CampaignId, campaign.CampaignName, RenderText.Snake(campaign.State), RenderText.Moment(campaign.AddedAt));
+            }
+
+            lines.Add(string.Empty);
+            lines.Add(table.Render());
+        }
+
         lines.AddRange(RenderText.ExternalIds(contact.ExternalIds));
         return RenderText.Lines(lines);
     }
@@ -51,7 +64,7 @@ public static class ContactRenderers
             return null;
         }
 
-        var table = new HumanTable("ID", "NAME", "COMPANY", "EMAIL", "TIME ZONE");
+        var table = new HumanTable("ID", "NAME", "COMPANY", "EMAIL", "TIME ZONE", "LAST");
         foreach (var contact in page.Items)
         {
             table.Row(
@@ -59,10 +72,69 @@ public static class ContactRenderers
                 RenderText.Name(contact.FirstName, contact.LastName),
                 contact.Company,
                 RenderText.Email(contact.Channels),
-                contact.TimeZone);
+                contact.TimeZone,
+                contact.LastActivity is { } last ? $"{last.Kind} {RenderText.Moment(last.Ts)}" : null);
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);
+    }
+
+    /// <summary>A page of a person's threads as the provider listed them.</summary>
+    public static string? Threads(string json)
+    {
+        var page = RenderText.Read<ContactThreadsResponse>(json);
+        if (page?.Items is null)
+        {
+            return null;
+        }
+
+        var table = new HumanTable("THREAD", "CHANNEL", "SUBJECT", "LAST ACTIVITY", "UNREAD");
+        foreach (var thread in page.Items.OfType<JsonObject>())
+        {
+            table.Row(
+                Shown(thread["external_id"]),
+                Shown(thread["channel"]),
+                Shown(thread["subject"]) ?? Shown(thread["preview"]),
+                Shown(thread["last_activity_at"]),
+                thread["unread"]?.GetValue<bool>() == true ? "yes" : null);
+        }
+
+        return page.HasMore ? table.Render() + Environment.NewLine + "more threads: ask again with --offset" : table.Render();
+    }
+
+    /// <summary>
+    /// One thread: what it is, then each message with who wrote it to whom and when, and its body as the provider holds
+    /// it, less the control characters that would drive the terminal instead of being printed on it.
+    /// </summary>
+    public static string? Thread(string json)
+    {
+        var read = RenderText.Read<ContactThreadResponse>(json);
+        if (read?.Thread is null || read.Messages is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            Line("Thread:", Shown(read.Thread["external_id"])),
+            Line("Channel:", Shown(read.Thread["channel"])),
+            Line("Subject:", Shown(read.Thread["subject"])),
+        };
+        foreach (var message in read.Messages.OfType<JsonObject>())
+        {
+            var to = message["to"] is JsonArray recipients ? string.Join(", ", recipients.Select(Shown)) : null;
+            lines.Add(string.Empty);
+            lines.Add($"{Shown(message["sent_at"])}  {Shown(message["from"])} -> {to}");
+            lines.Add(Shown(message["body"]) ?? string.Empty);
+        }
+
+        if (read.HasMore)
+        {
+            lines.Add(string.Empty);
+            lines.Add("more messages: ask again with --offset");
+        }
+
+        return RenderText.Lines(lines);
     }
 
     private static string Channels(IReadOnlyList<ChannelDto>? channels)
@@ -78,6 +150,13 @@ public static class ContactRenderers
 
         return table.Render();
     }
+
+    /// <summary>
+    /// Text a provider wrote, as it may be printed: without the C0 and C1 control characters but the line feed and the
+    /// tab, so an escape sequence in a subject or a body is shown as the rest of its characters and never runs.
+    /// </summary>
+    private static string? Shown(JsonNode? node) =>
+        (string?)node is { } text ? string.Concat(text.Where(c => c is '\n' or '\t' || !char.IsControl(c))) : null;
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
 }

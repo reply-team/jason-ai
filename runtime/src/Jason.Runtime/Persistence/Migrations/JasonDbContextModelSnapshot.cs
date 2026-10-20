@@ -1177,6 +1177,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("campaign_id");
 
+                    b.Property<int?>("ContactId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("contact_id");
+
                     b.Property<string>("Key")
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
@@ -1231,6 +1235,9 @@ namespace Jason.Runtime.Persistence.Migrations
 
                     b.HasIndex("CampaignId", "PublicId")
                         .HasDatabaseName("ix_journal_campaign_id_public_id");
+
+                    b.HasIndex("ContactId", "PublicId")
+                        .HasDatabaseName("ix_journal_contact_id_public_id");
 
                     b.HasIndex("WorkItemId", "PublicId")
                         .HasDatabaseName("ix_journal_work_item_id_public_id");
@@ -2096,7 +2103,15 @@ namespace Jason.Runtime.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_journal_campaigns_campaign_id");
 
+                    b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
+                        .WithMany()
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_journal_contacts_contact_id");
+
                     b.Navigation("Campaign");
+
+                    b.Navigation("Contact");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.ProviderEvent", b =>

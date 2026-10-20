@@ -21,7 +21,14 @@
         "key": "status",
         "old": "created",
         "new": "cancelled",
-        "reason": "Not this week."
+        "reason": "Not this week.",
+        "contact_id": "cnt_1",
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace",
+        "work_item_kind": "ai_role",
+        "work_item_role": "copywriter",
+        "work_item_operation": null,
+        "actor_role": null
       },
       {
         "id": "jrn_2",
@@ -37,7 +44,14 @@
         "key": "due_at",
         "old": "2026-10-16T10:00:00.000Z",
         "new": "2026-10-16T15:00:00.000Z",
-        "reason": null
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace",
+        "work_item_kind": "ai_role",
+        "work_item_role": "copywriter",
+        "work_item_operation": null,
+        "actor_role": null
       },
       {
         "id": "jrn_3",
@@ -53,7 +67,14 @@
         "key": "not_before",
         "old": null,
         "new": "2026-10-16T11:00:00.000Z",
-        "reason": null
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace",
+        "work_item_kind": "ai_role",
+        "work_item_role": "copywriter",
+        "work_item_operation": null,
+        "actor_role": null
       }
     ],
     "next_cursor": null

@@ -172,7 +172,9 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
   contact. It carries exactly one person — an operation about a person addresses one person in this version, and a
   read about a person reads about one — and is cut to the declared projection: only the channel the operation consumes,
   or none, never the person's whole reachability.
-- `campaign` is Jason's record of the campaign the work item belongs to.
+- `campaign` is Jason's record of the campaign the work item belongs to. A read made on a person's request — their
+  threads, or one thread's messages — belongs to no work item and carries none; the documents of the operations it
+  performs say the campaign may go unnamed.
 - `idempotency_key` appears only when the operation requires one, and it is the **work item's** identifier: stable
   across every attempt, which is what makes "the prior run under this key" answerable.
 - Every `external_ids` object is filtered to the calling plugin's own pins. Another provider's identifier is never

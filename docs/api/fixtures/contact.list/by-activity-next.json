@@ -1,0 +1,39 @@
+{
+  "operation": "contact.list",
+  "case": "by-activity-next",
+  "request": {
+    "order": "activity",
+    "limit": 3,
+    "cursor": "YWN0aXZpdHl8anJuXzAxSzdRTjAwMDAwMDAwMDAwMDAwMDAwMTAzfGNudF8wMUs3UU4wMDAwMDAwMDAwMDAwMDAwMDEwNA"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cnt_4",
+        "first_name": "Grace",
+        "last_name": "Hopper",
+        "company": "Navy",
+        "title": "Rear Admiral",
+        "time_zone": "America/New_York",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "grace@navy.example",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [],
+        "last_activity": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

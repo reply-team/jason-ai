@@ -1,0 +1,47 @@
+{
+  "operation": "journal.list",
+  "case": "by-contact-decisions",
+  "request": {
+    "contact_id": "cnt_1",
+    "kinds": [
+      "approval_requested",
+      "approval_approved",
+      "approval_rejected",
+      "decision_raised",
+      "decision_answered"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_5",
+        "ts": "2026-10-16T08:12:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "approval_approved",
+        "campaign_id": "cmp_2",
+        "work_item_id": "wi_4",
+        "attempt_id": null,
+        "key": "approval",
+        "old": null,
+        "new": {
+          "id": "apr_1",
+          "operation": "campaign.enroll"
+        },
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": "LatAm pilot",
+        "contact_name": "Mateo Ruiz",
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "campaign.enroll",
+        "actor_role": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

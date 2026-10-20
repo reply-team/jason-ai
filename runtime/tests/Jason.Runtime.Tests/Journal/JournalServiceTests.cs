@@ -176,7 +176,7 @@ public class JournalServiceTests
     }
 
     [Fact]
-    public async Task The_kind_and_since_filters_narrow_the_chronicle()
+    public async Task The_kind_kinds_and_since_filters_narrow_the_chronicle()
     {
         using var database = new TestDatabase();
         using var db = database.Open();
@@ -193,6 +193,12 @@ public class JournalServiceTests
 
         Assert.Equal(["late", "early"], byKind.Items.Select(e => e.Key));
         Assert.Equal(late.Id, Assert.Single(since.Items).Id);
+
+        var byKinds = await service.ListAsync(new JournalListRequest(campaign, null, null, null, null, null, Kinds: ["decision", "observation"]), Ct);
+        Assert.Equal(["decision", "observation", "observation"], byKinds.Items.Select(e => e.Kind));
+
+        var both = await Assert.ThrowsAsync<ValidationException>(() => service.ListAsync(new JournalListRequest(campaign, null, "observation", null, null, null, Kinds: ["decision"]), Ct));
+        Assert.Equal("kinds", Assert.Single(both.Details!).Field);
     }
 
     [Fact]
@@ -261,7 +267,9 @@ public class JournalServiceTests
         var campaign = db.Campaigns.Single(c => c.PublicId == campaignId);
         var writer = new JournalWriter(clock);
 
-        var mine = NewWorkItem(db, campaign, "wi_MINE");
+        var ada = new Contact { PublicId = "cnt_ADA", FirstName = "Ada", LastName = "Lovelace", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        db.Contacts.Add(ada);
+        var mine = NewWorkItem(db, campaign, "wi_MINE", ada);
         var other = NewWorkItem(db, campaign, "wi_OTHER");
         var attempt = new Attempt
         {
@@ -287,20 +295,81 @@ public class JournalServiceTests
         Assert.Equal("wi_MINE", entry.WorkItemId);
         Assert.Equal("att_A", entry.AttemptId);
         Assert.Equal(campaignId, entry.CampaignId);
+        Assert.Equal(("LatAm", "cnt_ADA", "Ada Lovelace"), (entry.CampaignName, entry.ContactId, entry.ContactName));
+        Assert.Equal((WorkItemKind.AiRole, "researcher", (string?)null), (entry.WorkItemKind, entry.WorkItemRole, entry.WorkItemOperation));
 
         // Combines with the other filters rather than replacing them.
         Assert.Empty((await service.ListAsync(new JournalListRequest(campaignId, "wi_MINE", JournalKinds.WorkItemExpired, null, null, null), Ct)).Items);
         Assert.Single((await service.ListAsync(new JournalListRequest(campaignId, "wi_MINE", JournalKinds.WorkItemScheduled, null, null, null), Ct)).Items);
     }
 
-    private static WorkItem NewWorkItem(JasonDbContext db, Campaign campaign, string publicId)
+    [Fact]
+    public async Task The_chronicle_narrows_to_one_person_and_says_which_role_acted()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var clock = new FixedClock(Noon);
+        var campaignId = await CreateAsync(NewCampaignService(db, clock));
+        var service = NewJournalService(db, clock);
+        var campaign = db.Campaigns.Single(c => c.PublicId == campaignId);
+        var writer = new JournalWriter(clock);
+        var ada = new Contact { PublicId = "cnt_ADA", FirstName = "Ada", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        var grace = new Contact { PublicId = "cnt_GRACE", FirstName = "Grace", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        db.Contacts.AddRange(ada, grace);
+        var research = NewWorkItem(db, campaign, "wi_RESEARCH", ada);
+        var enrol = NewWorkItem(db, campaign, "wi_ENROL", ada);
+        var attempt = new Attempt
+        {
+            PublicId = "att_R",
+            WorkItem = research,
+            Number = 1,
+            Command = WorkItemKind.AiRole,
+            Status = AttemptStatus.Running,
+            ClaimedAt = Noon.UtcDateTime,
+            LockUntil = Noon.UtcDateTime.AddHours(1),
+        };
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(Ct);
+
+        writer.Append(db, Actors.ForAttempt(attempt), JournalKinds.ContactUpdated, campaign: null, key: "cnt_ADA", contact: ada);
+        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemSucceeded, campaign: null, workItem: enrol);
+        writer.Append(db, new ActorRef(ActorType.Human, "vitaliy"), JournalKinds.ApprovalApproved, campaign: null, workItem: enrol);
+        writer.Append(db, Actors.Dispatcher, JournalKinds.InboundReplyObserved, campaign, key: "k", contactId: ada.Id);
+        writer.Append(db, Actors.Runtime, JournalKinds.ContactCreated, campaign: null, key: "cnt_GRACE", contact: grace);
+        await db.SaveChangesAsync(Ct);
+
+        var walked = new List<JournalEntryDto>();
+        string? cursor = null;
+        do
+        {
+            var page = await service.ListAsync(new JournalListRequest(null, null, null, null, 2, cursor, ContactId: "cnt_ADA"), Ct);
+            walked.AddRange(page.Items);
+            cursor = page.NextCursor;
+        }
+        while (cursor is not null);
+
+        Assert.Equal(
+            [JournalKinds.InboundReplyObserved, JournalKinds.ApprovalApproved, JournalKinds.WorkItemSucceeded, JournalKinds.ContactUpdated],
+            walked.Select(e => e.Kind));
+        Assert.All(walked, entry => Assert.Equal("cnt_ADA", entry.ContactId));
+        Assert.Equal("researcher", walked[3].ActorRole);
+        Assert.Null(walked[1].ActorRole);
+
+        var replies = await service.ListAsync(new JournalListRequest(null, null, null, null, null, null, ContactId: "cnt_ADA", Kinds: [JournalKinds.InboundReplyObserved, JournalKinds.ProviderEventObserved]), Ct);
+        Assert.Equal(JournalKinds.InboundReplyObserved, Assert.Single(replies.Items).Kind);
+        Assert.Equal(JournalKinds.ContactCreated, Assert.Single((await service.ListAsync(new JournalListRequest(null, null, null, null, null, null, ContactId: "cnt_GRACE"), Ct)).Items).Kind);
+        await Assert.ThrowsAsync<NotFoundException>(() => service.ListAsync(new JournalListRequest(null, null, null, null, null, null, ContactId: "cnt_NOBODY"), Ct));
+    }
+
+    private static WorkItem NewWorkItem(JasonDbContext db, Campaign campaign, string publicId, Contact? contact = null, string role = "researcher")
     {
         var item = new WorkItem
         {
             PublicId = publicId,
             Campaign = campaign,
+            Contact = contact,
             Kind = WorkItemKind.AiRole,
-            Role = "researcher",
+            Role = role,
             CreatedAt = Noon.UtcDateTime,
             UpdatedAt = Noon.UtcDateTime,
         };

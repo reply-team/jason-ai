@@ -11,12 +11,21 @@ export type WorkItemFilters = {
     failed?: boolean;
 };
 
+export type PersonTab = 'timeline' | 'threads' | 'details';
+export type PeopleFilters = {
+    /** The search typed into the list: a name, a company, a title or part of a channel value. */
+    q?: string;
+    campaign?: string;
+    archived?: boolean;
+};
+
 const day = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 export type Route =
-    | { screen: 'attention'; kind?: 'approvals' | 'questions'; id?: string }
+    | { screen: 'attention'; kind?: 'approvals' | 'questions'; id?: string; decided?: true }
     | { screen: 'system' }
-    | { screen: 'workitems'; tab: Tab; id?: string; filters: WorkItemFilters };
+    | { screen: 'workitems'; tab: Tab; id?: string; filters: WorkItemFilters }
+    | { screen: 'people'; id?: string; tab: PersonTab; filters: PeopleFilters };
 
 const tabs: readonly Tab[] = ['now', 'planned', 'done'];
 
@@ -26,11 +35,13 @@ export function parseRoute(hash: string): Route {
     const segments = path.split('/').filter((s) => s.length > 0);
     if (segments[0] === 'system') return { screen: 'system' };
     if (segments[0] === 'workitems') return workItems(segments.slice(1), query);
+    if (segments[0] === 'people') return people(segments.slice(1), query);
+    const decided = new URLSearchParams(query).get('decided') === '1' ? { decided: true as const } : {};
     if (segments[0] === 'attention' && (segments[1] === 'approvals' || segments[1] === 'questions') && segments[2]) {
         const id = decode(segments[2]);
-        if (id !== null) return { screen: 'attention', kind: segments[1], id };
+        if (id !== null) return { screen: 'attention', kind: segments[1], id, ...decided };
     }
-    return { screen: 'attention' };
+    return { screen: 'attention', ...decided };
 }
 
 function workItems(segments: string[], query: string): Route {
@@ -50,6 +61,29 @@ function workItems(segments: string[], query: string): Route {
     if (on && day.test(on)) filters.on = on;
     if (params.get('failed') === '1') filters.failed = true;
     return id !== null ? { screen: 'workitems', tab, id, filters } : { screen: 'workitems', tab, filters };
+}
+
+function people(segments: string[], query: string): Route {
+    const id = segments[0] ? decode(segments[0]) : null;
+    const params = new URLSearchParams(query);
+    const filters: PeopleFilters = {};
+    const q = params.get('q');
+    if (q) filters.q = q;
+    const campaign = params.get('campaign');
+    if (campaign) filters.campaign = campaign;
+    if (params.get('archived') === '1') filters.archived = true;
+    if (id === null) return { screen: 'people', tab: 'timeline', filters };
+    const tab = segments[1] === 'details' || segments[1] === 'threads' ? segments[1] : 'timeline';
+    return { screen: 'people', id, tab, filters };
+}
+
+/** The People filters in a fixed key order, as the Work items ones are. */
+function peopleQuery(filters: PeopleFilters): string {
+    const parts: string[] = [];
+    if (filters.q) parts.push(`q=${encodeURIComponent(filters.q)}`);
+    if (filters.campaign) parts.push(`campaign=${encodeURIComponent(filters.campaign)}`);
+    if (filters.archived) parts.push('archived=1');
+    return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
 
 /** The filters in a fixed key order, so one view has one address. */
@@ -80,7 +114,15 @@ export function href(route: Route): string {
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';
         return `#/workitems${tab}${id}${filterQuery(route.filters)}`;
     }
-    return route.kind && route.id ? `#/attention/${route.kind}/${encodeURIComponent(route.id)}` : '#/attention';
+    if (route.screen === 'people') {
+        const id = route.id ? `/${encodeURIComponent(route.id)}` : '';
+        const tab = route.id && route.tab !== 'timeline' ? `/${route.tab}` : '';
+        return `#/people${id}${tab}${peopleQuery(route.filters)}`;
+    }
+    const decided = route.decided ? '?decided=1' : '';
+    return route.kind && route.id
+        ? `#/attention/${route.kind}/${encodeURIComponent(route.id)}${decided}`
+        : `#/attention${decided}`;
 }
 
 export const route = signal<Route>(

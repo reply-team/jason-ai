@@ -111,6 +111,16 @@ public enum WorkItemListOrder
 }
 
 /// <summary>
+/// How a contact listing is ordered: <c>created</c> oldest first (the order a listing always had), <c>activity</c> by the
+/// person's newest journal line, newest first, people with no line of their own last.
+/// </summary>
+public enum ContactListOrder
+{
+    Created,
+    Activity,
+}
+
+/// <summary>
 /// Which of the four levels decided where an operation's work goes, most specific first. A campaign default
 /// hides every global operation override for that campaign: bringing one back takes an explicit campaign
 /// operation override, because a campaign that named its provider must not still be sending one operation

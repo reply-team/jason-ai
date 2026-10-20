@@ -25,7 +25,7 @@ public class SchemaTests
              "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
         Assert.Equal(
-            ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id"],
+            ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id", "contact_id"],
             Names(connection, "SELECT name FROM pragma_table_info('journal')"));
 
         var indexes = Names(connection, "SELECT name FROM sqlite_master WHERE type = 'index'");
@@ -34,6 +34,7 @@ public class SchemaTests
         Assert.Contains("ix_contact_channels_one_primary_per_channel", indexes);
         Assert.Contains("ix_campaign_contacts_campaign_id_contact_id", indexes);
         Assert.Contains("ix_suppressions_channel_value", indexes);
+        Assert.Contains("ix_journal_contact_id_public_id", indexes);
 
         Assert.Equal(
             [

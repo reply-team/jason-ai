@@ -195,7 +195,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
 
                 if (said.Add((campaign.Id, line.Kind, line.Key)))
                 {
-                    journal.Append(db, Actors.Dispatcher, line.Kind, campaign, line.Key, updated: line.New);
+                    journal.Append(db, Actors.Dispatcher, line.Kind, campaign, line.Key, updated: line.New, contactId: contact?.ContactId);
                     lines++;
                 }
             }

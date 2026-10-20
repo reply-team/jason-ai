@@ -1,0 +1,68 @@
+{
+  "operation": "journal.list",
+  "case": "by-contact-changes",
+  "request": {
+    "contact_id": "cnt_1",
+    "kinds": [
+      "contact_created",
+      "contact_updated",
+      "contact_archived"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_7",
+        "ts": "2026-10-15T16:40:00.000Z",
+        "actor": {
+          "type": "attempt",
+          "id": "att_4"
+        },
+        "kind": "contact_updated",
+        "campaign_id": null,
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": "cnt_1",
+        "old": null,
+        "new": [
+          "title",
+          "company"
+        ],
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": null,
+        "contact_name": "Mateo Ruiz",
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": "researcher"
+      },
+      {
+        "id": "jrn_8",
+        "ts": "2026-10-01T09:24:00.000Z",
+        "actor": {
+          "type": "attempt",
+          "id": "att_4"
+        },
+        "kind": "contact_created",
+        "campaign_id": null,
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": "cnt_1",
+        "old": null,
+        "new": null,
+        "reason": "imported from the Q2 list",
+        "contact_id": "cnt_1",
+        "campaign_name": null,
+        "contact_name": "Mateo Ruiz",
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": "researcher"
+      }
+    ],
+    "next_cursor": null
+  }
+}

@@ -35,6 +35,14 @@ public sealed class JournalEntry
     /// <summary>The PUBLIC id of the attempt the entry is about.</summary>
     public string? AttemptId { get; init; }
 
+    /// <summary>
+    /// The one person the entry is about, when there is one. Null on lines written before the column existed, and on
+    /// lines about many people at once or about nobody.
+    /// </summary>
+    public int? ContactId { get; init; }
+
+    public Contact? Contact { get; init; }
+
     public string? Key { get; init; }
 
     public JsonNode? Old { get; init; }

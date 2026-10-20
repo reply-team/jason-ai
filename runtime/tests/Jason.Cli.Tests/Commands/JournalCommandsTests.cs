@@ -95,6 +95,10 @@ public class JournalCommandsTests
             "wi_A",
             "--kind",
             "decision",
+            "--kind",
+            "pricing",
+            "--contact",
+            "cnt_A",
             "--since",
             "2026-09-14T10:00:00Z",
             "--limit",
@@ -105,7 +109,7 @@ public class JournalCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(
             Operations.JournalList,
-            "{\"campaign_id\":\"cmp_A\",\"work_item_id\":\"wi_A\",\"kind\":\"decision\",\"since\":\"2026-09-14T10:00:00Z\",\"limit\":5,\"cursor\":\"anJuX0E\"}");
+            "{\"campaign_id\":\"cmp_A\",\"work_item_id\":\"wi_A\",\"contact_id\":\"cnt_A\",\"kinds\":[\"decision\",\"pricing\"],\"since\":\"2026-09-14T10:00:00Z\",\"limit\":5,\"cursor\":\"anJuX0E\"}");
     }
 
     [Fact]
@@ -165,7 +169,7 @@ public class JournalCommandsTests
             new Page<JournalEntryDto>(
                 [
                     new JournalEntryDto("jrn_B", Moment, new ActorRef(ActorType.System, null), "campaign_started", "cmp_A", null, null, null, null, null, null),
-                    new JournalEntryDto("jrn_A", Moment, new ActorRef(ActorType.Role, "planner"), "decision", "cmp_A", null, null, "pricing", null, null, "the pilot ended"),
+                    new JournalEntryDto("jrn_A", Moment, new ActorRef(ActorType.Role, "planner"), "decision", "cmp_A", null, null, "pricing", null, null, "the pilot ended", "cnt_A", "LatAm", "Ada Lovelace"),
                 ],
                 "anJuX0E"),
             JasonJson.Options);
@@ -178,6 +182,8 @@ public class JournalCommandsTests
         Assert.Contains("system", cli.Text, StringComparison.Ordinal);
         Assert.Contains("role:planner", cli.Text, StringComparison.Ordinal);
         Assert.Contains("pricing", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("PERSON", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Ada Lovelace", cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: anJuX0E", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }

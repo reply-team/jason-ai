@@ -175,7 +175,8 @@ succeeded), besides the lines that say a reply. A read lists every thread that m
 page, so a busy campaign may take two or three read work items a cadence rather than one: as many pages as the threads
 that moved in the last four hours fill. A thread listed again says nothing: its key holds a move already said. A
 manager reading everything in the chronicle since its last review reads those too, about 80 in five hours; reading by
-kind (`jason journal list --kind inbound_reply_observed`) passes over them.
+kind (`jason journal list --kind inbound_reply_observed`) passes over them, and one person's replies are
+`jason journal list --contact cnt_… --kind inbound_reply_observed`.
 
 Each read also keeps the page it read as its result, up to 100 threads with their subjects and previews, as any read
 does. And a reply, or a read that failed, can wake the campaign's manager: what a check-in costs is in
