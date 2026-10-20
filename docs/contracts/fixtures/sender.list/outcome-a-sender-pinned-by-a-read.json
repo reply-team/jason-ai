@@ -1,0 +1,35 @@
+{
+  "operation": "sender.list",
+  "version": 1,
+  "case": "a read that pins the account it listed: a read pins nothing, and a sender is no kind of pin",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "external_id": "s_12",
+          "channel": "email",
+          "name": "Ann Owner",
+          "address": "ann@example.com",
+          "status": "active",
+          "owner": "own",
+          "vendor": { "status": "connected" }
+        }
+      ],
+      "has_more": false,
+      "channels": { "email": "listed", "linkedin": "not_asked" },
+      "vendor": { "ordering": "email_then_linkedin" }
+    },
+    "external_ids": { "sender": "s_12" },
+    "error": null,
+    "diagnostics": { "duration_ms": 900, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/external_ids/sender", "reason": "additional_properties" }]
+  }
+}

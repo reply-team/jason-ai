@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// The stand-in as the plugin meets it: the work commands, answered the way reply-cli 0.13.0 documents them —
+/// The stand-in as the plugin meets it: the work commands, answered the way reply-cli 0.14.0 documents them —
 /// a result on stdout and exit 0, or one <c>{"error":…}</c> line on stderr with exit 1, 2 or 3 — from a small record of
 /// what the account holds. It is a program run from outside, never a model of Reply's API.
 /// </summary>
@@ -21,7 +21,7 @@ public class ReplyStubCommandTests
         var (exit, stdout, _) = await account.RunAsync(["--version"], Ct);
 
         Assert.Equal(0, exit);
-        Assert.Equal("0.13.0", stdout.Trim());
+        Assert.Equal("0.14.0", stdout.Trim());
     }
 
     [Fact]

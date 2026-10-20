@@ -44,7 +44,9 @@ public class ReplyContactProxyRuleTests
     /// <summary>
     /// What drives one operation against the stand-in: the command it runs once the person is named, the world it needs,
     /// how Reply answers it by another identifier, whether it finds the person through a thread, and whether the command
-    /// names the person as its operand — with what it changes on stdin — rather than by <c>--contact-id</c>.
+    /// names the person as its operand — with what it changes on stdin — rather than by <c>--contact-id</c>. A send names
+    /// a channel of its own, reads the account it goes from before anyone is looked up, and reads the contact it found
+    /// before it sends; one whose document takes a single channel cannot be asked about another.
     /// </summary>
     private sealed record Driver(
         string Command,
@@ -52,7 +54,13 @@ public class ReplyContactProxyRuleTests
         Func<int, JsonObject>? AnsweredAs,
         bool ThroughTheThread = false,
         bool ByOperand = false,
-        string? NobodyIs = null);
+        string? NobodyIs = null,
+        string Channel = "email",
+        string[]? Before = null,
+        bool ReadsTheContact = false,
+        bool FixedChannel = false);
+
+    private const string SenderProfile = "https://www.linkedin.com/in/ann-owner";
 
     private static readonly IReadOnlyDictionary<string, Driver> Drivers = new Dictionary<string, Driver>(StringComparer.Ordinal)
     {
@@ -83,6 +91,15 @@ public class ReplyContactProxyRuleTests
             id => new JsonObject { ["status"] = "updated", ["contact_id"] = id },
             ByOperand: true,
             NobodyIs: "contact_not_found"),
+        ["social_invitation.send"] = new(
+            "contact linkedin-connect",
+            account => account.WithSender(34, "linkedin", "Ann Owner", SenderProfile),
+            id => new JsonObject { ["status"] = "sent", ["contact_id"] = id, ["activity_id"] = 70001, ["sent_at"] = null },
+            NobodyIs: "contact_not_found",
+            Channel: "linkedin",
+            Before: ["account list"],
+            ReadsTheContact: true,
+            FixedChannel: true),
     };
 
     public static TheoryData<string> Finding => Of(ProviderContact.FindOrCreate, ProviderContact.FindOnly);
@@ -93,6 +110,10 @@ public class ReplyContactProxyRuleTests
 
     /// <summary>The ways that find the person by the consumed value itself, every one but the reply, which finds them through its thread.</summary>
     public static TheoryData<string> ByTheValue => Data(Ids(ProviderContact.FindOrCreate, ProviderContact.FindOnly).Where(id => !Drivers[id].ThroughTheThread));
+
+    /// <summary>The ways that find the person by the value of whichever channel the arguments name.</summary>
+    public static TheoryData<string> ByAnyValue =>
+        Data(Ids(ProviderContact.FindOrCreate, ProviderContact.FindOnly).Where(id => !Drivers[id].ThroughTheThread && !Drivers[id].FixedChannel));
 
     public static TheoryData<string> PinnedOnly => Of(ProviderContact.PinnedOnly);
 
@@ -116,7 +137,7 @@ public class ReplyContactProxyRuleTests
     public async Task A_person_reply_holds_is_found_and_pinned_and_nothing_is_imported(string operation)
     {
         var driver = Drivers[operation];
-        using var account = driver.Plant(new ReplyAccount()).WithContact(1001, Address);
+        using var account = Person(driver, driver.Plant(new ReplyAccount()), firstName: null);
         var expected = account.Contacts;
         if (operation == "contact.update")
         {
@@ -126,7 +147,7 @@ public class ReplyContactProxyRuleTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, "email", Address), Ct);
+        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, driver.Channel, Value(driver)), Ct);
 
         ReplyOperations.Succeeded(operation, result);
         Assert.Equal("1001", PinnedContact(result));
@@ -137,9 +158,10 @@ public class ReplyContactProxyRuleTests
             return;
         }
 
-        Assert.Equal(["contact find", driver.Command], Lines(account));
-        Assert.Equal($$"""{"email":"{{Address}}"}""", account.Calls[0].Body);
-        AssertNamedByTheIdentifier(driver, account.Calls[1], "1001");
+        Assert.Equal(Expected(driver, found: true), Lines(account));
+        var lookup = account.Calls[(driver.Before ?? []).Length];
+        Assert.Equal(driver.Channel == "email" ? $$"""{"email":"{{Address}}"}""" : $$"""{"linkedin_url":"{{Profile}}"}""", lookup.Body);
+        AssertNamedByTheIdentifier(driver, account.Calls[^1], "1001");
     }
 
     /// <summary>
@@ -182,7 +204,7 @@ public class ReplyContactProxyRuleTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, "email", Address), Ct);
+        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, driver.Channel, Value(driver)), Ct);
 
         Assert.Empty(account.Contacts);
         if (driver.ThroughTheThread)
@@ -196,7 +218,7 @@ public class ReplyContactProxyRuleTests
         }
 
         Assert.Null(PinnedContact(result));
-        Assert.Equal(["contact find"], Lines(account));
+        Assert.Equal([.. driver.Before ?? [], "contact find"], Lines(account));
         if (driver.NobodyIs is { } code)
         {
             Assert.Equal((code, FailureClass.Permanent), (ReplyOperations.Failed(operation, result).Code, ReplyOperations.Failed(operation, result).Class));
@@ -216,11 +238,11 @@ public class ReplyContactProxyRuleTests
     public async Task A_second_attempt_works_by_the_pin_and_looks_nobody_up(string operation)
     {
         var driver = Drivers[operation];
-        using var account = driver.Plant(new ReplyAccount()).WithContact(1001, Address, "Marta");
+        using var account = Person(driver, driver.Plant(new ReplyAccount()), firstName: "Marta");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, "email", Address, pin: "1001"), Ct, attempt: 2);
+        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, driver.Channel, Value(driver), pin: "1001"), Ct, attempt: 2);
 
         ReplyOperations.Succeeded(operation, result);
         Assert.Equal("1001", PinnedContact(result));
@@ -231,7 +253,8 @@ public class ReplyContactProxyRuleTests
             return;
         }
 
-        var command = Assert.Single(account.Calls);
+        Assert.Equal(Expected(driver, found: false), Lines(account));
+        var command = account.Calls[^1];
         Assert.Equal(driver.Command, command.Line);
         AssertNamedByTheIdentifier(driver, command, "1001");
     }
@@ -246,7 +269,7 @@ public class ReplyContactProxyRuleTests
     public async Task An_answer_about_another_identifier_than_the_pin_is_recorded_beside_it_and_the_attempt_succeeds(string operation)
     {
         var driver = Drivers[operation];
-        using var account = driver.Plant(new ReplyAccount()).WithContact(1001, Address, "Marta");
+        using var account = Person(driver, driver.Plant(new ReplyAccount()), firstName: "Marta");
         account.Returns(driver.Command.Split(' ')[0] + " " + driver.Command.Split(' ')[1], driver.AnsweredAs!(1002));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
@@ -255,7 +278,7 @@ public class ReplyContactProxyRuleTests
         await using var db = database.Open();
         var scene = await SeedAsync(db, operation, pinned: "1001");
 
-        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, "email", Address, pin: "1001", contactId: scene.Contact.PublicId), Ct, attempt: 2);
+        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, driver.Channel, Value(driver), pin: "1001", contactId: scene.Contact.PublicId), Ct, attempt: 2);
         Assert.Equal("1002", PinnedContact(result));
 
         await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, OperationCatalog.Find(operation)!, ReplyPlugins.PluginId, result, Ct);
@@ -277,17 +300,17 @@ public class ReplyContactProxyRuleTests
     public async Task A_person_the_lookup_found_is_pinned_on_the_failure_of_the_command_that_follows(string operation)
     {
         var driver = Drivers[operation];
-        using var account = driver.Plant(new ReplyAccount()).WithContact(1001, Address, "Marta");
+        using var account = Person(driver, driver.Plant(new ReplyAccount()), firstName: "Marta");
         account.Refuses(driver.Command.Split(' ')[0] + " " + driver.Command.Split(' ')[1], "rate_limited", status: 429, retryAfter: 30);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, "email", Address), Ct);
+        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, driver.Channel, Value(driver)), Ct);
 
         var error = ReplyOperations.Failed(operation, result);
         Assert.Equal(("rate_limited", FailureClass.Transient), (error.Code, error.Class));
         Assert.Equal("1001", PinnedContact(result));
-        Assert.Equal(["contact find", driver.Command], Lines(account));
+        Assert.Equal(Expected(driver, found: true), Lines(account));
     }
 
     /// <summary>
@@ -296,7 +319,7 @@ public class ReplyContactProxyRuleTests
     /// cannot compare, and nobody is found or created by it.
     /// </summary>
     [Theory]
-    [MemberData(nameof(ByTheValue))]
+    [MemberData(nameof(ByAnyValue))]
     public async Task A_person_on_a_channel_reply_looks_nobody_up_by_is_refused_before_anything_is_called(string operation)
     {
         var driver = Drivers[operation];
@@ -339,9 +362,9 @@ public class ReplyContactProxyRuleTests
             return;
         }
 
-        Assert.Equal(["contact find", driver.Command], Lines(account));
-        Assert.Equal($$"""{"linkedin_url":"{{Profile}}"}""", account.Calls[0].Body);
-        AssertNamedByTheIdentifier(driver, account.Calls[1], "1001");
+        Assert.Equal(Expected(driver, found: true), Lines(account));
+        Assert.Equal($$"""{"linkedin_url":"{{Profile}}"}""", account.Calls[(driver.Before ?? []).Length].Body);
+        AssertNamedByTheIdentifier(driver, account.Calls[^1], "1001");
         Assert.Single(account.Contacts);
     }
 
@@ -455,6 +478,12 @@ public class ReplyContactProxyRuleTests
                     ["body"] = "Thursday at 10 works.",
                 },
                 "contact.update" => new JsonObject { ["channel"] = channel, ["fields"] = new JsonObject { ["title"] = "Chief Revenue Officer" } },
+                "social_invitation.send" => new JsonObject
+                {
+                    ["channel"] = channel,
+                    ["sender"] = new JsonObject { ["external_id"] = "34", ["address"] = SenderProfile },
+                    ["note"] = null,
+                },
                 _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "No input for this operation."),
             },
             ["contacts"] = new JsonArray(person),
@@ -468,6 +497,22 @@ public class ReplyContactProxyRuleTests
 
         return input;
     }
+
+    /// <summary>The value the driver's channel reaches the person at: the address, or the profile as Jason keys it.</summary>
+    private static string Value(Driver driver) => driver.Channel == "email" ? Address : Profile;
+
+    /// <summary>The person Reply holds, reached on the driver's channel.</summary>
+    private static ReplyAccount Person(Driver driver, ReplyAccount account, string? firstName) =>
+        driver.Channel == "email"
+            ? account.WithContact(1001, Address, firstName)
+            : account.WithContact(1001, null, firstName, linkedIn: Profile);
+
+    /// <summary>
+    /// Every call the driver's operation makes for a person Reply holds as 1001: the reads before anybody is looked up, the
+    /// lookup when there is no pin, the read of the contact found, and the command.
+    /// </summary>
+    private static string[] Expected(Driver driver, bool found) =>
+        [.. driver.Before ?? [], .. found ? new[] { "contact find" } : [], .. driver.ReadsTheContact ? new[] { "contact get 1001" } : [], driver.Command];
 
     /// <summary>The person's own fields, as every input that projects one carries it.</summary>
     private static readonly IReadOnlyDictionary<string, JsonNode?> Fields = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)

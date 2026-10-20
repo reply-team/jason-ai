@@ -67,6 +67,14 @@ public sealed class ReplyAccount : IDisposable
     public const string CustomFieldsFile = "customfields.json";
     public const string InstructionsFile = "instructions.json";
     public const string CredentialFile = "credential.json";
+    public const string SendersFile = "senders.json";
+    public const string IdentityFile = "identity.json";
+    public const string ConnectionsFile = "connections.json";
+    public const string FeaturesFile = "features.json";
+    public const string SentFile = "sent.json";
+
+    /// <summary>The Reply user the stand-in's credential signs in as, unless a test plants another.</summary>
+    public const int Caller = 501;
 
     /// <summary>The call log, one JSON object per line: appended to, never rewritten, so a lost line is a bug.</summary>
     public const string CallsFile = "calls.jsonl";
@@ -95,6 +103,7 @@ public sealed class ReplyAccount : IDisposable
         // Signed in from the start: an account with no credential is a state a test asks for by naming a profile
         // nobody signed into, which is exactly how the real thing fails.
         Write(CredentialFile, new JsonObject { ["token"] = DefaultToken });
+        WithIdentity(Caller);
     }
 
     /// <summary>The account directory: everything this provider holds, and the log of what it was asked.</summary>
@@ -438,6 +447,80 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// Who the credential signs in as, as <c>reply auth whoami</c> answers it: a Reply user, the login name and the team.
+    /// The login name is the operator's own, so a test can look for it where it must never travel.
+    /// </summary>
+    public ReplyAccount WithIdentity(int userId, string username = "owner@example.com", int teamId = 900)
+    {
+        Write(IdentityFile, new JsonObject { ["userId"] = userId, ["username"] = username, ["teamId"] = teamId });
+        return this;
+    }
+
+    /// <summary>
+    /// An account a send can go from, as Reply lists it: a mailbox (<c>email</c>) or a LinkedIn account, with its name, its
+    /// address — the mailbox's email or the LinkedIn profile — the Reply user whose it is, and Reply's own word for its
+    /// state (<c>connected</c>, <c>disconnected</c>, <c>unknown</c>; <c>enabled</c>, <c>disabled</c>, <c>cookieInvalid</c>,
+    /// <c>dailyLimitReached</c>). <paramref name="limit"/> plants a LinkedIn account whose daily or weekly allowance is spent.
+    /// </summary>
+    public ReplyAccount WithSender(
+        long id,
+        string channel,
+        string? name,
+        string? address,
+        int? owner = Caller,
+        string? status = null,
+        string? limit = null)
+    {
+        var senders = ReadArray(SendersFile);
+        foreach (var existing in senders.ToList())
+        {
+            if (existing!["id"]!.GetValue<long>() == id && (string?)existing["channel"] == channel)
+            {
+                senders.Remove(existing);
+            }
+        }
+
+        var sender = new JsonObject
+        {
+            ["id"] = id,
+            ["channel"] = channel,
+            ["name"] = name,
+            ["address"] = address,
+            ["ownerUserId"] = owner,
+            ["status"] = status ?? (channel == "email" ? "connected" : "enabled"),
+        };
+        if (limit is not null)
+        {
+            sender["_limit"] = limit;
+        }
+
+        senders.Add(sender);
+        Write(SendersFile, senders);
+        return this;
+    }
+
+    /// <summary>A contact the LinkedIn account is already connected with, so an invitation to them sends nothing.</summary>
+    public ReplyAccount WithConnection(int contact, long account)
+    {
+        var connections = ReadArray(ConnectionsFile);
+        connections.Add(new JsonObject { ["contactId"] = contact, ["accountId"] = account });
+        Write(ConnectionsFile, connections);
+        return this;
+    }
+
+    /// <summary>
+    /// A feature the account's plan or role does not include: <c>emailAccounts</c> or <c>linkedInAccounts</c>, the two
+    /// lists <c>account list</c> reads, or <c>directLinkedIn</c>, the LinkedIn sends outside a sequence.
+    /// </summary>
+    public ReplyAccount Without(string feature)
+    {
+        var features = Read(FeaturesFile) as JsonObject ?? [];
+        features[feature] = false;
+        Write(FeaturesFile, features);
+        return this;
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // What it can be told to do instead, through the directory and never through a flag
     // -------------------------------------------------------------------------------------------------------
@@ -618,6 +701,12 @@ public sealed class ReplyAccount : IDisposable
     public IReadOnlyList<JsonObject> OutboundIn(int thread) =>
         [.. (ThreadOf(thread)["messages"] as JsonArray ?? []).OfType<JsonObject>()
             .Where(message => message["isOutbound"] is JsonValue outbound && outbound.GetValue<bool>())];
+
+    /// <summary>
+    /// Every send that went out, in order: the command, the contact, the account it went from and the text on stdin. The
+    /// only honest answer to "was anything sent".
+    /// </summary>
+    public JsonArray Sent => ReadArray(SentFile);
 
     /// <summary>Who is on a list right now, which is the only honest answer to "did the add happen at all".</summary>
     public IReadOnlyList<int> MembersOf(int listId) =>

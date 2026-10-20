@@ -1,0 +1,30 @@
+{
+  "operation": "sender.list",
+  "version": 1,
+  "case": "a plan without LinkedIn: the mailboxes are still listed, and the channel the plan lacks is said rather than failed",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "external_id": "s_12",
+          "channel": "email",
+          "name": "Ann Owner",
+          "address": "ann@example.com",
+          "status": "active",
+          "owner": "own",
+          "vendor": { "status": "connected" }
+        }
+      ],
+      "has_more": false,
+      "channels": { "email": "listed", "linkedin": "not_included" },
+      "vendor": { "ordering": "email_then_linkedin" }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": { "duration_ms": 900, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

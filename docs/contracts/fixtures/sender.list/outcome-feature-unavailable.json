@@ -1,0 +1,21 @@
+{
+  "operation": "sender.list",
+  "version": 1,
+  "case": "the one channel named is one the plan or role does not include",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "feature_unavailable",
+      "message": "The account's plan or role does not include its LinkedIn accounts.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false }
+}

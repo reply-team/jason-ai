@@ -14,6 +14,7 @@
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { identifier, isReplyNumber, lookup, text } from "./reading.js";
+import { sameValue } from "./contacts.js";
 
 const OPERATION = "conversation.reply";
 const READ = "inbox get";
@@ -134,42 +135,6 @@ function personOn(contact, channel) {
   // Reply gives an empty string, not null, for a value the person does not have — a LinkedIn profile, say.
   const address = contact[ADDRESS[channel]];
   return { id: id, address: typeof address === "string" && address.length > 0 ? address : null };
-}
-
-// Whether the thread's person is reached at the value this work item consumes, compared the way the runtime keys the
-// value for its suppression register, so that the register's check at the claim is about exactly the person reached: an
-// address whatever its case, a profile link by the key below. Two values the register keys apart are two people here.
-function sameValue(channel, held, consumed) {
-  return channel === "linkedin" ? profileOf(held) === profileOf(consumed) : held.toLowerCase() === consumed.toLowerCase();
-}
-
-// A profile link as the runtime keys one: its scheme and its host whatever their case, a default port, a user name, a
-// fragment and one trailing slash dropped, its query exactly as written — and its path whatever its case on linkedin.com
-// and its subdomains, where a profile link names a person by its slug, and exactly as written on any other host.
-// `/in/Jane` and `/in/jane` are one profile on linkedin.com, and two anywhere else. A value that is not a link is
-// compared as it stands, and so is a letter written outside ASCII, which the runtime keys by its escape: such a profile
-// is refused rather than reached.
-const LINK = /^([A-Za-z][A-Za-z0-9+.\-]*):\/\/([^\/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/;
-
-// The port a scheme names by saying nothing.
-const DEFAULT_PORT = { "http": "80", "https": "443" };
-
-function profileOf(link) {
-  const parts = LINK.exec(link);
-  if (parts === null) {
-    return link;
-  }
-
-  const scheme = parts[1].toLowerCase();
-  const authority = parts[2].slice(parts[2].lastIndexOf("@") + 1).toLowerCase();
-  const colon = authority.lastIndexOf(":");
-  const host = colon >= 0 && authority.indexOf("]") < colon ? authority.slice(0, colon) : authority;
-  const port = host.length < authority.length ? authority.slice(host.length + 1) : "";
-  const kept = port.length > 0 && port !== DEFAULT_PORT[scheme] ? ":" + port : "";
-
-  const trimmed = parts[3].length > 0 && parts[3].charAt(parts[3].length - 1) === "/" ? parts[3].slice(0, -1) : parts[3];
-  const path = host === "linkedin.com" || host.endsWith(".linkedin.com") ? trimmed.toLowerCase() : trimmed;
-  return scheme + "://" + host + kept + path + (parts[4] || "");
 }
 
 function nullOrText(value) {

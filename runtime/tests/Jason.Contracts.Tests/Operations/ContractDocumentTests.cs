@@ -44,7 +44,8 @@ public class ContractDocumentTests
                 "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete",
                 "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list",
                 "conversation.reopen", "conversation.reply",
-                "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record",
+                "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record", "sender.list",
+                "social_invitation.send",
             ],
             OperationCatalog.All.Select(c => c.Id));
         Assert.All(OperationCatalog.All, contract => Assert.Equal(1, contract.Version));
@@ -77,18 +78,19 @@ public class ContractDocumentTests
 
     /// <summary>
     /// The catalogue lets an operation lower its approval only as a protective floor and raise it only by a stated
-    /// departure, and either one needs a reason. In this version two operations carry the catalogue's marks: recording
-    /// that somebody said stop, whose not running is itself the harm, on the floor; and deleting a provider's contact,
-    /// raised because it destroys working history other operations key on. Every other document says it does neither, in
-    /// the two fields, rather than leaving the reading of their absence to whoever reads it next.
+    /// departure, and either one needs a reason. In this version three operations carry the catalogue's marks: recording
+    /// that somebody said stop, whose not running is itself the harm, on the floor; deleting a provider's contact, raised
+    /// because it destroys working history other operations key on; and an invitation to connect, raised because its note
+    /// is content addressed to a named person. Every other document says it does neither, in the two fields, rather than
+    /// leaving the reading of their absence to whoever reads it next.
     /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
-    public void Only_the_record_of_a_stop_lowers_its_approval_only_it_and_a_delete_depart_and_each_says_why(string id)
+    public void Only_the_record_of_a_stop_lowers_its_approval_only_it_a_delete_and_an_invitation_depart_and_each_says_why(string id)
     {
         var contract = Contract(id);
         var floor = id == "optout.record";
-        var departs = floor || id == "contact.delete";
+        var departs = floor || id is "contact.delete" or "social_invitation.send";
 
         Assert.Equal(floor, contract.ProtectiveFloor);
         Assert.Equal(departs, contract.ApprovalDeparts);
@@ -163,8 +165,8 @@ public class ContractDocumentTests
 
     /// <summary>
     /// How each document finds the provider's own contact for its person, stated as data rather than in a sentence: the
-    /// writes that may make the person create them only where the provider holds nobody, the stop, the reply and the
-    /// update find them and create nobody, the read of a person's threads and the delete work by the pin alone, and the
+    /// writes that may make the person create them only where the provider holds nobody, the stop, the reply, the update
+    /// and the invitation find them and create nobody, the read of a person's threads and the delete work by the pin alone, and the
     /// rest name nobody. A document that
     /// moved between these would change what a plugin does with a person it holds no pin for, so the map is held whole.
     /// </summary>
@@ -179,6 +181,7 @@ public class ContractDocumentTests
             ["enrollment.stop"] = ProviderContact.FindOnly,
             ["contact.update"] = ProviderContact.FindOnly,
             ["conversation.reply"] = ProviderContact.FindOnly,
+            ["social_invitation.send"] = ProviderContact.FindOnly,
             ["conversation.list"] = ProviderContact.PinnedOnly,
             ["contact.delete"] = ProviderContact.PinnedOnly,
         };

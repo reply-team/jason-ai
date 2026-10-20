@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Eighteen operations — the whole set this build publishes: thirteen that write and five that only read.
+Twenty operations — the whole set this build publishes: fourteen that write and six that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -27,6 +27,8 @@ Eighteen operations — the whole set this build publishes: thirteen that write 
 | `conversation.reopen` | Marks a thread unread again, so it needs attention. |
 | `contact.update` | Changes a person's fields — first name, last name, company, title — and custom fields on the contact Reply holds for them, each custom field named as the account names it. A null clears a field; one left out stays. A person Reply holds nobody for is not found: nobody is made to be changed. |
 | `contact.delete` | Deletes the contact Reply holds for a person, by the identifier Jason pinned, once a person approves it: they leave every sequence and list there. A person Reply holds as opted out is refused, and Jason's own record of the person and its register stay as they are. |
+| `sender.list` | Reads the mailboxes and LinkedIn accounts a send can go from, and says whose each one is: the caller's own alone, or the whole team's when that is asked for. |
+| `social_invitation.send` | Invites one person to connect on LinkedIn from one of the account's LinkedIn accounts, with a note or without one, once a person approves it. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the profile the work item consumes and is not held as opted out. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**. Each operation runs the Reply CLI command made
 for it — `reply contact find`, `reply sequence add-contact`, `reply inbox list` and the rest, listed under
@@ -38,8 +40,8 @@ never makes the CLI's raw call, `reply api`: every request it makes has a comman
 **The CLI owns the credential, and Jason never sees it.** Signing in is something you do in your own
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a
-person reaches an argument either — a person's details travel on stdin, and so do the name a sequence is given and
-the text of a reply —
+person reaches an argument either — a person's details travel on stdin, and so do the name a sequence is given,
+the text of a reply and the note of an invitation —
 so what `~/.jason/logs/` records
 of a call is the command line, which carries only Reply's identifiers and flags, the exit code and how long it took.
 
@@ -48,7 +50,7 @@ of a call is the command line, which carries only Reply's identifiers and flags,
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
-- **Version 0.13.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+- **Version 0.14.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
   the answer. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
   routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
   does not have, or answers differently.
@@ -215,11 +217,20 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
   last name, a company, a title, never a time zone — keyed by the email or, with none, by the LinkedIn URL, which the
   CLI writes as its lowercased slug. A person given only by LinkedIn URL is looked up once more by the CLI before its
   import. `enrollment.stop` creates nobody: a person Reply does not hold takes part in nothing. `conversation.reply`
-  finds the person through its thread, and creates nobody either; nor does `contact.update`, which changes a contact
-  Reply holds: a person Reply holds nobody for is `contact_not_found`, and is enrolled or put on a list first.
+  finds the person through its thread, and creates nobody either; nor do `contact.update`, which changes a contact
+  Reply holds, and `social_invitation.send`, which reaches one: a person Reply holds nobody for is `contact_not_found`,
+  and is enrolled or put on a list first.
 - **A delete works by the pin alone.** `contact.delete` names the contact by the identifier Jason pinned and by nothing
   else, reads it with `reply contact get` before anything is deleted, and refuses one Reply holds as opted out, because
   Reply keeps that stop on the contact itself. It pins nothing.
+- **A send reads the contact before it goes.** `social_invitation.send` reads Reply's contact for the person with
+  `reply contact get` before anything is sent: one Reply holds as opted out is refused as `suppressed`, and one whose
+  LinkedIn profile is another than the work item's is refused as `contact_channel_conflict` and not changed. A LinkedIn
+  send may record the person's profile on the provider's contact when it was missing, and that is the only thing a
+  send ever writes to a contact; a profile Reply would hold under another spelling than the work item's — one with a
+  trailing slash, which Reply drops — is refused instead of written. A contact answer without the LinkedIn profile key
+  at all is read as lost and asked again, with nothing written or sent: a null or an empty value means the contact
+  carries none.
 - **The first name an import needs** is derived where the person has none, as *A person without a first name* under
   [The account a route names](#the-account-a-route-names) says, and the route's binding decides whether it may be.
 - **Fields and lists travel with the operation that needs them.** Nothing is copied to Reply in the background, and
@@ -254,7 +265,7 @@ route's binding names them.
 | `inbox list --contact-id` or `--sequence-id`, `--source --since --channel --category-id --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
 | `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from, and the read `conversation.reply` makes of the thread's channel and person, one message long, before it sends anything. |
 | `inbox categories` | read | The account's inbox categories, Reply's reserved ones included: what `conversation.classify` matches the category it was given against, by identifier or by name, before it files anything. |
-| `contact get <contact>` | read | One contact by its id, as Reply holds it: the read `contact.delete` makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out. Two keys are read and nothing is kept. |
+| `contact get <contact>` | read | One contact by its id, as Reply holds it: the read `contact.delete` makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out, and the read a send makes of the same, and of the address or profile the contact is reached at. Nothing else is read and nothing is kept. |
 | `contact find --contact -` | read | Reply's exact lookup of one address — an email, or a LinkedIn URL by its lowercased slug — read to its end and creating nobody: how every operation about a person with no pin finds Reply's contact for them before anything is written. The address is on stdin. |
 | `sequence list --name -` | read | Every sequence whose whole name is this one, ignoring case, read to its end: what `campaign.create` compares with the name it is to give, before it makes anything. The name is on stdin. |
 | `sequence add-contact <sequence>` with `--contact-id` or `--contact -`, `[--start-step] [--ignore-step-delay]` | write | Puts the person into the sequence, importing them first when Reply holds nobody under the address and they are given by their details. Into a live sequence, a send. |
@@ -267,7 +278,10 @@ route's binding names them.
 | `inbox reply <thread> --message -` | write | Replies to the thread's person on the thread's own channel, from the account that owns the thread, with the text on stdin. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `inbox categorize <thread>` with `--category-id` or `--clear` | write | Files the thread under one category, or clears its category: set outright, so a repeat lands on the same state. |
 | `inbox mark-read <thread>`, `inbox mark-unread <thread>` | write | Marks the thread read or unread: what `conversation.close` and `conversation.reopen` are at Reply, set outright. |
-| `contact update <contact> --fields -` | write | Changes the fields and custom fields on stdin, by the contact's id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. |
+| `contact update <contact> --fields -` | write | Changes the fields and custom fields on stdin, by the contact's id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. Before a LinkedIn send it also gives a contact that carries no profile the one the send consumes, and nothing else. |
+| `auth whoami` | read | Who the credential signs in as: the Reply user whose accounts `sender.list` offers under `own`. Only the user's id is read; the login name beside it is the operator's and is not kept. |
+| `account list --channel` | read | The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what `sender.list` answers from, and the read a send makes of its sender. |
+| `contact linkedin-connect --contact-id --linkedin-account-id [--message -]` | write | Invites the contact to connect on LinkedIn from the account named, with the note on stdin, or with none when there is no `--message`. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `contact delete <contact>` | write | Deletes the contact by its id, with its history at Reply: it leaves every sequence and list. Run again after a lost answer, it answers that Reply holds the contact no longer. |
 
 ### Endings every operation can meet
@@ -568,6 +582,47 @@ approves every delete before it runs, and its work waits while its Jason campaig
 and Jason's contact, its pins and its do-not-contact register stay as they were: a later operation about the person
 fails `contact_not_found` rather than finding them by address again.
 
+### `sender.list`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The one channel `sender_channel` names is one the account's plan or role does not include (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the channel. Without `sender_channel` the same answer is the channel said as `not_included`, and the others are still listed. |
+| Reply's list of mailboxes did not end within twenty thousand (`account.list_incomplete`). Nothing is listed. | `provider_call_failed` | permanent | Name the sender from Reply's own list of accounts instead. |
+| Reply's answer was longer than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. | `provider_answer_too_large` | permanent | Name one channel with `sender_channel`, or raise `Plugins:Exec:OutputBytes`. |
+
+`reply auth whoami` says who the credential signs in as, and `reply account list` is asked for one channel at a time:
+asked for both at once, Reply refuses the whole list when the plan or role leaves one out. Under `owners: own` an
+account is listed only when Reply names that user as its owner, so a teammate's account, and one Reply names no owner
+for, are never offered; under `team` every account is, marked `own`, `teammate` or `unknown`. A whoami that names
+nobody lists nothing, and the read is asked again.
+
+### `social_invitation.send`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The note carries `{{`, which Reply reads as the start of a placeholder of its own, closed or not; or Reply could not fill one it found (`linkedin.missing_variables`). Nothing is sent. | `message_invalid` | validation | Write the note without one and propose the invitation again. |
+| Reply found the note too long (`linkedin.message_too_long`, or `reply.invalid_request` naming the `message` field). Nothing is sent. | `message_too_long` | validation | Reply refuses notes over 200 characters; the document holds a note to that, so this comes back only if Reply's own bound moves. Write a shorter note. |
+| The sender's identifier is not a Reply number, Reply's list holds no LinkedIn account under it, or the invitation answered `linkedin.account_not_found`. | `sender_not_found` | permanent | Name an account `sender.list` returns. |
+| Reply holds the sender's account under another address than the arguments state, under one where they state none, or under none where they state one. Nothing is sent. | `sender_mismatch` | validation | Name the account by the identifier and the address `sender.list` returns. |
+| The sender's account is turned off or disconnected in Reply's list, or the invitation answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's word is in the trace. | `sender_unavailable` | permanent | Put the account right at Reply, then propose the invitation again. |
+| The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`); which one is under `limit` in the trace. | `sender_limit_reached` | permanent | Propose the invitation again once the allowance renews. |
+| The person has no pin and Reply holds nobody under the profile. Nothing is made and nothing is sent. | `contact_not_found` | permanent | Put the person on a list or enroll them first — either makes the contact — then propose the invitation again. |
+| The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
+| More than one contact is held under the profile (`contact.not_unique`). | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the invitation again. |
+| The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name the channel they have a profile on. |
+| Reply holds the person as opted out. Nothing is sent. | `suppressed` | permanent | A refusal on purpose; the only way past it is the person asking to be reinstated. |
+| Reply's contact for the person carries another LinkedIn profile than the work item's, or Reply says it carries none after the package gave it one (`contact.no_linkedin_profile`). Nothing is changed and nothing is sent. | `contact_channel_conflict` | permanent | Look at the contact at Reply: the profile there, or the one Jason holds, is wrong. |
+| Reply did not say whether the profile was written onto a contact that held none. Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which reads the contact again first. |
+| The account's plan or role does not include LinkedIn sends outside a sequence (`linkedin.feature_disabled`), or its LinkedIn accounts (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes them. |
+
+Before the invitation, in this order and each refusing with nothing sent: the note is held to what Reply would send as
+written; the sender is read from `reply account list --channel linkedin` and held to the address the person approving
+read; the person is found by the pin or by `reply contact find`, and nobody is made; and Reply's contact is read with
+`reply contact get` — opted out is a stop, another profile a refusal, no profile filled with the work item's. Then
+`reply contact linkedin-connect`, the note on stdin or no `--message` at all for an invitation without one. A person
+who is already a connection answers `already_connected`. An invitation whose answer was lost is never sent again:
+the item stops for a person, with the contact pinned.
+
 ## What it cannot do
 
 - **A delete reads the stop and then deletes, in two calls.** `contact.delete` reads the contact's opt-out with `reply
@@ -694,13 +749,37 @@ fails `contact_not_found` rather than finding them by address again.
   whatever their case, a default port, a user name, a fragment and one trailing slash dropped, its query exactly, and
   its path whatever its case on linkedin.com — the same profile however Reply cased its slug. A link that differs in
   anything else — another scheme, a missing `www.`, another subdomain, a path in another case on a host that is not
-  linkedin.com, a letter written outside ASCII — is another profile there, so it is another profile here, and the reply
-  fails `thread_contact_mismatch` with nothing sent: the register's check at the claim was about the value the work
-  item consumes, and only that value is reached.
+  linkedin.com — is another profile there, so it is another profile here, and the reply fails
+  `thread_contact_mismatch` with nothing sent: the register's check at the claim was about the value the work item
+  consumes, and only that value is reached. A letter written outside ASCII is compared by the escape Jason keys it by,
+  so it is the same profile however Reply wrote it; a link that steps back up its path (`/../`), or carries a `%` that
+  starts no escape, is refused rather than followed. Only Reply's spelling is keyed: the work item's profile is the one
+  Jason stored and asked its register about, compared as it stands, since keying it again would drop another trailing
+  slash and join two profiles the register keeps apart. The invitation holds Reply's contact to the profile the same way.
 - **A text carrying `{{` is refused.** Reply writes its placeholders that way, and it does render one in a reply in a
   thread: a live account refused a reply carrying `{{firstName}}` because it could not fill it in. So the package
   refuses such a text before anything is called rather than let something nobody approved go out, and a refusal of that
-  kind from Reply is `message_invalid` too.
+  kind from Reply is `message_invalid` too. An invitation's note is held the same way, `{{ name }}` and a `{{` that
+  never closes alike; other template syntax is not refused.
+- **Reply does not refuse a send outside a sequence to a person it holds as opted out, nor consult its blacklist on a
+  LinkedIn send.** Jason's own register is checked at the claim for the profile the invitation consumes, and the
+  package reads Reply's opt-out mark on the contact before every invitation. A blacklist rule at Reply that sets no
+  opt-out mark on the contact is not seen: record the stop with `jason suppression add` as well.
+- **Reply refuses notes over 200 characters.** The document holds a note to that, so a longer one is refused when the
+  work item is written, before anybody is asked.
+- **No moment is recorded for an invitation.** Reply answers a LinkedIn send with a moment of its own, and nothing has
+  shown it to be UTC, so `invitation.sent_at` is null.
+- **An invitation reads before it sends.** The sender from `reply account list`, the contact with `reply contact get`,
+  and the exact lookup where there is no pin: two or three reads before the invitation, and one write more when a
+  contact carries no profile. Against a rate limit they count.
+- **A profile may be written onto a contact before a refusal the package cannot foresee.** Where Reply's contact carries
+  no LinkedIn profile, the invitation gives it the one the work item consumes first. Reply may still refuse the
+  invitation after that — LinkedIn sends outside a sequence turned off for the account, its allowance spent, or a note
+  Reply counts as longer than the document does — and the profile stays on the contact.
+- **A LinkedIn account whose profile link this package cannot read as a link cannot be named as a sender.** The
+  sender's address is compared as a profile, and a link that does not key — no scheme, an empty query, a step back up
+  its path — matches nothing, so such an account is refused as `sender_mismatch` even when its address is copied from
+  `sender.list`.
 - **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
   whole thread before every filing; the reads report a thread's category.
 - **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first

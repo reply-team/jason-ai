@@ -3,6 +3,27 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.5.0
+
+- `sender.list` lists the mailboxes and the LinkedIn accounts a send can go from, with `reply account list`, one channel
+  at a time, and says whose each one is: `reply auth whoami` gives the Reply user the credential signs in as, and only
+  that user's id is read. Under `owners: own` a teammate's account, and one Reply names no owner for, is never offered;
+  under `team` every account is, each marked. A channel the account's plan or role leaves out is said beside the others,
+  so a plan without LinkedIn still lists its mailboxes. The package needs reply-cli 0.14.0 or newer.
+- `social_invitation.send` invites one person to connect on LinkedIn with `reply contact linkedin-connect`, once a person
+  approves it, with the note on stdin or with none. Before it the person is found by the pin or by `reply contact find`,
+  and nobody is made; the account is held to the address the person approving read, from `reply account list`; and
+  Reply's contact is read with `reply contact get`: one Reply holds as opted out is refused as `suppressed`, because Reply
+  does not refuse an invitation to such a person by itself. A contact that carries no LinkedIn profile is given the one
+  the invitation consumes first, and one that carries another is never changed. Reply refuses notes over 200 characters,
+  and the document holds a note to that. A person who is already a connection answers `already_connected`, and an
+  invitation whose answer was lost is never sent again: its document says `never`.
+- `conversation.reply` and the invitation compare a LinkedIn profile as the runtime keys it, a letter written outside
+  ASCII by its escape included, so a thread whose person's profile carries one is answered rather than refused. A link
+  that steps back up its path, or carries a `%` that starts no escape, is refused. Only Reply's spelling is keyed; the
+  profile Jason stored is compared as it stands, so a stop recorded under one spelling is never reached through another
+  the register keeps apart.
+
 ## 0.4.0
 
 - Four inbox operations, each through the Reply CLI command made for it. The package needs reply-cli 0.13.0 or newer.

@@ -1,0 +1,48 @@
+{
+  "operation": "sender.list",
+  "version": 1,
+  "case": "the team's accounts, each marked with whose it is, the mailboxes first, every channel read",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "external_id": "s_12",
+          "channel": "email",
+          "name": "Ann Owner",
+          "address": "ann@example.com",
+          "status": "active",
+          "owner": "own",
+          "vendor": { "status": "connected" }
+        },
+        {
+          "external_id": "s_13",
+          "channel": "email",
+          "name": null,
+          "address": "lena@example.com",
+          "status": "active",
+          "owner": "teammate",
+          "vendor": { "status": "connected" }
+        },
+        {
+          "external_id": "s_34",
+          "channel": "linkedin",
+          "name": "Ann Owner",
+          "address": "https://www.linkedin.com/in/ann-owner",
+          "status": "disconnected",
+          "owner": "own",
+          "vendor": { "status": "cookieInvalid" }
+        }
+      ],
+      "has_more": false,
+      "channels": { "email": "listed", "linkedin": "listed" },
+      "vendor": { "ordering": "email_then_linkedin" }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": { "duration_ms": 900, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

@@ -1,0 +1,15 @@
+{
+  "operation": "sender.list",
+  "version": 1,
+  "case": "`channel` names a contact's channel an operation consumes, and a list of senders consumes none: the filter is `sender_channel`",
+  "input": {
+    "args": { "owners": "own", "channel": "email", "limit": 20, "offset": 0 },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/args/channel", "reason": "additional_properties" }] }
+}

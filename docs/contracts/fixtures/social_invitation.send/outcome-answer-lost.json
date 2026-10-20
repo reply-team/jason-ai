@@ -1,0 +1,21 @@
+{
+  "operation": "social_invitation.send",
+  "version": 1,
+  "case": "the invitation may already have gone: the item stops for a person rather than inviting twice, and the person is still pinned",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "ambiguous",
+      "code": "provider_answer_lost",
+      "message": "The invitation was sent and no answer came back.",
+      "details": null,
+      "external_ids": { "contact": "p_88421" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "ambiguous", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

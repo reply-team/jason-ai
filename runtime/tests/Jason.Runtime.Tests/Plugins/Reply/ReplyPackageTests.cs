@@ -32,10 +32,10 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.4.0", plugin.Version);
+        Assert.Equal("0.5.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
-            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
+            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record", "sender.list", "social_invitation.send"],
             plugin.Operations.Order());
 
         // Declaration is not permission, and this package declares nothing it does not use: one program, no
@@ -59,7 +59,7 @@ public class ReplyPackageTests
 
         // The manifest asks for a minimum version, so the reload ran the version command on whatever it resolved.
         // That it answered, and that the answer satisfied the minimum, is why the package is valid at all.
-        Assert.Equal("0.13.0", executable.MinVersion);
+        Assert.Equal("0.14.0", executable.MinVersion);
         Assert.NotNull(executable.Version);
         Assert.NotNull(executable.MinVersion);
         Assert.True(Version.Parse(executable.Version) >= Version.Parse(executable.MinVersion));
@@ -141,7 +141,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.4.0", result.Provenance.Version);
+        Assert.Equal("0.5.0", result.Provenance.Version);
     }
 
     /// <summary>
@@ -297,7 +297,7 @@ public class ReplyPackageTests
         var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
         Assert.True(start >= 0, "The README has no section on what the package cannot do.");
         var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
-        var entry = Flat(ChangelogSection(0));
+        var entry = Flat(ChangelogSection(1));
 
         Assert.All(
             new[]
@@ -319,10 +319,29 @@ public class ReplyPackageTests
             words => Assert.Contains(words, entry, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The release that sends outside a sequence: the two operations it adds, the CLI it needs, and what a person reads in
+    /// it about the stop Reply does not make on such a send, the note Reply refuses, and the one write before a send.
+    /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_4_0_and_the_four_inbox_operations_it_adds()
+    public void The_changelog_opens_with_0_5_0_and_the_two_operations_it_adds()
     {
         var section = Flat(ChangelogSection(0));
+
+        Assert.StartsWith(" ## 0.5.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "`sender.list`", "`social_invitation.send`", "reply-cli 0.14.0", "`never`", "Reply refuses notes over 200 characters",
+                "opted out", "a teammate", "never changed", "outside ASCII",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_changelog_keeps_0_4_0_and_the_four_inbox_operations_it_adds()
+    {
+        var section = Flat(ChangelogSection(1));
 
         Assert.StartsWith(" ## 0.4.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -339,7 +358,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_2_and_the_operation_it_added()
     {
-        var section = ChangelogSection(1);
+        var section = ChangelogSection(2);
 
         Assert.StartsWith("\n## 0.3.2\n", section, StringComparison.Ordinal);
         Assert.Contains("`campaign.create`", section, StringComparison.Ordinal);
@@ -350,7 +369,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_1_and_the_rule()
     {
-        var section = ChangelogSection(2);
+        var section = ChangelogSection(3);
 
         Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
         Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);

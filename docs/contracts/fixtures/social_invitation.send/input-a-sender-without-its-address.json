@@ -1,0 +1,23 @@
+{
+  "operation": "social_invitation.send",
+  "version": 1,
+  "case": "the sender named by its identifier alone: its address is what the person approving reads, so it is said, null included",
+  "input": {
+    "args": { "channel": "linkedin", "sender": { "external_id": "s_34" }, "note": null },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": { "invalid": [{ "pointer": "/args/sender/address", "reason": "required" }] }
+}

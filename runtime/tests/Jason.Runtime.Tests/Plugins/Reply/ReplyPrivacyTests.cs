@@ -595,6 +595,115 @@ public class ReplyPrivacyTests
         }
     }
 
+    /// <summary>
+    /// A list of senders reads who the credential signs in as and the accounts of the whole team, and an invitation carries
+    /// a note and — for a contact that held none — the profile it writes onto Reply's contact. The note and the profile
+    /// travel once each, on stdin; the operator's login name travels nowhere at all, the list's answer included; and no
+    /// account's name or address, no note and no profile reaches an argument, a diagnostic or a log. Each corpus is shown
+    /// to hold what did travel, so a value that had gone there would be found.
+    /// </summary>
+    [Fact]
+    public async Task What_a_list_of_senders_and_an_invitation_carry_reach_no_argument_diagnostic_or_log()
+    {
+        const string Username = "username.marker@example.com";
+        const string SenderName = "Sendername-marker-5c2e";
+        const string SenderAddress = "sender.marker@example.com";
+        const string SenderProfile = "https://www.linkedin.com/in/sender-marker-77";
+        const string Profile = "https://www.linkedin.com/in/profile-marker-41";
+        const string Note = "Note-marker-8d0b: we met at the meetup.";
+        string[] travelled = [SenderName, SenderAddress, SenderProfile, Profile, Note];
+
+        using var account = new ReplyAccount()
+            .WithIdentity(ReplyAccount.Caller, Username)
+            .WithSender(12, "email", SenderName, SenderAddress)
+            .WithSender(34, "linkedin", SenderName, SenderProfile)
+            .WithContact(1001, null, "Ottilie");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var campaign = new JsonObject
+        {
+            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["name"] = "Q3 LatAm founders",
+            ["status"] = "active",
+            ["external_ids"] = new JsonObject(),
+        };
+        var list = new JsonObject
+        {
+            ["args"] = new JsonObject { ["owners"] = "team", ["limit"] = 20, ["offset"] = 0 },
+            ["campaign"] = campaign.DeepClone(),
+        };
+        var invitation = new JsonObject
+        {
+            ["args"] = new JsonObject
+            {
+                ["channel"] = "linkedin",
+                ["sender"] = new JsonObject { ["external_id"] = "34", ["address"] = SenderProfile },
+                ["note"] = Note,
+            },
+            ["contacts"] = new JsonArray(new JsonObject
+            {
+                ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "linkedin", ["value"] = Profile, ["primary"] = true }),
+                ["external_ids"] = new JsonObject { ["contact"] = "1001" },
+            }),
+            ["campaign"] = campaign.DeepClone(),
+            ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRY",
+        };
+
+        var listed = ReplyOperations.Succeeded("sender.list", await ReplyOperations.InvokeAsync(api, "sender.list", list, Ct));
+        var invited = await ReplyOperations.InvokeAsync(api, "social_invitation.send", invitation, Ct);
+        ReplyOperations.Succeeded("social_invitation.send", invited);
+
+        // Both did their work: the list holds the accounts by name and address, and the invitation wrote the profile
+        // onto the contact that held none, then went with its note.
+        Assert.Contains(SenderName, listed.ToJsonString(), StringComparison.Ordinal);
+        Assert.Equal(
+            ["auth whoami", "account list", "account list", "account list", "contact get 1001", "contact update 1001", "contact linkedin-connect"],
+            Paths(account));
+        Assert.Equal(Profile, (string?)account.ContactOf(1001)!["linkedInUrl"]);
+        Assert.Single(account.Sent);
+
+        foreach (var call in account.Calls)
+        {
+            var arguments = string.Join(' ', call.Args);
+            Assert.DoesNotContain('{', arguments);
+            foreach (var value in travelled.Append(Username))
+            {
+                Assert.DoesNotContain(value, arguments, StringComparison.OrdinalIgnoreCase);
+            }
+
+            switch (call.Command)
+            {
+                case "contact update":
+                    Assert.Equal($$"""{"linkedin_url":"{{Profile}}"}""", call.Body);
+                    break;
+                case "contact linkedin-connect":
+                    Assert.Equal(new JsonObject { ["note"] = Note }.ToJsonString(), call.Body);
+                    break;
+                default:
+                    Assert.True(call.Body is null, $"'{call.Line}' had '{call.Body}' on stdin.");
+                    break;
+            }
+        }
+
+        var answers = listed.ToJsonString() + Answered(invited);
+        Assert.DoesNotContain(Username, answers, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Note, answers, StringComparison.Ordinal);
+
+        var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
+        Assert.Contains("\"exec\"", diagnostics, StringComparison.Ordinal);
+        await api.Runtime.StopAsync();
+        var logs = ReadAll(api.Paths.LogsDirectory);
+        Assert.Contains("sender.list", logs, StringComparison.Ordinal);
+        Assert.Contains("social_invitation.send", logs, StringComparison.Ordinal);
+        foreach (var value in travelled.Append(Username))
+        {
+            Assert.DoesNotContain(value, diagnostics, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(value, logs, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>Everything one invocation answered, whichever way it ended, as one string to look through.</summary>
     private static string Answered(PluginInvocationResult result) => result.Outcome switch
     {

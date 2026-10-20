@@ -7,6 +7,11 @@ metadata:
 
 # LinkedIn guardrails
 
+> **Knowledge, not the enforced contract.** This skill names operations from the vendor-neutral
+> catalogue in `sdr-operations`, which says what an SDR operation *is*. What this runtime validates
+> and executes is the smaller set of JSON documents under `docs/contracts/operations/`; where the
+> two disagree, the contract is what decides.
+
 > **Expert skeleton.** Structure and safety posture are final. Every pacing number and every
 > recovery playbook is `TODO(expert)` and needs validation by the outbound experts who own this
 > skill before it leaves `draft`.

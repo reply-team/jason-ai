@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The work commands, answered as reply-cli 0.13.0 documents them, from the same files the account keeps. What each one
+/// The work commands, answered as reply-cli 0.14.0 documents them, from the same files the account keeps. What each one
 /// answers is reply-cli's contract — its result, its error code, its exit code — and never how reply-cli gets there: no
 /// Reply endpoint is imitated here.
 /// </summary>
@@ -72,10 +72,13 @@ internal static partial class Account
                 {
                     // Everything the command would have done is done, and then the answer is gone. What the CLI learned
                     // goes with it — except a sequence it was making, whose identifier only the lost answer carried.
+                    // A send says which contact and account it was about, as reply-cli does for every ending of one.
                     var effect = Handle(root, command, line, stdin);
                     var learned = command == "sequence create"
                         ? null
-                        : effect.Result is JsonObject done ? IdsOf(done) : effect.Error?["ids"]?.DeepClone() as JsonObject;
+                        : IsDirectSend(command)
+                            ? DirectSendIds(command, line)
+                            : effect.Result is JsonObject done ? IdsOf(done) : effect.Error?["ids"]?.DeepClone() as JsonObject;
                     return await PrintAsync(Refused(
                         "outcome.unknown", "The request may have reached Reply, but no answer came back.", exit: 3, ids: learned));
                 }
@@ -108,6 +111,9 @@ internal static partial class Account
         "inbox categorize" => InboxCategorize(root, line),
         "inbox mark-read" => InboxMark(root, line, read: true),
         "inbox mark-unread" => InboxMark(root, line, read: false),
+        "contact linkedin-connect" => DirectSendCommand(root, command, line, stdin),
+        "account list" => AccountList(root, line),
+        "auth whoami" => AuthWhoami(root),
         _ => throw new InvalidOperationException($"No handler for '{command}'."),
     };
 

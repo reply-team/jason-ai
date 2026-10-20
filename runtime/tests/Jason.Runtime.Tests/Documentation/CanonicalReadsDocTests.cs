@@ -139,6 +139,14 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| `field_not_found` and `invalid_field_value` |")]
     [InlineData("| Deleting by the pin alone |")]
     [InlineData("| `contact_opted_out` |")]
+    [InlineData("| `accepts_collection` on the invitation |")]
+    [InlineData("| What `sender.list` lists |")]
+    [InlineData("| Whose accounts a list offers |")]
+    [InlineData("| `sender.list` status vocabulary |")]
+    [InlineData("| A send names its sender by its address too |")]
+    [InlineData("| A profile travels with a LinkedIn send |")]
+    [InlineData("| The provider's own stop before a send |")]
+    [InlineData("| `contact_channel_conflict`, `sender_not_found`, `sender_mismatch`, `sender_unavailable`, `sender_limit_reached` and `message_too_long` |")]
     public void The_divergence_file_has_a_row_for_it(string row) =>
         Assert.Contains(row, Source("docs/contracts/divergence-from-l1.md"), StringComparison.Ordinal);
 
@@ -156,6 +164,8 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("docs/contracts/divergence-from-l1.md", "auto for a single record; confirm_once for a collection.")]
     [InlineData("docs/contracts/divergence-from-l1.md", "Change these fields on these people")]
     [InlineData("docs/contracts/divergence-from-l1.md", "Take this person out of the working database")]
+    [InlineData("docs/contracts/divergence-from-l1.md", "mailboxes, social accounts, numbers and business messaging identities in one list")]
+    [InlineData("docs/contracts/divergence-from-l1.md", "the invitation state for this pair: none / pending / accepted / withdrawn / declined.")]
     [InlineData("docs/contracts/README.md", "true when the value RAISES above the derivation table")]
     [InlineData("docs/contracts/README.md", "true for the one legitimate LOWERING: an operation whose non-performance is itself the harm")]
     public void A_quotation_of_the_catalogue_is_the_catalogue_s_words(string page, string quotation)
@@ -191,9 +201,9 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("the enrollment, the list add and the opt-out look the person up and create them only when nobody matches")]
     [InlineData("the update changes a contact the provider holds and makes none")]
     [InlineData("the read of a person's threads and the delete work by the pin and fail `contact_not_linked` without one")]
-    [InlineData("Six of the writes about a person declare `contact_not_found` for it")]
+    [InlineData("Seven of the writes about a person declare `contact_not_found` for it")]
     [InlineData("for `contact.delete` the same missing contact is `contact_not_found` on a first attempt and `already_deleted` on any later attempt, since an earlier attempt may have deleted it")]
-    [InlineData("The seventh, the reply in a thread, declares none")]
+    [InlineData("The eighth, the reply in a thread, declares none")]
     [InlineData("for `enrollment.stop` a pin the provider no longer holds reads as the completed stop it cannot be told apart from")]
     [InlineData("except the stop, which reads it as a person who takes no part")]
     [InlineData("it also covers a lookup by address the plugin could not finish")]
