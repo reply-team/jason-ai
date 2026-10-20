@@ -230,6 +230,32 @@ public class ReplySocialInvitationSendTests
     }
 
     /// <summary>
+    /// A link Reply holds that is longer than the runtime stores is keyed as it stands, never cut first: cut to the bound,
+    /// this one would be the consumed profile with a query, and the profile reached would be one the register was never
+    /// asked about whole. It is nobody's, so it is another than the one consumed — nothing is changed and nothing is sent.
+    /// </summary>
+    [Fact]
+    public async Task A_link_reply_holds_past_the_bound_is_never_cut_to_meet_the_consumed_profile()
+    {
+        var held = Profile + "?trk=" + new string('x', 501 - Profile.Length - 5);
+        Assert.True(
+            ReplyProfileKeys.RuntimeKey(held[..500]) == Profile && Jason.Contracts.Channels.ChannelRules.KeyOf("linkedin", held) is null,
+            $"'{held[..40]}…' ({held.Length} characters) does not cut to the consumed profile, or keys whole.");
+        using var account = Planted(linkedIn: held);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
+
+        Assert.True(
+            (error.Code, error.Class) == ("contact_channel_conflict", FailureClass.Permanent),
+            $"Reply held a link of {held.Length} characters, and the invitation ended {error.Code}.");
+        Assert.Equal(["account list", "contact get 1001"], Lines(account));
+        Assert.Equal(held, (string?)account.ContactOf(1001)!["linkedInUrl"]);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
     /// A person whose channel still holds a value from before the key, and Reply holding the profile under its plain
     /// spelling: the work item's value is compared as it stands, and it is not the key of what Reply holds, so nothing is
     /// sent and nothing is changed.

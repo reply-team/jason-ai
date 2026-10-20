@@ -1,7 +1,7 @@
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The grammar reply-cli 0.14.0 documents for the twenty-four work commands the official package runs, and for
+/// The grammar reply-cli 0.14.0 documents for the twenty-eight work commands the official package runs, and for
 /// <c>auth whoami</c>, the one command it runs that is not a work command: how many ids each takes, which options take a
 /// value, and which are switches. An option outside a command's own list is commander's usage error, exit 2.
 /// </summary>
@@ -36,6 +36,10 @@ internal static class Commands
             ["inbox mark-read"] = (1, [], []),
             ["inbox mark-unread"] = (1, [], []),
             ["contact linkedin-connect"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
+            ["contact send-email"] = (0, ["--contact-id", "--email-account-id", "--message"], []),
+            ["contact linkedin-message"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
+            ["contact linkedin-inmail"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
+            ["contact linkedin-voice"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
             ["account list"] = (0, ["--channel"], []),
             ["auth whoami"] = (0, [], []),
         };

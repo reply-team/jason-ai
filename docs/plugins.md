@@ -642,7 +642,7 @@ in one of four words, and the rule below is the same for every one of them.
 | `preflight.provider_contact` | What you do for a person carrying no pin of yours | Published today |
 |---|---|---|
 | `find_or_create` | Look the person up by the value of the channel `args.channel` names, and create the contact from that value only when the provider holds nobody under it. | `campaign.enroll`, `list_membership.add`, `optout.record` |
-| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`, `contact.update`, `social_invitation.send`; `conversation.reply`, through its thread |
+| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`, `contact.update`, `social_invitation.send`, `message.send`; `conversation.reply`, through its thread |
 | `pinned_only` | Work by the pin alone: a person with none fails `contact_not_linked` before anything is called. | `conversation.list`, `contact.delete` |
 | `not_used` | The operation names nobody, so there is nobody to find. | every other operation |
 
@@ -820,7 +820,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all twenty published
+`plugins/reply/` is the one to read: a marketplace package that implements all twenty-one published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so

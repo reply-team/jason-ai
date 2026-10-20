@@ -500,7 +500,21 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
-    /// <summary>A contact the LinkedIn account is already connected with, so an invitation to them sends nothing.</summary>
+    /// <summary>
+    /// A contact on the account's blacklist, which Reply consults on a direct email and on no LinkedIn send. It is kept on
+    /// the planted record and never answered by <c>contact get</c>, as Reply's contact read does not show it.
+    /// </summary>
+    public ReplyAccount WithBlacklisted(int contact)
+    {
+        var contacts = ReadArray(ContactsFile);
+        var planted = contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == contact)
+            ?? throw new InvalidOperationException($"no contact {contact} has been planted to blacklist.");
+        planted["_blacklisted"] = true;
+        Write(ContactsFile, contacts);
+        return this;
+    }
+
+    /// <summary>A contact the LinkedIn account is already connected with: an invitation to them sends nothing, and a message or a voice message may go.</summary>
     public ReplyAccount WithConnection(int contact, long account)
     {
         var connections = ReadArray(ConnectionsFile);

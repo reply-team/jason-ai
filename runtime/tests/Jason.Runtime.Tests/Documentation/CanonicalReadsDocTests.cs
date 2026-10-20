@@ -149,6 +149,9 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| A profile travels with a LinkedIn send |")]
     [InlineData("| The provider's own stop before a send |")]
     [InlineData("| `contact_channel_conflict`, `sender_not_found`, `sender_mismatch`, `sender_unavailable`, `sender_limit_reached` and `message_too_long` |")]
+    [InlineData("| A send that names its recipient |")]
+    [InlineData("| An email's text is written as markup |")]
+    [InlineData("| `not_connected` and `insufficient_credits` |")]
     public void The_divergence_file_has_a_row_for_it(string row) =>
         Assert.Contains(row, Source("docs/contracts/divergence-from-l1.md"), StringComparison.Ordinal);
 
@@ -236,7 +239,7 @@ public sealed partial class CanonicalReadsDocTests
     private static readonly string[] NumberWords =
     [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one",
     ];
 
     [Fact]
@@ -405,7 +408,7 @@ public sealed partial class CanonicalReadsDocTests
     /// published" names a subset, and is not a count.
     /// </summary>
     [GeneratedRegex(
-        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b",
+        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-one|twenty)\b",
         RegexOptions.IgnoreCase)]
     private static partial Regex CountPhrase();
 

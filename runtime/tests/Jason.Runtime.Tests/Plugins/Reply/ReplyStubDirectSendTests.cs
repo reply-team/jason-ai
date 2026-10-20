@@ -5,8 +5,9 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// <summary>
 /// The stand-in's commands for a send outside any sequence, answered as reply-cli 0.14.0 documents them: <c>auth whoami</c>,
 /// who the credential signs in as; <c>account list</c>, the mailboxes and LinkedIn accounts a send can go from and whose
-/// each one is; and <c>contact linkedin-connect</c>, an invitation with or without a note. The text travels on stdin and
-/// nowhere else, and what went out is read back from the account.
+/// each one is; <c>contact linkedin-connect</c>, an invitation with or without a note; and the four messages,
+/// <c>contact send-email</c>, <c>contact linkedin-message</c>, <c>contact linkedin-inmail</c> and <c>contact
+/// linkedin-voice</c>. The text travels on stdin and nowhere else, and what went out is read back from the account.
 /// </summary>
 public class ReplyStubDirectSendTests
 {
@@ -214,11 +215,190 @@ public class ReplyStubDirectSendTests
         Assert.Empty(account.Sent);
     }
 
+    /// <summary>
+    /// An email names its mailbox by an identifier Reply writes in 64 bits, takes its subject and its body from stdin and
+    /// nowhere else, and answers Reply's Message-ID with no moment: Reply's answer to a direct email carries none.
+    /// </summary>
+    [Fact]
+    public async Task An_email_takes_its_subject_and_body_from_stdin_only_and_answers_no_moment()
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com");
+
+        var (exit, stdout, _) = await account.RunAsync(Email("--message", "-"), """{"subject":"Tuesday","body":"<p>Hi Marta</p>"}""", Ct);
+
+        Assert.Equal(0, exit);
+        var sent = JsonNode.Parse(stdout)!.AsObject();
+        Assert.Equal(["contact_id", "message_id", "reply_status", "sent_at", "status"], sent.Select(member => member.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(("sent", 1001, "sent"), ((string?)sent["status"], (int)sent["contact_id"]!, (string?)sent["reply_status"]));
+        Assert.StartsWith("<", (string?)sent["message_id"], StringComparison.Ordinal);
+        Assert.Null(sent["sent_at"]);
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal(("contact send-email", 1001, Mailbox), ((string?)went["command"], (int)went["contactId"]!, (long)went["accountId"]!));
+        Assert.Equal(("Tuesday", "<p>Hi Marta</p>"), ((string?)went["text"]!["subject"], (string?)went["text"]!["body"]));
+        Assert.Equal(["body", "subject"], went["text"]!.AsObject().Select(member => member.Key).Order(StringComparer.Ordinal));
+
+        var (inline, _, inlineSaid) = await account.RunAsync(Email("--message", """{"subject":"x","body":"y"}"""), Ct);
+        Assert.Equal((2, "usage.message"), (inline, (string?)Error(inlineSaid)["code"]));
+        var (missing, _, missingSaid) = await account.RunAsync(Email("--message", "-"), """{"subject":"x"}""", Ct);
+        Assert.Equal((2, "usage.message"), (missing, (string?)Error(missingSaid)["code"]));
+        var (extra, _, extraSaid) = await account.RunAsync(Email("--message", "-"), """{"subject":"x","body":"y","note":"z"}""", Ct);
+        Assert.Equal((2, "usage.message"), (extra, (string?)Error(extraSaid)["code"]));
+        var (past, _, pastSaid) = await account.RunAsync(Line("contact", "send-email", "--contact-id", "1001", "--email-account-id", "9007199254740992", "--message", "-"), """{"subject":"x","body":"y"}""", Ct);
+        Assert.Equal((2, "usage.id"), (past, (string?)Error(pastSaid)["code"]));
+        Assert.Single(account.Sent);
+    }
+
+    /// <summary>
+    /// Reply's refusals of a direct email, each definite and each saying which contact and mailbox it was about. A double
+    /// opening brace is read by Reply as the start of its own template and refused under a code that says nothing of it.
+    /// </summary>
+    [Theory]
+    [InlineData("contact", "contact.not_found", 404, "contact.notFound")]
+    [InlineData("mailbox", "email_account.not_found", 400, "contact.emailAccountNotFound")]
+    [InlineData("blacklisted", "contact.blacklisted", 400, "contact.contactInBlackList")]
+    [InlineData("braces", "reply.refused", 400, "contact.unknown")]
+    public async Task An_email_reply_refuses_sends_nothing_and_says_why(string what, string code, int status, string replyCode)
+    {
+        using var account = what switch
+        {
+            "contact" => new ReplyAccount().WithSender(Mailbox, "email", "Ann", "ann@example.com"),
+            "mailbox" => new ReplyAccount().WithContact(1001, "marta@example.com", "Marta"),
+            "blacklisted" => new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithBlacklisted(1001).WithSender(Mailbox, "email", "Ann", "ann@example.com"),
+            _ => new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann", "ann@example.com"),
+        };
+        var subject = what == "braces" ? "Tuesday {{ day }}" : "Tuesday";
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), new JsonObject { ["subject"] = subject, ["body"] = "Hi" }.ToJsonString(), Ct);
+
+        Assert.Equal(1, exit);
+        Assert.Equal((code, status, replyCode), ((string?)Error(said)["code"], (int)Error(said)["status"]!, (string?)Error(said)["reply_code"]));
+        Assert.Equal("""{"contact_id":1001,"email_account_id":9007199254740991}""", Error(said)["ids"]!.ToJsonString());
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// Each LinkedIn send takes its text under its own names, and the CLI refuses a text longer than Reply publishes before
+    /// anything is sent, counted in characters: one outside the basic plane counts once.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin-message", "body", 8000)]
+    [InlineData("linkedin-inmail", "subject", 200)]
+    [InlineData("linkedin-inmail", "body", 1900)]
+    [InlineData("linkedin-voice", "script", 1000)]
+    public async Task Each_linkedin_send_takes_its_own_fields_and_holds_the_lengths_reply_publishes(string verb, string field, int longest)
+    {
+        using var account = Planted().WithConnection(1001, 34);
+        var fields = Fields[verb];
+
+        var (exit, stdout, _) = await account.RunAsync(LinkedIn(verb), TextOf(fields, field, string.Concat(Enumerable.Repeat("😀", longest))), Ct);
+
+        Assert.True(exit == 0, $"the longest {field} Reply publishes was refused: exit {exit}.");
+        var sent = JsonNode.Parse(stdout)!.AsObject();
+        Assert.Equal(["activity_id", "contact_id", "sent_at", "status"], sent.Select(member => member.Key).Order(StringComparer.Ordinal));
+        Assert.Equal("contact " + verb, (string?)Assert.Single(account.Sent)!["command"]);
+
+        var (over, _, said) = await account.RunAsync(LinkedIn(verb), TextOf(fields, field, string.Concat(Enumerable.Repeat("😀", longest + 1))), Ct);
+        Assert.Equal((2, "usage.message"), (over, (string?)Error(said)["code"]));
+
+        var (other, _, otherSaid) = await account.RunAsync(LinkedIn(verb), new JsonObject { ["note"] = "Hi" }.ToJsonString(), Ct);
+        Assert.Equal((2, "usage.message"), (other, (string?)Error(otherSaid)["code"]));
+        Assert.Single(account.Sent);
+    }
+
+    /// <summary>A message and a voice message go only to a connection of the account; an InMail is how one reaches anybody else.</summary>
+    [Theory]
+    [InlineData("linkedin-message", true)]
+    [InlineData("linkedin-voice", true)]
+    [InlineData("linkedin-inmail", false)]
+    public async Task A_message_to_a_person_not_connected_sends_nothing_where_the_send_needs_a_connection(string verb, bool needsOne)
+    {
+        using var account = Planted();
+
+        var (exit, _, said) = await account.RunAsync(LinkedIn(verb), TextOf(Fields[verb], null, null), Ct);
+
+        if (needsOne)
+        {
+            Assert.Equal(1, exit);
+            Assert.Equal(("linkedin.not_connected", 409, "directLinkedIn.notConnected"), ((string?)Error(said)["code"], (int)Error(said)["status"]!, (string?)Error(said)["reply_code"]));
+            Assert.Equal("""{"contact_id":1001,"linkedin_account_id":34}""", Error(said)["ids"]!.ToJsonString());
+            Assert.Empty(account.Sent);
+        }
+        else
+        {
+            Assert.Equal(0, exit);
+            Assert.Single(account.Sent);
+        }
+    }
+
+    [Theory]
+    [InlineData("linkedin-message", "braces", "linkedin.missing_variables", 400)]
+    [InlineData("linkedin-inmail", "profile", "contact.no_linkedin_profile", 404)]
+    [InlineData("linkedin-voice", "feature", "linkedin.feature_disabled", 403)]
+    [InlineData("linkedin-message", "cookie", "linkedin.invalid_cookie", 409)]
+    public async Task A_linkedin_message_reply_refuses_sends_nothing_and_says_why(string verb, string what, string code, int status)
+    {
+        using var account = what switch
+        {
+            "profile" => new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(34, "linkedin", "Ann", null),
+            "feature" => Planted().WithConnection(1001, 34).Without("directLinkedIn"),
+            "cookie" => Planted().WithConnection(1001, 34).WithSender(34, "linkedin", "Ann", null, status: "cookieInvalid"),
+            _ => Planted().WithConnection(1001, 34),
+        };
+
+        var (exit, _, said) = await account.RunAsync(LinkedIn(verb), TextOf(Fields[verb], Fields[verb][^1], what == "braces" ? "Hi {{firstName}}" : null), Ct);
+
+        Assert.Equal(1, exit);
+        Assert.Equal((code, status), ((string?)Error(said)["code"], (int)Error(said)["status"]!));
+        Assert.Empty(account.Sent);
+    }
+
+    [Fact]
+    public async Task A_lost_email_has_gone_and_says_which_contact_and_mailbox_it_was_about()
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann", "ann@example.com");
+        account.LosesTheOutcome("contact send-email");
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), """{"subject":"Tuesday","body":"Hi"}""", Ct);
+
+        Assert.Equal((3, "outcome.unknown"), (exit, (string?)Error(said)["code"]));
+        Assert.Equal("""{"contact_id":1001,"email_account_id":9007199254740991}""", Error(said)["ids"]!.ToJsonString());
+        Assert.Single(account.Sent);
+    }
+
+    /// <summary>A mailbox numbered at the most a JavaScript number holds exactly, as Reply's 64-bit identifiers reach it.</summary>
+    private const long Mailbox = 9_007_199_254_740_991;
+
+    /// <summary>The fields each LinkedIn send takes on stdin, as reply-cli 0.14.0 names them.</summary>
+    private static readonly IReadOnlyDictionary<string, string[]> Fields = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    {
+        ["linkedin-message"] = ["body"],
+        ["linkedin-inmail"] = ["subject", "body"],
+        ["linkedin-voice"] = ["script"],
+    };
+
+    /// <summary>Every field the send takes, written "Hi", and <paramref name="field"/> written as <paramref name="value"/>.</summary>
+    private static string TextOf(string[] fields, string? field, string? value)
+    {
+        var text = new JsonObject();
+        foreach (var name in fields)
+        {
+            text[name] = name == field && value is not null ? value : "Hi";
+        }
+
+        return text.ToJsonString();
+    }
+
     private static ReplyAccount Planted() =>
         new ReplyAccount().WithContact(1001, null, "Marta", linkedIn: Profile).WithSender(34, "linkedin", "Ann Owner", "https://www.linkedin.com/in/ann-owner");
 
     private static string[] Connect(params string[] message) =>
         Line(["contact", "linkedin-connect", "--contact-id", "1001", "--linkedin-account-id", "34", .. message]);
+
+    private static string[] Email(params string[] message) =>
+        Line(["contact", "send-email", "--contact-id", "1001", "--email-account-id", "9007199254740991", .. message]);
+
+    private static string[] LinkedIn(string verb) =>
+        Line("contact", verb, "--contact-id", "1001", "--linkedin-account-id", "34", "--message", "-");
 
     private static string[] Line(params string[] command) => ["--json", "-q", .. command];
 

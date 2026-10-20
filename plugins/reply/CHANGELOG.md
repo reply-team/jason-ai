@@ -18,13 +18,27 @@ absorbed by a release of this package alone.
   the invitation consumes first, and one that carries another is never changed. Reply refuses notes over 200 characters,
   and the document holds a note to that. A person who is already a connection answers `already_connected`, and an
   invitation whose answer was lost is never sent again: its document says `never`.
-- A LinkedIn profile is keyed by `host.channelKey`, the runtime's own rule, rather than by a copy of it here: the
-  profile's name after `/in/`, decoded once, composed and lowercased, whatever host of linkedin.com's, scheme, slashes,
-  query or fragment it carries. `conversation.reply` and the invitation compare Reply's spelling by that key, so a
-  thread whose person's profile Reply spells another way is answered rather than refused, and a value the runtime keys
-  as no profile is nobody's. The profile Jason stored is compared as it stands, and one that is not a key is never
-  written onto a contact. A name outside ASCII reaches the CLI as its letters, not as its percent-escapes. The package
-  needs Jason 0.13.0 or newer, which has `host.channelKey`.
+- `message.send` sends one person one message outside any sequence, once a person approves it: an email with `reply
+  contact send-email`, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text,
+  with `reply contact linkedin-message`, `linkedin-inmail` or `linkedin-voice`. It takes the invitation's path first —
+  the text held to what Reply would send as written, the account to the address the person approving read, the person
+  found and their contact read, opted out at Reply a stop — and then the one command, the text on stdin. Reply's contact
+  has to be reached at the address the work item consumes: an address is never written onto a contact. An email's text is
+  plain text written as HTML that shows exactly it, its characters escaped and its line breaks kept, and Reply's
+  blacklist refusing an email is `suppressed`. A LinkedIn message or voice message to a person the account is not
+  connected with is `not_connected`, an InMail without credits `insufficient_credits`, and a message whose answer was
+  lost is never sent again.
+- A LinkedIn profile and an email address are keyed by `host.channelKey`, the runtime's own rule, rather than by a copy
+  of it here: a profile by its name after `/in/`, decoded once, composed and lowercased, whatever host of linkedin.com's,
+  scheme, slashes, query or fragment it carries, and an address as the runtime keys it rather than by JavaScript's
+  lowercasing. `conversation.reply`, the invitation and the message compare Reply's spelling by that key, so a thread
+  whose person's profile Reply spells another way is answered rather than refused, a value the runtime keys as no
+  profile or no address is nobody's, and two addresses the register keys apart are two people: `conversation.reply`
+  now refuses a thread whose person's address only JavaScript's lowercasing made the work item's, and a mailbox whose
+  address the runtime would not key cannot be named as a sender. What Reply holds is keyed whole, never cut to 500
+  characters first, so a longer value is nobody's. The value Jason stored is compared as it stands, and a profile that
+  is not a key is never written onto a contact. A name outside ASCII reaches the CLI as its letters, not as its
+  percent-escapes. The package needs Jason 0.13.0 or newer, which has `host.channelKey`.
 
 ## 0.4.0
 

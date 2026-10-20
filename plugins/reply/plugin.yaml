@@ -10,7 +10,7 @@ homepage: https://reply.io
 contracts:
   protocol: [1]
   operations: [1]
-operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, social_invitation.send]
+operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, social_invitation.send, message.send]
 entry:
   module: main.js
   function: invoke
@@ -23,9 +23,10 @@ capabilities:
       - name: reply
         # The oldest release that has the work commands every operation below runs — `reply contact find`,
         # `reply sequence create`, `reply sequence add-contact`, `reply inbox reply`, `reply account list`,
-        # `reply contact linkedin-connect` and the rest — with the results and the error codes this package reads, a
-        # LinkedIn URL matched by its lowercased slug, a start that says the state it left, and the Reply user whose each
-        # account is. This package makes no raw call. A reload runs the version command and refuses an older one.
+        # `reply contact linkedin-connect`, `reply contact send-email` and the rest — with the results and the error
+        # codes this package reads, a LinkedIn URL matched by its lowercased slug, a start that says the state it left,
+        # and the Reply user whose each account is. This package makes no raw call. A reload runs the version command and
+        # refuses an older one.
         min_version: 0.14.0
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could

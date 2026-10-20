@@ -1,0 +1,311 @@
+{
+  "id": "message.send",
+  "version": 1,
+  "l1": { "name": "message.send", "contract_version": "2.0.0", "family": 7, "core": true },
+  "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+
+  "reach": "act",
+  "reversibility": "irreversible",
+  "approval": "confirm_each",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "read first: no send recorded for this person on this thread or step in the window — a timed-out send may already have succeeded.",
+  "idempotency_key": "required",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": {
+    "value": "metered",
+    "conditional": true,
+    "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+  },
+  "cost_basis": "per message, on channels that meter sending",
+  "meter": "message",
+  "invariants": ["A5", "A7", "A14", "A21", "A22", "H4", "H5"],
+
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_only" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": { "fields": ["id"], "channels": "consumed" },
+  "precondition": "The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent.",
+  "preview": {
+    "summary": "Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}), outside any campaign — subject: {/args/message/subject}; text: {/args/message/body}",
+    "highlights": ["/contacts/0/channels/0/value", "/args/channel", "/args/sender", "/args/message"]
+  },
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:message.send:1:input",
+    "title": "message.send input",
+    "description": "One message to one person, outside any of the provider's campaigns and threads, on one channel, from one of the provider's accounts.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "sender", "message"],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": ["email", "linkedin"],
+            "description": "The contact's channel the message consumes: the address or the LinkedIn profile it goes to. Exactly that one channel is projected into `contacts[0].channels`."
+          },
+          "sender": { "$ref": "#/$defs/sender" },
+          "message": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["format", "body"],
+            "description": "What goes out, exactly as the person approving it reads it: one format of the channel's, and its text.",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": ["email", "linkedin_message", "linkedin_inmail", "linkedin_voice"],
+                "description": "`email` on the email channel; on LinkedIn, a message to a connection, an InMail, or a voice message the provider speaks from the text."
+              },
+              "subject": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 998,
+                "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+                "not": { "pattern": "[\\n\\r\\u2028\\u2029]" },
+                "description": "The subject: one line, something other than white space, at most 998 characters on an email and 200 on an InMail. Only those two formats take one, and both require it."
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000,
+                "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+                "description": "The text as plain text, something other than white space — for a voice message the text the provider speaks: at most 12000 characters on an email, the most `conversation.get` reads back of one message; 8000 in a LinkedIn message, 1900 in an InMail and 1000 in a voice message, the most each holds."
+              }
+            }
+          }
+        },
+        "anyOf": [
+          {
+            "type": "object",
+            "required": ["channel", "message"],
+            "properties": {
+              "channel": { "const": "email" },
+              "message": { "type": "object", "required": ["format", "subject"], "properties": { "format": { "const": "email" } } }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["channel", "message"],
+            "properties": {
+              "channel": { "const": "linkedin" },
+              "message": {
+                "type": "object",
+                "required": ["format"],
+                "properties": { "format": { "const": "linkedin_message" }, "body": { "maxLength": 8000 } },
+                "not": { "type": "object", "required": ["subject"] }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["channel", "message"],
+            "properties": {
+              "channel": { "const": "linkedin" },
+              "message": {
+                "type": "object",
+                "required": ["format", "subject"],
+                "properties": { "format": { "const": "linkedin_inmail" }, "subject": { "maxLength": 200 }, "body": { "maxLength": 1900 } }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["channel", "message"],
+            "properties": {
+              "channel": { "const": "linkedin" },
+              "message": {
+                "type": "object",
+                "required": ["format"],
+                "properties": { "format": { "const": "linkedin_voice" }, "body": { "maxLength": 1000 } },
+                "not": { "type": "object", "required": ["subject"] }
+              }
+            }
+          }
+        ]
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "The person the message is for.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier, stable across every attempt."
+      }
+    },
+    "$defs": {
+      "sender": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_id", "address"],
+        "description": "The provider's account the message goes from, as `sender.list` listed it on the channel the message consumes: its identifier, and its address — null only for an account the provider holds no address for — so the person approving the message reads whose account it goes from.",
+        "properties": {
+          "external_id": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "address": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 }
+        }
+      },
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the message consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. The message names no campaign: it goes outside any of the provider's."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:message.send:1:output",
+    "title": "message.send result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome for the one message sent.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status", "channel", "format", "sender_external_id", "message", "external_ids"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": {
+              "const": "sent",
+              "description": "The provider took the message. A refusal, before sending or after, is a failed outcome with its class."
+            },
+            "channel": { "type": "string", "enum": ["email", "linkedin"] },
+            "format": { "type": "string", "enum": ["email", "linkedin_message", "linkedin_inmail", "linkedin_voice"] },
+            "sender_external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "description": "The provider's account the message went from."
+            },
+            "message": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["external_id", "sent_at"],
+              "properties": {
+                "external_id": {
+                  "type": ["string", "null"],
+                  "maxLength": 998,
+                  "description": "The provider's identifier for the message sent, or null when it gives none."
+                },
+                "sent_at": {
+                  "type": ["string", "null"],
+                  "format": "date-time",
+                  "maxLength": 64,
+                  "description": "When the message was sent, in UTC, or null when the provider gives no moment that is known to be UTC."
+                }
+              }
+            },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["contact"],
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the person the message went to, found by the pin or by the consumed value and pinned so no later call has to match them again. Nobody is created to find it."
+    }
+  },
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "never",
+
+  "failure_codes": [
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider; or, with no pin, the provider holds nobody under the consumed value — the person is put on a list or enrolled first. Nothing was sent." },
+    { "code": "contact_not_unique", "class": "permanent", "when": "More than one of the provider's contacts carries the consumed value, so picking one would be guessing. Nothing was sent." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The person carries no value on the channel named that the provider could find them by. Nothing was sent." },
+    { "code": "contact_channel_conflict", "class": "permanent", "when": "The person's contact at the provider is reached at another address or another LinkedIn profile than the one consumed, or at none it could be given, so the message would not reach the value the suppression register was asked about. An address is never changed, and a profile only given where there is none. Nothing was sent." },
+    { "code": "sender_not_found", "class": "permanent", "when": "The provider holds no account of the channel under the sender's identifier that this one can send from. Nothing was sent." },
+    { "code": "sender_mismatch", "class": "validation", "when": "The sender's address in the arguments is not the one the provider holds for that account, so the person approving read another account than the one it would go from. Nothing was sent." },
+    { "code": "sender_unavailable", "class": "permanent", "when": "The sender's account cannot send this now: turned off, its connection to the channel lost, or without what the format needs; the provider's own word travels in the details. Nothing was sent." },
+    { "code": "sender_limit_reached", "class": "permanent", "when": "The sender's daily or weekly allowance is spent; which one travels in the details. Nothing was sent; propose the message again once it renews." },
+    { "code": "not_connected", "class": "permanent", "when": "A LinkedIn message or voice message to a person the sender's account is not connected with. Nothing was sent: invite them first, or send an InMail." },
+    { "code": "insufficient_credits", "class": "permanent", "when": "The sender's account has no credits left for an InMail. Nothing was sent." },
+    { "code": "message_too_long", "class": "validation", "when": "The provider found the text too long — a voice message too long to speak among them. Nothing was sent." },
+    { "code": "message_invalid", "class": "validation", "when": "The subject or the text carries something the provider would read as markup of its own — a placeholder it fills in for each person — so what would go out is not the text a person approved. Nothing was sent." },
+    { "code": "suppressed", "class": "permanent", "when": "The provider holds this person as opted out, or its blacklist holds them, so nothing was sent." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include messages outside a campaign on this channel, so no call by this account can send one." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing was sent. Repeating it runs the same call again." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it send messages for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now, and nothing was sent; it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was sent." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the message may already have gone. No read tells this work item's message from another one to the same person, so the item stops for a person to look." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "Nothing is sent before the person is found — by the pin, or by the consumed value, and nobody is created — and their contact is read: one the provider holds as opted out fails `suppressed`; one reached at another address or carrying another LinkedIn profile fails `contact_channel_conflict` and is not changed; one carrying no LinkedIn profile is given the consumed one first, before a LinkedIn message.",
+    "The message goes from the account `args.sender` names, of the channel the message consumes, and only when the provider holds that account under the address the arguments state — null only for an account it holds no address for; otherwise it fails `sender_mismatch` before anything is sent.",
+    "The subject and the text go out exactly as approved: one the provider would read as a placeholder of its own fails `message_invalid` before anything is sent.",
+    "An email's text reaches the provider written as markup that shows exactly that text, its line breaks included; nothing in it is read as markup of the provider's.",
+    "An attempt sends at most once. One that may have sent and lost its answer fails `provider_answer_lost` and is never repeated.",
+    "The person's identifier comes back under `external_ids.contact`, on a failure too once the person was found.",
+    "The result carries exactly one item, its channel and format the ones the call named, and its `contact_id` is the identifier the call was given."
+  ]
+}

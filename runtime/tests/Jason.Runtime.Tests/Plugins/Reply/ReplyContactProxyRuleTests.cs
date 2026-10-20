@@ -46,7 +46,9 @@ public class ReplyContactProxyRuleTests
     /// how Reply answers it by another identifier, whether it finds the person through a thread, and whether the command
     /// names the person as its operand — with what it changes on stdin — rather than by <c>--contact-id</c>. A send names
     /// a channel of its own, reads the account it goes from before anyone is looked up, and reads the contact it found
-    /// before it sends; one whose document takes a single channel cannot be asked about another.
+    /// before it sends; one whose document takes only the channels Reply looks a person up by cannot be asked about another.
+    /// The message is driven on LinkedIn, where its path writes the most; its email half finds the person the same way,
+    /// which its own tests hold.
     /// </summary>
     private sealed record Driver(
         string Command,
@@ -58,7 +60,8 @@ public class ReplyContactProxyRuleTests
         string Channel = "email",
         string[]? Before = null,
         bool ReadsTheContact = false,
-        bool FixedChannel = false);
+        bool FixedChannel = false,
+        bool CarriesText = false);
 
     private const string SenderProfile = "https://www.linkedin.com/in/ann-owner";
 
@@ -100,6 +103,19 @@ public class ReplyContactProxyRuleTests
             Before: ["account list"],
             ReadsTheContact: true,
             FixedChannel: true),
+        ["message.send"] = new(
+            "contact linkedin-message",
+            account => account
+                .WithSender(12, "email", "Ann Owner", "ann@example.com")
+                .WithSender(34, "linkedin", "Ann Owner", SenderProfile)
+                .WithConnection(1001, 34),
+            id => new JsonObject { ["status"] = "sent", ["contact_id"] = id, ["activity_id"] = 70001, ["sent_at"] = null },
+            NobodyIs: "contact_not_found",
+            Channel: "linkedin",
+            Before: ["account list"],
+            ReadsTheContact: true,
+            FixedChannel: true,
+            CarriesText: true),
     };
 
     public static TheoryData<string> Finding => Of(ProviderContact.FindOrCreate, ProviderContact.FindOnly);
@@ -484,6 +500,16 @@ public class ReplyContactProxyRuleTests
                     ["sender"] = new JsonObject { ["external_id"] = "34", ["address"] = SenderProfile },
                     ["note"] = null,
                 },
+                "message.send" => new JsonObject
+                {
+                    ["channel"] = channel,
+                    ["sender"] = channel == "email"
+                        ? new JsonObject { ["external_id"] = "12", ["address"] = "ann@example.com" }
+                        : new JsonObject { ["external_id"] = "34", ["address"] = SenderProfile },
+                    ["message"] = channel == "email"
+                        ? new JsonObject { ["format"] = "email", ["subject"] = "Thursday", ["body"] = "Thursday at 10 works." }
+                        : new JsonObject { ["format"] = "linkedin_message", ["body"] = "Thursday at 10 works." },
+                },
                 _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "No input for this operation."),
             },
             ["contacts"] = new JsonArray(person),
@@ -525,8 +551,9 @@ public class ReplyContactProxyRuleTests
     };
 
     /// <summary>
-    /// The command names the person by the identifier and carries no address: by <c>--contact-id</c> with nothing on stdin,
-    /// or — for a command about one contact — as its operand, with only what it changes on stdin.
+    /// The command names the person by the identifier and carries no address: by <c>--contact-id</c> with nothing on stdin
+    /// but the text a message carries, or — for a command about one contact — as its operand, with only what it changes on
+    /// stdin.
     /// </summary>
     private static void AssertNamedByTheIdentifier(Driver driver, ReplyCall call, string id)
     {
@@ -539,6 +566,13 @@ public class ReplyContactProxyRuleTests
         }
 
         Assert.Equal(id, call.Option("--contact-id"));
+        if (driver.CarriesText)
+        {
+            Assert.DoesNotContain(Address, call.Body ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Profile, call.Body ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            return;
+        }
+
         Assert.Null(call.Body);
     }
 

@@ -403,11 +403,11 @@ For an ambiguous end the runtime reads the operation's own contract rather than 
 says a repeat is `safe`, because asking for a campaign a second time costs nothing but a round trip. `list_membership.add` says
 `after_recovery_read`, so a repeat is allowed only because the contract obliges the plugin to read the
 ledger under the idempotency key, and the membership it writes, before writing anything — which is what
-makes one crash cost one effect rather than one bill. `conversation.reply` says `never`, and
-`social_invitation.send` says `never` too: no read tells this work item's lost reply or invitation from another one
-sent to the same person, so the item ends for a person rather than risk a second message in somebody's inbox — the
-same end a lease that ran out or a restart gives it. Every read says `safe`, and so do the writes that set a state
-outright, pausing a campaign and filing, closing or reopening a thread.
+makes one crash cost one effect rather than one bill. `conversation.reply` says `never`, `social_invitation.send`
+says `never`, and `message.send` says `never` too: no read tells this work item's lost reply, invitation or message
+from another one sent to the same person, so the item ends for a person rather than risk a second message in somebody's
+inbox — the same end a lease that ran out or a restart gives it. Every read says `safe`, and so do the
+writes that set a state outright, pausing a campaign and filing, closing or reopening a thread.
 
 Every end where nobody answered is ambiguous: the invoker's timeout, a lease that ran out, a missed
 heartbeat, a command that could not be started, a command that was stopped. A missing answer says nothing
@@ -535,12 +535,12 @@ reconciliation — matching a person again, against two providers' answers — a
   standing approvals, no bulk decisions over a population, no expiry windows and no anomaly stop rules
   (DEF-APPROVAL-001). Nothing notifies anybody either, so a person finds out what is waiting by asking
   — `jason approval list` is the floor this version ships.
-- **Twenty operations, not a catalog.** The documents under `docs/contracts/operations/` — fourteen that write,
+- **Twenty-one operations, not a catalog.** The documents under `docs/contracts/operations/` — fifteen that write,
   `campaign.create`, `list_membership.add`, `campaign.enroll`, `campaign.pause`, `campaign.activate`, `optout.record`,
   `enrollment.stop`, `conversation.reply`, `conversation.classify`, `conversation.close`, `conversation.reopen`,
-  `contact.update`, `contact.delete` and `social_invitation.send`, and six reads — are the whole published set; an
-  operation outside it cannot be routed, created or named, and adding one is a deliberate act with its own document,
-  fixtures and version (DEF-OPS-001).
+  `contact.update`, `contact.delete`, `social_invitation.send` and `message.send`, and six reads — are the whole
+  published set; an operation outside it cannot be routed, created or named, and adding one is a deliberate act with
+  its own document, fixtures and version (DEF-OPS-001).
 - **No compatibility window and no deprecation policy.** Every published operation is at version 1, and a
   plugin declares which contract family versions it implements. What happens when version 2 arrives — how
   long version 1 keeps being served, and how a plugin is told — is not settled and is deliberately not

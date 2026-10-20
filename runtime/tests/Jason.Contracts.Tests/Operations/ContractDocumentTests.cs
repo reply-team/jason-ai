@@ -44,8 +44,8 @@ public class ContractDocumentTests
                 "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete",
                 "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list",
                 "conversation.reopen", "conversation.reply",
-                "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record", "sender.list",
-                "social_invitation.send",
+                "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record",
+                "sender.list", "social_invitation.send",
             ],
             OperationCatalog.All.Select(c => c.Id));
         Assert.All(OperationCatalog.All, contract => Assert.Equal(1, contract.Version));
@@ -165,8 +165,8 @@ public class ContractDocumentTests
 
     /// <summary>
     /// How each document finds the provider's own contact for its person, stated as data rather than in a sentence: the
-    /// writes that may make the person create them only where the provider holds nobody, the stop, the reply, the update
-    /// and the invitation find them and create nobody, the read of a person's threads and the delete work by the pin alone, and the
+    /// writes that may make the person create them only where the provider holds nobody, the stop, the reply, the update,
+    /// the invitation and the message find them and create nobody, the read of a person's threads and the delete work by the pin alone, and the
     /// rest name nobody. A document that
     /// moved between these would change what a plugin does with a person it holds no pin for, so the map is held whole.
     /// </summary>
@@ -182,6 +182,7 @@ public class ContractDocumentTests
             ["contact.update"] = ProviderContact.FindOnly,
             ["conversation.reply"] = ProviderContact.FindOnly,
             ["social_invitation.send"] = ProviderContact.FindOnly,
+            ["message.send"] = ProviderContact.FindOnly,
             ["conversation.list"] = ProviderContact.PinnedOnly,
             ["contact.delete"] = ProviderContact.PinnedOnly,
         };
@@ -330,6 +331,24 @@ public class ContractDocumentTests
             ["body", "channel", "reply_to_message", "thread"],
             ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
         Assert.False((bool)arguments["additionalProperties"]!);
+    }
+
+    /// <summary>
+    /// A message outside any thread goes to the work item's own person and to nobody else, from the one account named: an
+    /// added recipient would be somebody the suppression register was never asked about. So the arguments are exactly the
+    /// channel, the sender and the message, the message is exactly its format, its subject and its text, both closed, and
+    /// no copy, blind copy, attachment or recording can be named in this version.
+    /// </summary>
+    [Fact]
+    public void A_message_names_no_recipient_of_its_own()
+    {
+        var arguments = (JsonObject)Contract("message.send").InputSchema["properties"]!["args"]!;
+        var message = (JsonObject)arguments["properties"]!["message"]!;
+
+        Assert.Equal(["channel", "message", "sender"], ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
+        Assert.False((bool)arguments["additionalProperties"]!);
+        Assert.Equal(["body", "format", "subject"], ((JsonObject)message["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
+        Assert.False((bool)message["additionalProperties"]!);
     }
 
     /// <summary>

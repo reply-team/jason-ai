@@ -20,6 +20,7 @@ import { contactDelete } from "./modules/delete.js";
 import { contactUpdate } from "./modules/update.js";
 import { senderList } from "./modules/senders.js";
 import { socialInvitationSend } from "./modules/invite.js";
+import { messageSend } from "./modules/message.js";
 
 export function invoke(operation, input, context) {
   switch (operation) {
@@ -82,6 +83,9 @@ export function invoke(operation, input, context) {
 
     case "social_invitation.send":
       return socialInvitationSend(input, context);
+
+    case "message.send":
+      return messageSend(input, context);
 
     default:
       // A work item can only name an operation the manifest lists, so this is a call that should not exist. It

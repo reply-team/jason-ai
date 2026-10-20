@@ -111,7 +111,8 @@ internal static partial class Account
         "inbox categorize" => InboxCategorize(root, line),
         "inbox mark-read" => InboxMark(root, line, read: true),
         "inbox mark-unread" => InboxMark(root, line, read: false),
-        "contact linkedin-connect" => DirectSendCommand(root, command, line, stdin),
+        "contact linkedin-connect" or "contact send-email" or "contact linkedin-message" or "contact linkedin-inmail" or "contact linkedin-voice"
+            => DirectSendCommand(root, command, line, stdin),
         "account list" => AccountList(root, line),
         "auth whoami" => AuthWhoami(root),
         _ => throw new InvalidOperationException($"No handler for '{command}'."),

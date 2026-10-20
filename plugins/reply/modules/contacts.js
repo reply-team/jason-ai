@@ -105,33 +105,26 @@ export function toFind(operation, context, input, learned) {
 /**
  * Whether a value Reply holds for a person is the one this work item consumes, compared the way the runtime keys the
  * value for its suppression register, so that the register's check at the claim is about exactly the person reached: an
- * address whatever its case, a profile link by `keyOf`. Two values the register keys apart are two people here, and a
- * value the runtime would not key is nobody's.
+ * address and a profile link alike by `keyOf`, the runtime's own rule. Two values the register keys apart are two people
+ * here — two addresses JavaScript would lowercase to one text among them — and a value the runtime would not key, one
+ * longer than it stores included, is nobody's.
  *
  * Only the value Reply holds is keyed. The one the work item consumes is the runtime's key already — it was stored so,
  * and the register is asked about it exactly as it stands — so it is compared as it stands: a value stored before the
  * key, which the runtime left as it was, is never the key of anything Reply holds.
  */
 export function sameValue(channel, held, consumed) {
-  if (channel !== "linkedin") {
-    return held.toLowerCase() === consumed.toLowerCase();
-  }
-
-  const key = keyOf(held);
+  const key = keyOf(channel, held);
   return key !== null && key === consumed;
 }
 
 /**
- * Whether two values Reply wrote are one address: an email whatever its case, and a profile link by `keyOf` on both sides,
- * since neither is the runtime's stored key. A value the runtime would not key is nobody's, so it matches nothing.
+ * Whether two values Reply wrote are one address: an email and a profile link alike by `keyOf` on both sides, since
+ * neither is the runtime's stored key. A value the runtime would not key is nobody's, so it matches nothing.
  */
 export function sameAddress(channel, one, other) {
-  if (channel !== "linkedin") {
-    return one.toLowerCase() === other.toLowerCase();
-  }
-
-  const key = keyOf(one);
-  return key !== null && key === keyOf(other);
+  const key = keyOf(channel, one);
+  return key !== null && key === keyOf(channel, other);
 }
 
 /**
@@ -140,16 +133,16 @@ export function sameAddress(channel, one, other) {
  * was, is not, and is never written: Reply would hold it as a profile the register was not asked about.
  */
 export function writtenAsItIs(consumed) {
-  return keyOf(consumed) === consumed;
+  return keyOf("linkedin", consumed) === consumed;
 }
 
 /**
- * A profile link as the runtime keys it — the value its contacts, its register and its claim compare — or null where the
- * runtime would store none. The rule is the runtime's own, asked through `host.channelKey`, so this package never holds a
- * copy of it that could come to differ.
+ * A value on a channel as the runtime keys it — the value its contacts, its register and its claim compare — or null
+ * where the runtime would store none. The rule is the runtime's own, asked through `host.channelKey`, so this package
+ * never holds a copy of it that could come to differ.
  */
-export function keyOf(link) {
-  return typeof link === "string" ? host.channelKey("linkedin", link) : null;
+export function keyOf(channel, value) {
+  return typeof value === "string" ? host.channelKey(channel, value) : null;
 }
 
 /** Reply's identifier for a contact, as this package works by it — a string — or null when the value is not one. */

@@ -1,0 +1,35 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a LinkedIn message, which has no subject: the summary shows a dash there",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "message": { "format": "linkedin_message", "body": "Thanks for connecting, Marta." }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_message, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner), outside any campaign — subject: —; text: Thanks for connecting, Marta.",
+    "highlights": {
+      "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
+      "/args/channel": "linkedin",
+      "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "/args/message": { "format": "linkedin_message", "body": "Thanks for connecting, Marta." }
+    }
+  }
+}

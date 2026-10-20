@@ -35,7 +35,7 @@ public class ReplyPackageTests
         Assert.Equal("0.5.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
-            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record", "sender.list", "social_invitation.send"],
+            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record", "sender.list", "social_invitation.send"],
             plugin.Operations.Order());
 
         // Declaration is not permission, and this package declares nothing it does not use: one program, no
@@ -324,11 +324,12 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The release that sends outside a sequence: the two operations it adds, the CLI it needs, and what a person reads in
-    /// it about the stop Reply does not make on such a send, the note Reply refuses, and the one write before a send.
+    /// The release that sends outside a sequence: the three operations it adds, the CLI it needs, and what a person reads
+    /// in it about the stop Reply does not make on such a send, the note Reply refuses, the one write before a send, the
+    /// email written as HTML, and the address keyed as the runtime keys it.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_5_0_and_the_two_operations_it_adds()
+    public void The_changelog_opens_with_0_5_0_and_the_three_operations_it_adds()
     {
         var section = Flat(ChangelogSection(0));
 
@@ -337,7 +338,8 @@ public class ReplyPackageTests
             new[]
             {
                 "`sender.list`", "`social_invitation.send`", "reply-cli 0.14.0", "`never`", "Reply refuses notes over 200 characters",
-                "opted out", "a teammate", "never changed", "outside ASCII",
+                "opted out", "a teammate", "never changed", "outside ASCII", "`message.send`", "written as HTML",
+                "an address is never written", "`not_connected`", "JavaScript's lowercasing", "never cut to 500",
             },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
     }

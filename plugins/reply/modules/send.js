@@ -20,7 +20,6 @@
 import { run } from "./cli.js";
 import { describe, fail, lostAnswerRow } from "./errors.js";
 import { contactNumber, sameAddress, sameValue, toFind, writtenAsItIs } from "./contacts.js";
-import { text } from "./reading.js";
 
 const SENDERS = "account list";
 const READ = "contact get";
@@ -120,7 +119,10 @@ export function personFor(operation, context, input) {
     fail(operation, { call: READ, row: "opted_out_at_reply" }, learned);
   }
 
-  const reached = text(consumed.channel === "linkedin" ? held.linkedInUrl : held.email, 500);
+  // The value Reply holds is keyed whole, never cut first: cut to a bound, a longer one could key to the consumed value
+  // while Reply reaches another. One longer than the runtime stores keys to nothing, and is nobody's.
+  const value = consumed.channel === "linkedin" ? held.linkedInUrl : held.email;
+  const reached = typeof value === "string" && value.length > 0 ? value : null;
   if (reached !== null && sameValue(consumed.channel, reached, consumed.value)) {
     return learned;
   }

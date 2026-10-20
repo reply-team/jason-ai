@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Channels;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Invocation;
@@ -27,18 +28,20 @@ public class ReplyConversationReplyTests
     // -------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// A person with no pin is found through the thread: its person's address on the channel is theirs, whatever its
-    /// case, so the reply goes, and the thread's person is pinned. The thread is read once, for one message, and the text
-    /// reaches the CLI on stdin and nowhere else.
+    /// A person with no pin is found through the thread: its person's address on the channel at Reply is theirs, whatever
+    /// its case — the work item carries the runtime's key of it — so the reply goes, and the thread's person is pinned. The
+    /// thread is read once, for one message, and the text reaches the CLI on stdin and nowhere else.
     /// </summary>
     [Fact]
     public async Task A_reply_reads_the_thread_then_sends_its_text_on_stdin_and_pins_the_thread_s_person()
     {
-        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z"));
+        var thread = ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z");
+        thread["contact"]!["email"] = "Marta@Example.com";
+        using var account = new ReplyAccount().WithThread(thread);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await InvokeAsync(api, Input(value: "Marta@Example.com"));
+        var result = await InvokeAsync(api, Input(value: ChannelRules.KeyOf("email", "Marta@Example.com")));
 
         var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!.AsObject();
         Assert.Equal((ContactId, "sent", "501", "email"), ((string?)item["contact_id"], (string?)item["status"], (string?)item["thread_external_id"], (string?)item["channel"]));
@@ -123,6 +126,42 @@ public class ReplyConversationReplyTests
         Assert.Equal(("thread_contact_mismatch", FailureClass.Validation), (error.Code, error.Class));
         Assert.Null(error.ExternalIds);
         Assert.Equal(["inbox get 501"], Paths(account));
+        Assert.Empty(account.OutboundIn(501));
+    }
+
+    /// <summary>
+    /// An address is compared as the runtime keys it for its suppression register, by the runtime's own rule rather than
+    /// by JavaScript's lowercasing: an address Reply holds in another case is the work item's, and two addresses the
+    /// register keys apart are two people even where JavaScript would lowercase both to one text — a capital I with a dot
+    /// at Reply, and an i with a combining dot above in the work item.
+    /// </summary>
+    [Theory]
+    [InlineData("Marta@Example.COM", "marta@example.com", true)]
+    [InlineData("xİ@example.com", "xi\u0307@example.com", false)]
+    public async Task An_address_is_the_thread_s_person_only_where_the_register_keys_it_alike(string held, string written, bool alike)
+    {
+        var consumed = ChannelRules.KeyOf("email", written);
+        var key = ChannelRules.KeyOf("email", held);
+        Assert.True(consumed is not null && key is not null && (key == consumed) == alike, $"the runtime keys '{held}' as '{key}' and '{written}' as '{consumed}'.");
+        var thread = ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z");
+        thread["contact"]!["email"] = held;
+        using var account = new ReplyAccount().WithThread(thread);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(value: consumed));
+
+        if (alike)
+        {
+            ReplyOperations.Succeeded(Operation, result);
+            Assert.Single(account.OutboundIn(501));
+            return;
+        }
+
+        var error = ReplyOperations.Failed(Operation, result);
+        Assert.Equal(("thread_contact_mismatch", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Contains("another address", (string?)error.Details!["reason"], StringComparison.Ordinal);
+        Assert.Null(error.ExternalIds);
         Assert.Empty(account.OutboundIn(501));
     }
 

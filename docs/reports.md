@@ -347,7 +347,7 @@ produced it keeps it, named from the evidence rather than copied into it.
   are two rows; one reporter who genuinely produced the same effect twice must say so with a key.
 - **`effect` is uninterpreted free text.** There is no vocabulary of effects, so `email_sent` and
   `sent_email` are two different things to every filter and every reader.
-- **Only twenty published operations to correlate to.** The documents under
+- **Only twenty-one published operations to correlate to.** The documents under
   `docs/contracts/operations/` are the whole catalog, so `operation_known` is false for most of what anybody
   will actually report (DEF-OPS-001).
 

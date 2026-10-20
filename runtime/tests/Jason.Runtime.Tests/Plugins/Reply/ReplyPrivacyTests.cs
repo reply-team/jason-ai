@@ -704,6 +704,122 @@ public class ReplyPrivacyTests
         }
     }
 
+    /// <summary>
+    /// A message carries a subject and a text, on every format: an email, a LinkedIn message, an InMail and a voice
+    /// message. Each travels once, on stdin — an email's text written as HTML — and no subject, no text, no address, no
+    /// profile and no account's name or address reaches an argument, the answer, a diagnostic or a log. Each corpus is
+    /// shown to hold what did travel, so a value that had gone there would be found.
+    /// </summary>
+    [Fact]
+    public async Task What_a_message_carries_reaches_no_argument_answer_diagnostic_or_log()
+    {
+        const string SenderName = "Sendername-marker-71aa";
+        const string SenderAddress = "sender.marker@example.com";
+        const string SenderProfile = "https://www.linkedin.com/in/sender-marker-19";
+        const string Address = "address.marker@example.com";
+        const string Profile = "https://www.linkedin.com/in/profile-marker-63";
+        const string Subject = "Subject-marker-3f1e";
+        const string Text = "Text-marker-c40d: thanks for the chat.";
+        string[] travelled = [SenderName, SenderAddress, SenderProfile, Address, Profile, Subject, Text];
+
+        using var account = new ReplyAccount()
+            .WithSender(12, "email", SenderName, SenderAddress)
+            .WithSender(34, "linkedin", SenderName, SenderProfile)
+            .WithContact(1001, Address, "Ottilie")
+            .WithContact(1002, null, "Ottilie", linkedIn: Profile)
+            .WithConnection(1002, 34);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answers = string.Empty;
+        foreach (var format in new[] { "email", "linkedin_message", "linkedin_inmail", "linkedin_voice" })
+        {
+            var email = format == "email";
+            var message = new JsonObject { ["format"] = format, ["body"] = Text };
+            if (format is "email" or "linkedin_inmail")
+            {
+                message["subject"] = Subject;
+            }
+
+            var input = new JsonObject
+            {
+                ["args"] = new JsonObject
+                {
+                    ["channel"] = email ? "email" : "linkedin",
+                    ["sender"] = new JsonObject { ["external_id"] = email ? "12" : "34", ["address"] = email ? SenderAddress : SenderProfile },
+                    ["message"] = message,
+                },
+                ["contacts"] = new JsonArray(new JsonObject
+                {
+                    ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                    ["channels"] = new JsonArray(new JsonObject { ["channel"] = email ? "email" : "linkedin", ["value"] = email ? Address : Profile, ["primary"] = true }),
+                    ["external_ids"] = new JsonObject(),
+                }),
+                ["campaign"] = new JsonObject
+                {
+                    ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                    ["name"] = "Q3 LatAm founders",
+                    ["status"] = "active",
+                    ["external_ids"] = new JsonObject(),
+                },
+                ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRY",
+            };
+
+            var sent = await ReplyOperations.InvokeAsync(api, "message.send", input, Ct);
+            ReplyOperations.Succeeded("message.send", sent);
+            answers += Answered(sent);
+        }
+
+        // All four went, each found by its value and read before it was sent.
+        Assert.Equal(4, account.Sent.Count);
+        Assert.Equal(4, account.Calls.Count(call => call.Command == "contact find"));
+
+        foreach (var call in account.Calls)
+        {
+            var arguments = string.Join(' ', call.Args);
+            Assert.DoesNotContain('{', arguments);
+            foreach (var value in travelled)
+            {
+                Assert.DoesNotContain(value, arguments, StringComparison.OrdinalIgnoreCase);
+            }
+
+            switch (call.Command)
+            {
+                case "contact find":
+                    Assert.True(call.Body is not null && (call.Body.Contains(Address, StringComparison.Ordinal) || call.Body.Contains(Profile, StringComparison.Ordinal)), $"'{call.Line}' looked up '{call.Body}'.");
+                    break;
+                case "contact send-email":
+                case "contact linkedin-inmail":
+                    Assert.Equal(new JsonObject { ["subject"] = Subject, ["body"] = Text }.ToJsonString(), call.Body);
+                    break;
+                case "contact linkedin-message":
+                    Assert.Equal(new JsonObject { ["body"] = Text }.ToJsonString(), call.Body);
+                    break;
+                case "contact linkedin-voice":
+                    Assert.Equal(new JsonObject { ["script"] = Text }.ToJsonString(), call.Body);
+                    break;
+                default:
+                    Assert.True(call.Body is null, $"'{call.Line}' had '{call.Body}' on stdin.");
+                    break;
+            }
+        }
+
+        Assert.DoesNotContain(Subject, answers, StringComparison.Ordinal);
+        Assert.DoesNotContain(Text, answers, StringComparison.Ordinal);
+        Assert.DoesNotContain(SenderAddress, answers, StringComparison.OrdinalIgnoreCase);
+
+        var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
+        Assert.Contains("\"exec\"", diagnostics, StringComparison.Ordinal);
+        await api.Runtime.StopAsync();
+        var logs = ReadAll(api.Paths.LogsDirectory);
+        Assert.Contains("message.send", logs, StringComparison.Ordinal);
+        foreach (var value in travelled)
+        {
+            Assert.DoesNotContain(value, diagnostics, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(value, logs, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>Everything one invocation answered, whichever way it ended, as one string to look through.</summary>
     private static string Answered(PluginInvocationResult result) => result.Outcome switch
     {
