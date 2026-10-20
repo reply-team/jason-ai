@@ -104,9 +104,14 @@ place a tracker key is allowed: it is how the tracker links the pull request, an
 **Draft while you build, ready when you are done.** Open the pull request as a draft with the first push and keep
 pushing to it. A draft runs the Linux part of the pipeline on each push — the version check, the linux-x64 build and
 suite, an update on linux-x64, the install script on Ubuntu and the UI's checks — so a draft is cheap. Marking it
-ready for review runs the whole pipeline, and so does every push after that. The ruleset lets a pull request merge
-only when every job of the pipeline reports green at the head that merges, so mark it ready once, when the change is
-complete and its description is written.
+ready for review runs the whole pipeline but macOS, whose check reports as skipped, and so does every push after that,
+unless the push changes nothing but documentation since the tree the last whole run tested — Markdown outside
+`runtime/`, `.github/` and `plugins/` that no build compiles and no test runs as code — and then it runs the Linux part
+and reports the rest as skipped. A push to `main` runs the whole pipeline but macOS, unless its tree is the one the
+pull request's last whole run tested, and then only the version check runs. macOS runs on the nightly run on `main`,
+when `main` has moved since the last one that passed, on a run of CI started by hand, and at a release. The ruleset
+lets a pull request merge only when every job of the pipeline reports green at the head that merges, so mark it ready
+once, when the change is complete and its description is written.
 
 **The squash commit is the pull request.** `main` takes one squash commit per pull request, and that commit's message
 is the pull request's title and body; the messages of the branch's own commits never reach `main`. Commit on the

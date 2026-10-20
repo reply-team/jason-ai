@@ -527,9 +527,10 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The checks ci.yml reports, its matrix legs expanded, are exactly the ten this repository's ruleset requires
+    /// The checks ci.yml reports, its matrix legs expanded, are exactly the eleven this repository's ruleset requires
     /// before a pull request merges. A renamed job is a required check that never reports, and every pull request
-    /// would wait for it: a job is renamed here only together with the ruleset.
+    /// would wait for it: a job is renamed here only together with the ruleset. The job that reports a check a rule
+    /// skipped reports it under a name another job's leg has, which CiRunsTests holds, so it adds no name here.
     /// </summary>
     [Fact]
     public void Ci_reports_exactly_the_checks_the_ruleset_requires()
@@ -546,18 +547,16 @@ public class ReleaseWorkflowTests
             "an update on linux-x64",
             "install.sh on ubuntu",
             "install.ps1 on windows",
-        ];
-
-        // Reported on every run and not required by the ruleset: the UI's own checks, which a pull request shows but
-        // does not wait for. Making one required is a ruleset change, made together with moving its name up.
-        string[] optional =
-        [
             "The UI on ubuntu",
         ];
 
+        // Reported and not required by the ruleset: none today. Making one required is a ruleset change, made together
+        // with moving its name up.
+        string[] optional = [];
+
         var jobs = Mapping(Parse(Read(Ci)), "jobs");
         var reported = new List<string>();
-        foreach (var (key, value) in jobs.Children)
+        foreach (var (key, value) in jobs.Children.Where(pair => pair.Key.ToString() != "skipped-by-rule"))
         {
             var job = (YamlMappingNode)value;
             var name = Scalar(job, "name") ?? key.ToString();
@@ -1627,8 +1626,9 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// What a full run's version job hands on as <c>rids</c>: every platform its deciding step is given, comma-separated,
-    /// as the runner puts it into a line — which PowerShell then reads as an array, as it reads a list written out.
+    /// What the version job of a run that runs every check hands on as <c>rids</c>: every platform its deciding step is
+    /// given, comma-separated, as the runner puts it into a line — which PowerShell then reads as an array, as it reads a
+    /// list written out.
     /// </summary>
     private static string FullRunRids()
     {
