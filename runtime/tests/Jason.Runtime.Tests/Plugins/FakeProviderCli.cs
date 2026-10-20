@@ -15,4 +15,17 @@ public static class FakeProviderCli
     public static string ExecutableName => "Jason.FakeProviderCli";
 
     public static string ExecutablePath => Path.Combine(Directory, ExecutableName + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+
+    /// <summary>
+    /// The text whose code points <c>stdin-codepoints</c> answered with: what its standard input carried, decoded as
+    /// UTF-8 by the program itself, so the console's code page of neither side has a say in what is read here.
+    /// </summary>
+    public static string FromCodepoints(string answer)
+    {
+        ArgumentNullException.ThrowIfNull(answer);
+        return string.Concat(
+            answer
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(point => char.ConvertFromUtf32(int.Parse(point, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture))));
+    }
 }

@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using Jason.Contracts.Discovery;
 
 namespace Jason.App.Tests.Processes;
 
@@ -51,5 +53,52 @@ internal static class Offenders
     public static class InAStaticInitializer
     {
         public static readonly ProcessStartInfo Start = new("x");
+    }
+
+    // The streams. Each of these takes a start from the door and then chooses a redirect or an encoding itself, which
+    // is the choice the door makes by what the child is.
+    public static void RedirectsInput(ProcessStartInfo start) => start.RedirectStandardInput = true;
+
+    public static void RedirectsOutput(ProcessStartInfo start) => start.RedirectStandardOutput = true;
+
+    public static void RedirectsError(ProcessStartInfo start) => start.RedirectStandardError = true;
+
+    public static void PicksAnInputEncoding(ProcessStartInfo start) => start.StandardInputEncoding = Encoding.UTF8;
+
+    public static void PicksAnOutputEncoding(ProcessStartInfo start) => start.StandardOutputEncoding = Encoding.UTF8;
+
+    public static void PicksAnErrorEncoding(ProcessStartInfo start) => start.StandardErrorEncoding = Encoding.UTF8;
+
+    public static Action<ProcessStartInfo> RedirectsInALambda() => start => start.RedirectStandardOutput = true;
+
+    public static async Task RedirectsInAnAsyncMethod(ProcessStartInfo start)
+    {
+        await Task.Yield();
+        start.StandardOutputEncoding = Encoding.UTF8;
+    }
+
+    public static IEnumerable<ProcessStartInfo> RedirectsInAnIterator()
+    {
+        var start = ChildProcess.StartInfo("x");
+        start.RedirectStandardInput = true;
+        yield return start;
+    }
+
+    public static ProcessStartInfo RedirectsInALocalFunction()
+    {
+        return Redirect(ChildProcess.StartInfo("x"));
+
+        static ProcessStartInfo Redirect(ProcessStartInfo start)
+        {
+            start.StandardInputEncoding = Encoding.UTF8;
+            return start;
+        }
+    }
+
+    public static void RedirectsInAGenericMethod<T>(T name) => ChildProcess.StartInfo(name?.ToString() ?? "x").RedirectStandardError = true;
+
+    public static class RedirectsInAStaticInitializer
+    {
+        public static readonly bool Redirected = ChildProcess.StartInfo("x").RedirectStandardOutput = true;
     }
 }

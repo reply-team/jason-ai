@@ -147,11 +147,9 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
         var home = resolved.Launch.Count > 0
             ? Path.GetDirectoryName(resolved.Launch[0])!
             : Path.GetDirectoryName(resolved.Path)!;
-        var start = ChildProcess.StartInfo(resolved.Path);
+        // A version check is a system program's answer, read in the console's code page as it is written.
+        var start = ChildProcess.StartInfo(resolved.Path, ChildKind.SystemToolWithInput);
         start.WorkingDirectory = home;
-        start.RedirectStandardInput = true;
-        start.RedirectStandardOutput = true;
-        start.RedirectStandardError = true;
 
         // The pair the runtime resolved, then the version command: what is checked has to be what will be
         // started, or the check is about a different program than the one a plugin will reach.

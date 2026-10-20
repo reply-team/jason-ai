@@ -52,9 +52,6 @@ public sealed partial class PluginInvoker(
 
     private const int RejectedExitCode = 3;
 
-    /// <summary>Both sides of every pipe speak one encoding, chosen here rather than inherited from a console.</summary>
-    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
-
     private static readonly Action<ILogger, string, string, string, string, string, int, Exception?> Started =
         LoggerMessage.Define<string, string, string, string, string, int>(
             LogLevel.Information,
@@ -539,15 +536,10 @@ public sealed partial class PluginInvoker(
 
     private static ProcessStartInfo StartInfo(IReadOnlyList<string> command, string workDir, InvocationGrants grants)
     {
-        // Qualified: this namespace has a ChildProcess of its own, the one that waits for a child to end.
-        var startInfo = Jason.Contracts.Discovery.ChildProcess.StartInfo(command[0]);
+        // Qualified: this namespace has a ChildProcess of its own, the one that waits for a child to end. Both sides of
+        // every pipe speak one encoding, the door's rather than a console's.
+        var startInfo = Jason.Contracts.Discovery.ChildProcess.StartInfo(command[0], ChildKind.SpeaksToJason);
         startInfo.WorkingDirectory = workDir;
-        startInfo.RedirectStandardInput = true;
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
-        startInfo.StandardInputEncoding = Utf8;
-        startInfo.StandardOutputEncoding = Utf8;
-        startInfo.StandardErrorEncoding = Utf8;
 
         // One argument at a time, so nothing has to be quoted and no shell ever sees any of it.
         for (var index = 1; index < command.Count; index++)

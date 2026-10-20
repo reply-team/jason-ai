@@ -738,14 +738,9 @@ public sealed class ReplyAccount : IDisposable
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var info = new ProcessStartInfo(StandInPath)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        // Spoken to as the runtime's own plugin host speaks to it, UTF-8 both ways through the product's one door, so
+        // what a row sends and reads back is not left to this console's code page.
+        var info = Jason.Contracts.Discovery.ChildProcess.StartInfo(StandInPath, Jason.Contracts.Discovery.ChildKind.SpeaksToJason);
 
         foreach (var argument in args)
         {

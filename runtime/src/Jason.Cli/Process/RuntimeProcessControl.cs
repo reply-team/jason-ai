@@ -85,10 +85,9 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         ArgumentNullException.ThrowIfNull(paths);
 
         var (fileName, arguments) = Resolve(executable);
-        var startInfo = ChildProcess.StartInfo(fileName);
-        startInfo.RedirectStandardInput = true;
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
+        // The runtime speaks to Jason: the one sentence it may say before it lets go of its streams is written as UTF-8,
+        // and read as UTF-8 here whatever this console's code page.
+        var startInfo = ChildProcess.StartInfo(fileName, ChildKind.SpeaksToJason);
 
         foreach (var argument in arguments)
         {

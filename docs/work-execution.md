@@ -350,7 +350,8 @@ existed. It is the same rule the twelve provider checks follow.
 
 The child is started in a per-attempt **work directory**, `~/.jason/work/<wi_…>/<att_…>/`, which the
 launcher creates. Its standard output and standard error are written there as `stdout.log` and
-`stderr.log`. Nothing is cleaned up in this version.
+`stderr.log`, both read from the child as UTF-8 on every platform, whatever the console's code page,
+and written as UTF-8 without a byte-order mark. Nothing is cleaned up in this version.
 
 Both files stop growing past `Roles:MaxStdoutBytes` and end with the line
 

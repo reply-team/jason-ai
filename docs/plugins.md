@@ -392,7 +392,7 @@ was actually started is on the record rather than inferred from the name.
 |---|---|
 | `executable` | required string, at most 256 characters, a granted name |
 | `args` | at most 256 strings, at most 1 MiB together |
-| `stdin` | string of at most 1 MiB, written and then closed |
+| `stdin` | string of at most 1 MiB, written as UTF-8 without a byte-order mark, then closed |
 | `timeout_ms` | 1 .. the invocation's `timeout_ms`, then clamped to what is left of the budget; default: what is left, less the kill grace |
 | `env` | at most 32 entries, names `^[A-Za-z_][A-Za-z0-9_]*$`, never `JASON_*` and never a loader or interpreter hook, values at most 4096 bytes, for this child only |
 
@@ -404,8 +404,10 @@ as `exec_env_not_allowed`: `LD_*`, `DYLD_*`, `COMPlus_*`,
 `PYTHONSTARTUP`, `RUBYOPT`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `CLASSPATH`, `PATH`, `PATHEXT`,
 `COMSPEC` and `SHELL` among them. Ordinary variables of the same runtimes — `NODE_ENV`,
 `DOTNET_NOLOGO`, `PYTHONUNBUFFERED` — are yours to set. `stdout` and
-`stderr` are captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes kept and the
-crossing flagged in `truncated`. A call's **kill grace** is the smaller of 5 s and half of what is
+`stderr` are read as UTF-8 and captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes
+kept and the crossing flagged in `truncated`. UTF-8 is the rule on every platform, whatever the console's
+code page — what a node program reads and writes on a pipe — so a name or a message outside ASCII reaches
+the program as it was written. A call's **kill grace** is the smaller of 5 s and half of what is
 left of the budget when the call is made — with 20 s left, a call without `timeout_ms` runs for 15 s
 and keeps a grace of 5 s; with 4 s left, 2 s and 2 s. Kept back from a call that asked for no timeout,
 it means the plugin is told its program timed out while it still has time to answer for itself. On a
@@ -940,6 +942,13 @@ jason plugin-host --protocol 1 --plugin <id> --operation <op> --correlation <id>
 All four are required, order does not matter, and nothing else is accepted. They are public values a
 process listing may show, and they are repeated inside the envelope — the child refuses a
 disagreement. Everything else, the input, the binding and the resolved grants included, is on stdin.
+
+The wire is **ASCII both ways**. Each stream is UTF-8 without a byte-order mark, and the envelope and
+the outcome are JSON with each character outside ASCII written as an escape, so not one byte above 127
+crosses in either. That is a second defence beside the encoding: a child started without a window of
+its own is given a fresh console on the system's legacy code page, and a byte above 127 would be read
+through that page by a program that did not choose an encoding, whatever encoding it was written in. An
+escape reads the same in any page.
 
 ### The envelope: stdin, one JSON object, then end of file
 

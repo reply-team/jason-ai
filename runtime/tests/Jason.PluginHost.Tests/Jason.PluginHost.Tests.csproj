@@ -14,5 +14,7 @@
     <Compile Include="../Jason.Runtime.Tests/CompiledCalls.cs" Link="CompiledCalls.cs" />
     <!-- The one table of LinkedIn profile links, which host.channelKey is held to through the whole mode. -->
     <Compile Include="../Jason.Contracts.Tests/Channels/LinkedInKeyVectors.cs" Link="LinkedInKeyVectors.cs" />
+    <!-- The legacy console page a row about a child's streams sets for itself, so host.exec is held to UTF-8 on any runner. -->
+    <Compile Include="../Jason.Runtime.Tests/LegacyConsolePage.cs" Link="LegacyConsolePage.cs" />
   </ItemGroup>
 </Project>

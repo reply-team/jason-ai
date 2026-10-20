@@ -11,6 +11,15 @@ using Microsoft.Win32.SafeHandles;
 const int UnknownBehaviour = 2;
 const int StandardInputHandle = -10;
 
+// Read and written as the program it stands in for: node reads its standard input as UTF-8 and writes UTF-8 to a pipe,
+// whatever the console's code page. A stand-in that used the console's page would agree with a caller making the same
+// mistake and hide it. No byte-order mark is looked for, as node's JSON.parse looks for none: a preamble arrives as a
+// character of the text, and bytes that are not UTF-8 end the program instead of reading as something.
+var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+Console.SetIn(new StreamReader(Console.OpenStandardInput(), utf8, detectEncodingFromByteOrderMarks: false));
+Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true });
+Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
+
 if (args.Length == 0)
 {
     await Console.Error.WriteLineAsync("fake-cli: unknown behaviour");
@@ -179,12 +188,31 @@ switch (args[0])
         {
             // The bytes that arrived on stdin, decoded here as UTF-8 and said back as code points in ASCII: this console's
             // code page decides nothing, and bytes that are not UTF-8 end the program instead of reading as something.
+            // Said into the file named next, when there is one, for a caller that reads this program's stdout as
+            // something else: a plugin host's caller reads it as an outcome.
             using var input = Console.OpenStandardInput();
             using var bytes = new MemoryStream();
             await input.CopyToAsync(bytes);
-            var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes.ToArray());
-            await Console.Out.WriteAsync(string.Join(' ', text.EnumerateRunes().Select(rune => rune.Value.ToString("X4", CultureInfo.InvariantCulture))));
+            var text = utf8.GetString(bytes.ToArray());
+            var points = string.Join(' ', text.EnumerateRunes().Select(rune => rune.Value.ToString("X4", CultureInfo.InvariantCulture)));
+            if (args.Length > 1)
+            {
+                await File.WriteAllTextAsync(args[1], points);
+                return 0;
+            }
+
+            await Console.Out.WriteAsync(points);
             await Console.Out.FlushAsync();
+            return 0;
+        }
+
+    case "echo-stdin":
+        {
+            // Its standard input said back on both of its outputs, character for character: whatever was lost on the
+            // way in, or on the way back, shows as a difference from the text the caller sent.
+            var text = await Console.In.ReadToEndAsync();
+            await Console.Out.WriteAsync(text);
+            await Console.Error.WriteAsync(text);
             return 0;
         }
 

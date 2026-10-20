@@ -12,6 +12,15 @@
 // never on the command line: it finds its store the way the real CLI does, from the platform's own configuration
 // directory and the profile name.
 
+// Read and written as reply-cli is, a node program: UTF-8 on every stream, whatever the console's code page, with no
+// byte-order mark looked for, as node's JSON.parse looks for none. A stand-in that used the console's page would agree
+// with a caller making the same mistake and hide it; bytes that are not UTF-8 end the program instead of reading as
+// something.
+var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+Console.SetIn(new StreamReader(Console.OpenStandardInput(), utf8, detectEncodingFromByteOrderMarks: false));
+Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true });
+Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
+
 // Answered before anything else: a manifest that declares a minimum version makes a reload run this on whatever it
 // resolved, long before any account is involved. reply-cli prints the bare version.
 if (args.Length == 1 && (args[0] == "--version" || args[0] == "-v"))

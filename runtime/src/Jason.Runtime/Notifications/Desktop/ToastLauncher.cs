@@ -38,30 +38,22 @@ public sealed class ProcessToastLauncher : IToastLauncher
     /// <summary>How long a killed child is waited for before it is left to the operating system.</summary>
     private const int KillGraceMs = 2_000;
 
-    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
-
     public async Task<LaunchResult> LaunchAsync(ToastLaunch launch, TimeSpan bound, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(launch);
 
-        var start = Jason.Contracts.Discovery.ChildProcess.StartInfo(launch.Command[0]);
+        // UTF-8 without a byte-order mark both ways, the door's rule for a child that speaks to Jason: left to itself,
+        // stdin is written in the parent's console code page, which a runtime started at logon does not even have. What
+        // holds for the toast host is narrower: its payload and its outcome are escaped JSON, ASCII on the wire, so the
+        // OEM code page its fresh console reads stdin and writes stdout through never meets a byte above 127. Its stderr
+        // is its own words, and a localized Windows message in them is written in that page: the kept tail may read it
+        // wrong.
+        var start = Jason.Contracts.Discovery.ChildProcess.StartInfo(launch.Command[0], Jason.Contracts.Discovery.ChildKind.SpeaksToJason);
         foreach (var argument in launch.Command.Skip(1))
         {
             start.ArgumentList.Add(argument);
         }
 
-        start.RedirectStandardInput = true;
-        start.RedirectStandardOutput = true;
-        start.RedirectStandardError = true;
-
-        // UTF-8 without a byte-order mark both ways, as the plugin host's child is spoken to: left to itself, stdin is
-        // written in the parent's console code page, which a runtime started at logon does not even have. What holds
-        // for the toast host is narrower: its payload and its outcome are escaped JSON, ASCII on the wire, so the OEM code
-        // page its fresh console reads stdin and writes stdout through never meets a byte above 127. Its stderr is its own
-        // words, and a localized Windows message in them is written in that page: the kept tail may read it wrong.
-        start.StandardInputEncoding = Utf8;
-        start.StandardOutputEncoding = Utf8;
-        start.StandardErrorEncoding = Utf8;
         start.Environment.Clear();
         foreach (var (name, value) in launch.Environment)
         {

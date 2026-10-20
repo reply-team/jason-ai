@@ -62,7 +62,7 @@ internal static class Behaviours
     /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
     public static bool Known(string behaviour) =>
         behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope"
-            or "abandon" or "flood" or "researcher" or "manager";
+            or "abandon" or "flood" or "researcher" or "manager" or "say";
 
     /// <summary>
     /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
@@ -110,6 +110,8 @@ internal static class Behaviours
                 return await ResearcherAsync(options, envelope, api).ConfigureAwait(false);
             case "echo-envelope":
                 return await EchoEnvelopeAsync(rawEnvelope).ConfigureAwait(false);
+            case "say":
+                return await SayAsync(options).ConfigureAwait(false);
             default:
                 await Diagnostics.WriteAsync($"unknown behaviour '{behaviour}'").ConfigureAwait(false);
                 return UnknownBehaviour;
@@ -250,6 +252,18 @@ internal static class Behaviours
         await Diagnostics.WriteAsync($"token={token}").ConfigureAwait(false);
         await CompleteAsync(envelope, api, new JsonObject { ["summary"] = "done" }).ConfigureAwait(false);
         return Success;
+    }
+
+    /// <summary>
+    /// One line of its own on stdout and one on stderr, as an agent writes them, and then gone with the crash's exit
+    /// code: what the launcher kept of either line, in the transcript or in the words the attempt ended with, can be
+    /// read against the text the test chose.
+    /// </summary>
+    private static async Task<int> SayAsync(IReadOnlyList<string> options)
+    {
+        await Console.Out.WriteLineAsync(Option(options, "--stdout") ?? string.Empty).ConfigureAwait(false);
+        await Console.Error.WriteLineAsync(Option(options, "--stderr") ?? string.Empty).ConfigureAwait(false);
+        return Crashed;
     }
 
     /// <summary>Writes back exactly what it was handed, so a test can assert on the envelope the launcher composed.</summary>

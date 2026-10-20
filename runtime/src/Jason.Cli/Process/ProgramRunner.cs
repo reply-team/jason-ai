@@ -57,9 +57,7 @@ public static class ProgramRunners
             ArgumentException.ThrowIfNullOrWhiteSpace(program);
             ArgumentNullException.ThrowIfNull(arguments);
 
-            var startInfo = ChildProcess.StartInfo(program);
-            startInfo.RedirectStandardOutput = true;
-            startInfo.RedirectStandardError = true;
+            var startInfo = ChildProcess.StartInfo(program, ChildKind.SystemTool);
             startInfo.WorkingDirectory = workingDirectory ?? string.Empty;
 
             // One by one, so nothing has to be quoted and no shell ever sees them.

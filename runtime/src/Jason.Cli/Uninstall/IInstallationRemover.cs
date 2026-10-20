@@ -439,10 +439,7 @@ public static class InstallationRemovers
                 + $"for ($attempt = 0; $attempt -lt 40 -and (Test-Path -LiteralPath {target}); $attempt++) "
                 + $"{{ Remove-Item -LiteralPath {target} -Recurse -Force; if (Test-Path -LiteralPath {target}) {{ Start-Sleep -Milliseconds 250 }} }}");
 
-            var start = ChildProcess.StartInfo(powershell);
-            start.RedirectStandardInput = true;
-            start.RedirectStandardOutput = true;
-            start.RedirectStandardError = true;
+            var start = ChildProcess.StartInfo(powershell, ChildKind.SystemToolWithInput);
             foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", script })
             {
                 start.ArgumentList.Add(argument);

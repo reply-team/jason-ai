@@ -406,6 +406,25 @@ public class ProtocolFailureTests
         Assert.Equal(FailureClass.Transient, OutcomeClassification.ClassOf(failure.Code));
     }
 
+    /// <summary>
+    /// The invocation is ASCII on the wire whatever its input holds: every character outside ASCII crosses as an
+    /// escape, a second defence beside the encoding the door chooses. The child in the host's place reads the bytes
+    /// itself and writes their code points to a file, since what it says on stdout is read as an outcome.
+    /// </summary>
+    [Fact]
+    public async Task The_invocation_is_ascii_on_the_wire_whatever_its_input_holds()
+    {
+        using var directory = new TempTree();
+        var said = Path.Combine(directory.Root, "codepoints.txt");
+        await using var api = await StartAsync(Child("stdin-codepoints", said));
+
+        await InvokeAsync(api, input: new JsonObject { ["note"] = "José 😀" });
+
+        var wire = FakeProviderCli.FromCodepoints(await File.ReadAllTextAsync(said, Ct));
+        Assert.True(wire.Length > 0 && wire.All(char.IsAscii), $"The invocation crossed as '{wire}'.");
+        Assert.Equal("José 😀", (string?)JsonNode.Parse(wire)!["input"]!["note"]);
+    }
+
     /// <summary>The stand-in vendor CLI, which ignores the protocol arguments the invoker appends to its own.</summary>
     private static CommandLocator Child(params string[] behaviour) =>
         new(["dotnet", FakeProviderCli.Dll, .. behaviour]);

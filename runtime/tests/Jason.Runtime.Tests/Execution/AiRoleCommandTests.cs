@@ -177,6 +177,24 @@ public class AiRoleCommandTests
         Assert.Equal(ProgramResolver.DefaultCliCommand, envelope.Runtime.CliCommand);
     }
 
+    /// <summary>
+    /// The envelope is ASCII on the wire whatever its context holds: every character outside ASCII crosses as an escape.
+    /// That is a second defence beside the encoding the door chooses, the one an agent that read its input in another
+    /// page would still survive. The child reads the bytes itself and answers with their code points.
+    /// </summary>
+    [Fact]
+    public async Task The_envelope_is_ascii_on_the_wire_whatever_its_context_holds()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        await RunAsync(directory.Paths, workDir, [Plugins.FakeProviderCli.ExecutablePath, "stdin-codepoints"], brief: new JsonObject { ["note"] = "José 😀" });
+
+        var wire = Plugins.FakeProviderCli.FromCodepoints(await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct));
+        Assert.True(wire.Length > 0 && wire.All(char.IsAscii), $"The envelope crossed as '{wire}'.");
+        Assert.Equal("José 😀", (string?)JsonNode.Parse(wire)!["context"]!["note"]);
+    }
+
     [Fact]
     public async Task The_child_is_told_which_attempt_it_is_and_finds_the_cli_first_on_its_path()
     {
@@ -281,7 +299,8 @@ public class AiRoleCommandTests
         IReadOnlyList<string> entryCommand,
         CancellationTokenSource? kill = null,
         IReadOnlyList<string>? deny = null,
-        RolesOptions? roles = null)
+        RolesOptions? roles = null,
+        JsonObject? brief = null)
     {
         var command = new AiRoleCommand(paths, new TokenRedactor(new RuntimeSecrets(Token)), TestOptions.RoleSettings(roles), NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
@@ -293,7 +312,7 @@ public class AiRoleCommandTests
             WorkItemKind.AiRole,
             "researcher",
             null,
-            new JsonObject { ["goal"] = "find the decision maker" },
+            brief ?? new JsonObject { ["goal"] = "find the decision maker" },
             null,
             new EffectiveLimits(1800, 120, 3),
             new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero),

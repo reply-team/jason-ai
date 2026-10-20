@@ -158,9 +158,7 @@ public static class AutostartRegistrars
     /// <summary>Runs one command and says what it said. Nothing here is a shell, and nothing opens a window.</summary>
     internal static (int Exit, string Output, string Error) Run(IReadOnlyList<string> command)
     {
-        var start = ChildProcess.StartInfo(command[0]);
-        start.RedirectStandardOutput = true;
-        start.RedirectStandardError = true;
+        var start = ChildProcess.StartInfo(command[0], ChildKind.SystemTool);
 
         foreach (var argument in command.Skip(1))
         {

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
@@ -8,6 +9,14 @@ using Jason.FakeAgentHost;
 // dispatcher has to survive is one of these behaviours, so nothing in the test suite has to pretend to be a
 // process.
 const int UnreadableEnvelope = 64;
+
+// Read and written as an agent host is: UTF-8 on every stream, whatever the console's code page, with no byte-order
+// mark looked for. A stand-in that used the console's page would agree with a launcher making the same mistake and
+// hide it; bytes that are not UTF-8 make an envelope this host cannot read.
+var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+Console.SetIn(new StreamReader(Console.OpenStandardInput(), utf8, detectEncodingFromByteOrderMarks: false));
+Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true });
+Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
 
 // Not a behaviour and not a host: this program asked to hold a pipe open. It reads no envelope and answers
 // nothing, because what it is for is being something a finished host left behind.

@@ -71,11 +71,10 @@ public sealed class AiRoleCommand(
         // under, and whether it was taught anything at all.
         launch = launch with { Deny = context.Deny, RoleSkill = prepared.Skill };
 
-        var startInfo = ChildProcess.StartInfo(context.EntryCommand[0]);
+        // An agent speaks to Jason, and writes UTF-8: its transcript and the words it ends with are read as UTF-8,
+        // whatever this console's code page.
+        var startInfo = ChildProcess.StartInfo(context.EntryCommand[0], ChildKind.SpeaksToJason);
         startInfo.WorkingDirectory = context.WorkDir;
-        startInfo.RedirectStandardInput = true;
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
 
         // The first element is the program; the rest are arguments, passed one by one so nothing has to be
         // quoted and no shell ever sees them.

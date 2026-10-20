@@ -145,11 +145,10 @@ public sealed partial class ExecService(HostServices services)
     {
         Spending?.Invoke(timeout, grace);
         var watch = Stopwatch.StartNew();
-        var startInfo = ChildProcess.StartInfo(executable.Path);
+        // A plugin's program speaks to Jason: what the plugin hands it on stdin is written as UTF-8, whatever this
+        // console's code page, and what it says is read back as UTF-8 by the captures below.
+        var startInfo = ChildProcess.StartInfo(executable.Path, ChildKind.SpeaksToJason);
         startInfo.WorkingDirectory = services.WorkingDirectory;
-        startInfo.RedirectStandardInput = true;
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
 
         // What the runtime resolved this name to, ahead of anything the plugin asked for. A plugin never sees
         // these and can never set them: they are how a program the user granted is actually started — node and

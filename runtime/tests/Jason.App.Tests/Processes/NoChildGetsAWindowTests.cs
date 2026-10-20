@@ -6,7 +6,8 @@ using Jason.Contracts.Discovery;
 namespace Jason.App.Tests.Processes;
 
 /// <summary>
-/// No child this product starts gets a console window of its own: the compiled product, read.
+/// No child this product starts gets a console window of its own, or standard streams its caller chose rather than
+/// the door: the compiled product, read.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,23 +34,41 @@ public class NoChildGetsAWindowTests
     ];
 
     /// <summary>
-    /// No child gets a window, as a property of what ships. The runtime a logon task starts has no console, so a
-    /// child it starts without <c>CreateNoWindow</c> puts a window on the person's desktop for as long as it runs.
-    /// Every child therefore comes out of <see cref="ChildProcess.StartInfo"/>, and nothing afterwards turns the
-    /// window back on.
+    /// What only the door sets. The window and the shell, which no child is given. And the standard streams, which
+    /// the door redirects and decodes by what the child is: UTF-8 for a child that speaks to Jason, the console's code
+    /// page for a system tool. Left to itself, .NET reads and writes a redirected stream on Windows in the console's
+    /// page, and a child started without a window of its own has a console on the system's legacy page; a caller that
+    /// redirected a stream itself would be one place more to remember the encoding in, and one such place forgot it.
+    /// </summary>
+    private static readonly HashSet<string> TheDoorsOwn =
+    [
+        nameof(ProcessStartInfo.CreateNoWindow),
+        nameof(ProcessStartInfo.UseShellExecute),
+        nameof(ProcessStartInfo.RedirectStandardInput),
+        nameof(ProcessStartInfo.RedirectStandardOutput),
+        nameof(ProcessStartInfo.RedirectStandardError),
+        nameof(ProcessStartInfo.StandardInputEncoding),
+        nameof(ProcessStartInfo.StandardOutputEncoding),
+        nameof(ProcessStartInfo.StandardErrorEncoding),
+    ];
+
+    /// <summary>
+    /// No child gets a window, and none speaks in an encoding its caller chose, as a property of what ships. The
+    /// runtime a logon task starts has no console, so a child it starts without <c>CreateNoWindow</c> puts a window
+    /// on the person's desktop for as long as it runs. Every child therefore comes out of <see cref="ChildProcess"/>,
+    /// and nothing afterwards turns the window back on or picks its streams again.
     /// </summary>
     [Fact]
     public void Only_the_door_makes_a_start_and_nothing_undoes_what_it_sets()
     {
-        var door = typeof(ChildProcess).GetMethod(nameof(ChildProcess.StartInfo))!;
         var offenders = Product
             .SelectMany(IlReferences.Methods)
-            .Where(method => method != door)
+            .Where(method => method.DeclaringType != typeof(ChildProcess))
             .SelectMany(method => Forbidden(method).Select(reason => $"{Name(method)} {reason}"))
             .Distinct()
             .ToList();
 
-        Assert.True(offenders.Count == 0, "a child could get a window: " + string.Join("; ", offenders));
+        Assert.True(offenders.Count == 0, "a child could get a window or streams the door did not choose: " + string.Join("; ", offenders));
     }
 
     /// <summary>
@@ -87,6 +106,18 @@ public class NoChildGetsAWindowTests
     [InlineData(nameof(Offenders.InAnIterator), "makes a ProcessStartInfo")]
     [InlineData(nameof(Offenders.InALocalFunction), "makes a ProcessStartInfo")]
     [InlineData(nameof(Offenders.InAGenericMethod), "makes a ProcessStartInfo")]
+    [InlineData(nameof(Offenders.RedirectsInput), "sets RedirectStandardInput")]
+    [InlineData(nameof(Offenders.RedirectsOutput), "sets RedirectStandardOutput")]
+    [InlineData(nameof(Offenders.RedirectsError), "sets RedirectStandardError")]
+    [InlineData(nameof(Offenders.PicksAnInputEncoding), "sets StandardInputEncoding")]
+    [InlineData(nameof(Offenders.PicksAnOutputEncoding), "sets StandardOutputEncoding")]
+    [InlineData(nameof(Offenders.PicksAnErrorEncoding), "sets StandardErrorEncoding")]
+    [InlineData(nameof(Offenders.RedirectsInALambda), "sets RedirectStandardOutput")]
+    [InlineData(nameof(Offenders.RedirectsInAnAsyncMethod), "sets StandardOutputEncoding")]
+    [InlineData(nameof(Offenders.RedirectsInAnIterator), "sets RedirectStandardInput")]
+    [InlineData(nameof(Offenders.RedirectsInALocalFunction), "sets StandardInputEncoding")]
+    [InlineData(nameof(Offenders.RedirectsInAGenericMethod), "sets RedirectStandardError")]
+    [InlineData(nameof(Offenders.RedirectsInAStaticInitializer), "sets RedirectStandardOutput")]
     public void The_guard_sees_every_way_around_the_door(string method, string reason)
     {
         // A lambda's body, an async method's, an iterator's and a local function's are compiled into methods whose
@@ -112,13 +143,9 @@ public class NoChildGetsAWindowTests
                 {
                     yield return "makes a ProcessStartInfo";
                 }
-                else if (called.Name == "set_CreateNoWindow")
+                else if (called.Name.StartsWith("set_", StringComparison.Ordinal) && TheDoorsOwn.Contains(called.Name[4..]))
                 {
-                    yield return "sets CreateNoWindow";
-                }
-                else if (called.Name == "set_UseShellExecute")
-                {
-                    yield return "sets UseShellExecute";
+                    yield return $"sets {called.Name[4..]}";
                 }
             }
             else if (called.DeclaringType == typeof(Process))

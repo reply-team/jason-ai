@@ -35,5 +35,7 @@
     <Compile Include="../Jason.Runtime.Tests/Logging/ReviewedLogProperties.cs" Link="EndToEnd/ReviewedLogProperties.cs" />
     <!-- The one rule against a test matching a sentence the system words in the machine's language: each test assembly reads itself. -->
     <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
+    <!-- The legacy console page a row about a child's streams runs under, so the CLI's start of a runtime is held to UTF-8 on any runner. -->
+    <Compile Include="../Jason.Runtime.Tests/LegacyConsolePage.cs" Link="EndToEnd/LegacyConsolePage.cs" />
   </ItemGroup>
 </Project>
