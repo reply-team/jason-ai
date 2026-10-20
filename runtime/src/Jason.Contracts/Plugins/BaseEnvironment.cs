@@ -12,7 +12,9 @@ public static class BaseEnvironment
 
     /// <summary>
     /// Copied on every operating system. The proxy variables are machine configuration, not plugin secrets: the
-    /// host's own HTTP client honours them and a vendor CLI behind a corporate proxy needs them equally.
+    /// host's own HTTP client honours them and a vendor CLI behind a corporate proxy needs them equally. So is the
+    /// globalization mode .NET runs this process in: it decides how a letter is lowercased and composed, and the plugin
+    /// host keys a value with <c>host.channelKey</c> as its runtime does only when it runs in the same mode.
     /// </summary>
     public static IReadOnlyList<string> Common { get; } =
     [
@@ -24,6 +26,10 @@ public static class BaseEnvironment
         "http_proxy",
         "https_proxy",
         "no_proxy",
+        "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT",
+        "DOTNET_SYSTEM_GLOBALIZATION_USENLS",
+        "DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY",
+        "DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU",
     ];
 
     public static IReadOnlyList<string> Windows { get; } =

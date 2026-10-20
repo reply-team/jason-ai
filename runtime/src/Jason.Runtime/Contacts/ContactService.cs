@@ -47,7 +47,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         string? value = null;
         if (!string.IsNullOrWhiteSpace(request.Channel))
         {
-            channel = ChannelRules.NormalizeChannelName(request.Channel, "channel", errors);
+            channel = ChannelValidation.Name(request.Channel, "channel", errors);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Value))
@@ -58,7 +58,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
             }
             else if (channel is not null)
             {
-                value = ChannelRules.NormalizeValue(channel, request.Value, "value", errors);
+                value = ChannelValidation.Value(channel, request.Value, "value", errors);
             }
         }
 

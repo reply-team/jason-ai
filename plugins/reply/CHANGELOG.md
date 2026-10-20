@@ -18,11 +18,13 @@ absorbed by a release of this package alone.
   the invitation consumes first, and one that carries another is never changed. Reply refuses notes over 200 characters,
   and the document holds a note to that. A person who is already a connection answers `already_connected`, and an
   invitation whose answer was lost is never sent again: its document says `never`.
-- `conversation.reply` and the invitation compare a LinkedIn profile as the runtime keys it, a letter written outside
-  ASCII by its escape included, so a thread whose person's profile carries one is answered rather than refused. A link
-  that steps back up its path, or carries a `%` that starts no escape, is refused. Only Reply's spelling is keyed; the
-  profile Jason stored is compared as it stands, so a stop recorded under one spelling is never reached through another
-  the register keeps apart.
+- A LinkedIn profile is keyed by `host.channelKey`, the runtime's own rule, rather than by a copy of it here: the
+  profile's name after `/in/`, decoded once, composed and lowercased, whatever host of linkedin.com's, scheme, slashes,
+  query or fragment it carries. `conversation.reply` and the invitation compare Reply's spelling by that key, so a
+  thread whose person's profile Reply spells another way is answered rather than refused, and a value the runtime keys
+  as no profile is nobody's. The profile Jason stored is compared as it stands, and one that is not a key is never
+  written onto a contact. A name outside ASCII reaches the CLI as its letters, not as its percent-escapes. The package
+  needs Jason 0.13.0 or newer, which has `host.channelKey`.
 
 ## 0.4.0
 

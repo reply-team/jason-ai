@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Channels;
 using Jason.Contracts.Ids;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -71,7 +72,9 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
 
         var actor = Actors.Resolve(request.Actor);
         var errors = new ValidationErrors();
-        var (channel, value) = Normalize(request.Channel, request.Value, errors);
+        var named = ChannelRules.NormalizeChannelName(request.Channel, out _);
+        var left = named is null ? null : await LeftAsItStoodAsync(named, request.Value, cancellationToken).ConfigureAwait(false);
+        var (channel, value) = left is not null ? (named, left.Value) : Normalize(request.Channel, request.Value, errors);
         if (string.IsNullOrWhiteSpace(request.Reason))
         {
             errors.Add("reason", "required", "reason is required: putting somebody back in reach has to be explainable later.");
@@ -79,7 +82,7 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
 
         errors.ThrowIfAny();
 
-        var existing = await FindAsync(channel!, value!, cancellationToken).ConfigureAwait(false);
+        var existing = left ?? await FindAsync(channel!, value!, cancellationToken).ConfigureAwait(false);
         if (existing is null)
         {
             return new SuppressionRemovedDto(channel!, value!, false);
@@ -101,7 +104,7 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
         string? value = null;
         if (!string.IsNullOrWhiteSpace(request.Channel))
         {
-            channel = ChannelRules.NormalizeChannelName(request.Channel, "channel", errors);
+            channel = ChannelValidation.Name(request.Channel, "channel", errors);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Value))
@@ -113,7 +116,9 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
             }
             else if (channel is not null)
             {
-                value = ChannelRules.NormalizeValue(channel, request.Value, "value", errors);
+                value = await LeftAsItStoodAsync(channel, request.Value, cancellationToken).ConfigureAwait(false) is { } left
+                    ? left.Value
+                    : ChannelValidation.Value(channel, request.Value, "value", errors);
             }
         }
 
@@ -144,13 +149,13 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
     /// <summary>Both parts are required; the channel decides the rule the value is normalized with.</summary>
     private static (string? Channel, string? Value) Normalize(string? rawChannel, string? rawValue, ValidationErrors errors)
     {
-        var channel = ChannelRules.NormalizeChannelName(rawChannel, "channel", errors);
+        var channel = ChannelValidation.Name(rawChannel, "channel", errors);
 
         // Without a usable channel there is no rule to normalize the value with, but a missing value is still
         // reported: one round trip has to name every problem the payload has.
         var value = channel is null
             ? Missing(rawValue, errors)
-            : ChannelRules.NormalizeValue(channel, rawValue, "value", errors);
+            : ChannelValidation.Value(channel, rawValue, "value", errors);
 
         return (channel, value);
     }
@@ -164,6 +169,17 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
 
         return null;
     }
+
+    /// <summary>
+    /// The entry kept under exactly the text given, trimmed, looked up before the channel's rule is asked anything: the text
+    /// is keyed, and the key looked up, only where no entry holds the text itself. So an entry the start that re-keyed the
+    /// register left as it stood — beside the entry holding its key, or under a text the rule now refuses, whatever it
+    /// refuses it for — is listed and lifted by its own text, and lifting it leaves the entry holding the key, and the stop
+    /// it makes, where they are. A text that is its own key finds the entry holding it on this step. Null where nothing was
+    /// given or no entry holds the text.
+    /// </summary>
+    private async Task<Suppression?> LeftAsItStoodAsync(string channel, string? raw, CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(raw) ? null : await FindAsync(channel, raw.Trim(), cancellationToken).ConfigureAwait(false);
 
     private Task<Suppression?> FindAsync(string channel, string value, CancellationToken cancellationToken) =>
         db.Suppressions.FirstOrDefaultAsync(suppression => suppression.Channel == channel && suppression.Value == value, cancellationToken);

@@ -727,13 +727,13 @@ public class PluginInvokerTests
         TimeSpan? timeout = null) =>
         new(plugin ?? TestPlugins.FakeProviderId, operation, input, null, "att_01K0" + operation.Replace('.', '_'), Timeout: timeout);
 
-    private static JsonObject Exec(string variable) => new()
+    internal static JsonObject Exec(string variable) => new()
     {
         ["executable"] = FakeProviderCli.ExecutableName,
         ["args"] = new JsonArray("print-env", variable),
     };
 
-    private static string Stdout(PluginInvocationResult result) =>
+    internal static string Stdout(PluginInvocationResult result) =>
         Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Result!["stdout"]!.GetValue<string>().Trim();
 
     private static void AssertGone(int pid)

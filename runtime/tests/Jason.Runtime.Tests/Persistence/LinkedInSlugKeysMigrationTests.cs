@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
-using Jason.Runtime.Tests.Contacts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -23,6 +22,8 @@ namespace Jason.Runtime.Tests.Persistence;
 public partial class LinkedInSlugKeysMigrationTests
 {
     private const string PreviousMigration = "20261018230454_EventReads";
+
+    private const string ThisMigration = "20261019053859_LinkedInSlugKeys";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -218,31 +219,56 @@ public partial class LinkedInSlugKeysMigrationTests
     }
 
     /// <summary>
-    /// The rewrite is the rule, and not a second one: every value the rule before stored becomes exactly what the rule
-    /// now stores for the same link as it was written — the shared table of keys, one contact a row.
+    /// How a LinkedIn value was keyed around this migration, frozen here because the rule has moved on since: as it is
+    /// written in, what the rule before this migration stored, and what the rule this migration rewrote to stored. That
+    /// rule lowercased the path on linkedin.com and its subdomains and nowhere else, kept the query as written, and kept a
+    /// letter written as a percent-escape in the escape's case.
+    /// </summary>
+    private static readonly (string Raw, string Before, string Then)[] KeysAroundThisMigration =
+    [
+        ("HTTPS://WWW.LinkedIn.com/in/Jane/#x", "https://www.linkedin.com/in/Jane", "https://www.linkedin.com/in/jane"),
+        ("https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/marta-example"),
+        ("https://uk.linkedin.com/in/Marta-Example/", "https://uk.linkedin.com/in/Marta-Example", "https://uk.linkedin.com/in/marta-example"),
+        ("https://linkedin.com/in/Marta-Example", "https://linkedin.com/in/Marta-Example", "https://linkedin.com/in/marta-example"),
+        ("https://www.linkedin.com/in/Marta-Example?Trk=Profile", "https://www.linkedin.com/in/Marta-Example?Trk=Profile", "https://www.linkedin.com/in/marta-example?Trk=Profile"),
+        ("https://www.linkedin.com:443/in/Marta-Example", "https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/marta-example"),
+        ("https://www.linkedin.com:8443/in/Marta-Example", "https://www.linkedin.com:8443/in/Marta-Example", "https://www.linkedin.com:8443/in/marta-example"),
+        ("http://www.linkedin.com/in/Marta-Example", "http://www.linkedin.com/in/Marta-Example", "http://www.linkedin.com/in/marta-example"),
+        ("https://marta@www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/marta-example"),
+        ("https://www.linkedin.com/in/Marta-Example//", "https://www.linkedin.com/in/Marta-Example/", "https://www.linkedin.com/in/marta-example/"),
+        ("https://www.linkedin.com/in/JOSÉ-Example", "https://www.linkedin.com/in/JOS%C3%89-Example", "https://www.linkedin.com/in/jos%c3%89-example"),
+        ("https://LinkedIn.com/", "https://linkedin.com", "https://linkedin.com"),
+        ("https://www.linkedin.com/?Ref=Feed", "https://www.linkedin.com?Ref=Feed", "https://www.linkedin.com?Ref=Feed"),
+        ("https://notlinkedin.com/in/Marta-Example", "https://notlinkedin.com/in/Marta-Example", "https://notlinkedin.com/in/Marta-Example"),
+        ("https://linkedin.com.example.org/in/Marta-Example", "https://linkedin.com.example.org/in/Marta-Example", "https://linkedin.com.example.org/in/Marta-Example"),
+        ("http://x.example.com:8080/A?b=1#z", "http://x.example.com:8080/A?b=1", "http://x.example.com:8080/A?b=1"),
+    ];
+
+    /// <summary>
+    /// The rewrite was the rule of its day, and not a second one: every value the rule before stored became exactly what
+    /// the rule this migration rewrote to stored for the same link as it was written, one contact a row.
     /// </summary>
     [Fact]
-    public void Every_key_the_rule_before_stored_becomes_the_key_the_rule_now_stores()
+    public void Every_key_the_rule_before_stored_becomes_the_key_the_rule_of_this_migration_stored()
     {
-        var rows = ChannelRulesTests.LinkedInKeys.Select(row => row.Data).ToList();
+        var rows = KeysAroundThisMigration;
         var seed = new System.Text.StringBuilder();
-        for (var at = 0; at < rows.Count; at++)
+        for (var at = 0; at < rows.Length; at++)
         {
             seed.Append(System.FormattableString.Invariant(
                 $"INSERT INTO contacts (public_id, custom_json, created_at, updated_at) VALUES ('cnt_{at}', '{{}}', '2026-01-01', '2026-01-01');\n"));
             seed.Append(System.FormattableString.Invariant(
-                $"INSERT INTO contact_channels (contact_id, channel, value, is_primary) VALUES ({at + 1}, 'linkedin', '{rows[at].Item2}', 1);\n"));
+                $"INSERT INTO contact_channels (contact_id, channel, value, is_primary) VALUES ({at + 1}, 'linkedin', '{rows[at].Before}', 1);\n"));
         }
 
         using var dir = Seeded(seed.ToString());
         var migrated = Rows(dir, "SELECT contact_id, value FROM contact_channels");
 
-        for (var at = 0; at < rows.Count; at++)
+        for (var at = 0; at < rows.Length; at++)
         {
-            var (raw, before, now) = rows[at];
+            var (raw, before, then) = rows[at];
             var stored = migrated[System.FormattableString.Invariant($"{at + 1}")];
-            Assert.True(stored == now, $"'{before}', stored for '{raw}', became '{stored}', where the rule now stores '{now}'.");
-            Assert.Equal(now, ChannelRules.NormalizeValue("linkedin", raw, "value", new Jason.Runtime.Domain.ValidationErrors()));
+            Assert.True(stored == then, $"'{before}', stored for '{raw}', became '{stored}', where the rule of this migration stored '{then}'.");
         }
     }
 
@@ -413,7 +439,10 @@ public partial class LinkedInSlugKeysMigrationTests
         return dir;
     }
 
-    /// <summary>A database at the migration before this one, the rows given written into it, then every migration applied.</summary>
+    /// <summary>
+    /// A database at the migration before this one, the rows given written into it, then the migrations up to this one
+    /// applied: the later ones re-key what this one wrote, and their own tests hold what they do.
+    /// </summary>
     private static TempDataDir Seeded(string sql)
     {
         var dir = AtTheMigrationBefore();
@@ -428,7 +457,7 @@ public partial class LinkedInSlugKeysMigrationTests
 
         using (var db = new JasonDbContext(options))
         {
-            db.Database.Migrate();
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(ThisMigration);
         }
 
         return dir;

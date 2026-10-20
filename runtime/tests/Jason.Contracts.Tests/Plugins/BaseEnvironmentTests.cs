@@ -94,6 +94,35 @@ public class BaseEnvironmentTests
         Assert.DoesNotContain(built.Keys, key => key.StartsWith(BaseEnvironment.ReservedPrefix, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// The globalization mode .NET runs in is the runtime's to pass on: it decides how a letter is lowercased and
+    /// composed, so a child without it would key a value as no runtime on that machine does.
+    /// </summary>
+    [Fact]
+    public void The_globalization_mode_of_the_process_is_copied_on_every_operating_system()
+    {
+        string[] names =
+        [
+            "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT",
+            "DOTNET_SYSTEM_GLOBALIZATION_USENLS",
+            "DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY",
+            "DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU",
+        ];
+        var source = Source();
+        foreach (var name in names)
+        {
+            source[name] = "value-of-" + name;
+        }
+
+        var built = BaseEnvironment.Build(source, []);
+
+        foreach (var name in names)
+        {
+            Assert.Contains(name, BaseEnvironment.Common);
+            Assert.True(built.TryGetValue(name, out var value) && value == "value-of-" + name, $"{name} reached the child as '{value}'.");
+        }
+    }
+
     [Fact]
     public void Names_are_compared_the_way_the_operating_system_compares_them()
     {
@@ -125,6 +154,32 @@ public class BaseEnvironmentTests
             BaseEnvironment.Common.Concat(OperatingSystem.IsWindows() ? BaseEnvironment.Windows : BaseEnvironment.Unix),
             BaseEnvironment.ForCurrentOs);
         Assert.DoesNotContain(BaseEnvironment.ForCurrentOs, name => name.StartsWith(BaseEnvironment.ReservedPrefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The base environment is built from nothing, so every name it copies is a decision at a trust boundary. Each set is
+    /// pinned whole, in ordinal order: a name added or dropped changes this test too, and an order changed does not.
+    /// </summary>
+    [Fact]
+    public void Each_set_holds_exactly_the_names_decided()
+    {
+        AssertSet(
+            [
+                "PATH", "DOTNET_ROOT", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "DOTNET_SYSTEM_GLOBALIZATION_USENLS",
+                "DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY", "DOTNET_SYSTEM_GLOBALIZATION_APPLOCALICU",
+            ],
+            BaseEnvironment.Common);
+        AssertSet(
+            [
+                "PATHEXT", "SystemRoot", "SystemDrive", "windir", "ComSpec", "TEMP", "TMP", "USERPROFILE", "HOMEDRIVE",
+                "HOMEPATH", "APPDATA", "LOCALAPPDATA", "ProgramData", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432",
+                "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "USERNAME",
+            ],
+            BaseEnvironment.Windows);
+        AssertSet(
+            ["HOME", "XDG_CONFIG_HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME", "SHELL", "TERM"],
+            BaseEnvironment.Unix);
     }
 
     [Fact]
@@ -163,4 +218,7 @@ public class BaseEnvironmentTests
 
         Assert.DoesNotContain(copied, name => name.Contains("REPLY", StringComparison.OrdinalIgnoreCase));
     }
+
+    private static void AssertSet(string[] decided, IReadOnlyList<string> copied) =>
+        Assert.Equal<IEnumerable<string>>(decided.Order(StringComparer.Ordinal), copied.Order(StringComparer.Ordinal));
 }

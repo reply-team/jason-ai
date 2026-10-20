@@ -109,7 +109,7 @@ public sealed class IsolationTests : IDisposable
         Assert.Equal("undefined", result["fetch"]!.GetValue<string>());
         Assert.Equal("undefined", result["xhr"]!.GetValue<string>());
         Assert.Equal("undefined", result["worker"]!.GetValue<string>());
-        Assert.Equal("exec,http,env,log,fail", result["host"]!.GetValue<string>());
+        Assert.Equal("exec,http,env,log,fail,channelKey", result["host"]!.GetValue<string>());
     }
 
     [Fact]

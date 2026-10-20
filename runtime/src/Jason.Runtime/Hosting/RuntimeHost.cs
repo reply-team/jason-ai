@@ -37,6 +37,9 @@ public static class RuntimeHost
         ArgumentNullException.ThrowIfNull(paths);
         options ??= new RuntimeHostOptions();
 
+        // Before anything is written: a process that does not compose text would key one profile two ways.
+        TextComposition.EnsureThisProcessComposes();
+
         try
         {
             DataDirectoryLayout.Ensure(paths);
@@ -106,6 +109,17 @@ public static class RuntimeHost
 
             var migration = new DatabaseMigrator(paths).Migrate();
             logger.Information("Database ready: {Applied} migrations applied, {New} newly applied, backup {Backup}", migration.AppliedMigrations.Count, migration.NewlyApplied.Count, migration.BackupFile ?? "none");
+            if (migration.LinkedInKeys is { } linkedIn)
+            {
+                // Counts alone: which rows were left is what the register and the contacts say, never the log.
+                logger.Information(
+                    "LinkedIn profile links re-keyed: {Stored} stored, {Keys} are keys, {Refused} left as they stood because the rule refuses them, {LeftBeside} left as they stood beside the one holding their key, {SharedKeys} keys held by more than one contact",
+                    linkedIn.Stored,
+                    linkedIn.Keys,
+                    linkedIn.Refused,
+                    linkedIn.LeftBeside,
+                    linkedIn.SharedKeys);
+            }
 
             var token = CapabilityToken.Generate();
             app = BuildApplication(paths, configuration, settings, options, info, migration, token, logger, out var seams);
@@ -264,9 +278,10 @@ public static class RuntimeHost
         // and it quotes nothing, so it can be said where a person will read it — found however the host wrapped it, inside
         // another failure or among several. So are settings the start cannot use: the file and the position, or the
         // setting's path and its type, refused before there is a log to read. And so is an endpoint descriptor that could not be
-        // put in place, the last step of a start: without it no client could find this runtime.
+        // put in place, the last step of a start: without it no client could find this runtime. And so is a process that does
+        // not compose text, refused before anything else.
         catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or InvalidSettingsException
-            or DescriptorUnpublishableException
+            or DescriptorUnpublishableException or TextCompositionUnavailableException
             || UnreadableStoredValueException.In(refused) is not null)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null

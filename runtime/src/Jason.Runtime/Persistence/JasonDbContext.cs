@@ -83,7 +83,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         ArgumentNullException.ThrowIfNull(builder);
         return builder
             .UseSqlite(ConnectionString(databaseFile))
-            .AddInterceptors(new AppendOnlyInterceptor(), new TextFoldInterceptor())
+            .AddInterceptors(new AppendOnlyInterceptor(), new TextFoldInterceptor(), new LinkedInKeyInterceptor())
             .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.QueryIterationFailed));
     }
 

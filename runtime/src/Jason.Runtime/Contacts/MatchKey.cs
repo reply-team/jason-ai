@@ -44,7 +44,7 @@ public abstract partial record MatchKey
             return new ByCustomField(field);
         }
 
-        var channel = ChannelRules.NormalizeChannelName(raw, "match_by", errors);
+        var channel = ChannelValidation.Name(raw, "match_by", errors);
         return channel is null ? null : new ByChannel(channel);
     }
 

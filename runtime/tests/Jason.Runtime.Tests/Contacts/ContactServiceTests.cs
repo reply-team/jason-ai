@@ -93,6 +93,23 @@ public class ContactServiceTests
         Assert.Equal("duplicate", detail.Code);
     }
 
+    /// <summary>Two spellings of one LinkedIn profile are one value, so a contact carrying both carries the same pair twice.</summary>
+    [Fact]
+    public async Task Two_spellings_of_one_profile_inside_one_contact_are_the_same_pair_twice()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var service = NewService(db, new FixedClock(Noon));
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
+            service.CreateAsync(
+                Create(channels: [Channel("linkedin", "https://www.linkedin.com/in/marta-example"), Channel("linkedin", "uk.linkedin.com/in/Marta-Example//?trk=feed")]),
+                TestContext.Current.CancellationToken));
+
+        var detail = Assert.Single(ex.Details!);
+        Assert.Equal(("channels[1]", "duplicate"), (detail.Field, detail.Code));
+    }
+
     [Fact]
     public async Task A_second_primary_on_the_same_channel_is_refused()
     {
@@ -160,7 +177,8 @@ public class ContactServiceTests
     /// <summary>
     /// A listing narrows by one channel's normalized value, or by any part of what a person is known by — a name, a
     /// company, a title, any channel value — whatever its case and accents, a phone however it is spaced, and with the
-    /// characters a pattern would read as wildcards taken as written. Both narrow together.
+    /// characters a pattern would read as wildcards taken as written; a pasted LinkedIn link by its profile in any spelling,
+    /// a name outside ASCII included, and never a profile whose name only starts the same. Both narrow together.
     /// </summary>
     [Theory]
     [InlineData("Email", " FOO@bar.COM ", null, false, "Foo")]
@@ -172,6 +190,9 @@ public class ContactServiceTests
     [InlineData(null, null, "in/ada-love", false, "Ada Lovelace")]
     [InlineData(null, null, "https://www.linkedin.com/in/ada-lovelace/", false, "Ada Lovelace")]
     [InlineData(null, null, "linkedin.com/in/Ada-Lovelace?trk=public_profile", false, "Ada Lovelace")]
+    [InlineData(null, null, "https://www.linkedin.com/in/ada/", false, "Link")]
+    [InlineData(null, null, "uk.linkedin.com/in/J%C3%96RN-Sample/", false, "Jörn Sample")]
+    [InlineData(null, null, "https://www.linkedin.com/in/JÖRN-SAMPLE?trk=feed", false, "Jörn Sample")]
     [InlineData(null, null, "love", false, "Ada Lovelace")]
     [InlineData(null, null, "ada lovelace", false, "Ada Lovelace")]
     [InlineData(null, null, "andina", false, "Álvaro Núñez")]
@@ -197,7 +218,8 @@ public class ContactServiceTests
         var ct = TestContext.Current.CancellationToken;
         await service.CreateAsync(Person("Foo", null, null, null, Channel("email", "foo@bar.com")), ct);
         await service.CreateAsync(Person("Other", null, null, null, Channel("email", "other@bar.com")), ct);
-        await service.CreateAsync(Person("Link", null, null, null, Channel("linkedin", "https://example.com/in/x")), ct);
+        await service.CreateAsync(Person("Link", null, null, null, Channel("linkedin", "https://www.linkedin.com/in/ada")), ct);
+        await service.CreateAsync(Person("Jörn", "Sample", null, null, Channel("linkedin", "https://www.linkedin.com/in/J%C3%B6rn-Sample")), ct);
         await service.CreateAsync(
             Person("Ada", "Lovelace", "Kavali", "CTO", Channel("email", "ada@kavali.example"), Channel("phone", "+48601234567"), Channel("linkedin", "https://www.linkedin.com/in/ada-lovelace")),
             ct);
@@ -295,7 +317,7 @@ public class ContactServiceTests
                 Optional<string?>.Absent,
                 Optional<string?>.Of(null),
                 Optional<string?>.Absent,
-                Optional<IReadOnlyList<ChannelInput>?>.Of([Channel("linkedin", "https://example.com/in/ada")]),
+                Optional<IReadOnlyList<ChannelInput>?>.Of([Channel("linkedin", "https://www.linkedin.com/in/Ada-Example/")]),
                 Optional<JsonObject?>.Of(new JsonObject { ["crm_id"] = "2" }),
                 null,
                 "cleanup"),
@@ -303,7 +325,7 @@ public class ContactServiceTests
 
         Assert.Equal("Ada", updated.FirstName);
         Assert.Null(updated.Title);
-        Assert.Equal("https://example.com/in/ada", Assert.Single(updated.Channels).Value);
+        Assert.Equal("https://www.linkedin.com/in/ada-example", Assert.Single(updated.Channels).Value);
         Assert.Equal("2", (string?)updated.Custom["crm_id"]);
         Assert.Equal(Noon.AddHours(1), updated.UpdatedAt);
 

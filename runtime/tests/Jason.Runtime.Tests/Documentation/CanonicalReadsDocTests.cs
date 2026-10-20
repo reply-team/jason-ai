@@ -35,8 +35,10 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("3. **Deleting a Jason contact never deletes the provider's.**")]
     [InlineData("4. **Fields and lists travel with the operation that needs them.**")]
     [InlineData("If the provider answers with another identifier, return the one it answered: the runtime records it beside the pin as a divergence, keeps the pin, and the attempt still succeeds.")]
-    [InlineData("Two spellings of one person on the register become that person's one stop, the earliest, with its reason: a stop is never lost by the collapse.")]
-    [InlineData("The journal keeps every line it had, and the rewrite adds none.")]
+    [InlineData("The second keys a link by the profile's name and deletes nothing: a value the rule refuses is left as it stands")]
+    [InlineData("Where the value the claim reads for a contact is left beside the one holding the key, the primary moves to the holder, so the claim asks the register about the key.")]
+    [InlineData("No stop is lost by either rewrite, the journal keeps every line it had, and neither adds one.")]
+    [InlineData("### `host.channelKey`")]
     public void The_plugin_authors_page_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/plugins.md")), StringComparison.Ordinal);
 

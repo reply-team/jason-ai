@@ -52,7 +52,7 @@ public static class SuppressionCommands
     {
         var command = new Command("remove", "Lift a suppression. Removing one that is not there is not an error.");
         var channel = Channel("The channel the value belongs to, for example email.", required: true);
-        var value = Value("The channel value to stop suppressing.", required: true);
+        var value = Value("The channel value to stop suppressing: the entry kept under exactly this text, or where there is none, the one kept under the value as its channel's rule normalizes it.", required: true);
         var reason = new Option<string>("--reason")
         {
             Description = "Why the suppression is lifted; recorded in the journal. Required: lifting one is a deliberate act.",
@@ -82,7 +82,7 @@ public static class SuppressionCommands
     {
         var command = new Command("list", "List the do-not-contact entries.");
         var channel = Channel("Only entries of this channel.", required: false);
-        var value = Value("Only entries with this value.", required: false);
+        var value = Value("Only the entry with this value: the one kept under exactly this text, or where there is none, the one kept under the value as its channel's rule normalizes it.", required: false);
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();

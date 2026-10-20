@@ -1,3 +1,4 @@
+using Jason.Contracts.Channels;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,7 @@ namespace Jason.Runtime.Contacts;
 /// title, any channel value. Compared folded on both sides, so case, accents and script never decide; the characters a
 /// pattern would read as wildcards are escaped, so they match as written; a text that is a phone number once its spaces,
 /// dots, dashes and brackets go also matches by its digits, which is how a stored number is kept; and a pasted LinkedIn
-/// link matches by its profile path, whatever it carried after it.
+/// link matches by the profile path its key ends with, whichever spelling of the link was pasted.
 /// </summary>
 internal static class ContactSearch
 {
@@ -24,9 +25,9 @@ internal static class ContactSearch
         var pattern = TextFold.Containing(text);
         var digits = ChannelRules.DigitsOfPhone(text);
         var profile = ChannelRules.LinkedInProfilePath(text);
-        // The profile path ends the stored link, or a query follows it; either way "/in/ada" never finds "/in/ada-lovelace".
-        var profileEnd = profile is null ? null : "%" + TextFold.Escaped(profile);
-        var profileQuery = profile is null ? null : "%" + TextFold.Escaped(profile) + "?%";
+        // The profile path ends a stored key, so "/in/ada" never finds "/in/ada-lovelace". It is folded as the column is,
+        // or a name written outside ASCII would never find itself.
+        var profileEnd = profile is null ? null : "%" + TextFold.Escaped(TextFold.Text(profile));
 
         return query.Where(contact =>
             EF.Functions.Like(TextFold.Fold(contact.FirstName), pattern, Escape)
@@ -37,6 +38,6 @@ internal static class ContactSearch
             || contact.Channels.Any(entry => EF.Functions.Like(TextFold.Fold(entry.Value), pattern, Escape))
             || (digits != null && contact.Channels.Any(entry => entry.Value.Contains(digits)))
             || (profileEnd != null && contact.Channels.Any(entry => entry.Channel == ChannelRules.LinkedIn
-                && (EF.Functions.Like(TextFold.Fold(entry.Value), profileEnd, Escape) || EF.Functions.Like(TextFold.Fold(entry.Value), profileQuery!, Escape)))));
+                && EF.Functions.Like(TextFold.Fold(entry.Value), profileEnd, Escape))));
     }
 }

@@ -31,6 +31,11 @@ internal static class ReviewedLogProperties
         // How many pages a read of an account took, how many events it stored and how many the store already held (EventReader).
         "Pages", "Stored", "Duplicates",
 
+        // How many stored LinkedIn links the start that re-keyed them found to be keys, left because the rule refuses them,
+        // left beside the one holding their key, and how many keys more than one contact holds: counts (RuntimeHost; Stored
+        // above is the number of links there).
+        "Keys", "Refused", "LeftBeside", "SharedKeys",
+
         // Where a settings file stopped parsing: a line and a byte within it (RuntimeHost).
         "LineNumber", "BytePositionInLine",
 

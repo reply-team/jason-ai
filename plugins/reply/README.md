@@ -54,6 +54,8 @@ of a call is the command line, which carries only Reply's identifiers and flags,
   the answer. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
   routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
   does not have, or answers differently.
+- **Jason 0.13.0 or newer.** The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, which an
+  older runtime does not have.
 - **A runtime that can find it.** The name `reply` is resolved on the search path the *runtime* sees, at
   every reload — which is not always the path your shell sees, least of all for a runtime started in the
   background. `executable_missing` in `jason plugin list --human` means that and nothing else.
@@ -204,10 +206,10 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
 - **Without a pin, the exact lookup.** `reply contact find` asks Reply for the one contact under the value of the
   channel the operation consumes — an email address, matched whatever its case, or a LinkedIn URL — reads the answer
   to its end, and refuses two contacts under one address as `contact_not_unique` rather than guess between them. A
-  LinkedIn URL identifies a person by its lowercased slug: on linkedin.com and its subdomains the path's case does not
-  count, nor the scheme's or the host's, a default port, a user name, one trailing slash or a fragment, while `www`,
-  the subdomain and the query do. Jason keys the value that way too, so the one it hands the plugin is already the
-  slug, and the CLI asks Reply for it in that form and then as given. A lookup the CLI cannot read to its end answers
+  LinkedIn URL identifies a person by the profile's name after `/in/`, decoded once, composed and lowercased, whatever
+  host of linkedin.com's, scheme, slashes, query or fragment it carries; that is Jason's key, which the package asks for
+  with `host.channelKey` rather than spell the rule again. The value Jason hands the plugin is already the key, and the
+  CLI asks Reply for it in that form and then as given. A lookup the CLI cannot read to its end answers
   as Reply unavailable, and the attempt is made again; it is never taken for nobody or for one. Any other channel names
   a value Reply looks nobody up by, and is `invalid_channel_value` before anything is called.
 - **A person Reply holds is named by its identifier,** so nothing Jason holds — names, company, title — is written to
@@ -227,8 +229,8 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
   `reply contact get` before anything is sent: one Reply holds as opted out is refused as `suppressed`, and one whose
   LinkedIn profile is another than the work item's is refused as `contact_channel_conflict` and not changed. A LinkedIn
   send may record the person's profile on the provider's contact when it was missing, and that is the only thing a
-  send ever writes to a contact; a profile Reply would hold under another spelling than the work item's — one with a
-  trailing slash, which Reply drops — is refused instead of written. A contact answer without the LinkedIn profile key
+  send ever writes to a contact; a value that is not Jason's key — one stored before the key, which Jason left as it
+  stood — is refused instead of written. A contact answer without the LinkedIn profile key
   at all is read as lost and asked again, with nothing written or sent: a null or an empty value means the contact
   carries none.
 - **The first name an import needs** is derived where the person has none, as *A person without a first name* under
@@ -494,10 +496,9 @@ The thread is read first, one message long, for its channel and its person, and 
 with the work item: the thread is on the channel named, and its person is the one pinned — where there is a pin — and
 in every case the one whose address, or LinkedIn profile, is the channel's value. Jason checked its own suppression
 register for that value before the work was claimed, and the two are compared the way the register keys a value, so
-that check is about exactly the person the reply reaches: an address whatever its case, and a profile link by its
-scheme and host whatever their case, with a default port, a user name, a fragment and one trailing slash dropped, its
-query exactly, and its path whatever its case on linkedin.com — a LinkedIn URL identifies a person by its lowercased
-slug — and exactly on any other host.
+that check is about exactly the person the reply reaches: an address whatever its case, and a profile link by the
+profile's name after `/in/`, decoded once, composed and lowercased, whatever host of linkedin.com's, scheme, slashes,
+query or fragment it carries.
 Reply answers from the identity that owns the thread, so no sender is named, and no copy or blind copy can be. A person approves every reply before it is sent, and its work
 waits while its Jason campaign is paused. A reply whose answer was lost — the CLI's `outcome.unknown`, or the call cut
 off — may have gone, and it is never sent again: the item stops for a person, with the thread's person pinned so
@@ -639,8 +640,11 @@ the item stops for a person, with the contact pinned.
   already, a flag set again changes nothing, and it answers a pause of a paused sequence as a pause. So this package
   answers `added`, `recorded` or `paused`, and the effect at Reply is the same either way.
 - **A person without a first name.** Reply requires a first name; see [Contacts at Reply](#contacts-at-reply) above.
-- **Jason always asks Reply for a LinkedIn profile by its lowercased slug.** Whether Reply's lookup ignores the slug's
-  case is not verified. If it does not, a person Reply holds under a mixed-case profile link is not found: a list add or
+- **Jason always asks Reply for a LinkedIn profile by its key: the profile's name, lowercased, in Unicode.** A name
+  outside ASCII is asked for as its letters (`…/in/jörn-example`), not as its percent-escapes: Reply's own key decodes
+  percent-escapes and stores the name in Unicode, so the Unicode form is Reply's native spelling. Whether Reply's lookup
+  ignores the name's case is not verified.
+  If it does not, a person Reply holds under a mixed-case profile link is not found: a list add or
   an enrolment creates a second contact, and `optout.record` lands on that one — made for it if need be — while the
   contact Reply held is untouched.
 - **`conversation.list` with `source: all` reads Reply's inbox and its sent threads, and merges them.** Reply's thread
@@ -744,18 +748,16 @@ the item stops for a person, with the contact pinned.
   which asks for the thread and then for one page of its messages, one message long, to know its channel and its person
   before anything is sent; and `reply inbox reply` reads the thread once more itself, to send on the thread's own
   channel. Reply has no call that does both, and against a rate limit the three count.
-- **A LinkedIn profile Reply spells another way refuses the reply.** The thread's person is held to the profile the
-  work item consumes, under the key Jason gives a profile link for its suppression register: its scheme and host
-  whatever their case, a default port, a user name, a fragment and one trailing slash dropped, its query exactly, and
-  its path whatever its case on linkedin.com — the same profile however Reply cased its slug. A link that differs in
-  anything else — another scheme, a missing `www.`, another subdomain, a path in another case on a host that is not
-  linkedin.com — is another profile there, so it is another profile here, and the reply fails
-  `thread_contact_mismatch` with nothing sent: the register's check at the claim was about the value the work item
-  consumes, and only that value is reached. A letter written outside ASCII is compared by the escape Jason keys it by,
-  so it is the same profile however Reply wrote it; a link that steps back up its path (`/../`), or carries a `%` that
-  starts no escape, is refused rather than followed. Only Reply's spelling is keyed: the work item's profile is the one
-  Jason stored and asked its register about, compared as it stands, since keying it again would drop another trailing
-  slash and join two profiles the register keeps apart. The invitation holds Reply's contact to the profile the same way.
+- **A LinkedIn value Jason keys as no profile refuses the reply.** The thread's person is held to the profile the work
+  item consumes, under the key Jason gives a profile link for its suppression register, so every spelling of one
+  profile — its case, its slashes, a query, `uk.` or `m.` for `www.`, its name written in escapes — is the same profile.
+  A value Jason keys as no profile — a link to another kind of page, another host, a name with anything but letters,
+  digits, combining marks, hyphens and underscores in it, or one that starts with a hyphen or carries a mark after one —
+  is nobody, and the reply fails `thread_contact_mismatch` with nothing sent:
+  the register's check at the claim was about the value the work item consumes, and only that value is reached. Only
+  Reply's spelling is keyed: the work item's profile is the one Jason stored and asked its register about, compared as
+  it stands, so a value stored before the key, which Jason left as it stood, matches nothing Reply holds. The invitation
+  holds Reply's contact to the profile the same way.
 - **A text carrying `{{` is refused.** Reply writes its placeholders that way, and it does render one in a reply in a
   thread: a live account refused a reply carrying `{{firstName}}` because it could not fill it in. So the package
   refuses such a text before anything is called rather than let something nobody approved go out, and a refusal of that
@@ -777,9 +779,9 @@ the item stops for a person, with the contact pinned.
   invitation after that — LinkedIn sends outside a sequence turned off for the account, its allowance spent, or a note
   Reply counts as longer than the document does — and the profile stays on the contact.
 - **A LinkedIn account whose profile link this package cannot read as a link cannot be named as a sender.** The
-  sender's address is compared as a profile, and a link that does not key — no scheme, an empty query, a step back up
-  its path — matches nothing, so such an account is refused as `sender_mismatch` even when its address is copied from
-  `sender.list`.
+  sender's address is compared as a profile, and a value Jason keys as no profile — not a link to a profile on
+  linkedin.com — matches nothing, so such an account is refused as `sender_mismatch` even when its address is copied
+  from `sender.list`.
 - **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
   whole thread before every filing; the reads report a thread's category.
 - **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first

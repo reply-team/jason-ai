@@ -12,5 +12,7 @@
     <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
     <!-- The reading of compiled calls the runtime's guards use, so the plugin host's own assembly is read the same way. -->
     <Compile Include="../Jason.Runtime.Tests/CompiledCalls.cs" Link="CompiledCalls.cs" />
+    <!-- The one table of LinkedIn profile links, which host.channelKey is held to through the whole mode. -->
+    <Compile Include="../Jason.Contracts.Tests/Channels/LinkedInKeyVectors.cs" Link="LinkedInKeyVectors.cs" />
   </ItemGroup>
 </Project>

@@ -13,16 +13,17 @@ public sealed class HostObjectTests : IDisposable
     private SdkHarness Harness(Action<InvocationBuilder>? configure = null) => new(_package.Root, configure);
 
     [Fact]
-    public void The_host_object_is_exactly_five_functions()
+    public void The_host_object_is_exactly_six_functions()
     {
         using var harness = Harness();
 
-        Assert.Equal("exec,http,env,log,fail", harness.Evaluate("Object.keys(host).join(',')").AsString());
+        Assert.Equal("exec,http,env,log,fail,channelKey", harness.Evaluate("Object.keys(host).join(',')").AsString());
         Assert.Equal("function", harness.Evaluate("typeof host.exec").AsString());
         Assert.Equal("function", harness.Evaluate("typeof host.http").AsString());
         Assert.Equal("function", harness.Evaluate("typeof host.env").AsString());
         Assert.Equal("function", harness.Evaluate("typeof host.log").AsString());
         Assert.Equal("function", harness.Evaluate("typeof host.fail").AsString());
+        Assert.Equal("function", harness.Evaluate("typeof host.channelKey").AsString());
     }
 
     [Fact]
@@ -43,12 +44,12 @@ public sealed class HostObjectTests : IDisposable
     }
 
     [Fact]
-    public void There_is_no_surface_beyond_the_five()
+    public void There_is_no_surface_beyond_the_six()
     {
         using var harness = Harness();
 
         Assert.Equal("true", harness.Evaluate("String(Object.getPrototypeOf(host) === Object.prototype)").AsString());
-        Assert.Equal("exec,http,env,log,fail", harness.Evaluate("Object.getOwnPropertyNames(host).join(',')").AsString());
+        Assert.Equal("exec,http,env,log,fail,channelKey", harness.Evaluate("Object.getOwnPropertyNames(host).join(',')").AsString());
         Assert.Equal("undefined", harness.Evaluate("typeof host.GetType").AsString());
     }
 

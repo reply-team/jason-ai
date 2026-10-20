@@ -277,7 +277,9 @@ public class ReplyPackageTests
         Assert.All(
             new[]
             {
-                "the contact proxy rule", "`reply contact find`", "LinkedIn URL identifies a person by its lowercased slug",
+                "the contact proxy rule", "`reply contact find`",
+                "LinkedIn URL identifies a person by the profile's name after `/in/`, decoded once, composed and lowercased",
+                "`host.channelKey`",
                 "A person Reply holds is named by its identifier", "Only `find_or_create` imports.", "`contact_not_unique`",
                 "Fields and lists travel with the operation that needs them.",
             },
@@ -285,10 +287,11 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// Jason always asks Reply for a LinkedIn profile by its lowercased slug, and whether Reply's lookup ignores the slug's
-    /// case is not known. What an operator is owed is that limit and what follows from it, where the README says what the
-    /// package cannot do and in the release that brought the slug: a person Reply holds under a mixed-case profile link is
-    /// not found, a second contact is created, and the opt-out lands on that one.
+    /// Jason always asks Reply for a LinkedIn profile by its key, the profile's name lowercased and in Unicode, and whether
+    /// Reply's lookup ignores the name's case is not known. What an operator is owed is that limit, why the name is in
+    /// Unicode, and what follows from it, where the README says what the package cannot do and in the release that
+    /// brought the slug: a person Reply holds under a mixed-case profile link is not found, a second contact is created,
+    /// and the opt-out lands on that one.
     /// </summary>
     [Fact]
     public void The_readme_and_the_changelog_say_a_mixed_case_profile_link_may_not_be_found()
@@ -302,8 +305,9 @@ public class ReplyPackageTests
         Assert.All(
             new[]
             {
-                "Jason always asks Reply for a LinkedIn profile by its lowercased slug.",
-                "Whether Reply's lookup ignores the slug's case is not verified.",
+                "Jason always asks Reply for a LinkedIn profile by its key: the profile's name, lowercased, in Unicode.",
+                "Reply's own key decodes percent-escapes and stores the name in Unicode",
+                "Whether Reply's lookup ignores the name's case is not verified.",
                 "a person Reply holds under a mixed-case profile link is not found", "creates a second contact",
                 "`optout.record` lands on that one",
             },

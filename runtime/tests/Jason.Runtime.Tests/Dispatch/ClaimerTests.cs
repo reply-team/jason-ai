@@ -5,6 +5,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
@@ -1032,6 +1033,47 @@ public class ClaimerTests
             Assert.Equal(WorkItemStatus.Failed, item.Status);
             Assert.Equal(refused, (await db.Attempts.AsNoTracking().SingleAsync(Ct)).Error!.Code);
         }
+    }
+
+    /// <summary>
+    /// A stop recorded under the plain spelling of a LinkedIn profile, and a person whose channel was written with a doubled
+    /// trailing slash and a query: both are written by the rule that keys a profile by its slug, so they are one key, and
+    /// the claim's one question to the real register refuses the work about that person.
+    /// </summary>
+    [Fact]
+    public async Task A_stop_under_one_spelling_of_a_profile_refuses_work_about_a_person_stored_under_another()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var clock = new FixedClock(new DateTimeOffset(Noon));
+        var register = new SuppressionService(db, new JournalWriter(clock), clock);
+        await register.AddAsync(new SuppressionAddRequest("linkedin", "https://www.linkedin.com/in/Marta-Example", null, "said stop"), Ct);
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["list_membership.add"]),
+            route: new Route("stand-in-provider", null, null),
+            register: register);
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var errors = new Jason.Runtime.Domain.ValidationErrors();
+        var stored = ChannelValidation.Value("linkedin", "https://www.linkedin.com/in/Marta-Example//?trk=feed", "channels[0].value", errors);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Marta", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "linkedin", Value = stored!, IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, "list_membership.add", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["list"] = new JsonObject { ["external_id"] = "9" }, ["channel"] = "linkedin" },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.False(errors.Any);
+        Assert.Empty(claimed);
+        Assert.Equal(WorkItemStatus.Failed, item.Status);
+        Assert.Equal("suppressed", (await db.Attempts.AsNoTracking().SingleAsync(Ct)).Error!.Code);
     }
 
     /// <summary>

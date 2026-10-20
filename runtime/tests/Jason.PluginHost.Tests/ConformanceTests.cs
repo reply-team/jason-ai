@@ -303,4 +303,50 @@ public sealed class ConformanceTests : IDisposable
         Assert.Contains(stderr, line => line.Contains(HostDiagnostics.TruncationNotice, StringComparison.Ordinal));
         Assert.True(stderr.Count < 1000, "the log stops once its budget is spent");
     }
+
+    /// <summary>
+    /// <c>host.channelKey</c> answers what the runtime's own rule answers, row for row over the one table of profile links
+    /// and a value of every other rule: the envelope carries each value in, the plugin keys it in the engine, and the
+    /// outcome carries the key back — or null where the runtime stores none.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_keys_a_value_exactly_as_the_runtime_does()
+    {
+        InvocationFactory.WritePackage(
+            _written.Root,
+            """
+            export function invoke(operation, input) {
+              return { result: { keys: input.rows.map(row => host.channelKey(row.channel, row.value)) } };
+            }
+            """);
+
+        List<(string Channel, string Value)> rows =
+        [
+            .. Jason.Contracts.Tests.Channels.LinkedInKeyVectors.Rows.Select(row => ("linkedin", row.Raw)),
+            ("LinkedIn", "https://uk.linkedin.com/in/Marta-Example/"),
+            ("email", " Marta@Example.com "),
+            ("email", "marta"),
+            ("phone", "+1 (604) 555-0100"),
+            ("whatsapp", "+"),
+            ("telegram", " @marta "),
+            ("e mail", "marta@example.com"),
+        ];
+        var input = new JsonObject
+        {
+            ["rows"] = new JsonArray([.. rows.Select(row => (JsonNode)new JsonObject { ["channel"] = row.Channel, ["value"] = row.Value })]),
+        };
+
+        var (exit, stdout, _) = await ModeRun.RunAsync(InvocationFactory.Create(_written.Root, "channel.keys", input), Ct);
+
+        Assert.Equal(HostExitCodes.Completed, exit);
+        var keys = Succeeded(ModeRun.Outcome(stdout))["keys"]!.AsArray();
+        Assert.Equal(rows.Count, keys.Count);
+        for (var at = 0; at < rows.Count; at++)
+        {
+            var (channel, value) = rows[at];
+            var expected = Jason.Contracts.Channels.ChannelRules.KeyOf(channel, value);
+            var answered = (string?)keys[at];
+            Assert.True(answered == expected, $"host.channelKey('{channel}', '{value}') answered '{answered ?? "null"}', where the runtime keys '{expected ?? "null"}'.");
+        }
+    }
 }

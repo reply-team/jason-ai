@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Channels;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
 
@@ -91,8 +92,8 @@ public static class ContactValidation
                 continue;
             }
 
-            var name = ChannelRules.NormalizeChannelName(input.Channel, field + ".channel", errors);
-            var value = name is null ? null : ChannelRules.NormalizeValue(name, input.Value, field + ".value", errors);
+            var name = ChannelValidation.Name(input.Channel, field + ".channel", errors);
+            var value = name is null ? null : ChannelValidation.Value(name, input.Value, field + ".value", errors);
             var label = Label(input.Label, field + ".label", errors);
             var data = Data(input.Data, field + ".data", errors);
             if (name is null || value is null)

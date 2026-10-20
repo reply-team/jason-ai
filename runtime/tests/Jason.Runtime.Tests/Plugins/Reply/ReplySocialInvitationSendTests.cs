@@ -186,37 +186,62 @@ public class ReplySocialInvitationSendTests
         Assert.Empty(account.Sent);
     }
 
-    /// <summary>Reply's contact holds the profile as somebody typed it; the runtime keys it alike, so it is the same profile.</summary>
+    /// <summary>
+    /// Reply's contact holds the profile as somebody typed it; the runtime keys it alike, by its own rule, so it is the same
+    /// profile and the invitation goes. Nothing is written onto the contact.
+    /// </summary>
     [Theory]
-    [InlineData("HTTPS://WWW.LinkedIn.com/in/Marta-Example/")]
-    [InlineData("https://www.linkedin.com/in/marta-example#about")]
+    [MemberData(nameof(ReplyProfileKeys.Alike), MemberType = typeof(ReplyProfileKeys))]
     public async Task A_contact_holding_the_profile_in_another_spelling_is_invited_as_it_is(string held)
     {
         using var account = Planted(linkedIn: held);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(pinned: "1001")));
+        var result = await InvokeAsync(api, Input(pinned: "1001", profile: ReplyProfileKeys.RuntimeKey(held)));
 
+        Assert.True(result.Outcome is InvocationOutcome.Succeeded, $"Reply held '{held}', the work item carried its key, and the invitation was refused.");
         Assert.DoesNotContain(account.Calls, call => call.Command == "contact update");
         Assert.Equal(held, (string?)account.ContactOf(1001)!["linkedInUrl"]);
+        Assert.Single(account.Sent);
     }
 
     /// <summary>
-    /// A stop recorded under the plain spelling of a profile, and the person stored under the spelling with a doubled
-    /// trailing slash, which the runtime keys with one slash left: the register keeps the two apart, so the claim lets the
-    /// invitation through. Reply holds the person under the plain spelling. Keying the work item's value again would drop
-    /// that slash and take the stopped profile for the person, so nothing is sent and nothing is changed.
+    /// A contact at Reply carrying a value the runtime keys as no profile — a link to another kind of page, a link on
+    /// another host — is reached at nobody's profile, so it is another than the one consumed: nothing is changed and
+    /// nothing is sent.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ReplyProfileKeys.Apart), MemberType = typeof(ReplyProfileKeys))]
+    public async Task A_contact_carrying_a_value_the_runtime_keys_as_no_profile_is_not_changed_and_nothing_is_sent(string held)
+    {
+        using var account = Planted(linkedIn: held);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001", profile: ReplyProfileKeys.RuntimeKey(ReplyProfileKeys.Plain))));
+
+        Assert.True(
+            (error.Code, error.Class) == ("contact_channel_conflict", FailureClass.Permanent),
+            $"Reply held '{held}', and the invitation ended {error.Code}.");
+        Assert.Equal(["account list", "contact get 1001"], Lines(account));
+        Assert.Equal(held, (string?)account.ContactOf(1001)!["linkedInUrl"]);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A person whose channel still holds a value from before the key, and Reply holding the profile under its plain
+    /// spelling: the work item's value is compared as it stands, and it is not the key of what Reply holds, so nothing is
+    /// sent and nothing is changed.
     /// </summary>
     [Fact]
-    public async Task A_profile_the_register_keeps_apart_from_a_stopped_one_is_never_reached_through_it()
+    public async Task A_value_stored_before_the_key_is_never_the_profile_reply_holds_and_nothing_is_sent()
     {
-        var stored = await ReplyProfileKeys.StoredBesideAStopUnderThePlainSpellingAsync(Ct);
         using var account = Planted(linkedIn: ReplyProfileKeys.Plain);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001", profile: stored)));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001", profile: ReplyProfileKeys.LeftAsItStood)));
 
         Assert.Equal(("contact_channel_conflict", FailureClass.Permanent), (error.Code, error.Class));
         Assert.Equal(["account list", "contact get 1001"], Lines(account));
@@ -225,19 +250,18 @@ public class ReplySocialInvitationSendTests
     }
 
     /// <summary>
-    /// The same person stored with one trailing slash, and Reply's contact for them carrying no profile: written there,
-    /// the profile would be held as Reply keys it, without the slash — a profile the register keeps apart from the one it
-    /// was asked about. So nothing is written, and nothing is sent.
+    /// The same person, and Reply's contact for them carrying no profile: a value from before the key is no key, and
+    /// written there it would be a profile Reply holds under a spelling the register was not asked about. So nothing is
+    /// written, and nothing is sent.
     /// </summary>
     [Fact]
-    public async Task A_profile_reply_would_hold_under_another_spelling_is_never_written_onto_a_contact()
+    public async Task A_value_stored_before_the_key_is_never_written_onto_a_contact()
     {
-        var stored = ReplyProfileKeys.RuntimeKey(ReplyProfileKeys.Doubled);
         using var account = Planted(linkedIn: null);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001", profile: stored)));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001", profile: ReplyProfileKeys.LeftAsItStood)));
 
         Assert.Equal(("contact_channel_conflict", FailureClass.Permanent), (error.Code, error.Class));
         Assert.DoesNotContain(account.Calls, call => call.Command == "contact update");

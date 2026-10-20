@@ -183,9 +183,9 @@ public class ReplyConversationReplyTests
 
     /// <summary>
     /// On LinkedIn the person is the profile, held under the key the runtime gives a profile link for its suppression
-    /// register: the scheme and the host whatever their case, a default port, a user name, a fragment and one trailing
-    /// slash dropped, the query exactly as written, and the path whatever its case on linkedin.com. Reply's spelling is
-    /// keyed so; the work item's is that key already. Reply gives no identifier for a LinkedIn message.
+    /// register: the profile's name after <c>/in/</c>, decoded once, composed and lowercased, whatever host, scheme,
+    /// slashes, query or fragment the link carried. Reply's spelling is keyed so; the work item's is that key already.
+    /// Reply gives no identifier for a LinkedIn message.
     /// </summary>
     [Fact]
     public async Task A_linkedin_thread_is_answered_for_the_profile_it_names()
@@ -196,7 +196,7 @@ public class ReplyConversationReplyTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: ReplyProfileKeys.RuntimeKey("HTTPS://WWW.LinkedIn.com/in/Marta-Alvarez/#about")));
+        var result = await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: Profile));
 
         var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!;
         Assert.Equal(("linkedin", null), ((string?)item["channel"], (string?)item["message"]!["external_id"]));
@@ -204,69 +204,13 @@ public class ReplyConversationReplyTests
     }
 
     /// <summary>
-    /// The thread's person and the work item's are compared as the register keys a profile link, pair by pair from the
-    /// runtime's own table of keys: Reply holds the link as somebody typed it, the work item carries the key the runtime
-    /// stored for it, and they are one profile, so the reply goes. A slug in another case is the same person on
-    /// linkedin.com, a letter written outside ASCII is the escape the runtime keys it by, and a link with two trailing
-    /// slashes is the key that keeps one: only Reply's spelling is keyed, never the work item's again.
+    /// The thread's person and the work item's are compared as the register keys a profile link: Reply holds the link as
+    /// somebody typed it, the work item carries the key the runtime stored for it, and they are one profile, so the reply
+    /// goes. Only Reply's spelling is keyed, and by the runtime's own rule.
     /// </summary>
     [Theory]
-    [MemberData(nameof(ProfilePairs))]
-    public async Task A_linkedin_profile_the_register_keys_alike_is_the_thread_s_person_and_the_reply_goes(string held, string consumed)
-    {
-        var thread = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
-        thread["contact"]!["linkedInProfileUrl"] = held;
-        using var account = new ReplyAccount().WithThread(thread);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: consumed));
-
-        Assert.True(result.Outcome is InvocationOutcome.Succeeded, $"Reply held '{held}', the work item carried '{consumed}', and the reply was refused.");
-        Assert.Single(account.OutboundIn(502));
-    }
-
-    public static TheoryData<string, string> ProfilePairs()
-    {
-        var pairs = new TheoryData<string, string>();
-        foreach (var (raw, _, now) in Jason.Runtime.Tests.Contacts.ChannelRulesTests.LinkedInKeys.Select(row => row.Data))
-        {
-            pairs.Add(raw, now);
-        }
-
-        return pairs;
-    }
-
-    /// <summary>
-    /// A stop recorded under the plain spelling of a profile, and the work item's person stored under the spelling with a
-    /// doubled trailing slash, which the runtime keys with one slash left: the register keeps the two apart, so the claim
-    /// lets the reply through. Reply holds the thread's person under the plain spelling. Keying the work item's value
-    /// again would drop that slash and take the stopped profile for the person, so the reply is refused with nothing sent.
-    /// </summary>
-    [Fact]
-    public async Task A_profile_the_register_keeps_apart_from_a_stopped_one_is_never_reached_through_it()
-    {
-        var stored = await ReplyProfileKeys.StoredBesideAStopUnderThePlainSpellingAsync(Ct);
-        var thread = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
-        thread["contact"]!["linkedInProfileUrl"] = ReplyProfileKeys.Plain;
-        using var account = new ReplyAccount().WithThread(thread);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: stored)));
-
-        Assert.Equal(("thread_contact_mismatch", FailureClass.Validation), (error.Code, error.Class));
-        Assert.Equal(["inbox get 502"], Paths(account));
-        Assert.Empty(account.OutboundIn(502));
-    }
-
-    /// <summary>
-    /// A profile link written with escapes, or with letters outside ASCII, is keyed by the plugin as the runtime keys it,
-    /// and the key the work item carries is the runtime's own for the same link: the two are one profile, so the reply goes.
-    /// </summary>
-    [Theory]
-    [MemberData(nameof(ReplyProfileKeys.Keyed), MemberType = typeof(ReplyProfileKeys))]
-    public async Task A_profile_link_written_with_escapes_or_outside_ascii_is_the_profile_the_runtime_keys_it_as(string held)
+    [MemberData(nameof(ReplyProfileKeys.Alike), MemberType = typeof(ReplyProfileKeys))]
+    public async Task A_linkedin_profile_the_register_keys_alike_is_the_thread_s_person_and_the_reply_goes(string held)
     {
         var thread = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
         thread["contact"]!["linkedInProfileUrl"] = held;
@@ -277,17 +221,17 @@ public class ReplyConversationReplyTests
         var consumed = ReplyProfileKeys.RuntimeKey(held);
         var result = await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: consumed));
 
-        Assert.True(result.Outcome is InvocationOutcome.Succeeded, $"Reply held '{held}', the work item held the runtime's key '{consumed}', and the reply was refused.");
+        Assert.True(result.Outcome is InvocationOutcome.Succeeded, $"Reply held '{held}', the work item carried '{consumed}', and the reply was refused.");
         Assert.Single(account.OutboundIn(502));
     }
 
     /// <summary>
-    /// A link the runtime reads more into than the plugin follows — a step back up the path — is refused rather than
-    /// reached, even where the runtime keys it as the work item's own profile: the safe way to be wrong.
+    /// A value at Reply the runtime keys as no profile — a link to another kind of page, a link on another host — is
+    /// nobody's, so the thread is not this person's and nothing is sent.
     /// </summary>
     [Theory]
-    [MemberData(nameof(ReplyProfileKeys.Unfollowed), MemberType = typeof(ReplyProfileKeys))]
-    public async Task A_profile_link_the_plugin_cannot_key_as_the_runtime_does_is_nobody_s_and_nothing_is_sent(string held)
+    [MemberData(nameof(ReplyProfileKeys.Apart), MemberType = typeof(ReplyProfileKeys))]
+    public async Task A_value_at_reply_the_runtime_keys_as_no_profile_is_nobody_s_and_nothing_is_sent(string held)
     {
         var thread = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
         thread["contact"]!["linkedInProfileUrl"] = held;
@@ -295,25 +239,46 @@ public class ReplyConversationReplyTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: ReplyProfileKeys.RuntimeKey(held))));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: ReplyProfileKeys.RuntimeKey(ReplyProfileKeys.Plain))));
 
         Assert.True(
             (error.Code, error.Class) == ("thread_contact_mismatch", FailureClass.Validation),
             $"Reply held '{held}', and the reply ended {error.Code}.");
+        Assert.Equal(["inbox get 502"], Paths(account));
         Assert.Empty(account.OutboundIn(502));
     }
 
     /// <summary>
-    /// Every profile the register keys apart is another profile here: a profile one of whose links is the start of the
-    /// other's, and — on any host but linkedin.com — a path that differs only in its case. The register could hold a stop
-    /// under the thread's spelling while the claim asked it about the work item's, so the reply is refused rather than
-    /// sent to a person the check was never about.
+    /// A person whose channel still holds a value from before the key — left as it stood where the same person held the key
+    /// in another — is reached at a value the register keys as no profile. Reply holds the profile under its plain
+    /// spelling, whose key that value is not: the plugin compares the work item's value as it stands, so the thread is not
+    /// this person's and nothing is sent.
+    /// </summary>
+    [Fact]
+    public async Task A_value_stored_before_the_key_is_never_the_profile_reply_holds_and_nothing_is_sent()
+    {
+        var thread = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
+        thread["contact"]!["linkedInProfileUrl"] = ReplyProfileKeys.Plain;
+        using var account = new ReplyAccount().WithThread(thread);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: ReplyProfileKeys.LeftAsItStood)));
+
+        Assert.Equal(("thread_contact_mismatch", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(["inbox get 502"], Paths(account));
+        Assert.Empty(account.OutboundIn(502));
+    }
+
+    /// <summary>
+    /// Every profile the register keys apart is another profile here: a profile whose name differs, and one whose name is
+    /// the start of the other's. The register could hold a stop under the thread's profile while the claim asked it about
+    /// the work item's, so the reply is refused rather than sent to a person the check was never about.
     /// </summary>
     [Theory]
     [InlineData(null, "https://www.linkedin.com/in/marta-alvarez-2")]
     [InlineData(null, "https://www.linkedin.com/in/marta")]
-    [InlineData("https://example.com/in/Marta-Alvarez", "https://example.com/in/marta-alvarez")]
-    [InlineData("https://www.linkedin.com/in/marta-alvarez", "https://uk.linkedin.com/in/marta-alvarez")]
+    [InlineData("https://www.linkedin.com/in/marta-alvarez-2", "https://www.linkedin.com/in/marta-alvarez")]
     public async Task A_linkedin_profile_the_register_keys_apart_is_another_profile_and_nothing_is_sent(string? held, string value)
     {
         var planted = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");

@@ -3,10 +3,10 @@ using Jason.Contracts.Plugins;
 namespace Jason.PluginHost.Sdk;
 
 /// <summary>
-/// Everything the five host functions share: the envelope they enforce, the one stderr they write to, the call
-/// budget they spend, the kills the host must see end before it exits, how much of the invocation's time is left,
-/// and where a child process starts. Nothing here is reachable from JavaScript — the functions close over it, the
-/// <c>host</c> object does not expose it.
+/// Everything the host functions that reach outside the engine share: the envelope they enforce, the one stderr
+/// they write to, the call budget they spend, the kills the host must see end before it exits, how much of the
+/// invocation's time is left, and where a child process starts. Nothing here is reachable from JavaScript — the
+/// functions close over it, the <c>host</c> object does not expose it.
 /// </summary>
 public sealed class HostServices(
     PluginInvocation invocation,

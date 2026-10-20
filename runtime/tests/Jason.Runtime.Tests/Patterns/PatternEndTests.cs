@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Channels;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Manifest;
@@ -30,6 +31,8 @@ public sealed class PatternEndTests
     [InlineData("RoleValidation.RoleName", typeof(RoleValidation), "RoleName", "campaign-manager")]
     [InlineData("ChannelRules.ChannelName", typeof(ChannelRules), "ChannelName", "email")]
     [InlineData("ChannelRules.E164", typeof(ChannelRules), "E164", "+14155550123")]
+    [InlineData("ChannelRules.SchemeName", typeof(ChannelRules), "SchemeName", "https")]
+    [InlineData("ChannelRules.HostName", typeof(ChannelRules), "HostName", "www.linkedin.com")]
     [InlineData("MatchKey.CustomFieldName", typeof(MatchKey), "CustomFieldName", "crm_id")]
     [InlineData("ExecutorService.ErrorCode", typeof(ExecutorService), "ErrorCode", "rate_limited")]
     [InlineData("ExecutableResolver.NpmShimCall", typeof(ExecutableResolver), "NpmShimCall", NpmShimLastLine)]

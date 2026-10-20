@@ -8,7 +8,7 @@ namespace Jason.PluginHost.Sdk;
 /// <summary>
 /// The <c>host</c> object, built by hand rather than wrapped around a CLR instance. That is the whole point:
 /// a wrapped object would carry a type, a constructor and a member surface a plugin could walk; this one has
-/// five functions, no prototype of its own and nothing that can be added to it or replaced.
+/// six functions, no prototype of its own and nothing that can be added to it or replaced.
 /// </summary>
 public static class HostObject
 {
@@ -35,6 +35,7 @@ public static class HostObject
         Add(engine, host, "env", 1, (_, args) => env.Read(engine, args));
         Add(engine, host, "log", 2, (_, args) => log.Log(engine, args));
         Add(engine, host, "fail", 1, (_, args) => HostFailure.Create(engine, args));
+        Add(engine, host, "channelKey", 2, (_, args) => ChannelKeyFunction.Of(engine, args));
         host.PreventExtensions();
         return host;
     }
