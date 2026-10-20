@@ -41,10 +41,12 @@ a lead about what to check, not a fact about the campaign today.
 
 Read in this order, and do not skip a step because the cause seems to explain everything.
 
-**Failed items are your inbox.** A failure nobody interprets is the campaign quietly stopping:
+**Failed items are your inbox.** A failure nobody interprets is the campaign quietly stopping. Count them,
+then read them newest first:
 
 ```
-jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed --status expired
+jason workitem count --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed --status expired
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed --status expired --order finished
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
@@ -58,7 +60,7 @@ failures. A failed item is finished and is not reopened — if the work is still
 person. Read one to see which:
 
 ```
-jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --not-eligible
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --not-eligible --order due
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status awaiting_approval
 ```
 

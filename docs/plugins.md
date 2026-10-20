@@ -334,7 +334,7 @@ that plugin's own word for a call that never became work, and a contract expecti
 among its `failure_codes` (§7).
 
 **Promises.** `async function invoke` works: the host drains the job queue and unwraps the promise
-within the budget. The five `host.*` functions are synchronous — they block until the program or the
+within the budget. The six `host.*` functions are synchronous — they block until the program or the
 request finishes — so there is nothing to `await` on them.
 
 **Modules.** Only relative specifiers ending in `.js` or `.mjs`, only inside the package: `./x.js`,
@@ -359,8 +359,8 @@ declares (§3 and §7), at most 64 KiB; `attempt_id`,
 
 ## 6. The Host SDK
 
-`host` is a plain JavaScript object with exactly five read-only functions, closed to extension. It is
-not a wrapped CLR instance, so there is no member surface beyond those five and no type to walk back
+`host` is a plain JavaScript object with exactly six read-only functions, closed to extension. It is
+not a wrapped CLR instance, so there is no member surface beyond those six and no type to walk back
 into the host program. Every function takes **one options object** and refuses an unknown key with a
 `TypeError` you can catch: `timeoutMs` next to `timeout_ms` would otherwise make a capped call look
 uncapped. A key whose value is `undefined` counts as absent.
@@ -392,7 +392,7 @@ was actually started is on the record rather than inferred from the name.
 |---|---|
 | `executable` | required string, at most 256 characters, a granted name |
 | `args` | at most 256 strings, at most 1 MiB together |
-| `stdin` | string of at most 1 MiB, written and then closed |
+| `stdin` | string of at most 1 MiB, written as UTF-8 without a byte-order mark, then closed |
 | `timeout_ms` | 1 .. the invocation's `timeout_ms`, then clamped to what is left of the budget; default: what is left, less the kill grace |
 | `env` | at most 32 entries, names `^[A-Za-z_][A-Za-z0-9_]*$`, never `JASON_*` and never a loader or interpreter hook, values at most 4096 bytes, for this child only |
 
@@ -404,8 +404,10 @@ as `exec_env_not_allowed`: `LD_*`, `DYLD_*`, `COMPlus_*`,
 `PYTHONSTARTUP`, `RUBYOPT`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `CLASSPATH`, `PATH`, `PATHEXT`,
 `COMSPEC` and `SHELL` among them. Ordinary variables of the same runtimes — `NODE_ENV`,
 `DOTNET_NOLOGO`, `PYTHONUNBUFFERED` — are yours to set. `stdout` and
-`stderr` are captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes kept and the
-crossing flagged in `truncated`. A call's **kill grace** is the smaller of 5 s and half of what is
+`stderr` are read as UTF-8 and captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes
+kept and the crossing flagged in `truncated`. UTF-8 is the rule on every platform, whatever the console's
+code page — what a node program reads and writes on a pipe — so a name or a message outside ASCII reaches
+the program as it was written. A call's **kill grace** is the smaller of 5 s and half of what is
 left of the budget when the call is made — with 20 s left, a call without `timeout_ms` runs for 15 s
 and keeps a grace of 5 s; with 4 s left, 2 s and 2 s. Kept back from a call that asked for no timeout,
 it means the plugin is told its program timed out while it still has time to answer for itself. On a
@@ -485,6 +487,21 @@ is replaced by `[redacted]` in both the message and the serialised data. The mes
 4096 characters and `data` its first `Plugins:Invoker:LogLineBytes` (16 KiB), with `"truncated": true`
 on the line; after `Plugins:Invoker:StderrBytes` (4 MiB) in one invocation, a final `log_truncated`
 line is written and the log goes silent.
+
+### `host.channelKey`
+
+```js
+const key = host.channelKey("linkedin", held);   // "https://www.linkedin.com/in/marta-example", or null
+```
+
+The value the runtime's contacts, its do-not-contact register and its claim compare for a value on a channel: the
+runtime's own key, by the very function the runtime calls, or `null` where the runtime would store none. Compare a
+provider's spelling of an address with the one the runtime stored through it, and you compare as the register does,
+never by a copy of the rule that could come to differ. The channel's name is read as the runtime reads one, so
+`LinkedIn` and `linkedin` key alike; a channel without a rule of its own keys a value as its text trimmed. The input
+bound is the stored value's, 500 characters after trimming: anything longer is `null`. Both arguments must be strings,
+or it is a `TypeError`. It is a pure function — no grant, no budget, nothing written to stderr — and a runtime older
+than 0.13.0 has no such function.
 
 ### `host.fail`
 
@@ -625,7 +642,7 @@ in one of four words, and the rule below is the same for every one of them.
 | `preflight.provider_contact` | What you do for a person carrying no pin of yours | Published today |
 |---|---|---|
 | `find_or_create` | Look the person up by the value of the channel `args.channel` names, and create the contact from that value only when the provider holds nobody under it. | `campaign.enroll`, `list_membership.add`, `optout.record` |
-| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`, `contact.update`; `conversation.reply`, through its thread |
+| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`, `contact.update`, `social_invitation.send`, `message.send`; `conversation.reply`, through its thread |
 | `pinned_only` | Work by the pin alone: a person with none fails `contact_not_linked` before anything is called. | `conversation.list`, `contact.delete` |
 | `not_used` | The operation names nobody, so there is nobody to find. | every other operation |
 
@@ -637,8 +654,11 @@ does not.
 The rule has four parts.
 
 1. **The plugin owns the binding.** With no pin, find the provider's contact by the consumed channel's value, compared
-   the way the runtime keys that value — an email address without regard to case, a LinkedIn URL by its lowercased
-   slug — and read the lookup to its end. A provider's search may match by resemblance, so the comparison is yours; and
+   the way the runtime keys that value — `host.channelKey` answers that key: an email address without regard to case,
+   and a LinkedIn profile link by the name after `/in/`, decoded once, composed and lowercased, whatever host of
+   linkedin.com's, slashes, query or fragment it carries — and read the lookup to its end. The value you are handed is
+   that key already, so compare it as it stands. A provider's search may match by resemblance, so the comparison is
+   yours; and
    a lookup you cannot finish says nothing about a second match, so it is refused, never taken for nobody or for one.
    More than one match is `contact_not_unique`, and nothing is done. Create only where the word is `find_or_create`,
    and return the provider's identifier under `external_ids.contact` — on `error.external_ids` too, when the call
@@ -656,11 +676,18 @@ The rule has four parts.
    and its arguments hand you — the fields `contact.update` sets, for one — when the operation runs. Nothing is copied to the provider in the background, and the runtime keeps no
    copy of the provider's contact.
 
-Values written before a LinkedIn URL was keyed by its lowercased slug are rewritten to that key when the runtime
-starts, before anything is claimed, so the value you are handed is already in that form. Two spellings of one person
-on the register become that person's one stop, the earliest, with its reason: a stop is never lost by the collapse.
-A contact's two channels that become one value are kept as one, the primary where one of them is. The journal keeps every line it had, and the rewrite
-adds none.
+LinkedIn values written under an earlier key are rewritten to the key when the runtime starts, before anything is
+claimed, so the value you are handed is a key. Two rewrites have run. The first lowercased the path on linkedin.com,
+collapsed two spellings of one person on the register into that person's one stop, the earliest, with its reason, and
+kept a contact's two channels that became one value as one, the primary where one of them was. The second keys a link
+by the profile's name and deletes nothing: a value the rule refuses is left as it stands, and of several of one
+contact's values, or several of the register's entries, that come to share a key, one holds it and the others are left
+as they stood — so a value you are handed can, rarely, be one the runtime keys as no profile, which matches nothing a
+provider holds. Where the value the claim reads for a contact is left beside the one holding the key, the primary moves
+to the holder, so the claim asks the register about the key. A contact that still holds a value left so cannot be
+updated with its channels as read: the value the rule refuses answers `invalid`, and the one left beside the key answers
+`duplicate`, because it keys to the key the contact already holds. No stop is lost by either rewrite, the journal keeps
+every line it had, and neither adds one.
 
 ### Repeating after a lost answer
 
@@ -707,7 +734,7 @@ nobody downstream reasons over a word you guessed.
 
 ### Pages
 
-A read that answers a page — `enrollment.list`, `conversation.list`, `conversation.get` — is handed
+A read that answers a page — `enrollment.list`, `conversation.list`, `conversation.get`, `sender.list` — is handed
 `args.limit` and `args.offset` and answers at most `limit` items from `offset`, with `has_more`. Ask the
 provider for that page, map what comes back, and **stop adding items before the result would pass
 768 KiB**, counted the way the runtime counts a result: six bytes for DEL, for every character outside
@@ -793,7 +820,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all eighteen published
+`plugins/reply/` is the one to read: a marketplace package that implements all twenty-one published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -915,6 +942,13 @@ jason plugin-host --protocol 1 --plugin <id> --operation <op> --correlation <id>
 All four are required, order does not matter, and nothing else is accepted. They are public values a
 process listing may show, and they are repeated inside the envelope — the child refuses a
 disagreement. Everything else, the input, the binding and the resolved grants included, is on stdin.
+
+The wire is **ASCII both ways**. Each stream is UTF-8 without a byte-order mark, and the envelope and
+the outcome are JSON with each character outside ASCII written as an escape, so not one byte above 127
+crosses in either. That is a second defence beside the encoding: a child started without a window of
+its own is given a fresh console on the system's legacy code page, and a byte above 127 would be read
+through that page by a program that did not choose an encoding, whatever encoding it was written in. An
+escape reads the same in any page.
 
 ### The envelope: stdin, one JSON object, then end of file
 

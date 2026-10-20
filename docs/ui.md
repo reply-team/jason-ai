@@ -1,7 +1,7 @@
 # The browser UI
 
-Jason serves a small web UI from the runtime itself: what needs you (approvals and questions) and whether everything is
-running. It is one more client of the Runtime API, with the same rights as the command line, and nothing in the runtime
+Jason serves a small web UI from the runtime itself: what needs you (approvals and questions), what work is running,
+planned and finished, and whether everything is running. It is one more client of the Runtime API, with the same rights as the command line, and nothing in the runtime
 exists for it alone: everything the page does is a verb you could type.
 
 ## Opening it
@@ -15,13 +15,18 @@ instead, for an agent to hand to you). The link carries a ticket that pairs one 
 after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
 `jason ui open --approval <id>` and `--question <id>` open on one item.
 
-If nothing is installed, `jason ui open` says so with the code `ui_not_installed` and names the two directories below.
+If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
 ## Where the page comes from
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
-`<data>/ui/default/` when that holds a build; no release installs one. It serves those files and nothing else, under
+`<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'`.
+
+The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
+release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
+its end, and `jason status` names it where the default build is missing or another release's. A build from source
+has no published UI to fetch.
 
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
 and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version
@@ -37,13 +42,29 @@ jason ui revoke --all
 
 Each pairing is a token the runtime keeps as a hash, with who paired and when, and when it was last used. A token never
 expires on its own; revoke it when a browser should no longer have it. A browser that `jason ui open` opens again ends
-the token it held, so the list stays one row per browser. The System screen shows the same list.
+the token it held, so the list stays one row per browser. The System screen shows the same list, the browsers used most
+recently first; one not used for a month is dimmed, since a private window that closed or a browser whose data was
+cleared never comes back for its token, and one button revokes every browser but the one you are using.
 
 ## The port
 
 The runtime listens on `127.0.0.1:52766` by default, so the bookmark is stable. When that port is taken it takes the
 next free one above it and `jason runtime status --human` says so; `Runtime:Port` in `settings.json` picks another, and
 `0` lets the OS choose, as before.
+
+## Work items
+
+Three tabs over the same filters: **Now** is what is running and what waits for your approval, **Planned** is what
+will run, soonest first and grouped by day, and **Done** is what finished, newest first, with a chip that narrows it to
+failures. Each tab's number is `jason workitem count` for that tab's statuses and filters. The filters are a campaign
+and a person, each a search that opens on the first few and asks the runtime as you type (`jason campaign list
+--query`, `jason contact list --query`: any part of a name, company, title, email, phone or profile link), a kind, a
+role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a day at a time. They are part of the page's address,
+so a bookmark or a link from another screen keeps them. Opening an item shows what the runtime recorded about it: its
+facts, its attempts, its input and its history; a failure is shown as the error the runtime recorded, with its class
+and the attempts it used. Open work can take a new priority, start and due time, or be cancelled with a reason,
+through `jason workitem update` and `jason workitem cancel`; work waiting for your approval can be approved or rejected
+right there, as on Attention.
 
 ## What the page may do
 

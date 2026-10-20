@@ -28,11 +28,11 @@ thread first:
 - when `contacts[0].external_ids.contact` is present, the thread's person must be the one the provider holds under it;
 - and in every case the thread's address on the channel named by `args.channel` — the email address, the LinkedIn
   profile — must be that channel's value under the key the runtime gives a value for its suppression register: an
-  email address without regard to case; a profile link by its scheme and host without regard to case, with a default
-  port, a user name, a fragment and one trailing slash dropped, its query exactly, and its path without regard to case
-  on linkedin.com and its subdomains, where a profile link names a person by its slug, and exactly on any other host —
-  so `/in/Jane` and `/in/jane` are one person on linkedin.com and two anywhere else. That is what makes the register's
-  check, made at the claim for that value, a check for exactly the person reached.
+  email address without regard to case; a profile link by the profile's name after `/in/`, decoded once, composed and
+  lowercased, whatever host of linkedin.com's, scheme, slashes, query or fragment it carries — so
+  `uk.linkedin.com/in/Jane/` and `https://www.linkedin.com/in/jane` are one person, and a link the runtime keys as no
+  profile is nobody. That is what makes the register's check, made at the claim for that value, a check for exactly the
+  person reached.
 
 A thread on another channel fails `channel_mismatch`, a thread of somebody else `thread_contact_mismatch`, both
 before anything is sent. Nobody is created at the provider: the person is found through the thread, and their

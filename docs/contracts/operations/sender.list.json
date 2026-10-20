@@ -1,0 +1,194 @@
+{
+  "id": "sender.list",
+  "version": 1,
+  "l1": { "name": "sender.list", "contract_version": "2.0.0", "family": 15, "core": false },
+  "intent": "\"What can we send from?\" — mailboxes, social accounts, numbers and business messaging identities in one list.",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": [],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:sender.list:1:input",
+    "title": "sender.list input",
+    "description": "One page of the accounts a send can go from: the caller's own, or the whole team's when that is what is asked for.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["owners", "limit", "offset"],
+        "properties": {
+          "owners": {
+            "type": "string",
+            "enum": ["own", "team"],
+            "description": "Whose accounts to list: `own`, the accounts of the user the plugin signs in to the provider as and nothing else — an account the provider names no owner for is left out too — or `team`, every account the provider lists, each marked with whose it is. Required: offering a colleague's account is never a default."
+          },
+          "sender_channel": {
+            "type": "string",
+            "enum": ["email", "linkedin"],
+            "description": "Only the accounts of this channel. Without it every channel is listed, each asked for on its own."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many accounts on the page. Required: absence is not a default, and a page may come back shorter."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Where the page starts in the provider's own order: 0 for the first page, then the previous page's `offset` plus the number of items it returned."
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. The list names no campaign: an account sends for any of them."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:sender.list:1:output",
+    "title": "sender.list result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items", "has_more", "channels", "vendor"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["external_id", "channel", "name", "address", "status", "owner", "vendor"],
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "description": "The provider's identifier for the account: what a send names as its sender. Reported, never pinned."
+            },
+            "channel": { "type": "string", "enum": ["email", "linkedin"], "description": "The channel the account sends on." },
+            "name": {
+              "type": ["string", "null"],
+              "maxLength": 200,
+              "description": "The name the account sends under, or null when the provider holds none."
+            },
+            "address": {
+              "type": ["string", "null"],
+              "maxLength": 500,
+              "description": "Where the account sends from — a mailbox's address, a social profile's link — or null when the provider holds none. A send names it beside the identifier, so the person approving the send reads whose address it goes from."
+            },
+            "status": {
+              "type": "string",
+              "enum": ["active", "inactive", "disconnected", "other"],
+              "description": "Whether the account can send: `active`; `inactive`, turned off; `disconnected`, its connection to the channel lost; `other` for a state this vocabulary has no word for. The provider's own word is under `vendor.status` either way."
+            },
+            "owner": {
+              "type": "string",
+              "enum": ["own", "teammate", "unknown"],
+              "description": "Whose the account is: the user the plugin signs in to the provider as, a teammate of that user, or nobody the provider names."
+            },
+            "vendor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "description": "The provider's own word for the account's state. A closed list, so nothing else travels here.",
+              "properties": { "status": { "type": ["string", "null"], "maxLength": 32 } }
+            }
+          }
+        }
+      },
+      "has_more": { "type": "boolean", "description": "Whether the provider holds more accounts after this page." },
+      "channels": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["email", "linkedin"],
+        "description": "What became of each channel: `listed`, read whole; `not_included`, a channel the provider account's plan or role does not include, which holds no account a send could go from; `not_asked`, a channel `sender_channel` left out.",
+        "properties": {
+          "email": { "type": "string", "enum": ["listed", "not_included", "not_asked"] },
+          "linkedin": { "type": "string", "enum": ["listed", "not_included", "not_asked"] }
+        }
+      },
+      "vendor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ordering"],
+        "properties": {
+          "ordering": {
+            "const": "email_then_linkedin",
+            "description": "The provider's own order, the one `offset` counts in: the mailboxes first, then the LinkedIn accounts, each as the provider lists them."
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "feature_unavailable", "class": "permanent", "when": "The one channel `sender_channel` names is one the provider account's plan or role does not include. Without `sender_channel`, such a channel is said under `channels` instead." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the provider's list of accounts could not be read to its end, so nothing could be listed. Repeating it runs the same call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read this account's senders, or say whom it acts as." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the read for now and it may be asked again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing and costs nothing, so the next attempt simply asks again." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "Under `owners: own` an account is listed only when the provider names the user the plugin signs in as as its owner: a teammate's account, and one whose owner the provider does not name, are left out.",
+    "Under `owners: team` every account the provider lists is listed, each with `owner` saying whose it is.",
+    "Without `sender_channel` each channel is asked for on its own, and a channel the plan or role does not include is said under `channels` as `not_included` while the others are still listed; with `sender_channel` only that channel is asked for, and one not included fails `feature_unavailable`.",
+    "A page holds at most `limit` accounts, starting at `offset` in the provider's own order, and `has_more` says whether more follow; the next page starts at `offset` plus the number of items this page returned.",
+    "A page may come back short of `limit` with `has_more: true`: the plugin stops before the result would pass 768 KiB, counted as the runtime counts it.",
+    "A state this vocabulary has no word for is `other`, with the provider's own word under `vendor.status`.",
+    "A name or an address the provider holds as empty is null, never an empty string.",
+    "A read pins nothing: the identifiers it lists are named by the sends that follow, never recorded by this one."
+  ]
+}

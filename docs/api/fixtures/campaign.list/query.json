@@ -1,0 +1,22 @@
+{
+  "operation": "campaign.list",
+  "case": "query",
+  "request": {
+    "query": "smb",
+    "limit": 10
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cmp_2",
+        "name": "SMB test",
+        "status": "active",
+        "created_at": "2026-10-16T07:00:00.000Z",
+        "updated_at": "2026-10-16T07:00:00.000Z",
+        "archived_at": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "operation": "contact.get",
+  "case": "one",
+  "request": {
+    "contact_id": "cnt_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "cnt_1",
+    "first_name": "Ada",
+    "last_name": "Lovelace",
+    "company": "Kavali",
+    "title": "CTO",
+    "time_zone": null,
+    "channels": [
+      {
+        "channel": "email",
+        "value": "ada@kavali.example",
+        "label": null,
+        "primary": true,
+        "data": null
+      },
+      {
+        "channel": "phone",
+        "value": "+48601234567",
+        "label": null,
+        "primary": true,
+        "data": null
+      }
+    ],
+    "custom": {},
+    "external_ids": [],
+    "created_at": "2026-10-16T07:00:00.000Z",
+    "updated_at": "2026-10-16T07:00:00.000Z",
+    "archived_at": null
+  }
+}

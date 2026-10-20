@@ -112,14 +112,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.12.0/install.sh | sh -s -- --version 0.12.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.13.0/install.sh | sh -s -- --version 0.13.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.12.0/install.ps1))) -Version 0.12.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.13.0/install.ps1))) -Version 0.13.0
 ```
 
-These install 0.12.0 with 0.12.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.13.0 with 0.13.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -152,8 +152,8 @@ path — `~/.local/bin/jason --version`.
 A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
 day after that, at the default settings: one `GET`, carrying nothing about you or your work — it identifies only
 the runtime's version, including its build. `Update:CheckEnabled` set to `false` in
-`~/.jason/config/settings.json` turns that off. That request, and the downloads the install scripts and
-`jason update apply` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this
+`~/.jason/config/settings.json` turns that off. That request, and the downloads the install scripts,
+`jason update apply` and `jason ui install` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this
 repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the
 [licence](../LICENSE-RUNTIME.md).
 
@@ -235,7 +235,18 @@ jason skills install --roles-only
 
 Both fetch the skills with `git` from this repository, at the tag this build was published as (§1).
 
-That is everything a runtime needs, and it writes nowhere else. The other two packs go into your agent's own
+Then place the browser UI, the page `jason ui open` opens:
+
+```sh
+jason ui install
+```
+
+It downloads `jason-ui.zip` from the release this build was published as, checks it against that release's
+`checksums.txt`, and places it in the data directory as the default UI. A runtime works without it. A build from
+source has no published UI, so it refuses and says where a build of `ui/` goes instead: `ui/custom/` in the data
+directory, which is served first whenever it holds one.
+
+The role skills are everything a runtime needs, and none of these lines writes outside its data directory. The other two packs go into your agent's own
 configuration — for Claude Code, `~/.claude/skills` — which is yours to allow rather than Jason's to assume.
 
 **Ask first.** Without `--roles-only` the same verb deploys all three, again printing every root before it writes
@@ -269,9 +280,10 @@ from another. A deployment made at the tag of the build that installed it moves 
 made with `--ref` stays at its ref, a directory is read where it stands, and a development build keeps the ref the
 record names, because the tag its own version names is not published yet.
 
-`jason update apply` ends by running `jason skills update` at the new release's tag; an update applied by a build
-before 0.12.0 needs one `jason skills update` after it. A package manager's upgrade does not run
-`jason update apply`, so `jason skills update` follows it. Either way, `jason status` is the check: role skills a
+`jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
+UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
+and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. A package
+manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. Either way, `jason status` is the check: role skills a
 default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
 `jason skills install --roles-only`, with the `--source` they came from when it was not this repository. A
@@ -293,9 +305,10 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of six names in
-this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, and the `skills` and
-`update` nouns — and it cannot be otherwise: half of what it reports is not the runtime's to know.
+One question — "can this installation start work?" — answered check by check. It is one of seven names in
+this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and
+`update` nouns, and `ui install`, which changes this installation's files as those two do — and it cannot be
+otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
@@ -306,6 +319,7 @@ this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `
 | role skills are present, named after their directories and within the runtime's live cap | the skill packs are deployed to an agent harness |
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
 | | notifications reach you |
+| | a UI is installed, and the default one is this release's |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked. The JSON body carries `ready` and a state per check, so

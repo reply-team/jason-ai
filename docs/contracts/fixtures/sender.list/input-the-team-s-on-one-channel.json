@@ -1,0 +1,15 @@
+{
+  "operation": "sender.list",
+  "version": 1,
+  "case": "every LinkedIn account of the team, asked for on purpose",
+  "input": {
+    "args": { "owners": "team", "sender_channel": "linkedin", "limit": 50, "offset": 0 },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": "valid"
+}

@@ -42,11 +42,11 @@ export const COMMANDS = {
   },
   "contact get": {
     "kind": "read",
-    "note": "One contact by its id, as Reply holds it: the read contact.delete makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out. Two keys are read and nothing is kept."
+    "note": "One contact by its id, as Reply holds it: the read contact.delete makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out; and the read a send makes of the same and of where the contact is reached, an answer without that key read as lost. Nothing is kept."
   },
   "contact update": {
     "kind": "write",
-    "note": "Changes the fields and custom fields stdin names on the contact, by its id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values."
+    "note": "Changes the fields and custom fields stdin names on the contact, by its id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. Before a LinkedIn send it also gives a contact that carries no LinkedIn profile the one the send consumes, and nothing else."
   },
   "contact delete": {
     "kind": "write",
@@ -103,12 +103,41 @@ export const COMMANDS = {
   "inbox mark-unread": {
     "kind": "write",
     "note": "Marks the thread unread, which is what conversation.reopen is at Reply: set outright, so a repeat changes nothing."
+  },
+  "auth whoami": {
+    "kind": "read",
+    "note": "Who the credential signs in as: the one Reply user whose accounts sender.list offers under `own`. Only the user's id is read; the login name beside it is the operator's and is not kept."
+  },
+  "account list": {
+    "kind": "read",
+    "note": "The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what sender.list answers from."
+  },
+  "contact linkedin-connect": {
+    "kind": "write",
+    "note": "Invites the contact to connect on LinkedIn from the account named, with the note on stdin or with none. A send Reply keeps no key on, so a lost answer is never repeated."
+  },
+  "contact send-email": {
+    "kind": "write",
+    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML. A send Reply keeps no key on, so a lost answer is never repeated."
+  },
+  "contact linkedin-message": {
+    "kind": "write",
+    "note": "Sends the contact one LinkedIn message from the account named, outside any sequence, with the text on stdin; the contact has to be a connection of the account. A send Reply keeps no key on, so a lost answer is never repeated."
+  },
+  "contact linkedin-inmail": {
+    "kind": "write",
+    "note": "Sends the contact one InMail from the account named, outside any sequence, with the subject and the text on stdin. A send Reply keeps no key on, so a lost answer is never repeated."
+  },
+  "contact linkedin-voice": {
+    "kind": "write",
+    "note": "Sends the contact one voice message from the account named, outside any sequence, which Reply speaks from the script on stdin; the contact has to be a connection of the account. A send Reply keeps no key on, so a lost answer is never repeated."
   }
 };
 
 // Which row each of the Reply CLI's error codes is. An operation's own mapping wins over the shared one; a code in
 // neither is `auth.*` (who is calling), `usage.*` (refused before anything was sent), or a refusal this version has
-// no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email, and
+// no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email — and
+// `reply.invalid_request:message` one whose fields name a send's text — and
 // `reply.refused:inboxThread.invalidInput:RenderingFail` the row for a refusal Reply explained by its own code and by the
 // first word of its sentence, up to the first colon or white space.
 //
@@ -232,6 +261,48 @@ export const CODES = {
       "contact.not_unique": "contact_not_unique",
       "contact.field_not_found": "field_not_found",
       "reply.invalid_request": "value_refused",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "sender.list": {
+      "access.feature_unavailable": "feature_not_included",
+      "account.list_incomplete": "list_not_finished",
+      "network": "reply_not_reached"
+    },
+    "social_invitation.send": {
+      "contact.not_found": "contact_not_found",
+      "contact.not_unique": "contact_not_unique",
+      "contact.no_linkedin_profile": "no_profile_at_reply",
+      "account.list_incomplete": "list_not_finished",
+      "linkedin.account_not_found": "sender_not_found",
+      "linkedin.account_inactive": "sender_unavailable",
+      "linkedin.invalid_cookie": "sender_unavailable",
+      "linkedin.limit_reached": "sender_allowance_spent",
+      "linkedin.message_too_long": "note_too_long",
+      "reply.invalid_request:message": "note_too_long",
+      "linkedin.missing_variables": "text_would_render",
+      "linkedin.feature_disabled": "feature_not_included",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "message.send": {
+      "contact.not_found": "contact_not_found",
+      "contact.not_unique": "contact_not_unique",
+      "contact.no_linkedin_profile": "no_profile_at_reply",
+      "contact.blacklisted": "blacklisted_at_reply",
+      "account.list_incomplete": "list_not_finished",
+      "email_account.not_found": "sender_not_found",
+      "linkedin.account_not_found": "sender_not_found",
+      "linkedin.account_inactive": "sender_unavailable",
+      "linkedin.invalid_cookie": "sender_unavailable",
+      "linkedin.sales_navigator_required": "sender_unavailable",
+      "linkedin.sales_navigator_disconnected": "sender_unavailable",
+      "linkedin.voice_profile_missing": "sender_unavailable",
+      "linkedin.limit_reached": "sender_allowance_spent",
+      "linkedin.not_connected": "not_a_connection",
+      "linkedin.no_inmail_credits": "no_inmail_credits",
+      "linkedin.message_too_long": "text_too_long",
+      "linkedin.voice_too_long": "text_too_long",
+      "linkedin.missing_variables": "text_would_render",
+      "linkedin.feature_disabled": "feature_not_included",
       "access.feature_unavailable": "feature_not_included"
     }
   }
@@ -851,6 +922,258 @@ export const ROWS = {
         "class": "permanent",
         "note": "Reply says this account's plan or role may not change a contact. Signing in again would not change it; a role or a plan that includes it would."
       }
+    },
+    "sender.list": {
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable` for the one channel `sender_channel` names: the account's plan or role does not include its mailboxes or its LinkedIn accounts. Without `sender_channel` the same answer says the channel is `not_included`, and the others are still listed.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the accounts of the channel named, so there is none a send could go from there. Signing in again would not change it; a plan or a role that includes the channel would."
+      },
+      "list_not_finished": {
+        "when": "The CLI answered `account.list_incomplete`: Reply's list of mailboxes did not end within twenty thousand.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply's list of mailboxes did not end within twenty thousand, so the accounts could not all be listed and none were. Name the sender from Reply's own list of accounts instead."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on `account list`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated: name one channel with `sender_channel`, or raise `Plugins:Exec:OutputBytes`."
+      }
+    },
+    "social_invitation.send": {
+      "contact_not_found": {
+        "when": "`reply contact get` or the invitation answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account — so nothing was sent. The pin has to be cleared before this person can be worked again."
+      },
+      "nobody_under_the_value": {
+        "when": "The person has no pin, and the CLI's exact lookup of the profile found nobody Reply holds under it. Nothing is made: an invitation goes to a contact Reply holds.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "Reply holds nobody under this profile, so there is no contact to invite, and an invitation makes none. Put the person on a list or enroll them first — either makes the contact — then propose the invitation again."
+      },
+      "contact_not_unique": {
+        "when": "The person has no pin, and the CLI's exact lookup of the profile answered `contact.not_unique`: more than one contact is held under it.",
+        "code": "contact_not_unique",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this profile, so picking one would be guessing and nothing was sent. A person resolves the duplicate at Reply, then proposes the invitation again."
+      },
+      "invalid_channel_value": {
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "The person has no LinkedIn profile on the channel the call named, so there is nobody to invite. Name the channel they have a profile on."
+      },
+      "placeholder_in_the_text": {
+        "when": "The note carries a double opening brace, which Reply reads as the start of a placeholder of its own. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "The note carries a double opening brace, which Reply reads as a placeholder it fills in for each person, so what would go out might not be the note a person approved. Nothing was sent. Write the note without one and propose the invitation again."
+      },
+      "text_would_render": {
+        "when": "The CLI answered `linkedin.missing_variables`: Reply read part of the note as a placeholder of its own and could not fill it in.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "Reply read part of the note as a placeholder it fills in for each person and could not fill it in, so nothing was sent: what would have gone out was not the note a person approved. Write the note without anything Reply reads as a placeholder and propose the invitation again."
+      },
+      "note_too_long": {
+        "when": "The CLI answered `linkedin.message_too_long`, or `reply.invalid_request` naming the `message` field: Reply refuses notes over 200 characters. The document holds a note to 200, so this is reached only if Reply's own bound moves.",
+        "code": "message_too_long",
+        "class": "validation",
+        "note": "Reply found the note too long and sent nothing. Reply refuses notes over 200 characters; write a shorter note and propose the invitation again."
+      },
+      "sender_not_found": {
+        "when": "Reply's list of LinkedIn accounts holds none under the sender's identifier, the identifier is not a Reply number, refused without a call, or the CLI answered `linkedin.account_not_found`.",
+        "code": "sender_not_found",
+        "class": "permanent",
+        "note": "Reply has no LinkedIn account under this identifier that this account can send from, so nothing was sent. Name an account sender.list returns."
+      },
+      "sender_mismatch": {
+        "when": "Reply's list holds the sender's account under another address than the arguments state, or under one where they state none, or under none where they state one. Decided before the invitation.",
+        "code": "sender_mismatch",
+        "class": "validation",
+        "note": "The account the arguments name is not held by Reply under the address they state, so the person approving read another account than the one the invitation would go from, and nothing was sent. Name the account by the identifier and the address sender.list returns."
+      },
+      "sender_unavailable": {
+        "when": "Reply's list holds the sender's account as `inactive` or `disconnected`, or the CLI answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's own word travels in the trace.",
+        "code": "sender_unavailable",
+        "class": "permanent",
+        "note": "The LinkedIn account cannot send now — it is turned off, or its session at LinkedIn has to be connected again at Reply — so nothing was sent. Put the account right at Reply, then propose the invitation again."
+      },
+      "sender_allowance_spent": {
+        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace.",
+        "code": "sender_limit_reached",
+        "class": "permanent",
+        "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. Propose the invitation again once the allowance renews."
+      },
+      "opted_out_at_reply": {
+        "when": "`reply contact get` answered the contact with `isOptedOut: true`. Reply does not refuse an invitation to such a person by itself, so this read is the stop. Nothing is sent.",
+        "code": "suppressed",
+        "class": "permanent",
+        "note": "Reply holds this person as opted out, so nothing was sent. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
+      },
+      "channel_value_conflict": {
+        "when": "`reply contact get` answered the contact with another LinkedIn profile than the one the work item consumes, the one Reply holds keyed as the runtime keys a profile and the work item's compared as it stands; or with none, where the consumed one would be held at Reply under another spelling than the register was asked about. Nothing is changed and nothing is sent.",
+        "code": "contact_channel_conflict",
+        "class": "permanent",
+        "note": "Reply's contact for this person carries another LinkedIn profile than the one this work item consumes, and this package never changes one, so nothing was sent. Look at the contact at Reply: the profile there, or the one Jason holds, is wrong."
+      },
+      "no_profile_at_reply": {
+        "when": "The CLI answered `contact.no_linkedin_profile`: Reply holds no LinkedIn profile for the contact, though this package gave it the consumed one first.",
+        "code": "contact_channel_conflict",
+        "class": "permanent",
+        "note": "Reply says its contact for this person carries no LinkedIn profile, though the one this work item consumes was written onto it first, so nothing was sent. Look at the contact at Reply."
+      },
+      "patch_answer_lost": {
+        "when": "Writing the consumed profile onto a contact that held none timed out, exited 3 or answered something that is not a result. Nothing was sent, and the next attempt reads the contact again first.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply did not say whether the person's LinkedIn profile was written onto its contact, and nothing was sent. The runtime repeats the attempt, which reads the contact again before anything is sent."
+      },
+      "list_not_finished": {
+        "when": "The CLI answered `account.list_incomplete` to the read of the account's LinkedIn accounts. Nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply's list of accounts did not end, so the sender could not be found in it and nothing was sent."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `linkedin.feature_disabled` — Reply's code travels in the trace — or `access.feature_unavailable`: the account's plan or role does not include LinkedIn sends outside a sequence, or its LinkedIn accounts.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include LinkedIn invitations outside a sequence, so nothing was sent. Signing in again would not change it; a plan or a role that includes them would."
+      }
+    },
+    "message.send": {
+      "contact_not_found": {
+        "when": "`reply contact get` or the send answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account — so nothing was sent. The pin has to be cleared before this person can be worked again."
+      },
+      "nobody_under_the_value": {
+        "when": "The person has no pin, and the CLI's exact lookup of the address or the profile found nobody Reply holds under it. Nothing is made: a message goes to a contact Reply holds.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "Reply holds nobody under this address or profile, so there is no contact to send to, and a message makes none. Put the person on a list or enroll them first — either makes the contact — then propose the message again."
+      },
+      "contact_not_unique": {
+        "when": "The person has no pin, and the CLI's exact lookup of the address or the profile answered `contact.not_unique`: more than one contact is held under it.",
+        "code": "contact_not_unique",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this address or profile, so picking one would be guessing and nothing was sent. A person resolves the duplicate at Reply, then proposes the message again."
+      },
+      "invalid_channel_value": {
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "The person has no address or LinkedIn profile on the channel the call named, so there is nobody to send to. Name the channel they have."
+      },
+      "placeholder_in_the_text": {
+        "when": "The subject or the text carries a double opening brace, which Reply reads as the start of a placeholder of its own. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "The subject or the text carries a double opening brace, which Reply reads as a placeholder it fills in for each person, so what would go out might not be the message a person approved. Nothing was sent. Write it without one and propose the message again."
+      },
+      "format_of_another_channel": {
+        "when": "The message's format belongs to another channel than the one the call named — an email on LinkedIn, or a LinkedIn format on the email channel. The document refuses it first; this is the package's own check behind it. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "The message's format belongs to another channel than the one the call named, so it could not go as a person approved it. Nothing was sent. Name the format of the channel, or the channel of the format, and propose the message again."
+      },
+      "text_would_render": {
+        "when": "The CLI answered `linkedin.missing_variables`: Reply read part of a LinkedIn text as a placeholder of its own and could not fill it in.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "Reply read part of the text as a placeholder it fills in for each person and could not fill it in, so nothing was sent: what would have gone out was not the message a person approved. Write it without anything Reply reads as a placeholder and propose the message again."
+      },
+      "text_too_long": {
+        "when": "The CLI answered `linkedin.message_too_long`, or `linkedin.voice_too_long`: a voice message Reply finds too long to speak, which a script within 1000 characters can be. Reply's code travels in the trace.",
+        "code": "message_too_long",
+        "class": "validation",
+        "note": "Reply found the text too long — for a voice message, too long to speak — and sent nothing. Write a shorter text and propose the message again."
+      },
+      "sender_not_found": {
+        "when": "Reply's list of the channel's accounts holds none under the sender's identifier, the identifier is not a Reply number of the channel's size, refused without a call, or the send answered `email_account.not_found` or `linkedin.account_not_found`.",
+        "code": "sender_not_found",
+        "class": "permanent",
+        "note": "Reply has no account of this channel under this identifier that this account can send from, so nothing was sent. Name an account sender.list returns."
+      },
+      "sender_mismatch": {
+        "when": "Reply's list holds the sender's account under another address than the arguments state — compared as the runtime keys an address, so one it would not key matches nothing — or under one where they state none, or under none where they state one. Decided before the send.",
+        "code": "sender_mismatch",
+        "class": "validation",
+        "note": "The account the arguments name is not held by Reply under the address they state, so the person approving read another account than the one the message would go from, and nothing was sent. Name the account by the identifier and the address sender.list returns."
+      },
+      "sender_unavailable": {
+        "when": "Reply's list holds the sender's account as `inactive` or `disconnected`, or the send answered `linkedin.account_inactive`, `linkedin.invalid_cookie`, `linkedin.sales_navigator_required`, `linkedin.sales_navigator_disconnected` or `linkedin.voice_profile_missing`; Reply's own word travels in the trace.",
+        "code": "sender_unavailable",
+        "class": "permanent",
+        "note": "The account cannot send this message now — it is turned off, its connection at Reply has to be made again, or it lacks what the format needs: Sales Navigator for an InMail, a voice profile for a voice message — so nothing was sent. The attempt's trace says which; put the account right at Reply, then propose the message again."
+      },
+      "sender_allowance_spent": {
+        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace.",
+        "code": "sender_limit_reached",
+        "class": "permanent",
+        "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. Propose the message again once the allowance renews."
+      },
+      "not_a_connection": {
+        "when": "The CLI answered `linkedin.not_connected`: a LinkedIn message or voice message to a person the account is not connected with.",
+        "code": "not_connected",
+        "class": "permanent",
+        "note": "The LinkedIn account is not connected with this person, and Reply sends a message or a voice message only to a connection, so nothing was sent. Invite them with social_invitation.send and send once they accept, or send an InMail."
+      },
+      "no_inmail_credits": {
+        "when": "The CLI answered `linkedin.no_inmail_credits`: the LinkedIn account has no InMail credits left.",
+        "code": "insufficient_credits",
+        "class": "permanent",
+        "note": "The LinkedIn account has no InMail credits left, so nothing was sent. Propose the InMail again once the account has credits, or send a message to a connection."
+      },
+      "opted_out_at_reply": {
+        "when": "`reply contact get` answered the contact with `isOptedOut: true`. Reply does not refuse a send outside a sequence to such a person by itself, so this read is the stop. Nothing is sent.",
+        "code": "suppressed",
+        "class": "permanent",
+        "note": "Reply holds this person as opted out, so nothing was sent. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
+      },
+      "blacklisted_at_reply": {
+        "when": "The CLI answered `contact.blacklisted`: the account's blacklist holds the contact, which Reply consults on a direct email.",
+        "code": "suppressed",
+        "class": "permanent",
+        "note": "The account's blacklist at Reply holds this person, so nothing was sent. This is a refusal on purpose; Reply's blacklist is changed at Reply."
+      },
+      "channel_value_conflict": {
+        "when": "`reply contact get` answered the contact at another address than the one the work item consumes, or at none; or with another LinkedIn profile, or with none where the consumed one would be held at Reply under another spelling than the register was asked about. Reply's value is keyed whole as the runtime keys it, and the work item's compared as it stands. Nothing is changed and nothing is sent.",
+        "code": "contact_channel_conflict",
+        "class": "permanent",
+        "note": "Reply's contact for this person is reached at another address or LinkedIn profile than the one this work item consumes, or at none, and this package never changes an address or a profile, so nothing was sent. Look at the contact at Reply: the value there, or the one Jason holds, is wrong."
+      },
+      "no_profile_at_reply": {
+        "when": "The CLI answered `contact.no_linkedin_profile`: Reply holds no LinkedIn profile for the contact, though this package gave it the consumed one first.",
+        "code": "contact_channel_conflict",
+        "class": "permanent",
+        "note": "Reply says its contact for this person carries no LinkedIn profile, though the one this work item consumes was written onto it first, so nothing was sent. Look at the contact at Reply."
+      },
+      "patch_answer_lost": {
+        "when": "Writing the consumed profile onto a contact that held none timed out, exited 3 or answered something that is not a result. Nothing was sent, and the next attempt reads the contact again first.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply did not say whether the person's LinkedIn profile was written onto its contact, and nothing was sent. The runtime repeats the attempt, which reads the contact again before anything is sent."
+      },
+      "list_not_finished": {
+        "when": "The CLI answered `account.list_incomplete` to the read of the account's mailboxes or LinkedIn accounts. Nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply's list of accounts did not end, so the sender could not be found in it and nothing was sent."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `linkedin.feature_disabled` — Reply's code travels in the trace — or `access.feature_unavailable`: the account's plan or role does not include LinkedIn sends outside a sequence, or the accounts of the channel.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include messages outside a sequence on this channel, so nothing was sent. Signing in again would not change it; a plan or a role that includes them would."
+      }
     }
   }
 };
@@ -892,16 +1215,19 @@ export function cutAnswerRow(operation, command) {
 }
 
 // The row an error the CLI explained belongs in, for this operation: its own mapping, then the shared one, then the
-// CLI's namespaces. An invalid request naming the email field has a row of its own wherever the operation takes an
-// address, because there the person's data is what Reply refused rather than a request this package built wrong.
+// CLI's namespaces. An invalid request naming a field has a row of its own wherever the operation has one for that
+// field: the email, where the operation takes an address, because there the person's data is what Reply refused rather
+// than a request this package built wrong; and a send's text, which Reply holds to a length of its own.
 export function rowOf(operation, error) {
   const code = typeof error.code === "string" ? error.code : "";
   const own = has(CODES.per_operation, operation) ? CODES.per_operation[operation] : {};
   const details = error.details !== null && typeof error.details === "object" ? error.details : {};
   const fields = Array.isArray(details.fields) ? details.fields : [];
 
-  if (code === "reply.invalid_request" && fields.indexOf("email") >= 0 && has(own, code + ":email")) {
-    return own[code + ":email"];
+  for (const field of code === "reply.invalid_request" ? fields : []) {
+    if (typeof field === "string" && has(own, code + ":" + field)) {
+      return own[code + ":" + field];
+    }
   }
 
   // A refusal Reply explained, by its own code and the first word of its sentence, where the operation has a row for
@@ -957,7 +1283,7 @@ export function describe(value) {
 
 // What a result of an unexpected shape may say in a failure: the identifiers and words reply-cli's results are
 // documented to carry, and nothing else, because anything else a result held could be part of a person's record.
-const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active", "thread_id", "channel", "category_id"];
+const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active", "thread_id", "channel", "category_id", "activity_id", "reply_status"];
 
 export function evidence(result) {
   const kept = {};
@@ -991,6 +1317,8 @@ export function fail(operation, observed, learned) {
     // What this package itself could not do, for the endings that are its own refusal.
     reason: observed.reason,
     retry_after: observed.retry_after,
+    // Which of a sender's allowances is spent, where the provider said: daily or weekly.
+    limit: observed.limit,
     // The two numbers a person's decision was about and the one found at execution, where a population moved.
     expected: observed.expected,
     actual: observed.actual,

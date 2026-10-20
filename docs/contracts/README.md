@@ -70,7 +70,10 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | `not_used` | who is in a campaign at the provider |
 | [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
+| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_only` | send a person a message, outside any campaign, from one of the provider's accounts |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
+| [`sender.list`](operations/sender.list.md) | `sender.list` | `read` | `auto` | `safe` | `not_used` | the provider's accounts a send can go from |
+| [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_only` | invite a person to connect, from one of the provider's accounts |
 
 <!-- END GENERATED operations -->
 
@@ -112,7 +115,8 @@ value RAISES above the derivation table", the second "true for the one legitimat
 non-performance is itself the harm", and `approval_reason` says why. The catalogue sets both on `optout.record`, whose
 `auto` raises nothing — the table derives `confirm_once` for an irreversible control — so that document says `true`,
 `true` because its fragment does, not because one approval is both a raise and a lowering. The catalogue raises
-`contact.delete`, which states `approval_departs: true`, `protective_floor: false` and the fragment's reason. An
+`contact.delete` and `social_invitation.send`, which state `approval_departs: true`, `protective_floor: false` and each
+fragment's reason. An
 operation that does neither states `false`, `false` and `null`. The floor is checked when the document loads: it is refused unless
 `approval` is `auto`, `approval_reason` says why, `preflight.suppression` is `not_applicable` and
 `dispatch.in_paused_campaign` is `runs`, so neither the suppression register nor a paused campaign holds back an
@@ -212,8 +216,8 @@ declares `preview: null`, and every `auto` operation does.
 
 ## Pages
 
-A read that can answer more items than one result may hold — `enrollment.list`, `conversation.list` and
-`conversation.get` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
+A read that can answer more items than one result may hold — `enrollment.list`, `conversation.list`,
+`conversation.get` and `sender.list` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
 at most a row per channel and is not paged.
 
 - `args.limit` — at least 1, at most what the operation states — and `args.offset` — 0 to 1 000 000 — are both

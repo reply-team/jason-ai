@@ -1,6 +1,7 @@
 import { useEffect } from 'preact/hooks';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
+import type { UiToken } from '../../api/types';
 import { clock, relative } from '../../time/format';
 import * as store from './store';
 
@@ -210,10 +211,11 @@ export function SystemScreen() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {(store.tokens.value?.items ?? []).map((t) => {
+                                    {byLastUse(store.tokens.value?.items ?? []).map((t) => {
                                         const mine = t.id === session.tokenId.value;
+                                        const stale = now.getTime() - lastSeen(t) > staleAfterMs;
                                         return (
-                                            <tr key={t.id}>
+                                            <tr key={t.id} class={stale ? 'stale' : ''}>
                                                 <td>
                                                     {relative(new Date(t.issued_at), now)}
                                                     {mine && ' · this browser'}
@@ -221,6 +223,7 @@ export function SystemScreen() {
                                                 <td>{t.issued_to}</td>
                                                 <td>
                                                     {t.last_used_at ? relative(new Date(t.last_used_at), now) : 'never'}
+                                                    {stale && ' · not used for a month'}
                                                 </td>
                                                 <td class="r">
                                                     <button
@@ -237,10 +240,34 @@ export function SystemScreen() {
                                     })}
                                 </tbody>
                             </table>
+                            {(store.tokens.value?.items ?? []).some((t) => t.id !== session.tokenId.value) && (
+                                <div class="btn-row">
+                                    <button
+                                        class="btn"
+                                        type="button"
+                                        onClick={() => void store.revokeOthers(api, session.tokenId.value)}
+                                    >
+                                        Revoke all other browsers
+                                    </button>
+                                </div>
+                            )}
                         </section>
                     </div>
                 )}
             </div>
         </div>
     );
+}
+
+/** A browser unused for a month is most likely gone: a private window closed, its data cleared, another machine. */
+const staleAfterMs = 30 * 24 * 60 * 60 * 1000;
+
+/** When a browser was last seen: its last use, or its pairing if it was never used since. */
+function lastSeen(token: UiToken): number {
+    return new Date(token.last_used_at ?? token.issued_at).getTime();
+}
+
+/** The browsers seen most recently first, so the ones still in use lead and the forgotten ones sink. */
+function byLastUse(tokens: UiToken[]): UiToken[] {
+    return [...tokens].sort((a, b) => lastSeen(b) - lastSeen(a));
 }

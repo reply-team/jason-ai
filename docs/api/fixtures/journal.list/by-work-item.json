@@ -1,0 +1,61 @@
+{
+  "operation": "journal.list",
+  "case": "by-work-item",
+  "request": {
+    "work_item_id": "wi_4"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_1",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "workitem_cancelled",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_4",
+        "attempt_id": null,
+        "key": "status",
+        "old": "created",
+        "new": "cancelled",
+        "reason": "Not this week."
+      },
+      {
+        "id": "jrn_2",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "workitem_updated",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_4",
+        "attempt_id": null,
+        "key": "due_at",
+        "old": "2026-10-16T10:00:00.000Z",
+        "new": "2026-10-16T15:00:00.000Z",
+        "reason": null
+      },
+      {
+        "id": "jrn_3",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "workitem_updated",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_4",
+        "attempt_id": null,
+        "key": "not_before",
+        "old": null,
+        "new": "2026-10-16T11:00:00.000Z",
+        "reason": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

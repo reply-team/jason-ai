@@ -1,8 +1,9 @@
 // The only place in this package where a command line is built.
 //
 // One place, so that "a person's data never travels as an argument", "these flags never appear" and "no raw call is
-// ever made" are properties of the package rather than of whoever wrote the newest module: every line built here is a
-// work command, `reply <noun> <verb>`, and every request has a command made for it. The `exec` diagnostic records every argument, and the
+// ever made" are properties of the package rather than of whoever wrote the newest module: every line built here is
+// `reply <noun> <verb>` — a work command, or `auth whoami`, the CLI's own answer to whom it signs in as — and every
+// request has a command made for it. The `exec` diagnostic records every argument, and the
 // runtime's logs may never hold contact data, so a person goes on stdin and nowhere else. A test on the runtime side
 // reads the argument vector out of the stand-in's call log and holds it to exactly the shapes built here.
 //
@@ -119,6 +120,8 @@ function exec(context, args, stdin) {
  * says it had learned before it failed. `pins: false` keeps what the CLI learned out of the failure, for a command that
  * names something which is not ours yet, or for an operation that pins nothing. `missing` is the CLI's code for an id
  * Reply holds nothing under, where the caller answers that itself: the command then answers null instead of failing.
+ * `lost` is the row a lost answer belongs in where the caller knows more than the command's read or write mark says:
+ * a write made before a send, which sent nothing, is asked again as a read is.
  */
 export function run(context, request) {
   const stdin = request.stdin === undefined || request.stdin === null ? undefined : JSON.stringify(request.stdin);
@@ -132,11 +135,11 @@ export function run(context, request) {
 // all: what survived the cut can even parse, and acting on half an answer is worse than having none. On a read it
 // fails with the operation's own row — the same read would be cut at the same byte — and anywhere else it keeps the
 // lost-answer ending.
-function failIfUnread(answer, command, operation, learned) {
+function failIfUnread(answer, command, operation, learned, lost) {
   const observed = { call: command, exit_code: answer.exit_code, timed_out: answer.timed_out === true };
 
   if (answer.timed_out === true) {
-    observed.row = lostAnswerRow(command);
+    observed.row = lost;
     fail(operation, observed, learned);
   }
 
@@ -146,7 +149,7 @@ function failIfUnread(answer, command, operation, learned) {
   }
 
   if (answer.truncated !== null && typeof answer.truncated === "object" && answer.truncated.stdout === true) {
-    observed.row = cutAnswerRow(operation, command);
+    observed.row = lost === lostAnswerRow(command) ? cutAnswerRow(operation, command) : lost;
     observed.reason = "The answer passed Plugins:Exec:OutputBytes and was cut off.";
     fail(operation, observed, learned);
   }
@@ -159,12 +162,13 @@ function failIfUnread(answer, command, operation, learned) {
 function ended(answer, request) {
   const command = request.command;
   const operation = request.operation;
-  const observed = failIfUnread(answer, command, operation, request.learned);
+  const lost = typeof request.lost === "string" ? request.lost : lostAnswerRow(command);
+  const observed = failIfUnread(answer, command, operation, request.learned, lost);
 
   if (answer.exit_code === DONE) {
     const result = resultOf(answer.stdout);
     if (result === null) {
-      observed.row = lostAnswerRow(command);
+      observed.row = lost;
       fail(operation, observed, request.learned);
     }
 
@@ -186,11 +190,12 @@ function ended(answer, request) {
       observed.expected = said.details.expected;
       observed.actual = said.details.actual;
       observed.provider_status_code = typeof said.details.status_code === "string" ? said.details.status_code : undefined;
+      observed.limit = typeof said.details.limit === "string" ? said.details.limit : undefined;
     }
   }
 
   if (answer.exit_code === OUTCOME_UNKNOWN) {
-    observed.row = lostAnswerRow(command);
+    observed.row = lost;
   } else if (answer.exit_code === REFUSED_THE_CALL) {
     // Nothing was sent. The CLI's own word says whether it was about who is calling or about what was asked.
     observed.row = said === null ? "call_refused_before_it_was_sent" : rowOf(operation, said);
@@ -198,7 +203,7 @@ function ended(answer, request) {
     observed.row = rowOf(operation, said);
   } else {
     // An exit the CLI did not explain: a crash, a stack trace. On a write it may have happened.
-    observed.row = lostAnswerRow(command);
+    observed.row = lost;
   }
 
   fail(operation, observed, request.pins === false ? request.learned : learnedWith(request.learned, said, operation, observed.row));

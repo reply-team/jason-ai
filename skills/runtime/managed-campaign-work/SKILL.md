@@ -90,7 +90,13 @@ you already used is refused with `idempotency_key_reused`; give it a key of its 
 
 **The campaign's own people are `campaign list-contacts`.** `contact list` answers with everyone this runtime
 knows and takes no campaign at all, so `contact list --campaign …` is the spelling to expect yourself to reach
-for and the one that costs you a turn on `Unrecognized command or argument`.
+for and the one that costs you a turn on `Unrecognized command or argument`. To find one person among everyone the
+runtime knows, give `contact list` any part of what they are known by — a name, a company, an email, a phone however
+it is spaced, a LinkedIn link:
+
+```
+jason contact list --query "marta@"
+```
 
 `contacts.json` is a JSON array of people, each with their channels:
 
@@ -127,6 +133,14 @@ Then follow the work:
 ```
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+What is planned, soonest first and undated work last, rather than a walk through every page; and how many items
+match, with any filter `list` takes, rather than paging to count them:
+
+```
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --order due
+jason workitem count --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 ### Which host runs AI work, and what that means for work you create

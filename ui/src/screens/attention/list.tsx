@@ -1,5 +1,5 @@
-import { useRef } from 'preact/hooks';
-import { useLoadMoreOnScroll } from '../../lists/use-cursor-list';
+import type { LoadMore } from '../../lists/use-cursor-list';
+import { More } from '../../lists/more';
 import { navigate, route } from '../../router';
 import { relative } from '../../time/format';
 import type { ApprovalSummary, DecisionSummary } from '../../api/types';
@@ -9,8 +9,8 @@ import type { Kind } from './store';
 type Props = {
     approvals: ApprovalSummary[];
     questions: DecisionSummary[];
-    moreApprovals: (() => void) | null;
-    moreQuestions: (() => void) | null;
+    moreApprovals: LoadMore | null;
+    moreQuestions: LoadMore | null;
     now: Date;
 };
 
@@ -67,17 +67,6 @@ export function AttentionList({ approvals, questions, moreApprovals, moreQuestio
                 </a>
             ))}
             <More more={moreQuestions} />
-        </div>
-    );
-}
-
-function More({ more }: { more: (() => void) | null }) {
-    const sentinel = useRef<HTMLDivElement>(null);
-    useLoadMoreOnScroll(sentinel, more);
-    if (!more) return null;
-    return (
-        <div ref={sentinel} class="end loading" role="button" tabIndex={0} onClick={more}>
-            loading…
         </div>
     );
 }
