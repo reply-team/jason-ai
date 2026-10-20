@@ -14,7 +14,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Six names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Seven names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -49,8 +49,14 @@ namespace Jason.Cli;
 /// bundle rather than given as a reason there is none.
 /// </para>
 /// <para>
-/// A guard holds the list to these: a seventh has to be added in the open rather than arriving as one more verb
-/// somebody thought was obviously fine.
+/// <c>ui install</c> is the seventh, and the one verb of a noun whose other verbs are operations. It changes this
+/// installation as <c>skills</c> and <c>update</c> do: it places the release's UI as the default build on this
+/// machine, and asks the runtime nothing. <c>ui open</c>, <c>ui tokens</c> and <c>ui revoke</c> stay operations.
+/// </para>
+/// <para>
+/// Guards hold the list to these: the verb-map tests to the four verbs, the two nouns and the <c>ui</c> group's three
+/// operations and <c>install</c>. An eighth has to be added in the open rather than arriving as one more verb somebody
+/// thought was obviously fine.
 /// </para>
 /// </remarks>
 public static class CliApp

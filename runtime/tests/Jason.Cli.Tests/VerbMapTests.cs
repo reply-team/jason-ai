@@ -115,8 +115,30 @@ public class VerbMapTests
 
         // And the verbs stand for none either. Each says it never will, and nothing held that: an
         // `uninstall.*`, `status.*`, `logs.*` or `doctor.*` operation arriving in the contracts would have kept
-        // this test green while the six declared exceptions quietly became five.
+        // this test green while the seven declared exceptions quietly became six.
         Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
+    }
+
+    /// <summary>
+    /// The <c>ui</c> group is its three operations and one verb that is none: <c>install</c>, which places the release's
+    /// build on this machine and asks the runtime nothing, the way <c>skills install</c> does. A second verb like it is a
+    /// decision, and it is made here.
+    /// </summary>
+    [Fact]
+    public void The_ui_verb_group_is_its_three_operations_and_install()
+    {
+        using var paths = new TempPaths();
+        var group = Jason.Cli.Commands.UiCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
+        var verbs = group.Subcommands.Select(command => command.Name).Order(StringComparer.Ordinal).ToArray();
+        var operations = typeof(Contracts.Api.Operations)
+            .GetFields()
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .Where(name => name.StartsWith("ui.", StringComparison.Ordinal))
+            .Select(name => name["ui.".Length..]);
+
+        Assert.Equal(["install", "open", "revoke", "tokens"], verbs);
+        Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
     }
 
     /// <summary>

@@ -1055,6 +1055,68 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// <c>jason status</c> exits 1 whenever the installation is not ready, and GitHub's <c>pwsh</c> ends a step with the
+    /// last native command's exit code. A CI step that asks it, in a job that never makes its installation ready — no role
+    /// skills, no PATH entry — has to say that it succeeded itself, as the release's smoke does after its last command,
+    /// or it fails after every assertion in it passed.
+    /// </summary>
+    [Fact]
+    public void A_ci_step_that_asks_jason_status_ends_by_saying_it_succeeded()
+    {
+        var asking = Mapping(Parse(Read(Ci)), "jobs").Children
+            .SelectMany(job => (Node((YamlMappingNode)job.Value, "steps") as YamlSequenceNode)?.Children.Cast<YamlMappingNode>() ?? [])
+            .Select(step => Scalar(step, "run"))
+            .OfType<string>()
+            .Where(run => Regex.IsMatch(run, @"&\s*\$env:install\s+status\b"))
+            .ToList();
+
+        Assert.NotEmpty(asking);
+        Assert.All(asking, run => Assert.Equal("exit 0", run.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd().Split('\n')[^1].Trim()));
+    }
+
+    /// <summary>
+    /// The UI's package is built once per release, like the plugin's: by a job of its own, from the tag's checkout, with
+    /// the release's version stamped in its manifest — CI's zip says <c>-dev</c> and is gone in fourteen days, so the
+    /// release builds its own, after the UI's checks and tests have passed on that tree. It is uploaded under a name the
+    /// publishing job's download takes, and the publishing job waits for it.
+    /// </summary>
+    [Fact]
+    public void The_ui_s_package_is_built_at_the_tag_by_a_job_of_its_own_and_reaches_the_release()
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var (name, job) = Assert.Single(
+            jobs.Children.Select(found => (Name: found.Key.ToString(), Job: (YamlMappingNode)found.Value)),
+            found => (Node(found.Job, "steps") as YamlSequenceNode)?.Children.Cast<YamlMappingNode>().Any(step => Scalar(step, "run")?.Contains("npm run package", StringComparison.Ordinal) == true) == true);
+
+        Assert.Null(Node(job, "strategy"));
+        Assert.Equal("version", Scalar(job, "needs"));
+        var steps = Assert.IsType<YamlSequenceNode>(Node(job, "steps")).Children.Cast<YamlMappingNode>().ToList();
+        Assert.StartsWith("actions/checkout@", Scalar(steps[0], "uses"), StringComparison.Ordinal);
+        var node = Mapping(Assert.Single(steps, one => Scalar(one, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true), "with");
+        Assert.Equal("24", Scalar(node, "node-version"));
+
+        var runs = string.Join('\n', steps.Select(one => Scalar(one, "run")).OfType<string>());
+        var order = new[] { "npm ci", "npm run check", "npm test", "npm run build", "npm run package" }.Select(command => runs.IndexOf(command, StringComparison.Ordinal)).ToList();
+        Assert.DoesNotContain(-1, order);
+        Assert.Equal(order.Order(), order);
+        var packaging = Assert.Single(steps, one => Scalar(one, "run")?.Contains("npm run package", StringComparison.Ordinal) == true);
+        Assert.Equal("${{ needs.version.outputs.version }}", Scalar(Mapping(packaging, "env"), "JASON_VERSION"));
+        Assert.All(steps.Where(one => Scalar(one, "run") is not null), one => Assert.Null(Node(one, "continue-on-error")));
+
+        var upload = Mapping(Assert.Single(steps, one => Scalar(one, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true), "with");
+        Assert.Equal($"ui/artifacts/{ReleaseAssets.Ui}", Scalar(upload, "path"));
+        Assert.Equal("error", Scalar(upload, "if-no-files-found"));
+
+        var download = Mapping(Assert.Single(PublishingSteps(), one => Scalar(one, "uses")?.StartsWith("actions/download-artifact@", StringComparison.Ordinal) == true), "with");
+        var pattern = Scalar(download, "pattern")!;
+        var artifact = Scalar(upload, "name")!;
+        Assert.True(
+            Regex.IsMatch(artifact, "^" + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal) + "$"),
+            $"The UI's package is uploaded as '{artifact}', which the publishing job's download of '{pattern}' does not take.");
+        Assert.Contains(name, Assert.IsType<YamlSequenceNode>(Node(PublishingJob(), "needs")).Children.Select(need => need.ToString()));
+    }
+
+    /// <summary>
     /// The step that decides the version, run as the workflow would run it, with the same environment GitHub
     /// gives it. A tag is <c>v</c> and a version; the button gives the version itself; anything else stops the
     /// workflow before a runner has built anything. The accepted rows are the ones <see cref="SemanticVersion"/>
@@ -1317,7 +1379,7 @@ public class ReleaseWorkflowTests
         // The script's own refusal, which says what the release promised, rather than whatever a later line would say
         // about a file it cannot find.
         Assert.NotEqual(0, exit);
-        Assert.Contains($"The release carries the plugin package {ReleaseAssets.ReplyPlugin}, and it is not in", stderr, StringComparison.Ordinal);
+        Assert.Contains($"The release carries the package {ReleaseAssets.ReplyPlugin}, and it is not in", stderr, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Manifest)));
         Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Checksums)));
     }
@@ -1375,6 +1437,7 @@ public class ReleaseWorkflowTests
         }
 
         File.WriteAllText(Path.Combine(directory, ReleaseAssets.ReplyPlugin), $"not really {ReleaseAssets.ReplyPlugin}");
+        File.WriteAllText(Path.Combine(directory, ReleaseAssets.Ui), $"not really {ReleaseAssets.Ui}");
         return directory;
     }
 
@@ -1533,11 +1596,14 @@ public class ReleaseWorkflowTests
         {
             Assert.Equal("https://jasonharness.ai/releases/tag/v0.2.0", manifest.ReleaseNotesUrl);
 
-            var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, ReleaseAssets.ReplyPlugin))));
             var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
-            Assert.True(
-                checksums.Split('\n').Contains($"{package}  {ReleaseAssets.ReplyPlugin}"),
-                $"{workflow} runs `{invocation}`, and the checksums it wrote carry no line for {ReleaseAssets.ReplyPlugin}:\n{checksums}");
+            foreach (var carried in (string[])[ReleaseAssets.ReplyPlugin, ReleaseAssets.Ui])
+            {
+                var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, carried))));
+                Assert.True(
+                    checksums.Split('\n').Contains($"{package}  {carried}"),
+                    $"{workflow} runs `{invocation}`, and the checksums it wrote carry no line for {carried}:\n{checksums}");
+            }
         }
     }
 

@@ -39,18 +39,19 @@ public class DocumentedPageCommandsTests
 
     /// <summary>
     /// Lines typed whole rather than by prefix. <c>docs/INSTALL.md</c> prints eighteen <c>jason</c> lines and
-    /// these four went untyped while the commit and the pull request said every line was; a prefix would also
+    /// four of these went untyped while the commit and the pull request said every line was; a prefix would also
     /// catch prose, such as the README prompt's "…other than through jason runtime start." at the end of a
     /// sentence, which the prompt said until it pointed at the install page instead.
     /// </summary>
     /// <remarks>
-    /// Safe to type, all four: <c>--version</c> prints a string, <c>status</c> and <c>stop</c> find no
-    /// descriptor in this test's data directory, and <c>start</c> launches through the recording process table
-    /// below, whose child has already exited — nothing is started. What stays untyped on these pages, and why:
+    /// Safe to type, all five: <c>--version</c> prints a string, <c>status</c> and <c>stop</c> find no
+    /// descriptor in this test's data directory, <c>start</c> launches through the recording process table
+    /// below, whose child has already exited — nothing is started — and <c>ui install</c> downloads through the
+    /// handler below, which reaches nothing. What stays untyped on these pages, and why:
     /// <c>jason runtime run</c>, which keeps a runtime in the foreground of this very process and does not
     /// return, and <c>jason runtime restart</c>, which starts one; neither is printed as a line here today.
     /// </remarks>
-    private static readonly string[] Lines = ["jason --version", "jason runtime start", "jason runtime status", "jason runtime stop"];
+    private static readonly string[] Lines = ["jason --version", "jason runtime start", "jason runtime status", "jason runtime stop", "jason ui install"];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
     private static readonly string[] Pages =

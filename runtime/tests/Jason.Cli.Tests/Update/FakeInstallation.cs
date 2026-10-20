@@ -9,6 +9,7 @@ using Jason.Cli.Update;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
 
@@ -195,6 +196,12 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// </remarks>
     public string? ServesVersion { get; set; }
 
+    /// <summary>The API the runtime says it speaks in <c>system.info</c>, for a test about a build made for another.</summary>
+    public string SpeaksApi { get; set; } = "v1";
+
+    /// <summary>Set to have the runtime stop answering once the ledger says <c>complete</c>: it went away after it was healthy.</summary>
+    public bool GoesSilentOnceComplete { get; set; }
+
     /// <summary>
     /// Whether the runtime refuses to stop. It is the one failure that leaves a runtime up and answering, which
     /// is what makes it the case where an update's own stop has something to print.
@@ -260,8 +267,16 @@ public sealed class FakeInstallation : HttpMessageHandler
         return path;
     }
 
-    /// <summary>Every address the applier fetched from the feed, in order.</summary>
-    public List<string> Fetched => _release.Requested;
+    /// <summary>
+    /// Every address the update fetched for itself, in order: the feed and the archive. The UI's two files are left
+    /// out, because its step fetches them after every update, resumed or not; <see cref="FakeRelease.Requested"/> has
+    /// everything.
+    /// </summary>
+    public List<string> Fetched =>
+    [
+        .. _release.Requested.Where(path =>
+            !path.EndsWith("/" + ReleaseAssets.Checksums, StringComparison.Ordinal) && !path.EndsWith("/" + UiAssetLayout.AssetName, StringComparison.Ordinal)),
+    ];
 
     public Uri Feed => _release.Feed;
 
@@ -421,7 +436,7 @@ public sealed class FakeInstallation : HttpMessageHandler
         Operations.Add(operation);
         Witnessed.Add((operation, Ledger()?.Step, File.Exists(InstallPath)));
 
-        if (!Running)
+        if (!Running || (GoesSilentOnceComplete && Ledger()?.Step == UpdateStep.Complete))
         {
             throw new HttpRequestException("connection refused");
         }
@@ -493,7 +508,7 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     private SystemInfoResponse Info() => new(
         ServesVersion ?? Installed(),
-        "v1",
+        SpeaksApi,
         InstanceId,
         Pid,
         DateTimeOffset.UnixEpoch,

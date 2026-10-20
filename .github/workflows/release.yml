@@ -154,9 +154,53 @@ jobs:
           path: artifacts/release/jason-plugin-reply.zip
           if-no-files-found: error
 
+  ui:
+    name: The UI's package
+    needs: version
+    runs-on: ubuntu-latest
+    # Once per release, like the plugin's package, and built here rather than taken from CI: CI's zip carries the -dev
+    # version and is kept fourteen days, and `jason status` compares the default UI's version with the runtime's. The
+    # page's checks and tests run on the tag's tree before it is packaged, as the runtime's do before it is archived.
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Check (types, lint, format)
+        run: npm run check
+
+      - name: Unit and screen tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Package with the release's version
+        env:
+          JASON_VERSION: ${{ needs.version.outputs.version }}
+        run: npm run package
+
+      # Named so that the publishing job's download of jason-* brings it beside the archives, where the checksums are
+      # written.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-ui
+          path: ui/artifacts/jason-ui.zip
+          if-no-files-found: error
+
   release:
     name: Assemble and publish
-    needs: [version, build, plugin]
+    needs: [version, build, plugin, ui]
     runs-on: ubuntu-latest
     # The only job that holds the publication token, which reaches the public repository and nothing else. It builds
     # and runs nothing that was built, so a test on a matrix runner cannot publish anything, and nothing is published
@@ -181,11 +225,11 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           # The three fragments become manifest.json — what a running Jason reads to learn this release exists —
-          # and checksums.txt, which lists the plugin's package after the archives; the manifest does not, its
-          # artifacts being platforms. A platform or the package missing from the download, or an archive that no
+          # and checksums.txt, which lists the plugin's and the UI's packages after the archives; the manifest does not,
+          # its artifacts being platforms. A platform or a package missing from the download, or an archive that no
           # longer hashes to what its fragment says, stops the release here. The notes are read where the release is
           # published, which is the public repository whichever repository built it.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip -ReleaseNotesUrl "https://jasonharness.ai/releases/tag/v$env:VERSION"
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-ui.zip -ReleaseNotesUrl "https://jasonharness.ai/releases/tag/v$env:VERSION"
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -270,10 +314,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "gh release delete exited with $LASTEXITCODE" }
           }
 
-          # gh names an asset by its file name. The archives, the feed and the plugin's package were assembled under
+          # gh names an asset by its file name. The archives, the feed and the two packages were assembled under
           # artifacts/release; the install scripts are the tag's own, so a one-liner pinned to this release runs the
           # script it was published with.
-          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip')
+          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-ui.zip')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
 

@@ -128,7 +128,7 @@ Add-Line '</details>'
 Add-Line
 Add-Line '## The draft release'
 Add-Line
-Add-Line "``v$Version`` is a draft until this merges. It holds ``jason-win-x64.zip``, ``jason-linux-x64.tar.gz``, ``jason-osx-arm64.tar.gz``, ``manifest.json``, ``checksums.txt``, ``install.sh``, ``install.ps1`` and ``jason-plugin-reply.zip``."
+Add-Line "``v$Version`` is a draft until this merges. It holds ``jason-win-x64.zip``, ``jason-linux-x64.tar.gz``, ``jason-osx-arm64.tar.gz``, ``manifest.json``, ``checksums.txt``, ``install.sh``, ``install.ps1``, ``jason-plugin-reply.zip`` and ``jason-ui.zip``."
 
 $directory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Body))
 [IO.Directory]::CreateDirectory($directory) | Out-Null

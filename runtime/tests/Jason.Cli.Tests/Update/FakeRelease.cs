@@ -3,6 +3,8 @@ using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using Jason.Cli.Tests.Ui;
+using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
 
 namespace Jason.Cli.Tests.Update;
@@ -26,6 +28,28 @@ public sealed class FakeRelease : HttpMessageHandler
         Digest = digest ?? Convert.ToHexStringLower(SHA256.HashData(bytes));
         Size = size ?? bytes.LongLength;
         _files[ReleaseAssets.Manifest] = Encoding.UTF8.GetBytes(Manifest());
+        WithUi(UiZip.Build(version.ToString()));
+    }
+
+    /// <summary>The release's UI package, and checksums.txt listing it after the archive, as a release publishes both.</summary>
+    public FakeRelease WithUi(byte[] zip, string? digest = null)
+    {
+        _files[UiAssetLayout.AssetName] = zip;
+        return ChecksumsSay($"{Digest}  {Asset}\n{digest ?? Convert.ToHexStringLower(SHA256.HashData(zip))}  {UiAssetLayout.AssetName}\n");
+    }
+
+    /// <summary>A release from before the UI was published: no package, and checksums.txt lists the archive alone.</summary>
+    public FakeRelease WithoutUi()
+    {
+        _files.Remove(UiAssetLayout.AssetName);
+        return ChecksumsSay($"{Digest}  {Asset}\n");
+    }
+
+    /// <summary>Replaces what checksums.txt says, for a test about a file that says something wrong.</summary>
+    public FakeRelease ChecksumsSay(string text)
+    {
+        _files[ReleaseAssets.Checksums] = Encoding.UTF8.GetBytes(text);
+        return this;
     }
 
     /// <summary>The platform this test is running on: what a real applier would ask for.</summary>
@@ -59,6 +83,12 @@ public sealed class FakeRelease : HttpMessageHandler
 
     /// <summary>Every address this handler was asked for, so a test can assert what was fetched and from where.</summary>
     public List<string> Requested { get; } = [];
+
+    /// <summary>
+    /// The length the UI's package is said to be, where a test wants a server that says less than it sends: a proxy, or
+    /// the wrong file at the address. Unset, the length is the body's.
+    /// </summary>
+    public long? UiLengthSays { get; set; }
 
     /// <summary>Set to fail the next download in the way a network does.</summary>
     public HttpStatusCode? FailWith { get; set; }
@@ -129,13 +159,24 @@ public sealed class FakeRelease : HttpMessageHandler
                 $"/releases/latest/download/{Asset}",
                 $"/releases/download/v{Version}/{ReleaseAssets.Manifest}",
                 $"/releases/download/v{Version}/{Asset}",
+                $"/releases/download/v{Version}/{ReleaseAssets.Checksums}",
+                $"/releases/download/v{Version}/{UiAssetLayout.AssetName}",
             }
-            : new[] { $"/{ReleaseAssets.Manifest}", $"/{Asset}" };
+            : new[] { $"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}" };
 
         var name = path[(path.LastIndexOf('/') + 1)..];
-        return served.Contains(path, StringComparer.Ordinal) && _files.TryGetValue(name, out var bytes)
-            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }
-            : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new ByteArrayContent([]) };
+        if (!served.Contains(path, StringComparer.Ordinal) || !_files.TryGetValue(name, out var bytes))
+        {
+            return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new ByteArrayContent([]) };
+        }
+
+        var content = new ByteArrayContent(bytes);
+        if (name == UiAssetLayout.AssetName && UiLengthSays is { } says)
+        {
+            content.Headers.ContentLength = says;
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
     }
 
     /// <summary>What an entry of a test's archive is.</summary>

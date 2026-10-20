@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Jason.Contracts.Ui;
 
 namespace Jason.Contracts.Update;
 
@@ -45,9 +46,19 @@ public static class ReleaseAssets
     /// </remarks>
     public const string ReplyPlugin = "jason-plugin-reply.zip";
 
+    /// <summary>
+    /// The UI's package: the build <c>npm run package</c> makes from <c>ui/</c> at the release's tag, with the release's
+    /// version in its <c>manifest.json</c>. <c>jason ui install</c> places it as the default UI.
+    /// </summary>
+    /// <remarks>
+    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, as the plugin's package is. Built at the
+    /// tag rather than taken from CI, whose zip carries a development version and expires.
+    /// </remarks>
+    public const string Ui = UiAssetLayout.AssetName;
+
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
     public static IReadOnlyList<string> Published { get; } =
-        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin];
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, Ui];
 
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>

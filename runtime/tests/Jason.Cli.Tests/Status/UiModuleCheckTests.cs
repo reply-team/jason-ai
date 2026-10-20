@@ -4,34 +4,49 @@ using Jason.Contracts.Api;
 
 namespace Jason.Cli.Tests.Status;
 
-/// <summary>jason status says which UI is served, or that none is; the UI is optional, so the check never fails readiness.</summary>
+/// <summary>
+/// jason status says which UI is served, or that none is; the UI is optional, so the check never fails readiness. Where
+/// the release's own build is missing, or is another release's, it names the command that places this one's — but only
+/// while the runtime is this CLI's build: between a package manager's upgrade and the restart, the restart is the fix,
+/// and the runtime_version check names it.
+/// </summary>
 public class UiModuleCheckTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static readonly UiModuleInfo Default = new("default", "/home/ada/.jason/ui/default", "0.10.0", "v1", true, "sha256:abc", null);
 
-    public static TheoryData<UiModuleInfo?, CheckState, string> Cases() => new()
+    private static UiModuleInfo Served(string source, string version, string api = "v1") =>
+        new(source, $"/home/ada/.jason/ui/{source}", version, api, api == "v1", "sha256:abc", null);
+
+    public static TheoryData<UiModuleInfo?, string, string, CheckState, string, string?> Cases() => new()
     {
-        { null, CheckState.Absent, "No UI is installed" },
-        { Default, CheckState.Ok, "default 0.10.0" },
-        { new UiModuleInfo("custom", "/home/ada/.jason/ui/custom", "mine", "v0", false, "sha256:abc", null), CheckState.Failed, "built for API v0" },
-        { new UiModuleInfo("default", "/home/ada/.jason/ui/default", null, null, false, null, "'/home/ada/.jason/ui/custom' holds an index.html but no manifest.json, so it is not served."), CheckState.Failed, "no manifest.json" },
+        { null, StatusCommandTests.Version, StatusCommandTests.Version, CheckState.Absent, "No UI is installed.", "jason ui install" },
+        { Default, StatusCommandTests.Version, StatusCommandTests.Version, CheckState.Ok, "default 0.10.0", null },
+        { new UiModuleInfo("custom", "/home/ada/.jason/ui/custom", "mine", "v0", false, "sha256:abc", null), StatusCommandTests.Version, StatusCommandTests.Version, CheckState.Failed, "built for API v0", null },
+        { Served("default", "0.13.0", "v0"), "0.13.0", "0.13.0", CheckState.Failed, "built for API v0", "jason ui install" },
+        { new UiModuleInfo("default", "/home/ada/.jason/ui/default", null, null, false, null, "'/home/ada/.jason/ui/custom' holds an index.html but no manifest.json, so it is not served."), StatusCommandTests.Version, StatusCommandTests.Version, CheckState.Failed, "no manifest.json", null },
+        { Served("default", "0.12.0"), "0.13.0", "0.13.0", CheckState.Failed, "Serving default 0.12.0 from /home/ada/.jason/ui/default; this runtime is 0.13.0.", "jason ui install" },
+        { Served("default", "0.13.0"), "0.13.0+1a2b3c4", "0.13.0+1a2b3c4", CheckState.Ok, "default 0.13.0", null },
+        { Served("custom", "0.12.0"), "0.13.0", "0.13.0", CheckState.Ok, "custom 0.12.0", null },
+        { Served("default", "0.12.0"), "0.13.0-dev", "0.13.0-dev", CheckState.Ok, "default 0.12.0", null },
+        { Served("default", "0.12.0"), "0.13.0", "0.14.0", CheckState.Ok, "default 0.12.0", null },
     };
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task The_check_says_which_ui_is_served_and_never_decides_readiness(UiModuleInfo? ui, CheckState state, string fact)
+    public async Task The_check_says_which_ui_is_served_and_never_decides_readiness(UiModuleInfo? ui, string runtime, string build, CheckState state, string fact, string? fix)
     {
         using var dir = new TempPaths();
-        StatusCommandTests.Running(dir, ui: ui);
+        StatusCommandTests.Running(dir, version: runtime, ui: ui);
         var output = new StringWriter();
-        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output), Ct);
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, build: build), Ct);
 
         var check = Assert.Single(StatusCommandTests.Read(output).Checks, c => c.Name == "ui_module");
         Assert.Equal(state, check.State);
         Assert.False(check.Required);
         Assert.Contains(fact, check.Fact, StringComparison.Ordinal);
+        Assert.Equal(fix, check.Fix);
     }
 
     [Fact]

@@ -2,14 +2,19 @@ using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Human;
+using Jason.Cli.Skills;
+using Jason.Cli.Ui;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Ui;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Commands;
 
 /// <summary>
 /// The <c>ui</c> verb group: the browser UI the runtime serves. Open it (a one-time link, paired once and then
-/// bookmarked), see which browsers are paired, and unpair one. Nothing here changes the installation's files.
+/// bookmarked), see which browsers are paired, and unpair one. Only <c>install</c> changes the installation's files: it
+/// places the release's build as the default UI, and it is the one verb here that is no operation.
 /// </summary>
 public static class UiCommands
 {
@@ -18,11 +23,72 @@ public static class UiCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var ui = new Command("ui", "The browser UI: open it, see which browsers are paired with this runtime, and unpair one.");
+        var ui = new Command("ui", "The browser UI: place this release's build, open it, see which browsers are paired with this runtime, and unpair one.");
+        ui.Subcommands.Add(Install(env, actor));
         ui.Subcommands.Add(Open(env, actor));
         ui.Subcommands.Add(Tokens(env, actor));
         ui.Subcommands.Add(Revoke(env, actor));
         return ui;
+    }
+
+    /// <summary>
+    /// The UI the way the role skills arrive: one command places it, and the install guide, an update and
+    /// <c>jason status</c>'s repair all run that command. The runtime picks its build on every request, so the next one
+    /// serves what this placed, with no restart.
+    /// </summary>
+    private static Command Install(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "install",
+            "Place this release's UI as the default build: downloaded from the release, checked against its checksums.txt, and swapped in whole. A build of your own in ui/custom is never touched, and is still served first.");
+        var feed = new Option<string?>("--feed")
+        {
+            Description = "Read a different release: the https address of its manifest.json, or http on this machine. Default: the public release feed.",
+        };
+        var human = VerbOptions.Human();
+        command.Options.Add(feed);
+        command.Options.Add(human);
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            return InstallAsync(env, parseResult.GetValue(feed), parseResult.GetValue(human), cancellationToken);
+        });
+        return command;
+    }
+
+    private static async Task<int> InstallAsync(CliEnvironment env, string? feed, bool human, CancellationToken cancellationToken)
+    {
+        var built = SkillsSource.BuildVersion(env);
+        if (!SemanticVersion.TryParse(built, out var version))
+        {
+            env.Error.WriteLine($"This build reports its version as '{built}', which is not a version, so it has no release to fetch a UI from.");
+            return ExitCodes.ApiError;
+        }
+
+        // No development build is ever published, so the public feed is not asked for one; a feed named here can carry
+        // one, which is how a local build is tried and how the tests run.
+        if (feed is null && version.PreRelease == "dev")
+        {
+            env.Error.WriteLine(
+                $"This build, {built}, is not a release, so no UI is published for it. Unzip a build of the UI ({UiAssetLayout.AssetName}, which `npm run package` in ui/ makes and every CI run uploads) into {env.Paths.UiCustomDirectory}, or name a release that carries one with --feed.");
+            return ExitCodes.ApiError;
+        }
+
+        UiAssetInstalled placed;
+        try
+        {
+            placed = await UiInstaller.PlaceAsync(env, UpdateCommands.Address(feed), version, ApiVersion.Current, cancellationToken).ConfigureAwait(false);
+        }
+        catch (UiInstallException refused)
+        {
+            env.Error.WriteLine(refused.Message);
+            return ExitCodes.ApiError;
+        }
+
+        env.Out.WriteLine(human
+            ? $"Placed the UI {placed.Manifest.Version} in {placed.Directory}."
+            : JsonSerializer.Serialize(new UiInstallResponse(placed.Manifest.Version, placed.Manifest.ApiVersion, placed.Directory, placed.Digest, placed.FileCount), JasonJson.Options));
+        return ExitCodes.Success;
     }
 
     private static Command Open(CliEnvironment env, Option<string?> actor)

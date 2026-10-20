@@ -72,8 +72,10 @@ public class UpdateApplierTests
         Assert.Equal(UpdateStep.Drained, Witness(installation, "system.drain"));
         Assert.Equal(UpdateStep.Stopped, Witness(installation, "system.shutdown"));
 
-        // And the health check happens under "healthy", after the start it is checking.
-        Assert.Equal(UpdateStep.Healthy, installation.Witnessed[^1].Step);
+        // And the health check happens under "healthy", after the start it is checking. The one question after it is
+        // the UI step's, which asks the new runtime which API it speaks.
+        Assert.Equal(UpdateStep.Healthy, installation.Witnessed[^2].Step);
+        Assert.Equal(("system.info", UpdateStep.Complete), (installation.Witnessed[^1].Operation, installation.Witnessed[^1].Step));
     }
 
     /// <summary>
@@ -236,6 +238,11 @@ public class UpdateApplierTests
         Assert.Equal(UpdateStep.Complete, ledger.Step);
         Assert.Equal(installation.To.ToString(), installation.Installed());
         Assert.All(installation.Fetched, address => Assert.DoesNotContain("/v", address, StringComparison.Ordinal));
+
+        // And the UI step reads the same directory: the two files beside the manifest, and nothing composed.
+        Assert.Contains("/checksums.txt", installation.Release.Requested);
+        Assert.Contains("/jason-ui.zip", installation.Release.Requested);
+        Assert.All(installation.Release.Requested, address => Assert.DoesNotContain("/v", address, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -258,7 +265,7 @@ public class UpdateApplierTests
 
         // No runtime was ever started here, so the drain and the stop are the sentences that used to hide.
         Assert.Equal(
-            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete", "skills"],
+            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete", "skills", "ui"],
             applier.Steps.Select(step => step.Split(':')[0]));
         Assert.All(applier.Steps, step => Assert.Contains(": ", step, StringComparison.Ordinal));
     }

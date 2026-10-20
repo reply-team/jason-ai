@@ -1,18 +1,23 @@
 using System.IO.Compression;
 using System.Text;
+using Jason.Cli.Ui;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Contracts.Ui;
+using Jason.Contracts.Update;
 
-namespace Jason.Contracts.Tests.Ui;
+namespace Jason.Cli.Tests.Ui;
 
 /// <summary>
 /// The asset is a zip with the build at its root. The unpacker refuses anything that is not that before it touches
-/// the installed UI, places a good one atomically, and answers with the facts status reports.
+/// the installed UI, places a good one atomically, and answers with the facts status reports. It is held to the
+/// version it was fetched for and to the API the runtime speaks, so a release's zip can't land beside another release.
 /// </summary>
 public sealed class UiAssetInstallerTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("jason-ui-asset").FullName;
+
+    private static readonly UiExpected Expected = new(new SemanticVersion(0, 10, 0, null), "v1");
 
     private JasonPaths Paths => new(_root);
 
@@ -21,7 +26,7 @@ public sealed class UiAssetInstallerTests : IDisposable
     {
         var zip = Zip(("index.html", "<title>x</title>"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), ("favicon.svg", "<svg/>"), ("assets/app-1.js", "1"), ("THIRD-PARTY-NOTICES", "preact: MIT"));
 
-        var installed = UiAssetInstaller.Install(zip, Paths);
+        var installed = Install(zip);
 
         Assert.Equal(Paths.UiDefaultDirectory, installed.Directory);
         Assert.Equal(new UiManifest("0.10.0", "v1"), installed.Manifest);
@@ -34,8 +39,8 @@ public sealed class UiAssetInstallerTests : IDisposable
     [Fact]
     public void A_second_install_replaces_the_first_whole()
     {
-        UiAssetInstaller.Install(Zip(("index.html", "one"), ("manifest.json", "{\"version\":\"1\",\"api_version\":\"v1\"}"), ("assets/old.js", "x")), Paths);
-        UiAssetInstaller.Install(Zip(("index.html", "two"), ("manifest.json", "{\"version\":\"2\",\"api_version\":\"v1\"}"), ("assets/new.js", "y")), Paths);
+        Install(Zip(("index.html", "one"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), ("assets/old.js", "x")));
+        Install(Zip(("index.html", "two"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), ("assets/new.js", "y")));
 
         Assert.Equal("two", File.ReadAllText(Path.Combine(Paths.UiDefaultDirectory, "index.html")));
         Assert.False(File.Exists(Path.Combine(Paths.UiDefaultDirectory, "assets", "old.js")));
@@ -46,7 +51,7 @@ public sealed class UiAssetInstallerTests : IDisposable
     {
         Directory.CreateDirectory(Paths.UiCustomDirectory);
         File.WriteAllText(Path.Combine(Paths.UiCustomDirectory, "index.html"), "mine");
-        UiAssetInstaller.Install(Zip(("index.html", "x"), ("manifest.json", "{\"version\":\"1\",\"api_version\":\"v1\"}")), Paths);
+        Install(Zip(("index.html", "x"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}")));
         Assert.Equal("mine", File.ReadAllText(Path.Combine(Paths.UiCustomDirectory, "index.html")));
     }
 
@@ -57,10 +62,10 @@ public sealed class UiAssetInstallerTests : IDisposable
     [InlineData(".hidden")]
     public void An_entry_that_is_not_a_file_of_a_build_refuses_the_whole_asset_before_anything_changes(string entry)
     {
-        UiAssetInstaller.Install(Zip(("index.html", "keep"), ("manifest.json", "{\"version\":\"1\",\"api_version\":\"v1\"}")), Paths);
-        var bad = Zip(("index.html", "x"), ("manifest.json", "{\"version\":\"2\",\"api_version\":\"v1\"}"), (entry, "x"));
+        Install(Zip(("index.html", "keep"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}")));
+        var bad = Zip(("index.html", "x"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), (entry, "x"));
 
-        var refused = Assert.Throws<UiAssetRefusedException>(() => UiAssetInstaller.Install(bad, Paths));
+        var refused = Assert.Throws<UiAssetRefusedException>(() => Install(bad));
 
         Assert.Contains(entry.TrimStart('/'), refused.Message, StringComparison.Ordinal);
         Assert.Equal("keep", File.ReadAllText(Path.Combine(Paths.UiDefaultDirectory, "index.html")));
@@ -69,9 +74,9 @@ public sealed class UiAssetInstallerTests : IDisposable
     [Fact]
     public void An_asset_without_an_index_or_without_a_manifest_is_refused_by_name()
     {
-        Assert.Contains("index.html", Assert.Throws<UiAssetRefusedException>(() => UiAssetInstaller.Install(Zip(("manifest.json", "{\"version\":\"1\",\"api_version\":\"v1\"}")), Paths)).Message, StringComparison.Ordinal);
-        Assert.Contains("manifest.json", Assert.Throws<UiAssetRefusedException>(() => UiAssetInstaller.Install(Zip(("index.html", "x")), Paths)).Message, StringComparison.Ordinal);
-        Assert.Contains("manifest.json", Assert.Throws<UiAssetRefusedException>(() => UiAssetInstaller.Install(Zip(("index.html", "x"), ("manifest.json", "nope")), Paths)).Message, StringComparison.Ordinal);
+        Assert.Contains("index.html", Assert.Throws<UiAssetRefusedException>(() => Install(Zip(("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}")))).Message, StringComparison.Ordinal);
+        Assert.Contains("manifest.json", Assert.Throws<UiAssetRefusedException>(() => Install(Zip(("index.html", "x")))).Message, StringComparison.Ordinal);
+        Assert.Contains("manifest.json", Assert.Throws<UiAssetRefusedException>(() => Install(Zip(("index.html", "x"), ("manifest.json", "nope")))).Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Paths.UiDefaultDirectory));
     }
 
@@ -79,7 +84,7 @@ public sealed class UiAssetInstallerTests : IDisposable
     [Fact]
     public void An_asset_over_the_byte_bound_is_refused_before_anything_is_extracted()
     {
-        var refused = Assert.Throws<UiAssetRefusedException>(() => UiAssetInstaller.Install(WithBigEntry("honest.zip", PackageDigest.MaxBytes + 1), Paths));
+        var refused = Assert.Throws<UiAssetRefusedException>(() => Install(WithBigEntry("honest.zip", PackageDigest.MaxBytes + 1)));
 
         Assert.Contains("holds at most", refused.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Paths.UiDirectory));
@@ -111,7 +116,7 @@ public sealed class UiAssetInstallerTests : IDisposable
         Assert.True(patched >= 2, $"the size fields were not found to patch ({patched})");
         File.WriteAllBytes(file, bytes);
 
-        var installed = UiAssetInstaller.Install(file, Paths);
+        var installed = Install(file);
 
         Assert.Equal(1000, new FileInfo(Path.Combine(installed.Directory, "assets", "big.bin")).Length);
     }
@@ -121,7 +126,7 @@ public sealed class UiAssetInstallerTests : IDisposable
     {
         var file = Path.Combine(_root, name);
         using var archive = ZipFile.Open(file, ZipArchiveMode.Create);
-        foreach (var (entry, text) in new[] { ("index.html", "x"), ("manifest.json", "{\"version\":\"1\",\"api_version\":\"v1\"}") })
+        foreach (var (entry, text) in new[] { ("index.html", "x"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}") })
         {
             using var small = archive.CreateEntry(entry).Open();
             small.Write(Encoding.UTF8.GetBytes(text));
@@ -142,7 +147,91 @@ public sealed class UiAssetInstallerTests : IDisposable
     {
         var file = Path.Combine(_root, "not.zip");
         File.WriteAllText(file, "hello");
-        Assert.Throws<UiAssetRefusedException>(() => UiAssetInstaller.Install(file, Paths));
+        Assert.Throws<UiAssetRefusedException>(() => Install(file));
+    }
+
+    [Theory]
+    [InlineData("0.14.0", "v1", "0.14.0")]
+    [InlineData("0.13.0", "v2", "v2")]
+    public void A_build_for_another_version_or_api_is_refused_and_the_old_one_stays(string version, string api, string named)
+    {
+        var expected = new UiExpected(new SemanticVersion(0, 13, 0, null), "v1");
+        Install(Written(UiZip.Build("0.13.0")), expected);
+
+        var refused = Assert.Throws<UiAssetRefusedException>(() => Install(Written(UiZip.Build(version, api)), expected));
+
+        Assert.Contains(named, refused.Message, StringComparison.Ordinal);
+        Assert.Equal("0.13.0", UiManifest.Read(Paths.UiDefaultDirectory)!.Version);
+        Assert.DoesNotContain(Directory.GetDirectories(Paths.UiDirectory), d => Path.GetFileName(d) != "default");
+    }
+
+    /// <summary>A release build reports its version with the commit after a plus, which says nothing about which release it is.</summary>
+    [Fact]
+    public void A_build_is_held_to_its_version_without_metadata()
+    {
+        var installed = Install(Written(UiZip.Build("0.13.0+1a2b3c4")), new UiExpected(new SemanticVersion(0, 13, 0, null), "v1"));
+
+        Assert.Equal("0.13.0+1a2b3c4", installed.Manifest.Version);
+    }
+
+    /// <summary>
+    /// Windows refuses a directory rename while anything holds a file inside the tree — the runtime serving it, a scanner
+    /// reading what was just unpacked — and says access is denied. The move is tried again, as the skills' swap tries it.
+    /// </summary>
+    [Fact]
+    public void A_move_refused_while_a_file_in_it_is_held_is_tried_again()
+    {
+        var tries = 0;
+
+        UiAssetInstaller.Move(
+            () =>
+            {
+                if (++tries < 3)
+                {
+                    throw new IOException("held by another program", unchecked((int)0x80070005));
+                }
+            },
+            "default",
+            TimeProvider.System,
+            _ => { });
+
+        Assert.Equal(3, tries);
+    }
+
+    [Fact]
+    public void A_hold_that_outlasts_the_wait_is_a_refusal_that_says_so()
+    {
+        var clock = new Stepping();
+
+        var refused = Assert.Throws<UiAssetRefusedException>(() => UiAssetInstaller.Move(
+            () => throw new IOException("held by another program", unchecked((int)0x80070005)),
+            "default",
+            clock,
+            clock.Advance));
+
+        Assert.Contains("something is holding a file in it open", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A clock that moves only when a pause is taken, so a wait of seconds takes none.</summary>
+    private sealed class Stepping : TimeProvider
+    {
+        private long _now;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => _now;
+
+        public void Advance(TimeSpan by) => _now += by.Ticks;
+    }
+
+    private UiAssetInstalled Install(string zip, UiExpected? expected = null) =>
+        UiAssetInstaller.Install(zip, Paths, expected ?? Expected, TimeProvider.System);
+
+    private string Written(byte[] zip)
+    {
+        var file = Path.Combine(_root, Guid.NewGuid().ToString("N") + ".zip");
+        File.WriteAllBytes(file, zip);
+        return file;
     }
 
     private string Zip(params (string Name, string Text)[] entries)

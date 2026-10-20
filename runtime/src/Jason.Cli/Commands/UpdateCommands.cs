@@ -56,7 +56,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "apply",
-            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, and redeploy the skills this machine recorded at the new release's tag. If the skills cannot be redeployed the update still stands; the step's line says why, and 'jason status' names the repair.");
+            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -324,7 +324,7 @@ public static class UpdateCommands
             : throw new UsageException($"--version must be a version like 0.2.0, not '{version}'.");
     }
 
-    private static Uri Address(string? feed) => feed is null
+    internal static Uri Address(string? feed) => feed is null
         ? UpdateFeed.Default
         : Uri.TryCreate(feed, UriKind.Absolute, out var named) ? named : throw new UsageException("--feed must be an absolute address.");
 

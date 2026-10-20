@@ -12,6 +12,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Skills;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Status;
 
@@ -83,6 +84,12 @@ internal static class StatusChecks
         /// could not repair a required check without breaking that rule, and stopped rather than reach ready.
         /// </remarks>
         public const string InstallRoles = "jason skills install --roles-only";
+
+        /// <summary>
+        /// The release's UI, placed as the default build: the repair where none is installed, and where the default one is
+        /// another release's. A build of the person's own in <c>ui/custom</c> is never one this names.
+        /// </summary>
+        public const string InstallUi = "jason ui install";
 
         /// <summary>
         /// Deliberately the same as <see cref="InstallRoles"/>. Overwriting is not what repairs a role whose
@@ -207,7 +214,7 @@ internal static class StatusChecks
             checks.Add(Harnesses(env));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
-            checks.Add(UiModule(info));
+            checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
         }
         finally
         {
@@ -292,8 +299,15 @@ internal static class StatusChecks
     /// reader of a bundle has where the sentence is withheld, and what a reader of this fact can search for. A runtime
     /// from before the codes gives none, and its sentence stands alone.
     /// </summary>
-    /// <summary>Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness.</summary>
-    private static StatusCheck UiModule(SystemInfoResponse? info)
+    /// <summary>
+    /// Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness. The
+    /// default build is the release's, so one from another release is named with the command that places this one's —
+    /// where both are releases: a development runtime has no published UI to compare with, and a custom build is the
+    /// person's own. And only while the runtime is this CLI's build, which is the version <c>jason ui install</c> places:
+    /// between a package manager's upgrade and the restart the two differ, the restart is the fix, and
+    /// <c>runtime_version</c> names it.
+    /// </summary>
+    private static StatusCheck UiModule(SystemInfoResponse? info, string build)
     {
         if (info is null)
         {
@@ -302,7 +316,7 @@ internal static class StatusChecks
 
         if (info.Ui is null)
         {
-            return new StatusCheck("ui_module", false, CheckState.Absent, "No UI is installed; `jason ui open` says how to put one in place.", null);
+            return new StatusCheck("ui_module", false, CheckState.Absent, "No UI is installed.", Repair.InstallUi);
         }
 
         var ui = info.Ui;
@@ -311,9 +325,22 @@ internal static class StatusChecks
             return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving {ui.Source} from {ui.Directory}, with a problem: {ui.Problem}", null);
         }
 
+        var released = ui.Source == "default";
         if (!ui.ApiVersionMatches)
         {
-            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving {ui.Source} {ui.Version} from {ui.Directory}, built for API {ui.ApiVersion}; this runtime speaks {info.ApiVersion}; reinstall from a release that matches.", null);
+            var built = $"Serving {ui.Source} {ui.Version} from {ui.Directory}, built for API {ui.ApiVersion}; this runtime speaks {info.ApiVersion}.";
+            return released
+                ? new StatusCheck("ui_module", false, CheckState.Failed, built, Repair.InstallUi)
+                : new StatusCheck("ui_module", false, CheckState.Failed, built, null);
+        }
+
+        if (released
+            && string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
+            && SemanticVersion.TryParse(info.RuntimeVersion, out var runtime) && runtime.PreRelease is null
+            && SemanticVersion.TryParse(ui.Version, out var served) && served.PreRelease is null
+            && served != runtime)
+        {
+            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving default {ui.Version} from {ui.Directory}; this runtime is {info.RuntimeVersion}.", Repair.InstallUi);
         }
 
         return new StatusCheck("ui_module", false, CheckState.Ok, $"Serving {ui.Source} {ui.Version} from {ui.Directory}; built for API {ui.ApiVersion}, this runtime's; {ui.Digest}.", null);

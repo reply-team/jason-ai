@@ -44,13 +44,22 @@ public class ReleaseAssetsTests
         Assert.Equal("jason-plugin-reply.zip", ReleaseAssets.ReplyPlugin);
 
     /// <summary>
-    /// Every file a release carries, in the order the workflow attaches them: the three archives, the feed and its
-    /// checksums, the two install scripts and the plugin's package. Eight, and a ninth is a decision rather than a drift.
+    /// The UI's package, which <c>jason ui install</c> fetches beside the checksums: one name for every release, its
+    /// version inside its own <c>manifest.json</c>.
     /// </summary>
     [Fact]
-    public void A_release_publishes_exactly_these_eight_files() =>
+    public void The_ui_s_package_has_one_stable_asset_name() =>
+        Assert.Equal("jason-ui.zip", ReleaseAssets.Ui);
+
+    /// <summary>
+    /// Every file a release carries, in the order the workflow attaches them: the three archives, the feed and its
+    /// checksums, the two install scripts, the plugin's package and the UI's. Nine, and a tenth is a decision rather
+    /// than a drift.
+    /// </summary>
+    [Fact]
+    public void A_release_publishes_exactly_these_nine_files() =>
         Assert.Equal(
-            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip"],
+            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-ui.zip"],
             ReleaseAssets.Published);
 
     /// <summary>

@@ -349,7 +349,10 @@ jobs:
 
   update-end-to-end:
     name: an update on ${{ matrix.rid }}
-    needs: [version, build-test-publish]
+    # It waits for the ui job, whose package it serves, and so for that job's smoke as well: the update's last step
+    # places the UI, and a package from a job that failed proves nothing about an update. Building the UI here instead
+    # would put npm on both platforms of this job for a zip the ui job has already built and tested.
+    needs: [version, build-test-publish, ui]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -396,6 +399,12 @@ jobs:
           artifact: next-jason-${{ matrix.rid }}
           retention-days: 3
 
+      # The UI's package as the ui job built it from this tree, so the update's last step has a release's UI to place.
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-ui
+          path: ui-package
+
       - name: Serve that version from a feed on this machine
         shell: pwsh
         env:
@@ -404,7 +413,29 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force feed | Out-Null
           Copy-Item artifacts/release/* feed -Force
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:NEXT -Directory feed -Require $env:RID
+
+          # The UI's package beside it, stamped with the version this feed offers. A release builds its own at the tag,
+          # and that stamp is the one thing its build would write differently; rewriting it here keeps npm out of a job
+          # that has no Node, where the ui job has already built and tested the same tree.
+          Copy-Item ui-package/jason-ui.zip feed/jason-ui.zip
+          Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::Open((Resolve-Path feed/jason-ui.zip).Path, [System.IO.Compression.ZipArchiveMode]::Update)
+          try {
+            $entry = $zip.GetEntry('manifest.json')
+            $reader = [System.IO.StreamReader]::new($entry.Open())
+            $manifest = $reader.ReadToEnd() | ConvertFrom-Json
+            $reader.Dispose()
+            $entry.Delete()
+            $manifest.version = $env:NEXT
+            $writer = [System.IO.StreamWriter]::new($zip.CreateEntry('manifest.json').Open())
+            $writer.Write(($manifest | ConvertTo-Json -Compress) + "`n")
+            $writer.Dispose()
+          }
+          finally {
+            $zip.Dispose()
+          }
+
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:NEXT -Directory feed -Require $env:RID -Plugins jason-ui.zip
           Get-Content feed/manifest.json
 
           # Served from this machine and nowhere else: 127.0.0.1, for the length of this job. UpdateFeed takes
@@ -497,6 +528,10 @@ jobs:
             if (-not ($applied.steps | Where-Object { $_ -like "$step*" })) { throw "the update never said '$step': $($applied.steps -join '; ')" }
           }
 
+          # Its last step placed the UI the feed offered, from the package the ui job built, through the same installer
+          # `jason ui install` runs.
+          if (-not ($applied.steps -contains "ui: placed $env:NEXT")) { throw "the update did not place the UI the feed offered: $($applied.steps -join '; ')" }
+
           # What version is installed is asked of the runtime that is now serving rather than of the file, for
           # the reason the applier's own health check does it that way: a file that prints a version proves a
           # file exists, and what matters is which build is running. That assertion is in the step below.
@@ -532,6 +567,10 @@ jobs:
           if (-not (Test-Path $status.database.backup_file)) { throw "the backup it named is not there: $($status.database.backup_file)" }
           Write-Host "migrated $($status.database.newly_applied -join ', ') and kept $($status.database.backup_file)"
 
+          # And the runtime serves the UI the update placed: status reads it from the runtime, not from the files.
+          $ui = (& $env:install status | ConvertFrom-Json).checks | Where-Object { $_.name -eq 'ui_module' }
+          if ($ui.state -ne 'ok' -or $ui.fact -notlike "Serving default $env:NEXT from *") { throw "status says of the UI: $($ui | ConvertTo-Json)" }
+
           $ledger = Get-Content (Join-Path $env:JASON_DATA_DIR 'update/ledger.json') | ConvertFrom-Json
           if ($ledger.step -ne 'complete') { throw "the ledger says '$($ledger.step)'" }
           if (-not $ledger.newly_applied) { throw "the ledger did not record what the first start applied" }
@@ -543,6 +582,10 @@ jobs:
           # Remembered for the rollback below, which has to tell the backup this update took from the one the
           # restored version will take when it finds the database a migration behind again.
           "backup=$($status.database.backup_file)" >> $env:GITHUB_ENV
+
+          # `jason status` above exits 1 in this job, which never makes its installation ready (no role skills, no PATH
+          # entry), and pwsh would hand that on as the step's exit code. Everything asserted above passed.
+          exit 0
 
       - name: Roll it back, from the executable a person would type
         shell: pwsh

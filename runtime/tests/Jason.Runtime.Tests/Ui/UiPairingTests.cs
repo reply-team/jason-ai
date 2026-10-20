@@ -23,6 +23,7 @@ public class UiPairingTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var error = await api.PostErrorAsync(Operations.UiOpen, null, HttpStatusCode.NotFound, Ct);
         Assert.Equal("ui_not_installed", error.Code);
+        Assert.Contains("Run 'jason ui install' to place this release's build", error.Message, StringComparison.Ordinal);
         Assert.Contains(api.Paths.UiCustomDirectory, error.Message, StringComparison.Ordinal);
     }
 

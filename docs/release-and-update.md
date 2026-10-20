@@ -34,11 +34,12 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-win-x64.zip` | the Windows executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
 | `jason-linux-x64.tar.gz` | the Linux executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
 | `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
-| `checksums.txt` | one `sha256sum` line per archive, and one for the plugin's package |
+| `checksums.txt` | one `sha256sum` line per archive, and one for each package |
 | `manifest.json` | what the updater reads |
 | `install.sh` | the macOS and Linux install script, as this release was published with it |
 | `install.ps1` | the Windows install script, as this release was published with it |
 | `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |
+| `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -64,6 +65,14 @@ files of `plugins/reply` at the tag at its root, built once per release and list
 the manifest, whose artifacts are platforms. Installing it is unpacking it into `~/.jason/plugins/reply` once it
 matches its line — `docs/golden-path.md` step 3 prints the lines — and what is unpacked has the content digest of
 the package at the tag (DEC-INSTALL-002). Any other plugin is installed as `docs/plugins.md` §4 says.
+
+**The browser UI is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
+release's version in its `manifest.json`, and listed in `checksums.txt` but not in the manifest. It is built at the
+tag rather than taken from CI, whose zip carries a development version and expires. `jason ui install` places it:
+it downloads the package from the release this build was published as, holds it to its line in `checksums.txt`, to
+this build's version and to the runtime's API, and swaps it in as `ui/default/` whole or not at all. The install
+guide runs it after the role skills, `jason update apply` runs it at its end, and `jason status` names it where the
+default UI is missing or another release's (DEC-UI-003).
 
 ## 3. The manifest
 
@@ -380,8 +389,8 @@ than half-read.
 
 ### What an update does not touch
 
-An update replaces the executable and its two notice files, writes under `~/.jason/update/`, and redeploys the
-skills this installation recorded. It does not touch the rest of the data directory: not the database, not
+An update replaces the executable and its two notice files, writes under `~/.jason/update/`, redeploys the
+skills this installation recorded, and places the new release's UI as `ui/default/`. It does not touch the rest of the data directory: not the database, not
 `~/.jason/config/settings.json`, not the plugins under `~/.jason/plugins/`, not the logs, not the
 work directories. Nor does it touch anything you registered with the machine to start Jason — a systemd unit,
 a scheduled task, a login item — because the file at the install path is replaced in place rather than moved
@@ -401,6 +410,15 @@ fails it and prints the same repair it always has. An update applied by a build 
 it needs one `jason skills update` after it; from 0.12.0 on, `jason update apply` does it. A package manager's
 upgrade does not run `jason update apply`, so after `brew upgrade jason` or `winget upgrade Reply.Jason` it is
 `jason skills update` that moves the skills.
+
+After the skills comes the UI, as `jason ui install` places it: the new release's `jason-ui.zip`, read from the
+feed's own directory beside its `checksums.txt`, held to its line there, to the new version and to the API the new
+runtime says it speaks, and swapped in as `ui/default/`; `ui/custom/` is never touched. One `ui:` line says
+`placed <version>`. A release that publishes no UI — one from before the UI was published, which `--version` can
+name — says so and names nothing to run. Anything else — a digest that does not match, no network — says why and ends
+`run: jason ui install`. The update still stands either way. An update applied by a build older than this step, and
+a package manager's upgrade, place no UI, so `jason ui install` follows them, and `jason status` names it until it
+has.
 
 The one thing an update does change beyond the executable is the database, and not by itself: the new build's
 first start migrates it, exactly as any start does, after taking the backup that every migration takes. `healthy`
@@ -444,7 +462,8 @@ it, is corruption.
 A rollback leaves the skills where the update's last step put them, at the newer release's tag. The runtime you
 went back to then fails `role_skills`, because its role skills belong to a release it is not, and `ready` is false
 until `jason skills update` — or `jason skills install --roles-only`, for the role skills alone — brings them to the
-tag of the version you are on.
+tag of the version you are on. It leaves the UI where the update put it too, and `jason status` names
+`jason ui install` for the default UI from the newer release, which places the one of the version you are on.
 
 **The database is restored only while it is certain that nothing has happened since.** That is decided from the
 chronicle: the line it stood at when the new version was declared healthy, against the line it stands at now. If

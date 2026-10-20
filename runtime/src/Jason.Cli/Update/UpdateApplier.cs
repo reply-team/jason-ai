@@ -5,6 +5,7 @@ using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
+using Jason.Cli.Ui;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
@@ -24,8 +25,8 @@ public sealed record UpdateRequest(Uri Feed, SemanticVersion? Version, TimeSpan 
 /// </summary>
 /// <remarks>
 /// <para>
-/// The order is staged, drained, stopped, kept, swapped, started, healthy, complete — and then the skills, which
-/// are no step of the ledger (<see cref="RedeploySkillsAsync"/>). Between <c>kept</c> and
+/// The order is staged, drained, stopped, kept, swapped, started, healthy, complete — and then the skills and the UI,
+/// which are no steps of the ledger (<see cref="RedeploySkillsAsync"/>, <see cref="PlaceUiAsync"/>). Between <c>kept</c> and
 /// <c>swapped</c> the install path is <b>empty</b> — the old executable has been moved aside, its notices after it,
 /// and the new one is not in place yet — and that window is a few renames wide. It is also the one window a person
 /// cannot get out of by typing <c>jason update</c>, because there is no <c>jason</c> on the PATH to type: the way
@@ -55,6 +56,9 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>The name the skills lines go under: a step of the apply, and not one of the ledger's.</summary>
     private const string Skills = "skills";
+
+    /// <summary>The name the UI's line goes under, which is no step of the ledger either.</summary>
+    private const string Ui = "ui";
 
     /// <summary>Everything the applier did, in order, for the caller to print.</summary>
     public List<string> Steps { get; } = [];
@@ -90,7 +94,58 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         }
 
         await RedeploySkillsAsync(ledger, cancellationToken).ConfigureAwait(false);
+        await PlaceUiAsync(ledger, request, cancellationToken).ConfigureAwait(false);
         return ledger;
+    }
+
+    /// <summary>
+    /// The new release's UI, placed as <c>jason ui install</c> places it, after the skills: from the release this update
+    /// read, at the version it installed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After <c>complete</c> and never a step of the ledger, for the skills' reason: the update has happened, so nothing
+    /// here fails it. A UI that could not be placed says why on its line and names the command that places it, which is
+    /// also what <c>jason status</c> names.
+    /// </para>
+    /// <para>
+    /// The build is held to the API the new runtime says it speaks, not to this executable's: this is the build being
+    /// replaced, and the release may speak an API it never knew. The runtime was started and found healthy just before,
+    /// so one that does not answer now went away since; nothing is placed, and the line names the command, which needs
+    /// no runtime.
+    /// </para>
+    /// </remarks>
+    private async Task PlaceUiAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
+    {
+        string cause;
+        try
+        {
+            var api = (await InfoAsync(cancellationToken).ConfigureAwait(false))?.ApiVersion
+                ?? throw new UiInstallException("the new runtime did not say which API it speaks, so no build could be held to it.");
+            var placed = await UiInstaller.PlaceAsync(env, request.Feed, ledger.ToVersion, api, cancellationToken).ConfigureAwait(false);
+            Say(Ui, $"placed {placed.Manifest.Version}");
+            return;
+        }
+        catch (UiNotPublishedException)
+        {
+            // A release from before the UI was published, which --version can name. Nothing failed, and the executable
+            // just installed may have no `jason ui install` to name.
+            Say(Ui, $"{ledger.ToVersion} publishes no UI, so none was placed");
+            return;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            cause = "cancelled";
+        }
+        catch (Exception error)
+        {
+            // Everything, as the skills step catches everything: a completed update reported as refused is the one
+            // outcome this step must never have.
+            cause = error.Message;
+        }
+
+        env.Error.WriteLine(cause);
+        Say(Ui, $"not updated — {OneLine(cause)}; run: jason ui install");
     }
 
     /// <summary>

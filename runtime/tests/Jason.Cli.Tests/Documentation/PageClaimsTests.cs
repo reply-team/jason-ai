@@ -140,11 +140,11 @@ public partial class PageClaimsTests
         var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
 
         Assert.Contains(
-            "`jason update apply` ends by running `jason skills update` at the new release's tag; an update applied by a build before 0.12.0 needs one `jason skills update` after it.",
+            "`jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it, and one applied by a build older than the UI step places no UI, so `jason ui install` follows it.",
             teach,
             StringComparison.Ordinal);
         Assert.Contains(
-            "A package manager's upgrade does not run `jason update apply`, so `jason skills update` follows it.",
+            "A package manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it.",
             teach,
             StringComparison.Ordinal);
     }
@@ -165,14 +165,15 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Six names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
-    /// and the <c>skills</c> and <c>update</c> nouns — and no page says two, or the four it said before the two verbs
-    /// that read the installation's files arrived.
+    /// Seven names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
+    /// the <c>skills</c> and <c>update</c> nouns, and <c>ui install</c>, a verb of a noun whose other verbs are
+    /// operations — and no page says two, the four it said before the two verbs that read the installation's files
+    /// arrived, or the six it said before the UI was placed by a command.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "It is one of six names in this CLI with no API operation behind it")]
-    [InlineData("docs/INSTALL.md", "It is one of six names in this CLI with no API operation behind it")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **six declared exceptions**")]
+    [InlineData("README.md", "It is one of seven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install`")]
+    [InlineData("docs/INSTALL.md", "It is one of seven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install`")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **seven declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -182,6 +183,8 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("the only command here", text, StringComparison.Ordinal);
         Assert.DoesNotContain("one of four names", text, StringComparison.Ordinal);
         Assert.DoesNotContain("four declared exceptions", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of six names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("six declared exceptions", text, StringComparison.Ordinal);
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
@@ -386,8 +389,8 @@ public partial class PageClaimsTests
     /// and who operates the address, and that the skills still come from the repository directly.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "The check, the install scripts and `jason update` go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository directly.")]
-    [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts and `jason update apply` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
+    [InlineData("README.md", "The check, the install scripts, `jason update` and `jason ui install` go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository directly.")]
+    [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts, `jason update apply` and `jason ui install` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "**Where it goes.** The default feed is on `jasonharness.ai`, an address Reply.io operates, which redirects every request under `/releases/` to the same path in the public repository's releases on GitHub.")]
     public void The_pages_say_where_a_release_request_goes_and_who_operates_the_address(string page, string said) =>
         Assert.Contains(said, Flat(Unquoted(Page(page.Split('/')))), StringComparison.Ordinal);
@@ -479,11 +482,12 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |")]
-    [InlineData("docs/release-and-update.md", "| `checksums.txt` | one `sha256sum` line per archive, and one for the plugin's package |")]
+    [InlineData("docs/release-and-update.md", "| `checksums.txt` | one `sha256sum` line per archive, and one for each package |")]
     [InlineData("docs/release-and-update.md", "Installing it is unpacking it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 prints the lines — and what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002).")]
     [InlineData("docs/release-and-update.md", "A file published beside the archives that the manifest does not list, as the plugin's package is, changes no schema:")]
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, to unpack into `~/.jason/plugins/reply` |")]
-    [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of the plugin's package, in `sha256sum` format |")]
+    [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of the two packages, in `sha256sum` format |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
     [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by unpacking it into `~/.jason/plugins/reply` once it matches its line in `checksums.txt`; step 3 of `docs/golden-path.md` prints the lines.")]
     [InlineData("docs/plugins.md", "The package this repository ships, the Reply plugin, is also published with every release from 0.11.0 on as `jason-plugin-reply.zip`, its files at the archive's root: checked against that release's `checksums.txt` and unpacked into `~/.jason/plugins/reply`, it is installed.")]
     [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
@@ -495,6 +499,16 @@ public partial class PageClaimsTests
         Assert.Contains(said, text, StringComparison.Ordinal);
         Assert.DoesNotContain("installed from the repository", text, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Wherever a page walks the role skills in, or says what follows an older applier, the UI follows: the install
+    /// guide's own lines are held above, and these are the walk-throughs beside it.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", "`jason ui install` places this release's browser UI, the page `jason ui open` opens; a runtime works without it.")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "An update applied by a build before 0.12.0 has no such step, so it needs one `jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older than that step places none, so `jason ui install` follows it; `jason status` names it until it has.")]
+    public void The_walk_throughs_say_when_jason_ui_install_follows(string page, string said) =>
+        Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
 
     /// <summary>
     /// A build from source leaves debugging symbols beside the executable, and §3 says to copy the executable alone.

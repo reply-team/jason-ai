@@ -98,9 +98,16 @@ public partial class StatusDisciplineTests
         {
             using var typing = new TempPaths();
             var error = new StringWriter();
+            // A handler that answers nothing: `jason ui install` downloads, and a build stamped with a release's version —
+            // one CI leg builds these tests so — would otherwise ask the public release for real.
             var exit = await CliApp.RunAsync(
                 [.. repair.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1)],
-                new CliEnvironment(new StringWriter(), error, typing.Paths, Autostart: new RecordingRegistrar()),
+                new CliEnvironment(
+                    new StringWriter(),
+                    error,
+                    typing.Paths,
+                    new FakeHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable)),
+                    Autostart: new RecordingRegistrar()),
                 Ct);
 
             Assert.True(

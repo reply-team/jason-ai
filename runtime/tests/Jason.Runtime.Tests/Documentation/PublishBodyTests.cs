@@ -95,7 +95,7 @@ public sealed class PublishBodyTests
 
             ## The draft release
 
-            `v0.6.0` is a draft until this merges. It holds `jason-win-x64.zip`, `jason-linux-x64.tar.gz`, `jason-osx-arm64.tar.gz`, `manifest.json`, `checksums.txt`, `install.sh`, `install.ps1` and `jason-plugin-reply.zip`.
+            `v0.6.0` is a draft until this merges. It holds `jason-win-x64.zip`, `jason-linux-x64.tar.gz`, `jason-osx-arm64.tar.gz`, `manifest.json`, `checksums.txt`, `install.sh`, `install.ps1`, `jason-plugin-reply.zip` and `jason-ui.zip`.
 
             """.Replace("{TAB}", "\t", StringComparison.Ordinal).ReplaceLineEndings("\n"),
             body);

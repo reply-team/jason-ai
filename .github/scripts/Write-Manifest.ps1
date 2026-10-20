@@ -6,7 +6,7 @@ Assembles a release's manifest.json and checksums.txt from the fragments the pac
 Each platform's packaging uploads three files: the archive, its .sha256, and a one-entry fragment of the
 manifest — {"<rid>":{"asset":…,"sha256":…,"size":…}}. The release job downloads them all into one directory
 and runs this, which merges the fragments into the manifest a running Jason reads, and writes checksums.txt in
-sha256sum's format beside it: a line per archive, then a line per plugin package the release carries.
+sha256sum's format beside it: a line per archive, then a line per package the release carries.
 
 Every archive is hashed again here. The manifest repeats a claim about bytes, and it repeats it only after
 checking: a platform named in -Require that has no fragment, a fragment whose archive is not in the directory,
@@ -24,9 +24,9 @@ the same either way a caller writes it). They lead the manifest in this order; a
 is kept after them.
 
 .PARAMETER Plugins
-The plugin packages the release carries beside its archives, by file name, as a list or comma-separated. Each must be
-in the directory; it is hashed here and listed in checksums.txt after the archives, and never in the manifest, whose
-artifacts are platforms.
+The packages the release carries beside its archives (the plugin's, the UI's), by file name, as a list or
+comma-separated. Each must be in the directory; it is hashed here and listed in checksums.txt after the archives, and
+never in the manifest, whose artifacts are platforms.
 
 .PARAMETER ReleaseNotesUrl
 The page the release notes are on, or nothing: a release with no notes is a release.
@@ -72,12 +72,12 @@ foreach ($rid in $required) {
     if (-not $found.ContainsKey($rid)) { throw "No fragment for $rid; a release carries every platform it promises." }
 }
 
-# The plugin packages: hashed before anything is written, so a package the release promises and the download did not
+# The packages: hashed before anything is written, so a package the release promises and the download did not
 # bring stops the release here, with the manifest and the checksums unwritten.
 $packages = foreach ($name in @($Plugins | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
-    if ($name -ne (Split-Path -Leaf $name)) { throw "$name is not a file name; a plugin package is named as the release publishes it." }
+    if ($name -ne (Split-Path -Leaf $name)) { throw "$name is not a file name; a package is named as the release publishes it." }
     $package = Join-Path $Directory $name
-    if (-not (Test-Path -Path $package -PathType Leaf)) { throw "The release carries the plugin package $name, and it is not in $Directory." }
+    if (-not (Test-Path -Path $package -PathType Leaf)) { throw "The release carries the package $name, and it is not in $Directory." }
     [ordered]@{ asset = $name; sha256 = (Get-FileHash -Path $package -Algorithm SHA256).Hash.ToLowerInvariant() }
 }
 

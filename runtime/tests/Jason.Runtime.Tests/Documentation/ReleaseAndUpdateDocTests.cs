@@ -894,7 +894,7 @@ public class ReleaseAndUpdateDocTests
     /// <summary>
     /// The sentence that said nothing about autostart is ever registered lived in three places, and all three
     /// had to stop saying it on the day the verbs arrived. A guarantee kept in three copies is a guarantee that
-    /// goes stale in two of them.
+    /// goes stale in two of them. The commands moved from CLAUDE.md to DEVELOPMENT.md, and the copy with them.
     /// </summary>
     [Fact]
     public void Nothing_claims_that_autostart_is_never_registered()
@@ -902,7 +902,7 @@ public class ReleaseAndUpdateDocTests
         string[] places =
         [
             "README.md",
-            "CLAUDE.md",
+            "DEVELOPMENT.md",
             "runtime/src/Jason.Cli/Commands/RuntimeStartCommand.cs",
         ];
 

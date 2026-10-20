@@ -63,7 +63,7 @@ public sealed class UiModule(JasonPaths paths)
     public string NotInstalled()
     {
         var message = $"No UI is installed: nothing to serve at {paths.UiDefaultDirectory} or {paths.UiCustomDirectory}. "
-            + $"Unzip a build of the UI ({UiAssetLayout.AssetName}) into {paths.UiCustomDirectory}, or reinstall from a release that carries one.";
+            + $"Run 'jason ui install' to place this release's build, or unzip a build of the UI ({UiAssetLayout.AssetName}) into {paths.UiCustomDirectory}.";
         return CustomProblem(Describe(Custom, paths.UiCustomDirectory)) is { } problem ? message + " " + problem : message;
     }
 

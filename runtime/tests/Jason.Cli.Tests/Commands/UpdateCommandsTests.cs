@@ -33,7 +33,7 @@ public class UpdateCommandsTests
     /// executable in place with its licence files, and a rollback puts the old one back with its own.
     /// </summary>
     [Theory]
-    [InlineData("apply", "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, and redeploy the skills this machine recorded at the new release's tag. If the skills cannot be redeployed the update still stands; the step's line says why, and 'jason status' names the repair.")]
+    [InlineData("apply", "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair.")]
     [InlineData("rollback", "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote.")]
     public async Task The_update_verbs_say_that_the_licence_files_move_with_the_executable(string verb, string description)
     {

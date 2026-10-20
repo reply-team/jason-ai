@@ -11,14 +11,16 @@ Node 24. `npm ci`, then `npm run build` writes `dist/`. `npm run package` wraps 
 ## Where it lands
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
-`<data>/ui/default/` when that holds a build; no release installs one. To try a build against a real Jason: unzip
+`<data>/ui/default/` when that holds a build: the release's own, which `jason ui install` places (a release builds
+`ui/` at its tag and publishes `jason-ui.zip` beside its archives). To try a build against a real Jason: unzip
 `jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open`; `jason status` says which build is served. Delete `custom/` to go back.
 
 ## Dev loop
 
-A scratch runtime (`JASON_DATA_DIR` set to a scratch directory, never `~/.jason`), `npm run dev` rebuilding `dist/`
-on every change, a copy of `dist/` into that directory's `ui/custom/` (a symlink works on Linux and macOS), and
-`jason ui open` once. No hot reload, and no dev-only origin allowance in the runtime.
+A scratch runtime (`JASON_DATA_DIR` set to a scratch directory, never `~/.jason`), `dist/` linked as that directory's
+`ui/custom/` (a symbolic link on Linux and macOS, a junction on Windows), `npm run dev` rebuilding `dist/` on every
+change, and `jason ui open` once. The build writes the `manifest.json` the runtime asks of a directory before it serves
+it, so `dist/` is served as it stands. No hot reload, and no dev-only origin allowance in the runtime.
 
 ## Preact, not React
 

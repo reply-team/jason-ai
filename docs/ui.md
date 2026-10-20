@@ -15,13 +15,18 @@ instead, for an agent to hand to you). The link carries a ticket that pairs one 
 after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
 `jason ui open --approval <id>` and `--question <id>` open on one item.
 
-If nothing is installed, `jason ui open` says so with the code `ui_not_installed` and names the two directories below.
+If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
 ## Where the page comes from
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
-`<data>/ui/default/` when that holds a build; no release installs one. It serves those files and nothing else, under
+`<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'`.
+
+The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
+release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
+its end, and `jason status` names it where the default build is missing or another release's. A build from source
+has no published UI to fetch.
 
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
 and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version

@@ -64,7 +64,8 @@ public class UpdateSkillsStepTests
         // Said as steps of the apply, after the one that says it is complete: one line for each pack the verb carried,
         // in the verb's own words.
         var skills = SkillsLines(applier);
-        Assert.Equal("complete", applier.Steps[^(skills.Count + 1)].Split(':')[0]);
+        Assert.Equal("complete", applier.Steps[^(skills.Count + 2)].Split(':')[0]);
+        Assert.Equal("ui", applier.Steps[^1].Split(':')[0]);
         Assert.True(skills.Count == 2, $"The skills step said: {string.Join(" | ", skills)}");
         Assert.All(skills, line => Assert.Contains($"at {Tag(installation)}, the ref this build carries; its record named v{Before}.", line, StringComparison.Ordinal));
         Assert.All(skills, line => Assert.Contains("Written:", line, StringComparison.Ordinal));

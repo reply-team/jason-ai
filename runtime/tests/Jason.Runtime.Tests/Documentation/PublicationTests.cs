@@ -26,6 +26,7 @@ public sealed partial class PublicationTests
     [InlineData(".github/workflows/", "the pipeline is never published")]
     [InlineData(".github/publish/public/", "the pipeline is never published")]
     [InlineData("CLAUDE.md", "CLAUDE.md is never published")]
+    [InlineData("DEVELOPMENT.md", "DEVELOPMENT.md is never published")]
     [InlineData("global.json", "global.json is never published")]
     [InlineData("dotnet-tools.json", "dotnet-tools.json is never published")]
     [InlineData("plugins/TestResults/", "TestResults is never published")]

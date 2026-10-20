@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.302. It covers what this build does and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -47,13 +48,14 @@ prints the link alone, which is what you want from a session: hand the person th
 a minute. After that pairing, a bookmark of the page keeps working. `--approval <id>` and `--question <id>` open on one
 item.
 
-If it fails with `ui_not_installed`, no UI build is in place: the message names `ui/default` and
-`ui/custom`. No release installs a build, so say that none is in place, and that one is made from `ui/` as its README
-says and unzipped into `ui/custom`; do not fetch or build anything yourself.
+If it fails with `ui_not_installed`, no UI build is in place, and the message names the fix: `jason ui install` places
+this release's build as `ui/default`, which is also the repair `jason status` prints. Run it, then `jason ui open`
+again. A build from source has no published UI, and the command says so: then say that a build is made from `ui/` as
+its README says and unzipped into `ui/custom`, and do not build anything yourself.
 
 `jason ui tokens` lists the paired browsers; `jason ui revoke <token-id>` unpairs one, `--all` every one. Revoke when
-the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served
-and never decides readiness.
+the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served,
+names `jason ui install` where none is or the default one is another release's, and never decides readiness.
 
 ## Starting and stopping it
 
@@ -292,7 +294,8 @@ install took at another release's tag fail its `role_skills` check, which names 
 line it prints. From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last
 step, once the update is complete; if that step's line says it could not, the update still stands and the fix is
 the line it names. An update applied by a build before 0.12.0 has no such step, so it needs one
-`jason skills update` after it.
+`jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older
+than that step places none, so `jason ui install` follows it; `jason status` names it until it has.
 
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
