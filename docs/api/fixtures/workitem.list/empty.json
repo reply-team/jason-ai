@@ -1,0 +1,19 @@
+{
+  "operation": "workitem.list",
+  "case": "empty",
+  "request": {
+    "campaign_id": "cmp_2",
+    "kind": "ai_role",
+    "role": "manager",
+    "status": [
+      "created"
+    ],
+    "order": "due",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

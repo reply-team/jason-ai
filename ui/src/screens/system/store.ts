@@ -38,6 +38,18 @@ export async function load(api: Api): Promise<void> {
     }
 }
 
+/** Every paired browser but this one, one revoke each; then the list as the runtime now has it. */
+export async function revokeOthers(api: Api, mine: string | null): Promise<void> {
+    try {
+        for (const token of (tokens.value?.items ?? []).filter((t) => t.id !== mine)) {
+            await api.call('ui.revoke', { token_id: token.id });
+        }
+        tokens.value = await api.call<UiTokens>('ui.tokens');
+    } catch (error) {
+        fail(error);
+    }
+}
+
 export async function revoke(api: Api, tokenId: string): Promise<void> {
     try {
         await api.call('ui.revoke', { token_id: tokenId });

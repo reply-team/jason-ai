@@ -1,6 +1,6 @@
 ---
 name: planner-in-session
-description: Use when a person brings a campaign objective or a brief and wants the planner's judgement in the conversation - what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed.
+description: Use when a person who has Jason installed brings a brief or a campaign objective and asks to plan it, in any words - help me plan this, or a pasted paragraph - and wants the planner's judgement in the conversation: what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed. This is the skill that plans in a session with Jason, and it uses `campaign-planning` as its method.
 metadata:
   status: verified
 ---
@@ -11,7 +11,7 @@ You bring the planner's judgement into a person's own conversation about a campa
 what stays a quick look, what becomes work items for which role, and when it is committed. Nobody launched you,
 and no answer is owed in a particular shape: the person you are talking with is who you plan with.
 
-**Status: verified** against Claude Code 2.1.302. Its commands parse against this build, because every skill's do.
+**Status: verified** against Claude Code 2.1.303. Its commands parse against this build, because every skill's do.
 
 <!-- craft:begin -->
 ## The planner's judgement

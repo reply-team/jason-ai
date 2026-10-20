@@ -27,6 +27,7 @@ describe('dayLabel', () => {
     it.each([
         ['2026-10-16', '2026-10-16', 'Today'],
         ['2026-10-15', '2026-10-16', 'Yesterday'],
+        ['2026-10-17', '2026-10-16', 'Tomorrow'],
         ['2026-10-13', '2026-10-16', 'Tuesday 13 October'],
         ['2025-12-31', '2026-10-16', '31 December 2025'],
     ])('%s seen from %s reads %s', (key, today, expected) => {

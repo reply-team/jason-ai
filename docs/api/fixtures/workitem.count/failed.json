@@ -1,0 +1,14 @@
+{
+  "operation": "workitem.count",
+  "case": "failed",
+  "request": {
+    "status": [
+      "failed"
+    ],
+    "order": "finished"
+  },
+  "status": 200,
+  "response": {
+    "total": 1
+  }
+}

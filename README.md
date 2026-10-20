@@ -14,9 +14,9 @@ installed SDR skills, and external execution providers into a durable outbound-s
 > configure Jason to start send to theirs; the runtime's check for a newer release — five minutes after it starts
 > and then once a day, at the default settings, a single `GET` that identifies only the runtime's version, including
 > its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
-> scripts and `jason update`, and `jason skills install` and `update`. The check, the install scripts and
-> `jason update` go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's
-> releases; the skills come from this repository directly. What that address keeps, and for how long, is
+> scripts, `jason update` and `jason ui install`, and `jason skills install` and `update`. The check, the install
+> scripts, `jason update` and `jason ui install` go to `jasonharness.ai`, an address Reply.io operates, which
+> redirects them to this repository's releases; the skills come from this repository directly. What that address keeps, and for how long, is
 > section 7.2 of the [runtime's licence](LICENSE-RUNTIME.md). Nothing else, and no telemetry: the file
 > `jason doctor` writes stays on your machine unless you send it.
 
@@ -125,7 +125,7 @@ performs it in its own process, and what ran is pinned to the attempt — the pa
 the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh runtime routes nothing
 anywhere until somebody writes a route: work with no route fails at the claim with `no_route`. An operation that
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
-such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all eighteen published
+such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twenty-one published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
 CLI, signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program,
 and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of
@@ -156,7 +156,7 @@ source are not published. What a person, an agent or a plugin author needs from 
 | `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
 | `docs/` | The install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
-| `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip` |
+| `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
 | `VERSION` | The runtime version this tree describes |
 
 The runtime's source is not here. Each release attaches the runtime for every platform, built from that source at the
@@ -187,8 +187,8 @@ jason update status
 `check` downloads and installs nothing; it asks the feed and prints the answer. `apply` performs the update —
 download, drain, stop, swap, start, health check — driven by a ledger written before each step, so a machine
 that dies half-way is finished or put back by the next run, and it ends by redeploying the skills this machine
-recorded at the new release's tag; an update applied by a build before 0.12.0 needs one `jason skills update` after
-it. `status` says where one stands, and reads the ledger without needing a runtime.
+recorded at the new release's tag and placing the release's UI; an update applied by a build before 0.12.0 needs one
+`jason skills update` after it, and one applied by a build older than the UI step needs one `jason ui install`. `status` says where one stands, and reads the ledger without needing a runtime.
 
 ### Can this installation start work?
 
@@ -197,6 +197,7 @@ jason skills install --roles-only
 jason skills install --dry-run
 jason skills install
 jason skills update
+jason ui install
 jason status
 jason status --human
 ```
@@ -206,11 +207,12 @@ half a runtime cannot work without — and writes nowhere else. `jason skills in
 interactive and business packs where your agent harness looks as well, which is its configuration and yours
 to allow. Both print the target roots before they write anything, and both refuse a deployment the runtime
 would later refuse to launch, rather than writing one.
-[`skills/README.md`](skills/README.md) is the contract both verbs keep.
+[`skills/README.md`](skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
+browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of six names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs` and `doctor`, and the `skills` and `update` nouns — and it cannot be
-otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
+One question, answered check by check. It is one of seven names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install`, which
+changes this installation's files as those two do — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 
@@ -223,6 +225,7 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | role skills are present, named after their directories and within the runtime's live cap | the skill packs are deployed to an agent harness |
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
 | | notifications reach you |
+| | a UI is installed, and the default one is this release's |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked — so a runtime that is down is a failed check rather than an

@@ -1,0 +1,17 @@
+{
+  "operation": "workitem.count",
+  "case": "filtered",
+  "request": {
+    "campaign_id": "cmp_1",
+    "contact_id": "cnt_1",
+    "kind": "ai_role",
+    "status": [
+      "created"
+    ],
+    "order": "due"
+  },
+  "status": 200,
+  "response": {
+    "total": 1
+  }
+}

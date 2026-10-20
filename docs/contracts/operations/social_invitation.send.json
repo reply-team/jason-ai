@@ -1,0 +1,235 @@
+{
+  "id": "social_invitation.send",
+  "version": 1,
+  "l1": { "name": "social_invitation.send", "contract_version": "2.0.0", "family": 16, "core": false },
+  "intent": "\"Connect with them first, then talk\" — a connection request, with an optional note.",
+
+  "reach": "act",
+  "reversibility": "compensatable",
+  "approval": "confirm_each",
+  "approval_artefact": null,
+  "approval_departs": true,
+  "protective_floor": false,
+  "approval_reason": "raised: the note is content addressed to a named person.",
+  "before_repeating": "the invitation state for this pair: none / pending / accepted / withdrawn / declined.",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": false,
+  "cost": "metered",
+  "cost_basis": "per invitation",
+  "meter": "invitation",
+  "invariants": [],
+
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_only" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": { "fields": ["id"], "channels": "consumed" },
+  "precondition": "The person's contact at the provider carries no other LinkedIn profile than the one consumed, and the provider does not hold them as opted out; a contact that carries no profile is given the consumed one before anything is sent.",
+  "preview": {
+    "summary": "Invite {/contacts/0/channels/0/value} to connect on LinkedIn, from the provider's account {/args/sender/external_id} ({/args/sender/address}), with the note: {/args/note}",
+    "highlights": ["/contacts/0/channels/0/value", "/args/sender", "/args/note"]
+  },
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:social_invitation.send:1:input",
+    "title": "social_invitation.send input",
+    "description": "One invitation to connect, to one person, from one of the provider's accounts, with a note or without one.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "sender", "note"],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": ["linkedin"],
+            "description": "The contact's channel the invitation consumes: the LinkedIn profile it goes to. Exactly that one channel is projected into `contacts[0].channels`."
+          },
+          "sender": { "$ref": "#/$defs/sender" },
+          "note": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+            "description": "The note, exactly as the person approving it reads it and something other than white space, or null for an invitation without one; the note is at most 200 characters. Required: an invitation without a note is said, never assumed."
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "The person the invitation is for.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier, stable across every attempt."
+      }
+    },
+    "$defs": {
+      "sender": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_id", "address"],
+        "description": "The provider's account the invitation goes from, as `sender.list` listed it: its identifier, and its address — null only for an account the provider holds no address for — so the person approving the invitation reads whose account it goes from.",
+        "properties": {
+          "external_id": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "address": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 }
+        }
+      },
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the invitation consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. The invitation names no campaign: it goes outside any of the provider's."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:social_invitation.send:1:output",
+    "title": "social_invitation.send result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome for the one person invited.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status", "sender_external_id", "invitation", "external_ids"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": {
+              "type": "string",
+              "enum": ["sent", "already_connected"],
+              "description": "`sent`: the provider took the invitation. `already_connected`: the person is a connection of the account already, so nothing was sent. A refusal is a failed outcome with its class."
+            },
+            "sender_external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "description": "The provider's account the invitation went from, or would have."
+            },
+            "invitation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["external_id", "sent_at"],
+              "properties": {
+                "external_id": {
+                  "type": ["string", "null"],
+                  "maxLength": 64,
+                  "description": "The provider's identifier for the invitation sent, or null when it gives none — always when nothing was sent."
+                },
+                "sent_at": {
+                  "type": ["string", "null"],
+                  "format": "date-time",
+                  "maxLength": 64,
+                  "description": "When the invitation was sent, in UTC, or null when the provider gives no moment that is known to be UTC."
+                }
+              }
+            },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["contact"],
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the person invited, found by the pin or by the consumed profile and pinned so no later call has to match them again. Nobody is created to find it."
+    }
+  },
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "never",
+
+  "failure_codes": [
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider; or, with no pin, the provider holds nobody under the consumed profile — the person is put on a list or enrolled first. Nothing was sent." },
+    { "code": "contact_not_unique", "class": "permanent", "when": "More than one of the provider's contacts carries this profile, so picking one would be guessing. Nothing was sent." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The person carries no value on the channel named that the provider could find them by. Nothing was sent." },
+    { "code": "contact_channel_conflict", "class": "permanent", "when": "The person's contact at the provider carries another LinkedIn profile than the one consumed, or none it could be given, so the invitation would not reach the profile the suppression register was asked about. It is never overwritten. Nothing was sent." },
+    { "code": "sender_not_found", "class": "permanent", "when": "The provider holds no account under the sender's identifier that this one can send from. Nothing was sent." },
+    { "code": "sender_mismatch", "class": "validation", "when": "The sender's address in the arguments is not the one the provider holds for that account, so the person approving read another account than the one it would go from. Nothing was sent." },
+    { "code": "sender_unavailable", "class": "permanent", "when": "The sender's account cannot send now: turned off, or its connection to the channel lost; the provider's own word travels in the details. Nothing was sent." },
+    { "code": "sender_limit_reached", "class": "permanent", "when": "The sender's daily or weekly allowance of invitations is spent; which one travels in the details. Nothing was sent; propose the invitation again once it renews." },
+    { "code": "message_too_long", "class": "validation", "when": "The provider found the note too long. Nothing was sent." },
+    { "code": "message_invalid", "class": "validation", "when": "The note carries something the provider would read as markup of its own — a placeholder it fills in for each person — so what would go out is not the text a person approved. Nothing was sent." },
+    { "code": "suppressed", "class": "permanent", "when": "The provider holds this person as opted out, so nothing was sent." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include invitations outside a campaign, so no call by this account can send one." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing was sent. Repeating it runs the same call again." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it send invitations for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now, and nothing was sent; it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was sent." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the invitation may already have gone. No read tells this work item's invitation from another one, so the item stops for a person to look." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "Nothing is sent before the person is found — by the pin, or by the consumed profile, and nobody is created — and their contact is read: one the provider holds as opted out fails `suppressed`, one carrying another profile fails `contact_channel_conflict` and is not changed, and one carrying none is given the consumed profile first.",
+    "The invitation goes from the account `args.sender` names, and only when the provider holds that account under the address the arguments state — null only for an account it holds no address for; otherwise it fails `sender_mismatch` before anything is sent.",
+    "The note goes out exactly as approved: one the provider would read as a placeholder of its own fails `message_invalid` before anything is sent.",
+    "A person who is a connection of the account already answers `already_connected`, and nothing is sent.",
+    "An attempt sends at most once. One that may have sent and lost its answer fails `provider_answer_lost` and is never repeated.",
+    "The person's identifier comes back under `external_ids.contact`, on a failure too once the person was found.",
+    "The result carries exactly one item, and its `contact_id` is the identifier the call was given."
+  ]
+}

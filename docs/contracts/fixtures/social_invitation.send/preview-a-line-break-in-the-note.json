@@ -1,0 +1,34 @@
+{
+  "operation": "social_invitation.send",
+  "version": 1,
+  "case": "a note of two lines: the summary keeps it to one, the line break a space, and the highlight keeps the note as written",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "note": "Hi Marta,\nwe met at the Lisbon meetup."
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Invite https://www.linkedin.com/in/marta-example to connect on LinkedIn, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner), with the note: Hi Marta, we met at the Lisbon meetup.",
+    "highlights": {
+      "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
+      "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "/args/note": "Hi Marta,\nwe met at the Lisbon meetup."
+    }
+  }
+}

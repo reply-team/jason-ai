@@ -1,0 +1,46 @@
+{
+  "operation": "workitem.get",
+  "case": "open",
+  "request": {
+    "work_item_id": "wi_4"
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_4",
+    "campaign_id": "cmp_1",
+    "contact_id": "cnt_1",
+    "kind": "ai_role",
+    "role": "copywriter",
+    "operation": null,
+    "execution_profile": null,
+    "status": "created",
+    "eligible": true,
+    "priority": 0,
+    "not_before": null,
+    "due_at": "2026-10-16T10:00:00.000Z",
+    "retry_after": null,
+    "timeout_seconds": null,
+    "heartbeat_seconds": null,
+    "max_attempts": null,
+    "created_by": {
+      "type": "human",
+      "id": null
+    },
+    "context": {},
+    "result_format": null,
+    "result": null,
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [],
+    "external_reports": [],
+    "created_at": "2026-10-16T08:00:00.000Z",
+    "updated_at": "2026-10-16T08:00:00.000Z",
+    "finished_at": null,
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Autumn outreach",
+    "contact_name": "Ada Lovelace"
+  }
+}

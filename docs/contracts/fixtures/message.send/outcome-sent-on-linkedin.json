@@ -1,0 +1,27 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a LinkedIn message the provider took, its activity the message's identifier",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "sent",
+          "channel": "linkedin",
+          "format": "linkedin_message",
+          "sender_external_id": "s_34",
+          "message": { "external_id": "70017", "sent_at": null },
+          "external_ids": { "contact": "p_88421" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_88421" },
+    "error": null,
+    "diagnostics": { "duration_ms": 900, "exec_calls": 4, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

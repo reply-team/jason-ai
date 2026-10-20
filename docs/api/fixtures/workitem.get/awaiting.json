@@ -1,0 +1,46 @@
+{
+  "operation": "workitem.get",
+  "case": "awaiting",
+  "request": {
+    "work_item_id": "wi_3"
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_3",
+    "campaign_id": "cmp_1",
+    "contact_id": "cnt_2",
+    "kind": "provider_op",
+    "role": null,
+    "operation": "campaign.enroll",
+    "execution_profile": null,
+    "status": "awaiting_approval",
+    "eligible": false,
+    "priority": 0,
+    "not_before": null,
+    "due_at": null,
+    "retry_after": null,
+    "timeout_seconds": null,
+    "heartbeat_seconds": null,
+    "max_attempts": null,
+    "created_by": {
+      "type": "human",
+      "id": null
+    },
+    "context": {},
+    "result_format": null,
+    "result": null,
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [],
+    "external_reports": [],
+    "created_at": "2026-10-15T12:00:00.000Z",
+    "updated_at": "2026-10-15T12:00:00.000Z",
+    "finished_at": null,
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Autumn outreach",
+    "contact_name": "Grace Hopper"
+  }
+}

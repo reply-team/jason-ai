@@ -14,6 +14,9 @@ function buildFiles(dist) {
             if (name.startsWith('.')) throw new Error(`${join(dir, name)} is hidden; a build has no hidden files`);
             const path = join(dir, name);
             const rel = relative(dist, path).split('\\').join('/');
+            // The build's own manifest serves dist/ as it stands; the asset carries the one written below, with the
+            // version it is published as.
+            if (rel === 'manifest.json') continue;
             if (statSync(path).isDirectory()) {
                 if (rel !== 'assets') {
                     throw new Error(
@@ -54,6 +57,25 @@ function thirdPartyNotices() {
     return lines.join('\n');
 }
 
+/** What a build says it is: the version, and the API it was built for. The runtime serves no directory without one. */
+export function manifestOf(version, apiVersion) {
+    return JSON.stringify({ version, api_version: apiVersion }) + '\n';
+}
+
+/**
+ * The build writes its manifest into dist/, so a build is served as it stands, linked or copied into ui/custom/,
+ * with no package in between.
+ */
+export function buildManifest({ version, apiVersion }) {
+    return {
+        name: 'jason-ui-manifest',
+        apply: 'build',
+        generateBundle() {
+            this.emitFile({ type: 'asset', fileName: 'manifest.json', source: manifestOf(version, apiVersion) });
+        },
+    };
+}
+
 export function packageUi(dist, out, { version, apiVersion }) {
     return new Promise((resolve, reject) => {
         let files;
@@ -66,7 +88,7 @@ export function packageUi(dist, out, { version, apiVersion }) {
         mkdirSync(dirname(out), { recursive: true });
         const zip = new yazl.ZipFile();
         for (const file of files) zip.addFile(join(dist, file), file);
-        zip.addBuffer(Buffer.from(JSON.stringify({ version, api_version: apiVersion }) + '\n'), 'manifest.json');
+        zip.addBuffer(Buffer.from(manifestOf(version, apiVersion)), 'manifest.json');
         zip.addBuffer(Buffer.from(thirdPartyNotices()), 'THIRD-PARTY-NOTICES');
         zip.outputStream
             .pipe(createWriteStream(out))

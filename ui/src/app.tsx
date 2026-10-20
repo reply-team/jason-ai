@@ -10,6 +10,7 @@ import { Sidebar } from './shell/sidebar';
 import * as shell from './shell/shell';
 import { AttentionScreen } from './screens/attention/screen';
 import { SystemScreen } from './screens/system/screen';
+import { WorkItemsScreen } from './screens/workitems/screen';
 
 const ready = signal(false);
 
@@ -39,7 +40,13 @@ export function App({ api, uiApiVersion = API_VERSION }: { api?: Api; uiApiVersi
                             from a release that matches.
                         </div>
                     )}
-                    {route.value.screen === 'system' ? <SystemScreen /> : <AttentionScreen />}
+                    {route.value.screen === 'system' ? (
+                        <SystemScreen />
+                    ) : route.value.screen === 'workitems' ? (
+                        <WorkItemsScreen />
+                    ) : (
+                        <AttentionScreen />
+                    )}
                 </div>
             </div>
         </ApiProvider>

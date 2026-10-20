@@ -15,6 +15,12 @@ export function Sidebar() {
                 <a class={current === 'attention' ? 'active' : ''} href={href({ screen: 'attention' })}>
                     Attention {pendingMark.value && <span class="dot" aria-label="something needs you" />}
                 </a>
+                <a
+                    class={current === 'workitems' ? 'active' : ''}
+                    href={href({ screen: 'workitems', tab: 'now', filters: {} })}
+                >
+                    Work items
+                </a>
                 <a class={current === 'system' ? 'active' : ''} href={href({ screen: 'system' })}>
                     System
                 </a>

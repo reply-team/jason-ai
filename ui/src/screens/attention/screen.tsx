@@ -89,8 +89,8 @@ export function AttentionScreen() {
                     <AttentionList
                         approvals={store.approvals.value}
                         questions={store.questions.value}
-                        moreApprovals={store.approvalsCursor.value ? () => void store.more(api, 'approvals') : null}
-                        moreQuestions={store.questionsCursor.value ? () => void store.more(api, 'questions') : null}
+                        moreApprovals={store.approvalsCursor.value ? () => store.more(api, 'approvals') : null}
+                        moreQuestions={store.questionsCursor.value ? () => store.more(api, 'questions') : null}
                         now={now}
                     />
                 )}

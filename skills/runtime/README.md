@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.12.0**.
+this pack ships with Jason **0.13.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -163,6 +163,6 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
+| `planner-in-session` | Claude Code 2.1.303 (Opus 5.5) | 0.12.0 | `sha256:5983d790a5953f506fed5a08ba464d2691f6453decd9817087c281f2845f5d37` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
-| `planner-in-session` | Claude Code 2.1.302 (Opus 5.5) | 0.11.0 | `sha256:8fd443fe5700f86e23aa7e1eeca567e8f7afd8e4f9dc10a49628272a1e499548` |
