@@ -121,10 +121,8 @@ on Ubuntu and the UI's checks. Marking a pull request into a release branch read
 The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
 and that run is the release's gate; a pull request into `main` from any other branch — the version after a release, a
 document — runs the Linux set and reports the rest as skipped by rule. A push to `main` whose tree the merging pull
-request's last full run tested runs the version check alone. Nothing runs nightly. Until the workflow carries these
-rules, a ready pull request runs every check but macOS whatever branch it targets, macOS runs nightly and at a release,
-and the critical tier is a list rather than a trait; the first release branch opens with the workflow change, and
-`CiRunsTests` holds the rule the workflow carries.
+request's last full run tested runs the version check alone. Nothing runs nightly. The critical tier is still a list
+rather than a trait. `CiRunsTests` holds the rule the workflow carries.
 
 **Draft while you build, ready when you are done.** Open the pull request as a draft with the first push and keep
 pushing to it; a draft is cheap. Mark it ready once, after the two readings below and the fixes they asked for, so

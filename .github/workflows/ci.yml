@@ -1,27 +1,34 @@
 name: CI
 
-# Which checks a run needs is decided once, by the version job, which every other job needs:
+# Which checks a run needs is decided once, by the version job, which every other job needs, from the event and the
+# branch a change lands on:
 # - a draft pull request's push runs the Linux set: the version, linux-x64, install.sh on ubuntu, the update on
 #   linux-x64 and the UI;
-# - marking it ready for review, and every push after that, run every check but macOS, whose check reports as skipped
-#   by rule; a push after that which changes nothing but documentation since the tree the last full run tested runs the
-#   Linux set, and reports the rest as skipped;
-# - a push to main runs every check but macOS, unless its tree is the one its pull request's last full run tested:
-#   then the platform checks and the suite under a release's version report as skipped;
-# - the nightly run, when main has moved since the last nightly run that passed, and a run started by hand run every
-#   check, macOS included. A release runs its own, macOS among them, in release.yml.
-# Every check the main branch's ruleset requires reports on every run but a draft's, as a success where a rule skipped
-# it: a skipped job reports success, and a matrix row that is absent would not report at all.
+# - a pull request into a release branch runs the Linux set when it is ready as well, which is all a release branch's
+#   ruleset requires, and reports nothing as skipped; so does a pull request into any other branch but main;
+# - the release's pull request, from a release branch into main, runs every check, macOS included, when it is marked
+#   ready for review and on every push after that; a push after that which changes nothing but documentation since the
+#   tree its last run of every check tested runs the Linux set, and reports the rest as skipped;
+# - any other pull request into main runs the Linux set when it is ready, and reports every other check as skipped by
+#   rule;
+# - a push to main runs every check, macOS included, unless its tree is the one its pull request's last run of every
+#   check tested: then only the version runs, and the rest report as skipped;
+# - a push to a release branch runs the Linux set, unless its tree is the one its pull request's last ready run tested:
+#   then only the version runs. No ruleset reads a push to a release branch, so nothing reports as skipped;
+# - a run started by hand runs every check, macOS included. Nothing runs nightly. A release runs its own checks, macOS
+#   among them, in release.yml.
+# Every check the main branch's ruleset requires reports on every ready pull request into main and on every push to
+# main, as a success where a rule skipped it: a skipped job reports success, and a matrix row that is absent would not
+# report at all.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  schedule:
-    - cron: '23 9 * * *'
   workflow_dispatch:
 
-# One run per kind and ref: the nightly run is on main as a push is, and neither cancels the other.
+# One run per kind and ref: a push cancels the run an earlier push to the same pull request or branch started, and a run
+# started by hand neither cancels a push's run nor is cancelled by it.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
@@ -94,11 +101,11 @@ jobs:
           "tree=$tree" >> $env:GITHUB_OUTPUT
           "listing=$listing" >> $env:GITHUB_OUTPUT
 
-      # What an earlier run tested, asked only where the answer can let this run skip a leg: for a push to main, the record
-      # that the last passing run of the pull request it merged kept; for a push to a pull request that is ready, the
-      # record its own last passing full run kept; for the nightly run, the commit the last nightly run that passed was on.
-      # Whatever goes wrong here - an API error, no such run, a record that cannot be had - is an answer of nothing found,
-      # and on nothing found the step after this runs the full set.
+      # What an earlier run tested, asked only where the answer can let this run skip a leg: for a push to main or to a
+      # release branch, the record that the last passing run of the pull request it merged kept; for a push to the
+      # release's pull request once it is ready, the record its own last passing run of every check kept. Whatever goes
+      # wrong here - an API error, no such run, a record that cannot be had - is an answer of nothing found, and on
+      # nothing found the step after this skips nothing the branch requires.
       - id: earlier
         name: Find what an earlier run tested
         shell: pwsh
@@ -111,6 +118,7 @@ jobs:
           SHA: ${{ github.sha }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.head_ref }}
+          TARGET: ${{ github.base_ref || github.ref_name }}
         run: |
           $runs = "repos/$env:REPOSITORY/actions/workflows/ci.yml/runs"
 
@@ -120,9 +128,10 @@ jobs:
             ($answer -join "`n") | ConvertFrom-Json
           }
 
-          # The newest of these runs that kept a record of the tree it tested for this pull request, downloaded. Only runs
-          # that passed are asked about, and only a full run keeps a record, so a record names a tree every check but macOS
-          # passed on.
+          # The newest of these runs that kept a record of the tree it tested for this pull request, downloaded. Only
+          # runs that passed are asked about, and only a ready pull request's run of what its branch requires keeps a
+          # record - every check on the release's pull request, the Linux set on one into a release branch - so a record
+          # names a tree those checks passed on.
           function Recorded($candidates, [string] $number) {
             foreach ($run in @($candidates | Where-Object { $_ })) {
               $kept = @((Api "repos/$env:REPOSITORY/actions/runs/$($run.id)/artifacts?name=tested-tree").artifacts | Where-Object { $_ -and -not $_.expired })
@@ -139,7 +148,6 @@ jobs:
           }
 
           $record = ''
-          $nightly = ''
           try {
             if ($env:EVENT -eq 'push') {
               $merged = @(Api "repos/$env:REPOSITORY/commits/$($env:SHA)/pulls" | Where-Object { $_.merged_at -and $_.merge_commit_sha -eq $env:SHA })
@@ -151,36 +159,32 @@ jobs:
                 if ($found) { $record = $found.file; $said = $found.said }
                 else { $said = "no passing run of pull request #$($pull.number) at $($pull.head.sha) kept a record of its tree" }
               }
-            } elseif ($env:EVENT -eq 'pull_request' -and $env:ACTION -eq 'synchronize' -and $env:DRAFT -eq 'false') {
+            } elseif ($env:EVENT -eq 'pull_request' -and $env:ACTION -eq 'synchronize' -and $env:DRAFT -eq 'false' -and
+                $env:TARGET -ceq 'main' -and $env:BRANCH -clike 'release/*') {
               $branch = [uri]::EscapeDataString($env:BRANCH)
               $found = Recorded (Api "$($runs)?event=pull_request&branch=$branch&status=success&per_page=20").workflow_runs $env:PULL_REQUEST
               if ($found) { $record = $found.file; $said = $found.said }
               else { $said = "no passing run of pull request #$($env:PULL_REQUEST) kept a record of its tree" }
-            } elseif ($env:EVENT -eq 'schedule') {
-              $last = @((Api "$($runs)?event=schedule&branch=main&status=success&per_page=1").workflow_runs | Where-Object { $_ })
-              if ($last.Count -gt 0) { $nightly = $last[0].head_sha; $said = "the last nightly run that passed, run $($last[0].id), was on $nightly" }
-              else { $said = 'no nightly run has passed yet' }
             } else {
               $said = 'nothing an earlier run tested changes what this run needs'
             }
           } catch {
             $record = ''
-            $nightly = ''
             $said = "nothing was found ($($_.Exception.Message))"
           }
 
           $said = $said -replace '\s+', ' '
           Write-Host $said
           "record=$record" >> $env:GITHUB_OUTPUT
-          "nightly=$nightly" >> $env:GITHUB_OUTPUT
           "found=$said" >> $env:GITHUB_OUTPUT
 
-      # Which checks this run needs, from the event and from what the step before found, handed on as a word for each kind
-      # of job, the legs each matrix runs and the checks the stand-in reports as skipped by rule. A matrix cannot be cut by
-      # its job's own condition, so its legs are decided here, from the whole list. A job only the full set needs carries
-      # `if: needs.version.outputs.full == 'true'`, one the Linux set needs `linux`, and a job its condition skips reports
-      # success to the checks the ruleset requires. A leg is skipped only on what was found: nothing found, or a record that
-      # cannot be read, runs the full set.
+      # Which checks this run needs, from the event, the branch a change lands on, the branch a pull request comes from
+      # and what the step before found, handed on as a word for each kind of job, the legs each matrix runs and the
+      # checks the stand-in reports as skipped by rule. A matrix cannot be cut by its job's own condition, so its legs
+      # are decided here, from the whole list. A job only a run of every check needs carries
+      # `if: needs.version.outputs.full == 'true'`, one the Linux set needs `linux`, and a job its condition skips
+      # reports success to the checks the ruleset requires. A leg is skipped only on what was found: nothing found, or a
+      # record that cannot be read, skips nothing the branch requires.
       - id: legs
         name: Decide which checks this run needs
         shell: pwsh
@@ -190,10 +194,11 @@ jobs:
           DRAFT: ${{ github.event.pull_request.draft }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           SHA: ${{ github.sha }}
+          BRANCH: ${{ github.head_ref }}
+          TARGET: ${{ github.base_ref || github.ref_name }}
           TREE: ${{ steps.tree.outputs.tree }}
           LISTING: ${{ steps.tree.outputs.listing }}
           RECORD: ${{ steps.earlier.outputs.record }}
-          NIGHTLY: ${{ steps.earlier.outputs.nightly }}
           FOUND: ${{ steps.earlier.outputs.found }}
           PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"},{"rid":"osx-arm64","os":"macos-latest"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
@@ -233,43 +238,53 @@ jobs:
 
           function Record { Get-Content -Raw -LiteralPath $env:RECORD | ConvertFrom-Json }
 
+          # The release's pull request is the one from a release branch into main; a release branch is any branch under
+          # release/, as the ruleset that guards them reads it.
+          $toRelease = $env:TARGET -clike 'release/*'
+          $fromRelease = $env:BRANCH -clike 'release/*'
+
           try {
             if ($env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true') {
               $set = 'linux'; $why = "a draft pull request's push runs the Linux set"
+            } elseif ($env:EVENT -eq 'pull_request' -and $env:TARGET -cne 'main') {
+              $set = 'linux'; $why = "a pull request into $($env:TARGET) runs the Linux set, which is all a release branch's ruleset requires"
+            } elseif ($env:EVENT -eq 'pull_request' -and -not $fromRelease) {
+              $set = 'not-the-release'; $why = "a pull request into main from $($env:BRANCH) runs the Linux set: only the release's pull request, from a release branch, runs every check"
             } elseif ($env:EVENT -eq 'pull_request' -and $env:ACTION -eq 'synchronize' -and $env:RECORD) {
               $others = NotDocumentation (Record)
               if ($others.Count -eq 0) { $set = 'documentation'; $why = "every path this push changes since $($env:FOUND) is documentation" }
-              else { $set = 'full'; $why = "this push changes $($others -join ', ') since $($env:FOUND)" }
+              else { $set = 'everything'; $why = "this push changes $($others -join ', ') since $($env:FOUND)" }
             } elseif ($env:EVENT -eq 'pull_request' -and $env:ACTION -eq 'synchronize') {
-              $set = 'full'; $why = "a push to a pull request that is ready runs every check but macOS: $($env:FOUND)"
+              $set = 'everything'; $why = "a push to the release's pull request runs every check: $($env:FOUND)"
             } elseif ($env:EVENT -eq 'pull_request') {
-              $set = 'full'; $why = "a pull request ready for review ($($env:ACTION)) runs every check but macOS"
+              $set = 'everything'; $why = "the release's pull request, ready for review ($($env:ACTION)), runs every check"
+            } elseif ($env:EVENT -eq 'push' -and $toRelease -and $env:RECORD) {
+              $tested = "$((Record).tree)"
+              if ($tested -and $tested -ceq $env:TREE) { $set = 'none'; $why = "$($env:FOUND), which is this commit's tree" }
+              else { $set = 'linux'; $why = "$($env:FOUND), and this commit's tree is $($env:TREE)" }
+            } elseif ($env:EVENT -eq 'push' -and $toRelease) {
+              $set = 'linux'; $why = "a push to a release branch runs the Linux set: $($env:FOUND)"
             } elseif ($env:EVENT -eq 'push' -and $env:RECORD) {
               $tested = "$((Record).tree)"
               if ($tested -and $tested -ceq $env:TREE) { $set = 'tested'; $why = "$($env:FOUND), which is this commit's tree" }
-              else { $set = 'full'; $why = "$($env:FOUND), and this commit's tree is $($env:TREE)" }
+              else { $set = 'everything'; $why = "$($env:FOUND), and this commit's tree is $($env:TREE)" }
             } elseif ($env:EVENT -eq 'push') {
-              $set = 'full'; $why = "a push to main runs every check but macOS: $($env:FOUND)"
-            } elseif ($env:EVENT -eq 'schedule' -and $env:NIGHTLY -and $env:NIGHTLY -ceq $env:SHA) {
-              $set = 'none'; $why = "main is still at $($env:SHA): $($env:FOUND)"
-            } elseif ($env:EVENT -eq 'schedule') {
-              $set = 'everything'; $why = "main is at $($env:SHA): $($env:FOUND)"
+              $set = 'everything'; $why = "a push to main runs every check: $($env:FOUND)"
             } else {
               $set = 'everything'; $why = 'a run started by hand runs every check'
             }
           } catch {
-            $set = if ($env:EVENT -in 'pull_request', 'push') { 'full' } else { 'everything' }
+            $set = if ($env:EVENT -eq 'push' -and $toRelease) { 'linux' } else { 'everything' }
             $why = "what was found could not be read, so nothing is skipped ($($_.Exception.Message))"
           }
           $why = $why -replace '\s+', ' '
 
-          # Every platform when every check runs, all but macOS on the full set, Linux alone on the Linux set, and none where
-          # the tree was tested already or the nightly run has nothing to do.
+          # Every platform when every check runs, Linux alone on the Linux set, none where the tree was tested already.
           function Runs([string] $rid) {
             switch ($set) {
               'everything' { $true }
-              'full' { $rid -ne 'osx-arm64' }
               'documentation' { $rid -eq 'linux-x64' }
+              'not-the-release' { $rid -eq 'linux-x64' }
               'linux' { $rid -eq 'linux-x64' }
               default { $false }
             }
@@ -280,19 +295,18 @@ jobs:
           $kept = @($platforms | Where-Object { Runs $_.rid })
           $keptUpdates = @($updates | Where-Object { Runs $_.rid })
 
-          # What a ready pull request or main does not run reports as skipped by rule, under the check's own name, which is
-          # the platform's for a platform leg and the update job's for an update. A draft's push leaves it out: nothing
-          # waits on a draft.
+          # What a ready pull request into main or a push to main does not run reports as skipped by rule, under the
+          # check's own name, which is the platform's for a platform leg and the update job's for an update. Nothing
+          # else does: nothing waits on a draft, and a release branch's ruleset requires only the Linux set.
           $skipped = @()
-          if ($set -in 'full', 'documentation', 'tested') {
-            $because = if ($set -eq 'full') { 'macOS runs on the nightly run on main, on a run of CI started by hand and at a release, not on a pull request or a push to main' } else { $why }
-            $skipped = @($platforms | Where-Object { -not (Runs $_.rid) } | ForEach-Object { @{ check = $_.rid; why = $because } }) +
-              @($updates | Where-Object { -not (Runs $_.rid) } | ForEach-Object { @{ check = "an update on $($_.rid)"; why = $because } })
+          if ($set -in 'documentation', 'not-the-release', 'tested') {
+            $skipped = @($platforms | Where-Object { -not (Runs $_.rid) } | ForEach-Object { @{ check = $_.rid; why = $why } }) +
+              @($updates | Where-Object { -not (Runs $_.rid) } | ForEach-Object { @{ check = "an update on $($_.rid)"; why = $why } })
           }
 
           function Word([bool] $yes) { if ($yes) { 'true' } else { 'false' } }
           "set=$set" >> $env:GITHUB_OUTPUT
-          "full=$(Word ($set -in 'everything', 'full'))" >> $env:GITHUB_OUTPUT
+          "full=$(Word ($set -eq 'everything'))" >> $env:GITHUB_OUTPUT
           "linux=$(Word ($set -notin 'tested', 'none'))" >> $env:GITHUB_OUTPUT
           "macos=$(Word ($set -eq 'everything'))" >> $env:GITHUB_OUTPUT
           "platforms=$(@{ include = $kept } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
@@ -301,10 +315,11 @@ jobs:
           "skipping=$(Word ($skipped.Count -gt 0))" >> $env:GITHUB_OUTPUT
           "skipped=$(@{ include = $skipped } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
 
-          # A pull request's full run keeps a record of the tree it tested, for a push after it that changes documentation
-          # only and for the push to main its merge makes.
+          # A ready pull request's run of what its branch requires keeps a record of the tree it tested: the release's
+          # run of every check, for a push after it that changes documentation only and for the push to main its merge
+          # makes, and a run of the Linux set into a release branch, for the push to the release branch its merge makes.
           $recorded = ''
-          if ($set -eq 'full' -and $env:EVENT -eq 'pull_request') {
+          if ($env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'false' -and ($set -eq 'everything' -or ($set -eq 'linux' -and $toRelease))) {
             $recorded = Join-Path $env:RUNNER_TEMP 'tested-tree'
             New-Item -ItemType Directory -Force -Path $recorded | Out-Null
             [ordered] @{ tree = $env:TREE; commit = $env:SHA; pull_request = [int] $env:PULL_REQUEST; listing = @(Get-Content -LiteralPath $env:LISTING) } |
@@ -320,8 +335,8 @@ jobs:
             @('### Which checks this run needs', '', "**$set**: $why", '', $legs) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
 
-      # The record, kept fourteen days: as long as a pull request may wait for its merge. A record that has gone runs the
-      # full set.
+      # The record, kept fourteen days: as long as a pull request may wait for its merge. A record that has gone skips
+      # nothing.
       - name: Keep the record of the tree this run tested
         if: steps.legs.outputs.record != ''
         uses: actions/upload-artifact@v7
@@ -375,8 +390,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      # linux-x64, win-x64 and osx-arm64 when every check runs; all but osx-arm64 on the full set; linux-x64 alone on the
-      # Linux set.
+      # linux-x64, win-x64 and osx-arm64 when every check runs; linux-x64 alone on the Linux set.
       matrix: ${{ fromJSON(needs.version.outputs.platforms) }}
     steps:
       - uses: actions/checkout@v7
@@ -604,7 +618,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      # linux-x64 and win-x64 on the full set; linux-x64 alone on the Linux set.
+      # linux-x64 and win-x64 when every check runs; linux-x64 alone on the Linux set.
       matrix: ${{ fromJSON(needs.version.outputs.updates) }}
     steps:
       - uses: actions/checkout@v7
@@ -914,8 +928,7 @@ jobs:
           merge-multiple: true
           path: feed
 
-      # Every archive this run packaged: all three when every check runs, all but macOS's on the full set, the Linux one
-      # alone on the Linux set.
+      # Every archive this run packaged: all three when every check runs, the Linux one alone on the Linux set.
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
         run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require ${{ needs.version.outputs.rids }}
@@ -1266,10 +1279,12 @@ jobs:
           JASON_EXE: ${{ github.workspace }}/runtime/src/Jason.App/bin/Release/net10.0/jason
         run: npm run e2e
 
-  # A check the ruleset requires whose leg this run does not need, reported under the leg's own name as a success whose
-  # one step says why: macOS on a ready pull request and on main, the other platforms after a push that changes
-  # documentation only, every platform on a push to main whose tree was tested already. A matrix row that is absent
-  # would never report, and a merge would wait for it, so the version job hands the legs it leaves out to this job.
+  # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
+  # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not
+  # the release's, and on a push to the release's pull request that changes documentation only; every platform and
+  # update on a push to main whose tree was tested already. A matrix row that is absent would never report, and a merge
+  # would wait for it, so the version job hands the legs it leaves out to this job. A job without a matrix reports under
+  # its own name when its condition skips it, so every other check the ruleset requires reports without a stand-in.
   skipped-by-rule:
     name: ${{ matrix.check }}
     needs: version

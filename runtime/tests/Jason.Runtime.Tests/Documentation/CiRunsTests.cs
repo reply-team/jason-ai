@@ -7,13 +7,16 @@ using static Jason.Runtime.Tests.Documentation.Workflows;
 namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
-/// Which of CI's checks run on which push, and which report as skipped by rule. A draft pull request's pushes run the Linux
-/// set. Marking it ready for review, every push after that and every push to <c>main</c> run the whole set but macOS, whose
-/// check reports as skipped by rule. A push after ready that changes nothing but documentation since the tree the last full
-/// run tested runs the Linux set, and a push to <c>main</c> whose tree the merged pull request's last full run tested runs
-/// none of the platform checks; both report what they skip under its own name. The nightly run on <c>main</c>, when
-/// <c>main</c> has moved since the last one that passed, and a run started by hand run every check, macOS included. Read
-/// out of ci.yml, and the steps that decide are run rather than read, so what these facts hold is what a runner does.
+/// Which of CI's checks run on which push, decided by the branch a change lands on, and which report as skipped by rule. A
+/// draft pull request's pushes run the Linux set, and so does a pull request into a release branch once it is ready, which
+/// is all a release branch's ruleset requires. The release's pull request, from a release branch into <c>main</c>, runs
+/// every check, macOS included, once it is ready; a push to it that changes nothing but documentation since the tree its
+/// last run of every check tested runs the Linux set. Any other pull request into <c>main</c> runs the Linux set. Both
+/// report every other check <c>main</c>'s ruleset requires as skipped by rule, under its own name. A push to <c>main</c> or
+/// to a release branch whose tree the merged pull request's last ready run tested runs the version alone; any other push to
+/// <c>main</c> runs every check, and any other push to a release branch the Linux set. A run started by hand runs every
+/// check, and nothing runs nightly. Read out of ci.yml, and the steps that decide are run rather than read, so what these
+/// facts hold is what a runner does.
 /// </summary>
 public class CiRunsTests
 {
@@ -21,7 +24,7 @@ public class CiRunsTests
     private static readonly string[] Release = [".github", "workflows", "release.yml"];
     private static readonly string[] Action = [".github", "actions", "package", "action.yml"];
 
-    /// <summary>The condition a job carries when only the full set needs it.</summary>
+    /// <summary>The condition a job carries when only a run of every check needs it.</summary>
     private const string Full = "needs.version.outputs.full == 'true'";
 
     /// <summary>The condition a job carries when the Linux set needs it, as every set that builds anything does.</summary>
@@ -52,7 +55,7 @@ public class CiRunsTests
         "The UI on ubuntu",
     ];
 
-    /// <summary>What a draft pull request's push runs, and a push after ready that changes documentation only.</summary>
+    /// <summary>What the Linux set runs: a draft's push, and all a release branch's ruleset requires.</summary>
     private static readonly string[] TheLinuxSet =
     [
         "The version this tree carries", "linux-x64", "install.sh on ubuntu", "an update on linux-x64", "The UI on ubuntu",
@@ -71,7 +74,12 @@ public class CiRunsTests
 
     private const int PullRequestNumber = 7;
 
-    /// <summary>A tree as <c>git ls-tree -r</c> lists it: what the last full run tested. Made up.</summary>
+    /// <summary>A release branch, and the branch any other pull request comes from. Made up.</summary>
+    private const string ReleaseBranch = "release/0.15";
+
+    private const string FeatureBranch = "feature/the-change";
+
+    /// <summary>A tree as <c>git ls-tree -r</c> lists it: what the last ready run tested. Made up.</summary>
     private static readonly string[] Tested =
     [
         "100644 blob 1111111111111111111111111111111111111111\tREADME.md",
@@ -81,28 +89,37 @@ public class CiRunsTests
     ];
 
     /// <summary>
-    /// A run as the deciding step is told about it: the event, and what the step before it found — the tree an earlier full
-    /// run tested (none when nothing was found), this run's own listing, and the commit the last nightly run was on.
+    /// A run as the deciding step is told about it: the event, what the step before it found — the tree an earlier ready run
+    /// tested (none when nothing was found) — this run's own listing, the branch the change lands on and, for a pull request,
+    /// the branch it comes from.
     /// </summary>
-    private sealed record Run(string Event, string Action = "", string Draft = "", string? TestedTree = null, string[]? Listing = null, string Nightly = "");
+    private sealed record Run(
+        string Event, string Action = "", string Draft = "", string? TestedTree = null, string[]? Listing = null, string Target = "main", string Branch = FeatureBranch);
 
     /// <summary>Every kind of run, and the set it takes.</summary>
     private static readonly Dictionary<string, (Run Run, string Set)> Kinds = new(StringComparer.Ordinal)
     {
-        ["a draft's push"] = (new Run("pull_request", "synchronize", "true"), "linux"),
-        ["marking it ready"] = (new Run("pull_request", "ready_for_review", "false"), "full"),
-        ["opening it ready"] = (new Run("pull_request", "opened", "false"), "full"),
-        ["reopening it"] = (new Run("pull_request", "reopened", "false"), "full"),
-        ["a push after ready that changes code"] = (new Run("pull_request", "synchronize", "false", AnotherTree, Changed("runtime/src/Jason.App/Program.cs")), "full"),
-        ["a push after ready that changes documentation only"] = (new Run("pull_request", "synchronize", "false", AnotherTree, Changed("docs/plugins.md")), "documentation"),
-        ["a push after ready that changes nothing"] = (new Run("pull_request", "synchronize", "false", Tree), "documentation"),
-        ["a push after ready with no record found"] = (new Run("pull_request", "synchronize", "false"), "full"),
-        ["a push to main"] = (new Run("push", TestedTree: AnotherTree), "full"),
-        ["a push to main of the tree its pull request's full run tested"] = (new Run("push", TestedTree: Tree), "tested"),
-        ["a push to main with no record found"] = (new Run("push"), "full"),
-        ["the nightly run after main moved"] = (new Run("schedule", Nightly: AnotherSha), "everything"),
-        ["the nightly run on the commit the last one tested"] = (new Run("schedule", Nightly: Sha), "none"),
-        ["the first nightly run"] = (new Run("schedule"), "everything"),
+        ["a draft's push"] = (new Run("pull_request", "synchronize", "true", Target: ReleaseBranch), "linux"),
+        ["a draft's push into main"] = (new Run("pull_request", "synchronize", "true"), "linux"),
+        ["a push to the release's pull request while it is a draft"] = (new Run("pull_request", "synchronize", "true", Branch: ReleaseBranch), "linux"),
+        ["marking a pull request into a release branch ready"] = (new Run("pull_request", "ready_for_review", "false", Target: ReleaseBranch), "linux"),
+        ["a push after ready into a release branch"] = (new Run("pull_request", "synchronize", "false", AnotherTree, Changed("runtime/src/Jason.App/Program.cs"), Target: ReleaseBranch), "linux"),
+        ["marking a pull request into another pull request's branch ready"] = (new Run("pull_request", "ready_for_review", "false", Target: "feature/the-first"), "linux"),
+        ["marking the release's pull request ready"] = (new Run("pull_request", "ready_for_review", "false", Branch: ReleaseBranch), "everything"),
+        ["opening the release's pull request ready"] = (new Run("pull_request", "opened", "false", Branch: ReleaseBranch), "everything"),
+        ["reopening the release's pull request"] = (new Run("pull_request", "reopened", "false", Branch: ReleaseBranch), "everything"),
+        ["a push to the release's pull request that changes code"] = (new Run("pull_request", "synchronize", "false", AnotherTree, Changed("runtime/src/Jason.App/Program.cs"), Branch: ReleaseBranch), "everything"),
+        ["a push to the release's pull request that changes documentation only"] = (new Run("pull_request", "synchronize", "false", AnotherTree, Changed("docs/plugins.md"), Branch: ReleaseBranch), "documentation"),
+        ["a push to the release's pull request that changes nothing"] = (new Run("pull_request", "synchronize", "false", Tree, Branch: ReleaseBranch), "documentation"),
+        ["a push to the release's pull request with no record found"] = (new Run("pull_request", "synchronize", "false", Branch: ReleaseBranch), "everything"),
+        ["marking another pull request into main ready"] = (new Run("pull_request", "ready_for_review", "false"), "not-the-release"),
+        ["a push after ready to another pull request into main"] = (new Run("pull_request", "synchronize", "false", AnotherTree, Changed("runtime/src/Jason.App/Program.cs")), "not-the-release"),
+        ["a push to main"] = (new Run("push", TestedTree: AnotherTree), "everything"),
+        ["a push to main of the tree its pull request's last ready run tested"] = (new Run("push", TestedTree: Tree), "tested"),
+        ["a push to main with no record found"] = (new Run("push"), "everything"),
+        ["a push to a release branch"] = (new Run("push", TestedTree: AnotherTree, Target: ReleaseBranch), "linux"),
+        ["a push to a release branch of the tree its pull request's last ready run tested"] = (new Run("push", TestedTree: Tree, Target: ReleaseBranch), "none"),
+        ["a push to a release branch with no record found"] = (new Run("push", Target: ReleaseBranch), "linux"),
         ["a run started by hand"] = (new Run("workflow_dispatch"), "everything"),
     };
 
@@ -110,8 +127,8 @@ public class CiRunsTests
     private static readonly Dictionary<string, (string[] Ran, string[] SkippedByRule)> Sets = new(StringComparer.Ordinal)
     {
         ["linux"] = (TheLinuxSet, []),
-        ["full"] = ([.. Required.Where(name => name != "osx-arm64")], ["osx-arm64"]),
         ["documentation"] = (TheLinuxSet, ["win-x64", "osx-arm64", "an update on win-x64"]),
+        ["not-the-release"] = (TheLinuxSet, ["win-x64", "osx-arm64", "an update on win-x64"]),
         ["tested"] = (["The version this tree carries"], ["linux-x64", "win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
         ["everything"] = (Required, []),
         ["none"] = (["The version this tree carries"], []),
@@ -120,11 +137,11 @@ public class CiRunsTests
     public static TheoryData<string> KindsOfRun() => [.. Kinds.Keys];
 
     /// <summary>
-    /// A pull request runs CI when it is opened, pushed to, reopened, and when it is marked ready for review; <c>main</c> runs
-    /// it on every push, once a night, and when somebody starts it by hand.
+    /// A pull request runs CI when it is opened, pushed to, reopened, and when it is marked ready for review; <c>main</c> and
+    /// every release branch run it on every push, and somebody may start it by hand. Nothing runs it on a schedule.
     /// </summary>
     [Fact]
-    public void Ci_runs_on_a_pull_request_on_main_s_pushes_once_a_night_and_by_hand()
+    public void Ci_runs_on_a_pull_request_on_pushes_to_main_and_to_a_release_branch_and_by_hand()
     {
         var on = Mapping(Parse(Read(Ci)), "on");
 
@@ -132,18 +149,16 @@ public class CiRunsTests
         Assert.Equal(["opened", "synchronize", "reopened", "ready_for_review"], types.Children.Select(type => type.ToString()));
 
         var branches = Assert.IsType<YamlSequenceNode>(Node(Mapping(on, "push"), "branches"));
-        Assert.Equal(["main"], branches.Children.Select(branch => branch.ToString()));
+        Assert.Equal(["main", "release/**"], branches.Children.Select(branch => branch.ToString()));
 
-        var schedule = Assert.Single(Assert.IsType<YamlSequenceNode>(Node(on, "schedule")).Children);
-        var cron = Scalar(Assert.IsType<YamlMappingNode>(schedule), "cron");
-        Assert.True(cron is not null && Regex.IsMatch(cron, @"^\d{1,2} \d{1,2} \* \* \*$"), $"the schedule '{cron}' is not once a day");
+        Assert.False(on.Children.ContainsKey(new YamlScalarNode("schedule")), "CI still runs on a schedule");
 
         Assert.True(on.Children.ContainsKey(new YamlScalarNode("workflow_dispatch")), "CI cannot be started by hand");
     }
 
     /// <summary>
-    /// A run cancels the run of the same kind on the same ref, and no other: the nightly run, which is on <c>main</c> as a push
-    /// is, must not cancel the run a merge started, nor be cancelled by it.
+    /// A run cancels the run of the same kind on the same ref, and no other: a run started by hand on <c>main</c> must not
+    /// cancel the run a merge started, nor be cancelled by it.
     /// </summary>
     [Fact]
     public void A_run_cancels_only_a_run_of_its_own_kind_on_its_own_ref()
@@ -191,6 +206,7 @@ public class CiRunsTests
             ["SHA"] = "${{ github.sha }}",
             ["PULL_REQUEST"] = "${{ github.event.pull_request.number }}",
             ["BRANCH"] = "${{ github.head_ref }}",
+            ["TARGET"] = "${{ github.base_ref || github.ref_name }}",
         };
         Assert.Equal(said.OrderBy(pair => pair.Key, StringComparer.Ordinal), Variables(looking).OrderBy(pair => pair.Key, StringComparer.Ordinal));
 
@@ -202,10 +218,11 @@ public class CiRunsTests
             ["DRAFT"] = "${{ github.event.pull_request.draft }}",
             ["PULL_REQUEST"] = "${{ github.event.pull_request.number }}",
             ["SHA"] = "${{ github.sha }}",
+            ["BRANCH"] = "${{ github.head_ref }}",
+            ["TARGET"] = "${{ github.base_ref || github.ref_name }}",
             ["TREE"] = "${{ steps.tree.outputs.tree }}",
             ["LISTING"] = "${{ steps.tree.outputs.listing }}",
             ["RECORD"] = "${{ steps.earlier.outputs.record }}",
-            ["NIGHTLY"] = "${{ steps.earlier.outputs.nightly }}",
             ["FOUND"] = "${{ steps.earlier.outputs.found }}",
         };
         Assert.Equal(
@@ -254,8 +271,8 @@ public class CiRunsTests
 
     /// <summary>
     /// Each kind of run takes its set: what its jobs run, and what the job standing in reports as skipped by rule. On every
-    /// run a merge or <c>main</c> relies on — all but a draft's push and a nightly run with nothing to do — every check the
-    /// ruleset requires reports: by running, by a condition that skips it, which reports success, or by the stand-in. A
+    /// run a merge into <c>main</c> or <c>main</c> itself relies on — all but a draft's push and a run into or on a release
+    /// branch, whose ruleset requires the Linux set alone — every check <c>main</c>'s ruleset requires reports: by running, by a condition that skips it, which reports success, or by the stand-in. A
     /// matrix row that is absent never reports at all, and a matrix job a condition skips reports no leg's name. No check
     /// reports twice.
     /// </summary>
@@ -287,10 +304,9 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// The deciding step's words for each set — the full set's jobs, the Linux set's jobs, and the steps that need the macOS
-    /// archive — and the legs each matrix runs: every platform when every check runs, all but macOS on the full set, Linux
-    /// alone on the Linux set, none where the tree was tested already or the nightly run has nothing to do. And it says which
-    /// case it took and why, in the run's summary.
+    /// The deciding step's words for each set — the jobs only a run of every check needs, the Linux set's jobs, and the steps
+    /// that need the macOS archive — and the legs each matrix runs: every platform when every check runs, Linux alone on the
+    /// Linux set, none where the tree was tested already. And it says which case it took and why, in the run's summary.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
@@ -300,7 +316,7 @@ public class CiRunsTests
         var decided = Decide(run);
         var said = decided.Outputs;
 
-        Assert.Equal(set is "everything" or "full" ? "true" : "false", said["full"]);
+        Assert.Equal(set is "everything" ? "true" : "false", said["full"]);
         Assert.Equal(set is "tested" or "none" ? "false" : "true", said["linux"]);
         Assert.Equal(set is "everything" ? "true" : "false", said["macos"]);
         Assert.Equal(Sets[set].SkippedByRule.Length > 0 ? "true" : "false", said["skipping"]);
@@ -308,8 +324,7 @@ public class CiRunsTests
         string[] platforms = set switch
         {
             "everything" => ["linux-x64", "win-x64", "osx-arm64"],
-            "full" => ["linux-x64", "win-x64"],
-            "linux" or "documentation" => ["linux-x64"],
+            "linux" or "documentation" or "not-the-release" => ["linux-x64"],
             _ => [],
         };
         Assert.Equal(platforms, Legs(said["platforms"]).Select(leg => leg["rid"]));
@@ -325,10 +340,10 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// A push after ready runs the Linux set only when every path it changes since the tree the last full run tested is
-    /// documentation: Markdown outside <c>runtime/</c>, <c>.github/</c> and <c>plugins/</c>, a plain file before and after,
+    /// A push to the release's pull request after ready runs the Linux set only when every path it changes since the tree its
+    /// last run of every check tested is documentation: Markdown outside <c>runtime/</c>, <c>.github/</c> and <c>plugins/</c>, a plain file before and after,
     /// and neither the wiring check's page, whose step 3 a test runs in sh and both PowerShells, nor the runtime's licence,
-    /// which every archive carries. Anything else runs the full set.
+    /// which every archive carries. Anything else runs every check.
     /// </summary>
     [Theory]
     [InlineData("docs/plugins.md", "100644", false, true)]
@@ -347,65 +362,74 @@ public class CiRunsTests
     [InlineData("docs/plugins.md", "100755", false, false)]
     [InlineData("docs/plugins.md", "120000", false, false)]
     [InlineData("install/install.sh", "100755", false, false)]
-    public void A_push_after_ready_runs_the_linux_set_only_when_every_path_it_changes_is_documentation(string path, string mode, bool removed, bool documentation)
+    public void A_push_to_the_release_s_pull_request_runs_the_linux_set_only_when_every_path_it_changes_is_documentation(string path, string mode, bool removed, bool documentation)
     {
-        var decided = Decide(new Run("pull_request", "synchronize", "false", AnotherTree, Changed(path, mode, removed)));
+        var decided = Decide(new Run("pull_request", "synchronize", "false", AnotherTree, Changed(path, mode, removed), Branch: ReleaseBranch));
 
         Assert.True(
-            decided.Outputs["set"] == (documentation ? "documentation" : "full"),
+            decided.Outputs["set"] == (documentation ? "documentation" : "everything"),
             $"a push that {(removed ? "removes" : "changes")} {path} ({mode}) took the set '{decided.Outputs["set"]}': {decided.Summary}");
     }
 
-    /// <summary>One path that is not documentation among several that are runs the full set.</summary>
+    /// <summary>One path that is not documentation among several that are runs every check.</summary>
     [Fact]
-    public void A_push_after_ready_that_changes_documentation_and_code_runs_the_full_set()
+    public void A_push_to_the_release_s_pull_request_that_changes_documentation_and_code_runs_every_check()
     {
         var listing = Changed("docs/plugins.md").Where(line => !line.EndsWith("\truntime/src/Jason.App/Program.cs", StringComparison.Ordinal))
             .Append("100644 blob 6666666666666666666666666666666666666666\truntime/src/Jason.App/Program.cs")
             .ToArray();
 
-        var decided = Decide(new Run("pull_request", "synchronize", "false", AnotherTree, listing));
+        var decided = Decide(new Run("pull_request", "synchronize", "false", AnotherTree, listing, Branch: ReleaseBranch));
 
-        Assert.True(decided.Outputs["set"] == "full", $"a push changing documentation and code took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.True(decided.Outputs["set"] == "everything", $"a push changing documentation and code took the set '{decided.Outputs["set"]}': {decided.Summary}");
         Assert.Contains("runtime/src/Jason.App/Program.cs", decided.Summary, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// A record that cannot be read — not JSON, no listing, a listing that is not one, no tree, a file that is not there — is
-    /// doubt, and doubt runs the full set: a leg is skipped only on what was found.
+    /// doubt, and doubt skips nothing the branch requires: every check on the release's pull request and on <c>main</c>, the
+    /// Linux set on a release branch. A leg is skipped only on what was found.
     /// </summary>
     [Theory]
-    [InlineData("pull_request", "not json")]
-    [InlineData("pull_request", "{\"tree\":\"7ee0000000000000000000000000000000000b02\",\"pull_request\":7}")]
-    [InlineData("pull_request", "{\"tree\":\"7ee0000000000000000000000000000000000b02\",\"pull_request\":7,\"listing\":[]}")]
-    [InlineData("pull_request", "{\"tree\":\"7ee0000000000000000000000000000000000b02\",\"pull_request\":7,\"listing\":[\"not a line of git ls-tree\"]}")]
-    [InlineData("pull_request", null)]
-    [InlineData("push", "not json")]
-    [InlineData("push", "{\"pull_request\":7,\"listing\":[]}")]
-    [InlineData("push", null)]
-    public void A_record_that_cannot_be_read_runs_the_full_set(string @event, string? record)
+    [InlineData("pull_request", "main", "not json")]
+    [InlineData("pull_request", "main", "{\"tree\":\"7ee0000000000000000000000000000000000b02\",\"pull_request\":7}")]
+    [InlineData("pull_request", "main", "{\"tree\":\"7ee0000000000000000000000000000000000b02\",\"pull_request\":7,\"listing\":[]}")]
+    [InlineData("pull_request", "main", "{\"tree\":\"7ee0000000000000000000000000000000000b02\",\"pull_request\":7,\"listing\":[\"not a line of git ls-tree\"]}")]
+    [InlineData("pull_request", "main", null)]
+    [InlineData("push", "main", "not json")]
+    [InlineData("push", "main", "{\"pull_request\":7,\"listing\":[]}")]
+    [InlineData("push", "main", null)]
+    [InlineData("push", ReleaseBranch, "not json")]
+    [InlineData("push", ReleaseBranch, "{\"pull_request\":7,\"listing\":[]}")]
+    [InlineData("push", ReleaseBranch, null)]
+    public void A_record_that_cannot_be_read_skips_nothing_the_branch_requires(string @event, string target, string? record)
     {
-        var run = @event == "push" ? new Run("push") : new Run("pull_request", "synchronize", "false");
+        var run = @event == "push" ? new Run("push", Target: target) : new Run("pull_request", "synchronize", "false", Branch: ReleaseBranch);
 
         var decided = Decide(run, record ?? string.Empty, recordIsThere: record is not null);
 
-        Assert.True(decided.Outputs["set"] == "full", $"a {@event} run given the record '{record}' took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        var set = target == ReleaseBranch ? "linux" : "everything";
+        Assert.True(
+            decided.Outputs["set"] == set,
+            $"a {@event} run into {target} given the record '{record}' took the set '{decided.Outputs["set"]}', not '{set}': {decided.Summary}");
     }
 
     /// <summary>
-    /// A pull request's full run keeps a record of the tree it tested, for the runs after it: a push after ready that changes
-    /// documentation only, and the push to <c>main</c> its merge makes. No other run keeps one, so a record always means
-    /// every check but macOS ran on that tree. The record is trusted only from a run that passed, which the step that
-    /// looks asks for.
+    /// A ready pull request's run keeps a record of the tree it tested, for the runs after it: the release's run of every
+    /// check, for a push to it that changes documentation only and for the push to <c>main</c> its merge makes, and a run of
+    /// the Linux set into a release branch, for the push to the release branch its merge makes. No other run keeps one, so
+    /// a record always means the checks its target branch requires ran on that tree. The record is trusted only from a run
+    /// that passed, which the step that looks asks for.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
-    public void Only_a_pull_request_s_full_run_keeps_a_record_of_the_tree_it_tested(string kind)
+    public void Only_a_ready_pull_request_s_run_of_what_its_branch_requires_keeps_a_record(string kind)
     {
         var (run, set) = Kinds[kind];
         var decided = Decide(run);
 
-        var keeps = run.Event == "pull_request" && set == "full";
+        var keeps = run.Event == "pull_request" && run.Draft == "false" &&
+            (set == "everything" || (set == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)));
         Assert.True(keeps == decided.Record is not null, $"{kind} {(keeps ? "kept no record" : $"kept a record: {decided.Record}")}");
         if (decided.Record is { } record)
         {
@@ -418,7 +442,7 @@ public class CiRunsTests
 
     /// <summary>
     /// The record is uploaded under one name, when the deciding step wrote one, and kept fourteen days, as long as a pull
-    /// request may wait for its merge: a record that has gone runs the full set. The step that looks reads that name, and no
+    /// request may wait for its merge: a record that has gone skips nothing. The step that looks reads that name, and no
     /// other upload of this workflow takes it.
     /// </summary>
     [Fact]
@@ -444,11 +468,13 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// A push to <c>main</c> finds the pull request whose merge is this commit, and the newest of that pull request's runs at
-    /// its last head that passed and kept a record; a run that kept none is passed over.
+    /// A push to <c>main</c> or to a release branch finds the pull request whose merge is this commit, and the newest of that
+    /// pull request's runs at its last head that passed and kept a record; a run that kept none is passed over.
     /// </summary>
-    [Fact]
-    public void A_push_to_main_finds_the_record_its_merged_pull_request_s_newest_passing_run_kept()
+    [Theory]
+    [InlineData("main")]
+    [InlineData(ReleaseBranch)]
+    public void A_push_finds_the_record_its_merged_pull_request_s_newest_passing_run_kept(string target)
     {
         var answers = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -458,7 +484,7 @@ public class CiRunsTests
             ["api repos/acme/jason/actions/runs/301/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true),
         };
 
-        var looked = Look(Facts("push"), answers, new Dictionary<long, string> { [301] = RecordFor(7, Tree) });
+        var looked = Look(Facts("push", target: target), answers, new Dictionary<long, string> { [301] = RecordFor(7, Tree) });
 
         Assert.True(looked.Record is not null, $"nothing was found: {looked.Outputs["found"]}");
         Assert.Equal(Tree, (string?)JsonNode.Parse(looked.Record!)!["tree"]);
@@ -483,22 +509,22 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// A push to a pull request that is ready finds the newest record its own runs on its branch kept: one another pull request
-    /// kept on a branch of the same name is passed over, and so is an artifact that has expired.
+    /// A push to the release's pull request once it is ready finds the newest record its own runs on its branch kept: one
+    /// another pull request kept on a branch of the same name is passed over, and so is an artifact that has expired.
     /// </summary>
     [Fact]
-    public void A_push_after_ready_finds_its_own_pull_request_s_newest_record()
+    public void A_push_to_the_release_s_pull_request_finds_its_own_newest_record()
     {
         var answers = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["api repos/acme/jason/actions/workflows/ci.yml/runs?event=pull_request&branch=feature%2Fthe-change&status=success&per_page=20"] = RunsAnswer(403, 402, 401),
+            ["api repos/acme/jason/actions/workflows/ci.yml/runs?event=pull_request&branch=release%2F0.15&status=success&per_page=20"] = RunsAnswer(403, 402, 401),
             ["api repos/acme/jason/actions/runs/403/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true),
             ["api repos/acme/jason/actions/runs/402/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true, expired: true),
             ["api repos/acme/jason/actions/runs/401/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true),
         };
         var records = new Dictionary<long, string> { [403] = RecordFor(8, AnotherTree), [401] = RecordFor(7, Tree) };
 
-        var looked = Look(Facts("pull_request", "synchronize", "false"), answers, records);
+        var looked = Look(Facts("pull_request", "synchronize", "false", branch: ReleaseBranch), answers, records);
 
         Assert.True(looked.Record is not null, $"nothing was found: {looked.Outputs["found"]}");
         Assert.Equal(7, (int?)JsonNode.Parse(looked.Record!)!["pull_request"]);
@@ -507,7 +533,7 @@ public class CiRunsTests
 
     /// <summary>
     /// Whatever goes wrong while looking — no answer, a download that fails — is an answer of nothing found, and the step still
-    /// succeeds: the step after it runs the full set on nothing found, which is the failure that costs only minutes.
+    /// succeeds: the step after it skips nothing on nothing found, which is the failure that costs only minutes.
     /// </summary>
     [Theory]
     [InlineData("push", false)]
@@ -523,44 +549,29 @@ public class CiRunsTests
             answers["api repos/acme/jason/actions/runs/301/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true);
         }
 
-        var looked = Look(@event == "push" ? Facts("push") : Facts("pull_request", "synchronize", "false"), answers);
+        var looked = Look(@event == "push" ? Facts("push") : Facts("pull_request", "synchronize", "false", branch: ReleaseBranch), answers);
 
         Assert.True(looked.Record is null, $"a record was found: {looked.Outputs["found"]}");
         Assert.False(string.IsNullOrWhiteSpace(looked.Outputs["found"]), "the step does not say what it found");
-        Assert.Equal(string.Empty, looked.Outputs["nightly"]);
     }
 
-    /// <summary>A draft's push, the ready flip, an opened or reopened pull request and a run started by hand look for nothing.</summary>
+    /// <summary>
+    /// A draft's push, the ready flip, an opened or reopened pull request, a push to a ready pull request that is not the
+    /// release's into <c>main</c>, and a run started by hand look for nothing: their set is the same whatever was found.
+    /// </summary>
     [Theory]
-    [InlineData("pull_request", "synchronize", "true")]
-    [InlineData("pull_request", "ready_for_review", "false")]
-    [InlineData("pull_request", "opened", "false")]
-    [InlineData("pull_request", "reopened", "false")]
-    [InlineData("workflow_dispatch", "", "")]
-    public void A_run_whose_set_no_earlier_run_can_change_looks_for_nothing(string @event, string action, string draft)
+    [InlineData("pull_request", "synchronize", "true", "main", ReleaseBranch)]
+    [InlineData("pull_request", "ready_for_review", "false", "main", ReleaseBranch)]
+    [InlineData("pull_request", "opened", "false", "main", ReleaseBranch)]
+    [InlineData("pull_request", "reopened", "false", "main", ReleaseBranch)]
+    [InlineData("pull_request", "synchronize", "false", "main", FeatureBranch)]
+    [InlineData("pull_request", "synchronize", "false", ReleaseBranch, FeatureBranch)]
+    [InlineData("workflow_dispatch", "", "", "main", "")]
+    public void A_run_whose_set_no_earlier_run_can_change_looks_for_nothing(string @event, string action, string draft, string target, string branch)
     {
-        var looked = Look(Facts(@event, action, draft), new Dictionary<string, string>(StringComparer.Ordinal));
+        var looked = Look(Facts(@event, action, draft, target, branch), new Dictionary<string, string>(StringComparer.Ordinal));
 
         Assert.True(looked.Calls.Count == 0, $"it asked: {string.Join(" | ", looked.Calls)}");
-        Assert.Null(looked.Record);
-        Assert.Equal(string.Empty, looked.Outputs["nightly"]);
-    }
-
-    /// <summary>The nightly run finds the commit the last nightly run that passed was on, and nothing before the first one has.</summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void The_nightly_run_finds_the_commit_the_last_nightly_run_that_passed_was_on(bool onePassed)
-    {
-        var answers = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["api repos/acme/jason/actions/workflows/ci.yml/runs?event=schedule&branch=main&status=success&per_page=1"] =
-                onePassed ? $"{{\"workflow_runs\":[{{\"id\":501,\"head_sha\":\"{AnotherSha}\"}}]}}" : "{\"workflow_runs\":[]}",
-        };
-
-        var looked = Look(Facts("schedule"), answers);
-
-        Assert.Equal(onePassed ? AnotherSha : string.Empty, looked.Outputs["nightly"]);
         Assert.Null(looked.Record);
     }
 
@@ -586,8 +597,8 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// Every job but the version job's runs on one of its words: the Linux set's jobs on <c>linux</c>, the full set's on
-    /// <c>full</c>, and the stand-in on <c>skipping</c>.
+    /// Every job but the version job's runs on one of its words: the Linux set's jobs on <c>linux</c>, the jobs only a run
+    /// of every check needs on <c>full</c>, and the stand-in on <c>skipping</c>.
     /// </summary>
     [Fact]
     public void Every_job_runs_on_one_of_the_version_job_s_words()
@@ -663,7 +674,7 @@ public class CiRunsTests
 
     /// <summary>
     /// The deciding step's script, run as a runner runs a <c>pwsh</c> step, told about <paramref name="run"/> by the names the
-    /// workflow tells it, with the legs the workflow gives it. A run whose earlier full run is named gets that run's record —
+    /// workflow tells it, with the legs the workflow gives it. A run whose earlier ready run is named gets that run's record —
     /// <see cref="Tested"/> under its tree — unless <paramref name="record"/> says what the record holds instead.
     /// </summary>
     private static Decided Decide(Run run, string? record = null, bool recordIsThere = true)
@@ -699,10 +710,11 @@ public class CiRunsTests
             ["DRAFT"] = run.Draft,
             ["PULL_REQUEST"] = run.Event == "pull_request" ? PullRequest : string.Empty,
             ["SHA"] = Sha,
+            ["BRANCH"] = run.Event == "pull_request" ? run.Branch : string.Empty,
+            ["TARGET"] = run.Target,
             ["TREE"] = Tree,
             ["LISTING"] = listing,
             ["RECORD"] = recorded,
-            ["NIGHTLY"] = run.Nightly,
             ["FOUND"] = recorded.Length > 0 ? "run 301 of pull request #7 tested tree " + run.TestedTree : "nothing was found",
             ["PLATFORMS"] = Scalar(env, "PLATFORMS")!,
             ["UPDATES"] = Scalar(env, "UPDATES")!,
@@ -774,14 +786,16 @@ public class CiRunsTests
     /// <summary>The head of the pull request whose merge the push to main is. Made up.</summary>
     private const string Head = "feed0000000000000000000000000000000000c3";
 
-    private static Dictionary<string, string> Facts(string @event, string action = "", string draft = "") => new(StringComparer.Ordinal)
+    private static Dictionary<string, string> Facts(string @event, string action = "", string draft = "", string target = "main", string branch = FeatureBranch) =>
+        new(StringComparer.Ordinal)
     {
         ["EVENT"] = @event,
         ["ACTION"] = action,
         ["DRAFT"] = draft,
         ["SHA"] = Sha,
         ["PULL_REQUEST"] = @event == "pull_request" ? PullRequest : string.Empty,
-        ["BRANCH"] = @event == "pull_request" ? "feature/the-change" : string.Empty,
+        ["BRANCH"] = @event == "pull_request" ? branch : string.Empty,
+        ["TARGET"] = target,
         ["REPOSITORY"] = "acme/jason",
         ["GH_TOKEN"] = "not-a-token",
     };
