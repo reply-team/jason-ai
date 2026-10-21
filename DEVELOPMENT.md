@@ -89,57 +89,110 @@ To stop and remove it all: `jason runtime stop`, run as above, then delete the f
 
 The conventions the code follows — the layout, the boundaries the build enforces, the terminology, the rules of the
 API, of persistence and of the logs — are in `CLAUDE.md`, which every AI session reads and which holds for people just
-the same. This section is the part of the process that no test runs for you.
+the same. This section is the part of the process that no test runs for you. It describes the flow from the release
+after 0.14.0 on; where the pipeline still runs by the earlier rule, the paragraph says so.
+
+**Two kinds of branch.** `main` is what has been released: it changes when a release branch merges, and the tag
+follows that merge (`docs/release-and-update.md` is the contract). A release branch, `release/<name>`, carries one
+release's scope: a business increment heavy enough to be tried as a whole and to have release notes of its own, cut by
+urgency or by kind, never a polish. Several release branches run at once. Each is led by one session and owned by one
+person, who scopes it with the architecture session; the branches share nothing until a release. There is no cadence:
+the goal reached closes the release. A feature branch is cut from its release branch and its pull request targets that
+release branch. When a release merges, every other release branch takes `main` then, and conflicts are resolved there
+and nowhere else.
 
 **One pull request per increment.** A branch carries one change: a feature, a fix, a document, a skill's text. Two
 independent things are two pull requests, even when they were written in one sitting. When the second builds on the
-first, its branch is cut from the first's and rebased onto `main` once the first has merged; it is reviewed as the
-difference from the first and merges after it. The reason is the review: a reader who finds a problem in one half must
-not hold up the other, and the commit on `main` should say one thing. A pull request that has grown two things is
-split before it is marked ready, not after a review has found it.
+first, its branch is cut from the first's and rebased onto the release branch once the first has merged; it is
+reviewed as the difference from the first and merges after it. The reason is the review: a reader who finds a problem
+in one half must not hold up the other, and the commit on the release branch should say one thing. A pull request that
+has grown two things is split before it is marked ready, not after a review has found it.
 
 **The branch is named after the story it implements**, `REPLY-<key>-<slug>`, the key first. That name is the one
-place a tracker key is allowed: it is how the tracker links the pull request, and it never reaches `main`.
+place a tracker key is allowed: it is how the tracker links the pull request, and it never reaches a release branch or
+`main`.
+
+**Tests by stage.** A commit runs the critical tier locally before it is pushed — the tests that carry the `Critical`
+trait, about two minutes on a workstation — and never the whole suite, which takes seventeen minutes there and hours
+over a pull request's life. A pull request that touches `runtime/` runs the whole suite locally once before it is
+marked ready, in Release, with the log written to a file; one that changes Markdown only skips that. On CI, a draft's
+push runs the Linux set: the version check, the linux-x64 build and suite, an update on linux-x64, the install script
+on Ubuntu and the UI's checks. Marking a pull request into a release branch ready runs the whole suite on Linux, once.
+The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
+and that run is the release's gate; a pull request into `main` from any other branch — the version after a release, a
+document — runs the Linux set and reports the rest as skipped by rule. A push to `main` whose tree the merging pull
+request's last full run tested runs the version check alone. Nothing runs nightly. Until the workflow carries these
+rules, a ready pull request runs every check but macOS whatever branch it targets, macOS runs nightly and at a release,
+and the critical tier is a list rather than a trait; the first release branch opens with the workflow change, and
+`CiRunsTests` holds the rule the workflow carries.
 
 **Draft while you build, ready when you are done.** Open the pull request as a draft with the first push and keep
-pushing to it. A draft runs the Linux part of the pipeline on each push — the version check, the linux-x64 build and
-suite, an update on linux-x64, the install script on Ubuntu and the UI's checks — so a draft is cheap. Marking it
-ready for review runs the whole pipeline but macOS, whose check reports as skipped, and so does every push after that,
-unless the push changes nothing but documentation since the tree the last whole run tested — Markdown outside
-`runtime/`, `.github/` and `plugins/` that no build compiles and no test runs as code — and then it runs the Linux part
-and reports the rest as skipped. A push to `main` runs the whole pipeline but macOS, unless its tree is the one the
-pull request's last whole run tested, and then only the version check runs. macOS runs on the nightly run on `main`,
-when `main` has moved since the last one that passed, on a run of CI started by hand, and at a release. The ruleset
-lets a pull request merge only when every job of the pipeline reports green at the head that merges, so mark it ready
-once, when the change is complete and its description is written.
+pushing to it; a draft is cheap. Mark it ready once, after the two readings below and the fixes they asked for, so
+that the full run is paid once: a push after ready that changes nothing but documentation since the tree the last
+full run tested — Markdown outside `runtime/`, `.github/` and `plugins/` that no build compiles and no test runs as
+code — runs the Linux set and reports the rest as skipped; any other push after ready runs the full run again. The
+ruleset on a release branch lets a pull request merge only when the Linux set reports green at the head that merges;
+the ruleset on `main` waits for every check.
 
-**The squash commit is the pull request.** `main` takes one squash commit per pull request, and that commit's message
-is the pull request's title and body; the messages of the branch's own commits never reach `main`. Commit on the
-branch as often as you like, and write the title as the one line `git log` will show and the body for a reader who
-was not there: what changed, why, how it was verified.
+**Two readers at ready.** Before a pull request into a release branch is marked ready it is read twice: by the session
+that leads the release, which knows the scope and what the release's other pull requests do, and by a reviewer with no
+part in the change, started fresh for this reading, whose model and effort follow the size of the change — a document
+reads cheaply, a migration, a contract or a change to a guard reads at the highest effort. Each records in the pull
+request what it found and that it approves; what was found is fixed before ready. The pull request merges into its
+release branch on both approvals and a green run, and the session that leads the release merges it. Nothing is
+reviewed on commits; a complex commit may be read by a peer when the lead asks.
 
-**Nothing internal in what reaches `main`.** Commit messages and pull request bodies carry no tracker key, no link to
-a private system, no pointer to a plan or a note outside the repository, and no tooling attribution trailer: an AI
-assistant adds `Co-Authored-By` and session trailers by default, and they are stripped before the push. The reasoning
-a key would have pointed at is written into the body instead. The internal part — the discussion, the alternatives,
-who decided what — goes to the story's comments in the tracker. The trace runs one way, from the tracker to GitHub.
-Everything `.github/publish/open-set.txt` lists is read publicly at each release, and `PublicationTests` holds its
-links.
+**The release review.** The pull request from a release branch into `main` is read by the architecture session alone,
+its sub-agents reading the diff by blocks: the release against its scope and the direction, the seams, the hygiene of
+what the release publishes, the skills' statuses. It does not repeat the two readings each pull request had. The owner
+then walks the release on a real machine with the session that led it; what the walk finds lands as pull requests into
+the release branch under the rules above, and the three-platform run follows the patches. What that run finds is fixed
+in the release branch too: `main` takes only a green head, and the owner merges it.
+
+**Seams are read early.** Some paths are shared by every release branch and by every reader of the product: the
+operation documents and the catalog under `docs/contracts/`, a migration under
+`runtime/src/Jason.Runtime/Persistence/Migrations/`, the open set in `.github/publish/`, a skill's craft block or
+readings row under `skills/runtime/`, the release workflow and the public files, the version in
+`runtime/Directory.Build.props`. A pull request that touches one says so to the architecture session in one line when
+it opens, and the session reads that part then rather than twenty pull requests later; a release's scope names the
+seams it will touch at the start. One release branch owns the schema at a time, and a migration is regenerated on the
+release branch after it takes `main`, never merged by hand.
+
+**The version.** A release branch sets its version when its release pull request opens — the number after the last
+tag — and the branch that merges second sets its own again then. The pull request into `main` is marked ready with the
+bare version, so the suite that gates the release runs under the version the tag will carry.
+
+**The squash commit is the pull request.** A release branch takes one squash commit per pull request, and that
+commit's message is the pull request's title and body; the messages of the branch's own commits never reach it. Commit
+on the branch as often as you like, and write the title as the one line `git log` will show and the body for a reader
+who was not there: what changed, why, how it was verified. The release's pull request into `main` merges by rebase,
+so `main` keeps one commit per pull request of the release, in order, and its tree is the one the three-platform run
+tested.
+
+**Nothing internal in what reaches a release branch or `main`.** Commit messages and pull request bodies carry no
+tracker key, no link to a private system, no pointer to a plan or a note outside the repository, and no tooling
+attribution trailer: an AI assistant adds `Co-Authored-By` and session trailers by default, and they are stripped
+before the push. The reasoning a key would have pointed at is written into the body instead. The internal part — the
+discussion, the alternatives, who decided what — goes to the story's comments in the tracker. The trace runs one way,
+from the tracker to GitHub. Everything `.github/publish/open-set.txt` lists is read publicly at each release, and
+`PublicationTests` holds its links.
 
 **A red run is read before it is re-run.** A job that fails on a tree a green run already covered is a candidate
 defect — a timing assumption, a file still held, an order a test relied on — until its log says otherwise. It is
-diagnosed from the log first and re-run after, never re-run to see whether it goes away.
+diagnosed from the log first and re-run after, never re-run to see whether it goes away. The release's record counts
+the full runs each pull request needed until it was green; the target is one, and a pull request that needed more is
+an incident with a cause named, not a number.
 
 **Tests and fixtures use made-up data.** Never a real person's name, a real login, a real profile link, a real mailbox
 or a live provider identifier: not in a test, a fixture, a document, a pull request body or a commit message. A key or
 a token of any kind reaches no file of this repository, and no log, state or setting Jason writes.
 
-**A change to the installed product walks a real machine before the pull request leaves draft.** Install, uninstall,
-update, autostart, `jason status`, the deployment of skills and the UI's installation are each right alone and wrong
-together more easily than a test shows. The whole flow is run by hand, on a machine or under an account the build did
-not run under, and what it finds is fixed before the pull request is marked ready. When it finds more than a couple of
-blockers in code already on `main`, their fixes land as a pull request of their own first and the feature follows:
-the cost of a review grows with the square of the diff.
+**A release walks a real machine once.** Install, uninstall, update, autostart, `jason status`, the deployment of
+skills and the UI's installation are each right alone and wrong together more easily than a test shows. The owner runs
+the release's scenario by hand, on a machine or under an account the build did not run under, on the release branch
+after the architecture session's review, with the session that led the release; what it finds is fixed as pull
+requests into the release branch before the three-platform run. A single pull request is walked only when a fact has
+to be found to build it at all, on the lead's request.
 
 **A skill's `verified` row is earned, never written.** A skill marked `verified` was read, as that exact text, by a
 named agent host driving this runtime, and the digest of what it read is recorded. A change to its text, however
@@ -150,10 +203,12 @@ own act after the merge, not part of the pull request. `skills/runtime/README.md
 checkout, not in it. What has lasting value is written where a reader will look for it: `docs/` for a contract, the
 README of the area for how it is used.
 
-**The pipeline and the ruleset change together.** A job renamed, added or removed in `.github/workflows/ci.yml` is a
-check the ruleset on `main` still waits for, or never asked for; the ruleset is changed in the same breath, or every
-merge blocks.
+**The pipeline and the rulesets change together.** A job renamed, added or removed in `.github/workflows/ci.yml` is a
+check a ruleset still waits for, or never asked for; the ruleset on `main` and the one on `release/*` are changed in
+the same breath, or every merge blocks.
 
-**Merging and releasing.** A pull request merges when its ready run is green on every job and no review asks for
-changes; squash is the only merge method the repository allows, and the branch is deleted at the merge. A release is a
-tag on `main`, and the release workflow does the rest: `docs/release-and-update.md` is the contract.
+**Merging and releasing.** A pull request into a release branch merges when its Linux run is green, both readers have
+approved and no review asks for changes; squash is the only merge method there, and the branch is deleted at the
+merge. The release's pull request into `main` merges when the three-platform run is green at its head and the
+architecture session's review is done, by rebase, by the owner; the tag follows, and the release workflow does the
+rest: `docs/release-and-update.md` is the contract.
