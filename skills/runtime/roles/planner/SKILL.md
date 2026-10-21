@@ -39,6 +39,17 @@ per person and the first outreach go to a pilot, a small part of the people rath
 waits for the pilot's first results. Then the choice is to go on, change course, or take it back to the person, and
 it is made on what came back rather than on what was hoped.
 
+**A person is reached through the provider, in one of two ways.** Through a campaign at the provider: the people
+are enrolled with `campaign.enroll`, and starting it with `campaign.activate` is a person's decision over everyone
+it holds. Or one message at a time, with no campaign there: `message.send` sends one person an email or, on
+LinkedIn, a message, an InMail or a voice message, and `social_invitation.send` asks one person on LinkedIn to
+connect. Either send names one person Jason already holds as a contact. Each send is one work item for one person,
+and each waits for a person to approve exactly what it would send: that fits the few people of a pilot or a single
+follow-up, and a population is a campaign's. Which account a send goes from is the person's to say: `sender.list`
+reads the accounts it can go from, and a colleague's account is used only when the person names it. A send that
+ended without knowing whether it went out is not planned again: a new item for the same message is a second
+message, so it goes back to the person.
+
 **Who decides what.** Anything that changes who the campaign reaches, what it says or how much it spends belongs
 to the person who owns it, unless the campaign's context already allows it, and so does anything you are not sure
 is yours. Going on from a pilot to the rest reaches more people, so unless the context already allows it, the turn

@@ -6,25 +6,14 @@ public partial class InteractiveSkillTests
     /// A skill that teaches notifications and is verified is verified by the host that read it as it ships: the front
     /// matter, the body and the catalog's bullet say so, the catalog's row names that host, and the pack's own rule holds
     /// the row's digest to the text. The operating skill teaches them too, and is a draft again: its text gained how the
-    /// release's UI is placed after its reading. The planner in a person's session teaches none, and is held to the same
-    /// rule in a theory of its own beside this one, through the same helper. The managed path, which teaches none either,
-    /// is a draft again too: its text gained the planned and counted reads and the search for a person. Neither draft
-    /// has a row until a host reads it again.
+    /// release's UI is placed after its reading. The planner in a person's session teaches none, and is a draft again
+    /// too: its craft block gained the direct sends after its reading. The managed path, which teaches none either, is a
+    /// draft again: its text gained the planned and counted reads and the search for a person. None of the three has a
+    /// row until a host reads it again.
     /// </summary>
     [Theory]
     [InlineData("approvals-and-questions", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
     public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading) =>
-        IsVerifiedByTheHostThatReadIt(name, reading);
-
-    /// <summary>
-    /// The planner in a person's session teaches no notifications either, and is held to the same rule: verified by the
-    /// host that read it as it ships. Its craft block is the launched planner's too, so the block is in the digest this
-    /// row holds; the launched planner's file is read, and verified, on its own. It was read after its description named
-    /// the moment it is for and the campaign-planning skill deferred to it, so its row names that later reading.
-    /// </summary>
-    [Theory]
-    [InlineData("planner-in-session", "Claude Code 2.1.303 (Opus 5.5) | 0.12.0")]
-    public void The_planner_in_a_persons_session_is_verified_by_the_host_that_read_it(string name, string reading) =>
         IsVerifiedByTheHostThatReadIt(name, reading);
 
     private static void IsVerifiedByTheHostThatReadIt(string name, string reading)

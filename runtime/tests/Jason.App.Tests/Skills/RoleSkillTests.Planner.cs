@@ -65,5 +65,59 @@ public partial class RoleSkillTests
         // And the turns of a pilot are named as campaign-planning names them, so the two texts a planner may read
         // agree: go on, change course, or take it back to the person.
         Assert.Contains("the choice is to go on, change course, or take it back to the person", skill, StringComparison.Ordinal);
+
+        // Where a decision is the person's, the planner recommends and asks one question with the answers named. A planner
+        // that asked an open question, or several, would hand the person a form to fill in where a choice was wanted, and
+        // in a session the person is the one waiting for the next turn.
+        Assert.Contains("ask one question with the answers named", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The planner's judgement on the two direct sends, which the session file shares byte for byte. Pinned here once; the
+    /// craft guard carries it to the other file.
+    /// </summary>
+    [Fact]
+    public void The_planners_judgement_plans_a_direct_send_as_one_item_for_one_person_and_never_again_after_an_unknown_end()
+    {
+        var skill = Flattened("planner");
+
+        // The fact the judgement about pilots rests on: a send is approved one person at a time, so it fits a few people
+        // and a population is a campaign's. A planner that believed one approval covered a batch of sends would put two
+        // hundred people behind a single question, or build a one-person campaign to send one message.
+        Assert.Contains(
+            "Each send is one work item for one person, and each waits for a person to approve exactly what it would send",
+            skill,
+            StringComparison.Ordinal);
+
+        // The runtime never repeats an attempt whose send ended without knowing whether it went out, but a planner that
+        // creates a new work item for the same message has made a second message, and nothing else stops it. The only safe
+        // turn is back to the person, who can look at the provider.
+        Assert.Contains(
+            "a new item for the same message is a second message, so it goes back to the person",
+            skill,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_planners_judgement_leaves_the_account_a_send_goes_from_to_the_person()
+    {
+        var skill = Flattened("planner");
+
+        // Which account sends is not the planner's choice. A teammate's account can be listed and used, and a message from
+        // it reaches the person's prospect under the teammate's name; a planner that picked the first account the listing
+        // returned would do that without anyone having said so.
+        Assert.Contains("a colleague's account is used only when the person names it", skill, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_planners_judgement_leaves_the_watching_to_the_manager()
+    {
+        var skill = Flattened("planner");
+
+        // The planner's turn ends with the direction in campaign context and the next steps as work. A planner that
+        // believed it was to watch the work would hold its attempt open for a result, and one that believed nobody was
+        // watching would plan a check behind every item; noticing a stall, or a hypothesis nobody went back to, is the
+        // manager's.
+        Assert.Contains("The manager keeps the work moving; you do not watch it.", skill, StringComparison.Ordinal);
     }
 }

@@ -37,7 +37,7 @@ description that promises everything matches nothing.
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
-- [`planner-in-session`](planner-in-session/SKILL.md) — **verified.** The planner's judgement in a person's own
+- [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
   conversation about a campaign: taking a brief as it comes, what stays a quick look, what is agreed with the
   person before anything is created, and when it becomes campaign work. The session file of the planner, below.
 
@@ -163,6 +163,5 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
-| `planner-in-session` | Claude Code 2.1.303 (Opus 5.5) | 0.12.0 | `sha256:5983d790a5953f506fed5a08ba464d2691f6453decd9817087c281f2845f5d37` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
