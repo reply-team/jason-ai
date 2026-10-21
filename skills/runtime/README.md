@@ -27,11 +27,11 @@ description that promises everything matches nothing.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
-  The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening
-  the browser UI and unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads
-  and reading a span of one again, the hosts it can launch, whether notifications reach the person and turning them
-  off, whether a newer version exists, and installing it or taking it off again.
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
+  whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
+  unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
+  span of one again, the hosts it can launch, whether notifications reach the person and turning them off, whether a
+  newer version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft** until a host reads its new text. Why
   work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
@@ -163,5 +163,6 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
+| `operating-the-installation` | Claude Code 2.1.304 (Opus 5.5) | 0.13.0 | `sha256:f049080f8d0c02694431f5eb20330ce4934d9a4c147dfed6a865717d5212d636` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
