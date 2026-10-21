@@ -10,7 +10,7 @@ user's PATH unless -NoModifyPath says otherwise. Running it again over the same 
 says so, unless a licence file is missing beside it, which it then writes.
 
     irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.13.0/install.ps1))) -Version 0.13.0 -NoModifyPath
+    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.14.0/install.ps1))) -Version 0.14.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just
