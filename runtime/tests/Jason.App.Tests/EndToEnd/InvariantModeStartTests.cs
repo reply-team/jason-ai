@@ -27,7 +27,9 @@ public class InvariantModeStartTests
         Assert.True((string?)error?["code"] == "runtime_start_failed", $"The start was refused as '{error?["code"]}'.");
         var message = (string?)error?["message"] ?? string.Empty;
         Assert.Contains("It said: The runtime did not start: this process does not compose text", message, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 selects whether or not they are installed", message, StringComparison.Ordinal);
         Assert.Contains("Install libicu", message, StringComparison.Ordinal);
+        Assert.Contains("out of the runtime's environment", message, StringComparison.Ordinal);
         Assert.Null(GoldenPath.ReadDescriptor(it.Paths));
         Assert.False(Directory.Exists(it.Paths.StateDirectory), $"The start wrote {it.Paths.StateDirectory} before it refused.");
         Assert.False(Directory.Exists(it.Paths.LogsDirectory), $"The start wrote {it.Paths.LogsDirectory} before it refused.");

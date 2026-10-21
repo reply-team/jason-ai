@@ -23,22 +23,24 @@ public class TextCompositionTests
     }
 
     /// <summary>
-    /// A process that leaves them two says why it will not start, in words a person can act on: the mode by name, and the
-    /// libraries to install, never a variable to set, which would only hide the split.
+    /// A process that leaves them two says why it will not start, in words a person can act on: the mode by name, the
+    /// variable that holds the process in it, and both halves of the cure. The libraries are of no use while the variable
+    /// stays set, so a refusal that named only the libraries would send a person to install what changes nothing.
     /// </summary>
     [Theory]
     [InlineData("a\u0301")]
     [InlineData("")]
     [InlineData("a")]
-    public void A_process_that_leaves_them_two_is_refused_in_words_that_name_the_mode_and_the_cure(string composed)
+    public void A_process_that_leaves_them_two_is_refused_in_words_that_name_the_mode_and_both_halves_of_the_cure(string composed)
     {
         var refusal = TextComposition.Refusal(composed);
 
         Assert.NotNull(refusal);
         Assert.Contains("did not start", refusal, StringComparison.Ordinal);
         Assert.Contains("invariant mode", refusal, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 selects whether or not they are installed", refusal, StringComparison.Ordinal);
         Assert.Contains("Install libicu", refusal, StringComparison.Ordinal);
-        Assert.DoesNotContain("DOTNET_", refusal, StringComparison.Ordinal);
+        Assert.Contains("out of the runtime's environment", refusal, StringComparison.Ordinal);
     }
 
     /// <summary>This process composes, as every supported installation does, so the check lets it start.</summary>

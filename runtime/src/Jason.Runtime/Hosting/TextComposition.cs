@@ -19,9 +19,10 @@ public static class TextComposition
     private const string Refused =
         "The runtime did not start: this process does not compose text, so an accented letter written as one character and "
         + "the same letter written as a letter and a combining mark would be two LinkedIn keys for one profile, and a stop "
-        + "recorded under one would miss the other. It runs in .NET's globalization invariant mode, the mode for a machine "
-        + "without the ICU libraries. Install libicu, then start the runtime again. Nothing was written, and no log file "
-        + "exists to read, because this happens before logging starts.";
+        + "recorded under one would miss the other. It runs in .NET's globalization invariant mode, the mode for running "
+        + "without the ICU libraries, which DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 selects whether or not they are "
+        + "installed. Install libicu and take that variable out of the runtime's environment, then start the runtime again. "
+        + "Nothing was written, and no log file exists to read, because this happens before logging starts.";
 
     /// <summary>
     /// What a runtime that made <paramref name="composed"/> of <see cref="LetterAndMark"/> says as it refuses to start, or
