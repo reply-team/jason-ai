@@ -193,12 +193,15 @@ public class ProfileLaunchTests
 
         Assert.Equal(AttemptErrors.ExecutorExited, failed.LastError!.Code);
 
+        // What the host reported is read first, so a checkpoint that was lost is said with the host's own reason.
+        var stderr = FakeHostRuntime.StderrOf(host.Paths, failed.Id, failed.Attempts![0]);
+
         // What it checked in halfway is still there — a checkpoint is not held to the shape of a finished
         // answer — but the prose it tried to finish with never became the result.
-        Assert.DoesNotContain("a-thorough-look", failed.Result!.ToJsonString(), StringComparison.Ordinal);
+        Assert.True(failed.Result is not null, $"The checkpoint the host set halfway was not kept. The host said:\n{stderr}");
+        Assert.DoesNotContain("a-thorough-look", failed.Result.ToJsonString(), StringComparison.Ordinal);
 
         // The refusal reached the child rather than being decided after it: it is in what the host reported.
-        var stderr = FakeHostRuntime.StderrOf(host.Paths, failed.Id, failed.Attempts![0]);
         Assert.Contains("result_invalid", stderr, StringComparison.Ordinal);
     }
 

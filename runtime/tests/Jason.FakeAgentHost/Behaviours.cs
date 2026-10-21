@@ -603,8 +603,25 @@ internal static class Behaviours
         }
     }
 
-    private static Task<(int Status, string Body)> SetHalfDoneAsync(LaunchEnvelope envelope, RuntimeApi api) =>
-        api.CallAsync(Operations.WorkItemSetResult, new WorkItemSetResultRequest(envelope.WorkItemId, envelope.AttemptId, new JsonObject { ["progress"] = "half" }));
+    /// <summary>
+    /// The checkpoint halfway, and saying so when it was not kept: a test that reads the checkpoint back otherwise finds
+    /// nothing there and no reason why, whether the runtime refused it or never answered in time.
+    /// </summary>
+    private static async Task<(int Status, string Body)> SetHalfDoneAsync(LaunchEnvelope envelope, RuntimeApi api)
+    {
+        var answer = await api.CallAsync(
+            Operations.WorkItemSetResult,
+            new WorkItemSetResultRequest(envelope.WorkItemId, envelope.AttemptId, new JsonObject { ["progress"] = "half" }))
+            .ConfigureAwait(false);
+
+        if (answer.Status != 200)
+        {
+            var status = answer.Status == RuntimeApi.NoAnswer ? "no answer" : answer.Status.ToString(CultureInfo.InvariantCulture);
+            await Diagnostics.WriteAsync($"the checkpoint was not kept: {status} {answer.Body}").ConfigureAwait(false);
+        }
+
+        return answer;
+    }
 
     /// <summary>
     /// Finishing, and saying so when the runtime refuses to let it finish. A host told its answer is not the

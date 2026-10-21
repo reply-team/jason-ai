@@ -56,6 +56,29 @@ public class ReplyOutcomeReportingTests
         Assert.Contains("Error: reply-cli not found on PATH", thrown.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And where a test asks for a failure the plugin declared, a protocol failure is reported whole as well: an
+    /// intermittent one is otherwise only "expected Failed, found ProtocolFailure", with nothing of how far it got.
+    /// </summary>
+    [Fact]
+    public void A_protocol_failure_where_a_declared_failure_was_expected_is_reported_with_its_code_and_the_tail_of_stderr()
+    {
+        var failure = new InvocationOutcome.ProtocolFailure(
+            "host_failure",
+            "The plugin host did not answer.",
+            ExitCode: 4,
+            StderrTail: "Error: reply-cli not found on PATH");
+
+        var thrown = Assert.ThrowsAny<XunitException>(
+            () => ReplyOperations.Failed(ReplyOperations.CampaignGet, Result(failure)));
+
+        Assert.Contains(ReplyOperations.CampaignGet, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("host_failure", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("The plugin host did not answer.", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("Exit code: 4", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("Error: reply-cli not found on PATH", thrown.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A success still passes straight through: the instrument is for the outcomes that end a run.</summary>
     [Fact]
     public void A_success_is_still_returned_to_the_caller()

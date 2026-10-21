@@ -745,12 +745,24 @@ public sealed class ReplyAccount : IDisposable
         RunAsync(args, null, cancellationToken);
 
     /// <summary>The same, with a person, a name or a message on stdin — which is where every one of them travels.</summary>
+    public Task<(int ExitCode, string Stdout, string Stderr)> RunAsync(
+        IReadOnlyList<string> args,
+        string? stdin,
+        CancellationToken cancellationToken) =>
+        RunAsync(args, stdin, static (_, _) => Task.CompletedTask, cancellationToken);
+
+    /// <summary>
+    /// The same, with <paramref name="started"/> run between the start and the write of stdin, so a row can hold the
+    /// stand-in to the moment it is about: gone before the text reaches it, for one.
+    /// </summary>
     public async Task<(int ExitCode, string Stdout, string Stderr)> RunAsync(
         IReadOnlyList<string> args,
         string? stdin,
+        Func<Process, CancellationToken, Task> started,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(started);
 
         // Spoken to as the runtime's own plugin host speaks to it, UTF-8 both ways through the product's one door, so
         // what a row sends and reads back is not left to this console's code page.
@@ -764,17 +776,48 @@ public sealed class ReplyAccount : IDisposable
         info.Environment[ConfigHomeVariable] = ConfigHome;
 
         using var process = Process.Start(info)!;
-        if (stdin is not null)
+        await started(process, cancellationToken);
+        try
         {
-            await process.StandardInput.WriteAsync(stdin.AsMemory(), cancellationToken);
-        }
+            if (stdin is not null)
+            {
+                await process.StandardInput.WriteAsync(stdin.AsMemory(), cancellationToken);
+            }
 
-        process.StandardInput.Close();
+            process.StandardInput.Close();
+        }
+        catch (IOException) when (Gone(process))
+        {
+            // A call refused before stdin is read can end the stand-in before the text reaches it, and the pipe then
+            // refuses the write. What it answered is still on its stdout and stderr, which is what the row is about.
+            Release(process.StandardInput);
+        }
 
         var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
         return (process.ExitCode, stdout, stderr);
+    }
+
+    /// <summary>
+    /// Whether the stand-in has ended. A pipe refuses the write as soon as the process has closed its end, which can be
+    /// a moment before the process is reported as exited, so the answer is waited for, a bounded while.
+    /// </summary>
+    private static bool Gone(Process process) => process.WaitForExit(TimeSpan.FromSeconds(10));
+
+    /// <summary>
+    /// Lets go of a stdin whose write was refused. Disposing it flushes what the refused write left buffered, which the
+    /// pipe refuses once more; the handle is closed all the same.
+    /// </summary>
+    private static void Release(StreamWriter stdin)
+    {
+        try
+        {
+            stdin.Dispose();
+        }
+        catch (IOException)
+        {
+        }
     }
 
     public void Dispose()

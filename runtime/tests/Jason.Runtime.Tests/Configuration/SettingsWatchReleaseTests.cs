@@ -109,19 +109,27 @@ public sealed class SettingsWatchReleaseTests
         await runtime.StopAsync();
         var after = InotifyInstances();
 
-        // A count that is off says which instance it is and whether it goes on its own: every descriptor at each moment,
-        // what the ones opened since the start watch, and the count once more two seconds on.
-        var later = after;
-        if (running.Count != before.Count + 1 || after.Count != before.Count)
+        // The stop removes the watch at once, and the instance's descriptor is closed a moment later, off the stop's own
+        // path: an instance still open and watching nothing just after the stop is on its way back, so its release is
+        // waited for, a bounded while. That it is given back at all is what the row holds.
+        var released = after;
+        for (var look = 0; look < ReleaseLooks && released.Count != before.Count; look++)
         {
-            await Task.Delay(TimeSpan.FromSeconds(2), Ct);
-            later = InotifyInstances();
+            await Task.Delay(ReleaseLookSpacing, Ct);
+            released = InotifyInstances();
         }
 
-        var inventory = Inventory(data.Paths.Root, before, running, after, later);
+        // A count that is off says which instance it is and whether it went on its own: every descriptor at each moment,
+        // and what the ones opened since the start watch.
+        var inventory = Inventory(data.Paths.Root, before, running, after, released);
         Assert.True(running.Count == before.Count + 1, inventory);
-        Assert.True(after.Count == before.Count, inventory);
+        Assert.True(released.Count == before.Count, inventory);
     }
+
+    /// <summary>How many times the count is read again after a stop, a tenth of a second apart: five seconds for the instance to be back.</summary>
+    private const int ReleaseLooks = 50;
+
+    private static readonly TimeSpan ReleaseLookSpacing = TimeSpan.FromMilliseconds(100);
 
     /// <summary>
     /// A start refused before the host is built gives the settings file's watch back: a test process refuses starts many
@@ -230,16 +238,16 @@ public sealed class SettingsWatchReleaseTests
         SortedDictionary<int, IReadOnlyList<string>> before,
         SortedDictionary<int, IReadOnlyList<string>> running,
         SortedDictionary<int, IReadOnlyList<string>> after,
-        SortedDictionary<int, IReadOnlyList<string>> later)
+        SortedDictionary<int, IReadOnlyList<string>> released)
     {
         var text = new StringBuilder();
-        text.AppendLine(CultureInfo.InvariantCulture, $"inotify instances: {before.Count} before the start, {running.Count} while it ran, {after.Count} after it stopped, {later.Count} two seconds after that.");
-        foreach (var (moment, instances) in new[] { ("before", before), ("running", running), ("after", after), ("later", later) })
+        text.AppendLine(CultureInfo.InvariantCulture, $"inotify instances: {before.Count} before the start, {running.Count} while it ran, {after.Count} after it stopped, {released.Count} once its release was waited for.");
+        foreach (var (moment, instances) in new[] { ("before", before), ("running", running), ("after", after), ("released", released) })
         {
             text.AppendLine(CultureInfo.InvariantCulture, $"{moment}: {string.Join(", ", instances.Keys)}");
         }
 
-        var since = new[] { ("running", running), ("after", after), ("later", later) };
+        var since = new[] { ("running", running), ("after", after), ("released", released) };
         var changed = since
             .SelectMany(moment => moment.Item2)
             .Where(instance => !before.TryGetValue(instance.Key, out var was) || !was.SequenceEqual(instance.Value))

@@ -490,12 +490,22 @@ public sealed class PluginAssetTests
     internal static string WriteArchive(TempTree tree, string package)
     {
         var archive = Path.Combine(tree.NewDirectory("release"), ReleaseAssets.ReplyPlugin);
-        var (exit, _, stderr) = Script(
+        var (exit, stdout, stderr) = Script(
             NoEnvironment,
             Path.Combine([RepositoryRoot(), .. ArchiveScript]),
             "-Package", package,
             "-Archive", archive);
         Assert.True(exit == 0, $"Write-PluginArchive.ps1 exited {exit}: {stderr}");
+
+        // A script that ended with 0 and no archive has been seen once, on macOS. Its last line names the archive it wrote
+        // and how many files it holds, so what it said and what its directory holds tell how far it got.
+        if (!File.Exists(archive))
+        {
+            var directory = new DirectoryInfo(Path.GetDirectoryName(archive)!);
+            var holds = directory.Exists ? Listed(directory.EnumerateFileSystemInfos().Select(entry => entry.Name)) : "gone";
+            Assert.Fail($"Write-PluginArchive.ps1 exited 0 and {archive} is not there. Its stdout: '{stdout.Trim()}'. Its stderr: '{stderr.Trim()}'. Its directory: {holds}.");
+        }
+
         return archive;
     }
 

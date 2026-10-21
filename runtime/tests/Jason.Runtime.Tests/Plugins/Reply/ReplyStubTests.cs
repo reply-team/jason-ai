@@ -85,6 +85,29 @@ public class ReplyStubTests
         Assert.Empty(account.Calls);
     }
 
+    /// <summary>
+    /// A call refused before stdin is read can find the stand-in gone by the time the text is written, and a pipe nobody
+    /// reads any more refuses the write: a broken pipe on macOS and Linux, a pipe being closed on Windows. What the
+    /// stand-in answered is what a row holds it to, so the text it never needed does not fail the row that sent it. The
+    /// row waits for the exit before the write, which is the order the race only sometimes takes.
+    /// </summary>
+    [Fact]
+    public async Task A_stand_in_gone_before_its_stdin_is_written_is_still_heard()
+    {
+        using var account = new ReplyAccount();
+
+        var (exit, stdout, stderr) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/sequences"],
+            "{}",
+            static (process, cancellationToken) => process.WaitForExitAsync(cancellationToken),
+            Ct);
+
+        Assert.Equal(2, exit);
+        Assert.Equal(string.Empty, stdout);
+        Assert.Contains("unknown command 'api'", stderr, StringComparison.Ordinal);
+        Assert.Empty(account.Calls);
+    }
+
     [Theory]
     [InlineData("-k")]
     [InlineData("--api-key")]

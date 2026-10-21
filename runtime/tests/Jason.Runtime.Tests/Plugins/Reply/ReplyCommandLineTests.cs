@@ -390,12 +390,18 @@ internal static class ReplyOperations
     /// <summary>
     /// The failure the plugin declared, held to the codes the operation's own document publishes. A protocol
     /// failure is not a failure the plugin declared at all, and a code the document does not name is one the
-    /// runtime would refuse, so both are told apart here rather than in every test.
+    /// runtime would refuse, so both are told apart here rather than in every test — and an outcome of another kind is
+    /// reported with everything it carried, as <see cref="Succeeded"/> reports one.
     /// </summary>
     public static OutcomeError Failed(string operation, PluginInvocationResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
+        if (result.Outcome is not InvocationOutcome.Failed)
+        {
+            Assert.Fail($"{operation} did not end in a failure the plugin declared. {Describe(result.Outcome)}");
+        }
+
+        var failed = (InvocationOutcome.Failed)result.Outcome;
         var contract = OperationCatalog.Find(operation)!;
         var declared = contract.FailureCodes.SingleOrDefault(code => code.Code == failed.Error.Code);
 

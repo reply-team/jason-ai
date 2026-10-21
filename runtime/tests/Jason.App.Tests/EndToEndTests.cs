@@ -20,10 +20,15 @@ public class EndToEndTests
         Directory.CreateDirectory(root);
         var paths = new JasonPaths(root);
 
-        using var first = new RuntimeProcess(root);
+        // The first runtime's port is read again once it is gone, so it is one no operating system hands out of its own
+        // choosing: a port the OS chose for a runtime another test started could otherwise be the dead one, and that
+        // runtime would answer the stale descriptor.
+        using var first = new RuntimeProcess(root, PortNobodyIsGiven());
         try
         {
             var descriptor = await WaitForDescriptorAsync(paths, expectedNot: null, first);
+            var listening = new Uri(descriptor.BaseUrl).Port;
+            Assert.True(listening < FirstPortAnOsGives, $"the first runtime listens on {listening}, which an operating system may give another program");
 
             var (exit, output) = await StatusAsync(paths);
             Assert.Equal(ExitCodes.Success, exit);
@@ -89,6 +94,35 @@ public class EndToEndTests
         var logs = Logs(paths);
         Assert.Contains(RolesRefusal, logs, StringComparison.Ordinal);
         Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The lowest port an operating system hands out by default when a program asks for any port: 32768 on Linux, 49152 on
+    /// macOS and Windows.
+    /// </summary>
+    private const int FirstPortAnOsGives = 32768;
+
+    /// <summary>
+    /// A free port below <see cref="FirstPortAnOsGives"/>, from a drawn start, which a runtime configured with it listens
+    /// on or moves up from within its span, and stays below. A start whose whole span cannot be bound is drawn again.
+    /// </summary>
+    private static int PortNobodyIsGiven()
+    {
+        var tried = new List<int>();
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var start = 20000 + Random.Shared.Next(12000);
+            var port = Jason.Runtime.Hosting.PortProbe.FirstFree(start);
+            if (port != 0)
+            {
+                return port;
+            }
+
+            tried.Add(start);
+        }
+
+        Assert.Fail($"No start below {FirstPortAnOsGives} found a free port; the starts were {string.Join(", ", tried)}.");
+        return 0;
     }
 
     /// <summary>What the runtime logs when the roles edit above is refused.</summary>
@@ -230,7 +264,9 @@ public class EndToEndTests
         private readonly StringBuilder _diagnostics = new();
         private readonly Process _process;
 
-        public RuntimeProcess(string dataDirectory)
+        /// <param name="dataDirectory">The runtime's data directory.</param>
+        /// <param name="port">The port it is configured with; null for one the OS chooses, as every spawned test runtime has.</param>
+        public RuntimeProcess(string dataDirectory, int? port = null)
         {
             var start = new ProcessStartInfo("dotnet")
             {
@@ -242,6 +278,10 @@ public class EndToEndTests
             start.ArgumentList.Add("runtime");
             start.ArgumentList.Add("run");
             TestRuntimeEnvironment.Offline(start.Environment, dataDirectory);
+            if (port is { } configured)
+            {
+                start.Environment[TestRuntimeEnvironment.PortVariable] = configured.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
 
             _process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the runtime process.");
             _process.OutputDataReceived += Collect;
