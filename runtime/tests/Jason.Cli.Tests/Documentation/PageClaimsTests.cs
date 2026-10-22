@@ -835,9 +835,10 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A person's own agent that lands on the README sees, within its first screen, what Jason is, that installing it
-    /// is the install page, and the prompt: the title, one paragraph, the alpha box, then "Installing" with the prompt
-    /// under it. What the project is, its architecture and its layout follow.
+    /// A person's own agent that lands on the README sees, within its first screen, what Jason is, why it was built, that
+    /// installing it is the install page, and the prompt: the title, one paragraph, the short section on why Jason was
+    /// built, the alpha box, then "Installing" with the prompt under it. What the project is, its architecture and its
+    /// layout follow.
     /// </summary>
     [Fact]
     public void The_readme_opens_with_what_it_is_then_the_install_and_the_prompt()
@@ -845,14 +846,18 @@ public partial class PageClaimsTests
         var lines = OutsideFences(Page("README.md"));
 
         Assert.Equal(
-            ["## Installing", "## What this is", "## Architecture", "## Repository layout"],
-            lines.Where(line => line.StartsWith("## ", StringComparison.Ordinal)).Take(4));
+            ["## Why we built Jason", "## Installing", "## What this is", "## Architecture", "## Repository layout"],
+            lines.Where(line => line.StartsWith("## ", StringComparison.Ordinal)).Take(5));
 
         var installing = Array.IndexOf(lines, "## Installing");
         var what = Array.IndexOf(lines, "## What this is");
         Assert.Equal(["### Ask an agent to do it"], lines[installing..what].Where(line => line.StartsWith("### ", StringComparison.Ordinal)));
 
-        var opening = string.Join('\n', lines[..installing])
+        var why = Array.IndexOf(lines, "## Why we built Jason");
+        var alpha = Array.FindIndex(lines, line => line.StartsWith('>'));
+        Assert.True(why >= 0 && why < alpha && alpha < installing, $"The README's opening is out of order: why at line {why}, the alpha box at {alpha}, \"## Installing\" at {installing}.");
+
+        var opening = string.Join('\n', lines[..why].Concat(lines[alpha..installing]))
             .Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(block => !block.StartsWith("# ", StringComparison.Ordinal) && !block.StartsWith('>'))
             .ToList();
