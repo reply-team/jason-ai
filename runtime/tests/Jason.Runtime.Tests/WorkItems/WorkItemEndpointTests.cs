@@ -32,6 +32,31 @@ public class WorkItemEndpointTests
         Assert.Contains("\"attempt_count\":0", body, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// An argument the operation's schema describes by a shared definition — the account a message goes from, the
+    /// value a contact field takes — is measured against that definition when the item is written, as the claim
+    /// measures it later. Measured without the definitions beside it, every such item was refused as naming none.
+    /// </summary>
+    [Theory]
+    [InlineData("message.send", """{"channel":"email","sender":{"external_id":"s_12","address":"sales@example.com"},"message":{"format":"email","subject":"The Lisbon meetup","body":"Hi Marta, thanks for the chat at the meetup."}}""")]
+    [InlineData("social_invitation.send", """{"channel":"linkedin","sender":{"external_id":"s_35","address":null},"note":"Hi Marta, we met at the Lisbon meetup."}""")]
+    [InlineData("contact.update", """{"channel":"email","fields":{"title":"Head of Growth","company":"Example Analytics"}}""")]
+    public async Task Arguments_that_name_a_shared_definition_are_accepted_when_the_item_is_written(string operation, string arguments)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await ActiveCampaignAsync(api);
+
+        var item = await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemCreate,
+            new { CampaignId = campaign.Id, Kind = "provider_op", Operation = operation, Context = new JsonObject { ["input"] = JsonNode.Parse(arguments) } },
+            Ct);
+
+        Assert.Equal(operation, item.Operation);
+        Assert.True(
+            JsonNode.DeepEquals(JsonNode.Parse(arguments), item.Context["input"]),
+            $"{operation} kept {item.Context.ToJsonString()} under the reserved key.");
+    }
+
     [Fact]
     public async Task An_item_without_a_campaign_is_a_validation_failure_that_names_the_field()
     {

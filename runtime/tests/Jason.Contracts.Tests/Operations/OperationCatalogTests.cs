@@ -35,6 +35,78 @@ public class OperationCatalogTests
         Assert.False(OperationCatalog.Knows(""));
     }
 
+    /// <summary>
+    /// A caller's arguments are measured against the <c>args</c> property alone, and a reference inside it resolves
+    /// against the schema it is read in. So the argument schema is that property with the document's definitions
+    /// beside it — copies, so the input schema stays exactly the one the document publishes.
+    /// </summary>
+    [Fact]
+    public void The_argument_schema_is_the_arguments_with_the_documents_definitions_beside_them()
+    {
+        Assert.All(OperationCatalog.All, contract =>
+        {
+            var published = (JsonObject)JsonNode.Parse(File.ReadAllText(Path.Combine(ContractFiles.Operations, contract.Id + ".json")))!;
+            var input = published["input_schema"]!;
+            var arguments = contract.ArgumentSchema.DeepClone().AsObject();
+            var definitions = arguments["$defs"];
+            arguments.Remove("$defs");
+
+            Assert.True(
+                JsonNode.DeepEquals(input, contract.InputSchema),
+                $"{contract.Id}'s input schema is no longer the one its document publishes: {contract.InputSchema.ToJsonString()}");
+            Assert.True(
+                JsonNode.DeepEquals(input["properties"]!["args"], arguments),
+                $"{contract.Id}'s argument schema is not its `args` property: {arguments.ToJsonString()}");
+            Assert.True(
+                JsonNode.DeepEquals(input["$defs"], definitions),
+                $"{contract.Id}'s argument schema does not carry the document's definitions: {definitions?.ToJsonString() ?? "none"}");
+            if (contract.InputSchema["$defs"] is { } shared)
+            {
+                Assert.NotSame(shared, contract.ArgumentSchema["$defs"]);
+            }
+        });
+    }
+
+    /// <summary>
+    /// The argument schema is built once, as the contract is, and every request reads that one object: a schema built
+    /// on each read would be built on each request.
+    /// </summary>
+    [Fact]
+    public void The_argument_schema_is_built_once_per_contract()
+    {
+        Assert.All(OperationCatalog.All, contract => Assert.True(
+            ReferenceEquals(contract.ArgumentSchema, contract.ArgumentSchema),
+            $"{contract.Id} builds its argument schema again on every read."));
+    }
+
+    /// <summary>
+    /// A copy of a contract with another input schema measures arguments by that schema, not by the original's: the
+    /// argument schema follows the input schema it was derived from, and carries none of the old definitions.
+    /// </summary>
+    [Fact]
+    public void A_copy_with_another_input_schema_measures_arguments_by_that_schema()
+    {
+        var original = OperationCatalog.Find("message.send")!;
+        Assert.NotNull(original.ArgumentSchema["$defs"]);
+
+        var other = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject { ["args"] = new JsonObject { ["type"] = "object", ["required"] = new JsonArray("only") } },
+        };
+        var copy = original with { InputSchema = other };
+
+        Assert.Same(other, copy.InputSchema);
+        Assert.True(
+            copy.ArgumentSchema["$defs"] is null,
+            $"The copy kept the original's definitions: {copy.ArgumentSchema.ToJsonString()}");
+        Assert.True(
+            JsonNode.DeepEquals(other["properties"]!["args"], copy.ArgumentSchema),
+            $"The copy's argument schema is not its own `args` property: {copy.ArgumentSchema.ToJsonString()}");
+        Assert.Same(copy.ArgumentSchema, copy.ArgumentSchema);
+        Assert.NotSame(original.ArgumentSchema, copy.ArgumentSchema);
+    }
+
     [Fact]
     public void A_document_that_leaves_a_field_out_names_its_file_rather_than_defaulting()
     {

@@ -60,7 +60,7 @@ value, so nothing is written and the request is answered `validation_timed_out`,
 refused as above, and the refusal names only what is wrong.
 
 What is measured here is the caller's own arguments — the `args` property of the operation's input
-schema — and not the whole composed input. The rest of that input is the runtime's to write, at
+schema, with the document's shared definitions beside it so that a reference resolves — and not the whole composed input. The rest of that input is the runtime's to write, at
 claim: the contact, the campaign and the idempotency key. So a rule the operation states across the
 whole of it, such as a root `anyOf`, is not a creation-time check: at the claim the composed document
 is measured against the operation's whole input schema, and that is where such a rule is enforced —

@@ -325,7 +325,7 @@ internal static partial class WorkItemValidation
 
     private static void ValidateInput(OperationContract contract, JsonNode? input, PatternTiming timing, ValidationErrors errors)
     {
-        var declared = ArgumentSchema(contract);
+        var declared = contract.ArgumentSchema;
         if (input is null)
         {
             // An item that carries no arguments is composed with an empty `args` object at claim, so an operation
@@ -355,14 +355,6 @@ internal static partial class WorkItemValidation
             errors.Unmeasured(InputField + problem.Pointer, problem.Message);
         }
     }
-
-    /// <summary>
-    /// The schema of the caller's own arguments — the <c>args</c> property of the operation's input schema.
-    /// Everything else in that schema is what the runtime composes around them at claim: the contact, the
-    /// campaign and the idempotency key are the runtime's to write, never the caller's.
-    /// </summary>
-    private static JsonObject ArgumentSchema(OperationContract contract) =>
-        (contract.InputSchema["properties"] as JsonObject)?["args"] as JsonObject ?? [];
 
     private static List<string> Required(JsonObject schema) =>
         schema["required"] is JsonArray names

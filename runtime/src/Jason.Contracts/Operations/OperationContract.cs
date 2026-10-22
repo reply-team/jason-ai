@@ -62,6 +62,33 @@ public sealed record OperationContract(
     public static IReadOnlyList<string> ApprovalWords { get; } = ["auto", "confirm_once", "confirm_each"];
 
     /// <summary>
+    /// The schema the composed input is measured by. Setting it, in a constructor or in a <c>with</c>, derives
+    /// <see cref="ArgumentSchema"/> from it, so the two never describe different documents.
+    /// </summary>
+    public JsonObject InputSchema
+    {
+        get;
+        init
+        {
+            field = value;
+            ArgumentSchema = ArgumentsOf(value);
+        }
+    } = InputSchema;
+
+    /// <summary>
+    /// The schema of a caller's own arguments — the <c>args</c> property of <see cref="InputSchema"/>, what a work
+    /// item carries under <c>context.input</c>. Everything else in the input schema is what the runtime composes
+    /// around the arguments at the claim: the contact, the campaign and the idempotency key.
+    /// </summary>
+    /// <remarks>
+    /// An argument may be described by a definition the whole document shares — the account a message goes from, the
+    /// value a contact field takes — and a reference resolves against the root of the schema it is read in, so the
+    /// property carries the document's <c>$defs</c> beside it. Both are copies, made once as the input schema is
+    /// set: the input schema is never written, and no request builds a schema of its own.
+    /// </remarks>
+    public JsonObject ArgumentSchema { get; private init; } = ArgumentsOf(InputSchema);
+
+    /// <summary>
     /// Reads one published document. Absence is never a default: a field the document does not state is an error
     /// naming the file and the field, because the dangerous reading of a missing property is exactly the reading
     /// nobody intended to write down.
@@ -176,6 +203,22 @@ public sealed record OperationContract(
             throw new InvalidOperationException(
                 $"{source}: `preflight.provider_contact` is `pinned_only`, so a person nobody pinned fails before the provider is asked anything, and `failure_codes` does not declare `contact_not_linked`.");
         }
+    }
+
+    private static JsonObject ArgumentsOf(JsonObject inputSchema)
+    {
+        if ((inputSchema["properties"] as JsonObject)?["args"] is not JsonObject arguments)
+        {
+            return [];
+        }
+
+        var schema = arguments.DeepClone().AsObject();
+        if (inputSchema["$defs"] is JsonObject definitions)
+        {
+            schema["$defs"] = definitions.DeepClone();
+        }
+
+        return schema;
     }
 
     private static string Word<TValue>(IReadOnlyDictionary<string, TValue> vocabulary, TValue value)
