@@ -16,6 +16,7 @@ type Props = {
 
 export function AttentionList({ approvals, questions, moreApprovals, moreQuestions, now }: Props) {
     const selected = route.value.screen === 'attention' ? route.value : null;
+    const keep = selected?.decided ? { decided: true as const } : {};
     const isSelected = (kind: Kind, id: string) => selected?.kind === kind && selected.id === id;
     return (
         <div class="rows">
@@ -27,7 +28,7 @@ export function AttentionList({ approvals, questions, moreApprovals, moreQuestio
                     href="#"
                     onClick={(e) => {
                         e.preventDefault();
-                        navigate({ screen: 'attention', kind: 'approvals', id: a.id });
+                        navigate({ screen: 'attention', kind: 'approvals', id: a.id, ...keep });
                     }}
                 >
                     <span class={`mark ${approvalMark(a.status).kind}`}>{approvalMark(a.status).glyph}</span>
@@ -52,7 +53,7 @@ export function AttentionList({ approvals, questions, moreApprovals, moreQuestio
                     href="#"
                     onClick={(e) => {
                         e.preventDefault();
-                        navigate({ screen: 'attention', kind: 'questions', id: q.id });
+                        navigate({ screen: 'attention', kind: 'questions', id: q.id, ...keep });
                     }}
                 >
                     <span class={`mark ${q.status === 'pending' ? 'ask' : 'off'}`}>?</span>

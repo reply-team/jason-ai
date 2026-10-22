@@ -1,0 +1,7 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "case": "the tone in words, and nothing else",
+  "value": { "summary": "Plain and warm; short sentences; no exclamation marks." },
+  "expect": "valid"
+}

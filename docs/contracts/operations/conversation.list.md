@@ -42,6 +42,8 @@ It reads one of two scopes:
 - Without a person, the campaign is named as in `campaign.get`: by `args.campaign.external_id` the first time, or by
   `campaign.external_ids.campaign` once it is pinned. An input naming neither a person nor a campaign is refused
   before your code runs.
+- `campaign` is optional when a person is named. A work item always sends its own, as context; a read Jason makes on
+  a person's request, outside any work item, sends none, because a person's threads are the account's.
 - `source` is `inbound` (threads the other side wrote into) or `all`, and it is required.
 - `since`, when present, keeps only threads that moved at or after it.
 - `thread_channel`, `email` or `linkedin`, keeps only threads on that channel; `category`, by the identifier the reads

@@ -1,0 +1,49 @@
+{
+  "operation": "workitem.list",
+  "case": "by-contact-open",
+  "request": {
+    "contact_id": "cnt_1",
+    "status": [
+      "created",
+      "awaiting_approval",
+      "scheduled",
+      "processing"
+    ],
+    "order": "due",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "wi_3",
+        "campaign_id": "cmp_2",
+        "contact_id": "cnt_1",
+        "kind": "ai_role",
+        "role": "responder",
+        "operation": null,
+        "execution_profile": null,
+        "status": "created",
+        "eligible": false,
+        "priority": 0,
+        "not_before": "2026-10-16T11:30:00.000Z",
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-15T00:00:00.000Z",
+        "updated_at": "2026-10-15T00:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "LatAm pilot",
+        "contact_name": "Mateo Ruiz",
+        "running_since": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

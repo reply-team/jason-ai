@@ -13,7 +13,7 @@ Business skills are refreshed on their own cadence and are true whether or not J
 all. A single pack would have to move at the faster of the two rates and would carry knowledge that
 goes stale for a reason nobody can see.
 
-Neither directory depends on the .NET code, has a build step, or is compiled into anything. They are
+Neither directory depends on the runtime's code, has a build step, or is compiled into anything. They are
 text and they are meant to stay that way.
 
 ## How skills get installed

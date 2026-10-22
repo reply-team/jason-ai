@@ -30,6 +30,12 @@ import type {
     WorkItemListRequest,
     WorkItemSummary,
     WorkItemUpdateRequest,
+    AddContactsRequest,
+    AddContactsResult,
+    ContactThreadsRequest,
+    ContactThreads,
+    ContactThreadRequest,
+    ContactThread,
 } from '../api/types';
 
 import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.approve/already-decided.json';
@@ -52,6 +58,35 @@ import uiRevokeOne from '../../../docs/api/fixtures/ui.revoke/one.json';
 import uiTokensAged from '../../../docs/api/fixtures/ui.tokens/aged.json';
 import uiTokensNone from '../../../docs/api/fixtures/ui.tokens/none.json';
 import uiTokensTwo from '../../../docs/api/fixtures/ui.tokens/two.json';
+import campaignAddContactsOnePerson from '../../../docs/api/fixtures/campaign.add_contacts/one-person.json';
+import campaignAddContactsReEnrolExcluded from '../../../docs/api/fixtures/campaign.add_contacts/re-enrol-excluded.json';
+import campaignAddContactsAlreadyMember from '../../../docs/api/fixtures/campaign.add_contacts/already-member.json';
+import campaignAddContactsArchivedCampaign from '../../../docs/api/fixtures/campaign.add_contacts/archived-campaign.json';
+import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
+import contactGetWithCampaigns from '../../../docs/api/fixtures/contact.get/with-campaigns.json';
+import contactGetNoFirstName from '../../../docs/api/fixtures/contact.get/no-first-name.json';
+import contactGetArchived from '../../../docs/api/fixtures/contact.get/archived.json';
+import contactListByActivity from '../../../docs/api/fixtures/contact.list/by-activity.json';
+import contactListByActivityNext from '../../../docs/api/fixtures/contact.list/by-activity-next.json';
+import contactListByActivityQuery from '../../../docs/api/fixtures/contact.list/by-activity-query.json';
+import contactListByCampaign from '../../../docs/api/fixtures/contact.list/by-campaign.json';
+import contactListArchived from '../../../docs/api/fixtures/contact.list/archived.json';
+import contactThreadsTwoThreads from '../../../docs/api/fixtures/contact.threads/two-threads.json';
+import contactThreadsHasMore from '../../../docs/api/fixtures/contact.threads/has-more.json';
+import contactThreadsProviderFailed from '../../../docs/api/fixtures/contact.threads/provider-failed.json';
+import contactThreadsNotLinked from '../../../docs/api/fixtures/contact.threads/not-linked.json';
+import contactThreadsNoRoute from '../../../docs/api/fixtures/contact.threads/no-route.json';
+import contactThreadMessages from '../../../docs/api/fixtures/contact.thread/messages.json';
+import contactThreadHasMore from '../../../docs/api/fixtures/contact.thread/has-more.json';
+import contactThreadNotThisContact from '../../../docs/api/fixtures/contact.thread/not-this-contact.json';
+import journalListByContact from '../../../docs/api/fixtures/journal.list/by-contact.json';
+import journalListByContactReplies from '../../../docs/api/fixtures/journal.list/by-contact-replies.json';
+import journalListByContactWork from '../../../docs/api/fixtures/journal.list/by-contact-work.json';
+import journalListByContactDecisions from '../../../docs/api/fixtures/journal.list/by-contact-decisions.json';
+import journalListByContactChanges from '../../../docs/api/fixtures/journal.list/by-contact-changes.json';
+import journalListByContactFailed from '../../../docs/api/fixtures/journal.list/by-contact-failed.json';
+import journalListByContactEmpty from '../../../docs/api/fixtures/journal.list/by-contact-empty.json';
+import workitemListByContactOpen from '../../../docs/api/fixtures/workitem.list/by-contact-open.json';
 import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-work-item.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
 import campaignGetUnknown from '../../../docs/api/fixtures/campaign.get/unknown.json';
@@ -157,6 +192,71 @@ export const fixtures = {
     >,
     'workitem.update/dates': workitemUpdateDates satisfies Exchange<WorkItemUpdateRequest, WorkItem>,
     'workitem.update/terminal': workitemUpdateTerminal satisfies Exchange<WorkItemUpdateRequest, ErrorEnvelope>,
+    'campaign.add_contacts/one-person': campaignAddContactsOnePerson satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
+    'campaign.add_contacts/re-enrol-excluded': campaignAddContactsReEnrolExcluded satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
+    'campaign.add_contacts/already-member': campaignAddContactsAlreadyMember satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
+    'campaign.add_contacts/archived-campaign': campaignAddContactsArchivedCampaign satisfies Exchange<
+        AddContactsRequest,
+        ErrorEnvelope
+    >,
+    'campaign.list/for-picker': campaignListForPicker satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'contact.get/with-campaigns': contactGetWithCampaigns satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.get/no-first-name': contactGetNoFirstName satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.get/archived': contactGetArchived satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.list/by-activity': contactListByActivity satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/by-activity-next': contactListByActivityNext satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/by-activity-query': contactListByActivityQuery satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/by-campaign': contactListByCampaign satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/archived': contactListArchived satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.threads/two-threads': contactThreadsTwoThreads satisfies Exchange<ContactThreadsRequest, ContactThreads>,
+    'contact.threads/has-more': contactThreadsHasMore satisfies Exchange<ContactThreadsRequest, ContactThreads>,
+    'contact.threads/provider-failed': contactThreadsProviderFailed satisfies Exchange<
+        ContactThreadsRequest,
+        ErrorEnvelope
+    >,
+    'contact.threads/not-linked': contactThreadsNotLinked satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
+    'contact.threads/no-route': contactThreadsNoRoute satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
+    'contact.thread/messages': contactThreadMessages satisfies Exchange<ContactThreadRequest, ContactThread>,
+    'contact.thread/has-more': contactThreadHasMore satisfies Exchange<ContactThreadRequest, ContactThread>,
+    'contact.thread/not-this-contact': contactThreadNotThisContact satisfies Exchange<
+        ContactThreadRequest,
+        ErrorEnvelope
+    >,
+    'journal.list/by-contact': journalListByContact satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'journal.list/by-contact-replies': journalListByContactReplies satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-contact-work': journalListByContactWork satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'journal.list/by-contact-decisions': journalListByContactDecisions satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-contact-changes': journalListByContactChanges satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-contact-failed': journalListByContactFailed satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-contact-empty': journalListByContactEmpty satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'workitem.list/by-contact-open': workitemListByContactOpen satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
 } as const;
 
 export type FixtureName = keyof typeof fixtures;

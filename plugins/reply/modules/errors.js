@@ -42,11 +42,11 @@ export const COMMANDS = {
   },
   "contact get": {
     "kind": "read",
-    "note": "One contact by its id, as Reply holds it: the read contact.delete makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out; and the read a send makes of the same and of where the contact is reached, an answer without that key read as lost. Nothing is kept."
+    "note": "One contact by its id, as Reply holds it: the read contact.delete makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out; and the read a send makes of the same and of where the contact is reached, for a person Reply holds, an answer without that key read as lost. Nothing is kept."
   },
   "contact update": {
     "kind": "write",
-    "note": "Changes the fields and custom fields stdin names on the contact, by its id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. Before a LinkedIn send it also gives a contact that carries no LinkedIn profile the one the send consumes, and nothing else."
+    "note": "Changes the fields and custom fields stdin names on the contact, by its id; a null clears one and the rest stay. Given the person by their fields instead, beside the fields on stdin, it imports a person Reply holds nobody for first, as an add would, and then sets the fields on the contact made or matched. Set outright, so a repeat by the same contact lands on the same values. Before a LinkedIn send it also gives a contact that carries no LinkedIn profile the one the send consumes, and nothing else."
   },
   "contact delete": {
     "kind": "write",
@@ -114,23 +114,23 @@ export const COMMANDS = {
   },
   "contact linkedin-connect": {
     "kind": "write",
-    "note": "Invites the contact to connect on LinkedIn from the account named, with the note on stdin or with none. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Invites the contact to connect on LinkedIn from the account named, with the note on stdin or with none. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
   },
   "contact send-email": {
     "kind": "write",
-    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
   },
   "contact linkedin-message": {
     "kind": "write",
-    "note": "Sends the contact one LinkedIn message from the account named, outside any sequence, with the text on stdin; the contact has to be a connection of the account. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one LinkedIn message from the account named, outside any sequence, with the text on stdin; the contact has to be a connection of the account. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
   },
   "contact linkedin-inmail": {
     "kind": "write",
-    "note": "Sends the contact one InMail from the account named, outside any sequence, with the subject and the text on stdin. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one InMail from the account named, outside any sequence, with the subject and the text on stdin. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
   },
   "contact linkedin-voice": {
     "kind": "write",
-    "note": "Sends the contact one voice message from the account named, outside any sequence, which Reply speaks from the script on stdin; the contact has to be a connection of the account. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one voice message from the account named, outside any sequence, which Reply speaks from the script on stdin; the contact has to be a connection of the account. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
   }
 };
 
@@ -259,6 +259,10 @@ export const CODES = {
     "contact.update": {
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
+      "contact.invalid_email": "invalid_channel_value",
+      "contact.invalid_linkedin_url": "invalid_channel_value",
+      "account.contact_limit_reached": "limit_reached",
+      "reply.invalid_request:email": "invalid_channel_value",
       "contact.field_not_found": "field_not_found",
       "reply.invalid_request": "value_refused",
       "access.feature_unavailable": "feature_not_included"
@@ -271,6 +275,9 @@ export const CODES = {
     "social_invitation.send": {
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
+      "contact.invalid_linkedin_url": "invalid_channel_value",
+      "account.contact_limit_reached": "limit_reached",
+      "contact.already_held": "held_unnamed",
       "contact.no_linkedin_profile": "no_profile_at_reply",
       "account.list_incomplete": "list_not_finished",
       "linkedin.account_not_found": "sender_not_found",
@@ -286,6 +293,11 @@ export const CODES = {
     "message.send": {
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
+      "contact.invalid_email": "invalid_channel_value",
+      "contact.invalid_linkedin_url": "invalid_channel_value",
+      "account.contact_limit_reached": "limit_reached",
+      "reply.invalid_request:email": "invalid_channel_value",
+      "contact.already_held": "held_unnamed",
       "contact.no_linkedin_profile": "no_profile_at_reply",
       "contact.blacklisted": "blacklisted_at_reply",
       "account.list_incomplete": "list_not_finished",
@@ -880,12 +892,6 @@ export const ROWS = {
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account — so nothing was changed. The pin has to be cleared before this person can be worked again."
       },
-      "nobody_under_the_address": {
-        "when": "The person has no pin, and the CLI's exact lookup of the address found nobody Reply holds under it. Nothing is made: an update changes a contact Reply holds.",
-        "code": "contact_not_found",
-        "class": "permanent",
-        "note": "Reply holds nobody under this address, so there is no contact to change, and an update makes none. Enroll the person or put them on a list first — either makes the contact — then propose the update again."
-      },
       "contact_not_unique": {
         "when": "The person has no pin, and the CLI's exact lookup of the address answered `contact.not_unique`: more than one contact is held under it.",
         "code": "contact_not_unique",
@@ -893,10 +899,28 @@ export const ROWS = {
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was changed. A person resolves the duplicate at Reply, then proposes the work again."
       },
       "invalid_channel_value": {
-        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by, decided before any call; or the CLI answered `contact.invalid_email` or `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email field, to the import of a person Reply holds nobody for.",
         "code": "invalid_channel_value",
         "class": "validation",
-        "note": "The person has no value on the channel the call named that Reply could find them by, so nothing was asked. Name a channel they have: an email or a LinkedIn profile."
+        "note": "The person has no value on the channel the call named that Reply could find or create them by, so nothing was changed. Name a channel they have, an email or a LinkedIn profile, or correct the value Jason holds."
+      },
+      "limit_reached": {
+        "when": "The CLI answered `account.contact_limit_reached`: Reply held nobody under the value, and the account will hold no further contact.",
+        "code": "limit_reached",
+        "class": "permanent",
+        "note": "The account will hold no further contact, and Reply held nobody for this person, so the contact could not be made and nothing was changed. Make room at Reply, then propose the work again."
+      },
+      "first_name_not_derivable": {
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the exact lookup by address found nobody Reply holds under it.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so nothing was changed. Give the person a first name in Jason and propose the work again."
+      },
+      "first_name_derivation_forbidden": {
+        "when": "The person has no pin and no first name, the exact lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nothing was changed. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "field_not_found": {
         "when": "The CLI answered `contact.field_not_found`: a custom field the arguments name is one the account has none of, whatever its case. Nothing is changed.",
@@ -915,6 +939,18 @@ export const ROWS = {
         "code": "invalid_field_value",
         "class": "validation",
         "note": "The work item names one custom field twice, so which value is meant cannot be told and nothing was asked. Name each custom field once and propose the update again."
+      },
+      "contact_gone": {
+        "when": "The CLI answered `contact.not_found` for a contact this attempt was not pinned to — one the exact lookup found, or one the update's own import made or matched — so Reply named the contact and then held nothing under it. Nobody is pinned.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply named a contact for this person and then answered that it holds no such contact, so nothing was changed and nothing was pinned. Look the person up at Reply, then propose the update again."
+      },
+      "person_not_projected": {
+        "when": "The input carries no `first_name`, `last_name`, `company`, `title` or `time_zone` for the person at all — absent, not null — which only a runtime older than 0.14.0, whose documents projected the person's identifier and channel alone, composes, so it is reported in a code that runtime's documents already declare. Decided before any call; the cause and the fields it lacks travel in the trace.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.14.0 or newer; the attempt's trace names the fields."
       },
       "feature_not_included": {
         "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not change a contact.",
@@ -950,12 +986,6 @@ export const ROWS = {
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account — so nothing was sent. The pin has to be cleared before this person can be worked again."
       },
-      "nobody_under_the_value": {
-        "when": "The person has no pin, and the CLI's exact lookup of the profile found nobody Reply holds under it. Nothing is made: an invitation goes to a contact Reply holds.",
-        "code": "contact_not_found",
-        "class": "permanent",
-        "note": "Reply holds nobody under this profile, so there is no contact to invite, and an invitation makes none. Put the person on a list or enroll them first — either makes the contact — then propose the invitation again."
-      },
       "contact_not_unique": {
         "when": "The person has no pin, and the CLI's exact lookup of the profile answered `contact.not_unique`: more than one contact is held under it.",
         "code": "contact_not_unique",
@@ -963,10 +993,28 @@ export const ROWS = {
         "note": "Reply holds more than one contact under this profile, so picking one would be guessing and nothing was sent. A person resolves the duplicate at Reply, then proposes the invitation again."
       },
       "invalid_channel_value": {
-        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by, decided before any call; or the CLI answered `contact.invalid_linkedin_url` to the import of a person Reply holds nobody for.",
         "code": "invalid_channel_value",
         "class": "validation",
-        "note": "The person has no LinkedIn profile on the channel the call named, so there is nobody to invite. Name the channel they have a profile on."
+        "note": "The person has no LinkedIn profile on the channel the call named that Reply could find or create them by, so there is nobody to invite. Name the channel they have a profile on, or correct the profile Jason holds."
+      },
+      "limit_reached": {
+        "when": "The CLI answered `account.contact_limit_reached`: Reply held nobody under the value, and the account will hold no further contact.",
+        "code": "limit_reached",
+        "class": "permanent",
+        "note": "The account will hold no further contact, and Reply held nobody for this person, so the contact could not be made and nothing was sent. Make room at Reply, then propose the work again."
+      },
+      "first_name_not_derivable": {
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the exact lookup by address found nobody Reply holds under it.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so nothing was sent. Give the person a first name in Jason and propose the work again."
+      },
+      "first_name_derivation_forbidden": {
+        "when": "The person has no pin and no first name, the exact lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nothing was sent. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "placeholder_in_the_text": {
         "when": "The note carries a double opening brace, which Reply reads as the start of a placeholder of its own. Decided before any call.",
@@ -1017,7 +1065,7 @@ export const ROWS = {
         "note": "Reply holds this person as opted out, so nothing was sent. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
       },
       "channel_value_conflict": {
-        "when": "`reply contact get` answered the contact with another LinkedIn profile than the one the work item consumes, the one Reply holds keyed as the runtime keys a profile and the work item's compared as it stands; or with none, where the consumed one would be held at Reply under another spelling than the register was asked about. Nothing is changed and nothing is sent.",
+        "when": "`reply contact get` answered the contact with another LinkedIn profile than the one the work item consumes, the one Reply holds keyed as the runtime keys a profile and the work item's compared as it stands; or with none — or Reply holds nobody for the person — where the consumed one would be held at Reply under another spelling than the register was asked about. Nothing is changed or imported, and nothing is sent.",
         "code": "contact_channel_conflict",
         "class": "permanent",
         "note": "Reply's contact for this person carries another LinkedIn profile than the one this work item consumes, and this package never changes one, so nothing was sent. Look at the contact at Reply: the profile there, or the one Jason holds, is wrong."
@@ -1027,6 +1075,24 @@ export const ROWS = {
         "code": "contact_channel_conflict",
         "class": "permanent",
         "note": "Reply says its contact for this person carries no LinkedIn profile, though the one this work item consumes was written onto it first, so nothing was sent. Look at the contact at Reply."
+      },
+      "held_unnamed": {
+        "when": "The CLI answered `contact.already_held` — Reply already held a contact under the person's fields, so the command sent nothing — without naming that contact in its identifiers. Never expected: the CLI names it, and the package then reads that contact and invites it by its identifier.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply already held a contact for this person and the CLI did not say which, so it could not be read first and nothing was sent. Look the person up at Reply, then propose the invitation again."
+      },
+      "contact_gone": {
+        "when": "The CLI answered `contact.not_found` for a contact this attempt was not pinned to — one the exact lookup found, one the invitation's own import made, or one it named as already held — so Reply named the contact and then held nothing under it. Nobody is pinned.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply named a contact for this person and then answered that it holds no such contact, so nothing was sent and nothing was pinned. Look the person up at Reply, then propose the invitation again."
+      },
+      "person_not_projected": {
+        "when": "The input carries no `first_name`, `last_name`, `company`, `title` or `time_zone` for the person at all — absent, not null — which only a runtime older than 0.14.0, whose documents projected the person's identifier and channel alone, composes, so it is reported in a code that runtime's documents already declare. Decided before any call; the cause and the fields it lacks travel in the trace.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.14.0 or newer; the attempt's trace names the fields."
       },
       "patch_answer_lost": {
         "when": "Writing the consumed profile onto a contact that held none timed out, exited 3 or answered something that is not a result. Nothing was sent, and the next attempt reads the contact again first.",
@@ -1054,12 +1120,6 @@ export const ROWS = {
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account — so nothing was sent. The pin has to be cleared before this person can be worked again."
       },
-      "nobody_under_the_value": {
-        "when": "The person has no pin, and the CLI's exact lookup of the address or the profile found nobody Reply holds under it. Nothing is made: a message goes to a contact Reply holds.",
-        "code": "contact_not_found",
-        "class": "permanent",
-        "note": "Reply holds nobody under this address or profile, so there is no contact to send to, and a message makes none. Put the person on a list or enroll them first — either makes the contact — then propose the message again."
-      },
       "contact_not_unique": {
         "when": "The person has no pin, and the CLI's exact lookup of the address or the profile answered `contact.not_unique`: more than one contact is held under it.",
         "code": "contact_not_unique",
@@ -1067,10 +1127,28 @@ export const ROWS = {
         "note": "Reply holds more than one contact under this address or profile, so picking one would be guessing and nothing was sent. A person resolves the duplicate at Reply, then proposes the message again."
       },
       "invalid_channel_value": {
-        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by, decided before any call; or the CLI answered `contact.invalid_email` or `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email field, to the import of a person Reply holds nobody for.",
         "code": "invalid_channel_value",
         "class": "validation",
-        "note": "The person has no address or LinkedIn profile on the channel the call named, so there is nobody to send to. Name the channel they have."
+        "note": "The person has no address or LinkedIn profile on the channel the call named that Reply could find or create them by, so there is nobody to send to. Name the channel they have, or correct the value Jason holds."
+      },
+      "limit_reached": {
+        "when": "The CLI answered `account.contact_limit_reached`: Reply held nobody under the value, and the account will hold no further contact.",
+        "code": "limit_reached",
+        "class": "permanent",
+        "note": "The account will hold no further contact, and Reply held nobody for this person, so the contact could not be made and nothing was sent. Make room at Reply, then propose the work again."
+      },
+      "first_name_not_derivable": {
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the exact lookup by address found nobody Reply holds under it.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so nothing was sent. Give the person a first name in Jason and propose the work again."
+      },
+      "first_name_derivation_forbidden": {
+        "when": "The person has no pin and no first name, the exact lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nothing was sent. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "placeholder_in_the_text": {
         "when": "The subject or the text carries a double opening brace, which Reply reads as the start of a placeholder of its own. Decided before any call.",
@@ -1145,7 +1223,7 @@ export const ROWS = {
         "note": "The account's blacklist at Reply holds this person, so nothing was sent. This is a refusal on purpose; Reply's blacklist is changed at Reply."
       },
       "channel_value_conflict": {
-        "when": "`reply contact get` answered the contact at another address than the one the work item consumes, or at none; or with another LinkedIn profile, or with none where the consumed one would be held at Reply under another spelling than the register was asked about. Reply's value is keyed whole as the runtime keys it, and the work item's compared as it stands. Nothing is changed and nothing is sent.",
+        "when": "`reply contact get` answered the contact at another address than the one the work item consumes, or at none; or with another LinkedIn profile, or with none — or Reply holds nobody for the person — where the consumed one would be held at Reply under another spelling than the register was asked about. Reply's value is keyed whole as the runtime keys it, and the work item's compared as it stands. Nothing is changed or imported, and nothing is sent.",
         "code": "contact_channel_conflict",
         "class": "permanent",
         "note": "Reply's contact for this person is reached at another address or LinkedIn profile than the one this work item consumes, or at none, and this package never changes an address or a profile, so nothing was sent. Look at the contact at Reply: the value there, or the one Jason holds, is wrong."
@@ -1155,6 +1233,24 @@ export const ROWS = {
         "code": "contact_channel_conflict",
         "class": "permanent",
         "note": "Reply says its contact for this person carries no LinkedIn profile, though the one this work item consumes was written onto it first, so nothing was sent. Look at the contact at Reply."
+      },
+      "held_unnamed": {
+        "when": "The CLI answered `contact.already_held` — Reply already held a contact under the person's fields, so the command sent nothing — without naming that contact in its identifiers. Never expected: the CLI names it, and the package then reads that contact and sends to it by its identifier.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply already held a contact for this person and the CLI did not say which, so it could not be read first and nothing was sent. Look the person up at Reply, then propose the message again."
+      },
+      "contact_gone": {
+        "when": "The CLI answered `contact.not_found` for a contact this attempt was not pinned to — one the exact lookup found, one the send's own import made, or one it named as already held — so Reply named the contact and then held nothing under it. Nobody is pinned.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply named a contact for this person and then answered that it holds no such contact, so nothing was sent and nothing was pinned. Look the person up at Reply, then propose the message again."
+      },
+      "person_not_projected": {
+        "when": "The input carries no `first_name`, `last_name`, `company`, `title` or `time_zone` for the person at all — absent, not null — which only a runtime older than 0.14.0, whose documents projected the person's identifier and channel alone, composes, so it is reported in a code that runtime's documents already declare. Decided before any call; the cause and the fields it lacks travel in the trace.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.14.0 or newer; the attempt's trace names the fields."
       },
       "patch_answer_lost": {
         "when": "Writing the consumed profile onto a contact that held none timed out, exited 3 or answered something that is not a result. Nothing was sent, and the next attempt reads the contact again first.",

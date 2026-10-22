@@ -1,7 +1,7 @@
 {
   "operation": "contact.update",
   "version": 1,
-  "case": "the provider holds nobody under the address, so there is no record to change and nobody is created: the person is enrolled or put on a list first, then updated",
+  "case": "the pin no longer resolves: nobody is matched by the address or created in its place, and nothing is changed",
   "outcome": {
     "protocol_version": 1,
     "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
@@ -11,7 +11,7 @@
     "error": {
       "class": "permanent",
       "code": "contact_not_found",
-      "message": "The provider holds nobody under this address, so there is no contact to change.",
+      "message": "The provider holds no contact under the pinned identifier, so there is no contact to change.",
       "details": null,
       "external_ids": null
     },

@@ -1,0 +1,22 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "summary": "How the company sounds, as agreed with the person: the tone in words, how formal it is, how a first message opens and closes, and messages the person likes.",
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["summary"],
+    "additionalProperties": false,
+    "properties": {
+      "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+      "formality": { "enum": ["informal", "neutral", "formal"] },
+      "greeting": { "type": "string", "maxLength": 200 },
+      "sign_off": { "type": "string", "maxLength": 200 },
+      "examples": {
+        "type": "array",
+        "maxItems": 3,
+        "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    }
+  }
+}

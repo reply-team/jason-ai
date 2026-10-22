@@ -24,9 +24,19 @@ guessing wrong is a second message in somebody's inbox.
 
 ## Finding the person
 
-`preflight.provider_contact` is `find_only`: the person is found by the pin, or else by the consumed value, and nobody
-is created — a person the provider holds nobody for is `contact_not_found`, and is put on a list or enrolled first.
-Then the contact is read before anything is sent:
+`preflight.provider_contact` is `find_or_create`, as for `campaign.enroll`: a pin, once there is one, is worked by;
+without one the person is looked up first, created only when the provider holds nobody under the consumed value, and
+the provider's identifier comes back in `external_ids.contact`. A message goes to the provider's contact for the
+person, so a person Jason holds is not refused for being new to the provider: the contact is made from the consumed
+value and the person's own fields, which come with the call for that: the call projects the person as every operation
+that may create them does. [`docs/plugins.md`](../../plugins.md) §7, "The contact proxy rule", says how the lookup
+compares. The policy was `find_only` before, when a person the provider held nobody for failed `contact_not_found`;
+that is a relaxation, so the document keeps its version (the contracts [README](../README.md), "Versioning"). Because
+the composed input now carries the person's own fields, an approval parked before this change is parked once more, as
+`input_changed`, when its work item is next claimed. A person created for a message the provider then refuses — a
+sender's spent allowance, say — stays created there, and the failure carries their identifier; nothing was sent.
+
+A contact the provider already held is read before anything is sent:
 
 - one the provider holds as opted out fails `suppressed`: the providers mapped first do not refuse a message outside a
   campaign to such a person by themselves, so the read is what keeps a stop the provider holds;
@@ -47,7 +57,7 @@ at the claim is a check for exactly the value reached.
     "sender": { "external_id": "12", "address": "ann@example.com" },
     "message": { "format": "email", "subject": "The Lisbon meetup", "body": "Hi Marta,\nthanks for the chat at the meetup." }
   },
-  "contacts": [ { "id": "cnt_…", "channels": [ { "channel": "email", "value": "marta@example.com", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
+  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "company": null, "title": null, "time_zone": null, "channels": [ { "channel": "email", "value": "marta@example.com", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
   "campaign": { "id": "cmp_…", "name": "Q3 LatAm founders", "status": "active", "external_ids": {} },
   "idempotency_key": "wi_…"
 }
@@ -93,7 +103,8 @@ subject or a text the provider would read as markup of its own — a placeholder
 would go out is not what a person approved. `not_connected` is a LinkedIn message or voice message to a person the
 sender's account is not connected with: invite them with `social_invitation.send` first, or send an InMail.
 `insufficient_credits` is an InMail with no credits left. `sender_limit_reached` is the account's daily or weekly
-allowance spent, which one in the details; the message is proposed again once it renews.
+allowance spent, which one in the details; the message is proposed again once it renews. `limit_reached` is the
+provider's account full: it will hold no further contact, and the person had to be created.
 
 ## What a person reads before deciding
 
@@ -123,9 +134,9 @@ what is approved: what is approved is the composed input, not the summary. The f
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_only` |
+| pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
-| contact projection | `id`; channels: `consumed` |
+| contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent. |
 | preview a person reads | `Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}), outside any campaign — subject: {/args/message/subject}; text: {/args/message/body}`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/sender`, `/args/message` |
 | pinned identifiers | `contact` names a contact |

@@ -25,11 +25,11 @@ Twenty-one operations — the whole set this build publishes: fifteen that write
 | `conversation.classify` | Files a thread under one of the account's inbox categories, by its identifier or its name, or takes it out of its category. Reply's Do not contact is refused: filing there opts the person out. |
 | `conversation.close` | Marks a thread read: Reply has no closed state, and read is how its inbox shows a thread as worked. |
 | `conversation.reopen` | Marks a thread unread again, so it needs attention. |
-| `contact.update` | Changes a person's fields — first name, last name, company, title — and custom fields on the contact Reply holds for them, each custom field named as the account names it. A null clears a field; one left out stays. A person Reply holds nobody for is not found: nobody is made to be changed. |
+| `contact.update` | Changes a person's fields — first name, last name, company, title — and custom fields on the contact Reply holds for them, each custom field named as the account names it. A null clears a field; one left out stays. A person Reply holds nobody for is created with those fields, as an add creates one. |
 | `contact.delete` | Deletes the contact Reply holds for a person, by the identifier Jason pinned, once a person approves it: they leave every sequence and list there. A person Reply holds as opted out is refused, and Jason's own record of the person and its register stay as they are. |
 | `sender.list` | Reads the mailboxes and LinkedIn accounts a send can go from, and says whose each one is: the caller's own alone, or the whole team's when that is asked for. |
-| `social_invitation.send` | Invites one person to connect on LinkedIn from one of the account's LinkedIn accounts, with a note or without one, once a person approves it. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the profile the work item consumes and is not held as opted out. |
-| `message.send` | Sends one person one message outside any sequence, once a person approves it: an email, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the address or the profile the work item consumes and is not held as opted out. |
+| `social_invitation.send` | Invites one person to connect on LinkedIn from one of the account's LinkedIn accounts, with a note or without one, once a person approves it. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
+| `message.send` | Sends one person one message outside any sequence, once a person approves it: an email, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the address or the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**. Each operation runs the Reply CLI command made
 for it — `reply contact find`, `reply sequence add-contact`, `reply inbox list` and the rest, listed under
@@ -51,12 +51,16 @@ of a call is the command line, which carries only Reply's identifiers and flags,
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
-- **Version 0.14.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
-  the answer. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
+- **Version 0.15.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+  the answer. 0.15.0 is the release whose direct sends and `reply contact update` take the person by their fields and
+  import one Reply holds nobody for. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
   routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
   does not have, or answers differently.
-- **Jason 0.13.0 or newer.** The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, which an
-  older runtime does not have.
+- **Jason 0.14.0 or newer.** The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, which a
+  runtime older than 0.13.0 does not have; and 0.14.0 is the first release whose `message.send`,
+  `social_invitation.send` and `contact.update` hand the package the person's own fields — their names, company, title
+  and time zone — to create a person Reply holds nobody for. Given an input without those fields at all, which only an
+  older runtime composes, the three refuse the work before anything is called, naming the fields.
 - **A runtime that can find it.** The name `reply` is resolved on the search path the *runtime* sees, at
   every reload — which is not always the path your shell sees, least of all for a runtime started in the
   background. `executable_missing` in `jason plugin list --human` means that and nothing else.
@@ -214,20 +218,25 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
   as Reply unavailable, and the attempt is made again; it is never taken for nobody or for one. Any other channel names
   a value Reply looks nobody up by, and is `invalid_channel_value` before anything is called.
 - **A person Reply holds is named by its identifier,** so nothing Jason holds — names, company, title — is written to
-  their record, and Reply needs no first name for them.
-- **Only `find_or_create` imports.** `list_membership.add`, `campaign.enroll` and `optout.record` import a person Reply
-  holds nobody for, from the fields the operation's projection gives — the address or the LinkedIn URL, a first name, a
-  last name, a company, a title, never a time zone — keyed by the email or, with none, by the LinkedIn URL, which the
-  CLI writes as its lowercased slug. A person given only by LinkedIn URL is looked up once more by the CLI before its
-  import. `enrollment.stop` creates nobody: a person Reply does not hold takes part in nothing. `conversation.reply`
-  finds the person through its thread, and creates nobody either; nor do `contact.update`, which changes a contact
-  Reply holds, and `social_invitation.send` and `message.send`, which reach one: a person Reply holds nobody for is
-  `contact_not_found`, and is enrolled or put on a list first.
+  their record, and Reply needs no first name for them. A contact the lookup did not return but Reply's import matches
+  is the one exception: the import fills that contact's empty fields from the ones given.
+- **Only `find_or_create` imports.** `list_membership.add`, `campaign.enroll`, `optout.record`, `contact.update`,
+  `social_invitation.send` and `message.send` import a person Reply holds nobody for, from the fields the operation's
+  projection gives — the address or the LinkedIn URL, a first name, a last name, a company, a title, never a time
+  zone — keyed by the email or, with none, by the LinkedIn URL, which the CLI writes as its lowercased slug. Each
+  imports with the command that acts on the person, given `--contact -`: the add, the opt-out, the update, the send.
+  The person is named by the value of the channel consumed alone, so a LinkedIn send imports by the profile. Before
+  its import the CLI looks the person up once more for the opt-out, the update and a send, and for an add only where
+  it is given a LinkedIn URL: an add given an email imports straight away, and Reply's import matches the email.
+  `enrollment.stop`
+  creates nobody: a person Reply does not hold takes part in nothing. `conversation.reply` finds the person through its
+  thread, and creates nobody either.
 - **A delete works by the pin alone.** `contact.delete` names the contact by the identifier Jason pinned and by nothing
   else, reads it with `reply contact get` before anything is deleted, and refuses one Reply holds as opted out, because
   Reply keeps that stop on the contact itself. It pins nothing.
-- **A send reads the contact before it goes.** `social_invitation.send` and `message.send` read Reply's contact for the
-  person with `reply contact get` before anything is sent: one Reply holds as opted out is refused as `suppressed`, and
+- **A send reads the contact before it goes.** `social_invitation.send` and `message.send` read the contact Reply holds
+  for the person — found by the pin or by the lookup — with `reply contact get` before anything is sent: one Reply holds
+  as opted out is refused as `suppressed`, and
   one whose address or LinkedIn profile is another than the work item's — or, for an email, one with no address — is
   refused as `contact_channel_conflict` and not changed. Reply's value is keyed whole by Jason's own rule, an address
   as Jason keys one rather than by JavaScript's lowercasing. An address is never written onto a contact. A LinkedIn
@@ -235,7 +244,13 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
   send ever writes to a contact; a value that is not Jason's key — one stored before the key, which Jason left as it
   stood — is refused instead of written. A contact answer without the LinkedIn profile key
   at all is read as lost and asked again, with nothing written or sent: a null or an empty value means the contact
-  carries none.
+  carries none. A person the lookup found nobody for has no contact to read: the send's own command imports them from
+  the value consumed, so the contact it makes is reached there and holds no stop, and a profile that is not Jason's key
+  is refused rather than imported. The command sends only to a contact it made. Where Reply already held one — its own
+  lookup found the person, which it runs again before the import, or its import matched a contact Reply's lookup did
+  not return — it sends nothing and answers `contact.already_held` with that contact's identifier; the package then
+  reads that contact exactly as it reads one it found, and sends to it by its identifier. No send reaches a contact
+  Reply held without that read.
 - **The first name an import needs** is derived where the person has none, as *A person without a first name* under
   [The account a route names](#the-account-a-route-names) says, and the route's binding decides whether it may be.
 - **Fields and lists travel with the operation that needs them.** Nothing is copied to Reply in the background, and
@@ -558,20 +573,28 @@ thread was. A repeat after a lost answer runs the command again. Neither records
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
-| The person has no pin and Reply holds nobody under the address. Nothing is made and nothing is changed. | `contact_not_found` | permanent | Enroll the person or put them on a list first — either makes the contact — then propose the update again. |
 | More than one contact is held under the address (`contact.not_unique`). Nothing is changed. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the update again. |
 | The person carries no value on the channel the call named, or the channel is one Reply looks nobody up by. Nothing is called. | `invalid_channel_value` | validation | Name a channel they have: an email or a LinkedIn profile. |
+| Reply will not accept the address or the LinkedIn URL the person would be created from (`contact.invalid_email`, `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email). Nothing is changed. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
+| Reply holds nobody for the person and the account will hold no further contact (`account.contact_limit_reached`). Nothing is changed. | `limit_reached` | permanent | Free capacity at Reply, then propose the update again. |
+| The person has no pin, no first name and no last name, Reply holds nobody under the value, and it has no text before an `@`. Nothing is changed. | `provider_call_failed` | permanent | "A first name could not be derived." Give the person a first name in Jason and propose the update again: Reply creates nobody without one. |
+| The person has no pin and no first name, Reply holds nobody under the value, and the route's binding says `derive_first_name: false`. Nothing is changed. | `provider_call_failed` | permanent | "The route forbids deriving a first name." Give the person a first name in Jason, or allow the derivation in the route's binding, and propose the update again. |
 | A custom field the work item names is one the account has none of, whatever its case (`contact.field_not_found`). Nothing is changed. | `field_not_found` | validation | Name each custom field as the account names it. |
 | Reply did not accept a value the work item gives a field (`reply.invalid_request`; Reply's names for the fields are in the trace), or the work item names one custom field twice, whatever its case. Nothing is changed. | `invalid_field_value` | validation | Correct the value, or name the field once, and propose the update again. |
+| Reply answered that it holds no contact under an identifier it had just named — one the lookup found, or one the command's own import made or matched (`contact.not_found`). Nothing is changed, and nothing is pinned. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the update again. |
+| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.14.0 or newer. |
 | Reply says the account's plan or role may not change a contact (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes it. |
 
-The person is found before anything is written: by the pin, or by the exact lookup of the address, as `enrollment.stop`
-does, and nobody is made — a contact made only so that its fields had somewhere to go would copy the person to Reply
-ahead of any operation that needs them there. Then one command changes what the work item names — the values on stdin, a null clearing a field, a field left
-out staying as Reply holds it — and nothing Jason holds of the person is copied there besides. A custom field is
-named as the account names it; the CLI reads the account's custom fields once and refuses an unknown name before
-anything is written. The update runs without anybody approving it: one work item changes one record. A repeat after a
-lost answer works by the contact the failure pinned and sets the same values again.
+The person is found before anything is written: by the pin, or by the exact lookup of the address. Then one command
+changes what the work item names — the values on stdin, a null clearing a field, a field left out staying as Reply holds
+it — and nothing Jason holds of the person is copied to a contact Reply holds besides. A person Reply holds nobody for is
+created by that same command, `reply contact update --contact - --fields -`: the person and the fields are one object
+on stdin, the person imported as an add imports them, and the fields set on the contact made — or on the one the import
+matched, where Reply's lookup did not return a contact it held, as an add acts on one. A custom field is named as
+the account names it; the CLI reads the account's custom fields once and refuses an unknown name before anything is
+written or imported. The update runs without anybody approving it: one work item changes one record. A repeat after a
+lost answer works by the contact the failure pinned, or by the one the lookup then finds, and sets the same values
+again.
 
 ### `contact.delete`
 
@@ -612,20 +635,29 @@ nobody lists nothing, and the read is asked again.
 | Reply holds the sender's account under another address than the arguments state, under one where they state none, or under none where they state one. Nothing is sent. | `sender_mismatch` | validation | Name the account by the identifier and the address `sender.list` returns. |
 | The sender's account is turned off or disconnected in Reply's list, or the invitation answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's word is in the trace. | `sender_unavailable` | permanent | Put the account right at Reply, then propose the invitation again. |
 | The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`); which one is under `limit` in the trace. | `sender_limit_reached` | permanent | Propose the invitation again once the allowance renews. |
-| The person has no pin and Reply holds nobody under the profile. Nothing is made and nothing is sent. | `contact_not_found` | permanent | Put the person on a list or enroll them first — either makes the contact — then propose the invitation again. |
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
 | More than one contact is held under the profile (`contact.not_unique`). | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the invitation again. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name the channel they have a profile on. |
+| Reply will not accept the LinkedIn URL the person would be created from (`contact.invalid_linkedin_url`). Nothing is sent. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
+| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.14.0 or newer. |
+| Reply holds nobody for the person and the account will hold no further contact (`account.contact_limit_reached`). Nothing is sent. | `limit_reached` | permanent | Free capacity at Reply, then propose the invitation again. |
+| The person has no pin, no first name and no last name, Reply holds nobody under the value, and it has no text before an `@`. Nothing is sent. | `provider_call_failed` | permanent | "A first name could not be derived." Give the person a first name in Jason and propose the invitation again: Reply creates nobody without one. |
+| The person has no pin and no first name, Reply holds nobody under the value, and the route's binding says `derive_first_name: false`. Nothing is sent. | `provider_call_failed` | permanent | "The route forbids deriving a first name." Give the person a first name in Jason, or allow the derivation in the route's binding, and propose the invitation again. |
 | Reply holds the person as opted out. Nothing is sent. | `suppressed` | permanent | A refusal on purpose; the only way past it is the person asking to be reinstated. |
-| Reply's contact for the person carries another LinkedIn profile than the work item's, or Reply says it carries none after the package gave it one (`contact.no_linkedin_profile`). Nothing is changed and nothing is sent. | `contact_channel_conflict` | permanent | Look at the contact at Reply: the profile there, or the one Jason holds, is wrong. |
+| Reply's contact for the person carries another LinkedIn profile than the work item's, or Reply says it carries none after the package gave it one (`contact.no_linkedin_profile`); or Reply holds nobody for the person and the work item's profile is not Jason's key. Nothing is changed and nothing is sent. | `contact_channel_conflict` | permanent | Look at the contact at Reply: the profile there, or the one Jason holds, is wrong. |
 | Reply did not say whether the profile was written onto a contact that held none. Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which reads the contact again first. |
+| Reply answered that it holds no contact under an identifier it had just named — one the lookup found, one the command's own import made, or one it named as already held (`contact.not_found`). Nothing is sent, and nothing is pinned. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the invitation again. |
+| The command answered that Reply already held the person (`contact.already_held`) without saying which contact. Nothing is sent. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the invitation again. |
 | The account's plan or role does not include LinkedIn sends outside a sequence (`linkedin.feature_disabled`), or its LinkedIn accounts (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes them. |
 
 Before the invitation, in this order and each refusing with nothing sent: the note is held to what Reply would send as
 written; the sender is read from `reply account list --channel linkedin` and held to the address the person approving
-read; the person is found by the pin or by `reply contact find`, and nobody is made; and Reply's contact is read with
-`reply contact get` — opted out is a stop, another profile a refusal, no profile filled with the work item's. Then
-`reply contact linkedin-connect`, the note on stdin or no `--message` at all for an invitation without one. A person
+read; the person is found by the pin or by `reply contact find`; and the contact Reply holds is read with `reply contact
+get` — opted out is a stop, another profile a refusal, no profile filled with the work item's. Then `reply contact
+linkedin-connect`, the note on stdin or no `--message` at all for an invitation without one. A person Reply holds nobody
+for is named to it by `--contact -` instead, imported by the profile, and the note beside them in one object on stdin;
+the command invites only a contact it made, and one Reply already held it names as `contact.already_held`, inviting
+nobody, which the package then reads as above and invites by its identifier. A person
 who is already a connection answers `already_connected`. An invitation whose answer was lost is never sent again:
 the item stops for a person, with the contact pinned.
 
@@ -642,24 +674,33 @@ the item stops for a person, with the contact pinned.
 | Reply holds the sender's account under another address than the arguments state, under one where they state none, or under none where they state one; an address Jason would not key matches nothing. Nothing is sent. | `sender_mismatch` | validation | Name the account by the identifier and the address `sender.list` returns. |
 | The sender's account is turned off or disconnected in Reply's list, or the send answered `linkedin.account_inactive`, `linkedin.invalid_cookie`, `linkedin.sales_navigator_required`, `linkedin.sales_navigator_disconnected` or `linkedin.voice_profile_missing`; Reply's word is in the trace. | `sender_unavailable` | permanent | Put the account right at Reply — connect it again, or give it Sales Navigator or a voice profile — then propose the message again. |
 | The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`); which one is under `limit` in the trace. | `sender_limit_reached` | permanent | Propose the message again once the allowance renews. |
-| The person has no pin and Reply holds nobody under the address or the profile. Nothing is made and nothing is sent. | `contact_not_found` | permanent | Put the person on a list or enroll them first — either makes the contact — then propose the message again. |
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
 | More than one contact is held under the address or the profile (`contact.not_unique`). | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the message again. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name the channel they have. |
+| Reply will not accept the address or the LinkedIn URL the person would be created from (`contact.invalid_email`, `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email). Nothing is sent. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
+| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.14.0 or newer. |
+| Reply holds nobody for the person and the account will hold no further contact (`account.contact_limit_reached`). Nothing is sent. | `limit_reached` | permanent | Free capacity at Reply, then propose the message again. |
+| The person has no pin, no first name and no last name, Reply holds nobody under the value, and it has no text before an `@`. Nothing is sent. | `provider_call_failed` | permanent | "A first name could not be derived." Give the person a first name in Jason and propose the message again: Reply creates nobody without one. |
+| The person has no pin and no first name, Reply holds nobody under the value, and the route's binding says `derive_first_name: false`. Nothing is sent. | `provider_call_failed` | permanent | "The route forbids deriving a first name." Give the person a first name in Jason, or allow the derivation in the route's binding, and propose the message again. |
 | Reply holds the person as opted out, or its blacklist refuses the email (`contact.blacklisted`). Nothing is sent. | `suppressed` | permanent | A refusal on purpose; the only way past it is the person asking to be reinstated, or the blacklist changed at Reply. |
-| Reply's contact for the person is reached at another address or LinkedIn profile than the work item's, or at no address; or Reply says it carries no profile after the package gave it one (`contact.no_linkedin_profile`). Nothing is changed and nothing is sent. | `contact_channel_conflict` | permanent | Look at the contact at Reply: the value there, or the one Jason holds, is wrong. |
+| Reply's contact for the person is reached at another address or LinkedIn profile than the work item's, or at no address; or Reply says it carries no profile after the package gave it one (`contact.no_linkedin_profile`); or Reply holds nobody for the person and the work item's profile is not Jason's key. Nothing is changed and nothing is sent. | `contact_channel_conflict` | permanent | Look at the contact at Reply: the value there, or the one Jason holds, is wrong. |
 | Reply did not say whether the profile was written onto a contact that held none. Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which reads the contact again first. |
+| Reply answered that it holds no contact under an identifier it had just named — one the lookup found, one the command's own import made, or one it named as already held (`contact.not_found`). Nothing is sent, and nothing is pinned. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the message again. |
+| The command answered that Reply already held the person (`contact.already_held`) without saying which contact. Nothing is sent. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the message again. |
 | The account's plan or role does not include LinkedIn sends outside a sequence (`linkedin.feature_disabled`), or the accounts of the channel (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes them. |
 | Reply refused a field (`reply.invalid_request`) or the text (`reply.refused`, `contact.unknown` among them) in a way this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | Reply's code, and the fields it names, are in the attempt's trace; correct what it names and propose the message again. |
 
 The same path as the invitation's, in this order and each refusing with nothing sent: the subject and the text are held
 to what Reply would send as written; the sender is read from `reply account list --channel email` or `--channel
 linkedin` and held to the address the person approving read; the person is found by the pin or by `reply contact
-find`, and nobody is made; and Reply's contact is read with `reply contact get` — opted out is a stop, another address
-or profile a refusal, no LinkedIn profile filled with the work item's. Then the one command made for the format, the
-text on stdin: `reply contact send-email` with `{subject, body}`, the body the text written as HTML; `reply contact
+find`; and the contact Reply holds is read with `reply contact get` — opted out is a stop, another address or profile a
+refusal, no LinkedIn profile filled with the work item's. Then the one command made for the format, the text on stdin —
+for a person Reply holds nobody for, given `--contact -`, which imports them, the person and the text one object
+`{"contact": …, "message": …}`: `reply contact send-email` with `{subject, body}`, the body the text written as HTML; `reply contact
 linkedin-message` with `{body}`; `reply contact linkedin-inmail` with `{subject, body}`; `reply contact linkedin-voice`
-with the text as `{script}`. `status: sent` says Reply took the message; on a failure, Reply's own word for an email's
+with the text as `{script}`. Given `--contact -`, the command sends only to a contact it made, and one Reply already
+held it names as `contact.already_held`, sending nothing; the package then reads that contact as above and sends to it
+by its identifier. `status: sent` says Reply took the message; on a failure, Reply's own word for an email's
 state stays in the evidence. A message whose answer was lost is never sent again: the item stops for a person, with the contact
 pinned.
 
@@ -815,7 +856,8 @@ pinned.
   nothing has shown it to be UTC, and a direct email with none, so `invitation.sent_at` and `message.sent_at` are null.
 - **An invitation and a message read before they send.** The sender from `reply account list`, the contact with `reply
   contact get`, and the exact lookup where there is no pin: two or three reads before the send, and one write more when
-  a contact carries no LinkedIn profile. Against a rate limit they count.
+  a contact carries no LinkedIn profile. Where the lookup found nobody and the send's own command names a contact Reply
+  already held, that contact is read and the command run once more. Against a rate limit they count.
 - **An email's text is sent as HTML written from it.** The text a person approves is plain text, and Reply takes an
   email's body as HTML, so every character HTML reads as markup is escaped and every line break is a `<br>`. Spaces and
   tabs stay as written: a run of them collapses to one space in the reader's mail program, though the HTML Reply sends

@@ -1,0 +1,7 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "case": "the same alias given twice",
+  "value": { "senders": [{ "name": "Marta Lind", "gender_forms": "feminine", "aliases": ["Marta", "Marta"] }] },
+  "expect": { "invalid": [{ "pointer": "/senders/0/aliases", "reason": "unique_items" }] }
+}

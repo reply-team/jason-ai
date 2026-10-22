@@ -1,0 +1,37 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "summary": "Who messages are written as: one or more senders, the first of whom writes whenever a campaign names no other.",
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["senders"],
+    "additionalProperties": false,
+    "properties": {
+      "senders": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "required": ["name", "gender_forms"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "addressed_as": { "type": "string", "maxLength": 100 },
+            "gender_forms": { "enum": ["feminine", "masculine", "neutral"] },
+            "title": { "type": "string", "maxLength": 200 },
+            "company": { "type": "string", "maxLength": 200 },
+            "aliases": {
+              "type": "array",
+              "maxItems": 10,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+            },
+            "details": { "type": "string", "maxLength": 2000 }
+          }
+        }
+      }
+    }
+  }
+}

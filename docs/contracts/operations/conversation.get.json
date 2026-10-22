@@ -30,10 +30,10 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "urn:jason:operation:conversation.get:1:input",
     "title": "conversation.get input",
-    "description": "One page of one thread's messages. The thread names itself; the campaign is the work item's, carried for context.",
+    "description": "One page of one thread's messages. The thread names itself: a read on request names no campaign, and a work item's campaign is carried for context only.",
     "type": "object",
     "additionalProperties": false,
-    "required": ["args", "campaign"],
+    "required": ["args"],
     "properties": {
       "args": {
         "type": "object",

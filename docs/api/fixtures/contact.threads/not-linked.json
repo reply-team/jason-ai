@@ -1,0 +1,16 @@
+{
+  "operation": "contact.threads",
+  "case": "not-linked",
+  "request": {
+    "contact_id": "cnt_4",
+    "limit": 100
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "contact_not_linked",
+      "message": "Contact 'cnt_4' is known to no provider.",
+      "retryable": false
+    }
+  }
+}

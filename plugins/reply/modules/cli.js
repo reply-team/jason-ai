@@ -28,6 +28,11 @@ const OUTCOME_UNKNOWN = 3;
 
 const LARGEST_REPLY_NUMBER = 2147483647;
 
+// The CLI's word for a contact Reply holds nothing under, and for a contact a command given a person's fields did not act
+// on because Reply already held it.
+const NOT_FOUND = "contact.not_found";
+const ALREADY_HELD = "contact.already_held";
+
 // How much of a program's stderr is read to find the CLI's verdict. A refusal is one short line; the rest is a
 // bound, not a budget.
 const STDERR_TAIL = 8192;
@@ -114,19 +119,48 @@ function exec(context, args, stdin) {
 
 /**
  * One reply-cli work command: its result object when it exits 0, and `host.fail` with the row the table decides for
- * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned, pins, missing }`: the
+ * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned, pins, missing, lost, gone }`: the
  * canonical operation the command serves, the command's two words, its ids, its flags, the person for stdin, and what
  * this package already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI
  * says it had learned before it failed. `pins: false` keeps what the CLI learned out of the failure, for a command that
  * names something which is not ours yet, or for an operation that pins nothing. `missing` is the CLI's code for an id
  * Reply holds nothing under, where the caller answers that itself: the command then answers null instead of failing.
  * `lost` is the row a lost answer belongs in where the caller knows more than the command's read or write mark says:
- * a write made before a send, which sent nothing, is asked again as a read is.
+ * a write made before a send, which sent nothing, is asked again as a read is. `gone` is the row the CLI's
+ * `contact.not_found` belongs in where the contact the command named is not one this attempt was pinned to — found by
+ * the lookup, or made or matched by the command's own import: Reply named it and then holds nothing under it, which is
+ * no stale pin, so that ending pins no contact at all.
  */
 export function run(context, request) {
+  return ended(call(context, request), request);
+}
+
+/**
+ * `run`, for a command given a person by their fields that acts only on a contact it creates: `{ result }` when it exits
+ * 0, and `{ held }` when it answers that Reply already held a contact under those fields — the contact it names, as this
+ * package works by one, and did not act on. Every other ending is `run`'s, that answer without a contact it names too.
+ */
+export function runOrHeld(context, request) {
+  const answer = call(context, request);
+  const held = heldIn(answer);
+  return held !== null ? { held: held } : { result: ended(answer, request) };
+}
+
+function call(context, request) {
   const stdin = request.stdin === undefined || request.stdin === null ? undefined : JSON.stringify(request.stdin);
-  const answer = exec(context, commandArgs(context, request.command, request.operands || [], request.flags || []), stdin);
-  return ended(answer, request);
+  return exec(context, commandArgs(context, request.command, request.operands || [], request.flags || []), stdin);
+}
+
+// The contact an answer says Reply already held, or null for every other ending: an exit 1 whose verdict is that refusal
+// and names a contact in its identifiers. Nothing was done by such a command, so nothing else in the answer is read.
+function heldIn(answer) {
+  if (answer.timed_out === true || answer.exit_code !== FAILED) {
+    return null;
+  }
+
+  const said = verdict(answer.stderr);
+  const ids = said !== null && said.ids !== null && typeof said.ids === "object" ? said.ids : {};
+  return said !== null && said.code === ALREADY_HELD && isReplyNumber(ids.contact_id) ? String(ids.contact_id) : null;
 }
 
 // The endings that come before anything the program printed can be read. A timeout is read first, because a process
@@ -206,7 +240,20 @@ function ended(answer, request) {
     observed.row = lost;
   }
 
+  if (answer.exit_code === FAILED && said !== null && said.code === NOT_FOUND && typeof request.gone === "string") {
+    // Reply named this contact and then held nothing under it: no pin of this attempt's went stale, and none is made.
+    observed.row = request.gone;
+    fail(operation, observed, withoutContact(request.learned));
+  }
+
   fail(operation, observed, request.pins === false ? request.learned : learnedWith(request.learned, said, operation, observed.row));
+}
+
+// What this package knew, without a contact: the one a refusal says Reply holds nothing under is nobody's to pin.
+function withoutContact(learned) {
+  const kept = Object.assign({}, learned || {});
+  delete kept.contact;
+  return Object.keys(kept).length === 0 ? undefined : kept;
 }
 
 // What a failure carries out: what this package knew, joined by the ids the CLI had learned — the contact it created

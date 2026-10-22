@@ -1,0 +1,7 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "case": "a field of its own: which mailbox sends is the provider's account, not part of who writes",
+  "value": { "senders": [{ "name": "Marta Lind", "gender_forms": "feminine", "email": "marta@example.com" }] },
+  "expect": { "invalid": [{ "pointer": "/senders/0/email", "reason": "additional_properties" }] }
+}

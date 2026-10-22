@@ -1,0 +1,9 @@
+{
+  "operation": "conversation.get",
+  "version": 1,
+  "case": "a thread read on request, outside any work item: the thread names itself and no campaign comes with it",
+  "input": {
+    "args": { "thread": { "external_id": "t_99812" }, "limit": 20, "offset": 0 }
+  },
+  "expect": "valid"
+}

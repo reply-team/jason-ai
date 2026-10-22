@@ -5,14 +5,14 @@ import { renderApp } from './test/render-app';
 import { session } from './api/session';
 
 describe('the shell', () => {
-    it('shows the sidebar with the two screens of this build and who is paired', async () => {
+    it('shows the sidebar with the screens of this build, in order, and who is paired', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/empty')
             .answer('decision.list', 'decision.list/empty');
         renderApp(fake);
         await waitFor(() => expect(screen.getByRole('navigation')).toBeTruthy());
-        expect(screen.getByRole('link', { name: /Attention/ })).toBeTruthy();
-        expect(screen.getByRole('link', { name: 'System' })).toBeTruthy();
+        const links = screen.getAllByRole('link').map((link) => link.textContent?.trim());
+        expect(links).toEqual(['Attention', 'Work items', 'People', 'System']);
         await waitFor(() => expect(screen.getByText(/ada · Jason/)).toBeTruthy());
     });
 

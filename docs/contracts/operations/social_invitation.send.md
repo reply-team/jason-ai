@@ -21,9 +21,20 @@ that may have sent and heard nothing back ends for a person, because guessing wr
 
 ## Finding the person
 
-`preflight.provider_contact` is `find_only`: the person is found by the pin, or else by the consumed profile, and nobody
-is created — a person the provider holds nobody for is `contact_not_found`, and is put on a list or enrolled first. Then
-the contact is read before anything is sent:
+`preflight.provider_contact` is `find_or_create`, as for `campaign.enroll`: a pin, once there is one, is worked by;
+without one the person is looked up first, created only when the provider holds nobody under the consumed profile, and
+the provider's identifier comes back in `external_ids.contact`. An invitation goes to the provider's contact for the
+person, so a person Jason holds is not refused for being new to the provider: the contact is made from the consumed
+profile and the person's own fields, which come with the call for that — a profile is no name, so a provider that
+requires one is given what Jason holds, as every operation that may create the person projects it.
+[`docs/plugins.md`](../../plugins.md) §7, "The contact proxy rule", says how the lookup compares. The policy was
+`find_only` before, when a person the provider held nobody for failed `contact_not_found`; that is a relaxation, so the
+document keeps its version (the contracts [README](../README.md), "Versioning"). Because the composed input now carries
+the person's own fields, an approval parked before this change is parked once more, as `input_changed`, when its work
+item is next claimed. A person created for an invitation the provider then refuses — a sender's spent allowance, say —
+stays created there, and the failure carries their identifier; nothing was sent.
+
+A contact the provider already held is read before anything is sent:
 
 - one the provider holds as opted out fails `suppressed`: the provider does not refuse an invitation to such a person by
   itself, so the read is what keeps a stop the provider holds;
@@ -43,7 +54,7 @@ check for exactly the profile reached.
     "sender": { "external_id": "34", "address": "https://www.linkedin.com/in/ann-owner" },
     "note": "Hi Marta, we met at the Lisbon meetup."
   },
-  "contacts": [ { "id": "cnt_…", "channels": [ { "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
+  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "company": null, "title": null, "time_zone": null, "channels": [ { "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
   "campaign": { "id": "cmp_…", "name": "Q3 LatAm founders", "status": "active", "external_ids": {} },
   "idempotency_key": "wi_…"
 }
@@ -80,7 +91,8 @@ class, never an item.
 Every refusal the document declares says nothing was sent, except `provider_answer_lost`. `message_invalid` is a note the
 provider would read as markup of its own — a placeholder it fills in for each person — so what would go out is not what
 a person approved. `sender_limit_reached` is the account's daily or weekly allowance spent, which one in the details;
-the invitation is proposed again once it renews.
+the invitation is proposed again once it renews. `limit_reached` is the provider's account full: it will hold no further
+contact, and the person had to be created.
 
 ## What a person reads before deciding
 
@@ -110,9 +122,9 @@ show each case.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_only` |
+| pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
-| contact projection | `id`; channels: `consumed` |
+| contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | The person's contact at the provider carries no other LinkedIn profile than the one consumed, and the provider does not hold them as opted out; a contact that carries no profile is given the consumed one before anything is sent. |
 | preview a person reads | `Invite {/contacts/0/channels/0/value} to connect on LinkedIn, from the provider's account {/args/sender/external_id} ({/args/sender/address}), with the note: {/args/note}`; highlighted: `/contacts/0/channels/0/value`, `/args/sender`, `/args/note` |
 | pinned identifiers | `contact` names a contact |

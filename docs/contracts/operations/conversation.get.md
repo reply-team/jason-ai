@@ -27,8 +27,9 @@ by the identifier `conversation.list` returned for it.
 }
 ```
 
-The thread names itself, so nothing else has to: the campaign is the work item's own, carried for context. `limit` is
-at most 20 — see "Pages" for why the page is short.
+The thread names itself, so nothing else has to: the campaign is the work item's own, carried for context, and a read
+Jason makes on a person's request, outside any work item, sends none. `limit` is at most 20 — see "Pages" for why the
+page is short.
 
 ## What to return
 

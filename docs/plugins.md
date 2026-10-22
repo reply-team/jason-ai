@@ -626,7 +626,9 @@ The runtime composes it from the work item; a plugin never sees a work item's co
   The rest of a person's reachability is not yours to see, and widening that is a change to the
   document. An operation whose contact is `optional` runs with a person or without one, so look for
   `contacts` before reading it.
-- **`campaign`** is Jason's own record of the campaign the work item belongs to.
+- **`campaign`** is Jason's own record of the campaign the work item belongs to. A read a person asks
+  for — a person's threads, one thread's messages — runs outside any work item and carries no
+  `campaign`, so an operation whose document lets the campaign go unnamed must not expect one.
 - **`idempotency_key`** is the *work item's* own identifier, present when the operation requires one.
   It is stable across every attempt, which is what makes "what did the prior run under this key do"
   a question a provider's ledger can answer.
@@ -641,8 +643,8 @@ in one of four words, and the rule below is the same for every one of them.
 
 | `preflight.provider_contact` | What you do for a person carrying no pin of yours | Published today |
 |---|---|---|
-| `find_or_create` | Look the person up by the value of the channel `args.channel` names, and create the contact from that value only when the provider holds nobody under it. | `campaign.enroll`, `list_membership.add`, `optout.record` |
-| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`, `contact.update`, `social_invitation.send`, `message.send`; `conversation.reply`, through its thread |
+| `find_or_create` | Look the person up by the value of the channel `args.channel` names, and create the contact from that value and the person's own fields only when the provider holds nobody under it. | `campaign.enroll`, `list_membership.add`, `optout.record`, `contact.update`, `social_invitation.send`, `message.send` |
+| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`; `conversation.reply`, through its thread |
 | `pinned_only` | Work by the pin alone: a person with none fails `contact_not_linked` before anything is called. | `conversation.list`, `contact.delete` |
 | `not_used` | The operation names nobody, so there is nobody to find. | every other operation |
 

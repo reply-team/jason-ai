@@ -1,0 +1,23 @@
+{
+  "operation": "project.create",
+  "case": "invalid-slug",
+  "request": {
+    "name": "Acme",
+    "slug": "Acme Corp"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: slug: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "slug",
+          "code": "invalid",
+          "message": "slug is lower-case ASCII letters and digits, in runs joined by single hyphens."
+        }
+      ]
+    }
+  }
+}

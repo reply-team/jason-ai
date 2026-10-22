@@ -24,8 +24,7 @@ Jason never sends you there for the work itself.
 ## What you need
 
 - **The `jason` executable**, installed from a release as [`docs/INSTALL.md`](INSTALL.md) §2 describes, and on
-  your `PATH`. Everything below then reads as written. *(The tests put nothing on a `PATH`: they run the same
-  program as `dotnet jason.dll`, built from the runtime's source.)*
+  your `PATH`. Everything below then reads as written.
 - **The Reply CLI**, installed and signed in, if you are following this against a real account. It owns the
   credential; Jason never sees one. *(The tests run against a stand-in that answers like it, so nothing in CI
   touches a real account.)*

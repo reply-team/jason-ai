@@ -1,0 +1,9 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "no person and no campaign at all: nothing says whose threads to list",
+  "input": {
+    "args": { "limit": 20, "offset": 0, "source": "all" }
+  },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}
