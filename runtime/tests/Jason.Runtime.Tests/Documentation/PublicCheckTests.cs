@@ -32,6 +32,10 @@ public sealed class PublicCheckTests
         { "Built from jason-" + "internal.", "the private repository by name" },
     };
 
+    // Critical: the public check refuses a pointer.
+    public static TheoryData<string, string> CriticalPointers() =>
+        CriticalRows.Mark(Pointers(), Family.B4, data => data is [_, "a tracker key"]);
+
     [Fact]
     public void The_check_runs_on_every_pull_request_by_its_two_names_and_reads_nothing_it_may_not()
     {
@@ -87,7 +91,7 @@ public sealed class PublicCheckTests
     }
 
     [Theory]
-    [MemberData(nameof(Pointers))]
+    [MemberData(nameof(CriticalPointers))]
     public void A_pointer_in_an_added_line_is_refused_and_named_by_its_file_and_line(string pointer, string kind)
     {
         using var repository = new Repository();
@@ -163,6 +167,7 @@ public sealed class PublicCheckTests
     /// own pull request never meets a refusal of the step's own making.
     /// </summary>
     [Fact]
+    [Critical(Family.B4, "no tracker key or trailer in the published tree")]
     public void The_hygiene_step_passes_every_line_a_release_publishes_from_this_tree()
     {
         using var repository = new Repository();

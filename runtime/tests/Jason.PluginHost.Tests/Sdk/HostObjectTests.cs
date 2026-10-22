@@ -1,5 +1,6 @@
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 
 namespace Jason.PluginHost.Tests.Sdk;
@@ -13,6 +14,7 @@ public sealed class HostObjectTests : IDisposable
     private SdkHarness Harness(Action<InvocationBuilder>? configure = null) => new(_package.Root, configure);
 
     [Fact]
+    [Critical(Family.R4, "the SDK surface is closed")]
     public void The_host_object_is_exactly_six_functions()
     {
         using var harness = Harness();

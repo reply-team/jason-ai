@@ -132,6 +132,7 @@ public class ProviderOutcomeRecorderTests
     /// the provider calls anybody. A later attempt that measures its answer pins as any answer does.
     /// </summary>
     [Fact]
+    [Critical(Family.X1, "a timed-out validation pins nothing")]
     public async Task An_answer_whose_validation_timed_out_pins_nothing_and_stays_on_the_trace()
     {
         using var database = new TestDatabase();
@@ -203,6 +204,7 @@ public class ProviderOutcomeRecorderTests
     /// this version deliberately does not have.
     /// </summary>
     [Fact]
+    [Critical(Family.W10, "divergence beside the pin")]
     public async Task A_disagreement_about_an_identifier_does_not_cost_the_attempt_its_success()
     {
         using var database = new TestDatabase();
@@ -285,6 +287,7 @@ public class ProviderOutcomeRecorderTests
     /// instead of being handed out again, which is the whole reason a contract states the rule.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "never repeated after ambiguous")]
     public async Task An_ambiguous_failure_of_an_operation_that_may_never_be_repeated_waits_for_a_person()
     {
         using var database = new TestDatabase();
@@ -303,6 +306,7 @@ public class ProviderOutcomeRecorderTests
     /// and the identifier the plugin managed to return is the only trace of what was done.
     /// </summary>
     [Fact]
+    [Critical(Family.W10, "pins on failure")]
     public async Task An_identifier_returned_with_a_failure_is_pinned_because_that_is_where_it_matters_most()
     {
         using var database = new TestDatabase();
@@ -439,6 +443,7 @@ public class ProviderOutcomeRecorderTests
     }
 
     [Fact]
+    [Critical(Family.W5, "a timed-out send ends")]
     public async Task A_timeout_of_an_operation_that_may_never_be_repeated_ends_the_item()
     {
         using var database = new TestDatabase();

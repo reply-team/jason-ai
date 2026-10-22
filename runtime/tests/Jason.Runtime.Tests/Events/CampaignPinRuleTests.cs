@@ -17,7 +17,8 @@ public class CampaignPinRuleTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
-    [InlineData(1, 0, 0)]
+    // Critical: one function for skip and attribution.
+    [InlineData(1, 0, 0, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.N2)])]
     [InlineData(2, 0, 0)]
     [InlineData(1, 1, 0)]
     [InlineData(1, 0, 1)]

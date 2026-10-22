@@ -5,6 +5,7 @@ using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -20,6 +21,7 @@ public class UninstallReceiptTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.I3, "receipt removal is exact")]
     public async Task Exactly_the_recorded_paths_go_and_the_neighbours_stay()
     {
         using var dir = new TempPaths();
@@ -108,6 +110,7 @@ public class UninstallReceiptTests
     /// neither that file nor the directories above it. The root is reported as one nothing may guess at.
     /// </summary>
     [Fact]
+    [Critical(Family.X2, "a receipt cannot reach outside")]
     public async Task A_record_naming_a_file_outside_its_root_removes_nothing()
     {
         using var dir = new TempPaths();
@@ -148,6 +151,7 @@ public class UninstallReceiptTests
     /// Removing it would be the data-loss bug the installer refuses to be, with no undo.
     /// </summary>
     [Fact]
+    [Critical(Family.I3, "an edited file stays")]
     public async Task A_file_whose_bytes_are_not_the_bytes_the_record_names_is_reported_and_kept()
     {
         using var dir = new TempPaths();

@@ -136,6 +136,10 @@ public class CiRunsTests
 
     public static TheoryData<string> KindsOfRun() => [.. Kinds.Keys];
 
+    // Critical: the pipeline reports what the ruleset waits for.
+    public static TheoryData<string> CriticalKindsOfRun() =>
+        CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["a draft's push"]);
+
     /// <summary>
     /// A pull request runs CI when it is opened, pushed to, reopened, and when it is marked ready for review; <c>main</c> and
     /// every release branch run it on every push, and somebody may start it by hand. Nothing runs it on a schedule.
@@ -277,7 +281,7 @@ public class CiRunsTests
     /// reports twice.
     /// </summary>
     [Theory]
-    [MemberData(nameof(KindsOfRun))]
+    [MemberData(nameof(CriticalKindsOfRun))]
     public void Each_kind_of_run_runs_its_set_and_reports_every_check_a_merge_waits_for(string kind)
     {
         var (run, set) = Kinds[kind];

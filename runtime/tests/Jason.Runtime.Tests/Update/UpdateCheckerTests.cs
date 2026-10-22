@@ -209,6 +209,7 @@ public class UpdateCheckerTests
     /// same rule.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "a feed's address stays out of the log")]
     public async Task A_configured_feed_that_fails_is_named_as_configured_and_never_by_its_address()
     {
         var clock = new FixedClock(Noon);

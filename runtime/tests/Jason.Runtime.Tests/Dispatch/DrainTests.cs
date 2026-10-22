@@ -87,6 +87,7 @@ public class DrainTests
 
     /// <summary>A drain stops the claim, and a resume starts it again. Neither is a state anything else can see.</summary>
     [Fact]
+    [Critical(Family.I2, "the drain update apply relies on")]
     public async Task A_drain_stops_the_claim_and_a_resume_starts_it_again()
     {
         var clock = new FixedClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero));

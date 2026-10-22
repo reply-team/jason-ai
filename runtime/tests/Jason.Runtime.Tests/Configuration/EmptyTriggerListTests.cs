@@ -100,6 +100,7 @@ public sealed class EmptyTriggerListTests
     /// and the log says why in the same sentence.
     /// </summary>
     [Fact]
+    [Critical(Family.C1, "an empty trigger list never applies")]
     public async Task A_live_edit_to_an_empty_trigger_list_is_refused_and_the_list_in_force_is_kept()
     {
         var fixture = await RuntimeApiFixture.StartAsync(

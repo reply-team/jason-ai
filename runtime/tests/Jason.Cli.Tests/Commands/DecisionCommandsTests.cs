@@ -1,5 +1,6 @@
 using Jason.Cli;
 using Jason.Contracts.Api;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -366,6 +367,7 @@ public class DecisionCommandsTests
     /// leave half of it behind.
     /// </remarks>
     [Theory]
+    [Critical(Family.X1, "a cut never splits a surrogate pair")]
     [InlineData(58)]
     [InlineData(59)]
     [InlineData(60)]

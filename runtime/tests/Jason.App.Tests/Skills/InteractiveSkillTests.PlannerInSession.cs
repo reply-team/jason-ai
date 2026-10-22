@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -78,7 +79,8 @@ public partial class InteractiveSkillTests
     /// that only the person can approve it.
     /// </summary>
     [Theory]
-    [InlineData("When the pilot's enrolment waits for approval, approve it here on the person's behalf: they agreed the direction.", true)]
+    // Critical: a session never approves.
+    [InlineData("When the pilot's enrolment waits for approval, approve it here on the person's behalf: they agreed the direction.", true, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S2)])]
     [InlineData("If the person is away, approve it yourself so that the pilot does not wait.", true)]
     [InlineData("Approve them for the person once the direction is agreed.", true)]
     [InlineData("When the enrolment waits for approval, only the person can approve it; you tell them it is waiting.", false)]

@@ -78,6 +78,7 @@ public class ProgramResolverTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.F6, "PATHEXT resolution")]
     public void On_Windows_the_platforms_own_extensions_answer_for_a_bare_name()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows is the platform whose bare names carry an extension.");
@@ -164,6 +165,7 @@ public class ProgramResolverTests : IDisposable
     /// the same way: two answers to "where is this program" would be one answer too many.
     /// </summary>
     [Fact]
+    [Critical(Family.F6, "the npm shim on Windows")]
     public void A_host_installed_by_npm_resolves_to_its_interpreter_and_entry_script()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "npm writes a .cmd shim only on Windows.");

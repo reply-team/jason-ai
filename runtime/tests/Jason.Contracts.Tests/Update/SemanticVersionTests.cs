@@ -1,5 +1,6 @@
 using Jason.Contracts;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Update;
 
@@ -11,12 +12,14 @@ namespace Jason.Contracts.Tests.Update;
 public class SemanticVersionTests
 {
     [Theory]
-    [InlineData("0.1.0-dev", "0.1.0")]
+    // Critical: dev before release; rc.2 before rc.10.
+    [InlineData("0.1.0-dev", "0.1.0", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I2)])]
     [InlineData("0.1.0", "0.1.1")]
     [InlineData("0.1.9", "0.2.0")]
     [InlineData("0.9.0", "1.0.0-rc.1")]
     [InlineData("1.0.0-rc.1", "1.0.0-rc.2")]
-    [InlineData("1.0.0-rc.2", "1.0.0-rc.10")]
+    // Critical: dev before release; rc.2 before rc.10.
+    [InlineData("1.0.0-rc.2", "1.0.0-rc.10", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I2)])]
     [InlineData("1.0.0-alpha", "1.0.0-alpha.1")]
     [InlineData("1.0.0-rc.2", "1.0.0")]
     public void Older_comes_before_newer(string older, string newer)

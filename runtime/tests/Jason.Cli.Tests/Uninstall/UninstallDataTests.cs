@@ -6,6 +6,7 @@ using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -23,6 +24,7 @@ public class UninstallDataTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.I3, "the data directory is kept")]
     public async Task Without_the_flag_everything_but_the_role_skills_is_byte_identical_afterwards()
     {
         using var dir = new TempPaths();
@@ -66,6 +68,7 @@ public class UninstallDataTests
     /// with the whole installation still in place, not with everything but the data already gone.
     /// </summary>
     [Fact]
+    [Critical(Family.I3, "--purge-data needs --yes")]
     public async Task The_machine_shape_refuses_purge_without_yes_and_removes_nothing_at_all()
     {
         using var dir = new TempPaths();

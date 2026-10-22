@@ -16,6 +16,7 @@ public sealed class DescriptorReaderDenialTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.S5, "another account's runtime is not ours")]
     public void A_descriptor_this_account_may_not_read_is_no_runtime()
     {
         Assert.SkipWhen(!OperatingSystem.IsWindows() && Environment.IsPrivilegedProcess, "The superuser reads any file, so nothing here can be denied.");

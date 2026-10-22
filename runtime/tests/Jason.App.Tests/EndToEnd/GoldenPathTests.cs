@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 using Microsoft.Data.Sqlite;
 
 namespace Jason.App.Tests.EndToEnd;
@@ -411,6 +412,7 @@ public class GoldenPathTests
     /// against a real account is a person's own.
     /// </remarks>
     [Fact]
+    [Critical(Family.E2, "golden path: the real executable, the CLI, the plugin host and the Reply stand-in, one patient start")]
     public async Task The_wiring_check_makes_the_provider_s_campaign_reads_it_and_enrols_only_you()
     {
         var page = WiringCheckCommands();

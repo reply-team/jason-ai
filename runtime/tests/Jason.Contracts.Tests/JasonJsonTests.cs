@@ -2,6 +2,7 @@ using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests;
 
@@ -12,6 +13,7 @@ public class JasonJsonTests
     private sealed record Envelope(Sample Kind, DateTimeOffset At, string? Missing);
 
     [Fact]
+    [Critical(Family.R2, "the JSON dialect in one assertion")]
     public void Properties_are_snake_case_and_enums_are_snake_case_strings()
     {
         var json = JsonSerializer.Serialize(new Envelope(Sample.AwaitingApproval, DateTimeOffset.UnixEpoch, null), JasonJson.Options);
@@ -19,6 +21,7 @@ public class JasonJsonTests
     }
 
     [Fact]
+    [Critical(Family.R2, "ISO-8601 UTC timestamps")]
     public void Timestamps_are_written_in_utc_with_z_and_read_back()
     {
         var local = new DateTimeOffset(2026, 9, 14, 12, 30, 0, TimeSpan.FromHours(3));
@@ -56,6 +59,7 @@ public class JasonJsonTests
     }
 
     [Fact]
+    [Critical(Family.R2, "{\"error\":{code,message,retryable}}")]
     public void Error_envelope_has_the_agreed_shape()
     {
         var json = JsonSerializer.Serialize(new ErrorResponse(new ErrorBody("not_found", "Unknown operation.", false)), JasonJson.Options);

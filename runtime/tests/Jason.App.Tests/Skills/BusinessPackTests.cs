@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 /// <summary>
@@ -83,6 +85,7 @@ public class BusinessPackTests
     /// promote, reword, record the digest, then read.
     /// </summary>
     [Fact]
+    [Critical(Family.D2, "no claimed reading")]
     public void No_business_skill_claims_a_host_has_read_it()
     {
         foreach (var skill in SkillPack.Business())

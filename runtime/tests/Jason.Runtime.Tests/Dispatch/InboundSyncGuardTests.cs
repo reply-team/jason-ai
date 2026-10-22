@@ -45,6 +45,7 @@ public class InboundSyncGuardTests
 
     /// <summary>The same while a read was accounted for: the second campaign's lines are not written, and its read stays.</summary>
     [Fact]
+    [Critical(Family.N1, "guarded accounting under a race")]
     public async Task A_campaign_moved_by_another_writer_while_its_read_was_accounted_for_says_nothing()
     {
         using var harness = new DispatchHarness(Noon);

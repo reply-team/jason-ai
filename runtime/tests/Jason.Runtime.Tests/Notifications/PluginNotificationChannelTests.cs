@@ -115,6 +115,7 @@ public sealed class PluginNotificationChannelTests
 
     /// <summary>A binding names an account and never a credential: a credential's place is the plugin's environment.</summary>
     [Fact]
+    [Critical(Family.S3, "a binding never names a credential")]
     public async Task A_binding_that_names_a_credential_is_invalid()
     {
         await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: {} }; }"));
@@ -150,6 +151,7 @@ public sealed class PluginNotificationChannelTests
     /// is the runtime's own failure, final, and no plugin is asked to deliver it.
     /// </summary>
     [Fact]
+    [Critical(Family.R3, "notification.send is enforced")]
     public async Task An_input_outside_the_contract_is_refused_before_anything_starts()
     {
         await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'x' } }; }"));

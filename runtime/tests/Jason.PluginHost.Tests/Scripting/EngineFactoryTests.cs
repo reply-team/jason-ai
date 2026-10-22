@@ -1,6 +1,7 @@
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Scripting;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 using Jint.Runtime;
 using Jint.Runtime.Modules;
@@ -42,6 +43,7 @@ public sealed class EngineFactoryTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R4, "the statement bound")]
     public void A_runaway_loop_runs_out_of_statements()
     {
         var engine = Create(limits => limits with { MaxStatements = 1000 });
@@ -109,6 +111,7 @@ public sealed class EngineFactoryTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R4, "the engine's memory bound")]
     public void Memory_is_bounded()
     {
         var engine = Create(limits => limits with { MemoryBytes = 2 * 1024 * 1024, MaxStatements = 1_000_000_000, TimeoutMs = 60_000 });

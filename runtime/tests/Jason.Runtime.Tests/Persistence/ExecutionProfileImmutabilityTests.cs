@@ -18,6 +18,7 @@ namespace Jason.Runtime.Tests.Persistence;
 public class ExecutionProfileImmutabilityTests
 {
     [Fact]
+    [Critical(Family.P1, "profile revisions are immutable")]
     public void Raw_update_and_delete_of_a_revision_are_refused_by_the_triggers()
     {
         using var database = new TestDatabase();

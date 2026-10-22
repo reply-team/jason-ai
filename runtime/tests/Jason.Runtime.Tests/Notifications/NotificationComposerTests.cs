@@ -54,6 +54,7 @@ public sealed class NotificationComposerTests
     /// length, 399 of the 400, so that a wording that spends the one character left is seen being spent.
     /// </summary>
     [Theory]
+    [Critical(Family.N3, "the message fits the contract")]
     [InlineData(9_999)]
     [InlineData(10_000)]
     [InlineData(int.MaxValue)]

@@ -28,6 +28,7 @@ public class FailureClassifierTests
         Assert.False(FailureClassifier.IsRetriable(code));
 
     [Fact]
+    [Critical(Family.W4, "retriable codes")]
     public void The_set_is_the_one_the_wave_decided_and_matching_is_exact()
     {
         Assert.Equal(7, FailureClassifier.RetriableCodes.Count);

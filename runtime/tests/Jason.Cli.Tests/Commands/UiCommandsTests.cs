@@ -1,6 +1,7 @@
 using Jason.Cli;
 using Jason.Cli.Process;
 using Jason.Contracts.Api;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -57,6 +58,7 @@ public class UiCommandsTests
     }
 
     [Fact]
+    [Critical(Family.R2, "exit 3 for the UI verb")]
     public async Task Open_without_a_runtime_exits_3()
     {
         using var cli = new CliRun(descriptor: false);

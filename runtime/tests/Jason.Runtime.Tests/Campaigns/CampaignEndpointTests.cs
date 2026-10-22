@@ -84,6 +84,7 @@ public class CampaignEndpointTests
     }
 
     [Fact]
+    [Critical(Family.W9, "campaign lifecycle over HTTP")]
     public async Task The_lifecycle_runs_end_to_end_over_http()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

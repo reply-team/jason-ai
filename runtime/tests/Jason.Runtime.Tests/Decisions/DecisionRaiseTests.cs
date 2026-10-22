@@ -23,6 +23,7 @@ public class DecisionRaiseTests
     /// lease was lost is told to stop rather than allowed to put a question in somebody's queue.
     /// </summary>
     [Fact]
+    [Critical(Family.W2, "the fence on raise")]
     public async Task An_attempt_that_is_not_the_live_one_cannot_raise()
     {
         using var database = new TestDatabase();
@@ -85,6 +86,7 @@ public class DecisionRaiseTests
     /// runtime ever looked.
     /// </summary>
     [Fact]
+    [Critical(Family.X2, "no reference across campaigns")]
     public async Task A_reference_that_is_not_this_campaigns_own_is_refused()
     {
         using var database = new TestDatabase();

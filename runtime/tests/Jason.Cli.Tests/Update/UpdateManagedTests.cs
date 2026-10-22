@@ -2,6 +2,7 @@ using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Installation;
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -23,6 +24,7 @@ public sealed class UpdateManagedTests : IDisposable
     public void Dispose() => _layouts.Dispose();
 
     [Theory]
+    [Critical(Family.I2, "a package manager owns its install")]
     [InlineData("Homebrew")]
     [InlineData("winget")]
     public async Task Apply_refuses_a_managed_installation_before_anything_is_staged_drained_or_stopped(string manager)

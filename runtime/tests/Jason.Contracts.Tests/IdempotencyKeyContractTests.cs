@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests;
 
@@ -13,6 +14,7 @@ namespace Jason.Contracts.Tests;
 public class IdempotencyKeyContractTests
 {
     [Fact]
+    [Critical(Family.W8, "the caller's key, never derived")]
     public void A_create_request_without_a_key_binds_none_and_one_with_a_key_binds_it()
     {
         var plain = JsonSerializer.Deserialize<CampaignCreateRequest>("""{"name":"Q3"}""", JasonJson.Options)!;

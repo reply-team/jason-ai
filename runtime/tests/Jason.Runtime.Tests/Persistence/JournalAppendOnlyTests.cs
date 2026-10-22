@@ -8,6 +8,7 @@ namespace Jason.Runtime.Tests.Persistence;
 public class JournalAppendOnlyTests
 {
     [Fact]
+    [Critical(Family.P1, "the journal's triggers")]
     public void Raw_update_and_delete_are_refused_by_the_triggers()
     {
         using var database = new TestDatabase();
@@ -30,6 +31,7 @@ public class JournalAppendOnlyTests
     }
 
     [Fact]
+    [Critical(Family.P1, "the EF interceptor")]
     public void Ef_core_refuses_to_modify_or_remove_journal_rows_before_reaching_the_database()
     {
         using var database = new TestDatabase();

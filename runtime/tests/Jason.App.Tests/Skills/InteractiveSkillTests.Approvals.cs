@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
@@ -52,6 +54,7 @@ public partial class InteractiveSkillTests
         Assert.Contains(words, SkillFrontMatter.Read(SkillPack.Find(name).File).Top["description"], StringComparison.Ordinal);
 
     [Fact]
+    [Critical(Family.S2, "the approvals skill never decides")]
     public void The_approvals_skill_never_decides_and_never_invents_the_person()
     {
         var skill = Flattened("approvals-and-questions");

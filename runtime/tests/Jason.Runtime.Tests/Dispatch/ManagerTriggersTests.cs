@@ -29,6 +29,7 @@ public class ManagerTriggersTests
     /// would be asked about on every scan.
     /// </summary>
     [Fact]
+    [Critical(Family.M1, "the manager loop cannot feed itself")]
     public void A_check_in_of_our_own_making_never_summons_another()
     {
         var entries = new[]
@@ -139,6 +140,7 @@ public class ManagerTriggersTests
     }
 
     [Fact]
+    [Critical(Family.M1, "the chronicle watermark")]
     public void The_watermark_never_moves_backwards()
     {
         var entries = new[] { Entry(5, JournalKinds.WorkItemFailed), Entry(6, JournalKinds.WorkItemFailed) };
@@ -193,6 +195,7 @@ public class ManagerTriggersTests
     /// that the dispatcher reads no meaning used to be a discipline and is now a shape.
     /// </summary>
     [Fact]
+    [Critical(Family.B8, "the dispatcher reads no meaning, by shape")]
     public void A_line_the_summon_reads_cannot_carry_meaning()
     {
         var carried = typeof(ChronicleLine)

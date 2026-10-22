@@ -22,6 +22,7 @@ public class EventLineTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.N2, "the reserved line")]
     public async Task A_move_by_the_other_side_or_by_nobody_known_says_inbound_reply_observed_under_inbound_sync_s_key()
     {
         using var store = new EventStoreFixture();
@@ -119,6 +120,7 @@ public class EventLineTests
 
     /// <summary>A move the inbound read already said in the campaign is the same move, said once whichever read found it first.</summary>
     [Fact]
+    [Critical(Family.N2, "events and inbound share a key")]
     public async Task A_move_the_inbound_read_already_said_is_not_said_again()
     {
         using var store = new EventStoreFixture();

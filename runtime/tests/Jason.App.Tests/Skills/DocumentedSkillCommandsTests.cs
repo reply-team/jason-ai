@@ -25,6 +25,7 @@ public class DocumentedSkillCommandsTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.D1, "a skill's printed command parses")]
     public async Task Every_command_the_pack_prints_is_a_command_this_program_understands()
     {
         var skills = SkillPack.All();

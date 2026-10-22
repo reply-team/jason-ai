@@ -14,6 +14,7 @@ public class UpdateRollbackTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.I2, "rollback")]
     public async Task A_rollback_puts_the_previous_executable_back_and_starts_it()
     {
         using var installation = await UpdatedAsync();
@@ -98,6 +99,7 @@ public class UpdateRollbackTests
 
     /// <summary>An update that migrated is undone whole: the backup comes back and its write-ahead log goes.</summary>
     [Fact]
+    [Critical(Family.P2, "the pre-migration backup is the way back")]
     public async Task An_update_that_migrated_restores_the_backup_and_deletes_the_sidecars()
     {
         using var installation = await UpdatedAsync(migrates: true);
@@ -123,6 +125,7 @@ public class UpdateRollbackTests
     /// somebody did. The binary still goes back, and the message says what was left and how to finish the job.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, "a restore never loses new work")]
     public async Task A_database_written_since_the_migration_refuses_the_restore_and_says_so()
     {
         using var installation = await UpdatedAsync(migrates: true);

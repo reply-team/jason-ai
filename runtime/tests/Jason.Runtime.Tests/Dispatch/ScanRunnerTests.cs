@@ -13,6 +13,7 @@ public class ScanRunnerTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W6, "the scan order")]
     public async Task One_scan_expires_then_enforces_then_claims()
     {
         var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -129,6 +130,7 @@ public class ScanRunnerTests
     }
 
     [Fact]
+    [Critical(Family.W6, "concurrent scans")]
     public async Task Two_scans_at_once_over_a_full_backlog_never_claim_more_than_the_pool_holds()
     {
         var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);

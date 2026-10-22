@@ -99,6 +99,7 @@ public class OperationEndpointsTests
     }
 
     [Fact]
+    [Critical(Family.R2, "200 with a bare DTO")]
     public async Task A_successful_response_is_the_bare_dto_in_the_api_dialect()
     {
         await using var api = await ProbeApi.StartAsync(request => new ProbeResponse(request.Name!, request.Count!.Value), Ct);
@@ -121,6 +122,7 @@ public class OperationEndpointsTests
     }
 
     [Fact]
+    [Critical(Family.R2, "snake_case codes and statuses")]
     public async Task Domain_exceptions_become_their_own_status_and_code()
     {
         await using var notFound = await ProbeApi.StartAsync(_ => throw new NotFoundException("campaign_not_found", "No campaign with id 'cmp_X'."), Ct);
@@ -159,6 +161,7 @@ public class OperationEndpointsTests
     }
 
     [Fact]
+    [Critical(Family.R2, "the 500 envelope")]
     public async Task An_unexpected_failure_is_a_retryable_internal_error_that_says_nothing_about_the_request()
     {
         await using var api = await ProbeApi.StartAsync(_ => throw new InvalidOperationException("a distinctive secret value"), Ct);
@@ -263,6 +266,7 @@ public class OperationEndpointsTests
     /// caller who wrote the body — and it is not the runtime's failure, so it writes nothing to the log.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "a request body never reaches the log")]
     public async Task A_body_the_door_cannot_read_is_answered_and_leaves_nothing_in_the_log()
     {
         var logs = new RecordingLogs();

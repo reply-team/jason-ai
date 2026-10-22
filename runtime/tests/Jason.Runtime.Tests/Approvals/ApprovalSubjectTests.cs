@@ -24,6 +24,7 @@ public class ApprovalSubjectTests
     private static readonly WorkItem Parked = WorkItemFactory.NewProviderOp(Outreach, "campaign.enroll");
 
     [Fact]
+    [Critical(Family.S2, "the subject hash that releases work")]
     public void The_same_subject_written_two_ways_has_one_hash_and_a_changed_argument_has_another()
     {
         var subject = Subject(Input("alex@example.test"));

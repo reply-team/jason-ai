@@ -45,6 +45,7 @@ public class ProviderSpineTests
     /// contract names before answering from them. One crash, one effect.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "recovery read before a repeat")]
     public async Task A_lost_answer_costs_a_recovery_read_rather_than_a_second_effect()
     {
         using var workspace = new TestWorkspace();
@@ -178,6 +179,7 @@ public class ProviderSpineTests
     /// <c>permanent</c>, so the item ends rather than retrying into the same refusal.
     /// </summary>
     [Fact]
+    [Critical(Family.S1, "a provider-side stop ends the work")]
     public async Task A_suppression_only_the_provider_knows_about_ends_the_item_rather_than_retrying_into_it()
     {
         using var workspace = new TestWorkspace();

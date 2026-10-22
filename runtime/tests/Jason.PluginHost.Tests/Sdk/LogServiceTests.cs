@@ -1,5 +1,6 @@
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 
 namespace Jason.PluginHost.Tests.Sdk;
@@ -58,6 +59,7 @@ public sealed class LogServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.S3, "a granted secret never reaches the log")]
     public void The_value_of_a_granted_variable_never_reaches_the_log()
     {
         Environment.SetEnvironmentVariable(_name, "super-secret-token-value");

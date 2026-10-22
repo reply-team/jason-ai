@@ -6,6 +6,7 @@ using Jason.Cli.Uninstall;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -73,6 +74,7 @@ public class UninstallExecutableTests
     public void This_suite_is_not_running_as_a_single_file() => Assert.False(SelfExecutable.IsSingleFile);
 
     [Fact]
+    [Critical(Family.I3, "the executable goes")]
     public async Task The_executable_and_its_directory_go()
     {
         using var dir = new TempPaths();
@@ -112,6 +114,7 @@ public class UninstallExecutableTests
     /// remaining copy went.
     /// </summary>
     [Fact]
+    [Critical(Family.I3, "the running image on Windows")]
     public async Task A_running_image_is_moved_aside_and_the_report_names_where_it_went()
     {
         using var dir = new TempPaths();

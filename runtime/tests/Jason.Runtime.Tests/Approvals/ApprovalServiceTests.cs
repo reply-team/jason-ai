@@ -45,6 +45,7 @@ public class ApprovalServiceTests
     /// semantic judgment never becomes.
     /// </summary>
     [Theory]
+    [Critical(Family.S2, "only a person approves")]
     [InlineData(ActorType.Role, "planner")]
     [InlineData(ActorType.Attempt, "att_01K52JR0000000000000000001")]
     public async Task A_role_that_tries_to_approve_is_refused_the_way_a_system_actor_is(ActorType type, string id)
@@ -91,6 +92,7 @@ public class ApprovalServiceTests
     /// same place in the queue it had before a person was asked.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "approve requeues unchanged")]
     public async Task An_approved_item_goes_back_into_the_queue_with_its_due_date_and_priority_untouched()
     {
         using var database = new TestDatabase();
@@ -170,6 +172,7 @@ public class ApprovalServiceTests
     /// at all rather than half of it, and says so.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "two deciders, one decision")]
     public async Task A_second_decision_that_read_the_same_row_first_loses_cleanly()
     {
         using var database = new TestDatabase();
@@ -212,6 +215,7 @@ public class ApprovalServiceTests
     /// rows that have moved since — and the whole point of a preview is that it is about the thing being decided.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "the preview is what runs")]
     public async Task The_preview_a_person_reads_is_the_one_the_claim_wrote()
     {
         using var database = new TestDatabase();

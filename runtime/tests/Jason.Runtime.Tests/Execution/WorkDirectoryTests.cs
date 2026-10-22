@@ -23,6 +23,7 @@ public class WorkDirectoryTests : IDisposable
     private string SkillsRoot => Path.Combine(_root, "skills", "roles");
 
     [Fact]
+    [Critical(Family.S6, "the work directory denies")]
     public void The_work_directory_carries_the_deny_rules_and_never_an_allow_list()
     {
         var report = WorkDirectory.Prepare(WorkDir, ["Bash(rm *)", "WebFetch"], role: null, SkillsRoot, 1024);
@@ -136,6 +137,7 @@ public class WorkDirectoryTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.X2, "no link is followed into a work directory")]
     public void A_link_in_a_skill_directory_is_neither_copied_nor_followed()
     {
         Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nthe job\n");

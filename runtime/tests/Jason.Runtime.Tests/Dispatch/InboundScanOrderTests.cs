@@ -19,6 +19,7 @@ public class InboundScanOrderTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.M1, "a reply wakes the manager")]
     public async Task A_reply_said_by_a_scan_wakes_the_manager_in_that_scan()
     {
         using var harness = new DispatchHarness(Noon);

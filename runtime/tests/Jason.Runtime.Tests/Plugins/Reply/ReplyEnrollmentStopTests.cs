@@ -234,6 +234,7 @@ public class ReplyEnrollmentStopTests
     /// does not stand in the way.
     /// </summary>
     [Fact]
+    [Critical(Family.S1, "a stop always runs")]
     public async Task A_person_reply_holds_as_opted_out_is_taken_out_all_the_same()
     {
         using var account = Planted();

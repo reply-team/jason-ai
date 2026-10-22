@@ -13,6 +13,7 @@ public class ExpirerTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W1, "expiry")]
     public async Task An_item_nobody_claimed_in_time_expires()
     {
         using var database = new TestDatabase();
@@ -56,6 +57,7 @@ public class ExpirerTests
     }
 
     [Fact]
+    [Critical(Family.W1, "running work is not expired")]
     public async Task Work_that_is_already_running_runs_past_its_due_date()
     {
         using var database = new TestDatabase();

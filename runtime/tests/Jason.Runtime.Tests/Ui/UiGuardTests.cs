@@ -20,8 +20,12 @@ public class UiGuardTests(UiGuardTests.SharedRuntime shared) : IClassFixture<UiG
             .Where(f => f is { IsLiteral: true } && f.FieldType == typeof(string))
             .Select(f => (string)f.GetRawConstantValue()!)];
 
+    // Critical: every operation needs the bearer.
+    public static TheoryData<string> CriticalEveryOperation() =>
+        CriticalRows.Mark(EveryOperation(), Family.S5, data => data is ["system.info"]);
+
     [Theory]
-    [MemberData(nameof(EveryOperation))]
+    [MemberData(nameof(CriticalEveryOperation))]
     public async Task Every_operation_needs_a_bearer(string operation)
     {
         using var http = new HttpClient { BaseAddress = shared.Api.Runtime.BaseUrl };
@@ -31,6 +35,7 @@ public class UiGuardTests(UiGuardTests.SharedRuntime shared) : IClassFixture<UiG
     }
 
     [Fact]
+    [Critical(Family.S5, "the pairing door is the one exception")]
     public async Task The_door_is_the_only_post_under_ui_and_it_answers_without_a_bearer()
     {
         using var http = new HttpClient { BaseAddress = shared.Api.Runtime.BaseUrl };
@@ -47,6 +52,7 @@ public class UiGuardTests(UiGuardTests.SharedRuntime shared) : IClassFixture<UiG
     }
 
     [Fact]
+    [Critical(Family.B6, "without ui/ the runtime is unchanged")]
     public async Task A_runtime_starts_with_no_ui_directory_and_answers_404_for_the_page()
     {
         Assert.False(Directory.Exists(shared.Api.Paths.UiDirectory), "the runtime made a ui directory nobody asked for");

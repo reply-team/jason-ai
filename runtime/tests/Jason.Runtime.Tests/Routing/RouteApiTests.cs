@@ -82,6 +82,7 @@ public class RouteApiTests
     /// campaign that has never been pointed at a provider is not a runtime that is broken.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "no_route")]
     public async Task Resolving_an_operation_nothing_routes_is_the_business_error_no_route()
     {
         await using var api = await StartAsync();
@@ -203,6 +204,7 @@ public class RouteApiTests
     /// last reload froze — until a reload says otherwise.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "frozen routes")]
     public async Task A_campaign_route_does_not_pick_up_an_edited_settings_file()
     {
         await using var api = await StartAsync(TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
@@ -228,6 +230,7 @@ public class RouteApiTests
     /// entry that says where this campaign's work used to go and where it goes now.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "route.set")]
     public async Task Setting_a_route_activates_a_new_snapshot_and_writes_down_what_changed()
     {
         await using var api = await StartAsync(TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));

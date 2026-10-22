@@ -21,6 +21,7 @@ public sealed class PublishedLinksTests : IDisposable
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
     [Fact]
+    [Critical(Family.B4, "no link leaves the published set")]
     public void Nothing_published_sends_a_reader_where_they_cannot_follow()
     {
         var root = Publication.RepositoryRoot();

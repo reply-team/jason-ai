@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -26,6 +27,7 @@ public class OutcomeContractTests
     }
 
     [Fact]
+    [Critical(Family.R1, "a result that breaks its schema is refused")]
     public void A_result_of_another_shape_is_reported_with_the_pointers_that_name_the_trouble()
     {
         var result = Result("""{"items":[{"contact_id":"cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD","status":"joined"}]}""");
@@ -52,6 +54,7 @@ public class OutcomeContractTests
     }
 
     [Fact]
+    [Critical(Family.R1, "identifiers are declared kinds only")]
     public void An_identifier_of_a_kind_the_operation_never_declared_is_refused()
     {
         var problems = OutcomeContract.CheckExternalIds(Add, new JsonObject { ["contact"] = "p_1", ["enrollment"] = "e_1" });
@@ -99,7 +102,8 @@ public class OutcomeContractTests
     /// offending values are built here, character by character, rather than parsed out of text.
     /// </summary>
     [Theory]
-    [InlineData("p_884\n21")]
+    // Critical: a provider value never prints control characters.
+    [InlineData("p_884\n21", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R1)])]
     [InlineData("p_884\u001b[2J21")]
     [InlineData("p_884\u000021")]
     [InlineData("p_884\u009b31m21")]

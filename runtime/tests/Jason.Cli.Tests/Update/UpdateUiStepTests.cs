@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -69,6 +70,7 @@ public class UpdateUiStepTests
     }
 
     [Fact]
+    [Critical(Family.I2, "the UI matches the new API")]
     public async Task The_ui_step_holds_the_build_to_the_api_the_new_runtime_speaks()
     {
         using var installation = new FakeInstallation().WithRuntime();

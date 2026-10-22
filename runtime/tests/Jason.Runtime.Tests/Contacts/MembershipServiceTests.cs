@@ -136,6 +136,7 @@ public class MembershipServiceTests
     }
 
     [Fact]
+    [Critical(Family.S1, "an ambiguous match is never guessed")]
     public async Task Two_contacts_sharing_the_key_are_an_ambiguous_match_the_caller_has_to_resolve()
     {
         using var database = new TestDatabase();
@@ -213,6 +214,7 @@ public class MembershipServiceTests
     }
 
     [Fact]
+    [Critical(Family.R2, "partial batch semantics")]
     public async Task An_invalid_row_is_rejected_by_index_while_the_rest_of_the_batch_lands()
     {
         using var database = new TestDatabase();
@@ -251,6 +253,7 @@ public class MembershipServiceTests
     }
 
     [Fact]
+    [Critical(Family.S1, "an excluded person stays out")]
     public async Task An_import_never_re_enrols_an_excluded_member_but_an_explicit_reference_does()
     {
         using var database = new TestDatabase();

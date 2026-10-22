@@ -36,6 +36,7 @@ public class ManagerOptionsTests
     /// append; that it reads like an event is exactly why it must not be one.
     /// </summary>
     [Fact]
+    [Critical(Family.M1, "no self-waking manager loop")]
     public void A_trigger_a_role_could_write_itself_refuses_the_start()
     {
         var failure = Validate(options => options.Triggers = ["plan_revision"]);

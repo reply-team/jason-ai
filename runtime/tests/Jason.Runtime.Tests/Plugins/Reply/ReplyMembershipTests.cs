@@ -116,6 +116,7 @@ public class ReplyMembershipTests
     }
 
     [Fact]
+    [Critical(Family.W5, "one membership after a crash")]
     public async Task An_attempt_after_a_lost_answer_runs_the_add_again_and_leaves_one_membership()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());

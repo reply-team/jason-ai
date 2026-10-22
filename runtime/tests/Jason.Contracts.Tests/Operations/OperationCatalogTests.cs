@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -11,6 +12,7 @@ namespace Jason.Contracts.Tests.OperationContracts;
 public class OperationCatalogTests
 {
     [Fact]
+    [Critical(Family.R3, "the catalog's shape")]
     public void Every_published_document_appears_once_and_in_a_settled_order()
     {
         var ids = OperationCatalog.All.Select(c => c.Id).ToList();
@@ -209,6 +211,7 @@ public class OperationCatalogTests
     /// they wrote, or an act whose reach is `act`, even conditionally — is checked against it, whatever it declares.
     /// </summary>
     [Theory]
+    [Critical(Family.S1, "register bypass only for control reach")]
     [InlineData("\"read\"")]
     [InlineData("\"act\"")]
     [InlineData("""{ "value": "act", "conditional": true, "detail": "`control` while the campaign holds nobody." }""")]
@@ -282,7 +285,8 @@ public class OperationCatalogTests
     /// is stated, and where the register or a pause would still hold the operation back.
     /// </summary>
     [Theory]
-    [InlineData("approval", "\"confirm_once\"")]
+    // Critical: the protective floor's implications.
+    [InlineData("approval", "\"confirm_once\"", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S2)])]
     [InlineData("approval", """{ "value": "confirm_once", "conditional": true, "detail": "auto for one person." }""")]
     [InlineData("approval_reason", "null")]
     [InlineData("approval_reason", "\"   \"")]
@@ -534,6 +538,7 @@ public class OperationCatalogTests
     /// stricter word as a looser one would ask a person for less than the document means.
     /// </summary>
     [Theory]
+    [Critical(Family.S2, "approval vocabulary is closed")]
     [InlineData("\"confirm_twice\"")]
     [InlineData("\"none\"")]
     [InlineData("""{ "value": "confirm_every_attempt", "conditional": true, "detail": "a word this build has never read." }""")]
@@ -555,6 +560,7 @@ public class OperationCatalogTests
     /// the value that person is reached at. The published reply does; take either away and the document is refused.
     /// </summary>
     [Theory]
+    [Critical(Family.S2, "confirm_each names the one person a decision reaches")]
     [InlineData("contact")]
     [InlineData("accepts_collection")]
     [InlineData("preview")]

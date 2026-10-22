@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -39,6 +40,7 @@ public class IdempotencyKeyOptionTests
     }
 
     [Fact]
+    [Critical(Family.W8, "the CLI never derives a key")]
     public async Task Workitem_create_sends_no_key_unless_one_is_given_and_the_key_as_typed_when_it_is()
     {
         using (var plain = new CliRun())

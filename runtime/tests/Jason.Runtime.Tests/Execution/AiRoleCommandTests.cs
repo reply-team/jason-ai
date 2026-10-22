@@ -112,6 +112,7 @@ public class AiRoleCommandTests
     }
 
     [Fact]
+    [Critical(Family.S3, "the token never reaches a child's environment")]
     public async Task The_capability_token_is_nowhere_in_the_child_environment()
     {
         using var directory = new TempDataDir();
@@ -125,6 +126,7 @@ public class AiRoleCommandTests
     }
 
     [Fact]
+    [Critical(Family.S3, "a leaked token is redacted everywhere")]
     public async Task A_host_that_spills_the_token_leaves_none_of_it_on_disk_or_in_the_outcome()
     {
         using var directory = new TempDataDir();
@@ -146,6 +148,7 @@ public class AiRoleCommandTests
     }
 
     [Fact]
+    [Critical(Family.W7, "the launch envelope on stdin")]
     public async Task The_envelope_the_child_reads_is_the_one_the_contract_describes()
     {
         using var directory = new TempDataDir();

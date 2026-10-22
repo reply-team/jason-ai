@@ -116,6 +116,7 @@ public class RoleNoteHostileInputTests
 
     /// <summary>A note nested past what any parser will read is refused as a request, not a stack overflow.</summary>
     [Fact]
+    [Critical(Family.X1, "hostile depth")]
     public async Task A_note_nested_a_thousand_deep_is_refused_and_the_runtime_answers_afterwards()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

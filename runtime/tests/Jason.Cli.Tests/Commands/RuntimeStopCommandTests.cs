@@ -1,6 +1,7 @@
 using System.Net;
 using Jason.Cli.Commands;
 using Jason.Cli.Tests.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -9,6 +10,7 @@ public class RuntimeStopCommandTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.R2, "exit 3 without a runtime")]
     public async Task Nothing_to_stop_exits_3_with_no_descriptor()
     {
         using var dir = new TempPaths();
@@ -42,6 +44,7 @@ public class RuntimeStopCommandTests
     }
 
     [Fact]
+    [Critical(Family.R2, "a stop that does not stop is not success")]
     public async Task A_process_that_outlives_its_acknowledgement_exits_1_with_shutdown_timeout()
     {
         using var dir = new TempPaths();

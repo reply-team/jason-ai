@@ -214,6 +214,7 @@ public class SummonerTests
     /// reads the same chronicle and reports again.
     /// </summary>
     [Fact]
+    [Critical(Family.M1, "no self-summon")]
     public async Task A_report_written_by_a_check_ins_attempt_summons_nobody()
     {
         using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
@@ -237,6 +238,7 @@ public class SummonerTests
     /// one runtime — the scan gate serializes them — and the guarantee has to hold for two runtimes anyway.
     /// </summary>
     [Fact]
+    [Critical(Family.M1, "one open check-in")]
     public async Task The_second_check_in_for_one_campaign_is_refused_by_the_database()
     {
         using var harness = new DispatchHarness(Noon);
@@ -458,6 +460,7 @@ public class SummonerTests
     /// runtimes, which is also the only thing that can really race here.
     /// </remarks>
     [Fact]
+    [Critical(Family.M1, "guarded watermark")]
     public async Task A_watermark_another_writer_moved_is_refused_rather_than_overwritten()
     {
         using var harness = new DispatchHarness(Noon);

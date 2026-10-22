@@ -130,6 +130,7 @@ public class DispatcherServiceTests
     /// there to answer, and takes the file the moment it is put right.
     /// </summary>
     [Fact]
+    [Critical(Family.C1, "a refused edit never stops the loop")]
     public async Task A_live_edit_the_validator_refuses_costs_the_edit_and_not_the_runtime()
     {
         var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings("""{"Dispatcher":{"TickSeconds":1,"DrainSeconds":1}}"""));

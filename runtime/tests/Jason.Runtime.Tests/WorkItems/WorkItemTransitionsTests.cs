@@ -31,6 +31,7 @@ public class WorkItemTransitionsTests
     ];
 
     [Fact]
+    [Critical(Family.W1, "the transition table")]
     public void The_whole_matrix_agrees_with_the_table()
     {
         foreach (var from in Enum.GetValues<WorkItemStatus>())
@@ -55,8 +56,10 @@ public class WorkItemTransitionsTests
     [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Failed, true)]
     [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Cancelled, true)]
     [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Expired, true)]
-    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Scheduled, false)]
-    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Processing, false)]
+    // Critical: parked work never goes to a dispatcher.
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Scheduled, false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W1)])]
+    // Critical: parked work never goes to a dispatcher.
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Processing, false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W1)])]
     [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Succeeded, false)]
     [InlineData(WorkItemStatus.Scheduled, WorkItemStatus.AwaitingApproval, false)]
     public void Work_waiting_for_a_person_may_only_go_where_a_person_or_the_clock_sends_it(
@@ -136,6 +139,7 @@ public class WorkItemTransitionsTests
     }
 
     [Fact]
+    [Critical(Family.W1, "illegal moves throw")]
     public void An_illegal_pair_is_a_bug_rather_than_a_bad_request()
     {
         var item = WorkItemFactory.NewAiRole(WorkItemFactory.NewCampaign(), now: Noon);
@@ -147,6 +151,7 @@ public class WorkItemTransitionsTests
     }
 
     [Fact]
+    [Critical(Family.W1, "every move is journaled")]
     public void Every_transition_names_the_reserved_kind_that_records_it()
     {
         Assert.Equal(JournalKinds.WorkItemScheduled, WorkItemTransitions.JournalKind(WorkItemStatus.Created, WorkItemStatus.Scheduled));

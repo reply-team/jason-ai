@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Plugins;
 
@@ -32,6 +33,7 @@ public class PackageDigestTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "the digest is the same on every OS")]
     public void Files_are_sorted_by_relative_path_with_forward_slashes()
     {
         Write("modules/helper.js", "h");
@@ -42,6 +44,7 @@ public class PackageDigestTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "what the digest covers")]
     public void Hidden_files_and_directories_are_excluded()
     {
         Write("main.js", "m");
@@ -144,6 +147,7 @@ public class PackageDigestTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "the sha256 package digest is stable")]
     public void A_known_package_has_a_known_digest()
     {
         Write("plugin.yaml", "a\n");

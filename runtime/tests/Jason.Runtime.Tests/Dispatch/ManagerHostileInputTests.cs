@@ -24,6 +24,7 @@ public class ManagerHostileInputTests
     /// what is not read this time is read the next time there is a review to read it.
     /// </summary>
     [Fact]
+    [Critical(Family.M1, "bounded reads")]
     public async Task A_chronicle_that_arrives_all_at_once_is_read_in_bounded_bites()
     {
         using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { MaxEntriesPerScan = 500 });

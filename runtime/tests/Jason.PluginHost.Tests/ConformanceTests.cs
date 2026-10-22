@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 
 namespace Jason.PluginHost.Tests;
 
@@ -110,6 +111,7 @@ public sealed class ConformanceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.F4, "a flooding child is capped, not deadlocked")]
     public async Task A_program_that_floods_its_output_is_cut_at_the_cap()
     {
         var outcome = await OutcomeAsync(
@@ -146,6 +148,7 @@ public sealed class ConformanceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.S3, "stderr diagnostics are masked")]
     public async Task What_the_plugin_logs_is_on_stderr_with_its_secrets_masked()
     {
         Environment.SetEnvironmentVariable(TokenVariable, TokenValue);
@@ -164,7 +167,8 @@ public sealed class ConformanceTests : IDisposable
     }
 
     [Theory]
-    [InlineData("fail.transient", FailureClass.Transient)]
+    // Critical: a failure class survives the process boundary.
+    [InlineData("fail.transient", FailureClass.Transient, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R1)])]
     [InlineData("fail.permanent", FailureClass.Permanent)]
     [InlineData("fail.validation", FailureClass.Validation)]
     [InlineData("fail.ambiguous", FailureClass.Ambiguous)]
@@ -200,6 +204,7 @@ public sealed class ConformanceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.W5, "a started program makes a timeout ambiguous")]
     public async Task A_plugin_that_had_already_started_a_program_times_out_ambiguously()
     {
         // The canonical package cannot both call out and hang, so this one is written for the question: the
@@ -275,6 +280,7 @@ public sealed class ConformanceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "exactly one outcome on stdout")]
     public async Task However_much_a_plugin_logs_stdout_still_carries_one_outcome()
     {
         InvocationFactory.WritePackage(
@@ -310,6 +316,7 @@ public sealed class ConformanceTests : IDisposable
     /// outcome carries the key back — or null where the runtime stores none.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the plugin SDK's channel key is the runtime's")]
     public async Task A_plugin_keys_a_value_exactly_as_the_runtime_does()
     {
         InvocationFactory.WritePackage(

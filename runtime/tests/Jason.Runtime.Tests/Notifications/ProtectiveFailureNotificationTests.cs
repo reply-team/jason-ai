@@ -84,6 +84,7 @@ public sealed class ProtectiveFailureNotificationTests
     // ---- what it says, and the window it counts ---------------------------------------------------------------------
 
     [Fact]
+    [Critical(Family.N3, "failed protective work is told")]
     public async Task One_failed_protective_action_with_nothing_waiting_is_a_pointer_that_names_its_campaign()
     {
         using var harness = await StartedAsync();

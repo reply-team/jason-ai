@@ -5,6 +5,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Ui;
 
@@ -47,6 +48,7 @@ public sealed class UiAssetInstallerTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.B6, "ui/custom belongs to the person")]
     public void The_custom_directory_is_never_touched()
     {
         Directory.CreateDirectory(Paths.UiCustomDirectory);
@@ -56,7 +58,8 @@ public sealed class UiAssetInstallerTests : IDisposable
     }
 
     [Theory]
-    [InlineData("../escape.html")]
+    // Critical: zip-slip refused whole.
+    [InlineData("../escape.html", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X2)])]
     [InlineData("/abs.html")]
     [InlineData("jason-ui/index.html")]
     [InlineData(".hidden")]
@@ -82,6 +85,7 @@ public sealed class UiAssetInstallerTests : IDisposable
 
     /// <summary>An asset over the byte bound is refused by what it declares, before anything is extracted.</summary>
     [Fact]
+    [Critical(Family.I1, "the UI asset bound")]
     public void An_asset_over_the_byte_bound_is_refused_before_anything_is_extracted()
     {
         var refused = Assert.Throws<UiAssetRefusedException>(() => Install(WithBigEntry("honest.zip", PackageDigest.MaxBytes + 1)));

@@ -13,6 +13,7 @@ namespace Jason.Runtime.Tests.Plugins.Invocation;
 public class ChildEnvironmentTests
 {
     [Fact]
+    [Critical(Family.B1, "the child's environment is built")]
     public void A_child_gets_the_machine_configuration_its_grants_and_nothing_else()
     {
         var unique = Guid.NewGuid().ToString("N").ToUpperInvariant();

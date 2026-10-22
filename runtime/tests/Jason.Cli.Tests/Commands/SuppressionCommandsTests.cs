@@ -2,6 +2,7 @@ using System.Text.Json;
 using Jason.Cli;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -34,6 +35,7 @@ public class SuppressionCommandsTests
     }
 
     [Fact]
+    [Critical(Family.S1, "lifting a do-not-contact entry needs a reason")]
     public async Task Remove_without_a_reason_is_a_usage_error()
     {
         using var cli = new CliRun();

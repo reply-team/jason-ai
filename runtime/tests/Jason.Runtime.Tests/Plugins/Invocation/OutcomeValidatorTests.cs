@@ -40,6 +40,7 @@ public class OutcomeValidatorTests
     }
 
     [Fact]
+    [Critical(Family.R1, "exactly one outcome")]
     public void Two_documents_are_not_one_answer()
     {
         var accepted = OutcomeValidator.TryValidate(Succeeded() + Succeeded(), Expected, out var outcome, out var problem);
@@ -73,6 +74,7 @@ public class OutcomeValidatorTests
     }
 
     [Fact]
+    [Critical(Family.R1, "correlation")]
     public void An_outcome_of_another_invocation_is_refused()
     {
         var document = Document(invocationId: "pin_other");
@@ -110,6 +112,7 @@ public class OutcomeValidatorTests
     }
 
     [Fact]
+    [Critical(Family.R1, "four classes")]
     public void A_class_outside_the_four_is_refused()
     {
         var document = Document(status: "failed", error: Error(failureClass: "maybe"));

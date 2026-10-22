@@ -1,5 +1,6 @@
 using Jason.Cli;
 using Jason.Contracts.Api;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -75,6 +76,7 @@ public class ApprovalCommandsTests
     }
 
     [Fact]
+    [Critical(Family.S2, "an approval names the person")]
     public async Task Approve_sends_the_decision_with_the_person_who_made_it()
     {
         using var cli = new CliRun(OneApproval);

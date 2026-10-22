@@ -61,6 +61,7 @@ public class GuardRegistersNothingTests
     /// usage error, and this says what it is instead.
     /// </summary>
     [Fact]
+    [Critical(Family.B9, "the pack guard performs nothing")]
     public async Task The_line_that_would_register_something_is_refused_rather_than_performed()
     {
         using var tree = new TempTree();

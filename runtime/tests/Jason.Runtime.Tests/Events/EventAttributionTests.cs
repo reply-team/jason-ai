@@ -16,6 +16,7 @@ public class EventAttributionTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.N2, "attribution by campaign pin only")]
     public async Task An_event_reaches_the_campaign_pinned_with_its_id_and_no_other()
     {
         using var store = new EventStoreFixture();
@@ -42,6 +43,7 @@ public class EventAttributionTests
 
     /// <summary>An identifier two campaigns hold pinned at the plugin says nothing about which one it concerns, so it concerns neither.</summary>
     [Fact]
+    [Critical(Family.N2, "ambiguity attributes nothing")]
     public async Task An_identifier_two_campaigns_hold_concerns_neither()
     {
         using var store = new EventStoreFixture();

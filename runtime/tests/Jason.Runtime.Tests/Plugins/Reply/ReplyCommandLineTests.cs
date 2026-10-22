@@ -25,7 +25,8 @@ public class ReplyCommandLineTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
-    [InlineData("-k")]
+    // Critical: the Reply CLI's forbidden flags.
+    [InlineData("-k", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R5)])]
     [InlineData("--api-key")]
     [InlineData("--verbose")]
     [InlineData("--user-id")]
@@ -114,6 +115,7 @@ public class ReplyCommandLineTests
     }
 
     [Fact]
+    [Critical(Family.B3, "no personal data on a command line")]
     public async Task Every_person_travels_on_stdin_and_never_in_an_argument()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());

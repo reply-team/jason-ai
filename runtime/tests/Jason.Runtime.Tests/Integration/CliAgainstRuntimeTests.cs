@@ -16,6 +16,7 @@ public class CliAgainstRuntimeTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.E1, "golden path: the real CLI against a real runtime host, no child process")]
     public async Task A_campaign_is_created_described_filled_with_contacts_and_archived_through_the_cli()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
@@ -97,6 +98,7 @@ public class CliAgainstRuntimeTests
     }
 
     [Fact]
+    [Critical(Family.S1, "the register through the CLI")]
     public async Task Suppressing_a_value_and_lifting_it_again_go_through_the_cli()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(Ct);

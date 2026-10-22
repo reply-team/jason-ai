@@ -1,5 +1,6 @@
 using Jason.Cli.Skills;
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Skills;
 
@@ -107,7 +108,8 @@ public class SkillsRecordTests
     /// had the uninstall remove a file outside the root, and empty the directories above it.
     /// </summary>
     [Theory]
-    [InlineData("../outside/SKILL.md")]
+    // Critical: a receipt cannot name outside its root.
+    [InlineData("../outside/SKILL.md", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X2)])]
     [InlineData("skill/../../outside/SKILL.md")]
     [InlineData("..")]
     [InlineData("")]

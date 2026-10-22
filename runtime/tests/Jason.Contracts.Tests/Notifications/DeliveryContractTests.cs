@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Notifications;
 
@@ -33,6 +34,7 @@ public sealed class DeliveryContractTests
     }
 
     [Fact]
+    [Critical(Family.R3, "notification.send stays out of the catalog")]
     public void A_delivery_is_never_a_canonical_operation()
     {
         Assert.False(OperationCatalog.Knows("notification.send"));
@@ -79,6 +81,7 @@ public sealed class DeliveryContractTests
     }
 
     [Fact]
+    [Critical(Family.R3, "the delivery family uses the same dialect")]
     public void A_schema_keyword_outside_the_dialect_is_refused()
     {
         var document = Document();

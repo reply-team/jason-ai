@@ -248,7 +248,8 @@ public sealed class LogReaderTests
     /// so a fixture that quietly went back to ASCII would fail here rather than pass for nothing.
     /// </summary>
     [Theory]
-    [InlineData("é", 1)]
+    // Critical: block boundaries in UTF-8.
+    [InlineData("é", 1, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X1)])]
     [InlineData("日", 1)]
     [InlineData("日", 2)]
     [InlineData("\U0001F642", 1)]
@@ -417,6 +418,7 @@ public sealed class LogReaderTests
     // ---- a writer mid-line, and lines that are not events -------------------------------------------------------
 
     [Fact]
+    [Critical(Family.X1, "a line still being written")]
     public void A_final_line_with_no_line_break_is_the_writer_mid_line_and_is_skipped_without_being_counted()
     {
         using var tree = new TempTree();
@@ -591,6 +593,7 @@ public sealed class LogReaderTests
     /// writing to.
     /// </summary>
     [Fact]
+    [Critical(Family.F5, "a held log is read, not refused")]
     public void A_file_a_writer_still_holds_is_read_while_it_is_written()
     {
         using var tree = new TempTree();

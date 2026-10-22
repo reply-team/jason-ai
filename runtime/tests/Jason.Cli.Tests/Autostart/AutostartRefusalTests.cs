@@ -1,5 +1,6 @@
 using System.Text;
 using Jason.Cli.Autostart;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Autostart;
 
@@ -34,6 +35,7 @@ public sealed class AutostartRefusalTests : IDisposable
     /// Left there, it is a file named after a registration on a machine that has none.
     /// </summary>
     [Fact]
+    [Critical(Family.I4, "a refused enable is undone")]
     public void A_refused_registration_leaves_nothing_behind()
     {
         var directory = Path.Combine(_root, "autostart");

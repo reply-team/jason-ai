@@ -8,6 +8,7 @@ namespace Jason.Runtime.Tests.Persistence;
 public class DatabaseMigratorTests
 {
     [Fact]
+    [Critical(Family.P2, "WAL and a fresh start")]
     public void Fresh_database_is_created_migrated_and_in_wal_mode_without_a_backup()
     {
         using var dir = new TempDataDir();
@@ -24,6 +25,7 @@ public class DatabaseMigratorTests
     }
 
     [Fact]
+    [Critical(Family.P2, "idempotent migration")]
     public void Second_start_is_a_no_op()
     {
         using var dir = new TempDataDir();
@@ -37,6 +39,7 @@ public class DatabaseMigratorTests
     }
 
     [Fact]
+    [Critical(Family.P2, "the pre-migration backup")]
     public void Existing_database_with_pending_migrations_is_backed_up_first()
     {
         using var dir = new TempDataDir();
@@ -84,6 +87,7 @@ public class DatabaseMigratorTests
     }
 
     [Fact]
+    [Critical(Family.P2, "the oldest database reaches head")]
     public async Task A_wave_two_database_migrates_to_head_without_losing_its_chronicle()
     {
         using var dir = new TempDataDir();

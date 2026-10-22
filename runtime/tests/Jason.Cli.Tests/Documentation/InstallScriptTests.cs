@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 using Microsoft.Win32;
 
 namespace Jason.Cli.Tests.Documentation;
@@ -92,6 +93,7 @@ public partial class InstallScriptTests
     /// before the first unpack, on the lines that are code and not on a comment that happens to name both.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "install.sh verifies the checksum first")]
     public void Install_sh_checks_the_digest_before_it_unpacks()
     {
         var code = Code("install.sh");
@@ -99,6 +101,7 @@ public partial class InstallScriptTests
     }
 
     [Fact]
+    [Critical(Family.I1, "install.ps1 verifies the checksum first")]
     public void Install_ps1_checks_the_digest_before_it_unpacks()
     {
         var code = Code("install.ps1");

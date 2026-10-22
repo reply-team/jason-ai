@@ -1,5 +1,6 @@
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -16,7 +17,8 @@ public class RetriabilityTests
     [InlineData(RepeatAfterAmbiguous.Safe, FailureClass.Transient, true)]
     [InlineData(RepeatAfterAmbiguous.Safe, FailureClass.Permanent, false)]
     [InlineData(RepeatAfterAmbiguous.Safe, FailureClass.Validation, false)]
-    [InlineData(RepeatAfterAmbiguous.Safe, FailureClass.Ambiguous, true)]
+    // Critical: ambiguous repeats under Safe, never under Never.
+    [InlineData(RepeatAfterAmbiguous.Safe, FailureClass.Ambiguous, true, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W5)])]
 
     // after_recovery_read: repeating is allowed because the contract obliges the plugin to read first.
     [InlineData(RepeatAfterAmbiguous.AfterRecoveryRead, FailureClass.Transient, true)]
@@ -28,7 +30,8 @@ public class RetriabilityTests
     [InlineData(RepeatAfterAmbiguous.Never, FailureClass.Transient, true)]
     [InlineData(RepeatAfterAmbiguous.Never, FailureClass.Permanent, false)]
     [InlineData(RepeatAfterAmbiguous.Never, FailureClass.Validation, false)]
-    [InlineData(RepeatAfterAmbiguous.Never, FailureClass.Ambiguous, false)]
+    // Critical: ambiguous repeats under Safe, never under Never.
+    [InlineData(RepeatAfterAmbiguous.Never, FailureClass.Ambiguous, false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W5)])]
     public void The_rule_is_the_operation_s_own(RepeatAfterAmbiguous rule, FailureClass failureClass, bool expected) =>
         Assert.Equal(expected, OutcomeContract.Retriable(failureClass, ContractWith(rule)));
 
@@ -61,6 +64,7 @@ public class RetriabilityTests
     /// nothing was sent is still worth another attempt.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "conversation.reply is never repeated blind")]
     public void The_published_reply_ends_for_a_person_after_an_ambiguous_end()
     {
         var reply = OperationCatalog.Find("conversation.reply");

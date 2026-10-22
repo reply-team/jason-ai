@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -32,6 +33,10 @@ public class PageTests
 
         return data;
     }
+
+    // Critical: the page budget edge.
+    public static TheoryData<string> CriticalPaged() =>
+        CriticalRows.Mark(Paged(), Family.X1, data => data is ["conversation.get"]);
 
     private static bool IsPaged(OperationContract contract) =>
         contract.OutputSchema["properties"] is JsonObject properties && properties.ContainsKey("has_more");
@@ -72,7 +77,7 @@ public class PageTests
     /// budget. An output that leaves anything unbounded fails here too, because nothing could then be promised.
     /// </summary>
     [Theory]
-    [MemberData(nameof(Paged))]
+    [MemberData(nameof(CriticalPaged))]
     public void One_item_of_a_page_always_fits_under_the_budget_a_page_is_cut_at(string id)
     {
         var contract = OperationCatalog.Find(id)!;

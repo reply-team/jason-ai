@@ -1,5 +1,6 @@
 using System.Text;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Plugins;
 
@@ -34,6 +35,7 @@ public class BoundedCaptureTests
     }
 
     [Fact]
+    [Critical(Family.F4, "a child's stream is drained past the cap (no deadlock)")]
     public async Task Beyond_the_cap_the_first_bytes_are_kept_and_the_rest_is_still_read()
     {
         var truncations = 0;

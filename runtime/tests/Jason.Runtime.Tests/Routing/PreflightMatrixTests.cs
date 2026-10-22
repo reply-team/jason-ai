@@ -43,8 +43,12 @@ public class PreflightMatrixTests
 
     public static TheoryData<string> EveryWayAProviderItemCannotRun() => [.. Cases.Keys];
 
+    // Critical: no_route, suppressed, input_invalid.
+    public static TheoryData<string> CriticalWaysAProviderItemCannotRun() =>
+        CriticalRows.Mark(EveryWayAProviderItemCannotRun(), Family.W3, data => data is ["no_route"] or ["suppressed"] or ["input_invalid"]);
+
     [Theory]
-    [MemberData(nameof(EveryWayAProviderItemCannotRun))]
+    [MemberData(nameof(CriticalWaysAProviderItemCannotRun))]
     public async Task A_provider_item_that_cannot_run_says_why_and_keeps_its_attempt(string reason)
     {
         var scenario = Cases[reason];

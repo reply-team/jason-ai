@@ -61,8 +61,12 @@ public sealed partial class ConfigShapeAgreementTests
         { """{"Dispatcher":{"MaxParallel":2},"dispatcher":{"MaxParallel":3}}""", Outcome.Refused },
     };
 
+    // Critical: the doctor parser and the runtime agree.
+    public static TheoryData<string, Outcome> CriticalFiles() =>
+        CriticalRows.Mark(Files(), Family.S4, data => data is ["{}", Outcome.Read]);
+
     [Theory]
-    [MemberData(nameof(Files))]
+    [MemberData(nameof(CriticalFiles))]
     public void The_client_and_the_runtime_agree_on_whether_the_file_is_json_and_on_where_it_stops(string text, Outcome expected)
     {
         using var dir = new TempDataDir();

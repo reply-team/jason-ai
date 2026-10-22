@@ -61,6 +61,7 @@ public sealed class PatternAnchorGuardTests
     ];
 
     [Fact]
+    [Critical(Family.R3, "no $ that admits a trailing newline")]
     public void No_pattern_of_the_runtime_holds_an_anchor_that_lets_a_line_break_through()
     {
         var root = RepositoryRoot();

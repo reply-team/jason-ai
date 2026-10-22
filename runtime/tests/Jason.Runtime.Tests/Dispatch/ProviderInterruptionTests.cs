@@ -28,6 +28,7 @@ public class ProviderInterruptionTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
+    [Critical(Family.W5, "the operation decides the repeat")]
     [InlineData(Safe, WorkItemStatus.Created, true)]
     [InlineData(NeverRepeated, WorkItemStatus.Failed, false)]
     public async Task A_lease_that_ran_out_on_a_provider_attempt_is_ambiguous_and_then_the_operation_decides(
@@ -130,6 +131,7 @@ public class ProviderInterruptionTests
     /// attempt together, which is why no run leaves a row like this and the test has to write it itself.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "a restart never guesses success or failure")]
     public async Task A_provider_attempt_found_past_its_start_is_ambiguous_however_a_restart_finds_it()
     {
         using var database = new TestDatabase();
@@ -153,6 +155,7 @@ public class ProviderInterruptionTests
     /// operation could not be repeated, and nobody knows whether it happened.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "never repeated after ambiguous")]
     public async Task An_item_that_may_never_be_repeated_waits_for_a_person_with_the_reason_it_is_waiting()
     {
         using var database = new TestDatabase();

@@ -91,6 +91,7 @@ public sealed class IdentityRewriterTests
     /// path would read <c>C:\Users\&lt;user&gt;</c>, which says where it was and not that it was the home directory.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "rewrite order")]
     public void The_home_directory_is_rewritten_before_the_user_name_inside_it()
     {
         Assert.Equal(@"~\notes.txt", Rewritten(Windows, @"C:\Users\Ada\notes.txt"));
@@ -114,6 +115,7 @@ public sealed class IdentityRewriterTests
     }
 
     [Fact]
+    [Critical(Family.S4, "the user name becomes <user>")]
     public void The_user_name_is_a_placeholder_standing_alone()
     {
         Assert.Equal("user <user> signed in", Rewritten(Windows, "user Ada signed in"));
@@ -145,8 +147,10 @@ public sealed class IdentityRewriterTests
     /// that remains, a word that is the name being rewritten wherever it stands alone, is the safe side to be wrong on.
     /// </summary>
     [Theory]
-    [InlineData("log", "logs and catalog and Logging and log2 and 2log", "logs and catalog and Logging and log2 and 2log")]
-    [InlineData("log", "the log said: log", "the <user> said: <user>")]
+    // Critical: token, never substring.
+    [InlineData("log", "logs and catalog and Logging and log2 and 2log", "logs and catalog and Logging and log2 and 2log", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S4)])]
+    // Critical: token, never substring.
+    [InlineData("log", "the log said: log", "the <user> said: <user>", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S4)])]
     [InlineData("log", "logs\\log\\logs.txt", "logs\\<user>\\logs.txt")]
     [InlineData("a", "a failure in the data, not Alpha", "<user> failure in the data, not Alpha")]
     [InlineData("a", "an apple", "an apple")]
@@ -181,6 +185,7 @@ public sealed class IdentityRewriterTests
     }
 
     [Fact]
+    [Critical(Family.S4, "the machine name mark")]
     public void The_machine_name_is_a_placeholder_as_a_whole_token_in_any_case()
     {
         Assert.Equal("host <machine> refused; <machine> too", Rewritten(Windows, "host WORKSTATION-7 refused; workstation-7 too"));
@@ -210,6 +215,7 @@ public sealed class IdentityRewriterTests
     }
 
     [Fact]
+    [Critical(Family.S4, "the SID mark")]
     public void This_accounts_identifier_is_a_placeholder_wherever_it_stands_including_in_a_task_name()
     {
         Assert.Equal("Jason-<sid>", Rewritten(Windows, $"Jason-{ThisSid}"));
@@ -297,6 +303,7 @@ public sealed class IdentityRewriterTests
     }
 
     [Fact]
+    [Critical(Family.S4, "the rewrite keeps JSON valid")]
     public void What_is_written_still_parses_to_what_was_rewritten()
     {
         var input = new JsonObject
@@ -334,7 +341,8 @@ public sealed class IdentityRewriterTests
     /// and its six letters are most of a name.
     /// </summary>
     [Theory]
-    [InlineData(@"C:\Users\JOHNSM~1\AppData\Local\Temp\x", @"C:\Users\<user>\AppData\Local\Temp\x")]
+    // Critical: the 8.3 short name.
+    [InlineData(@"C:\Users\JOHNSM~1\AppData\Local\Temp\x", @"C:\Users\<user>\AppData\Local\Temp\x", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S4)])]
     [InlineData(@"C:\Users\JOHNSM~12\x", @"C:\Users\<user>\x")]
     [InlineData(@"c:\users\johnsm~1\x", @"c:\users\<user>\x")]
     [InlineData("JASON_DATA_DIR=C:/Users/JOHNSM~1/data", "JASON_DATA_DIR=C:/Users/<user>/data")]
@@ -735,7 +743,8 @@ public sealed class IdentityRewriterTests
     /// this installation does as plainly as a home directory says whose account it runs under.
     /// </summary>
     [Theory]
-    [InlineData(@"D:\Clients\Acme\jason", "<data>")]
+    // Critical: <data>.
+    [InlineData(@"D:\Clients\Acme\jason", "<data>", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S4)])]
     [InlineData(@"D:\Clients\Acme\jason\logs\runtime-20261004.jsonl", @"<data>\logs\runtime-20261004.jsonl")]
     [InlineData("D:/Clients/Acme/jason/config", "<data>/config")]
     [InlineData(@"{""data_dir"":""D:\\Clients\\Acme\\jason""}", @"{""data_dir"":""<data>""}")]

@@ -108,6 +108,7 @@ public class ReplyEnrollTests
     }
 
     [Fact]
+    [Critical(Family.W5, "enrol is idempotent by key")]
     public async Task A_second_call_under_the_same_key_answers_already_enrolled_and_enrols_nobody_twice()
     {
         using var account = new ReplyAccount();
@@ -130,6 +131,7 @@ public class ReplyEnrollTests
     }
 
     [Fact]
+    [Critical(Family.W5, "one crash, one enrolment")]
     public async Task An_attempt_after_a_lost_answer_runs_the_add_again_so_one_crash_leaves_one_enrollment()
     {
         using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12);
@@ -544,6 +546,7 @@ public class ReplyEnrollTests
     }
 
     [Fact]
+    [Critical(Family.S1, "a provider-side stop")]
     public async Task An_address_the_provider_suppresses_fails_permanently_rather_than_being_enrolled()
     {
         using var account = new ReplyAccount();
@@ -584,6 +587,7 @@ public class ReplyEnrollTests
     }
 
     [Fact]
+    [Critical(Family.W5, "a write failure is ambiguous")]
     public async Task A_failure_on_the_providers_own_side_during_the_enrollment_is_ambiguous_because_it_is_a_write()
     {
         using var account = new ReplyAccount();

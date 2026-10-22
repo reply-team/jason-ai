@@ -42,6 +42,7 @@ public class DispatcherLoggingTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.B3, "the dispatcher logs ids only")]
     public async Task The_dispatcher_logs_ids_and_nothing_the_work_was_about()
     {
         using var dir = new TempDataDir();

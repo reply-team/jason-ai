@@ -1,4 +1,5 @@
 using Jason.Cli.Doctor;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Doctor;
 
@@ -40,6 +41,7 @@ public sealed class FromHomeTests
         Assert.Equal(path, IdentityRewriter.FromHome(path, home));
 
     [Fact]
+    [Critical(Family.S4, "case-insensitive home on Windows")]
     public void On_Windows_a_path_in_another_case_is_the_same_path()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Elsewhere a path in another case is another path.");

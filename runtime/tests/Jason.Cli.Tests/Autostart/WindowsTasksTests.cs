@@ -1,4 +1,5 @@
 using Jason.Cli.Autostart;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Autostart;
 
@@ -117,7 +118,8 @@ public class WindowsTasksTests
     /// is left where it is.
     /// </summary>
     [Theory]
-    [InlineData(@"C:\Tools\notes.exe", "--sync")]
+    // Critical: a namesake task is not ours.
+    [InlineData(@"C:\Tools\notes.exe", "--sync", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I4)])]
     [InlineData(@"C:\Users\ada\AppData\Local\Programs\jason\jason.exe", "runtime run --data-dir C:\\Users\\ada\\.jason")]
     [InlineData(@"C:\Users\ada\AppData\Local\Programs\jason\jason.exe", "runtime run --detached")]
     [InlineData(@"C:\Users\ada\AppData\Local\Programs\jason\jason.exe", "runtime run --detached --data-dir C:\\data --verbose")]
@@ -547,6 +549,7 @@ public class WindowsTasksTests
     /// name, which on a shared machine was the one thing this verb must never do.
     /// </summary>
     [Theory]
+    [Critical(Family.I4, "another account's task is never touched")]
     [InlineData(0)]
     [InlineData(AccessDenied)]
     public void Disable_never_touches_another_account_s_legacy_task(int legacyExit)

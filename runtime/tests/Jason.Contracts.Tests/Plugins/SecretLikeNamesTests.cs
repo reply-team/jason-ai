@@ -1,4 +1,5 @@
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Plugins;
 
@@ -11,7 +12,8 @@ public class SecretLikeNamesTests
 {
     /// <summary>The spellings of one name. None of them is a different name, and none of them is allowed.</summary>
     [Theory]
-    [InlineData("x-api-key")]
+    // Critical: credential names by every spelling.
+    [InlineData("x-api-key", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S3)])]
     [InlineData("API-KEY")]
     [InlineData("api.key")]
     [InlineData("api key")]

@@ -48,6 +48,7 @@ public class ExclusionCancelsWorkTests
     }
 
     [Fact]
+    [Critical(Family.S1, "archiving a person stops their work")]
     public async Task Archiving_a_contact_cancels_its_work_in_every_campaign()
     {
         using var database = new TestDatabase();

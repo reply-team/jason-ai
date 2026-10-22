@@ -38,6 +38,7 @@ public class EventReaderTests
     }
 
     [Fact]
+    [Critical(Family.N2, "cursor discipline")]
     public async Task The_cursor_moves_only_with_the_page_that_lands()
     {
         using var harness = Create();

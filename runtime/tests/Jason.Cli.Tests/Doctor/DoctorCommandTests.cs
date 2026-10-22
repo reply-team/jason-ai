@@ -119,7 +119,8 @@ public sealed class DoctorCommandTests
     }
 
     [Theory]
-    [InlineData(false, false)]
+    // Critical: never writes over a file.
+    [InlineData(false, false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S4)])]
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
@@ -450,6 +451,7 @@ public sealed class DoctorCommandTests
     /// the plain run after it writes, item for item, and what the written file's own header says.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "--dry-run lists and writes nothing")]
     public async Task A_dry_run_writes_nothing_and_lists_what_a_plain_run_writes_item_for_item()
     {
         using var dir = new TempPaths();
@@ -641,6 +643,7 @@ public sealed class DoctorCommandTests
 
     /// <summary>A bundle is most wanted when the runtime does not answer, so not answering is in the bundle and the exit is 0.</summary>
     [Theory]
+    [Critical(Family.R2, "doctor never exits 3")]
     [InlineData("no_descriptor")]
     [InlineData("runtime_unreachable")]
     [InlineData("unauthorized")]

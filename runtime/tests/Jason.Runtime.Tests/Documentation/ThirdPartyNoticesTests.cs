@@ -17,6 +17,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed class ThirdPartyNoticesTests
 {
     [Fact]
+    [Critical(Family.B5, "every package is noticed")]
     public void Every_package_of_the_closure_has_an_entry_with_its_exact_version()
     {
         var closure = ThirdPartyNotices.Closure.Of(Read(ThirdPartyNotices.Assets));
@@ -54,6 +55,7 @@ public sealed class ThirdPartyNoticesTests
     }
 
     [Fact]
+    [Critical(Family.B5, "THIRD-PARTY-NOTICES is current")]
     public void The_file_has_no_problem_at_all()
     {
         var problems = ThirdPartyNotices.Problems(Notices(), ThirdPartyNotices.Closure.Of(Read(ThirdPartyNotices.Assets)));

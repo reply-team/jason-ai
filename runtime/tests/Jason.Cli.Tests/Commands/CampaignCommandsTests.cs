@@ -6,6 +6,7 @@ using Jason.Cli;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -103,6 +104,7 @@ public class CampaignCommandsTests
     }
 
     [Fact]
+    [Critical(Family.R2, "absent vs null from the CLI")]
     public async Task Update_sends_the_execution_profile_and_clears_it_with_an_explicit_null()
     {
         using var cli = new CliRun();

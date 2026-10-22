@@ -109,6 +109,7 @@ public class EventsServiceTests
 
     /// <summary>The edges are inside: a span may end now, and begin exactly a year and a day back.</summary>
     [Fact]
+    [Critical(Family.N2, "the backfill bound")]
     public async Task A_span_may_end_now_and_begin_366_days_back()
     {
         await using var api = await StartAsync();
@@ -196,6 +197,7 @@ public class EventsServiceTests
 
     /// <summary>Eight spans may wait for one account; a ninth is refused until one ends, done or failed — which is what frees its place.</summary>
     [Fact]
+    [Critical(Family.N2, "eight waiting spans")]
     public async Task A_ninth_waiting_span_is_refused_until_one_ends()
     {
         await using var api = await StartAsync();
@@ -257,6 +259,7 @@ public class EventsServiceTests
     /// account whose route names no binding is bound with none.
     /// </summary>
     [Fact]
+    [Critical(Family.N2, "events.sources never answers a cursor")]
     public async Task A_source_says_what_its_row_and_the_snapshot_say_and_never_its_cursor()
     {
         await using var api = await StartAsync(routes: [Bound("a"), new Route(Reader, null, null)]);
@@ -402,6 +405,7 @@ public class EventsServiceTests
     /// not in the chronicle — and a signal writes no line of its own.
     /// </summary>
     [Fact]
+    [Critical(Family.N2, "events.signal is {source} alone")]
     public async Task A_webhook_s_body_posted_with_a_signal_lands_nowhere()
     {
         await using var api = await StartAsync();

@@ -46,6 +46,7 @@ public class IdempotencySchemaTests
     }
 
     [Fact]
+    [Critical(Family.W8, "the key index")]
     public void One_key_names_one_work_item_in_its_campaign_and_another_campaign_has_keys_of_its_own()
     {
         using var database = new TestDatabase();

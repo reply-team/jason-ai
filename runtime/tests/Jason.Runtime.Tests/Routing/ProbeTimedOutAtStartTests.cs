@@ -37,6 +37,7 @@ public sealed class ProbeTimedOutAtStartTests
     /// plugin was never measured: two loads, each probing once and once more warm, and nothing more.
     /// </summary>
     [Fact]
+    [Critical(Family.R1, "probe_timed_out is environmental")]
     public async Task A_package_whose_probe_never_finishes_at_the_start_holds_back_only_itself_and_its_routes_stand_unmeasured()
     {
         var probing = new TimingOut(int.MaxValue) { OnlyPattern = ProbedPattern };

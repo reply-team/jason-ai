@@ -4,6 +4,7 @@ using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -17,6 +18,7 @@ namespace Jason.Cli.Tests.Uninstall;
 public class UninstallPlanTests
 {
     [Fact]
+    [Critical(Family.I3, "uninstall by receipt")]
     public void Only_files_a_receipt_names_are_in_the_plan()
     {
         using var dir = new TempPaths();
@@ -135,6 +137,7 @@ public class UninstallPlanTests
 
     /// <summary>And the plan is printed in every mode, not only under --dry-run.</summary>
     [Fact]
+    [Critical(Family.I3, "plan first")]
     public async Task The_plan_is_printed_before_anything_is_removed()
     {
         using var dir = new TempPaths();

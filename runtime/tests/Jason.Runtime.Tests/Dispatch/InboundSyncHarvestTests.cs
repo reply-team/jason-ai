@@ -63,6 +63,7 @@ public class InboundSyncHarvestTests
     /// campaign identifier or its vendor block. Not in the journal, not on the campaign's row, not in the log.
     /// </summary>
     [Fact]
+    [Critical(Family.N1, "inbound keeps identifiers only")]
     public async Task The_subject_the_preview_the_name_and_the_vendor_block_are_never_kept()
     {
         using var harness = new DispatchHarness(Noon);
@@ -82,6 +83,7 @@ public class InboundSyncHarvestTests
     }
 
     [Fact]
+    [Critical(Family.N1, "said once")]
     public async Task A_thread_read_again_at_the_same_moment_is_not_said_again()
     {
         using var harness = new DispatchHarness(Noon);

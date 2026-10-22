@@ -43,6 +43,7 @@ public class PluginEndpointTests
     }
 
     [Fact]
+    [Critical(Family.S5, "the plugin verbs need the token")]
     public async Task Neither_operation_answers_without_the_capability_token()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

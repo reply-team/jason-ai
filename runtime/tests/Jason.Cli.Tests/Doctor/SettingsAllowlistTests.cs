@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Cli.Doctor;
 using Jason.Contracts.Configuration;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Doctor;
 
@@ -65,6 +66,7 @@ public sealed class SettingsAllowlistTests
     private static readonly string[] SampleSwitchValues = ["true", "false"];
 
     [Fact]
+    [Critical(Family.S4, "the allowlist is the published one")]
     public void The_published_list_names_every_path_it_carries_and_no_other()
     {
         var published = SettingsAllowlist.Default.Published.Select(PathOf).Order(StringComparer.Ordinal).ToList();
@@ -170,7 +172,7 @@ public sealed class SettingsAllowlistTests
     }
 
     [Theory]
-    [MemberData(nameof(IntegerPaths))]
+    [MemberData(nameof(CriticalIntegerPaths))]
     public void A_bounded_number_carries_only_as_a_json_integer(string path)
     {
         var list = SettingsAllowlist.Default;
@@ -247,7 +249,7 @@ public sealed class SettingsAllowlistTests
     }
 
     [Theory]
-    [MemberData(nameof(NeverAValuePaths))]
+    [MemberData(nameof(CriticalNeverAValuePaths))]
     public void A_setting_that_is_named_as_never_carried_carries_nothing_whatever_it_holds(string path)
     {
         var list = SettingsAllowlist.Default;
@@ -271,7 +273,15 @@ public sealed class SettingsAllowlistTests
 
     public static TheoryData<string> IntegerPaths() => [.. Integers];
 
+    // Critical: an allowed number travels only as a number.
+    public static TheoryData<string> CriticalIntegerPaths() =>
+        CriticalRows.Mark(IntegerPaths(), Family.S4, data => data is ["Dispatcher:MaxParallel"]);
+
     public static TheoryData<string> NeverAValuePaths() => [.. NeverAValue];
+
+    // Critical: the feed URL and the grants never travel.
+    public static TheoryData<string> CriticalNeverAValuePaths() =>
+        CriticalRows.Mark(NeverAValuePaths(), Family.S4, data => data is ["Update:FeedUrl"] or ["Plugins:Grants:fake-provider:Exec[]"]);
 
     /// <summary>The path at the front of a published line, with the description in brackets taken off.</summary>
     private static string PathOf(string line) => line[..line.IndexOf(" (", StringComparison.Ordinal)];

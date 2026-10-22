@@ -20,6 +20,7 @@ public class OptionsValidationTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.C1, "the shipped defaults are valid")]
     public void The_defaults_of_every_option_class_validate_clean()
     {
         Assert.True(new RuntimeOptionsValidator().Validate(null, new RuntimeOptions()).Succeeded);
@@ -350,6 +351,7 @@ public class OptionsValidationTests
 
     /// <summary>The validator is only a rule until the host runs it: this is the registration, seen from the outside.</summary>
     [Fact]
+    [Critical(Family.I2, "no plain-http feed")]
     public async Task A_feed_that_is_plain_http_on_a_network_refuses_to_start()
     {
         using var dir = new TempDataDir();
@@ -369,6 +371,7 @@ public class OptionsValidationTests
     /// one back. A number the binder has already read is not text anybody typed in secret, and is still quoted.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "no refusal echoes a setting's text")]
     public void No_refusal_quotes_back_the_text_a_person_wrote()
     {
         var services = Registered(TestOptions.NothingInstalled());

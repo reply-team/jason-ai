@@ -19,6 +19,7 @@ public sealed class DescriptorHeldTests
     private static FileStream Reader(string path) => new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
 
     [Fact]
+    [Critical(Family.F5, "the held descriptor wait")]
     public async Task A_descriptor_a_reader_holds_for_a_moment_is_replaced_once_it_lets_go()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Elsewhere a reader does not stop a rename over the file it reads.");

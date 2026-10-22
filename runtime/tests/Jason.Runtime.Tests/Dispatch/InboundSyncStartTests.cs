@@ -62,6 +62,7 @@ public class InboundSyncStartTests
     }
 
     [Fact]
+    [Critical(Family.N1, "one read at a time")]
     public async Task No_second_read_starts_while_one_is_outstanding()
     {
         using var harness = new DispatchHarness(Noon);
@@ -96,7 +97,8 @@ public class InboundSyncStartTests
     [InlineData(2, 3_600)]
     [InlineData(6, 57_600)]
     [InlineData(7, 86_400)]
-    [InlineData(40, 86_400)]
+    // Critical: the backoff cap.
+    [InlineData(40, 86_400, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.N1)])]
     public async Task Each_failure_in_a_row_doubles_the_wait_up_to_a_day(int failures, int wait)
     {
         using var harness = new DispatchHarness(Noon);

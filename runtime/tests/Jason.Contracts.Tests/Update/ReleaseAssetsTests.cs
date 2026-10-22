@@ -1,4 +1,5 @@
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Update;
 
@@ -57,6 +58,7 @@ public class ReleaseAssetsTests
     /// than a drift.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release's asset set")]
     public void A_release_publishes_exactly_these_nine_files() =>
         Assert.Equal(
             ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-ui.zip"],
@@ -68,7 +70,8 @@ public class ReleaseAssetsTests
     /// is refused before either is built — the test writes its own hostile names.
     /// </summary>
     [Theory]
-    [InlineData("jason-win-x64.zip", true)]
+    // Critical: an asset name cannot climb.
+    [InlineData("jason-win-x64.zip", true, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I1)])]
     [InlineData("checksums.txt", true)]
     [InlineData("a", true)]
     [InlineData("", false)]

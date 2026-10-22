@@ -90,6 +90,7 @@ public class ContactThreadServiceTests
     }
 
     [Fact]
+    [Critical(Family.S1, "a thread read is the person's own")]
     public async Task A_thread_of_somebody_else_is_refused()
     {
         using var world = await World.CreateAsync();

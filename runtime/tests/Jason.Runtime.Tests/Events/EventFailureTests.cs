@@ -154,6 +154,7 @@ public class EventFailureTests
     }
 
     [Fact]
+    [Critical(Family.N2, "a read pins nothing")]
     public async Task An_answer_that_pins_an_identifier_stores_nothing()
     {
         using var harness = Create();

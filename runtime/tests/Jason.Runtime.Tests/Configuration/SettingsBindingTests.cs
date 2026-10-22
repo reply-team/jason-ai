@@ -250,7 +250,7 @@ public class SettingsBindingTests
     /// say nothing, so each is given a value of the wrong type here, read the way the runtime reads it.
     /// </summary>
     [Theory]
-    [MemberData(nameof(MistypedInEverySection))]
+    [MemberData(nameof(CriticalMistypedInEverySection))]
     public void A_mistyped_value_in_any_section_is_refused_by_that_sections_path(string section, string settings, string expected)
     {
         var refusal = section switch
@@ -273,6 +273,7 @@ public class SettingsBindingTests
 
     /// <summary>The theory above has a row for every section there is, so a section added later cannot be left out of it.</summary>
     [Fact]
+    [Critical(Family.C1, "every section is covered by the type check")]
     public void The_mistyped_value_theory_has_a_row_for_every_section()
     {
         var sections = typeof(RuntimeOptions).Assembly.GetTypes()
@@ -296,6 +297,10 @@ public class SettingsBindingTests
             return data;
         }
     }
+
+    // Critical: a mistyped value is refused by path.
+    public static TheoryData<string, string, string> CriticalMistypedInEverySection() =>
+        CriticalRows.Mark(MistypedInEverySection, Family.C1, data => data is ["Runtime", _, _]);
 
     private static readonly (string Section, string Settings, string Expected)[] MistypedRows =
     [

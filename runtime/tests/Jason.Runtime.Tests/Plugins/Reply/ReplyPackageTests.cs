@@ -22,6 +22,7 @@ public class ReplyPackageTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.R5, "the shipped package's grants")]
     public async Task The_official_package_loads_and_asks_for_exactly_what_it_uses()
     {
         await using var api = await ReplyPlugins.StartAsync(Ct);
@@ -123,6 +124,7 @@ public class ReplyPackageTests
     }
 
     [Fact]
+    [Critical(Family.R1, "the shipped package in a real host")]
     public async Task The_entry_module_is_loaded_by_a_real_child_and_answers_for_the_operation_it_was_given()
     {
         await using var api = await ReplyPlugins.StartAsync(Ct);

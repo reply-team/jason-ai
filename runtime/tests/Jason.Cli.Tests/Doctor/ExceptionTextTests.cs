@@ -1,4 +1,5 @@
 using Jason.Cli.Doctor;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Doctor;
 
@@ -153,6 +154,7 @@ public sealed class ExceptionTextTests
 
     /// <summary>A cut that fell between the two halves of one character would leave half of it, which is no character at all.</summary>
     [Fact]
+    [Critical(Family.X1, "a cut never splits a character")]
     public void A_cut_never_leaves_half_of_a_character_that_takes_two_places()
     {
         var text = Line('x', 499) + "😀" + "yy";
@@ -213,6 +215,7 @@ public sealed class ExceptionTextTests
     }
 
     [Fact]
+    [Critical(Family.X1, "the stack cap edge")]
     public void Sixty_one_frames_are_cut_to_sixty_and_the_mark_says_how_many_more_there_were()
     {
         var text = "System.X: boom\r\n" + Frames(61);

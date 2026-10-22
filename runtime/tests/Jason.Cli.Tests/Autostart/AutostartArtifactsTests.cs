@@ -1,5 +1,6 @@
 using Jason.Cli.Autostart;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Autostart;
 
@@ -279,6 +280,7 @@ public class AutostartArtifactsTests
     /// with a space in it — which is where an ordinary Windows installation puts things.
     /// </summary>
     [Theory]
+    [Critical(Family.I4, "the logon registration on every platform")]
     [InlineData(AutostartPlatform.Windows)]
     [InlineData(AutostartPlatform.MacOs)]
     [InlineData(AutostartPlatform.Linux)]
@@ -359,6 +361,7 @@ public class AutostartArtifactsTests
     /// it was given. Windows cannot reach this — a quote is not a legal character in a path there.
     /// </summary>
     [Fact]
+    [Critical(Family.I4, "no quoting injection into a registration")]
     public void A_double_quote_in_a_data_directory_is_refused_by_name()
     {
         var refused = Assert.Throws<AutostartException>(

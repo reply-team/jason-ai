@@ -16,6 +16,7 @@ public class ProfileVerbsTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.P1, "profiles are never deleted")]
     public async Task There_is_no_verb_that_deletes_a_profile()
     {
         var published = typeof(Operations)

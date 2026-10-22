@@ -3,6 +3,7 @@ using Jason.Contracts.Events;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Events;
 
@@ -14,6 +15,7 @@ namespace Jason.Contracts.Tests.Events;
 public sealed class EventsContractTests
 {
     [Fact]
+    [Critical(Family.R3, "the events family is one document")]
     public void The_family_publishes_one_contract_events_read_at_version_1()
     {
         var contract = Assert.Single(EventsCatalog.All);
@@ -134,6 +136,7 @@ public sealed class EventsContractTests
 
     /// <summary>A read finds pins and never writes one: any identifier beside its result is refused, whatever its kind.</summary>
     [Fact]
+    [Critical(Family.R3, "an events read pins nothing")]
     public void An_answer_carrying_identifiers_is_refused_whatever_their_kind()
     {
         var problems = EventsContract.CheckExternalIds(new JsonObject { ["campaign"] = "p_1", ["contact"] = "c_1" });

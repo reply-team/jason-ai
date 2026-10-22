@@ -59,6 +59,7 @@ public class WorkItemIdempotencyTests
     }
 
     [Fact]
+    [Critical(Family.W8, "idempotent workitem.create")]
     public async Task The_same_request_again_answers_the_same_item_and_writes_nothing()
     {
         using var database = new TestDatabase();
@@ -196,6 +197,7 @@ public class WorkItemIdempotencyTests
     }
 
     [Fact]
+    [Critical(Family.W8, "a key reuse is refused")]
     public async Task A_different_request_under_the_same_key_is_refused_naming_the_item_and_not_the_key()
     {
         using var database = new TestDatabase();
@@ -216,6 +218,7 @@ public class WorkItemIdempotencyTests
     }
 
     [Fact]
+    [Critical(Family.W8, "key race")]
     public async Task A_writer_that_loses_the_race_to_the_same_request_answers_with_the_winner()
     {
         using var database = new TestDatabase();

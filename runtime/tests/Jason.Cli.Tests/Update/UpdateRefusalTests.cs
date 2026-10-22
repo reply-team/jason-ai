@@ -2,6 +2,7 @@ using Jason.Cli;
 using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -160,6 +161,7 @@ public class UpdateRefusalTests
     /// under way is refused — and the message says what is in flight, where it stands and what to type.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "one update at a time")]
     public async Task An_update_to_another_version_while_one_is_in_flight_is_refused()
     {
         using var installation = new FakeInstallation().WithRuntime();
@@ -187,6 +189,7 @@ public class UpdateRefusalTests
     /// rather than beginning again — which is what writing the ledger before each step is for.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "apply resumes")]
     public async Task A_second_apply_for_the_same_version_carries_on_from_the_step_it_reached()
     {
         using var installation = new FakeInstallation().WithRuntime();

@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.Cli.Tests.Documentation;
 
 /// <summary>
@@ -192,6 +194,7 @@ public sealed partial class InstallNoticesTests
 
     /// <summary>The archive the repair downloads is checked as an install's is, and one that does not match writes nothing.</summary>
     [Theory]
+    [Critical(Family.I1, "a checksum mismatch writes nothing")]
     [InlineData(Sh)]
     [InlineData(Ps1)]
     public void A_repair_whose_archive_does_not_match_its_checksum_writes_nothing(string script)

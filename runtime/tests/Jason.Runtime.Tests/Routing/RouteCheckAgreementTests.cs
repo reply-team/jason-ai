@@ -77,8 +77,12 @@ public class RouteCheckAgreementTests
 
     public static TheoryData<string> EveryQuestionBothGatesAsk() => [.. Shared.Keys];
 
+    // Critical: activation and claim agree.
+    public static TheoryData<string> CriticalQuestionsBothGatesAsk() =>
+        CriticalRows.Mark(EveryQuestionBothGatesAsk(), Family.W3, data => data is ["nothing stands in the route's way"]);
+
     [Theory]
-    [MemberData(nameof(EveryQuestionBothGatesAsk))]
+    [MemberData(nameof(CriticalQuestionsBothGatesAsk))]
     public void Activation_and_the_claim_reach_the_same_verdict_about_one_route(string question)
     {
         var scenario = Shared[question];

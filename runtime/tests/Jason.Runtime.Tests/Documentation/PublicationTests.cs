@@ -10,6 +10,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed partial class PublicationTests
 {
     [Fact]
+    [Critical(Family.B4, "the open set's shape")]
     public void The_open_set_is_a_sorted_list_of_published_paths_that_exist()
     {
         var root = Publication.RepositoryRoot();
@@ -21,11 +22,13 @@ public sealed partial class PublicationTests
     }
 
     [Theory]
-    [InlineData("runtime/", "the runtime's source is never published")]
+    // Critical: the runtime source and CLAUDE.md are never published.
+    [InlineData("runtime/", "the runtime's source is never published", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B4)])]
     [InlineData("runtime/src/Jason.App/", "the runtime's source is never published")]
     [InlineData(".github/workflows/", "the pipeline is never published")]
     [InlineData(".github/publish/public/", "the pipeline is never published")]
-    [InlineData("CLAUDE.md", "CLAUDE.md is never published")]
+    // Critical: the runtime source and CLAUDE.md are never published.
+    [InlineData("CLAUDE.md", "CLAUDE.md is never published", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B4)])]
     [InlineData("DEVELOPMENT.md", "DEVELOPMENT.md is never published")]
     [InlineData("global.json", "global.json is never published")]
     [InlineData("dotnet-tools.json", "dotnet-tools.json is never published")]
@@ -107,6 +110,7 @@ public sealed partial class PublicationTests
     /// fixed list: a file added to the directory is a file published, and that is a decision, not a side effect.
     /// </summary>
     [Fact]
+    [Critical(Family.B4, "public-own files")]
     public void The_public_repository_s_own_files_are_exactly_these()
     {
         var directory = Path.Combine(Publication.RepositoryRoot(), Publication.PublicOwnDirectory);

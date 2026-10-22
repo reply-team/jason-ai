@@ -14,6 +14,7 @@ public class PluginJournalTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.R1, "plugins_reloaded")]
     public async Task An_activated_reload_is_written_down_once()
     {
         using var programs = new TestPrograms();

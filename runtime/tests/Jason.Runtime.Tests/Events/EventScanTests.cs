@@ -89,6 +89,7 @@ public class EventScanTests
     }
 
     [Fact]
+    [Critical(Family.N2, "one reader off the scan")]
     public async Task One_read_is_handed_over_at_a_time()
     {
         using var harness = new DispatchHarness(Noon);
@@ -164,6 +165,7 @@ public class EventScanTests
     /// before the first question it asks about the campaigns' inbound reads.
     /// </summary>
     [Fact]
+    [Critical(Family.N2, "scan order")]
     public async Task The_events_step_runs_before_the_inbound_read_in_a_scan()
     {
         using var harness = Create();

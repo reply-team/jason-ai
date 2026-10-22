@@ -1,6 +1,7 @@
 using Jason.Cli.Update;
 using Jason.Contracts.Api;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -69,6 +70,7 @@ public class UpdateKillPointTests
     /// the whole suite green.
     /// </remarks>
     [Fact]
+    [Critical(Family.I2, "write-ahead order")]
     public async Task The_ledger_says_swapped_before_the_rename_that_swaps()
     {
         using var installation = new FakeInstallation().WithRuntime();
@@ -226,6 +228,7 @@ public class UpdateKillPointTests
 
     /// <summary>The new executable is in place and nothing is serving from it, so the next run starts it.</summary>
     [Fact]
+    [Critical(Family.I2, "resume after a kill")]
     public async Task A_kill_after_the_swap_leaves_a_new_binary_the_next_run_starts()
     {
         using var installation = new FakeInstallation().WithRuntime();
@@ -352,6 +355,7 @@ public class UpdateKillPointTests
     /// a drain, a stop or a start takes, rather than for one rename.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "never a half executable")]
     public async Task The_install_path_is_a_whole_executable_at_every_moment_the_runtime_is_asked_anything()
     {
         using var installation = new FakeInstallation().WithRuntime(runningAttempts: 1);

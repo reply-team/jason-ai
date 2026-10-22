@@ -18,6 +18,7 @@ public class ReportNonInterferenceTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W10, "reports change nothing managed")]
     public async Task Admitting_a_report_changes_no_managed_record()
     {
         using var database = new TestDatabase();
@@ -62,6 +63,7 @@ public class ReportNonInterferenceTests
     /// promoting it would put a claim the runtime cannot stand behind where its own findings live.
     /// </summary>
     [Fact]
+    [Critical(Family.W10, "reports never pin")]
     public async Task A_reported_provider_identifier_never_becomes_a_pin()
     {
         using var database = new TestDatabase();

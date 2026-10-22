@@ -7,6 +7,7 @@ namespace Jason.Runtime.Tests.Api;
 public partial class ApiFixturesCatalogTests
 {
     [Fact]
+    [Critical(Family.B6, "the UI fixtures are held one to one")]
     public void The_files_on_disk_are_exactly_the_catalogued_cases()
     {
         var root = ApiFixtures.Root;
@@ -22,7 +23,7 @@ public partial class ApiFixturesCatalogTests
     }
 
     [Theory]
-    [MemberData(nameof(EveryCase))]
+    [MemberData(nameof(CriticalEveryCase))]
     public void Every_file_is_a_scrubbed_exchange_of_its_operation(string @case)
     {
         var text = File.ReadAllText(ApiFixtures.PathOf(@case));
@@ -39,6 +40,10 @@ public partial class ApiFixturesCatalogTests
     }
 
     public static TheoryData<string> EveryCase() => [.. ApiFixtures.Cases];
+
+    // Critical: a recorded exchange is scrubbed.
+    public static TheoryData<string> CriticalEveryCase() =>
+        CriticalRows.Mark(EveryCase(), Family.B6, data => data is ["approval.approve/already-decided"]);
 
     [GeneratedRegex("[a-z]{2,8}_[0-9A-HJKMNP-TV-Z]{26}")]
     private static partial Regex Ulid();

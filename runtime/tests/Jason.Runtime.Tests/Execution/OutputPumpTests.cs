@@ -16,6 +16,7 @@ public class OutputPumpTests
     private const int Unbounded = 1024 * 1024;
 
     [Fact]
+    [Critical(Family.S3, "transcripts are redacted")]
     public async Task Every_line_is_redacted_on_its_way_to_the_file()
     {
         using var directory = new TempDataDir();
@@ -106,6 +107,7 @@ public class OutputPumpTests
     }
 
     [Fact]
+    [Critical(Family.F4, "the pump drains past the cap")]
     public async Task The_pipe_is_drained_to_the_end_long_after_the_file_stopped_growing()
     {
         using var directory = new TempDataDir();

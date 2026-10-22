@@ -1,4 +1,5 @@
 using Jason.Cli.Status;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -34,6 +35,7 @@ public sealed class RuntimeVersionCheckTests
     /// and <c>ready</c> is false, which is the whole point: everything else here passes.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "a runtime of another build is not ready")]
     public async Task A_runtime_that_is_another_build_is_a_required_failure_with_the_restart()
     {
         using var dir = new TempPaths();

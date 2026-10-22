@@ -39,6 +39,7 @@ public class ParseFailureTests
     /// their text as a value is: only names the code itself knows may travel, and a path is not one of them.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "parser paths are scrubbed")]
     public void A_key_somebody_typed_is_not_said_even_though_the_path_names_it()
     {
         var failure = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Dictionary<string, int>>("{\"" + SentinelKey + "\":\"many\"}"));

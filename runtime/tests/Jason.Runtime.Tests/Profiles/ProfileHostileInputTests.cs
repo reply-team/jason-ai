@@ -124,7 +124,8 @@ public class ProfileHostileInputTests
     /// reach, so a path would name a program the runtime never put there.
     /// </summary>
     [Theory]
-    [InlineData("/usr/local/bin/jason")]
+    // Critical: the callback word is a word.
+    [InlineData("/usr/local/bin/jason", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S6)])]
     [InlineData("C:\\tools\\jason.exe")]
     [InlineData("..\\jason")]
     [InlineData("./jason")]
@@ -263,7 +264,8 @@ public class ProfileHostileInputTests
     /// unable to report — while every document still said otherwise. Refused where they are written.
     /// </summary>
     [Theory]
-    [InlineData("--permission-mode")]
+    // Critical: a profile cannot override the runtime's flags.
+    [InlineData("--permission-mode", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S6)])]
     [InlineData("--permission-mode=bypassPermissions")]
     [InlineData("--restricted")]
     [InlineData("--tools")]
@@ -370,6 +372,7 @@ public class ProfileHostileInputTests
     /// secret in it.
     /// </summary>
     [Fact]
+    [Critical(Family.S3, "no credential in a profile")]
     public async Task Credential_shaped_fields_are_not_part_of_a_profile_and_are_not_kept()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

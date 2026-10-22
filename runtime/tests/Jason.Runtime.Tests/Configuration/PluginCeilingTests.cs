@@ -40,6 +40,7 @@ public class PluginCeilingTests
     /// day an operator finds a killed child and no reason for it.
     /// </summary>
     [Fact]
+    [Critical(Family.C1, "default budgets fit every operation")]
     public void The_defaults_this_runtime_ships_hold_the_slowest_operation_it_publishes()
     {
         var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions());

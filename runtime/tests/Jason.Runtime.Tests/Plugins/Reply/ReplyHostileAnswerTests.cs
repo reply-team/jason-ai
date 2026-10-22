@@ -44,6 +44,7 @@ public class ReplyHostileAnswerTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.R1, "a garbled provider answer")]
     public async Task Stdout_that_is_not_json_at_all_is_treated_as_no_answer()
     {
         // A CLI that fell over prints whatever it prints. There is no envelope to read, so there is no answer —

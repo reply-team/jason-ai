@@ -313,6 +313,7 @@ public class PluginServiceTests
     /// running host writes through its file sink and nothing else would see the line.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "a typed reason never reaches the log")]
     public async Task A_reload_reason_is_kept_in_the_journal_and_never_in_the_log()
     {
         var logs = new RecordingLogs();

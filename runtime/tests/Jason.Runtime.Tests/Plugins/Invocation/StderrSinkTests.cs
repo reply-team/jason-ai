@@ -37,6 +37,7 @@ public class StderrSinkTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.S3, "redaction across read boundaries")]
     public async Task A_secret_split_between_two_reads_is_still_masked()
     {
         var sink = Sink();

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -55,6 +56,7 @@ public class SchemaValidatorTests
     }
 
     [Fact]
+    [Critical(Family.R3, "required")]
     public void Required_points_at_the_property_that_is_missing()
     {
         const string schema = """
@@ -79,6 +81,7 @@ public class SchemaValidatorTests
     }
 
     [Fact]
+    [Critical(Family.R3, "closed objects")]
     public void Additional_properties_false_names_the_property_nobody_declared()
     {
         const string schema = """{"type":"object","properties":{"a":{"type":"string"}},"additionalProperties":false}""";
@@ -151,6 +154,7 @@ public class SchemaValidatorTests
     /// a newline after it and went on to whatever read the value next.
     /// </summary>
     [Fact]
+    [Critical(Family.R3, "the classic $ trap")]
     public void A_dollar_anchors_the_end_of_the_value_and_a_final_newline_does_not_satisfy_it()
     {
         Assert.Empty(CheckPattern("^[a-z]+$", "abc"));
@@ -246,7 +250,8 @@ public class SchemaValidatorTests
     /// refuses the escape rather than choose. The refusal names the escape and never the pattern around it.
     /// </summary>
     [Theory]
-    [InlineData(@"^[a-z]+\Z", @"\Z")]
+    // Critical: escapes with two meanings.
+    [InlineData(@"^[a-z]+\Z", @"\Z", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R3)])]
     [InlineData(@"^[a-z]+\z", @"\z")]
     [InlineData(@"\A[a-z]+$", @"\A")]
     [InlineData(@"^[a-z]+\G", @"\G")]
@@ -310,6 +315,7 @@ public class SchemaValidatorTests
     /// carriage return, and the text a schema's author wrote as one line would reach whatever reads it next as two.
     /// </summary>
     [Fact]
+    [Critical(Family.R3, "ECMA-262 dot semantics")]
     public void A_dot_stops_at_each_of_the_four_line_terminators_ecma_262_names()
     {
         Assert.Empty(CheckPattern("^.+$", "abc"));
@@ -630,6 +636,7 @@ public class SchemaValidatorTests
     }
 
     [Fact]
+    [Critical(Family.R3, "date-time format")]
     public void Format_date_time_refuses_a_timestamp_without_an_offset_and_an_impossible_day()
     {
         const string schema = """{"type":"string","format":"date-time"}""";
@@ -689,6 +696,7 @@ public class SchemaValidatorTests
     }
 
     [Fact]
+    [Critical(Family.R3, "all failures at once")]
     public void Every_failure_of_a_document_is_reported_at_once_rather_than_the_first()
     {
         const string schema = """

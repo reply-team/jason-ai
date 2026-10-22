@@ -16,6 +16,7 @@ namespace Jason.Runtime.Tests.Persistence;
 public class ReportImmutabilityTests
 {
     [Fact]
+    [Critical(Family.P1, "reports are immutable")]
     public void Raw_update_and_delete_of_a_report_are_refused_by_the_triggers()
     {
         using var database = new TestDatabase();

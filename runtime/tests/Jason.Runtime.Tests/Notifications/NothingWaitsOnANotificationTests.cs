@@ -98,6 +98,7 @@ public sealed class NothingWaitsOnANotificationTests
     }
 
     [Fact]
+    [Critical(Family.N3, "notifications never block work")]
     public async Task A_notifier_that_throws_still_leaves_the_claimed_work_dispatched()
     {
         var command = FakeCommand.Returning(new CommandOutcome.Completed(null));

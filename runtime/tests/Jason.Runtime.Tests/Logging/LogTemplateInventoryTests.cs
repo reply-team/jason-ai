@@ -111,6 +111,7 @@ public sealed class LogTemplateInventoryTests
     private static readonly Lazy<ILookup<(string Type, string Field), string>> Constants = new(() => ConstantsOf(Production.Value));
 
     [Fact]
+    [Critical(Family.B3, "the log-template guard")]
     public void Every_template_of_the_runtime_names_only_properties_whose_values_nobody_typed()
     {
         var root = RepositoryRoot();
@@ -186,6 +187,7 @@ public sealed class LogTemplateInventoryTests
 
     /// <summary>A reload's reason is free text a person or an agent typed, and the journal is where it is kept.</summary>
     [Fact]
+    [Critical(Family.B3, "a typed reason never reaches a log")]
     public void A_reason_is_not_a_property_any_log_line_may_carry()
     {
         Assert.DoesNotContain("Reason", ReviewedLogProperties.Names);
@@ -280,6 +282,7 @@ public sealed class LogTemplateInventoryTests
     /// as a delegate — and the check finds both, by this file and the line each is on.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "the guard cannot be bypassed by shape")]
     public void A_logging_call_the_reader_passes_over_is_found_in_the_compiled_assembly_by_its_file_and_line()
     {
         var root = RepositoryRoot();

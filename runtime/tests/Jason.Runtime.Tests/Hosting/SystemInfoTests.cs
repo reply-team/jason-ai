@@ -55,6 +55,7 @@ public class SystemInfoTests
     /// only the answer left them out.
     /// </remarks>
     [Fact]
+    [Critical(Family.P2, "the backup is reported")]
     public async Task A_start_that_migrated_says_what_it_applied_and_where_it_put_the_backup()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: AtTheMigrationBeforeLast);

@@ -75,6 +75,7 @@ public class ExecutableResolverTests
     }
 
     [Fact]
+    [Critical(Family.B1, "no shell")]
     public void A_file_that_only_a_shell_could_start_is_refused()
     {
         using var programs = new TestPrograms();
@@ -461,6 +462,7 @@ public class ExecutableResolverTests
     /// file the shim names is the file that runs; where it really is has to be what is checked.
     /// </summary>
     [Fact]
+    [Critical(Family.X2, "a junction cannot leave the package")]
     public void A_package_directory_that_is_a_junction_out_of_the_tree_is_refused()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
@@ -537,6 +539,7 @@ public class ExecutableResolverTests
     }
 
     [Fact]
+    [Critical(Family.F6, "shim precedence")]
     public void A_shim_never_wins_over_a_real_program_later_on_the_search_path()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);

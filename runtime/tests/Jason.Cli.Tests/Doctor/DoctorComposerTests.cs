@@ -177,6 +177,7 @@ public sealed class DoctorComposerTests
     }
 
     [Fact]
+    [Critical(Family.S4, "journal metadata only by default")]
     public async Task The_journal_is_counted_over_its_window_by_kind_and_its_recent_entries_carry_metadata_alone()
     {
         using var dir = new TempPaths();
@@ -420,6 +421,7 @@ public sealed class DoctorComposerTests
     /// writes carries a key. A campaign is never asked for at all.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "idempotency keys are withheld")]
     public async Task A_key_a_work_item_was_created_with_never_reaches_the_bundle()
     {
         const string Sentinel = "SENTINEL_DOCTORKEY_7f3c";
@@ -934,6 +936,7 @@ public sealed class DoctorComposerTests
     /// chose, as the settings are.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "a route's account never travels")]
     public async Task The_routes_section_says_which_plugin_performs_which_operation_and_never_which_account()
     {
         using var dir = new TempPaths();
@@ -1047,6 +1050,7 @@ public sealed class DoctorComposerTests
     // ---- loopback only, and what is never carried ---------------------------------------------------------------
 
     [Fact]
+    [Critical(Family.S4, "doctor only reads")]
     public async Task Every_request_goes_to_the_descriptors_base_url_and_reads_only()
     {
         using var dir = new TempPaths();
@@ -1077,6 +1081,7 @@ public sealed class DoctorComposerTests
 
     /// <summary>A descriptor that names an address off this machine is not a runtime of this installation, and nothing is sent there.</summary>
     [Theory]
+    [Critical(Family.S4, "no network beyond loopback")]
     [InlineData("http://example.com:47811")]
     [InlineData("http://10.0.0.7:47811")]
     public async Task A_descriptor_whose_address_is_not_loopback_is_stale_and_never_asked(string baseUrl)
@@ -1092,6 +1097,7 @@ public sealed class DoctorComposerTests
     }
 
     [Theory]
+    [Critical(Family.S3, "no token, with the journal or without")]
     [InlineData(false)]
     [InlineData(true)]
     public async Task The_capability_token_is_never_in_a_bundle(bool includeJournal)
@@ -1109,6 +1115,7 @@ public sealed class DoctorComposerTests
     /// file's and environment's values off the list: none reaches the bundle.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "the values the reads return are dropped")]
     public async Task No_value_the_reads_hand_this_process_reaches_the_bundle()
     {
         using var dir = new TempPaths();
@@ -1177,6 +1184,7 @@ public sealed class DoctorComposerTests
     }
 
     [Fact]
+    [Critical(Family.S4, "--include-journal and its warning")]
     public async Task With_the_journal_asked_for_its_entries_are_carried_whole_and_the_warning_with_them()
     {
         using var dir = new TempPaths();
@@ -1590,6 +1598,7 @@ public sealed class DoctorComposerTests
     /// section, whose facts are composed from the same answer, quotes none of what is withheld and the word as written.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "system_info travels projected")]
     public async Task System_info_and_status_withhold_exactly_the_declared_fields_and_carry_the_runtimes_own_words()
     {
         using var dir = new TempPaths();

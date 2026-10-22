@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -13,6 +14,7 @@ namespace Jason.Contracts.Tests.OperationContracts;
 public partial class ShippedPatternsTests
 {
     [Fact]
+    [Critical(Family.R3, "every shipped pattern still compiles to the same meaning")]
     public void Every_shipped_pattern_is_admitted_and_means_what_it_meant()
     {
         var shipped = Shipped().ToList();

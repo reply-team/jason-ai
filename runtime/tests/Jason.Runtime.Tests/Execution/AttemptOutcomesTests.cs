@@ -42,6 +42,7 @@ public class AttemptOutcomesTests
     }
 
     [Fact]
+    [Critical(Family.W4, "retry with delay")]
     public async Task A_retriable_failure_below_the_limit_gives_the_item_back_with_a_delay()
     {
         using var database = new TestDatabase();
@@ -68,6 +69,7 @@ public class AttemptOutcomesTests
     }
 
     [Fact]
+    [Critical(Family.W4, "the retry limit")]
     public async Task The_last_attempt_fails_the_item_and_leaves_the_trace_on_the_attempt()
     {
         using var database = new TestDatabase();
@@ -100,6 +102,7 @@ public class AttemptOutcomesTests
     }
 
     [Fact]
+    [Critical(Family.W4, "final failures end the item")]
     public async Task A_failure_that_is_not_worth_repeating_ends_the_item_at_once()
     {
         using var database = new TestDatabase();
@@ -141,6 +144,7 @@ public class AttemptOutcomesTests
     /// because what the provider said about this particular failure is better evidence than a name.
     /// </summary>
     [Fact]
+    [Critical(Family.W4, "the failure class decides")]
     public async Task A_caller_that_was_told_the_class_decides_instead_of_the_code()
     {
         using var database = new TestDatabase();
@@ -197,6 +201,7 @@ public class AttemptOutcomesTests
     }
 
     [Fact]
+    [Critical(Family.W4, "interruption is free")]
     public async Task An_interrupted_attempt_costs_the_item_nothing()
     {
         using var database = new TestDatabase();

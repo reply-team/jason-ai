@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Jason.Contracts;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Update;
 
@@ -20,6 +21,7 @@ public class UpdateFeedTests
     /// GET, one header saying which version is asking, no body, no query, nothing else.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "the update check carries nothing about the user")]
     public async Task The_request_says_which_version_is_asking_and_carries_nothing_else()
     {
         var seen = new List<HttpRequestMessage>();
@@ -86,12 +88,15 @@ public class UpdateFeedTests
     /// being the reason the rule is relaxed for everybody.
     /// </summary>
     [Theory]
-    [InlineData("https://example.com/manifest.json", true)]
+    // Critical: https only; no metadata address.
+    [InlineData("https://example.com/manifest.json", true, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I2)])]
     [InlineData("http://127.0.0.1:5000/manifest.json", true)]
     [InlineData("http://localhost:5000/manifest.json", true)]
     [InlineData("http://[::1]:5000/manifest.json", true)]
-    [InlineData("http://example.com/manifest.json", false)]
-    [InlineData("http://169.254.169.254/manifest.json", false)]
+    // Critical: https only; no metadata address.
+    [InlineData("http://example.com/manifest.json", false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I2)])]
+    // Critical: https only; no metadata address.
+    [InlineData("http://169.254.169.254/manifest.json", false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I2)])]
     [InlineData("ftp://example.com/manifest.json", false)]
     public async Task Only_https_and_loopback_are_ever_fetched(string url, bool allowed)
     {

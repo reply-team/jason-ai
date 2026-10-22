@@ -81,6 +81,7 @@ public sealed class NtfyPackageTests
 
     /// <summary>The token the operator granted is sent as a bearer header, and is found nowhere else.</summary>
     [Fact]
+    [Critical(Family.S3, "ntfy's token")]
     public async Task A_granted_token_travels_as_a_bearer_header_and_nowhere_else()
     {
         const string Token = "tk_jason_ntfy_test_0123456789";

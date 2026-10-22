@@ -97,6 +97,7 @@ public class ExternalIdStoreTests
     }
 
     [Fact]
+    [Critical(Family.W10, "a pin is never overwritten")]
     public async Task A_different_identifier_never_overwrites_the_first()
     {
         using var database = new TestDatabase();
@@ -299,6 +300,7 @@ public class ExternalIdStoreTests
     }
 
     [Fact]
+    [Critical(Family.W10, "pins are per plugin")]
     public async Task A_plugin_never_sees_another_plugin_s_identifiers()
     {
         using var database = new TestDatabase();
@@ -314,6 +316,7 @@ public class ExternalIdStoreTests
     }
 
     [Fact]
+    [Critical(Family.W10, "the pin wins")]
     public async Task A_diverged_pin_passes_the_value_Jason_recorded_not_the_one_it_disputes()
     {
         using var database = new TestDatabase();

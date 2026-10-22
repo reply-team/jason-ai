@@ -98,6 +98,7 @@ public sealed class JournalKindInventoryTests
     ];
 
     [Fact]
+    [Critical(Family.S4, "doctor's journal classes cover every kind")]
     public void Every_kind_the_runtime_writes_is_decided_once_and_a_kind_that_carries_values_is_named_by_the_bundles_words()
     {
         var defined = typeof(JournalKinds)

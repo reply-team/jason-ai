@@ -33,6 +33,7 @@ public class PluginPrivacyTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.B3, "plugin traffic stays out of files")]
     public async Task What_a_plugin_was_sent_answered_and_granted_reaches_no_file_a_person_reads()
     {
         Environment.SetEnvironmentVariable(_variable, _token);

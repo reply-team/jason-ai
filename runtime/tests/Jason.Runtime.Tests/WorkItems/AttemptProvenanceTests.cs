@@ -114,6 +114,7 @@ public class AttemptProvenanceTests
     /// changed, the plugins are reloaded, and the package on disk is edited — and all three are here.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "provenance is never rewritten")]
     public async Task What_ran_stays_what_ran_after_the_routes_the_plugins_and_the_package_change()
     {
         var executor = new Executor();
@@ -162,6 +163,7 @@ public class AttemptProvenanceTests
     /// silently undoes another. Here the other writer is a heartbeat landing in between.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "provenance completed at the end")]
     public async Task A_completion_adds_what_the_invocation_learned_and_undoes_nothing()
     {
         var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);

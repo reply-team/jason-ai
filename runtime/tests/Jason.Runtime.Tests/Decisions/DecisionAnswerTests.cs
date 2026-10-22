@@ -25,6 +25,7 @@ public class DecisionAnswerTests
     /// escalating is for.
     /// </summary>
     [Theory]
+    [Critical(Family.S2, "a question is a person's to answer")]
     [InlineData(ActorType.Role, "researcher")]
     [InlineData(ActorType.Attempt, "att_live")]
     public async Task Only_a_person_can_answer(ActorType type, string id)
@@ -162,6 +163,7 @@ public class DecisionAnswerTests
     /// commit together or not at all.
     /// </remarks>
     [Fact]
+    [Critical(Family.S2, "one answer under a race")]
     public async Task Two_people_answering_at_once_leave_one_answer_and_one_line()
     {
         using var database = new TestDatabase();

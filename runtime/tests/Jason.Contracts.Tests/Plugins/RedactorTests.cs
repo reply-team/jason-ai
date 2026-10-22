@@ -1,10 +1,12 @@
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Plugins;
 
 public class RedactorTests
 {
     [Fact]
+    [Critical(Family.S3, "the redactor masks every occurrence")]
     public void Every_secret_it_knows_is_masked_wherever_it_appears()
     {
         var redactor = new Redactor(["first-secret-value", "second-secret-value"]);
@@ -31,6 +33,7 @@ public class RedactorTests
     }
 
     [Fact]
+    [Critical(Family.S3, "no partial secret survives an overlap")]
     public void An_overlapping_pair_masks_the_longer_value_whole()
     {
         var redactor = new Redactor(["abcdefgh", "abcdefghij"]);

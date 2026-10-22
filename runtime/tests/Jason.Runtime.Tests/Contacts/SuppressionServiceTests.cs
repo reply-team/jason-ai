@@ -15,6 +15,7 @@ public class SuppressionServiceTests
     private static SuppressionService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
 
     [Fact]
+    [Critical(Family.S1, "the register stores keys")]
     public async Task An_entry_is_stored_under_the_normalized_value_of_its_channel()
     {
         using var database = new TestDatabase();
@@ -59,6 +60,7 @@ public class SuppressionServiceTests
     /// spelling it was written in.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "one stop per LinkedIn person")]
     public async Task A_linkedin_stop_is_one_stop_under_any_spelling_of_the_profile()
     {
         using var database = new TestDatabase();
@@ -91,6 +93,7 @@ public class SuppressionServiceTests
 
     /// <summary>A stop is lifted by any spelling of the profile it was recorded under.</summary>
     [Fact]
+    [Critical(Family.F2, "the lift finds the key")]
     public async Task A_linkedin_stop_is_lifted_by_another_spelling_of_its_profile()
     {
         using var database = new TestDatabase();
@@ -113,6 +116,7 @@ public class SuppressionServiceTests
     /// a profile link, or longer than a value may be given.
     /// </summary>
     [Theory]
+    [Critical(Family.F2, "a pre-key entry is lifted by its own text")]
     [InlineData(ChannelRefusal.Invalid)]
     [InlineData(ChannelRefusal.TooLong)]
     public async Task An_entry_under_a_text_the_rule_now_refuses_is_listed_and_lifted_by_that_text(ChannelRefusal refusedFor)
@@ -166,6 +170,7 @@ public class SuppressionServiceTests
     }
 
     [Fact]
+    [Critical(Family.S1, "a lift needs a reason")]
     public async Task Lifting_a_suppression_without_a_reason_is_refused()
     {
         using var database = new TestDatabase();

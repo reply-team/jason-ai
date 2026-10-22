@@ -4,6 +4,9 @@ using System.Text;
 using Jason.Cli.Uninstall;
 using Jason.Cli.Tests.Documentation;
 using Microsoft.Win32;
+// The critical tier's two names alone: the suite's own TempTree would meet the one this file already uses.
+using CriticalAttribute = Jason.Runtime.Tests.CriticalAttribute;
+using Family = Jason.Runtime.Tests.Family;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -35,6 +38,7 @@ public class UserPathRegistryTests
     // --- the removal ----------------------------------------------------------------------------------------
 
     [Fact]
+    [Critical(Family.I3, "the Windows user PATH keeps REG_EXPAND_SZ")]
     public void The_removal_keeps_the_kind_and_the_variables_of_everything_it_does_not_take()
     {
         using var key = ScratchKey.Create();

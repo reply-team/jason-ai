@@ -81,6 +81,7 @@ public class ClaudeCodeHostTests
     /// command line reads afterwards as a permission the role had.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "the launched session's allow list")]
     public void The_allow_list_is_the_callback_and_nothing_else()
     {
         var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
@@ -202,7 +203,8 @@ public class ClaudeCodeHostTests
     /// verified against Claude Code 2.1.275, where every one of them widens what a session can reach.
     /// </summary>
     [Theory]
-    [InlineData("--verbose")]
+    // Critical: a profile cannot widen the agent's permissions.
+    [InlineData("--verbose", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S6)])]
     [InlineData("--setting-sources")]
     [InlineData("--strict-mcp-config")]
     [InlineData("--mcp-config")]

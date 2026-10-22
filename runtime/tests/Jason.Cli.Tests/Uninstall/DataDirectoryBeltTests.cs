@@ -1,4 +1,5 @@
 using Jason.Cli.Uninstall;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -27,8 +28,12 @@ public class DataDirectoryBeltTests
         { "an ancestor of the installation", Path.GetDirectoryName(Install)! },
     };
 
+    // Critical: the purge belt refuses a non-data directory.
+    public static TheoryData<string, string> CriticalRefused() =>
+        CriticalRows.Mark(Refused(), Family.I3, data => data is ["the root of a file system", _]);
+
     [Theory]
-    [MemberData(nameof(Refused))]
+    [MemberData(nameof(CriticalRefused))]
     public void A_directory_that_is_not_a_data_directory_is_refused(string what, string directory)
     {
         var refusal = DataDirectoryBelt.Refusal(directory, Profile, Temporary, Install);
@@ -65,6 +70,7 @@ public class DataDirectoryBeltTests
     /// strings, and <c>\\?\C:\Users\…</c> got past it.
     /// </summary>
     [Fact]
+    [Critical(Family.I3, "\\\\?\\ cannot disguise the profile")]
     public void The_profile_spelled_with_the_long_path_prefix_is_refused()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The prefix is Windows' own; elsewhere it is an ordinary, if odd, directory name.");
@@ -77,6 +83,7 @@ public class DataDirectoryBeltTests
     /// belt compared the link's own path, and it got past.
     /// </summary>
     [Fact]
+    [Critical(Family.I3, "the purge never follows a link to the profile")]
     public void A_link_to_the_profile_is_refused()
     {
         using var tree = new Documentation.TempTree();

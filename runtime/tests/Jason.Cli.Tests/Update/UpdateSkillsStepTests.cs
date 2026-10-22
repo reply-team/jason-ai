@@ -10,6 +10,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -99,6 +100,7 @@ public class UpdateSkillsStepTests
     /// the same repair it named before the step existed.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "the skills step never undoes an update")]
     public async Task A_skills_step_that_fails_leaves_the_update_complete_and_status_naming_the_repair()
     {
         using var installation = new FakeInstallation();

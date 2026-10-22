@@ -16,6 +16,7 @@ public class EventGapTests
     private static readonly EventGap Skipped = new(Noon.AddDays(-45), Noon.AddDays(-30));
 
     [Fact]
+    [Critical(Family.N2, "events_gap_observed once")]
     public async Task A_gap_is_said_with_the_first_page_that_lands_and_once()
     {
         using var it = new EventStoreFixture();

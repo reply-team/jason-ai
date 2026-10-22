@@ -36,6 +36,7 @@ public class JasonConfigurationTests
     }
 
     [Fact]
+    [Critical(Family.C1, "settings.json precedence")]
     public void User_settings_override_shipped_settings()
     {
         using var dir = new TempDataDir();
@@ -58,6 +59,7 @@ public class JasonConfigurationTests
     /// inherited by every runtime another test starts in the same moment.
     /// </summary>
     [Fact]
+    [Critical(Family.C1, "JASON_* precedence")]
     public void Environment_variables_with_the_jason_prefix_win()
     {
         using var dir = new TempDataDir();

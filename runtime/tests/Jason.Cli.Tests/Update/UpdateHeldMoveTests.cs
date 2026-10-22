@@ -6,6 +6,7 @@ using Jason.Cli.Uninstall;
 using Jason.Cli.Update;
 using Jason.Contracts.Files;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -55,6 +56,7 @@ public sealed class UpdateHeldMoveTests
     /// does not stop the rename at all, so the move goes through at once and no pause is taken.
     /// </summary>
     [Theory]
+    [Critical(Family.F5, "the held-file wait in update")]
     [InlineData(Aside)]
     [InlineData(InPlace)]
     public async Task An_executable_held_for_a_moment_is_moved_once_it_is_let_go(string move)

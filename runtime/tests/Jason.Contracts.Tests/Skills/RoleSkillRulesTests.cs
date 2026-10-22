@@ -1,4 +1,5 @@
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Skills;
 
@@ -162,6 +163,7 @@ public class RoleSkillRulesTests : IDisposable
     /// with the file; telling the operator to fix front matter that is already right was the mistake to avoid.
     /// </summary>
     [Fact]
+    [Critical(Family.X2, "a link is never followed into a role's tree")]
     public void A_skill_file_that_is_a_link_says_to_replace_the_link()
     {
         var directory = Directory.CreateDirectory(Path.Combine(_root, "researcher")).FullName;

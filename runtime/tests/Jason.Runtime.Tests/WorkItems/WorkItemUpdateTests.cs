@@ -125,6 +125,7 @@ public class WorkItemUpdateTests
     }
 
     [Fact]
+    [Critical(Family.P3, "finished is final")]
     public async Task A_finished_item_is_not_patched()
     {
         using var database = new TestDatabase();
@@ -139,6 +140,7 @@ public class WorkItemUpdateTests
     }
 
     [Fact]
+    [Critical(Family.W7, "the snapshot an attempt runs with")]
     public async Task A_context_edit_on_a_claimed_item_leaves_the_running_attempt_with_what_it_was_told()
     {
         using var database = new TestDatabase();

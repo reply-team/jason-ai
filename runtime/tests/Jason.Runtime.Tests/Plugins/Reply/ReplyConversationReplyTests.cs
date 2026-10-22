@@ -109,7 +109,8 @@ public class ReplyConversationReplyTests
     /// one call is the read, and the thread's person is never pinned to somebody they are not.
     /// </summary>
     [Theory]
-    [InlineData("1002", "marta@example.com", false)]
+    // Critical: a reply reaches the thread's own person.
+    [InlineData("1002", "marta@example.com", false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S1)])]
     [InlineData(null, "lena@example.com", false)]
     [InlineData("1001", "marta.work@example.com", false)]
     [InlineData(null, "marta@example.com", true)]
@@ -315,6 +316,7 @@ public class ReplyConversationReplyTests
     /// the work item's, so the reply is refused rather than sent to a person the check was never about.
     /// </summary>
     [Theory]
+    [Critical(Family.F1, "one LinkedIn key at the reply")]
     [InlineData(null, "https://www.linkedin.com/in/marta-alvarez-2")]
     [InlineData(null, "https://www.linkedin.com/in/marta")]
     [InlineData("https://www.linkedin.com/in/marta-alvarez-2", "https://www.linkedin.com/in/marta-alvarez")]
@@ -364,6 +366,7 @@ public class ReplyConversationReplyTests
     /// the thread's person travels with the failure so whoever looks knows who it was for.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "a lost reply is never repeated")]
     public async Task A_lost_answer_is_never_repeated_and_carries_the_thread_s_person()
     {
         using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z"));

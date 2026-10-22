@@ -157,6 +157,7 @@ public class UpdateStagerTests
     }
 
     [Fact]
+    [Critical(Family.I1, "update verifies the checksum")]
     public async Task A_download_whose_digest_does_not_match_is_refused_and_its_bytes_are_gone()
     {
         using var dir = new TempTree();
@@ -199,7 +200,7 @@ public class UpdateStagerTests
     /// the executable's and the notices', and ignore the rest. There is no path to sanitise because no path is ever used.
     /// </summary>
     [Theory]
-    [MemberData(nameof(HostileArchives))]
+    [MemberData(nameof(CriticalHostileArchives))]
     public async Task Only_the_one_expected_entry_is_ever_taken_out_of_an_archive(string what, string[] entries, bool staged)
     {
         using var dir = new TempTree();
@@ -243,6 +244,10 @@ public class UpdateStagerTests
         };
     }
 
+    // Critical: archive extraction takes one entry.
+    public static TheoryData<string, string[], bool> CriticalHostileArchives() =>
+        CriticalRows.Mark(HostileArchives(), Family.X2, data => data is ["the file and nothing else", _, _]);
+
     /// <summary>A second update finds nothing of the first one's: the staged directory is emptied before it is filled.</summary>
     [Fact]
     public async Task Staging_clears_what_the_last_update_left()
@@ -273,6 +278,7 @@ public class UpdateStagerTests
     }
 
     [Fact]
+    [Critical(Family.I1, "the size bound")]
     public async Task An_artifact_larger_than_the_bound_is_refused_before_a_byte_is_fetched()
     {
         using var dir = new TempTree();

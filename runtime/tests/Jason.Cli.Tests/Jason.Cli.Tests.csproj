@@ -15,6 +15,8 @@
 
     <!-- The one rule against a test matching a sentence the system words in the machine's language: each test assembly reads itself. -->
     <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
+    <!-- The critical tier's attribute and its families, one vocabulary in every test assembly. -->
+    <Compile Include="../Jason.Runtime.Tests/Critical.cs" Link="Critical.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- What the repository teaches somebody to type, linked beside the tests that hand every printed command to the real parser. -->

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Xml.Linq;
 using Jason.App.Tests.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Hosting;
 
@@ -30,6 +31,7 @@ public class ApplicationManifestTests
     /// </para>
     /// </remarks>
     [Fact]
+    [Critical(Family.B1, "no console window of its own")]
     public void The_compiled_program_takes_no_console_it_did_not_inherit_and_runs_as_its_invoker()
     {
         var image = Path.Combine(AppContext.BaseDirectory, "jason.dll");

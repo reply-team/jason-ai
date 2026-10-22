@@ -66,6 +66,7 @@ public class ReplyContactDeleteTests
 
     /// <summary>Reply's own stop lives on the contact, so deleting it would erase that stop: the person is refused, and their record stays.</summary>
     [Fact]
+    [Critical(Family.S1, "an opt-out is never deleted away")]
     public async Task A_contact_the_provider_holds_as_opted_out_is_refused_and_not_deleted()
     {
         using var account = new ReplyAccount().WithContact(1001, Address, "Marta", optedOut: true);
@@ -318,6 +319,7 @@ public class ReplyContactDeleteTests
     /// do-not-contact register, whose stop on another of their channels stays a stop.
     /// </summary>
     [Fact]
+    [Critical(Family.S1, "the register survives a delete")]
     public async Task The_runtime_keeps_the_person_their_pin_and_the_register_after_a_delete()
     {
         using var account = new ReplyAccount().WithContact(1001, Address, "Marta");

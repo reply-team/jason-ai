@@ -4,6 +4,7 @@ using Jason.Cli.Skills;
 using Jason.Contracts.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Skills;
 
@@ -59,6 +60,7 @@ public class SkillsIdempotencyTests
     /// half of them is worse: the operator would have to work out which half.
     /// </summary>
     [Fact]
+    [Critical(Family.I3, "an operator's edit is never overwritten")]
     public async Task A_file_the_operator_edited_is_reported_and_kept_and_nothing_else_is_written()
     {
         using var dir = new TempPaths();

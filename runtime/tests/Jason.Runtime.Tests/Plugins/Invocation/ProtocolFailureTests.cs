@@ -41,6 +41,7 @@ public class ProtocolFailureTests
     /// empty search means the text is absent and not that the lines never arrived.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "a bad outcome is not logged")]
     public async Task A_child_that_writes_an_unreadable_outcome_is_not_quoted_in_any_log_line()
     {
         var logs = new RecordingLogs();
@@ -109,6 +110,7 @@ public class ProtocolFailureTests
     }
 
     [Fact]
+    [Critical(Family.F4, "stdout flood")]
     public async Task A_child_that_floods_stdout_is_ended_rather_than_read()
     {
         await using var api = await StartAsync(
@@ -237,6 +239,7 @@ public class ProtocolFailureTests
     }
 
     [Fact]
+    [Critical(Family.F4, "stdin never read")]
     public async Task A_child_that_never_reads_its_envelope_is_ended_rather_than_holding_the_write_open()
     {
         await using var api = await StartAsync(
@@ -336,6 +339,7 @@ public class ProtocolFailureTests
     /// the kill grace is the answer.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "a grandchild holding the pipes")]
     public async Task Something_the_killed_child_left_behind_does_not_hold_the_invocation_open()
     {
         await using var api = await StartAsync(
@@ -412,6 +416,7 @@ public class ProtocolFailureTests
     /// itself and writes their code points to a file, since what it says on stdout is read as an outcome.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "ASCII on the wire")]
     public async Task The_invocation_is_ascii_on_the_wire_whatever_its_input_holds()
     {
         using var directory = new TempTree();

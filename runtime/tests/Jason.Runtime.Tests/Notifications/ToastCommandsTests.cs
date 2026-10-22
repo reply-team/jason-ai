@@ -41,6 +41,7 @@ public sealed class ToastCommandsTests
 
     /// <summary>The composer never makes a quote or a backslash; the escaping rule is held anyway.</summary>
     [Fact]
+    [Critical(Family.X3, "no injection into osascript")]
     public void Apple_script_s_quote_and_backslash_are_escaped()
     {
         var odd = new NotificationMessage("Ja\"son", "a \"b\" c\\d", "e", 1, 0);
@@ -72,6 +73,7 @@ public sealed class ToastCommandsTests
     }
 
     [Fact]
+    [Critical(Family.X3, "no injection into gdbus")]
     public void A_gvariant_string_escapes_its_quote_and_backslash()
     {
         var odd = new NotificationMessage("Jason", "it's c:\\x", "e", 1, 0);

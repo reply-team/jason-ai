@@ -144,6 +144,7 @@ public class ReplyCampaignCreateTests
     /// to its <c>exec</c> line. So both commands read it on stdin.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "the name stays off argv")]
     public async Task The_name_never_reaches_a_command_line()
     {
         const string Marked = "Name-marker-7d3e";
@@ -182,6 +183,7 @@ public class ReplyCampaignCreateTests
     /// a draft that holds nobody, made after the work item — and answers from it, making nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "campaign.create recovery read")]
     public async Task A_create_whose_answer_was_lost_is_found_by_the_next_attempt_and_never_made_twice()
     {
         using var account = new ReplyAccount();

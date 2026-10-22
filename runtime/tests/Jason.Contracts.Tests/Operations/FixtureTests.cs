@@ -5,6 +5,7 @@ using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -17,6 +18,20 @@ public class FixtureTests
     public static TheoryData<string> Inputs() => Files("input");
 
     public static TheoryData<string> Outcomes() => Files("outcome");
+
+    // Critical: fixtures executed, a sample across the catalog.
+    public static TheoryData<string> CriticalInputs() =>
+        CriticalRows.Mark(Inputs(), Family.R3, data => data is
+            ["docs/contracts/fixtures/campaign.activate/input-a-fraction-of-a-person.json"]
+            or ["docs/contracts/fixtures/engagement.summarize/input-a-span-of-dates-for-a-campaign-linked-now.json"]
+            or ["docs/contracts/fixtures/social_invitation.send/input-without-a-note.json"]);
+
+    // Critical: outcome classification from fixtures, a sample.
+    public static TheoryData<string> CriticalOutcomes() =>
+        CriticalRows.Mark(Outcomes(), Family.R1, data => data is
+            ["docs/contracts/fixtures/campaign.activate/outcome-a-negative-count.json"]
+            or ["docs/contracts/fixtures/conversation.reply/outcome-pins-the-contact.json"]
+            or ["docs/contracts/fixtures/social_invitation.send/outcome-suppressed.json"]);
 
     public static TheoryData<string> Previews() => Files("preview");
 
@@ -35,6 +50,7 @@ public class FixtureTests
         (JsonObject)JsonNode.Parse(File.ReadAllText(Path.Combine(ContractFiles.Root, relative)))!;
 
     [Fact]
+    [Critical(Family.R3, "no operation without fixtures")]
     public void Every_published_operation_has_fixtures_of_both_kinds()
     {
         var inputs = ContractFiles.FixtureFiles("input").Select(Read).ToList();
@@ -151,7 +167,7 @@ public class FixtureTests
     }
 
     [Theory]
-    [MemberData(nameof(Inputs))]
+    [MemberData(nameof(CriticalInputs))]
     public void An_input_fixture_says_what_the_validator_will_say(string relative)
     {
         var fixture = Read(relative);
@@ -168,7 +184,7 @@ public class FixtureTests
     }
 
     [Theory]
-    [MemberData(nameof(Outcomes))]
+    [MemberData(nameof(CriticalOutcomes))]
     public void An_outcome_fixture_says_what_the_runtime_will_make_of_that_answer(string relative)
     {
         var fixture = Read(relative);

@@ -162,7 +162,8 @@ public class UiServingTests
     }
 
     [Theory]
-    [InlineData("/ui/%2e%2e/config/settings.json")]
+    // Critical: the UI server cannot climb.
+    [InlineData("/ui/%2e%2e/config/settings.json", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X2)])]
     [InlineData("/ui/..%2fconfig%2fsettings.json")]
     [InlineData("/ui/assets/")]
     [InlineData("/ui/assets")]

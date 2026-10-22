@@ -1,4 +1,5 @@
 using Jason.Contracts.Ui;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Ui;
 
@@ -21,7 +22,8 @@ public class UiManifestTests
     }
 
     [Theory]
-    [InlineData("not json")]
+    // Critical: a UI build's manifest.
+    [InlineData("not json", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B6)])]
     [InlineData("{\"version\":\"0.10.0\"}")]
     [InlineData("{\"version\":\"\",\"api_version\":\"v1\"}")]
     [InlineData("{\"version\":\"0.10.0\",\"api_version\":\"v1\",\"extra\":1}")]

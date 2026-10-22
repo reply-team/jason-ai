@@ -157,6 +157,7 @@ public class CanonicalOperationTests
     }
 
     [Fact]
+    [Critical(Family.W5, "one effect after a lost answer")]
     public async Task An_attempt_after_a_lost_answer_reads_the_ledger_first_and_leaves_one_effect_behind()
     {
         using var workspace = new TestWorkspace();

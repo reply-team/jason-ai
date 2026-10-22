@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.PluginHost.Tests;
 
@@ -18,6 +19,7 @@ public class HostDiagnosticsTests
             .Select(line => JsonNode.Parse(line)!.AsObject())];
 
     [Fact]
+    [Critical(Family.R1, "stderr is JSON Lines")]
     public void Every_line_is_one_json_object_naming_who_wrote_it()
     {
         using var stderr = new StringWriter();
@@ -52,6 +54,7 @@ public class HostDiagnosticsTests
     }
 
     [Fact]
+    [Critical(Family.S3, "host diagnostics are masked")]
     public void A_secret_the_host_knows_is_masked_in_the_message_and_in_the_data()
     {
         using var stderr = new StringWriter();

@@ -100,6 +100,7 @@ public sealed class PatternTimeoutAtTheApiTests
 
     /// <summary>Through the runtime's own composition: the host's timing reaches the site, and the envelope says 503.</summary>
     [Fact]
+    [Critical(Family.R2, "the timeout answer")]
     public async Task The_api_answers_503_validation_timed_out_retryable()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, configureServices: services => services.AddSingleton<PatternTiming>(TimingOut.Always()));

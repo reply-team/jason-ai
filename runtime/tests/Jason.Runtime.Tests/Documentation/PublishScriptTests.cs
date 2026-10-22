@@ -57,6 +57,7 @@ public sealed class PublishScriptTests
     private static string ScriptPath => Path.Combine(RepositoryRoot(), ".github", "scripts", "Publish-OpenSet.ps1");
 
     [Fact]
+    [Critical(Family.B4, "the public tree is a pure function of the tag")]
     public void The_public_tree_becomes_the_projection_and_nothing_else()
     {
         using var tree = new GitTrees();
@@ -84,6 +85,7 @@ public sealed class PublishScriptTests
     }
 
     [Fact]
+    [Critical(Family.B4, "LICENSE as its MIT block")]
     public void The_published_licence_is_the_real_licence_from_its_one_MIT_line_to_the_end()
     {
         using var tree = new GitTrees();

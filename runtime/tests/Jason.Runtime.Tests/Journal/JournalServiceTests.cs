@@ -56,7 +56,8 @@ public class JournalServiceTests
     }
 
     [Theory]
-    [InlineData(JournalKinds.CampaignCreated)]
+    // Critical: reserved kinds.
+    [InlineData(JournalKinds.CampaignCreated, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.P1)])]
     [InlineData(JournalKinds.ContextUpdated)]
     [InlineData(JournalKinds.SuppressionRemoved)]
     [InlineData(JournalKinds.PluginsReloaded)]
@@ -202,6 +203,7 @@ public class JournalServiceTests
     }
 
     [Fact]
+    [Critical(Family.X2, "no leak across campaigns")]
     public async Task A_campaign_filter_never_leaks_another_campaigns_or_a_global_entry()
     {
         using var database = new TestDatabase();

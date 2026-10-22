@@ -5,6 +5,7 @@ using Jason.Cli;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -93,6 +94,7 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    [Critical(Family.R3, "context.input")]
     public async Task Create_puts_the_operation_arguments_under_the_context_key_that_carries_them()
     {
         using var cli = new CliRun();
@@ -461,6 +463,7 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    [Critical(Family.W2, "the attempt id travels as the fence")]
     public async Task Heartbeat_carries_the_fencing_token()
     {
         using var cli = new CliRun();

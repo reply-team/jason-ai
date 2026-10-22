@@ -21,6 +21,7 @@ public class FilePermissionsTests
     }
 
     [Fact]
+    [Critical(Family.S5, "a readable descriptor is refused")]
     public void A_file_readable_by_others_is_rejected()
     {
         using var dir = new TempDataDir();

@@ -29,6 +29,7 @@ public partial class OfflineRuntimeTests
     /// public web page and nothing but a five-minute delay in the way.
     /// </summary>
     [Fact]
+    [Critical(Family.B9, "one offline switch")]
     public void There_is_one_declaration_of_the_shared_options()
     {
         var declarations = Lines()
@@ -145,6 +146,7 @@ public partial class OfflineRuntimeTests
     /// turns it on itself, with channels of its own.
     /// </summary>
     [Fact]
+    [Critical(Family.B9, "tests notify nobody")]
     public async Task The_shared_options_turn_notifications_off_whatever_the_settings_say()
     {
         using var dir = new TempDataDir();

@@ -1,5 +1,6 @@
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 
 namespace Jason.PluginHost.Tests.Sdk;
@@ -49,6 +50,7 @@ public sealed class EnvServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R5, "declaration is not permission")]
     public void Without_the_capability_nothing_is_readable()
     {
         Environment.SetEnvironmentVariable(_name, "a-secret-value");
@@ -59,6 +61,7 @@ public sealed class EnvServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R5, "a grant cannot reach a reserved variable")]
     public void A_reserved_variable_stays_invisible_even_when_a_grant_names_it()
     {
         Environment.SetEnvironmentVariable("JASON_DATA_DIR_TEST", "should-not-be-readable");

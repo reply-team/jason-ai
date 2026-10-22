@@ -120,6 +120,14 @@ public class ReplyContactProxyRuleTests
 
     public static TheoryData<string> Finding => Of(ProviderContact.FindOrCreate, ProviderContact.FindOnly);
 
+    // Critical: mixed-case profile links.
+    public static TheoryData<string> CriticalFindingByAMixedCaseLink =>
+        CriticalRows.Mark(Finding, Family.F1, data => data is ["campaign.enroll"]);
+
+    // Critical: the pin is used, not a lookup.
+    public static TheoryData<string> CriticalFindingByThePin =>
+        CriticalRows.Mark(Finding, Family.W10, data => data is ["campaign.enroll"]);
+
     public static TheoryData<string> Creating => Of(ProviderContact.FindOrCreate);
 
     public static TheoryData<string> FindingOnly => Of(ProviderContact.FindOnly);
@@ -134,6 +142,7 @@ public class ReplyContactProxyRuleTests
     public static TheoryData<string> PinnedOnly => Of(ProviderContact.PinnedOnly);
 
     [Fact]
+    [Critical(Family.W10, "the proxy rule covers every operation")]
     public void Every_operation_that_finds_a_person_has_a_driver_and_every_driver_is_one_of_them()
     {
         Assert.Equal(
@@ -250,7 +259,7 @@ public class ReplyContactProxyRuleTests
     /// person by it — the reply reads its thread for the channel and holds the thread's person to the pin.
     /// </summary>
     [Theory]
-    [MemberData(nameof(Finding))]
+    [MemberData(nameof(CriticalFindingByThePin))]
     public async Task A_second_attempt_works_by_the_pin_and_looks_nobody_up(string operation)
     {
         var driver = Drivers[operation];
@@ -357,7 +366,7 @@ public class ReplyContactProxyRuleTests
     /// person, so the reply goes.
     /// </summary>
     [Theory]
-    [MemberData(nameof(Finding))]
+    [MemberData(nameof(CriticalFindingByAMixedCaseLink))]
     public async Task A_person_reply_holds_under_a_mixed_case_linkedin_url_is_found_by_its_lowercased_slug(string operation)
     {
         var driver = Drivers[operation];

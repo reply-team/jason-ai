@@ -45,6 +45,7 @@ public class PatternTimingTests
     /// schema is wrong. Nothing is known about the value, and the code says exactly that.
     /// </summary>
     [Fact]
+    [Critical(Family.X1, "a timeout is never a verdict")]
     public void A_match_that_times_out_twice_is_reported_as_unmeasured_and_never_as_a_verdict()
     {
         var timing = TimingOut.Always();

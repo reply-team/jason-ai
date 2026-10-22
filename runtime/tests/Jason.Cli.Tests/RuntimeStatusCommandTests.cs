@@ -7,6 +7,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
 
@@ -228,6 +229,7 @@ public class RuntimeStatusCommandTests
     }
 
     [Fact]
+    [Critical(Family.R2, "a stale descriptor is not this runtime")]
     public async Task Instance_mismatch_exits_3_with_stale_descriptor()
     {
         using var dir = new TempPaths();

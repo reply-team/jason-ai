@@ -1,5 +1,6 @@
 using Jason.Cli.Installation;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Installation;
 
@@ -25,6 +26,7 @@ public sealed class PackageOwnerTests : IDisposable
     /// <c>brew upgrade</c> deletes.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "Homebrew owns a keg")]
     public void A_keg_carrying_homebrews_receipt_is_homebrews()
     {
         var brew = _layouts.Homebrew();
@@ -108,6 +110,7 @@ public sealed class PackageOwnerTests : IDisposable
     /// stable entry, which is what <c>winget upgrade</c> replaces in place.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "winget owns its package")]
     public void A_package_directory_winget_registered_is_wingets()
     {
         var winget = _layouts.Winget();

@@ -1,4 +1,5 @@
 using Jason.Cli.Uninstall;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -167,6 +168,7 @@ public sealed class MachineRemoverHeldFileTests
 
     /// <summary>The uninstall's rule as it was decided: ten seconds, every quarter of a second, an access-denied not counted.</summary>
     [Fact]
+    [Critical(Family.F5, "the held-file rule")]
     public void The_uninstalls_rule_is_ten_seconds_every_quarter_second_with_no_access_denied_counted() =>
         Assert.Equal(
             new Contracts.Files.HeldFileRule(TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(250), AccessDeniedCounts: false),

@@ -58,6 +58,7 @@ public class UiTokensTests
     }
 
     [Fact]
+    [Critical(Family.S5, "revocation")]
     public async Task A_revoked_token_is_refused_from_the_next_request_on()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
@@ -111,6 +112,7 @@ public class UiTokensTests
     }
 
     [Fact]
+    [Critical(Family.S3, "UI tokens are redacted")]
     public async Task The_redactor_masks_a_token_minted_in_this_process()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

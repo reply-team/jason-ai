@@ -28,6 +28,7 @@ public class ApprovalResolutionTests
     /// so its due date takes it like any other, and the approval goes in the same transaction.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "a stale approval cannot release work")]
     public async Task Work_parked_past_its_due_date_expires_and_takes_its_pending_approval_with_it()
     {
         using var database = new TestDatabase();

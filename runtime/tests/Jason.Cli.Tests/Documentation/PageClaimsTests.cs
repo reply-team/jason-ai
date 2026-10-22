@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Jason.Cli.Doctor;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -767,6 +768,7 @@ public partial class PageClaimsTests
     }
 
     [Fact]
+    [Critical(Family.D1, "what an agent is taught to run")]
     public void The_agent_section_never_pipes_a_download_into_a_shell() =>
         Assert.Contains("Never pipe a download into a shell.", Flat(Agent()), StringComparison.Ordinal);
 
@@ -1479,6 +1481,7 @@ public partial class PageClaimsTests
     /// tells an agent never to start one, and prints no command that would.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the wiring check stays synthetic")]
     public void The_wiring_check_never_starts_the_provider_s_campaign()
     {
         var page = Page("docs", "golden-path.md");

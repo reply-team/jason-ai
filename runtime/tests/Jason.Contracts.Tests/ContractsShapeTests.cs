@@ -5,6 +5,7 @@ using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Contracts.Tests.OperationContracts;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests;
 
@@ -72,6 +73,7 @@ public class ContractsShapeTests
     }
 
     [Fact]
+    [Critical(Family.R2, "enums travel as snake_case text only")]
     public void Enums_are_never_accepted_as_numbers()
     {
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CampaignListRequest>("{\"status\":1}", JasonJson.Options));
@@ -280,6 +282,7 @@ public class ContractsShapeTests
     }
 
     [Fact]
+    [Critical(Family.R2, "Optional<T> absent vs null on a patch")]
     public void A_work_item_patch_tells_an_absent_field_from_an_explicit_null()
     {
         var request = JsonSerializer.Deserialize<WorkItemUpdateRequest>("""{"work_item_id":"wi_x","priority":5,"due_at":null}""", JasonJson.Options)!;
@@ -343,6 +346,7 @@ public class ContractsShapeTests
     }
 
     [Fact]
+    [Critical(Family.W7, "the envelope the child reads on stdin")]
     public void The_launch_envelope_round_trips_in_the_api_dialect()
     {
         var envelope = new LaunchEnvelope(
@@ -475,6 +479,7 @@ public class ContractsShapeTests
         null);
 
     [Fact]
+    [Critical(Family.B6, "the UI gets operations, never a view")]
     public void The_ui_noun_has_exactly_three_operations_and_the_door_is_not_one()
     {
         var names = typeof(Operations).GetFields().Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!)

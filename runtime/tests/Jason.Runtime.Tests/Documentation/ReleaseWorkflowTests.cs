@@ -207,6 +207,7 @@ public class ReleaseWorkflowTests
     /// so that row runs on CI's Linux and macOS legs and is skipped on Windows.
     /// </remarks>
     [Theory]
+    [Critical(Family.I1, "the archive's content")]
     [InlineData("win-x64")]
     [InlineData("linux-x64")]
     public void Every_archive_holds_the_executable_its_licence_and_the_notices_and_nothing_else(string rid)
@@ -533,6 +534,7 @@ public class ReleaseWorkflowTests
     /// skipped reports it under a name another job's leg has, which CiRunsTests holds, so it adds no name here.
     /// </summary>
     [Fact]
+    [Critical(Family.B7, "pipeline and ruleset agree")]
     public void Ci_reports_exactly_the_checks_the_ruleset_requires()
     {
         string[] required =
@@ -626,6 +628,7 @@ public class ReleaseWorkflowTests
     /// repository, reached with that token alone — so no permission anywhere grants a write.
     /// </summary>
     [Fact]
+    [Critical(Family.B4, "the publication token's scope")]
     public void Only_the_publishing_job_holds_the_publication_token()
     {
         var text = Read(Release);
@@ -961,6 +964,7 @@ public class ReleaseWorkflowTests
     /// and print <c>0.2.0-dev</c> on a release.
     /// </summary>
     [Fact]
+    [Critical(Family.B7, "a release is tested first")]
     public void The_tests_run_at_the_tag_before_anything_is_packaged()
     {
         var release = Read(Release);

@@ -18,6 +18,7 @@ public class ApprovalPreviewTests
     private static readonly OperationContract Enroll = OperationCatalog.Find("campaign.enroll")!;
 
     [Fact]
+    [Critical(Family.S2, "what a person approves")]
     public void The_preview_names_the_effect_the_person_and_the_account_and_repeats_the_contracts_own_words()
     {
         var campaign = WorkItemFactory.NewCampaign("Autumn outreach");

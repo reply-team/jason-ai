@@ -39,6 +39,7 @@ public class ManifestReaderTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "the shipped package validates")]
     public void The_checked_in_package_is_valid_as_it_is_shipped()
     {
         using var dir = new TempDataDir();
@@ -122,7 +123,8 @@ public class ManifestReaderTests : IDisposable
 
     // Variables.
     [InlineData("capabilities:\n  env:\n    variables: [lower]\n", "variable_name_invalid", "capabilities.env.variables[0]")]
-    [InlineData("capabilities:\n  env:\n    variables: [JASON_DATA_DIR]\n", "variable_reserved", "capabilities.env.variables[0]")]
+    // Critical: a reserved variable; a credential in a binding.
+    [InlineData("capabilities:\n  env:\n    variables: [JASON_DATA_DIR]\n", "variable_reserved", "capabilities.env.variables[0]", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R1)])]
     [InlineData("capabilities:\n  env:\n    variables: [TOKEN, TOKEN]\n", "variable_name_invalid", "capabilities.env.variables[1]")]
     [InlineData("capabilities:\n  env:\n    variables: [TOKEN]\n", null, null)]
 
@@ -138,7 +140,8 @@ public class ManifestReaderTests : IDisposable
     [InlineData("binding:\n  type: string\n", "field_invalid", "binding")]
     [InlineData("binding:\n  type: object\n  unevaluatedProperties: false\n", "field_invalid", "binding#/unevaluatedProperties")]
     [InlineData("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n      pattern: \"(?<=a)b\"\n", "field_invalid", "binding#/properties/workspace/pattern")]
-    [InlineData("binding:\n  type: object\n  properties:\n    api_token:\n      type: string\n", "binding_secret_like", "binding#/properties/api_token")]
+    // Critical: a reserved variable; a credential in a binding.
+    [InlineData("binding:\n  type: object\n  properties:\n    api_token:\n      type: string\n", "binding_secret_like", "binding#/properties/api_token", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R1)])]
     // A binding is a schema of `type: object` exactly. The list form is good JSON Schema and good dialect, so the
     // dialect check passes it through to this rule — which read the name with an accessor that throws on a list.
     [InlineData("binding:\n  type: [object, \"null\"]\n  properties:\n    workspace:\n      type: string\n", "field_invalid", "binding")]
@@ -717,6 +720,7 @@ public class ManifestReaderTests : IDisposable
     /// this holds every place a rule reads a value, not only the ones a case above happens to name.
     /// </summary>
     [Fact]
+    [Critical(Family.R1, "the reader never throws")]
     public void No_manifest_however_malformed_makes_the_reader_throw()
     {
         var root = NewPackage(TestPlugins.Manifest("fake"), "fake");

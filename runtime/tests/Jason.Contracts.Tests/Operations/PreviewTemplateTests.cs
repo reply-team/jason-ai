@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -70,6 +71,7 @@ public class PreviewTemplateTests
     /// value, and both Unicode line separators, become a space.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "what a person approves reads as it is")]
     public void A_control_character_in_a_value_becomes_a_space()
     {
         Assert.Equal(
@@ -83,7 +85,8 @@ public class PreviewTemplateTests
     /// value becomes a space, as a control character does, one outside the Basic Multilingual Plane included.
     /// </summary>
     [Theory]
-    [InlineData(0x202A)]
+    // Critical: a hidden format character cannot disguise a preview.
+    [InlineData(0x202A, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S2)])]
     [InlineData(0x202B)]
     [InlineData(0x202C)]
     [InlineData(0x202D)]

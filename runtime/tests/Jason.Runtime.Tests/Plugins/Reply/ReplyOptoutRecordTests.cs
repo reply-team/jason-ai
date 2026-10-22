@@ -51,6 +51,7 @@ public class ReplyOptoutRecordTests
     }
 
     [Fact]
+    [Critical(Family.B3, "an opt-out's words stay home")]
     public async Task What_they_said_where_and_when_never_reaches_the_provider()
     {
         using var account = new ReplyAccount();
@@ -134,6 +135,7 @@ public class ReplyOptoutRecordTests
     }
 
     [Fact]
+    [Critical(Family.S1, "optout.record never clears")]
     public async Task The_flag_is_only_ever_set_and_never_cleared()
     {
         using var account = new ReplyAccount();

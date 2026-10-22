@@ -44,6 +44,7 @@ public class UiPairingTests
     }
 
     [Fact]
+    [Critical(Family.S5, "a ticket pairs once")]
     public async Task The_door_trades_a_live_ticket_for_a_token_once()
     {
         var clock = new FixedClock(Nine);
@@ -93,6 +94,7 @@ public class UiPairingTests
     }
 
     [Fact]
+    [Critical(Family.S5, "pairing origin")]
     public async Task The_door_listens_only_to_the_runtimes_own_origin()
     {
         await using var api = await StartWithBuildAsync(new FixedClock(Nine));

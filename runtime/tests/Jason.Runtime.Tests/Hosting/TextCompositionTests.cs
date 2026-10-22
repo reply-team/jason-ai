@@ -28,6 +28,7 @@ public class TextCompositionTests
     /// stays set, so a refusal that named only the libraries would send a person to install what changes nothing.
     /// </summary>
     [Theory]
+    [Critical(Family.F3, "invariant mode is refused at start")]
     [InlineData("a\u0301")]
     [InlineData("")]
     [InlineData("a")]

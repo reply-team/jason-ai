@@ -172,6 +172,7 @@ public class SchemaTests
     }
 
     [Fact]
+    [Critical(Family.S1, "the primary index")]
     public void One_primary_channel_per_contact_and_channel_is_enforced()
     {
         using var database = new TestDatabase();

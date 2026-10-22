@@ -19,6 +19,7 @@ public class PagingTests
     }
 
     [Fact]
+    [Critical(Family.R2, "cursor pagination")]
     public void Cursors_round_trip_and_nonsense_is_refused()
     {
         Assert.Null(Paging.DecodeCursor(null));

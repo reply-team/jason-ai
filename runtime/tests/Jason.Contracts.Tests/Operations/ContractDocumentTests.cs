@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -31,6 +32,26 @@ public class ContractDocumentTests
         return data;
     }
 
+    // Critical: message.send says never; campaign.enroll does not.
+    public static TheoryData<string> CriticalPublishedForTheSendRule() =>
+        CriticalRows.Mark(Published(), Family.W5, data => data is ["message.send"] or ["campaign.enroll"]);
+
+    // Critical: the embedded resource is the published file.
+    public static TheoryData<string> CriticalPublishedForTheFileOnDisk() =>
+        CriticalRows.Mark(Published(), Family.R3, data => data is ["message.send"]);
+
+    // Critical: a document is closed.
+    public static TheoryData<string> CriticalPublishedForEveryField() =>
+        CriticalRows.Mark(Published(), Family.R3, data => data is ["message.send"]);
+
+    // Critical: approval implies a preview.
+    public static TheoryData<string> CriticalPublishedForThePreview() =>
+        CriticalRows.Mark(Published(), Family.S2, data => data is ["message.send"]);
+
+    // Critical: the schemas use the schema dialect's vocabulary.
+    public static TheoryData<string> CriticalPublishedForTheDialect() =>
+        CriticalRows.Mark(Published(), Family.R3, data => data is ["message.send"]);
+
     private static OperationContract Contract(string id) => OperationCatalog.Find(id)!;
 
     private static JsonObject Document(string id) =>
@@ -56,6 +77,7 @@ public class ContractDocumentTests
     /// document and transient in another would be repeated or given up on depending on which operation said it.
     /// </summary>
     [Fact]
+    [Critical(Family.R1, "a failure code has one class")]
     public void A_failure_code_has_the_same_class_in_every_document_that_declares_it()
     {
         var classes = OperationCatalog.All
@@ -68,7 +90,7 @@ public class ContractDocumentTests
     }
 
     [Theory]
-    [MemberData(nameof(Published))]
+    [MemberData(nameof(CriticalPublishedForEveryField))]
     public void Every_document_states_every_field_and_nothing_else(string id)
     {
         var document = Document(id);
@@ -153,6 +175,7 @@ public class ContractDocumentTests
     /// register applies, and a third that set it aside would be a change to what the register protects.
     /// </summary>
     [Fact]
+    [Critical(Family.S1, "only taking a person out bypasses the register")]
     public void Exactly_the_two_operations_that_take_a_person_out_set_the_suppression_register_aside()
     {
         Assert.Equal(
@@ -228,7 +251,7 @@ public class ContractDocumentTests
     /// document alone.
     /// </summary>
     [Theory]
-    [MemberData(nameof(Published))]
+    [MemberData(nameof(CriticalPublishedForThePreview))]
     public void An_operation_declares_a_preview_exactly_when_a_person_approves_it(string id)
     {
         var contract = Contract(id);
@@ -241,7 +264,7 @@ public class ContractDocumentTests
     }
 
     [Theory]
-    [MemberData(nameof(Published))]
+    [MemberData(nameof(CriticalPublishedForTheFileOnDisk))]
     public void The_file_on_disk_is_the_document_the_catalog_enforces(string id)
     {
         using var embedded = typeof(OperationContract).Assembly.GetManifestResourceStream("Jason.Contracts.Operations." + id + ".json");
@@ -298,7 +321,7 @@ public class ContractDocumentTests
     /// that only reads or controls has a repeat rule that settles it.
     /// </summary>
     [Theory]
-    [MemberData(nameof(Published))]
+    [MemberData(nameof(CriticalPublishedForTheSendRule))]
     public void A_send_is_never_repeated_after_an_ambiguous_end_and_only_a_send_says_never(string id)
     {
         var contract = Contract(id);
@@ -652,7 +675,7 @@ public class ContractDocumentTests
     }
 
     [Theory]
-    [MemberData(nameof(Published))]
+    [MemberData(nameof(CriticalPublishedForTheDialect))]
     public void Both_schemas_are_written_in_the_published_dialect(string id)
     {
         var contract = Contract(id);

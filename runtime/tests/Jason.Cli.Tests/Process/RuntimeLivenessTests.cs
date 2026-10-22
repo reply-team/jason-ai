@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Jason.Cli.Process;
+using Jason.Runtime.Tests;
 using OperatingSystemProcess = System.Diagnostics.Process;
 
 namespace Jason.Cli.Tests.Process;
@@ -38,6 +39,7 @@ public class RuntimeLivenessTests
     /// is still serving, and a script would start the next one on top of it.
     /// </remarks>
     [Fact]
+    [Critical(Family.X1, "access denied is not absence")]
     public void A_process_this_prompt_may_not_open_is_running_rather_than_gone()
     {
         var closed = Unopenable();

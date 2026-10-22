@@ -63,6 +63,7 @@ public class ReportSubmitHostileInputTests
 
     /// <summary>The runtime performs effects; it does not report them.</summary>
     [Fact]
+    [Critical(Family.R2, "system actor reserved")]
     public async Task A_reporter_may_not_claim_to_be_the_runtime()
     {
         using var database = new TestDatabase();
@@ -102,7 +103,8 @@ public class ReportSubmitHostileInputTests
     /// it quietly would answer with a document nobody sent.
     /// </summary>
     [Theory]
-    [InlineData("received_at")]
+    // Critical: the runtime's half is its own.
+    [InlineData("received_at", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R2)])]
     [InlineData("id")]
     [InlineData("assertion_hash")]
     [InlineData("correlation")]

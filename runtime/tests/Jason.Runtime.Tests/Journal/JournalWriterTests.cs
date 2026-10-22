@@ -202,6 +202,7 @@ public class JournalWriterTests
     /// without its <c>Reserved</c> entry would let a caller forge the runtime's own record through journal.append.
     /// </summary>
     [Fact]
+    [Critical(Family.P1, "the reserved vocabulary")]
     public void Every_kind_the_runtime_names_is_reserved()
     {
         var named = typeof(JournalKinds)

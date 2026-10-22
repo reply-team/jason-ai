@@ -1,6 +1,7 @@
 using Jason.Cli.Commands;
 using Jason.Cli.Tests.Process;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -155,6 +156,7 @@ public class RuntimeStartCommandTests
     /// reason to the standard error it was started with, and this read that and threw it away.
     /// </summary>
     [Fact]
+    [Critical(Family.R2, "a start refusal reaches the person")]
     public async Task A_child_that_says_why_it_will_not_start_is_heard_in_its_own_words()
     {
         using var dir = new TempPaths();
@@ -573,6 +575,7 @@ public class RuntimeStartCommandTests
     /// else's.
     /// </summary>
     [Fact]
+    [Critical(Family.X1, "pid reuse is detected")]
     public async Task A_silent_descriptor_whose_process_id_now_belongs_to_another_program_is_stale()
     {
         using var dir = new TempPaths();

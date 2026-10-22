@@ -146,6 +146,7 @@ public sealed class ToastHostTests
     /// on the stderr the runtime keeps the end of, whatever the parser's own message would have quoted.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "the toast host quotes nothing")]
     public async Task A_payload_it_cannot_parse_is_rejected_without_being_quoted()
     {
         const string Sentinel = "SENTINEL_TOAST_PAYLOAD";

@@ -191,6 +191,7 @@ public class LineageMaterializationTests
     /// <c>WorkItemServiceTests</c> covers — so this is the answer the rule gives when it is asked anyway.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "lineage fails closed")]
     public async Task An_ancestor_attempt_that_cannot_be_read_is_unresolved_rather_than_root()
     {
         using var database = new TestDatabase();

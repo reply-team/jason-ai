@@ -21,6 +21,7 @@ public class RoleNoteTests
     /// half-formed guesses about people, and the journal is the one table nobody can edit afterwards.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "a note's text stays out of the journal")]
     public async Task The_journal_records_that_a_note_was_set_and_never_what_it_said()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
@@ -116,6 +117,7 @@ public class RoleNoteTests
     /// "campaign-scoped" means here.
     /// </summary>
     [Fact]
+    [Critical(Family.X2, "role notes are scoped")]
     public async Task A_note_belongs_to_one_campaign_and_one_role_and_reaches_no_further()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

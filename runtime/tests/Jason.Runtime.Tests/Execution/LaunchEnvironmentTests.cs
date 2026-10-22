@@ -16,6 +16,7 @@ public class LaunchEnvironmentTests
     private const string WorkItemId = "wi_one";
 
     [Fact]
+    [Critical(Family.W7, "the child's environment")]
     public void The_child_is_told_its_attempt_id_its_work_item_and_where_the_cli_is()
     {
         var environment = Existing();
@@ -35,6 +36,7 @@ public class LaunchEnvironmentTests
     }
 
     [Fact]
+    [Critical(Family.B1, "no stray variable reaches a child")]
     public void Nothing_else_is_added_and_nothing_is_taken_away()
     {
         var before = Existing();

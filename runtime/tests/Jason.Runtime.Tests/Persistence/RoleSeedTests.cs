@@ -17,6 +17,7 @@ public class RoleSeedTests
     ];
 
     [Fact]
+    [Critical(Family.P2, "the seeded roster")]
     public void The_nine_builtin_roles_arrive_with_the_migration()
     {
         using var database = new TestDatabase();

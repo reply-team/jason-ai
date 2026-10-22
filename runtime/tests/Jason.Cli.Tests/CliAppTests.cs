@@ -1,10 +1,12 @@
 using Jason.Cli;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
 
 public class CliAppTests
 {
     [Fact]
+    [Critical(Family.R2, "exit 2")]
     public async Task Unknown_command_is_a_usage_error()
     {
         using var dir = new TempPaths();

@@ -33,6 +33,7 @@ public class HandlerPoolTests
     }
 
     [Fact]
+    [Critical(Family.W6, "slots are never oversubscribed")]
     public async Task Dispatching_without_a_free_slot_is_a_bug_in_the_claim()
     {
         var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);

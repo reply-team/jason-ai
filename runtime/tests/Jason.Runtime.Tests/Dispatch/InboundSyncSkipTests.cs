@@ -48,6 +48,7 @@ public class InboundSyncSkipTests
     }
 
     [Fact]
+    [Critical(Family.N2, "inbound skips only for a healthy events source")]
     public async Task A_campaign_is_never_left_to_a_source_before_its_first_read_that_succeeded()
     {
         using var unread = Create();

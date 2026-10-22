@@ -3,6 +3,7 @@ using Jason.Cli.Autostart;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Autostart;
 
@@ -26,6 +27,7 @@ public class AutostartCommandTests
     /// runs it every time, must not end up with two things starting at logon.
     /// </summary>
     [Fact]
+    [Critical(Family.I4, "enable is idempotent")]
     public async Task Enabling_twice_leaves_one_registration()
     {
         using var machine = new Machine();

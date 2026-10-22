@@ -42,6 +42,7 @@ public class ApprovalGateTests
     /// and the account was never asked for anything — not even the read an enrollment starts with.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "the approval gate, integrated")]
     public async Task An_unapproved_act_operation_never_reaches_a_plugin_host()
     {
         using var workspace = new TestWorkspace();
@@ -72,6 +73,7 @@ public class ApprovalGateTests
     /// and the attempt that ran names the decision that released it.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "the approved subject runs")]
     public async Task An_approved_item_runs_the_subject_that_was_approved_and_names_the_approval_that_released_it()
     {
         using var workspace = new TestWorkspace();
@@ -159,6 +161,7 @@ public class ApprovalGateTests
     /// run late. The decision was given; the work was simply too late to do.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "a late approval does not run")]
     public async Task Work_approved_after_its_due_date_expires_instead_of_running()
     {
         using var workspace = new TestWorkspace();
@@ -232,6 +235,7 @@ public class ApprovalGateTests
     /// kept, and a chronicle is not a copy of somebody's contact details either.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "previews stay out of logs")]
     public async Task Nothing_of_a_preview_reaches_the_journal_or_the_log_files()
     {
         using var workspace = new TestWorkspace();

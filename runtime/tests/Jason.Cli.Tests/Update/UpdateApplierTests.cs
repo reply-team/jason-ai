@@ -1,6 +1,7 @@
 using Jason.Cli.Update;
 using Jason.Contracts.Api;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -30,6 +31,7 @@ public class UpdateApplierTests
     }
 
     [Fact]
+    [Critical(Family.I2, "update apply end to end (in process)")]
     public async Task The_whole_sequence_leaves_the_new_version_installed_and_running()
     {
         using var installation = new FakeInstallation().WithRuntime(runningAttempts: 1);
@@ -61,6 +63,7 @@ public class UpdateApplierTests
     /// happened rather than an instruction for whoever comes next.
     /// </remarks>
     [Fact]
+    [Critical(Family.I2, "the ledger is written ahead")]
     public async Task Each_step_is_on_disk_before_it_is_taken()
     {
         using var installation = new FakeInstallation().WithRuntime();
@@ -142,6 +145,7 @@ public class UpdateApplierTests
     /// the old build for the ordinary reason.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "the health check sees the version")]
     public async Task An_update_that_did_not_really_swap_fails_its_health_check()
     {
         using var installation = new FakeInstallation().WithRuntime();

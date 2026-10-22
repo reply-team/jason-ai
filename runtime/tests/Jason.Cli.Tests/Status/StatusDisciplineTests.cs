@@ -7,6 +7,7 @@ using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -32,6 +33,7 @@ public partial class StatusDisciplineTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.B1, "status checks run nothing unexpected")]
     public void No_check_reads_a_log_or_reaches_the_machine_behind_the_runner()
     {
         var sources = Directory.EnumerateFiles(StatusSources(), "*.cs").ToList();
@@ -86,6 +88,7 @@ public partial class StatusDisciplineTests
     /// below did not reach, shipped unread and green.
     /// </remarks>
     [Fact]
+    [Critical(Family.D1, "every repair is a real command")]
     public async Task Every_repair_a_check_prints_is_a_command_this_program_understands()
     {
         // Every jason repair this verb can print, read off the source rather than off one run of it. One

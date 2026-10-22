@@ -13,6 +13,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Cli.Tests.Uninstall;
 using Jason.Cli.Uninstall;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -30,6 +31,7 @@ public class StatusCommandTests
     /// asked — so a person whose runtime is down gets a report, not an error envelope.
     /// </summary>
     [Fact]
+    [Critical(Family.R2, "status never exits 3")]
     public async Task A_runtime_that_does_not_answer_is_a_failed_check_and_never_exit_three()
     {
         using var dir = new TempPaths();
@@ -49,6 +51,7 @@ public class StatusCommandTests
 
     /// <summary>A ready installation exits 0, and says so in the body as well as in the code.</summary>
     [Fact]
+    [Critical(Family.R2, "ready in the body")]
     public async Task An_installation_with_every_required_check_passing_is_ready()
     {
         using var dir = new TempPaths();
@@ -67,6 +70,7 @@ public class StatusCommandTests
     /// configured yet has a working installation rather than a broken one.
     /// </summary>
     [Fact]
+    [Critical(Family.R2, "optional checks never fail readiness")]
     public async Task Nothing_optional_can_fail_the_run()
     {
         using var dir = new TempPaths();
@@ -221,6 +225,7 @@ public class StatusCommandTests
     /// key, not a prefix of it, not its length.
     /// </summary>
     [Fact]
+    [Critical(Family.S3, "no credential in status")]
     public async Task The_provider_check_names_its_command_bounds_it_and_prints_no_credential()
     {
         const string Secret = "rk_live_do_not_print_me";

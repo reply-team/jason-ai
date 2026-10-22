@@ -17,6 +17,7 @@ public class GrantResolverTests
         new EnvRequestSpec(["EXAMPLE_API_KEY", "EXAMPLE_OTHER"]));
 
     [Fact]
+    [Critical(Family.R5, "default deny")]
     public void A_plugin_nobody_decided_about_is_granted_nothing()
     {
         var grants = GrantResolver.Resolve(Manifest(Requested), null);
@@ -74,6 +75,7 @@ public class GrantResolverTests
     }
 
     [Fact]
+    [Critical(Family.R5, "declaration then grant")]
     public void A_capability_the_manifest_never_requested_cannot_be_granted_at_all()
     {
         var grants = GrantResolver.Resolve(

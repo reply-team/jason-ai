@@ -25,7 +25,8 @@ public sealed class PatternEndTests
         "endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\node_modules\\vendor-cli\\dist\\index.js\" %*";
 
     [Theory]
-    [InlineData("WorkItemValidation.RoleName", typeof(WorkItemValidation), "RoleName", "campaign-manager")]
+    // Critical: the trailing-newline trap.
+    [InlineData("WorkItemValidation.RoleName", typeof(WorkItemValidation), "RoleName", "campaign-manager", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R3)])]
     [InlineData("WorkItemValidation.OperationName", typeof(WorkItemValidation), "OperationName", "campaign.get")]
     [InlineData("ProfileValidation.ProfileName", typeof(ProfileValidation), "ProfileName", "house")]
     [InlineData("RoleValidation.RoleName", typeof(RoleValidation), "RoleName", "campaign-manager")]

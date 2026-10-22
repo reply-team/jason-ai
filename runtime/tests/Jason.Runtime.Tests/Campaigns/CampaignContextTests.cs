@@ -119,6 +119,7 @@ public class CampaignContextTests
     }
 
     [Fact]
+    [Critical(Family.X1, "the context size edge")]
     public async Task A_context_is_accepted_at_the_limit_and_refused_one_byte_over_it()
     {
         using var database = new TestDatabase();

@@ -23,6 +23,7 @@ public class RequestLineTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.B3, "request paths are scrubbed")]
     public async Task A_request_that_matched_no_operation_is_logged_as_unmatched_and_its_path_reaches_no_line()
     {
         var sentinel = "SENTINEL_PATH_" + Guid.NewGuid().ToString("N");

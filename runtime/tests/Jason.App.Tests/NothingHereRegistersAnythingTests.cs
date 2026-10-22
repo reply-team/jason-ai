@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
 
@@ -23,6 +24,7 @@ namespace Jason.App.Tests;
 public partial class NothingHereRegistersAnythingTests
 {
     [Fact]
+    [Critical(Family.B9, "the suite cannot register anything on the machine")]
     public void No_file_that_names_the_verb_can_also_reach_the_real_environment()
     {
         const string Verb = "autostart";

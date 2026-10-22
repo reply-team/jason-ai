@@ -15,6 +15,7 @@ public class EventStoreAppendOnlyTests
     private static readonly DateTime Noon = new(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    [Critical(Family.P1, "the event store's triggers")]
     public void Raw_update_and_delete_of_an_event_are_refused_by_the_triggers()
     {
         using var database = new TestDatabase();
@@ -89,6 +90,7 @@ public class EventStoreAppendOnlyTests
     /// changes what is there.
     /// </summary>
     [Fact]
+    [Critical(Family.P1, "no API path rewrites an event")]
     public void No_operation_of_the_runtime_api_rewrites_or_removes_an_event()
     {
         string[] rewriting = ["update", "delete", "remove", "set", "unset", "archive", "edit", "replace", "clear"];

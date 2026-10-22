@@ -8,10 +8,12 @@ public class ModeRouterTests
 {
     [Theory]
     [InlineData(new[] { "--version" }, Mode.Version)]
-    [InlineData(new[] { "runtime", "run" }, Mode.RuntimeService)]
+    // Critical: one executable, the mode from argv.
+    [InlineData(new[] { "runtime", "run" }, Mode.RuntimeService, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B2)])]
     [InlineData(new[] { "runtime", "run", "--whatever" }, Mode.RuntimeService)]
     [InlineData(new[] { "runtime", "run", "--detached" }, Mode.RuntimeService)]
-    [InlineData(new[] { "plugin-host" }, Mode.PluginHost)]
+    // Critical: one executable, the mode from argv.
+    [InlineData(new[] { "plugin-host" }, Mode.PluginHost, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B2)])]
     [InlineData(new[] { "plugin-host", "fake-provider" }, Mode.PluginHost)]
     // The mode follows the first argument whatever comes after it; no test names the protocol the host answers.
     [InlineData(new[] { "toast-host", "--protocol", "2" }, Mode.ToastHost)]

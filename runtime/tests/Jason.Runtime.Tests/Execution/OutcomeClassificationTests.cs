@@ -11,7 +11,8 @@ namespace Jason.Runtime.Tests.Execution;
 public class OutcomeClassificationTests
 {
     [Theory]
-    [InlineData(ProtocolCodes.PluginLaunchFailed, FailureClass.Transient)]
+    // Critical: launch failure transient; timeout ambiguous.
+    [InlineData(ProtocolCodes.PluginLaunchFailed, FailureClass.Transient, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R1)])]
     [InlineData(ProtocolCodes.PluginNotLoaded, FailureClass.Permanent)]
     [InlineData(ProtocolCodes.PluginUnavailable, FailureClass.Permanent)]
     [InlineData(ProtocolCodes.PluginOperationUnsupported, FailureClass.Permanent)]
@@ -19,7 +20,8 @@ public class OutcomeClassificationTests
     [InlineData(ProtocolCodes.PluginInvocationRejected, FailureClass.Permanent)]
     [InlineData(ProtocolCodes.PluginInputTooLarge, FailureClass.Permanent)]
     [InlineData(ProtocolCodes.PluginBindingTooLarge, FailureClass.Permanent)]
-    [InlineData(ProtocolCodes.PluginTimeout, FailureClass.Ambiguous)]
+    // Critical: launch failure transient; timeout ambiguous.
+    [InlineData(ProtocolCodes.PluginTimeout, FailureClass.Ambiguous, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R1)])]
     [InlineData(ProtocolCodes.PluginKilled, FailureClass.Ambiguous)]
     [InlineData(ProtocolCodes.PluginNoOutcome, FailureClass.Ambiguous)]
     [InlineData(ProtocolCodes.PluginMalformedOutcome, FailureClass.Ambiguous)]
@@ -28,6 +30,7 @@ public class OutcomeClassificationTests
         Assert.Equal(expected, OutcomeClassification.ClassOf(code));
 
     [Fact]
+    [Critical(Family.W5, "unknown is ambiguous")]
     public void A_code_the_table_does_not_know_is_treated_as_ambiguous()
     {
         Assert.Equal(FailureClass.Ambiguous, OutcomeClassification.ClassOf("anything_else"));

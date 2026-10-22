@@ -148,6 +148,7 @@ public class ReleaseAndUpdateDocTests
     /// is the only way a table of error codes stays true for longer than the week it was written in.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the update contract page matches the code")]
     public void Every_step_and_code_on_the_page_is_one_the_code_has()
     {
         var page = Read();

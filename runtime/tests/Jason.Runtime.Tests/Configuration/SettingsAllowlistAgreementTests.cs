@@ -54,6 +54,7 @@ public sealed class SettingsAllowlistAgreementTests
     /// the description are the ones the list names, and every one the list names appears.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "the doctor allowlist and the runtime agree")]
     public void Of_a_number_at_every_setting_the_runtime_reads_exactly_the_listed_ones_are_carried()
     {
         var settings = Settings().ToList();

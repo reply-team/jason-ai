@@ -79,6 +79,7 @@ public class PluginLoaderTests
     }
 
     [Fact]
+    [Critical(Family.R1, "package problems reject the reload")]
     public async Task One_broken_package_keeps_the_whole_set_out()
     {
         using var dir = new TempDataDir();
@@ -99,6 +100,7 @@ public class PluginLoaderTests
     }
 
     [Fact]
+    [Critical(Family.R1, "environmental problems are local")]
     public async Task A_plugin_whose_program_is_missing_holds_back_only_itself()
     {
         using var dir = new TempDataDir();

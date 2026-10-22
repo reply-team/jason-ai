@@ -52,6 +52,7 @@ public class RuntimeHostTests
     }
 
     [Fact]
+    [Critical(Family.S5, "the bearer")]
     public async Task Missing_or_wrong_token_is_401_with_the_error_envelope()
     {
         using var dir = new TempDataDir();
@@ -70,6 +71,7 @@ public class RuntimeHostTests
     }
 
     [Fact]
+    [Critical(Family.S5, "DNS rebinding")]
     public async Task Foreign_host_header_is_rejected_before_authentication()
     {
         using var dir = new TempDataDir();
@@ -86,6 +88,7 @@ public class RuntimeHostTests
     }
 
     [Fact]
+    [Critical(Family.R2, "unknown routes")]
     public async Task Unknown_operations_and_wrong_methods_are_404_with_the_error_envelope()
     {
         using var dir = new TempDataDir();
@@ -101,6 +104,7 @@ public class RuntimeHostTests
     }
 
     [Fact]
+    [Critical(Family.W6, "one runtime per data directory")]
     public async Task A_second_runtime_on_the_same_data_directory_refuses_to_start()
     {
         using var dir = new TempDataDir();
@@ -129,6 +133,7 @@ public class RuntimeHostTests
     }
 
     [Fact]
+    [Critical(Family.S3, "the token is not logged")]
     public async Task The_token_never_reaches_the_logs()
     {
         using var dir = new TempDataDir();

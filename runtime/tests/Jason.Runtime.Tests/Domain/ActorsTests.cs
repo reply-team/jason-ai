@@ -12,6 +12,7 @@ public class ActorsTests
     }
 
     [Fact]
+    [Critical(Family.R2, "the system actor is reserved")]
     public void Claiming_system_is_refused_because_it_belongs_to_the_runtime()
     {
         var ex = Assert.Throws<ValidationException>(() => Actors.Resolve(new ActorRef(ActorType.System, "runtime")));
@@ -75,6 +76,7 @@ public class ActorsTests
     }
 
     [Fact]
+    [Critical(Family.W2, "an attempt actor is verified")]
     public async Task An_attempt_claim_is_the_one_the_runtime_can_check()
     {
         using var database = new TestDatabase();

@@ -1,6 +1,7 @@
 using Jason.Cli.Status;
 using Jason.Cli.Tests.Commands;
 using Jason.Contracts.Api;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -288,6 +289,7 @@ public sealed class NotificationsCheckTests
 
     /// <summary>An optional check never fails readiness, whatever its state.</summary>
     [Fact]
+    [Critical(Family.R2, "notifications are optional")]
     public async Task A_failed_notifications_check_does_not_make_the_installation_unready()
     {
         using var dir = new TempPaths();

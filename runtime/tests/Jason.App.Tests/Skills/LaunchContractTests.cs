@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.App.Tests.EndToEnd;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -11,6 +12,7 @@ namespace Jason.App.Tests.Skills;
 public class LaunchContractTests
 {
     [Fact]
+    [Critical(Family.D2, "one launch contract")]
     public void Every_role_is_taught_the_same_launch_contract_byte_for_byte()
     {
         var roles = SkillPack.All().Where(skill => skill.IsRole).ToList();
@@ -48,6 +50,7 @@ public class LaunchContractTests
     /// runtime, which is the price of asking the program instead of asking its storage.
     /// </summary>
     [Fact]
+    [Critical(Family.D2, "seeded roles and the pack agree")]
     public async Task The_roles_this_runtime_seeds_and_the_roles_this_pack_teaches_are_the_same_nine()
     {
         using var it = GoldenPath.Create("skill-roster");

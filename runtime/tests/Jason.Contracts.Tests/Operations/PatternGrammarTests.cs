@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -16,7 +17,8 @@ public class PatternGrammarTests
     /// subtraction — or something ECMA-262 does not: a class that begins with `]`, an unknown escape read as a letter.
     /// </summary>
     [Theory]
-    [InlineData(@"^a\b$")]
+    // Critical: the pattern grammar refuses what both engines disagree on.
+    [InlineData(@"^a\b$", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R3)])]
     [InlineData(@"^\Bx$")]
     [InlineData(@"^\p{L}$")]
     [InlineData(@"^\P{L}$")]
@@ -37,7 +39,8 @@ public class PatternGrammarTests
     [InlineData(@"^(?<=a)b$")]
     [InlineData(@"^(?<!a)b$")]
     [InlineData(@"^[a-z-[aeiou]]$")]
-    [InlineData(@"^[\d-z]$")]
+    // Critical: the pattern grammar refuses what both engines disagree on.
+    [InlineData(@"^[\d-z]$", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R3)])]
     [InlineData(@"^[a-\w]$")]
     [InlineData(@"^[\D]$")]
     [InlineData(@"^[\W]$")]
@@ -136,7 +139,8 @@ public class PatternGrammarTests
     /// and records that are not theirs to fill. The construct is the few characters the table names, nothing around them.
     /// </summary>
     [Theory]
-    [InlineData(@"^SENTINEL_PAT(?i)x$", "(?i")]
+    // Critical: a refusal never quotes the pattern.
+    [InlineData(@"^SENTINEL_PAT(?i)x$", "(?i", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B3)])]
     [InlineData(@"^SENTINEL_PAT\p{L}$", @"\p")]
     [InlineData(@"^SENTINEL_PAT[]x]$", "[]")]
     [InlineData(@"^SENTINEL_PAT\Z", @"\Z")]

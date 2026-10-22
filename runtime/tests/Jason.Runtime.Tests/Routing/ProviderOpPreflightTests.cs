@@ -32,6 +32,7 @@ public class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "the twelve checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -105,6 +106,7 @@ public class ProviderOpPreflightTests
     /// the operation whose value is `confirm_once` parks, the operations whose value is `auto` run.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "the conditional approval reads the dangerous value")]
     public void The_gate_reads_the_dangerous_value_and_never_the_condition_beside_it()
     {
         // The case is a real one: this operation's approval is published as a condition, not as a plain value.
@@ -146,6 +148,7 @@ public class ProviderOpPreflightTests
     /// code later added to both places cannot come to mean two different things.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "pre-flight refusals are final")]
     public void No_reason_the_pre_flight_gives_is_ever_worth_another_attempt() =>
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
@@ -199,6 +202,7 @@ public class ProviderOpPreflightTests
     /// reason, rather than being handed quietly to whichever other plugin happens to implement it.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "no fallback to another plugin")]
     public void An_operation_the_routed_plugin_cannot_perform_is_never_handed_to_one_that_can()
     {
         var scenario = new Scenario
@@ -221,6 +225,7 @@ public class ProviderOpPreflightTests
     /// either way — and the message names the pin, because that is the value everything else would use.
     /// </summary>
     [Fact]
+    [Critical(Family.W10, "arguments cannot contradict a pin")]
     public void An_identifier_in_the_arguments_that_contradicts_the_pin_is_refused_by_pointer()
     {
         var scenario = new Scenario
@@ -336,6 +341,7 @@ public class ProviderOpPreflightTests
     /// register, and an operation that would reach them is still refused.
     /// </summary>
     [Fact]
+    [Critical(Family.S1, "the register at the pre-flight")]
     public void A_suppressed_person_is_refused_what_would_reach_them_and_not_the_record_that_they_said_stop()
     {
         Scenario Suppressed(string operation, JsonObject arguments) => new()

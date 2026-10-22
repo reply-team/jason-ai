@@ -105,6 +105,7 @@ public class UpdateLedgerTests
     /// is a state no applier could read and no update could recover from.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "the update ledger is atomic")]
     public void A_half_written_ledger_never_replaces_a_whole_one()
     {
         using var dir = new TempTree();

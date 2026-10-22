@@ -47,6 +47,7 @@ public sealed class NotificationSenderTests
     }
 
     [Fact]
+    [Critical(Family.N3, "notification_sent line")]
     public async Task One_notification_is_one_line_with_every_channel_s_outcome()
     {
         using var harness = Harness();
@@ -188,6 +189,7 @@ public sealed class NotificationSenderTests
 
     /// <summary>A channel that throws is a defect in that channel: it is recorded, and the others' outcomes stand.</summary>
     [Fact]
+    [Critical(Family.N3, "channel isolation")]
     public async Task A_channel_that_throws_is_one_failed_outcome_and_the_others_stand()
     {
         using var harness = Harness();

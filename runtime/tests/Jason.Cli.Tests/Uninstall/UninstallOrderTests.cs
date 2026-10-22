@@ -5,6 +5,7 @@ using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Process;
 using Jason.Cli.Uninstall;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -22,6 +23,7 @@ public class UninstallOrderTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.I3, "the order of the steps")]
     public async Task The_registration_is_removed_before_the_runtime_is_asked_to_stop()
     {
         using var dir = new TempPaths();
@@ -47,6 +49,7 @@ public class UninstallOrderTests
     /// there are steps after it to stop. Without them this passed whatever step 2 decided.
     /// </remarks>
     [Fact]
+    [Critical(Family.I3, "nothing removed under a live runtime")]
     public async Task A_runtime_that_will_not_stop_refuses_the_whole_verb_and_removes_nothing_further()
     {
         using var dir = new TempPaths();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests;
 
@@ -35,6 +36,7 @@ public class OptionalTests
     }
 
     [Fact]
+    [Critical(Family.R2, "Optional<T> on the wire")]
     public void Absent_fields_are_omitted_when_writing_and_set_fields_round_trip()
     {
         var json = JsonSerializer.Serialize(new Patch(Optional<string?>.Of(null), Optional<int?>.Absent), JasonJson.Options);

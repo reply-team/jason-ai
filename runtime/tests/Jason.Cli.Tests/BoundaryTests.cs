@@ -1,13 +1,16 @@
 using Jason.Cli;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
 
 public class BoundaryTests
 {
     [Theory]
-    [InlineData("Jason.Runtime")]
+    // Critical: no Jason.Runtime, no EF Core in the CLI.
+    [InlineData("Jason.Runtime", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B2)])]
     [InlineData("Jason.PluginHost")]
-    [InlineData("Microsoft.EntityFrameworkCore")]
+    // Critical: no Jason.Runtime, no EF Core in the CLI.
+    [InlineData("Microsoft.EntityFrameworkCore", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B2)])]
     [InlineData("Microsoft.Data.Sqlite")]
     [InlineData("Microsoft.AspNetCore")]
     [InlineData("YamlDotNet")]

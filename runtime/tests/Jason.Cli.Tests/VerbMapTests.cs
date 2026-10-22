@@ -1,4 +1,5 @@
 using Jason.Cli;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
 
@@ -45,6 +46,7 @@ public class VerbMapTests
     ];
 
     [Fact]
+    [Critical(Family.R2, "the verb map is one-to-one")]
     public async Task Every_top_level_name_is_a_noun_except_the_declared_exceptions()
     {
         var printed = await NamesFromHelpAsync();
@@ -100,6 +102,7 @@ public class VerbMapTests
     /// without one is the map drifting from the rule its own doc comment states.
     /// </summary>
     [Fact]
+    [Critical(Family.R2, "the seven declared exceptions")]
     public void Exactly_the_declared_names_have_no_api_operation_behind_them()
     {
         var operations = typeof(Contracts.Api.Operations)

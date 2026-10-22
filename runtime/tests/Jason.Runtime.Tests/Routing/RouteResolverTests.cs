@@ -17,10 +17,12 @@ public class RouteResolverTests
     private const string Operation = "campaign.get";
 
     [Theory]
-    [InlineData("A", "B", "C", "D", "A", RouteScope.CampaignOperation)]
+    // Critical: campaign operation wins; global default last.
+    [InlineData("A", "B", "C", "D", "A", RouteScope.CampaignOperation, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W11)])]
     [InlineData(null, "B", "C", "D", "B", RouteScope.CampaignDefault)]
     [InlineData(null, null, "C", "D", "C", RouteScope.GlobalOperation)]
-    [InlineData(null, null, null, "D", "D", RouteScope.GlobalDefault)]
+    // Critical: campaign operation wins; global default last.
+    [InlineData(null, null, null, "D", "D", RouteScope.GlobalDefault, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W11)])]
     [InlineData("A", null, "C", null, "A", RouteScope.CampaignOperation)]
     [InlineData(null, "B", null, "D", "B", RouteScope.CampaignDefault)]
     [InlineData(null, null, "C", null, "C", RouteScope.GlobalOperation)]
@@ -46,6 +48,7 @@ public class RouteResolverTests
         Assert.Null(RouteResolver.Resolve(Snapshot(null, null, null, null), Campaign, Operation));
 
     [Fact]
+    [Critical(Family.W11, "exact masking")]
     public void A_campaign_default_hides_a_global_override_and_an_explicit_campaign_override_brings_it_back()
     {
         var masked = Snapshot(campaignOperation: null, campaignDefault: "house", globalOperation: "special", globalDefault: "fallback");

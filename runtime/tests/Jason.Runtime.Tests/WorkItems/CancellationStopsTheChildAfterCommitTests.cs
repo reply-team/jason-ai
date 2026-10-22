@@ -22,6 +22,7 @@ public class CancellationStopsTheChildAfterCommitTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
+    [Critical(Family.W2, "commit before kill")]
     [InlineData("the person is removed from the campaign")]
     [InlineData("the contact is archived")]
     [InlineData("the campaign is archived")]

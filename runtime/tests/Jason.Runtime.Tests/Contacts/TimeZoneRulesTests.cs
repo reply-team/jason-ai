@@ -19,7 +19,8 @@ public class TimeZoneRulesTests
     }
 
     [Theory]
-    [InlineData("Pacific Standard Time")]
+    // Critical: IANA only, on every OS.
+    [InlineData("Pacific Standard Time", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.F3)])]
     [InlineData("FLE Standard Time")]
     [InlineData("Mars/Olympus")]
     [InlineData("+02:00")]

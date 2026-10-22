@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Jason.Contracts.Ids;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests;
 
@@ -32,6 +33,7 @@ public partial class PublicIdTests
     }
 
     [Fact]
+    [Critical(Family.X1, "ordering inside one millisecond is fragile")]
     public void Ulids_generated_in_one_process_are_strictly_increasing_even_within_a_millisecond()
     {
         var ids = Enumerable.Range(0, 5000).Select(_ => Ulid.NewUlid()).ToList();
@@ -42,6 +44,7 @@ public partial class PublicIdTests
     }
 
     [Fact]
+    [Critical(Family.R2, "cmp_/wi_/att_ ids")]
     public void Public_ids_are_prefixed_ulids()
     {
         var id = PublicId.New("cmp");

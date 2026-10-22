@@ -2,6 +2,7 @@ using Jason.Cli.Autostart;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -56,6 +57,7 @@ public class GuardsRegisterNothingTests
     /// to a refusal so that forgetting costs a refusal rather than either of those.
     /// </summary>
     [Fact]
+    [Critical(Family.B1, "the guards cannot touch the machine")]
     public void Neither_guard_can_reach_a_real_harness_root_or_start_a_real_program()
     {
         using var directory = new TempPaths();

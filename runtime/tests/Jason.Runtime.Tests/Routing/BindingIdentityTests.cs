@@ -20,6 +20,7 @@ public class BindingIdentityTests
     }
 
     [Fact]
+    [Critical(Family.W11, "binding identity")]
     public void Two_bindings_that_differ_only_in_key_order_are_the_same_binding()
     {
         var one = new JsonObject { ["workspace"] = "west", ["mailbox"] = "sales" };

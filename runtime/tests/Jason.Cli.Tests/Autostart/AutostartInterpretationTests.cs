@@ -1,4 +1,5 @@
 using Jason.Cli.Autostart;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Autostart;
 
@@ -36,6 +37,7 @@ public class AutostartInterpretationTests
     /// on nothing with a failure, and `enable` registered the task and then failed reading it back.
     /// </summary>
     [Theory]
+    [Critical(Family.F3, "a localized system answer is read by code, not words")]
     [InlineData("ERROR: The system cannot find the file specified.\r\n")]
     [InlineData("ОШИБКА: Не удается найти указанный файл.\r\n")]
     [InlineData("")]

@@ -23,6 +23,7 @@ public class CanonicalInputTests
     /// in the contract rather than decided here, widening it is a visible change to a published document.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "data minimisation to a plugin")]
     public void A_plugin_receives_the_channel_the_operation_consumes_and_no_other()
     {
         var contact = ContactWith(("email", "ada@example.test", true), ("phone", "+15555550100", false), ("linkedin", "https://example.test/in/ada", false));
@@ -118,6 +119,7 @@ public class CanonicalInputTests
     /// "the prior run under this key" needs. The attempt id is the correlation, and it travels elsewhere.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "the provider key is stable across attempts")]
     public void The_idempotency_key_is_the_work_item_s_own_identifier()
     {
         var facts = Facts(ListMembershipAdd, Arguments("email"), ContactWith(("email", "ada@example.test", true)));

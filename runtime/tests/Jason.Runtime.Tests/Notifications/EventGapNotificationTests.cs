@@ -23,6 +23,7 @@ public sealed class EventGapNotificationTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.N3, "unread events are told")]
     public async Task A_gap_wakes_one_pointer_that_says_an_account_was_not_read()
     {
         using var harness = await StartedAsync();

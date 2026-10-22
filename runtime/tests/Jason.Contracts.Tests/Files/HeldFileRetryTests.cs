@@ -1,5 +1,6 @@
 using System.Globalization;
 using Jason.Contracts.Files;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Files;
 
@@ -32,6 +33,7 @@ public class HeldFileRetryTests
     }
 
     [Fact]
+    [Critical(Family.F5, "the wait ends on time with the cause kept")]
     public void A_call_held_throughout_is_given_up_at_exactly_the_wait_with_the_last_refusal_kept()
     {
         var clock = new SteppedClock();
@@ -61,6 +63,7 @@ public class HeldFileRetryTests
     }
 
     [Fact]
+    [Critical(Family.F5, "the held-file wait begins at the first refusal")]
     public void A_first_try_slower_than_the_wait_is_still_paused_after_because_the_wait_counts_from_the_first_refusal()
     {
         var clock = new SteppedClock();

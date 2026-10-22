@@ -88,6 +88,7 @@ public sealed partial class ProductAddressTests : IDisposable
     /// a request that skips the address, and the store behind the address could no longer change without it.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "releases come through the product address")]
     public void No_release_is_fetched_from_github_by_name_outside_the_named_exceptions()
     {
         var found = FromGitHub(Publication.RepositoryRoot(), Exceptions);

@@ -37,6 +37,7 @@ public class PluginRegistryTests
     }
 
     [Fact]
+    [Critical(Family.R1, "a rejected reload keeps the snapshot")]
     public void A_rejected_load_leaves_the_active_snapshot_exactly_where_it_was()
     {
         var registry = new PluginRegistry(new FixedClock(Noon));

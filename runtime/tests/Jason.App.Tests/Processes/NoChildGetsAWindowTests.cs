@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Processes;
 
@@ -59,6 +60,7 @@ public class NoChildGetsAWindowTests
     /// and nothing afterwards turns the window back on or picks its streams again.
     /// </summary>
     [Fact]
+    [Critical(Family.B1, "the IL guard over ChildProcess.StartInfo")]
     public void Only_the_door_makes_a_start_and_nothing_undoes_what_it_sets()
     {
         var offenders = Product
@@ -79,6 +81,7 @@ public class NoChildGetsAWindowTests
     /// compiler-written state machine.
     /// </summary>
     [Fact]
+    [Critical(Family.B1, "the guard reads every production assembly")]
     public void The_scan_reaches_every_place_the_door_is_used()
     {
         var callers = Product
@@ -93,10 +96,13 @@ public class NoChildGetsAWindowTests
     }
 
     [Theory]
-    [InlineData(nameof(Offenders.MakesItsOwn), "makes a ProcessStartInfo")]
+    // Critical: its own ProcessStartInfo, UseShellExecute, CreateNoWindow.
+    [InlineData(nameof(Offenders.MakesItsOwn), "makes a ProcessStartInfo", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B1)])]
     [InlineData(nameof(Offenders.MakesItsOwnTargetTyped), "makes a ProcessStartInfo")]
-    [InlineData(nameof(Offenders.TurnsTheWindowBackOn), "sets CreateNoWindow")]
-    [InlineData(nameof(Offenders.AsksForTheShell), "sets UseShellExecute")]
+    // Critical: its own ProcessStartInfo, UseShellExecute, CreateNoWindow.
+    [InlineData(nameof(Offenders.TurnsTheWindowBackOn), "sets CreateNoWindow", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B1)])]
+    // Critical: its own ProcessStartInfo, UseShellExecute, CreateNoWindow.
+    [InlineData(nameof(Offenders.AsksForTheShell), "sets UseShellExecute", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B1)])]
     [InlineData(nameof(Offenders.StartsAFileName), "starts a process from a file name")]
     [InlineData(nameof(Offenders.ReachesIntoAProcess), "reads a process's StartInfo")]
     [InlineData(nameof(Offenders.InALambda), "makes a ProcessStartInfo")]

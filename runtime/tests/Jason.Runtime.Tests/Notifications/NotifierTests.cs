@@ -129,6 +129,7 @@ public sealed class NotifierTests
     }
 
     [Fact]
+    [Critical(Family.N3, "one in flight")]
     public async Task Only_one_notification_is_in_flight()
     {
         using var harness = await StartedAsync();
@@ -325,6 +326,7 @@ public sealed class NotifierTests
     /// newest line, and what is still pending gives one pointer after the start grace — or nothing, if nothing is.
     /// </summary>
     [Theory]
+    [Critical(Family.N3, "no flood on first start")]
     [InlineData(true, 1)]
     [InlineData(false, 0)]
     public async Task The_first_start_on_a_database_with_no_line_does_not_walk_its_history(bool pending, int notified)

@@ -2,6 +2,7 @@ using Jason.Cli;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Skills;
 
@@ -18,6 +19,7 @@ public class SkillsUpdateTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.I2, "skills update reads its record")]
     public async Task Update_uses_the_source_and_ref_the_record_names()
     {
         using var dir = new TempPaths();

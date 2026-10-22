@@ -155,7 +155,8 @@ public class ReplyMessageSendTests
     /// refused before anything is called, whether or not it closes and whatever the format: a subject is content too.
     /// </summary>
     [Theory]
-    [InlineData("email", "Hi {{firstName}}", null)]
+    // Critical: no provider template expansion.
+    [InlineData("email", "Hi {{firstName}}", null, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X3)])]
     [InlineData("email", null, "Braces {{ stay as typed.")]
     [InlineData("linkedin_inmail", "{{ company }} and us", null)]
     [InlineData("linkedin_message", null, "Hi {{firstName}}")]
@@ -225,7 +226,8 @@ public class ReplyMessageSendTests
     /// Reply writes it, capitals and all, is the account approved: it is what <c>sender.list</c> returned.
     /// </summary>
     [Theory]
-    [InlineData("Ann@Example.COM", "ann@example.com", true)]
+    // Critical: the approved sender is the sender.
+    [InlineData("Ann@Example.COM", "ann@example.com", true, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S2)])]
     [InlineData("Ann@Example.COM", "Ann@Example.COM", true)]
     [InlineData("xİ@example.com", "xi\u0307@example.com", false)]
     [InlineData("ann@example", "ann@example", false)]
@@ -352,6 +354,7 @@ public class ReplyMessageSendTests
     /// at Reply is not the i with a combining dot above the register was asked about, so nothing is sent.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the key decides who the person is")]
     public async Task An_address_the_register_keys_apart_is_another_person_s_and_nothing_is_sent()
     {
         const string held = "xİ@example.com";
@@ -408,6 +411,7 @@ public class ReplyMessageSendTests
 
     /// <summary>Reply consults its blacklist on a direct email, and refuses one to a person it holds: that is a stop too.</summary>
     [Fact]
+    [Critical(Family.S1, "the provider's own register")]
     public async Task A_person_on_reply_s_blacklist_is_suppressed_and_nothing_is_sent()
     {
         using var account = ByEmail().WithBlacklisted(1001);
@@ -544,7 +548,8 @@ public class ReplyMessageSendTests
 
     /// <summary>A message whose answer was lost may have gone, and no read tells it from another: it stops for a person, on every format.</summary>
     [Theory]
-    [InlineData("email")]
+    // Critical: a lost send is never repeated.
+    [InlineData("email", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W5)])]
     [InlineData("linkedin_message")]
     [InlineData("linkedin_inmail")]
     [InlineData("linkedin_voice")]

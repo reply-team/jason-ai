@@ -115,6 +115,7 @@ public class ReportDedupTests
 
     /// <summary>Two callers, two connections, one row: neither of them gets to create the second effect.</summary>
     [Fact]
+    [Critical(Family.W8, "report dedup under a race")]
     public async Task Two_callers_who_both_submit_the_same_report_end_with_one_row_and_one_id()
     {
         using var database = new TestDatabase();

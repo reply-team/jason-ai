@@ -334,7 +334,8 @@ public class ReplyFirstNameTests
     }
 
     [Theory]
-    [InlineData(MembershipAdd, true)]
+    // Critical: derived names stay off argv.
+    [InlineData(MembershipAdd, true, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B3)])]
     [InlineData(MembershipAdd, false)]
     [InlineData(Enroll, true)]
     [InlineData(Enroll, false)]

@@ -28,6 +28,7 @@ public sealed class NotificationRuleTests
 
     /// <summary>(b): a burst that never goes quiet is sent when its oldest line has waited the cap — 60 parks ten seconds apart.</summary>
     [Fact]
+    [Critical(Family.N3, "the cap")]
     public void A_burst_that_never_goes_quiet_is_sent_at_the_cap()
     {
         var burst = new Burst(60, Start.AddSeconds(100), Start.AddSeconds(690));
@@ -37,6 +38,7 @@ public sealed class NotificationRuleTests
 
     /// <summary>(c): nothing within the floor of the last one that reached anybody.</summary>
     [Fact]
+    [Critical(Family.N3, "the floor")]
     public void Nothing_is_sent_within_the_floor_of_the_last_delivery()
     {
         var burst = new Burst(1, Start.AddSeconds(1_000), Start.AddSeconds(1_000));

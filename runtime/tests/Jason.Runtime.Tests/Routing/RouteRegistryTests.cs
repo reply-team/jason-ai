@@ -32,6 +32,7 @@ public class RouteRegistryTests
     }
 
     [Fact]
+    [Critical(Family.W11, "immutable snapshots")]
     public void A_snapshot_taken_before_an_activation_is_not_changed_by_it()
     {
         var started = DateTimeOffset.Parse("2026-09-15T10:00:00Z", CultureInfo.InvariantCulture);

@@ -1,4 +1,5 @@
 using Jason.Cli;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -79,11 +80,15 @@ public class DocumentedPageCommandsTests
         return data;
     }
 
+    // Critical: a printed command parses.
+    public static TheoryData<string, string> CriticalDocumentedCommands() =>
+        CriticalRows.Mark(DocumentedCommands(), Family.D1, data => data is ["README.md", "jason update check"]);
+
     private static IEnumerable<(string Page, string Command)> Printed() =>
         Pages.SelectMany(page => Commands(page).Select(line => (page, line)));
 
     [Theory]
-    [MemberData(nameof(DocumentedCommands))]
+    [MemberData(nameof(CriticalDocumentedCommands))]
     public async Task Every_documented_command_is_understood(string page, string command)
     {
         using var dir = new TempPaths();

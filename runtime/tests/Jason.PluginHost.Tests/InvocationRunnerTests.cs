@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 
 namespace Jason.PluginHost.Tests;
 
@@ -155,6 +156,7 @@ public sealed class InvocationRunnerTests
     }
 
     [Fact]
+    [Critical(Family.R1, "four failure classes only")]
     public void A_failure_outside_the_four_classes_is_refused_where_the_plugin_stands()
     {
         var outcome = Run("""
@@ -174,6 +176,7 @@ public sealed class InvocationRunnerTests
     }
 
     [Fact]
+    [Critical(Family.R4, "the invocation deadline")]
     public void A_plugin_that_never_finishes_runs_out_of_time()
     {
         var outcome = Run(
@@ -217,6 +220,7 @@ public sealed class InvocationRunnerTests
     }
 
     [Fact]
+    [Critical(Family.R4, "the package is the sandbox's edge")]
     public void A_module_outside_the_package_is_never_loaded()
     {
         var outcome = Run("import fs from \"fs\"; export function invoke() { return { result: 1 }; }");

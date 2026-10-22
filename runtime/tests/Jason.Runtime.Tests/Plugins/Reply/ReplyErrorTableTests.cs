@@ -21,6 +21,10 @@ public class ReplyErrorTableTests
     /// </summary>
     public static TheoryData<string> Performed() => [.. ReplyErrorTable.Performed()];
 
+    // Critical: the Reply error table and the contracts agree.
+    public static TheoryData<string> CriticalPerformed() =>
+        CriticalRows.Mark(Performed(), Family.R1, data => data is ["campaign.get"]);
+
     [Fact]
     public void The_table_is_held_for_every_operation_the_package_performs()
     {
@@ -30,7 +34,7 @@ public class ReplyErrorTableTests
     }
 
     [Theory]
-    [MemberData(nameof(Performed))]
+    [MemberData(nameof(CriticalPerformed))]
     public void Every_code_the_table_names_is_one_the_operation_declares(string operation)
     {
         var contract = OperationCatalog.Find(operation);
@@ -137,6 +141,7 @@ public class ReplyErrorTableTests
     }
 
     [Fact]
+    [Critical(Family.W5, "read vs write after a lost answer")]
     public void A_lost_answer_is_ambiguous_on_a_write_and_only_transient_on_a_read()
     {
         var shared = ReplyErrorTable.Shared;

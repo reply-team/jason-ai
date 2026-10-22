@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -156,6 +157,7 @@ public class SkillPackTests
     /// or a new digest after a new reading, which a reviewer sees in the diff.
     /// </summary>
     [Fact]
+    [Critical(Family.D2, "a verified row is earned")]
     public void Every_verified_skill_is_the_text_a_host_actually_read()
     {
         var catalog = File.ReadAllText(SkillPack.Catalog());

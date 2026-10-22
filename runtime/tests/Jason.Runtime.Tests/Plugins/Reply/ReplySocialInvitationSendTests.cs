@@ -119,6 +119,7 @@ public class ReplySocialInvitationSendTests
     /// anything is called, whether or not it closes: the stand-in would answer only some of them.
     /// </summary>
     [Theory]
+    [Critical(Family.X3, "no template expansion in a note")]
     [InlineData("Hi {{firstName}}, we met at the meetup.")]
     [InlineData("Hi {{ name }}")]
     [InlineData("Braces {{ stay as typed.")]
@@ -136,6 +137,7 @@ public class ReplySocialInvitationSendTests
 
     /// <summary>Reply does not refuse an invitation to a person it holds as opted out, so the read of the contact is the stop.</summary>
     [Fact]
+    [Critical(Family.S1, "opted out, nothing sent")]
     public async Task A_person_reply_holds_as_opted_out_is_suppressed_and_nothing_is_sent()
     {
         using var account = Planted(optedOut: true);
@@ -281,6 +283,7 @@ public class ReplySocialInvitationSendTests
     /// written, and nothing is sent.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "a pre-key value never reaches the provider")]
     public async Task A_value_stored_before_the_key_is_never_written_onto_a_contact()
     {
         using var account = Planted(linkedIn: null);
@@ -509,6 +512,7 @@ public class ReplySocialInvitationSendTests
 
     /// <summary>An invitation whose answer was lost may have gone, and no read tells it from another: it stops for a person.</summary>
     [Fact]
+    [Critical(Family.W5, "a lost invitation is never repeated")]
     public async Task A_lost_invitation_is_ambiguous_never_repeated_and_the_person_stays_pinned()
     {
         using var account = Planted();

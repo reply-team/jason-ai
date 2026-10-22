@@ -8,6 +8,7 @@ namespace Jason.Runtime.Tests.Discovery;
 public class DescriptorPublisherTests
 {
     [Fact]
+    [Critical(Family.S5, "the descriptor is restricted")]
     public void Publishing_writes_a_restricted_snake_case_descriptor()
     {
         using var dir = new TempDataDir();
@@ -56,6 +57,7 @@ public class DescriptorPublisherTests
     }
 
     [Fact]
+    [Critical(Family.S5, "the run directory ACL")]
     public void The_run_directory_is_restricted_to_the_current_user()
     {
         using var dir = new TempDataDir();

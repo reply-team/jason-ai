@@ -19,6 +19,7 @@ public class OptionsHotReloadTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.C1, "live settings")]
     public async Task A_hand_edit_of_the_user_settings_reaches_the_running_runtime()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(
@@ -66,6 +67,7 @@ public class OptionsHotReloadTests
     /// the edited file, so that the reload has something new to freeze.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "routes are read only at a reload")]
     public async Task An_edited_route_is_seen_by_the_runtime_that_will_freeze_it_at_the_next_reload()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(
@@ -111,6 +113,7 @@ public class OptionsHotReloadTests
     /// it says, where it is thrown and where it is logged, is the setting's path and the type it has to be.
     /// </summary>
     [Fact]
+    [Critical(Family.C1, "a start refusal names the path, never the value")]
     public async Task A_value_of_the_wrong_type_stops_the_start_naming_the_setting_and_never_the_value()
     {
         const string sentinel = "SENTINEL_F";
@@ -143,6 +146,7 @@ public class OptionsHotReloadTests
     /// had — not what a file it could not read would have given it, which is every setting at its default.
     /// </summary>
     [Fact]
+    [Critical(Family.C1, "a bad live edit keeps the last good settings")]
     public async Task A_settings_file_that_is_not_valid_JSON_is_reported_by_position_while_the_runtime_keeps_what_it_had()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(

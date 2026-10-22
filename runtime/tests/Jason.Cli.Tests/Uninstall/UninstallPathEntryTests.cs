@@ -1,4 +1,5 @@
 using Jason.Cli.Uninstall;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -30,6 +31,7 @@ public class UninstallPathEntryTests
     }
 
     [Fact]
+    [Critical(Family.I3, "the PATH block comes out byte-exactly")]
     public void A_profile_loses_the_three_lines_the_installer_appended_and_keeps_every_other_byte()
     {
         const string before = "# mine\nexport EDITOR=vim\n\n# added by jason install\nexport PATH=\"/home/a/.local/bin:$PATH\"\n\nexport LANG=C\n";
@@ -76,6 +78,7 @@ public class UninstallPathEntryTests
     /// ~/.local/bin off somebody's PATH along with everything else in it.
     /// </summary>
     [Fact]
+    [Critical(Family.I3, "a person's own line stays")]
     public void A_hand_written_line_is_somebodys_own_and_stays()
     {
         const string before = "# mine\nexport PATH=\"/home/a/.local/bin:$PATH\"\nexport LANG=C\n";
@@ -503,6 +506,7 @@ public class UninstallPathEntryTests
     /// the one <c>install.sh</c> itself appends with.
     /// </remarks>
     [Fact]
+    [Critical(Family.I3, "install and uninstall agree")]
     public void What_the_repair_appends_is_what_the_removal_takes_back_out()
     {
         const string before = "# mine\nexport EDITOR=vim\n";

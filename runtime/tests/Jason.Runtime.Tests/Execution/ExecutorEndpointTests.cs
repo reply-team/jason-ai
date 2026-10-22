@@ -58,6 +58,7 @@ public class ExecutorEndpointTests
     }
 
     [Fact]
+    [Critical(Family.W2, "a stale attempt is told to stop")]
     public async Task An_attempt_that_no_longer_owns_the_item_is_told_to_stop()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Noon));

@@ -51,6 +51,7 @@ public class ManagerLoopTests
     /// manager that answers in the shape a check-in is held to.
     /// </summary>
     [Fact]
+    [Critical(Family.M1, "the manager's default trigger")]
     public async Task A_failed_item_puts_a_manager_on_the_queue_and_a_succeeded_one_does_not()
     {
         await using var host = await FakeHostRuntime.StartAsync(Ct, Settings(reviewSeconds: 86_400));

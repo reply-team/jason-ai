@@ -27,6 +27,7 @@ public class OriginRuleTests
         Assert.Equal(own, OriginRule.IsOwn(origin.Replace("{port}", "52766", StringComparison.Ordinal), 52766));
 
     [Fact]
+    [Critical(Family.S5, "a browser on another origin cannot drive the API")]
     public async Task An_operation_with_a_foreign_origin_is_refused_before_authentication_and_without_one_is_untouched()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

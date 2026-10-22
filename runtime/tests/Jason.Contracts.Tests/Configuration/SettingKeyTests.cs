@@ -1,6 +1,7 @@
 using Jason.Contracts.Configuration;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Configuration;
 
@@ -40,14 +41,16 @@ public class SettingKeyTests
 
     [Theory]
     [InlineData("other-provider")]
-    [InlineData("ghp_abc123def456")]
+    // Critical: a refused setting path never shows a token or a number a person typed.
+    [InlineData("ghp_abc123def456", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B3)])]
     [InlineData("my secret")]
     [InlineData("cmp_01ARZ3NDEKTSV4RRFFQ69G5FA")]
     [InlineData("xyz_01ARZ3NDEKTSV4RRFFQ69G5FAV")]
     [InlineData("cmp_01arz3ndektsv4rrffq69g5fav")]
     [InlineData("cmp_01ARZ3NDEKTSV4RRFFQ69G5FAU")]
     [InlineData("12a")]
-    [InlineData("4111111111111111")]
+    // Critical: a refused setting path never shows a token or a number a person typed.
+    [InlineData("4111111111111111", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B3)])]
     [InlineData("")]
 
     // On its own a number is no index into anything: it is shown only where a list stands before it.

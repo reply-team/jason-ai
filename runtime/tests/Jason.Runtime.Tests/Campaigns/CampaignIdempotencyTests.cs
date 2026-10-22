@@ -62,6 +62,7 @@ public class CampaignIdempotencyTests
     }
 
     [Fact]
+    [Critical(Family.W8, "idempotent campaign.create")]
     public async Task The_same_request_again_answers_the_same_campaign_and_writes_nothing()
     {
         using var database = new TestDatabase();
@@ -174,6 +175,7 @@ public class CampaignIdempotencyTests
     }
 
     [Fact]
+    [Critical(Family.W8, "key race")]
     public async Task A_writer_that_loses_the_race_to_a_different_request_is_refused_naming_the_winner()
     {
         using var database = new TestDatabase();

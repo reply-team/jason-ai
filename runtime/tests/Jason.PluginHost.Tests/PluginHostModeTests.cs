@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 
 namespace Jason.PluginHost.Tests;
 
@@ -120,6 +121,7 @@ public sealed class PluginHostModeTests : IDisposable
     /// longer reaches it. The outcome is on stdout from the moment it was written all the same.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "the unfinished kill is waited for")]
     public async Task The_host_writes_its_outcome_and_does_not_exit_before_an_unfinished_kill_has_ended()
     {
         var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -273,6 +275,7 @@ public sealed class PluginHostModeTests : IDisposable
     /// it, the line is not said a millisecond before that moment, is said at it, and names it.
     /// </summary>
     [Fact]
+    [Critical(Family.X1, "the deadline arithmetic")]
     public async Task The_deadline_is_the_host_s_start_plus_the_invocation_s_timeout_exactly()
     {
         const int TimeoutMs = 500;
@@ -523,6 +526,7 @@ public sealed class PluginHostModeTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "exit 2")]
     public async Task A_protocol_this_build_does_not_speak_is_a_usage_error()
     {
         var (exit, stdout, stderr) = await RunAsync(Argv(protocol: 2));
@@ -543,6 +547,7 @@ public sealed class PluginHostModeTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "exit 3")]
     public async Task Something_that_is_not_an_envelope_is_a_rejected_invocation()
     {
         using var stdin = new StringReader("not json at all");
@@ -578,6 +583,7 @@ public sealed class PluginHostModeTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "the child recomputes the digest")]
     public async Task A_package_that_changed_since_the_runtime_validated_it_is_never_run()
     {
         var runner = Succeeding();
@@ -631,6 +637,7 @@ public sealed class PluginHostModeTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "exit 4")]
     public async Task A_runner_that_throws_is_the_host_failing_rather_than_the_plugin()
     {
         PluginHostMode.Runner = new StubRunner(_ => throw new InvalidOperationException("the host broke"));
@@ -643,6 +650,7 @@ public sealed class PluginHostModeTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R1, "exit 0 with one outcome")]
     public async Task A_completed_invocation_writes_exactly_one_outcome_and_exits_zero()
     {
         var invocation = InvocationFactory.Create(_root, "echo.run");

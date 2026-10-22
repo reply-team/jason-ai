@@ -5,6 +5,7 @@ using Jason.Cli.Doctor;
 using Jason.Contracts.Configuration;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Doctor;
 
@@ -80,6 +81,7 @@ public sealed class ConfigShapeTests
     /// quotes what it found there, and what was typed onto the wrong line is often a secret.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "a broken file leaks no text")]
     public void A_file_that_is_not_json_is_described_by_the_line_and_column_of_the_parser_and_nothing_of_its_text()
     {
         const string text = "{\n  \"Update\": {\n    \"FeedUrl\": \"SENTINEL-FEED\",\n    \"IntervalHours\": ]\n  }\n}";
@@ -256,6 +258,7 @@ public sealed class ConfigShapeTests
     /// is written under it is still described — by its own keys, which the code knows, and by type — but never by value.
     /// </summary>
     [Fact]
+    [Critical(Family.S4, "an unknown key is a placeholder")]
     public void A_key_the_code_does_not_know_is_written_as_a_placeholder_and_what_is_under_it_is_still_described()
     {
         var described = Describe("""{"ghp_SENTINELTOKEN":{"Port":1},"Runtime":{"Port":2}}""");
@@ -510,6 +513,7 @@ public sealed class ConfigShapeTests
     }
 
     [Fact]
+    [Critical(Family.S4, "a bundle carries a string's shape, never its text")]
     public void A_string_is_never_described_by_its_text_whatever_it_says()
     {
         var shape = Describe("""{"Update":{"FeedUrl":"sk-SENTINEL-1234 <script>"},"Roles":{"DefaultExecutionProfile":"SENTINEL-profile"}}""");
@@ -925,6 +929,7 @@ public sealed class ConfigShapeTests
 
     /// <summary>The same document with a string in every leaf, the listed ones included: none of them is the kind the list names.</summary>
     [Fact]
+    [Critical(Family.S4, "the sentinel sweep over settings")]
     public void Of_a_sentinel_string_at_every_leaf_none_appears_not_even_where_the_path_is_listed()
     {
         var document = Document((index, _, _) => JsonValue.Create($"SENTINEL-{index}-TEXT"));

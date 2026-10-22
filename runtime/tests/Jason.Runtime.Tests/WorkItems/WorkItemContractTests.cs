@@ -75,6 +75,7 @@ public class WorkItemContractTests
     }
 
     [Fact]
+    [Critical(Family.R3, "context.input at create")]
     public async Task An_operation_that_declares_required_arguments_is_refused_without_an_input()
     {
         using var database = new TestDatabase();
@@ -111,6 +112,7 @@ public class WorkItemContractTests
     }
 
     [Fact]
+    [Critical(Family.R3, "the reserved key")]
     public async Task Arguments_the_contract_accepts_are_kept_under_the_reserved_key()
     {
         using var database = new TestDatabase();
@@ -217,6 +219,7 @@ public class WorkItemContractTests
     }
 
     [Fact]
+    [Critical(Family.S2, "enrolment choices are explicit")]
     public async Task The_enrollment_contract_insists_on_the_three_choices_nobody_may_default()
     {
         using var database = new TestDatabase();
@@ -310,6 +313,7 @@ public class WorkItemContractTests
     }
 
     [Fact]
+    [Critical(Family.R3, "context.input at update")]
     public async Task Rewriting_the_arguments_is_measured_against_the_items_own_operation()
     {
         using var database = new TestDatabase();

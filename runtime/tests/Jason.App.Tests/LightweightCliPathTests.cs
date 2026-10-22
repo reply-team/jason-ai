@@ -1,5 +1,6 @@
 using Jason.App;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
 
@@ -17,6 +18,7 @@ public class LightweightCliPathTests
     /// What is asserted is therefore the causal claim, which is the claim worth making.
     /// </remarks>
     [Fact]
+    [Critical(Family.B2, "the CLI loads no server assemblies")]
     public async Task Running_a_cli_command_does_not_load_server_side_assemblies()
     {
         var before = Loaded();
@@ -57,6 +59,7 @@ public class LightweightCliPathTests
     /// entering plugin-host mode loads none of these — which is the claim worth making.
     /// </remarks>
     [Fact]
+    [Critical(Family.B2, "the plugin host loads no server assemblies")]
     public async Task Entering_plugin_host_mode_loads_no_server_side_assemblies()
     {
         var before = Loaded();

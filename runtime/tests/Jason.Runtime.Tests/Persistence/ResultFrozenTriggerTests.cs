@@ -9,6 +9,7 @@ namespace Jason.Runtime.Tests.Persistence;
 public class ResultFrozenTriggerTests
 {
     [Fact]
+    [Critical(Family.P3, "result_json frozen")]
     public void The_result_of_a_finished_work_item_cannot_be_rewritten()
     {
         using var database = new TestDatabase();
@@ -37,6 +38,7 @@ public class ResultFrozenTriggerTests
     }
 
     [Fact]
+    [Critical(Family.P3, "every terminal path freezes")]
     public void Every_way_a_work_item_can_be_finished_freezes_its_result()
     {
         using var database = new TestDatabase();
@@ -52,6 +54,7 @@ public class ResultFrozenTriggerTests
     }
 
     [Fact]
+    [Critical(Family.W2, "the filtered unique index")]
     public void One_live_attempt_per_work_item_is_a_database_guarantee()
     {
         using var database = new TestDatabase();

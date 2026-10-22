@@ -9,6 +9,7 @@ namespace Jason.Runtime.Tests.Persistence;
 public class JasonDbContextTests
 {
     [Fact]
+    [Critical(Family.P2, "snake_case schema")]
     public void Schema_uses_snake_case_names()
     {
         using var dir = new TempDataDir();

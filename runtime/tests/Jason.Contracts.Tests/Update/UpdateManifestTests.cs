@@ -1,4 +1,5 @@
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Update;
 
@@ -32,6 +33,7 @@ public class UpdateManifestTests
     }
 
     [Fact]
+    [Critical(Family.I2, "the update decision")]
     public void Newer_than_what_is_running_is_the_whole_question_it_answers()
     {
         var manifest = UpdateManifest.Read(Good());
@@ -64,7 +66,7 @@ public class UpdateManifestTests
     }
 
     [Theory]
-    [MemberData(nameof(Rubbish))]
+    [MemberData(nameof(CriticalRubbish))]
     public void A_document_that_is_not_a_manifest_is_refused_rather_than_half_read(string what, string json)
     {
         var refused = Assert.Throws<UpdateFeedException>(() => UpdateManifest.Read(json));
@@ -126,6 +128,10 @@ public class UpdateManifestTests
 
         Assert.Equal(digest.ToLowerInvariant(), manifest.Artifacts["linux-x64"].Sha256);
     }
+
+    // Critical: a manifest that is not one; a short digest.
+    public static TheoryData<string, string> CriticalRubbish() =>
+        CriticalRows.Mark(Rubbish(), Family.I2, data => data is ["not json at all", _] or ["a digest that is too short", _]);
 
     public static TheoryData<string, string> Rubbish()
     {

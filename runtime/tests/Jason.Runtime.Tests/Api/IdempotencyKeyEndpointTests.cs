@@ -31,6 +31,7 @@ public class IdempotencyKeyEndpointTests
     }
 
     [Fact]
+    [Critical(Family.W8, "idempotent create over HTTP")]
     public async Task A_repeated_work_item_create_is_answered_with_the_body_of_the_first()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
@@ -45,6 +46,7 @@ public class IdempotencyKeyEndpointTests
     }
 
     [Fact]
+    [Critical(Family.W8, "a reused key is a final conflict")]
     public async Task A_different_request_under_a_used_key_is_a_final_conflict_that_holds_no_part_of_the_key()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

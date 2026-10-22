@@ -55,6 +55,7 @@ public class FakeHostLifetimeTests
     }
 
     [Fact]
+    [Critical(Family.B9, "no orphaned child")]
     public async Task The_fixture_leaves_no_child_behind()
     {
         int pid;

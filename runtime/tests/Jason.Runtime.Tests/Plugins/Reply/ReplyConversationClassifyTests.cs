@@ -124,6 +124,7 @@ public class ReplyConversationClassifyTests
     /// belongs instead.
     /// </summary>
     [Theory]
+    [Critical(Family.S1, "classify cannot set a stop")]
     [InlineData("""{"external_id":"5"}""")]
     [InlineData("""{"name":"Do not contact"}""")]
     [InlineData("""{"name":"DO NOT CONTACT"}""")]

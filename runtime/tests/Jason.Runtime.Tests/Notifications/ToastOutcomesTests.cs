@@ -48,6 +48,7 @@ public sealed class ToastOutcomesTests
         Is(ToastOutcomes.Read(new LaunchResult(false, false, null, "", "", "file not found")), ChannelResult.Failed, "toast_launch_failed", FailureClass.Transient, detail: "file not found");
 
     [Fact]
+    [Critical(Family.F4, "a killed toast host")]
     public void A_child_killed_at_the_bound_is_ambiguous() =>
         Is(ToastOutcomes.Read(new LaunchResult(true, true, null, "", "")), ChannelResult.Failed, "toast_timeout", FailureClass.Ambiguous);
 

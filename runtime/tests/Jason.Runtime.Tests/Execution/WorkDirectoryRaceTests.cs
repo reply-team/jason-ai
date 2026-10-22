@@ -122,6 +122,7 @@ public class WorkDirectoryRaceTests : IDisposable
     /// nothing about this one is.
     /// </summary>
     [Fact]
+    [Critical(Family.X1, "a deployment race refuses, never half-teaches")]
     public void A_launch_that_loses_the_race_twice_is_refused_rather_than_taught_nothing()
     {
         Deploy(Live, "OLD");
@@ -153,6 +154,7 @@ public class WorkDirectoryRaceTests : IDisposable
     /// for, and a scan is the only shape that can fail.
     /// </remarks>
     [Theory]
+    [Critical(Family.B1, "test seams are unreachable in production")]
     [InlineData(nameof(WorkDirectory.BetweenReadAndCopy))]
     [InlineData(nameof(Jason.Runtime.Plugins.Invocation.PluginInvoker.EnvelopeWriteMissesTheCancellation))]
     public void Nothing_in_the_product_arms_a_test_hook(string hook)

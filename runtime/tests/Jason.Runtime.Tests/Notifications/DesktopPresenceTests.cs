@@ -22,6 +22,7 @@ public sealed class DesktopPresenceTests
             path => (files ?? []).Contains(path));
 
     [Fact]
+    [Critical(Family.N3, "session 0")]
     public void A_windows_process_in_session_0_has_no_desktop()
     {
         // One word for it, in the contracts: the runtime says it, and jason status keys its advice on it.

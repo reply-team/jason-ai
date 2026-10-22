@@ -10,6 +10,7 @@ public class UiTokensSchemaTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.S5, "UI tokens stored as hashes")]
     public async Task The_table_holds_a_hash_and_the_pairing_facts_and_nothing_else()
     {
         using var database = new TestDatabase();

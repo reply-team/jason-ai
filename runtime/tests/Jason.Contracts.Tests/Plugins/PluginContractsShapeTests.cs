@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Plugins;
 
@@ -91,6 +92,7 @@ public class PluginContractsShapeTests
     }
 
     [Fact]
+    [Critical(Family.R1, "the failure class on the wire")]
     public void A_failed_outcome_carries_its_class_and_omits_what_it_does_not_have()
     {
         var outcome = new PluginOutcome(
@@ -211,6 +213,7 @@ public class PluginContractsShapeTests
     }
 
     [Fact]
+    [Critical(Family.R1, "protocol versions and limits")]
     public void The_protocol_pins_the_versions_and_the_limits_the_whole_wave_quotes()
     {
         Assert.Equal(1, PluginProtocol.CurrentVersion);

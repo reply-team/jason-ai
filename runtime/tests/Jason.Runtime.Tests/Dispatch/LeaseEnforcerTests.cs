@@ -15,6 +15,7 @@ public class LeaseEnforcerTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W4, "the lease")]
     public async Task A_lease_that_ran_out_loses_the_attempt_and_stops_the_child()
     {
         using var database = new TestDatabase();
@@ -75,6 +76,7 @@ public class LeaseEnforcerTests
     }
 
     [Theory]
+    [Critical(Family.W4, "restart grace")]
     [InlineData(500, false)]
     [InlineData(541, true)]
     public async Task A_restart_gives_every_running_attempt_the_grace_it_could_not_observe(int elapsedSeconds, bool lost)

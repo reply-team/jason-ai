@@ -104,6 +104,7 @@ public class CreationKeyTests
     }
 
     [Fact]
+    [Critical(Family.B3, "a key is never echoed")]
     public void No_refusal_quotes_the_key()
     {
         foreach (var key in new[] { Sentinel + new string('k', 200), Sentinel + "\u0007", " " })
@@ -163,6 +164,7 @@ public class CreationKeyTests
     }
 
     [Fact]
+    [Critical(Family.W8, "the request digest is canonical")]
     public void A_campaign_request_spelled_another_way_is_the_same_request()
     {
         Assert.Equal(
@@ -173,7 +175,8 @@ public class CreationKeyTests
     /// <summary>Each spelling JSON allows for one number — a leading zero before the point, either case of the exponent's
     /// letter, a sign on it, padding in it, a negative zero — is one value.</summary>
     [Theory]
-    [InlineData("0.5", "5e-1", "0.50", "50E-2")]
+    // Critical: number canonicalisation.
+    [InlineData("0.5", "5e-1", "0.50", "50E-2", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W8)])]
     [InlineData("100", "1E+2", "1e+2", "1e0002")]
     [InlineData("0", "-0", "0.0", "-0.0e5")]
     [InlineData("-1.25", "-125e-2", "-0.125E1", "-12.50e-1")]
@@ -263,6 +266,7 @@ public class CreationKeyTests
     /// sends the same body, and a digest tied to defaults would change whenever a default did.
     /// </summary>
     [Fact]
+    [Critical(Family.W8, "absent is not zero")]
     public void An_absent_priority_and_a_priority_of_zero_are_two_requests()
     {
         Assert.NotEqual(

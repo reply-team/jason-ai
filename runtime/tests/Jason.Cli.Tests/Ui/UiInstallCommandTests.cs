@@ -4,6 +4,7 @@ using Jason.Cli.Tests.Update;
 using Jason.Cli.Ui;
 using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Ui;
 
@@ -39,7 +40,8 @@ public sealed class UiInstallCommandTests : IDisposable
     }
 
     [Theory]
-    [InlineData("digest", "does not match")]
+    // Critical: the UI's checksum.
+    [InlineData("digest", "does not match", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.I1)])]
     [InlineData("no line", "lists no jason-ui.zip")]
     [InlineData("two lines", "more than once")]
     [InlineData("version", "0.12.1")]

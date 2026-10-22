@@ -111,6 +111,7 @@ public class WorkItemServiceTests
     }
 
     [Fact]
+    [Critical(Family.W9, "archive")]
     public async Task An_archived_campaign_takes_no_more_work()
     {
         using var database = new TestDatabase();
@@ -311,6 +312,7 @@ public class WorkItemServiceTests
     }
 
     [Fact]
+    [Critical(Family.S1, "excluded people get no work")]
     public async Task Work_about_somebody_excluded_from_the_campaign_is_refused()
     {
         using var database = new TestDatabase();

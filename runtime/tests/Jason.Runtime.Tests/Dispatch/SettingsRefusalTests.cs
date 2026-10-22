@@ -118,6 +118,7 @@ public class SettingsRefusalTests
     /// falls over, which is the line this test counts to zero.
     /// </summary>
     [Fact]
+    [Critical(Family.C1, "refusal said once")]
     public async Task A_refused_settings_edit_is_said_once_and_not_once_a_tick()
     {
         var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(FastTick));
@@ -336,7 +337,8 @@ public class SettingsRefusalTests
     /// type before anything of the test reads it through its seam, and each seam still answers with what it had.
     /// </summary>
     [Theory]
-    [InlineData("Dispatcher", """{"Dispatcher":{"Enabled":false,"TickSeconds":"SENTINEL_D_SEAM"}}""")]
+    // Critical: last good settings at every seam.
+    [InlineData("Dispatcher", """{"Dispatcher":{"Enabled":false,"TickSeconds":"SENTINEL_D_SEAM"}}""", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.C1)])]
     [InlineData("Roles", """{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":"SENTINEL_D_SEAM"}}""")]
     [InlineData("Manager", """{"Dispatcher":{"Enabled":false},"Manager":{"ReviewSeconds":"SENTINEL_D_SEAM"}}""")]
     [InlineData("Plugins", """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"TimeoutMs":"SENTINEL_D_SEAM"}}}""")]

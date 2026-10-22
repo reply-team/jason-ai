@@ -45,6 +45,7 @@ public class ShutdownTests
     }
 
     [Fact]
+    [Critical(Family.W4, "one shutdown path")]
     public async Task Shutdown_takes_the_same_path_as_a_console_interrupt()
     {
         using var dir = new TempDataDir();

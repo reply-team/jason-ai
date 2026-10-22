@@ -106,6 +106,7 @@ public class YamlToJsonTests
     }
 
     [Fact]
+    [Critical(Family.R1, "no duplicate keys")]
     public void A_duplicate_key_is_refused_where_it_is_written()
     {
         var error = Assert.Throws<YamlInvalidException>(() => YamlToJson.Convert("id: one\nkind: provider\nid: two\n"));
@@ -138,6 +139,7 @@ public class YamlToJsonTests
     }
 
     [Fact]
+    [Critical(Family.R1, "no YAML alias bomb")]
     public void An_alias_is_refused_rather_than_expanded()
     {
         // A manifest is read once, by people and by the runtime; an anchor that expands elsewhere would make

@@ -77,6 +77,7 @@ public class ClaimerTests
     }
 
     [Fact]
+    [Critical(Family.W6, "one per campaign per scan")]
     public async Task One_campaign_gives_up_one_item_per_scan_and_gives_up_its_most_important()
     {
         using var harness = new Harness();
@@ -143,6 +144,7 @@ public class ClaimerTests
     }
 
     [Fact]
+    [Critical(Family.W6, "slots and priority")]
     public async Task A_single_free_slot_goes_to_the_most_important_work_anywhere()
     {
         using var harness = new Harness();
@@ -243,6 +245,7 @@ public class ClaimerTests
     }
 
     [Fact]
+    [Critical(Family.W3, "fail closed without a route")]
     public async Task A_provider_operation_fails_closed_because_no_route_exists_yet()
     {
         using var harness = new Harness();
@@ -556,6 +559,7 @@ public class ClaimerTests
     }
 
     [Fact]
+    [Critical(Family.W6, "no double claim")]
     public async Task Two_scans_over_one_item_produce_one_attempt()
     {
         using var harness = new Harness();
@@ -582,6 +586,7 @@ public class ClaimerTests
     }
 
     [Fact]
+    [Critical(Family.W6, "BEGIN IMMEDIATE")]
     public async Task The_claim_transaction_locks_the_database_for_writing_from_the_start()
     {
         using var database = new TestDatabase();
@@ -626,6 +631,7 @@ public class ClaimerTests
     /// three times that had spent three of its attempts would be given up on for being patient.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "the gate is before the attempt")]
     public async Task An_operation_that_needs_approval_is_parked_before_any_attempt_exists()
     {
         using var harness = new Harness(
@@ -687,6 +693,7 @@ public class ClaimerTests
     /// against the attempt budget. Both halves are here, in one scan, so neither can quietly become the other.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "a refusal keeps the attempt")]
     public async Task A_refusal_keeps_its_attempt_and_a_park_makes_none()
     {
         using var harness = new Harness(
@@ -729,6 +736,7 @@ public class ClaimerTests
     /// of scans turns waiting into running.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "parked work is never claimed")]
     public async Task An_item_awaiting_approval_is_never_claimed_however_many_scans_pass()
     {
         using var harness = new Harness(
@@ -822,6 +830,7 @@ public class ClaimerTests
     /// which of the two things happened — rather than running under a decision nobody made about it.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "a changed input needs a new approval")]
     public async Task An_input_changed_after_the_decision_is_parked_again_and_says_which_hash_moved()
     {
         using var harness = new Harness(
@@ -909,6 +918,7 @@ public class ClaimerTests
     /// is parked again for a decision of its own and nothing runs under the first one.
     /// </summary>
     [Fact]
+    [Critical(Family.S2, "confirm_each: a changed text needs a new word")]
     public async Task A_reply_whose_text_changed_after_the_decision_is_parked_for_a_new_one()
     {
         using var harness = new Harness(
@@ -1041,6 +1051,7 @@ public class ClaimerTests
     /// the claim's one question to the real register refuses the work about that person.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the register at the claim across spellings")]
     public async Task A_stop_under_one_spelling_of_a_profile_refuses_work_about_a_person_stored_under_another()
     {
         using var database = new TestDatabase();
@@ -1121,6 +1132,7 @@ public class ClaimerTests
     /// items is in flight.
     /// </summary>
     [Fact]
+    [Critical(Family.W9, "what runs in a paused campaign")]
     public async Task A_paused_campaign_offers_the_work_that_runs_there_behind_more_important_work_that_waits()
     {
         using var database = new TestDatabase();

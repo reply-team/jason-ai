@@ -20,6 +20,7 @@ public class FencingTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W2, "a replaced attempt cannot write")]
     public async Task The_attempt_that_was_replaced_cannot_write_and_does_not_disturb_the_one_that_replaced_it()
     {
         using var database = new TestDatabase();
@@ -69,6 +70,7 @@ public class FencingTests
     }
 
     [Fact]
+    [Critical(Family.W2, "an item that moved on is fenced")]
     public async Task A_running_attempt_whose_item_moved_on_cannot_write_either()
     {
         using var database = new TestDatabase();
@@ -88,6 +90,7 @@ public class FencingTests
     }
 
     [Fact]
+    [Critical(Family.W2, "one guarded UPDATE")]
     public async Task The_fence_is_one_guarded_statement_and_not_a_read_followed_by_a_write()
     {
         using var database = new TestDatabase();

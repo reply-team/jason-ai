@@ -2,6 +2,7 @@ using Jason.Cli;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Skills;
 
@@ -137,6 +138,7 @@ public class SkillsSourceTests
     /// in the verb whose contract is that nothing is written until the whole tree is deliverable.
     /// </remarks>
     [Theory]
+    [Critical(Family.X2, "a ref cannot climb")]
     [InlineData("..")]
     [InlineData("../..")]
     [InlineData(".")]

@@ -216,6 +216,7 @@ public class ConversionsTests
     }
 
     [Fact]
+    [Critical(Family.X1, "JSON column change tracking")]
     public void Json_context_round_trips_and_in_place_edits_are_detected()
     {
         using var database = new TestDatabase();
@@ -288,6 +289,7 @@ public class ConversionsTests
     }
 
     [Fact]
+    [Critical(Family.X1, "no guessed status")]
     public void Status_text_the_converter_does_not_know_stops_the_read_instead_of_being_guessed_at()
     {
         using var database = new TestDatabase();

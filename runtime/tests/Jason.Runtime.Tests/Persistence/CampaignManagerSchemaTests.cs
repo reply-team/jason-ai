@@ -27,6 +27,7 @@ public class CampaignManagerSchemaTests
     /// looking would both see no, and both insert.
     /// </summary>
     [Fact]
+    [Critical(Family.M1, "the manager index")]
     public void One_open_check_in_per_campaign_is_a_database_rule()
     {
         using var database = new TestDatabase();

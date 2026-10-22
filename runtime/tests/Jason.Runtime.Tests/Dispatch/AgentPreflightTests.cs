@@ -211,6 +211,7 @@ public class AgentPreflightTests
     /// and a sentence naming the repair.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "no silent fallback to the default profile")]
     public async Task An_item_whose_ancestry_cannot_be_resolved_fails_instead_of_using_the_global_default()
     {
         using var harness = new Harness(globalDefault: "house");
@@ -278,6 +279,7 @@ public class AgentPreflightTests
     }
 
     [Fact]
+    [Critical(Family.W3, "AI work fails closed too")]
     public async Task A_disabled_profile_fails_the_attempt_before_a_child_exists()
     {
         using var harness = new Harness();

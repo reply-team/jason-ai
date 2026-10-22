@@ -131,6 +131,7 @@ public class PluginInvokerTests
     }
 
     [Fact]
+    [Critical(Family.S3, "stderr is redacted")]
     public async Task What_the_plugin_writes_to_stderr_is_kept_redacted_and_alone_in_the_working_directory()
     {
         var token = "token-" + Guid.NewGuid().ToString("N");
@@ -158,6 +159,7 @@ public class PluginInvokerTests
     }
 
     [Fact]
+    [Critical(Family.B2, "no plugin JavaScript in the runtime process")]
     public async Task The_runtime_process_never_loads_the_engine_that_runs_the_plugin()
     {
         await using var api = await StartAsync();
@@ -268,6 +270,7 @@ public class PluginInvokerTests
     }
 
     [Fact]
+    [Critical(Family.R5, "not granted")]
     public async Task A_capability_the_manifest_asks_for_but_nobody_granted_is_refused_as_not_granted()
     {
         // Declared, resolvable, and granted nothing: the plugin must hear "not granted", not "this program is
@@ -498,6 +501,7 @@ public class PluginInvokerTests
     }
 
     [Fact]
+    [Critical(Family.R1, "the digest in the child")]
     public async Task A_package_changed_after_the_reload_is_refused_by_the_child_itself()
     {
         await using var api = await StartAsync();
@@ -571,6 +575,7 @@ public class PluginInvokerTests
     }
 
     [Fact]
+    [Critical(Family.W7, "nothing on argv")]
     public async Task A_correlation_id_that_would_travel_on_argv_is_the_caller_s_bug()
     {
         await using var api = await StartAsync();

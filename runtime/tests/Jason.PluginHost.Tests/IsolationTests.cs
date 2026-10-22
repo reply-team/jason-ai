@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 
 namespace Jason.PluginHost.Tests;
 
@@ -113,6 +114,7 @@ public sealed class IsolationTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R4, "no shell from a plugin")]
     public async Task A_shell_is_not_something_a_plugin_can_start()
     {
         var outcome = await WrittenAsync(
@@ -127,6 +129,7 @@ public sealed class IsolationTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R4, "the data directory is out of reach")]
     public async Task The_data_directory_cannot_even_be_located()
     {
         var variable = "JASON_DATA_DIR";
@@ -154,6 +157,7 @@ public sealed class IsolationTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R4, "no state between invocations")]
     public async Task A_plugin_cannot_reach_another_invocation_s_engine_or_leave_state_behind()
     {
         var mainJs = """

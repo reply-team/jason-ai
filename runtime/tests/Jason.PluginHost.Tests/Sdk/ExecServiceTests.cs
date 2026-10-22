@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 using Jint.Runtime;
 
@@ -172,6 +173,7 @@ public sealed class ExecServiceTests : IDisposable
     /// thread only so that failing this rule fails the test rather than stopping the run.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "a grandchild holding the pipe does not hang the call")]
     public async Task Something_the_killed_program_left_behind_does_not_hold_the_call_open()
     {
         using var harness = Harness();
@@ -264,6 +266,7 @@ public sealed class ExecServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.B1, "a child's environment is filtered")]
     public void A_refused_variable_never_reaches_the_program()
     {
         using var harness = Harness();
@@ -346,6 +349,7 @@ public sealed class ExecServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R5, "no exec without the grant")]
     public void Without_the_capability_nothing_starts()
     {
         using var harness = new SdkHarness(_package.Root);
@@ -371,6 +375,7 @@ public sealed class ExecServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.W5, "the moment ambiguity begins")]
     public void A_started_program_is_what_makes_a_later_timeout_ambiguous()
     {
         using var harness = Harness();

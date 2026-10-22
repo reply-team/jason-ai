@@ -16,6 +16,7 @@ public class TokenRedactorTests
     }
 
     [Fact]
+    [Critical(Family.S3, "token redaction")]
     public void Every_occurrence_goes_including_several_on_one_line()
     {
         var redactor = new TokenRedactor(new RuntimeSecrets(Token));

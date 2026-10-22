@@ -26,6 +26,7 @@ public class PluginInvokerGlobalizationTests
     /// from being loaded by any .NET program started meanwhile, which would end it.
     /// </summary>
     [Fact]
+    [Critical(Family.F3, "invariant mode crosses the host")]
     public async Task The_globalization_mode_of_the_runtime_reaches_its_plugin_host_and_what_it_starts()
     {
         (string Name, string Value)[] mode =

@@ -1,4 +1,5 @@
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Plugins;
 
@@ -29,13 +30,15 @@ public class BaseEnvironmentTests
     }
 
     [Theory]
-    [InlineData("LD_PRELOAD")]
+    // Critical: LD_PRELOAD and DOTNET_STARTUP_HOOKS never pass.
+    [InlineData("LD_PRELOAD", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B1)])]
     [InlineData("ld_preload")]
     [InlineData("LD_ANYTHING_AT_ALL")]
     [InlineData("DYLD_INSERT_LIBRARIES")]
     [InlineData("COMPlus_ETWEnabled")]
     [InlineData("CORECLR_PROFILER")]
-    [InlineData("DOTNET_STARTUP_HOOKS")]
+    // Critical: LD_PRELOAD and DOTNET_STARTUP_HOOKS never pass.
+    [InlineData("DOTNET_STARTUP_HOOKS", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B1)])]
     [InlineData("DOTNET_ROOT")]
     [InlineData("NODE_OPTIONS")]
     [InlineData("PYTHONPATH")]
@@ -86,6 +89,7 @@ public class BaseEnvironmentTests
     }
 
     [Fact]
+    [Critical(Family.B1, "a child's environment is built, not inherited")]
     public void The_data_directory_never_reaches_a_child_even_when_it_is_granted()
     {
         var built = BaseEnvironment.Build(Source(), ["JASON_DATA_DIR"]);
@@ -99,6 +103,7 @@ public class BaseEnvironmentTests
     /// composed, so a child without it would key a value as no runtime on that machine does.
     /// </summary>
     [Fact]
+    [Critical(Family.F3, "invariant mode reaches the child as the parent has it")]
     public void The_globalization_mode_of_the_process_is_copied_on_every_operating_system()
     {
         string[] names =

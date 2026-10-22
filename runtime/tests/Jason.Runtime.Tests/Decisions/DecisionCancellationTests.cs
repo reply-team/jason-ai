@@ -22,6 +22,7 @@ public class DecisionCancellationTests
     private static readonly ActorRef Ada = new(ActorType.Human, "ada");
 
     [Fact]
+    [Critical(Family.W9, "archive cancels questions")]
     public async Task Archiving_a_campaign_cancels_its_pending_decisions_and_journals_each_one()
     {
         using var database = new TestDatabase();

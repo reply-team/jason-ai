@@ -55,7 +55,8 @@ public class ChannelValidationTests
     }
 
     [Theory]
-    [InlineData("email", "ada.lovelace@analyticalengine")]
+    // Critical: a refusal never echoes an address.
+    [InlineData("email", "ada.lovelace@analyticalengine", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B3)])]
     [InlineData("phone", "0987654321")]
     [InlineData("linkedin", "in/ada-lovelace")]
     [InlineData("linkedin", "https://www.linkedin.com/pub/ada-lovelace/1/2/3")]

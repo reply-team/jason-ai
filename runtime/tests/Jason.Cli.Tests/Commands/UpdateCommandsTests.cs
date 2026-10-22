@@ -46,6 +46,7 @@ public class UpdateCommandsTests
     }
 
     [Fact]
+    [Critical(Family.I2, "update is outside the verb map")]
     public async Task Check_prints_what_the_feed_says_and_never_calls_the_runtime()
     {
         using var dir = new TempPaths();
@@ -143,6 +144,7 @@ public class UpdateCommandsTests
     }
 
     [Fact]
+    [Critical(Family.I2, "no plain-http feed off loopback")]
     public async Task Another_feed_is_asked_when_named_and_refused_when_it_is_plain_http_on_a_network()
     {
         using var dir = new TempPaths();

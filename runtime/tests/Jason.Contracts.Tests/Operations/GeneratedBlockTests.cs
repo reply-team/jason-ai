@@ -111,6 +111,10 @@ public class GeneratedBlockTests
     public static TheoryData<string> WithheldKeywords() =>
         Data(Standard.Except(SchemaValidator.Keywords, StringComparer.Ordinal));
 
+    // Critical: a withheld keyword is refused, not ignored.
+    public static TheoryData<string> CriticalWithheldKeywords() =>
+        CriticalRows.Mark(WithheldKeywords(), Family.R3, data => data is ["$anchor"]);
+
     public static TheoryData<string> PublishedReasonCodes() => Data(ListedUnder("**Reason codes.**"));
 
     [Theory]
@@ -199,6 +203,7 @@ public class GeneratedBlockTests
     }
 
     [Fact]
+    [Critical(Family.R3, "the dialect's vocabulary is the published one")]
     public void The_readme_publishes_the_keywords_the_validator_holds_and_no_others()
     {
         Assert.Equal(
@@ -223,7 +228,7 @@ public class GeneratedBlockTests
     }
 
     [Theory]
-    [MemberData(nameof(WithheldKeywords))]
+    [MemberData(nameof(CriticalWithheldKeywords))]
     public void A_keyword_of_the_standard_this_dialect_withholds_is_refused_by_both(string keyword)
     {
         var schema = new JsonObject { ["type"] = "object", [keyword] = new JsonObject() };
@@ -235,6 +240,7 @@ public class GeneratedBlockTests
     }
 
     [Fact]
+    [Critical(Family.R3, "the validator's reason codes are the published ones")]
     public void Every_reason_code_here_is_one_the_readme_publishes_and_the_other_way_round()
     {
         Assert.Equal(

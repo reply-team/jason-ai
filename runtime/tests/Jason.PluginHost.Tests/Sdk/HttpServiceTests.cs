@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 
 namespace Jason.PluginHost.Tests.Sdk;
@@ -99,6 +100,7 @@ public sealed class HttpServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R5, "the HTTP allowlist")]
     public void A_host_that_was_not_granted_is_never_reached()
     {
         using var harness = Harness();
@@ -169,6 +171,7 @@ public sealed class HttpServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.R5, "a redirect cannot leave the allowlist")]
     public void A_redirect_is_answered_to_the_plugin_rather_than_followed()
     {
         using var harness = Harness();
@@ -195,6 +198,7 @@ public sealed class HttpServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.B3, "the request record carries no payload")]
     public void Every_request_is_on_the_record_without_its_query_headers_or_body()
     {
         using var harness = Harness();

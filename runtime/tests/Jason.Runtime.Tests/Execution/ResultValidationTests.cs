@@ -38,6 +38,7 @@ public class ResultValidationTests
     };
 
     [Fact]
+    [Critical(Family.R3, "an AI answer is held to its shape")]
     public async Task Persuasive_prose_is_refused_where_a_shape_was_asked_for()
     {
         using var database = new TestDatabase();

@@ -40,6 +40,7 @@ public class JournalEndpointTests
     }
 
     [Fact]
+    [Critical(Family.P1, "the system actor is reserved")]
     public async Task A_caller_cannot_append_as_the_runtime_itself()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

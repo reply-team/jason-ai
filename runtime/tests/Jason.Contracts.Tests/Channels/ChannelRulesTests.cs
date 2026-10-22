@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Jason.Contracts.Channels;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Channels;
 
@@ -49,9 +50,11 @@ public class ChannelRulesTests
     }
 
     [Theory]
-    [InlineData("email", "  Foo@Bar.COM ", "foo@bar.com")]
+    // Critical: email and phone normalization.
+    [InlineData("email", "  Foo@Bar.COM ", "foo@bar.com", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S1)])]
     [InlineData("email", "jane.doe+tag@sub.example.co.uk", "jane.doe+tag@sub.example.co.uk")]
-    [InlineData("phone", "+1 (604) 555-0100", "+16045550100")]
+    // Critical: email and phone normalization.
+    [InlineData("phone", "+1 (604) 555-0100", "+16045550100", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S1)])]
     [InlineData("whatsapp", " +380.44.123.45.67 ", "+380441234567")]
     [InlineData("telegram", "  @jane  ", "@jane")]
     public void A_value_is_normalized_by_the_rule_of_its_channel(string channel, string raw, string expected)
@@ -110,13 +113,22 @@ public class ChannelRulesTests
     // The LinkedIn key
     // -------------------------------------------------------------------------------------------------------
 
+    // Critical: one LinkedIn key: canonical, case+fragment, percent-encoded, dot-segment, look-alike host.
+    public static TheoryData<string, string?> CriticalLinkedInVectors() =>
+        CriticalRows.Mark(LinkedInKeyVectors.Theory(), Family.F1, data => data is
+            ["https://www.linkedin.com/in/marta-example", _]
+            or ["HTTPS://WWW.LinkedIn.com/in/Marta-Example/#about", _]
+            or ["https://www.linkedin.com/in/j%C3%B6rn-example", _]
+            or ["https://www.linkedin.com/in/x/../marta-example", _]
+            or ["https://linkedin.com.example.org/in/marta-example", _]);
+
     /// <summary>
     /// Every row of the one table: a profile link is keyed by its slug, decoded once, composed and lowercased, under the
     /// canonical host, and anything that names no LinkedIn profile is refused as invalid. The channel name is read as the
     /// runtime reads one, so the key is the same whatever its case.
     /// </summary>
     [Theory]
-    [MemberData(nameof(LinkedInKeyVectors.Theory), MemberType = typeof(LinkedInKeyVectors))]
+    [MemberData(nameof(CriticalLinkedInVectors))]
     public void A_linkedin_value_is_keyed_by_its_slug_or_refused(string raw, string? key)
     {
         var keyed = ChannelRules.NormalizeValue("linkedin", raw, out var refusal);
@@ -130,6 +142,7 @@ public class ChannelRulesTests
 
     /// <summary>"Invariant culture" is a claim about every culture a machine may run in, Turkish casing included.</summary>
     [Fact]
+    [Critical(Family.F1, "culture-sensitive lower-casing")]
     public void The_key_is_the_same_in_a_turkish_culture()
     {
         var before = CultureInfo.CurrentCulture;
@@ -239,6 +252,7 @@ public class ChannelRulesTests
     /// in all, whatever the input was, so a value stored before the key can be keyed with no bound on its own length.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the key fits its column")]
     public void Every_key_of_an_accepted_input_is_at_most_228_characters()
     {
         Assert.Equal(28, "https://www.linkedin.com/in/".Length);
@@ -298,6 +312,7 @@ public class ChannelRulesTests
     /// the composed name, so 100 accented letters each written as a letter and a mark are 100 too.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "length after percent-decoding")]
     public void The_bound_counts_code_points_after_the_decoding()
     {
         var given = string.Concat(Enumerable.Repeat("%C3%B6", 70)) + new string('ö', 30);
@@ -325,10 +340,13 @@ public class ChannelRulesTests
     }
 
     [Theory]
-    [InlineData("LinkedIn", "https://www.linkedin.com/in/Marta-Example/", "https://www.linkedin.com/in/marta-example")]
-    [InlineData("email", " Marta@Example.com ", "marta@example.com")]
+    // Critical: the stored key per channel, and none for an invalid value.
+    [InlineData("LinkedIn", "https://www.linkedin.com/in/Marta-Example/", "https://www.linkedin.com/in/marta-example", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S1)])]
+    // Critical: the stored key per channel, and none for an invalid value.
+    [InlineData("email", " Marta@Example.com ", "marta@example.com", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S1)])]
     [InlineData("telegram", " @marta ", "@marta")]
-    [InlineData("email", "marta", null)]
+    // Critical: the stored key per channel, and none for an invalid value.
+    [InlineData("email", "marta", null, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S1)])]
     [InlineData("e mail", "marta@example.com", null)]
     [InlineData("linkedin", "", null)]
     public void A_key_is_what_the_runtime_stores_for_the_value_on_that_channel(string channel, string value, string? key)

@@ -47,6 +47,7 @@ public sealed partial class SystemSentenceTests
         .ToDictionary(code => code.Value);
 
     [Fact]
+    [Critical(Family.F3, "no test leans on an OS-language sentence")]
     public void No_string_the_tests_load_matches_a_sentence_the_system_words()
     {
         var assembly = typeof(SystemSentenceTests).Assembly;

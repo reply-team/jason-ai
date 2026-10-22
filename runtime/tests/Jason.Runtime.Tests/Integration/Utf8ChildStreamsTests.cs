@@ -31,6 +31,7 @@ public class Utf8ChildStreamsTests
     /// emoji as two question marks.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "UTF-8 across the real host")]
     public async Task A_plugin_s_program_is_sent_its_input_and_heard_in_utf_8_through_the_real_plugin_host()
     {
         await using var api = await PluginInvokerTests.StartAsync();
@@ -58,6 +59,7 @@ public class Utf8ChildStreamsTests
     /// outside ASCII came back as a replacement character.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "UTF-8 transcripts")]
     public async Task An_agent_s_transcript_and_the_words_its_attempt_ended_with_keep_every_letter()
     {
         await using var host = await FakeHostRuntime.StartAsync(Ct);

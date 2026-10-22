@@ -54,6 +54,7 @@ public class AbandonedOutputTests
     /// thing it is guarding against cannot happen.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "no pipe deadlock")]
     public async Task A_host_that_writes_more_than_a_pipe_holds_is_drained_rather_than_deadlocked()
     {
         await using var host = await FakeHostRuntime.StartAsync(Ct);

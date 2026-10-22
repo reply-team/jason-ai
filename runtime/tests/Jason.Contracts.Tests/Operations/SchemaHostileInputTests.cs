@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -21,6 +22,7 @@ public class SchemaHostileInputTests
         (JsonObject)JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { MaxDepth = 256 })!;
 
     [Fact]
+    [Critical(Family.R3, "catastrophic backtracking is bounded")]
     public void A_pattern_built_to_backtrack_finishes_and_reports_instead_of_hanging()
     {
         var schema = Schema("""{"type":"string","pattern":"^(a+)+$"}""");
@@ -65,6 +67,7 @@ public class SchemaHostileInputTests
     }
 
     [Fact]
+    [Critical(Family.R3, "no stack overflow on hostile input")]
     public void A_document_nested_past_the_depth_limit_stops_rather_than_exhausting_the_stack()
     {
         var problems = SchemaValidator.Validate(JsonNode.Parse(Nested("{\"x\":", "}", 40, "1")), DeepSchema(NestedSchema(40)));
@@ -79,7 +82,8 @@ public class SchemaHostileInputTests
     }
 
     [Theory]
-    [InlineData("if")]
+    // Critical: the dialect's closed vocabulary.
+    [InlineData("if", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R3)])]
     [InlineData("dependentSchemas")]
     [InlineData("patternProperties")]
     [InlineData("unevaluatedProperties")]
@@ -147,7 +151,8 @@ public class SchemaHostileInputTests
     }
 
     [Theory]
-    [InlineData("""{"type":"object","properties":{"x":true}}""", "{}")]
+    // Critical: the validator reports, never throws.
+    [InlineData("""{"type":"object","properties":{"x":true}}""", "{}", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R3)])]
     [InlineData("""{"type":"object","required":"x"}""", """{"y":1}""")]
     [InlineData("""{"minimum":"three"}""", "1")]
     [InlineData("""{"$ref":"#/$defs/a","$defs":{"a":{"$ref":"#/$defs/a"}}}""", """{"x":[1,2]}""")]

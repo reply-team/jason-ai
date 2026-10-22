@@ -65,6 +65,7 @@ public class WorkItemCancelTests
     }
 
     [Fact]
+    [Critical(Family.W4, "cancel stops the child")]
     public async Task Cancelling_a_running_item_asks_the_handler_to_stop_its_child_once()
     {
         using var database = new TestDatabase();

@@ -90,6 +90,7 @@ public class ContactEndpointTests
     /// does not know — the update succeeds, and the contact still has no identifiers afterwards.
     /// </summary>
     [Fact]
+    [Critical(Family.W10, "only a plugin answer pins")]
     public async Task No_request_field_writes_a_pin()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(TestContext.Current.CancellationToken);

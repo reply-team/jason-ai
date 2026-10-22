@@ -20,6 +20,7 @@ public class RoutesOptionsTests
     /// contradicted by the configuration the product ships with.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "nothing routed by default")]
     public void Out_of_the_box_nothing_is_routed_anywhere_and_no_plugin_is_named()
     {
         var options = new RoutesOptions();

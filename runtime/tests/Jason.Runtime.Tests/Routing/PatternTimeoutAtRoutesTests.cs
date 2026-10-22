@@ -104,6 +104,7 @@ public sealed class PatternTimeoutAtRoutesTests
     /// other fault in a package.
     /// </summary>
     [Fact]
+    [Critical(Family.X1, "an unmeasured pattern never activates")]
     public async Task A_reload_of_a_package_whose_binding_pattern_cannot_finish_keeps_the_previous_snapshot()
     {
         var timing = TimingOut.Never();

@@ -1,5 +1,6 @@
 using System.Text;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Discovery;
 
@@ -10,6 +11,7 @@ namespace Jason.Contracts.Tests.Discovery;
 public class ChildProcessTests
 {
     [Fact]
+    [Critical(Family.B1, "the door's two settings, observed on a real child")]
     public void A_child_is_started_with_no_window_and_without_the_shell()
     {
         var start = ChildProcess.StartInfo("program");
@@ -25,6 +27,7 @@ public class ChildProcessTests
     /// a pipe, a preamble is three bytes a node program's JSON.parse refuses.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "stdin encoding of a Jason child")]
     public void A_child_that_speaks_to_jason_is_spoken_to_in_utf_8_without_a_byte_order_mark()
     {
         var start = ChildProcess.StartInfo("program", ChildKind.SpeaksToJason);
@@ -44,6 +47,7 @@ public class ChildProcessTests
     /// which is how .NET reads it. Its input is this process's own unless the caller asks for one of its own to close.
     /// </summary>
     [Theory]
+    [Critical(Family.F4, "a system tool's output decoding")]
     [InlineData(ChildKind.SystemTool, false)]
     [InlineData(ChildKind.SystemToolWithInput, true)]
     public void A_system_tool_is_read_in_the_console_s_code_page(ChildKind kind, bool input)

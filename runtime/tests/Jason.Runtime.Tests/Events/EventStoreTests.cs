@@ -20,6 +20,7 @@ public class EventStoreTests
     /// nothing and changes nothing: the store reads the keys it holds, and the rows it holds stay as they were stored.
     /// </summary>
     [Fact]
+    [Critical(Family.N2, "each event once by key")]
     public async Task A_page_stored_twice_inserts_once_and_changes_no_row()
     {
         using var store = new EventStoreFixture();
@@ -56,6 +57,7 @@ public class EventStoreTests
     /// is the plugin's, not the account's. Another plugin's event of the same shape is another provider's, and is kept.
     /// </summary>
     [Fact]
+    [Critical(Family.N2, "the dedup key")]
     public async Task The_key_is_per_plugin_and_not_per_source()
     {
         using var store = new EventStoreFixture();
@@ -75,6 +77,7 @@ public class EventStoreTests
 
     /// <summary>An event whose identifiers no campaign's pins match is kept all the same, concerning nobody and telling nobody.</summary>
     [Fact]
+    [Critical(Family.N2, "unmatched events are kept")]
     public async Task An_event_no_pin_matches_is_kept_unattributed()
     {
         using var store = new EventStoreFixture();
@@ -119,6 +122,7 @@ public class EventStoreTests
     /// time it is stored — another writer moved it — is not stored, and the cursor that writer left stands.
     /// </summary>
     [Fact]
+    [Critical(Family.N2, "guarded cursor")]
     public async Task A_page_whose_source_another_writer_moved_is_not_stored()
     {
         using var store = new EventStoreFixture();
@@ -173,6 +177,7 @@ public class EventStoreTests
     /// account's reading already stored is found held, and stored once.
     /// </summary>
     [Fact]
+    [Critical(Family.N2, "backfill never moves the account's cursor")]
     public async Task A_backfill_page_moves_its_own_cursor_and_never_the_source_s()
     {
         using var store = new EventStoreFixture();

@@ -28,6 +28,7 @@ public class RouteActivationTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W11, "a bad route rejects the reload")]
     public async Task A_route_to_a_plugin_that_is_not_in_the_new_set_rejects_the_whole_reload()
     {
         await using var api = await StartAsync(
@@ -211,6 +212,7 @@ public class RouteActivationTests
     /// credential-shaped name is the sentence whoever wrote it has to read, so that check comes first.
     /// </summary>
     [Fact]
+    [Critical(Family.S3, "a binding names an account, never a credential")]
     public async Task A_binding_that_carries_something_credential_shaped_is_refused_however_deep_it_sits()
     {
         var binding = new JsonObject
@@ -485,6 +487,7 @@ public class RouteActivationTests
     /// checked against — and writes down where work was being sent, beside which packages were active.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "routes frozen with plugins")]
     public async Task An_activated_reload_freezes_every_route_and_writes_down_where_work_goes()
     {
         await using var api = await StartAsync(
@@ -524,6 +527,7 @@ public class RouteActivationTests
     /// than a rule two call sites have to remember.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "route.set copies the active global half")]
     public async Task A_candidate_built_from_the_active_snapshot_never_reads_the_settings_file()
     {
         await using var api = await StartAsync(

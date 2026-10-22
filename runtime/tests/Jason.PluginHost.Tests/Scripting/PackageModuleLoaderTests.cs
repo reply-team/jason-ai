@@ -2,6 +2,7 @@ using System.Globalization;
 using Jason.PluginHost.Scripting;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 using Jint.Runtime.Modules;
 
@@ -25,6 +26,7 @@ public sealed class PackageModuleLoaderTests
     }
 
     [Fact]
+    [Critical(Family.X2, "no module climbs out of the package")]
     public void A_module_above_the_package_root_never_resolves()
     {
         using var package = new TempPackage("import \"../outside.js\"; export const value = 1;");

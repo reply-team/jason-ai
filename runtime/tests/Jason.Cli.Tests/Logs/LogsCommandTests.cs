@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Tests.Commands;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 using static Jason.Cli.Tests.Logs.LogFixtures;
 
 namespace Jason.Cli.Tests.Logs;
@@ -470,6 +471,7 @@ public sealed class LogsCommandTests
     }
 
     [Fact]
+    [Critical(Family.X3, "no terminal injection from a logged value")]
     public async Task Human_output_shows_what_is_in_a_value_and_never_lets_a_value_become_a_second_line_or_a_terminal_command()
     {
         using var dir = new TempPaths();
@@ -683,6 +685,7 @@ public sealed class LogsCommandTests
     // ---- the runtime is never asked ----------------------------------------------------------------------------
 
     [Fact]
+    [Critical(Family.R2, "jason logs never asks the runtime")]
     public async Task The_runtime_is_never_asked_and_its_descriptor_is_never_needed()
     {
         using var dir = new TempPaths();
@@ -713,6 +716,7 @@ public sealed class LogsCommandTests
     }
 
     [Fact]
+    [Critical(Family.R2, "logs never exits 3")]
     public async Task With_no_runtime_ever_started_and_no_descriptor_it_still_answers_and_never_exits_three()
     {
         using var dir = new TempPaths();

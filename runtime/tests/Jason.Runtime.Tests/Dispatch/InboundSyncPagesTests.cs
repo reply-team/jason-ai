@@ -63,6 +63,7 @@ public class InboundSyncPagesTests
     /// page, at the same moment: it is one move, and said once.
     /// </summary>
     [Fact]
+    [Critical(Family.N1, "paging edge")]
     public async Task A_thread_shifted_across_a_page_boundary_is_said_once()
     {
         using var harness = new DispatchHarness(Noon);
@@ -121,6 +122,7 @@ public class InboundSyncPagesTests
 
     /// <summary>A watermark later than the read's start less the look-back stays: it never moves back, so never before the go-live.</summary>
     [Fact]
+    [Critical(Family.N1, "the inbound watermark")]
     public async Task The_watermark_never_moves_back()
     {
         using var harness = new DispatchHarness(Noon);

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
 
@@ -71,6 +72,7 @@ public class ActorOptionTests
     }
 
     [Theory]
+    [Critical(Family.R2, "nobody can act as the runtime")]
     [InlineData("system")]
     [InlineData("system:runtime")]
     public void System_is_reserved_for_the_runtime(string text)

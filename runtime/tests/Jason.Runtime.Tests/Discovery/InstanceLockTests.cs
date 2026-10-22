@@ -5,6 +5,7 @@ namespace Jason.Runtime.Tests.Discovery;
 public class InstanceLockTests
 {
     [Fact]
+    [Critical(Family.W6, "one runtime per data directory")]
     public void Only_one_holder_at_a_time()
     {
         using var dir = new TempDataDir();

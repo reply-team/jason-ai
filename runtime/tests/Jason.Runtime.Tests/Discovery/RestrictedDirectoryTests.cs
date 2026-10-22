@@ -30,6 +30,7 @@ public class RestrictedDirectoryTests
     /// it before its logging was configured.
     /// </summary>
     [Fact]
+    [Critical(Family.S5, "Windows ACL edge")]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public void A_directory_whose_rights_stop_short_of_taking_ownership_is_still_restricted()
     {

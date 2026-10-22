@@ -28,6 +28,7 @@ public sealed class NoTestShowsAToastTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.B9, "the suite never shows a toast")]
     public void No_test_shows_a_toast_or_writes_the_registration()
     {
         var offences = Sources().Select(source => Offence(Path.GetFileName(source.File), source.Text)).OfType<string>().ToList();

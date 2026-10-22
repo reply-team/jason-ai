@@ -119,6 +119,7 @@ public class RoleServiceTests
     }
 
     [Fact]
+    [Critical(Family.R2, "built-in roles are reserved")]
     public async Task A_builtin_name_is_taken()
     {
         using var database = new TestDatabase();

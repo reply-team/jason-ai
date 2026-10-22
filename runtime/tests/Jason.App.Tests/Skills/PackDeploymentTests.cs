@@ -55,6 +55,7 @@ public class PackDeploymentTests
     /// would have to be maintained beside both.
     /// </remarks>
     [Fact]
+    [Critical(Family.I3, "deployment is exact")]
     public async Task Every_skill_the_packs_hold_arrives_and_nothing_else_does()
     {
         using var data = new TempDataDir();

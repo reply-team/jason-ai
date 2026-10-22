@@ -31,6 +31,7 @@ public sealed class KillSeamTests
         .Select(field => (OpCode)field.GetValue(null)!)
         .ToDictionary(code => code.Value);
     [Fact]
+    [Critical(Family.B1, "the test seam is unreachable in production")]
     public void The_kill_seam_is_set_by_nothing_the_executable_ships()
     {
         const BindingFlags Any = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;

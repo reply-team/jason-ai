@@ -22,6 +22,7 @@ public class RunningAttemptRegistryTests
     }
 
     [Fact]
+    [Critical(Family.F4, "one kill")]
     public void A_kill_runs_once_however_often_it_is_asked_for()
     {
         var registry = new RunningAttemptRegistry();

@@ -18,6 +18,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed partial class CompiledPageNamesTests
 {
     [Fact]
+    [Critical(Family.B4, "no compiled pointer outside the open set")]
     public void No_string_the_programs_carry_names_a_page_a_release_does_not_publish()
     {
         var root = Publication.RepositoryRoot();

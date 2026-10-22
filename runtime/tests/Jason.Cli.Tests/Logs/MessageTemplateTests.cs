@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Cli.Logs;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Logs;
 
@@ -85,6 +86,7 @@ public sealed class MessageTemplateTests
     }
 
     [Fact]
+    [Critical(Family.X1, "no template re-expansion")]
     public void A_value_is_inserted_as_it_is_even_when_it_looks_like_a_template()
     {
         // Rendering is one pass over the template: a value that contains braces is not read for holes of its own.

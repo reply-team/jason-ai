@@ -15,6 +15,7 @@ public class ProfileResolutionTests
     /// runs somebody's work without anybody saying so.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "fail closed on lineage")]
     public void An_unresolved_ancestry_blocks_instead_of_reaching_the_global_default()
     {
         var decision = ProfileResolution.Decide(
@@ -42,6 +43,7 @@ public class ProfileResolutionTests
     /// a body of work; a role policy is a statement about a kind of worker everywhere.
     /// </summary>
     [Fact]
+    [Critical(Family.W3, "profile precedence")]
     public void A_campaign_policy_beats_a_role_policy()
     {
         var decision = ProfileResolution.Decide(

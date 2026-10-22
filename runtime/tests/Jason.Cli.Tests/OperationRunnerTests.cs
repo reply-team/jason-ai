@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
 
@@ -22,6 +23,7 @@ public class OperationRunnerTests
     }
 
     [Fact]
+    [Critical(Family.R2, "exit 3")]
     public async Task A_refused_connection_exits_3_with_runtime_unreachable()
     {
         using var dir = new TempPaths();
@@ -48,6 +50,7 @@ public class OperationRunnerTests
     }
 
     [Fact]
+    [Critical(Family.R2, "exit 1 with the API body")]
     public async Task A_business_error_is_printed_verbatim_and_exits_1()
     {
         using var dir = new TempPaths();
@@ -127,6 +130,7 @@ public class OperationRunnerTests
     }
 
     [Fact]
+    [Critical(Family.R2, "compact JSON verbatim on stdout")]
     public async Task A_successful_response_is_printed_verbatim_and_the_request_carries_the_body_and_the_token()
     {
         using var dir = new TempPaths();

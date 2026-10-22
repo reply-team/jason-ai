@@ -96,6 +96,7 @@ public class ExecutorServiceTests
     }
 
     [Fact]
+    [Critical(Family.X1, "the result cap")]
     public async Task A_result_larger_than_a_megabyte_is_refused()
     {
         using var database = new TestDatabase();
@@ -238,6 +239,7 @@ public class ExecutorServiceTests
     }
 
     [Fact]
+    [Critical(Family.W2, "completion is fenced")]
     public async Task Completing_an_attempt_twice_tells_the_second_caller_to_stop()
     {
         using var database = new TestDatabase();

@@ -5,6 +5,7 @@ namespace Jason.Runtime.Tests.Discovery;
 public class CapabilityTokenTests
 {
     [Fact]
+    [Critical(Family.S5, "the capability token's strength")]
     public void Tokens_are_256_bit_base64url_and_unique()
     {
         var a = CapabilityToken.Generate();
@@ -17,6 +18,7 @@ public class CapabilityTokenTests
     }
 
     [Fact]
+    [Critical(Family.S5, "token comparison")]
     public void Matching_is_exact()
     {
         var token = CapabilityToken.Generate();

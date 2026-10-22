@@ -1,4 +1,5 @@
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Skills;
 
@@ -9,6 +10,7 @@ namespace Jason.Contracts.Tests.Skills;
 public class SkillProblemCodesTests
 {
     [Fact]
+    [Critical(Family.R3, "the skill problem vocabulary is closed")]
     public void The_codes_are_ten_distinct_words()
     {
         Assert.Equal(10, SkillProblemCodes.All.Count);

@@ -8,6 +8,7 @@ public class TestRuntimeEnvironmentTests
     /// would still be handing the child a name it no longer answers to.
     /// </summary>
     [Fact]
+    [Critical(Family.B9, "a test runtime never reaches the machine, the feed or a person")]
     public void A_spawned_runtime_is_given_its_directory_a_port_the_os_chooses_and_told_not_to_ask_the_feed_or_notify_anyone()
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-tests", "somewhere");

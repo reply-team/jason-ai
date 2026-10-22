@@ -1,4 +1,5 @@
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.Discovery;
 
@@ -41,7 +42,8 @@ public class StagedSourcePathTests
     /// a guard against that reproduction.
     /// </summary>
     [Theory]
-    [InlineData("..")]
+    // Critical: .. and an absolute drive path.
+    [InlineData("..", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X2)])]
     [InlineData(".")]
     [InlineData("...")]
     [InlineData("../..")]
@@ -50,7 +52,8 @@ public class StagedSourcePathTests
     [InlineData("a\\b")]
     [InlineData("/etc")]
     [InlineData("C:")]
-    [InlineData("C:\\windows")]
+    // Critical: .. and an absolute drive path.
+    [InlineData("C:\\windows", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X2)])]
     public void A_name_that_could_climb_is_refused_rather_than_mangled(string name)
     {
         var refused = Assert.Throws<ArgumentException>(() => Paths.SkillsStagedSourceDirectory(name));
@@ -63,6 +66,7 @@ public class StagedSourcePathTests
     /// the staging root. A list of spellings goes stale; this does not.
     /// </summary>
     [Fact]
+    [Critical(Family.X2, "a composed path never leaves its root")]
     public void Nothing_this_composes_is_ever_outside_the_staging_root()
     {
         string[] names = ["v1", "..", ".", "a/b", "a\\b", "..\\..\\..", "C:\\windows", "~", "$HOME", "  ", "\t"];

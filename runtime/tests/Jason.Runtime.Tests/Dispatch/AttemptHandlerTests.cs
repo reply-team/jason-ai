@@ -52,6 +52,7 @@ public class AttemptHandlerTests
     }
 
     [Fact]
+    [Critical(Family.W4, "no report, no success")]
     public async Task An_executor_that_exits_without_reporting_loses_its_attempt()
     {
         var command = FakeCommand.Returning(new CommandOutcome.Exited(3, "boom", Launch(2718)));
@@ -152,6 +153,7 @@ public class AttemptHandlerTests
     /// had already reached the provider is exactly what nobody can say.
     /// </summary>
     [Fact]
+    [Critical(Family.W5, "a stopped provider call is ambiguous")]
     public async Task A_provider_command_that_was_stopped_ends_ambiguous()
     {
         var command = FakeCommand.Returning(new CommandOutcome.Killed(Launch(2718)), WorkItemKind.ProviderOp);
@@ -244,6 +246,7 @@ public class AttemptHandlerTests
     /// stop by the time the cancellation saves, that save waits until the handler has written what it will.
     /// </summary>
     [Fact]
+    [Critical(Family.W2, "cancel commits first")]
     public async Task A_cancellation_is_committed_before_the_child_it_stops_can_answer_for_the_attempt()
     {
         var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

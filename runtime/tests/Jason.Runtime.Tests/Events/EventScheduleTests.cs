@@ -35,7 +35,8 @@ public class EventScheduleTests
     [InlineData(2, 2_400)]
     [InlineData(7, 76_800)]
     [InlineData(8, 86_400)]
-    [InlineData(40, 86_400)]
+    // Critical: the backoff cap.
+    [InlineData(40, 86_400, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.N2)])]
     public void Failures_double_the_wait_up_to_a_day(int failures, int wait)
     {
         var source = Source(started: Now, failures: failures, failedAs: "transient");
@@ -105,6 +106,7 @@ public class EventScheduleTests
     // ---------------------------------------------------------------------------------------------------------------
 
     [Fact]
+    [Critical(Family.N2, "thirty days deep")]
     public void A_first_start_reads_thirty_days_back()
     {
         var plan = EventSchedule.Plan(Source(started: null), Now.AddMilliseconds(750));
@@ -170,6 +172,7 @@ public class EventScheduleTests
     // ---------------------------------------------------------------------------------------------------------------
 
     [Fact]
+    [Critical(Family.N2, "the health window")]
     public void Healthy_while_the_last_read_succeeded_and_started_within_two_cadences()
     {
         var source = Source(started: Now.AddSeconds(-2 * Cadence), succeeded: Now.AddSeconds(-2 * Cadence));
@@ -242,6 +245,7 @@ public class EventScheduleTests
 
     /// <summary>However soon a signal comes after a read started, the next is not due within a minute of that start: a burst of webhooks is one read.</summary>
     [Fact]
+    [Critical(Family.N2, "events.signal floor")]
     public void A_signal_is_not_honoured_within_sixty_seconds_of_the_last_start()
     {
         var source = Source(started: Now);

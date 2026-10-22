@@ -193,6 +193,7 @@ public partial class LinkedInSlugKeysMigrationTests
     /// have stopped refusing — and for two spellings the rule before kept apart.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the slug migration and the register")]
     public async Task After_the_rewrite_the_register_refuses_a_contact_whose_stop_shares_its_slug_in_any_case()
     {
         using var dir = Seeded(

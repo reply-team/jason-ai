@@ -84,6 +84,7 @@ public class ReplyPrivacyTests
     }
 
     [Fact]
+    [Critical(Family.B3, "the Reply privacy sweep")]
     public async Task No_contact_field_ever_appears_in_an_argument()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
@@ -711,6 +712,7 @@ public class ReplyPrivacyTests
     /// shown to hold what did travel, so a value that had gone there would be found.
     /// </summary>
     [Fact]
+    [Critical(Family.B3, "a message stays off argv and logs")]
     public async Task What_a_message_carries_reaches_no_argument_answer_diagnostic_or_log()
     {
         const string SenderName = "Sendername-marker-71aa";

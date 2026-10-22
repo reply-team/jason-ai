@@ -21,6 +21,7 @@ public sealed class ExecUtf8Tests
     /// provider's program arrived that way.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "child streams are UTF-8 whatever the code page")]
     public async Task A_program_is_sent_its_input_and_heard_in_utf_8_whatever_the_console_s_page()
     {
         var (exit, stdout, stderr) = await ModeRun.RunAsync(

@@ -13,6 +13,7 @@ public class ChildProcessTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.F4, "a stuck child is bounded")]
     public async Task A_child_nothing_managed_to_end_is_waited_for_no_longer_than_its_grace()
     {
         using var process = Start("hold", "30000");

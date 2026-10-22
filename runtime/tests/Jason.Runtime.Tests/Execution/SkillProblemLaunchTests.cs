@@ -59,7 +59,8 @@ public sealed class SkillProblemLaunchTests : IDisposable
     /// the page says so for each of them.
     /// </summary>
     [Theory]
-    [InlineData(SkillProblemCodes.SkillNameMissing)]
+    // Critical: a bad skill refuses the launch.
+    [InlineData(SkillProblemCodes.SkillNameMissing, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.R3)])]
     [InlineData(SkillProblemCodes.SkillNameMismatch)]
     [InlineData(SkillProblemCodes.SkillTooLarge)]
     [InlineData(SkillProblemCodes.SkillFileUnreadable)]

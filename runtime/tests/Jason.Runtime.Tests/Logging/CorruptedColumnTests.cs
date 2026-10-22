@@ -162,6 +162,7 @@ public sealed class CorruptedColumnTests
     /// something other than the parser's exception: a start survives it as a refusal, not as an exception nothing caught.
     /// </summary>
     [Theory]
+    [Critical(Family.B3, "a corrupt column is named, not quoted")]
     [InlineData(false)]
     [InlineData(true)]
     public async Task A_start_that_finds_an_unreadable_column_refuses_in_words_a_person_can_act_on_and_quotes_none_of_it(bool wrongShape)

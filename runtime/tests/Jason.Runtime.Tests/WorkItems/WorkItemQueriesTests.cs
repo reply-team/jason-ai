@@ -82,6 +82,7 @@ public class WorkItemQueriesTests
     /// still waits.
     /// </summary>
     [Fact]
+    [Critical(Family.W6, "eligibility in SQL and in memory agree")]
     public async Task The_listing_its_twin_and_the_claim_agree_in_every_campaign_state()
     {
         using var database = new TestDatabase();

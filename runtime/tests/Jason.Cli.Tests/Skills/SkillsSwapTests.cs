@@ -1,4 +1,5 @@
 using Jason.Cli.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Skills;
 
@@ -47,6 +48,7 @@ public class SkillsSwapTests
     /// it. Elsewhere the rename goes through and there is no failure to recover from.
     /// </remarks>
     [Fact]
+    [Critical(Family.I3, "the swap is atomic")]
     public void A_blocked_second_rename_puts_back_the_tree_that_was_there()
     {
         if (!OperatingSystem.IsWindows())

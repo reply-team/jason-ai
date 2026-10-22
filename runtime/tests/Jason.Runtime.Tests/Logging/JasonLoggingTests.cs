@@ -10,6 +10,7 @@ namespace Jason.Runtime.Tests.Logging;
 public class JasonLoggingTests
 {
     [Fact]
+    [Critical(Family.B3, "logs are JSON Lines")]
     public void Writes_json_lines_into_the_logs_directory()
     {
         using var dir = new TempDataDir();

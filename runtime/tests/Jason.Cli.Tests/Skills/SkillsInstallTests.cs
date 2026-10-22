@@ -4,6 +4,7 @@ using Jason.Cli.Skills;
 using Jason.Contracts.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Skills;
 
@@ -276,6 +277,7 @@ public class SkillsInstallTests
 
     /// <summary>A record is left in the harness root naming every path written.</summary>
     [Fact]
+    [Critical(Family.I3, "the receipt is written")]
     public async Task A_record_is_left_naming_every_path_that_was_written()
     {
         using var dir = new TempPaths();
@@ -352,6 +354,7 @@ public class SkillsInstallTests
     /// both runs of the fresh-account check: right for an agent, and no way to reach ready.
     /// </remarks>
     [Fact]
+    [Critical(Family.I3, "--roles-only writes into no harness")]
     public async Task Roles_only_deploys_the_role_skills_and_writes_into_no_harness()
     {
         using var dir = new TempPaths();

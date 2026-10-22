@@ -34,6 +34,7 @@ public class RoutingSchemaTests
     }
 
     [Fact]
+    [Critical(Family.W10, "one pin per kind")]
     public async Task A_plugin_pins_one_value_per_kind_on_a_contact()
     {
         using var database = new TestDatabase();

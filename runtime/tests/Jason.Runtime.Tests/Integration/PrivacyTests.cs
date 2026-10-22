@@ -26,6 +26,7 @@ public class PrivacyTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.B3, "contact data stays out of logs")]
     public async Task Contact_data_and_the_token_never_reach_the_log_files()
     {
         using var dir = new TempDataDir();
@@ -73,6 +74,7 @@ public class PrivacyTests
     }
 
     [Fact]
+    [Critical(Family.B3, "the log privacy sweep")]
     public async Task Nothing_a_work_item_carries_reaches_the_logs_and_the_token_reaches_nothing_at_all()
     {
         const string Brief = "ctx-canary-5e1b";

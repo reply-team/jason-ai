@@ -15,6 +15,7 @@ public class StartupRecoveryTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W4, "startup recovery")]
     public async Task A_restart_hands_back_what_it_never_started_and_leaves_the_rest_to_the_leases()
     {
         var clock = new FixedClock(Noon);

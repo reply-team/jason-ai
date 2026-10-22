@@ -24,7 +24,8 @@ public class CampaignTransitionTests
     }
 
     [Theory]
-    [InlineData(CampaignStatus.Draft, Verb.Start, JournalKinds.CampaignStarted)]
+    // Critical: campaign transitions.
+    [InlineData(CampaignStatus.Draft, Verb.Start, JournalKinds.CampaignStarted, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W9)])]
     [InlineData(CampaignStatus.Paused, Verb.Start, JournalKinds.CampaignStarted)]
     [InlineData(CampaignStatus.Active, Verb.Pause, JournalKinds.CampaignPaused)]
     [InlineData(CampaignStatus.Draft, Verb.Archive, JournalKinds.CampaignArchived)]
@@ -96,6 +97,7 @@ public class CampaignTransitionTests
     }
 
     [Theory]
+    [Critical(Family.W9, "archived is final")]
     [InlineData(Verb.Start)]
     [InlineData(Verb.Pause)]
     public async Task An_archived_campaign_refuses_further_transitions(Verb verb)

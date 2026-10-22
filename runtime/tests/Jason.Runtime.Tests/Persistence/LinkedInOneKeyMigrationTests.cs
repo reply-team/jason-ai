@@ -144,6 +144,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// the claim read the lowest id, so the holder is made the primary. Every contact keeps at most one primary.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the claim reads the key")]
     public void The_primary_moves_to_the_row_holding_the_key_so_the_claim_reads_the_key()
     {
         using var dir = Seeded(
@@ -235,6 +236,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// Lifting by the key's own text then lifts the stop.
     /// </summary>
     [Fact]
+    [Critical(Family.F2, "the lift order after the re-key")]
     public async Task An_entry_left_beside_its_key_is_listed_and_lifted_by_its_own_text_and_the_stop_stays()
     {
         const string Key = "https://www.linkedin.com/in/marta-example";
@@ -293,6 +295,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// beside the key, because the primary moved to the key.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the register holds after the re-key")]
     public async Task After_the_upgrade_the_register_refuses_every_contact_whose_stop_names_its_profile()
     {
         using var dir = Seeded(
@@ -335,6 +338,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// becomes exactly the key the rule gives it, or stays exactly as it was where the rule refuses it.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the re-key migration follows the rule's table")]
     public void Every_row_of_the_rule_s_table_becomes_its_key_or_stays_as_it_was()
     {
         var rows = LinkedInKeyVectors.Rows;
@@ -458,6 +462,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// finds its rows by identifier or by key.
     /// </summary>
     [Fact]
+    [Critical(Family.F1, "the migration's query plan")]
     public void Every_statement_reads_through_an_index_and_never_once_per_row()
     {
         Assert.Equal(

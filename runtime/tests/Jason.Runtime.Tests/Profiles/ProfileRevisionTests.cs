@@ -15,6 +15,7 @@ public class ProfileRevisionTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.P1, "revisions append")]
     public async Task Updating_a_profile_appends_a_revision_and_leaves_the_old_one_alone()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

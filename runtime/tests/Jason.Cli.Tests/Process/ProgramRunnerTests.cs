@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Jason.Cli.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Process;
 
@@ -44,6 +45,7 @@ public class ProgramRunnerTests
     /// that never answers, which is worse than one that says it could not tell.
     /// </summary>
     [Fact]
+    [Critical(Family.F4, "a child is bounded")]
     public async Task A_program_that_will_not_finish_is_stopped_and_says_so()
     {
         var started = Stopwatch.StartNew();

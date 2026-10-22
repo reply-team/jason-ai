@@ -21,6 +21,7 @@ public class ProviderOpTimeoutFloorTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
+    [Critical(Family.X1, "the lease floor")]
     [InlineData(Operations.WorkItemCreate)]
     [InlineData(Operations.WorkItemUpdate)]
     public async Task A_provider_item_may_not_ask_for_less_time_than_its_operation_needs(string operation)

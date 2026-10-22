@@ -104,6 +104,7 @@ public class ContactServiceTests
 
     /// <summary>Two spellings of one LinkedIn profile are one value, so a contact carrying both carries the same pair twice.</summary>
     [Fact]
+    [Critical(Family.F1, "one key per profile in a contact")]
     public async Task Two_spellings_of_one_profile_inside_one_contact_are_the_same_pair_twice()
     {
         using var database = new TestDatabase();
@@ -120,6 +121,7 @@ public class ContactServiceTests
     }
 
     [Fact]
+    [Critical(Family.S1, "one primary per channel")]
     public async Task A_second_primary_on_the_same_channel_is_refused()
     {
         using var database = new TestDatabase();
@@ -423,6 +425,7 @@ public class ContactServiceTests
     }
 
     [Fact]
+    [Critical(Family.X1, "the unique index during a replace")]
     public async Task Replacing_the_channel_list_survives_a_value_that_stays_while_the_primary_moves()
     {
         using var database = new TestDatabase();

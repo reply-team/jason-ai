@@ -12,6 +12,7 @@ namespace Jason.Runtime.Tests.Plugins;
 public class ArchitectureTests
 {
     [Fact]
+    [Critical(Family.B2, "no Jint in the runtime")]
     public void The_runtime_has_no_way_to_run_a_plugin_in_its_own_process()
     {
         var referenced = References(typeof(PluginInvoker).Assembly);
@@ -22,6 +23,7 @@ public class ArchitectureTests
     }
 
     [Fact]
+    [Critical(Family.B2, "the contracts stay clean")]
     public void The_contracts_carry_the_protocol_and_no_dependency_of_either_side()
     {
         var referenced = References(typeof(PluginInvocation).Assembly);
@@ -31,6 +33,7 @@ public class ArchitectureTests
     }
 
     [Fact]
+    [Critical(Family.B2, "the host never references the runtime")]
     public void The_plugin_host_knows_nothing_of_the_runtime_it_is_started_by()
     {
         var host = Assembly.LoadFrom(Path.Combine(AppContext.BaseDirectory, "Jason.PluginHost.dll"));
@@ -44,6 +47,7 @@ public class ArchitectureTests
     }
 
     [Fact]
+    [Critical(Family.B2, "YAML in one place")]
     public void The_manifest_reader_is_the_one_place_the_yaml_dependency_is_allowed()
     {
         // Stated as a fact rather than a prohibition: a manifest is written by people, and exactly one assembly
@@ -63,6 +67,7 @@ public class ArchitectureTests
     /// </para>
     /// </summary>
     [Fact]
+    [Critical(Family.B2, "vendor-neutral runtime")]
     public void No_vendor_is_named_anywhere_in_the_sources()
     {
         var found = new List<string>();

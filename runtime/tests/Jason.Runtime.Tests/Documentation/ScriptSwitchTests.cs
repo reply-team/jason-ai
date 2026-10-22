@@ -93,6 +93,7 @@ public sealed partial class ScriptSwitchTests
     }
 
     [Fact]
+    [Critical(Family.I1, "installs are pinned to a release")]
     public void No_line_anywhere_installs_from_the_default_branch()
     {
         // Built from parts, so this file is not itself an offender.
