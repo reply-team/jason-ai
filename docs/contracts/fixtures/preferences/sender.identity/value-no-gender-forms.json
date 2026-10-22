@@ -1,0 +1,7 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "case": "a sender without the forms their messages use, which is the reason the preference exists",
+  "value": { "senders": [{ "name": "Marta Lind" }] },
+  "expect": { "invalid": [{ "pointer": "/senders/0/gender_forms", "reason": "required" }] }
+}

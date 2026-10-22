@@ -1,0 +1,7 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "case": "a formality without the tone in words",
+  "value": { "formality": "formal" },
+  "expect": { "invalid": [{ "pointer": "/summary", "reason": "required" }] }
+}

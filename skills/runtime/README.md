@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.13.0**.
+this pack ships with Jason **0.14.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -27,17 +27,17 @@ description that promises everything matches nothing.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
-  The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening
-  the browser UI and unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads
-  and reading a span of one again, the hosts it can launch, whether notifications reach the person and turning them
-  off, whether a newer version exists, and installing it or taking it off again.
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
+  whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
+  unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
+  span of one again, the hosts it can launch, whether notifications reach the person and turning them off, whether a
+  newer version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft** until a host reads its new text. Why
   work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
-- [`planner-in-session`](planner-in-session/SKILL.md) — **verified.** The planner's judgement in a person's own
+- [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
   conversation about a campaign: taking a brief as it comes, what stays a quick look, what is agreed with the
   person before anything is created, and when it becomes campaign work. The session file of the planner, below.
 
@@ -73,7 +73,7 @@ All **nine roles this runtime seeds** are taught here, and every one of them car
 differs between them is one paragraph of purpose and one of what this build can and cannot give that role — and,
 for a role that sits with a person, the judgement it shares with its session file (below).
 
-- [`roles/researcher`](roles/researcher/SKILL.md) — **verified.** The brief a role is given when the runtime
+- [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** The brief a role is given when the runtime
   launches it: how to call home in the one command form that is permitted, how to read and keep its campaign
   note, and how to answer in the shape the work item asked for.
 - [`roles/manager`](roles/manager/SKILL.md) — **draft**, because it was re-authored onto the shared launch
@@ -111,7 +111,7 @@ SHA-256 of the text it read.
 |---|---|---|---|---|
 | `manager` | draft (re-authored onto the contract since its last reading) | — | — | — |
 | `planner` | draft | — | — | — |
-| `researcher` | verified | Claude Code 2.1.278 | 0.1.0 | `sha256:f5039552b4c487d14d109a4cea714de3849c8e62e45ade53c894538ad6eff201` |
+| `researcher` | draft | — | — | — |
 | `copywriter` | draft | — | — | — |
 | `personalizer` | draft | — | — | — |
 | `critic` | draft | — | — | — |
@@ -163,6 +163,6 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
-| `planner-in-session` | Claude Code 2.1.303 (Opus 5.5) | 0.12.0 | `sha256:5983d790a5953f506fed5a08ba464d2691f6453decd9817087c281f2845f5d37` |
+| `operating-the-installation` | Claude Code 2.1.304 (Opus 5.5) | 0.13.0 | `sha256:f049080f8d0c02694431f5eb20330ce4934d9a4c147dfed6a865717d5212d636` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |

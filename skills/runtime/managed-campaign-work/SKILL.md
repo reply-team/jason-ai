@@ -88,11 +88,10 @@ choose. If its answer never comes back — a timeout, a session that ended mid-c
 the same key: it answers with what the first one made, and nothing is made twice. A different request under a key
 you already used is refused with `idempotency_key_reused`; give it a key of its own. Nothing makes a key up for you.
 
-**The campaign's own people are `campaign list-contacts`.** `contact list` answers with everyone this runtime
-knows and takes no campaign at all, so `contact list --campaign …` is the spelling to expect yourself to reach
-for and the one that costs you a turn on `Unrecognized command or argument`. To find one person among everyone the
-runtime knows, give `contact list` any part of what they are known by — a name, a company, an email, a phone however
-it is spaced, a LinkedIn link:
+**The campaign's own people are `campaign list-contacts`**, each with where they stand in it: enrolled, paused,
+finished or excluded. `contact list --campaign cmp_…` lists the same people who are not excluded, as contact records.
+To find one person among everyone the runtime knows, give `contact list` any part of what they are known by — a
+name, a company, an email, a phone however it is spaced, a LinkedIn link:
 
 ```
 jason contact list --query "marta@"
@@ -141,6 +140,14 @@ match, with any filter `list` takes, rather than paging to count them:
 ```
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --order due
 jason workitem count --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+What has happened to one person, newest first — changes to their record, the work done for them, the decisions about
+it and the replies Jason noticed — and everyone listed by what last happened to them, the most recent first:
+
+```
+jason journal list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason contact list --order activity
 ```
 
 ### Which host runs AI work, and what that means for work you create

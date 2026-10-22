@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clock, dayKey, dayLabel, relative } from './format';
+import { clock, dayKey, dayLabel, place, relative, shortDate, when } from './format';
 
 const at = (iso: string) => new Date(iso);
 
@@ -48,5 +48,41 @@ describe('relative', () => {
         ['2026-10-18T12:00:00Z', 'in 2 d'],
     ])('%s is %s', (iso, expected) => {
         expect(relative(at(iso), now)).toBe(expected);
+    });
+});
+
+describe('place', () => {
+    it.each([
+        ['America/Mexico_City', '2026-10-16T09:00:00Z', { city: 'Mexico City', time: '03:00' }],
+        ['America/Argentina/Buenos_Aires', '2026-10-16T09:00:00Z', { city: 'Buenos Aires', time: '06:00' }],
+        ['UTC', '2026-10-16T09:00:00Z', { city: 'UTC', time: '09:00' }],
+        ['Not/AZone', '2026-10-16T09:00:00Z', null],
+    ])('%s at %s is %o', (zone, iso, expected) => {
+        expect(place(zone, at(iso))).toEqual(expected);
+    });
+});
+
+describe('shortDate', () => {
+    const now = at('2026-10-16T09:00:00Z');
+    it.each([
+        ['2026-10-03T00:00:00Z', 'UTC', '3 Oct'],
+        ['2026-10-01T23:30:00Z', 'Europe/Kyiv', '2 Oct'],
+        ['2025-12-31T23:30:00Z', 'UTC', '31 Dec 2025'],
+        ['2025-12-31T23:30:00Z', 'Europe/Kyiv', '1 Jan'],
+    ])('%s in %s is %s', (iso, zone, expected) => {
+        expect(shortDate(at(iso), zone, now)).toBe(expected);
+    });
+});
+
+describe('when', () => {
+    const now = at('2026-10-16T09:00:00Z');
+    it.each([
+        ['2026-10-16T08:41:00Z', 'UTC', '08:41'],
+        ['2026-10-17T05:00:00Z', 'UTC', '17 Oct, 05:00'],
+        ['2026-10-03T18:02:44Z', 'UTC', '3 Oct, 18:02'],
+        ['2026-10-15T22:30:00Z', 'Europe/Kyiv', '01:30'],
+        ['2025-12-31T23:30:00Z', 'UTC', '31 Dec 2025, 23:30'],
+    ])('%s in %s is %s', (iso, zone, expected) => {
+        expect(when(at(iso), now, zone)).toBe(expected);
     });
 });

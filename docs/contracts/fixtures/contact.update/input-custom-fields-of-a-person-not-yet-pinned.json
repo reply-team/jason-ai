@@ -1,12 +1,17 @@
 {
   "operation": "contact.update",
   "version": 1,
-  "case": "custom fields alone, for a person nobody has pinned yet: the plugin finds the provider's contact by the address first, and creates nobody",
+  "case": "custom fields alone, for a person nobody has pinned yet: the plugin looks the provider's contact up by the address first, and creates one only when the provider holds nobody under it",
   "input": {
     "args": { "channel": "email", "custom_fields": [{ "name": "lead_source", "value": "Webinar" }, { "name": "Region", "value": null }] },
     "contacts": [
       {
         "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
         "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
         "external_ids": {}
       }

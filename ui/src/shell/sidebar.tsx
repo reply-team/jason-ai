@@ -21,6 +21,12 @@ export function Sidebar() {
                 >
                     Work items
                 </a>
+                <a
+                    class={current === 'people' ? 'active' : ''}
+                    href={href({ screen: 'people', tab: 'timeline', filters: {} })}
+                >
+                    People
+                </a>
                 <a class={current === 'system' ? 'active' : ''} href={href({ screen: 'system' })}>
                     System
                 </a>

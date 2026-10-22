@@ -35,7 +35,9 @@
         "external_ids": [],
         "created_at": "2026-10-16T07:00:00.000Z",
         "updated_at": "2026-10-16T07:00:00.000Z",
-        "archived_at": null
+        "archived_at": null,
+        "campaigns": [],
+        "last_activity": null
       }
     ],
     "next_cursor": null

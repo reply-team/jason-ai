@@ -81,7 +81,7 @@ not accept it, do not install Jason.
 
 Both lines install the **latest release**. If either answers 404, the release could not be reached — through the
 address or on GitHub — and that is not a failure of your machine: report it as it stands rather than run the line
-again, and build nothing instead; there is nothing in this repository to build (§3).
+again, and build nothing instead.
 
 Each script works out your platform, downloads the archive for it, **verifies its SHA-256 before unpacking**,
 installs the executable under your own account — with its licence and the third-party notices beside it, as
@@ -112,14 +112,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.13.0/install.sh | sh -s -- --version 0.13.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.14.0/install.sh | sh -s -- --version 0.14.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.13.0/install.ps1))) -Version 0.13.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.14.0/install.ps1))) -Version 0.14.0
 ```
 
-These install 0.13.0 with 0.13.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.14.0 with 0.14.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -196,9 +196,7 @@ have done their work: you may delete those three — only those — with `Remove
 
 ## 3. Build from source
 
-The runtime's source is not published, so there is nothing in this repository to build: a release (§2) is the way
-in. A person with access to that source builds the executable by its repository's own guide, and then needs two
-things from this page.
+A build of the executable from the runtime's repository, rather than a release (§2), needs two things from this page:
 
 - **The executable alone, in a directory of its own, on the PATH by hand** — as §2 says for `--install-dir` and
   `--no-modify-path`. Copy that file alone: the `.pdb` files beside it are debugging symbols, and a directory that

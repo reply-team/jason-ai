@@ -1,0 +1,67 @@
+{
+  "operation": "journal.list",
+  "case": "by-contact-work",
+  "request": {
+    "contact_id": "cnt_1",
+    "kinds": [
+      "workitem_succeeded",
+      "workitem_failed",
+      "workitem_cancelled",
+      "workitem_expired",
+      "external_effect_reported"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_4",
+        "ts": "2026-10-16T08:15:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": "runtime"
+        },
+        "kind": "workitem_succeeded",
+        "campaign_id": "cmp_2",
+        "work_item_id": "wi_4",
+        "attempt_id": null,
+        "key": "result_present",
+        "old": null,
+        "new": true,
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": "LatAm pilot",
+        "contact_name": "Mateo Ruiz",
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "campaign.enroll",
+        "actor_role": null
+      },
+      {
+        "id": "jrn_6",
+        "ts": "2026-10-15T17:20:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": "runtime"
+        },
+        "kind": "workitem_succeeded",
+        "campaign_id": "cmp_2",
+        "work_item_id": "wi_5",
+        "attempt_id": null,
+        "key": "result_present",
+        "old": null,
+        "new": true,
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": "LatAm pilot",
+        "contact_name": "Mateo Ruiz",
+        "work_item_kind": "ai_role",
+        "work_item_role": "personalizer",
+        "work_item_operation": null,
+        "actor_role": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

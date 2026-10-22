@@ -1,0 +1,37 @@
+{
+  "operation": "project.list",
+  "case": "all",
+  "request": {
+    "limit": 10
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "prj_3",
+        "name": "Default",
+        "slug": "default",
+        "default": true,
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z"
+      },
+      {
+        "id": "prj_1",
+        "name": "Acme Corp",
+        "slug": "acme-corp",
+        "default": false,
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z"
+      },
+      {
+        "id": "prj_2",
+        "name": "Acme Europe",
+        "slug": "acme-eu",
+        "default": false,
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z"
+      }
+    ],
+    "next_cursor": null
+  }
+}

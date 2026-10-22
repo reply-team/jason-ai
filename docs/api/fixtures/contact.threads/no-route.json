@@ -1,0 +1,16 @@
+{
+  "operation": "contact.threads",
+  "case": "no-route",
+  "request": {
+    "contact_id": "cnt_3",
+    "limit": 100
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "no_route",
+      "message": "No route sends 'conversation.list' to 'reply' in the account this person's identifier was learned in.",
+      "retryable": false
+    }
+  }
+}

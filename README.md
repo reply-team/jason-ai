@@ -4,6 +4,23 @@
 self-contained executable per platform, with open skills, contracts and plugins, that turns your own AI agents,
 installed SDR skills, and external execution providers into a durable outbound-sales operation.
 
+## Why we built Jason
+
+The way people use software is changing: the agent's session is becoming the place where work gets done, between a
+person and the services that open their capabilities through an API. You say what you need; the agent reads the
+repository, files the ticket the way your company files them, writes the mail, and you open none of those interfaces. We
+run outbound sales at Reply.io, and we watched the agents our own people use do the thinking well and the operation
+badly: an agent can plan a campaign, write to a person and call a tool, but when the chat ends, so does the work.
+Nothing holds what was sent, what waits for a decision, what failed and what comes next, and the next session starts
+from a blank page. Jason is that layer, built for agents first: a harness in which your own agents keep the judgment,
+skills carry the profession, a runtime on your machine keeps campaigns, work, approvals and history alive between
+sessions, and plugins connect the operation to whichever provider owns the channels, Reply first.
+
+We built it with the current, not against it. In a few years the agents themselves gained skills, connectors, sessions
+and memory; Jason stands on those conventions, so most of the work happens inside your session, and each step their
+makers take forward strengthens it. Nothing reaches a real person without your approval, and the skills, contracts and
+plugins are open, so the harness grows the way agent tooling does: by people adding what they need.
+
 > **Alpha.** Jason is early software: it does what this page says, and what it does changes from one release to the
 > next.
 >
@@ -83,7 +100,7 @@ become a durable SDR operation: it has no authoritative campaign state, no relia
 schedules and retries, no approval enforcement, no recovery, and no operational history that
 survives the chat session. Jason is that missing layer — three parts working as one product:
 
-1. **Jason Runtime** — a deterministic, long-running, user-scoped process (.NET, SQLite)
+1. **Jason Runtime** — a deterministic, long-running, user-scoped process
    that owns durable campaign and work state, scheduling, dispatch, approvals, safety
    guardrails, recovery, and observability. Its **Runtime API** is the only authoritative
    boundary; the **Jason CLI** (built for both humans and AI agents) is its client.
@@ -139,10 +156,10 @@ increment at a time; no dates, no roadmap promises.
 
 ## Architecture
 
-One executable, three modes: the runtime service, which owns campaign and work state in SQLite and is the only thing
+One executable, three modes: the runtime service, which owns campaign and work state and is the only thing
 that writes it; the CLI, a pure client of the runtime's loopback API; and the plugin host, a short-lived process in
-which a plugin's JavaScript runs, so that it never runs inside the long-lived runtime. The runtime's design and its
-source are not published. What a person, an agent or a plugin author needs from them is here:
+which a plugin's JavaScript runs, so that it never runs inside the long-lived runtime. What a person, an agent or a
+plugin author needs is here:
 [docs/INSTALL.md](docs/INSTALL.md), [docs/plugins.md](docs/plugins.md), [docs/ui.md](docs/ui.md) for the browser UI, the contracts under
 [docs/contracts/](docs/contracts/README.md), and the skills under [`skills/`](skills).
 
@@ -159,8 +176,8 @@ source are not published. What a person, an agent or a plugin author needs from 
 | `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
 | `VERSION` | The runtime version this tree describes |
 
-The runtime's source is not here. Each release attaches the runtime for every platform, built from that source at the
-release's version, and this tree is published from the same release.
+Each release attaches the runtime for every platform, built at the release's version, and this tree is published from
+the same release.
 
 ## The installation
 
@@ -170,8 +187,7 @@ Windows — with its licence and the third-party notices beside it, as `jason-LI
 `jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing
 needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
 could not be reached — through the address or on GitHub — and that is not a failure of your machine: report it
-as it stands rather than run the line again, and build nothing instead; there is nothing here to build
-([docs/INSTALL.md](docs/INSTALL.md) §3).
+as it stands rather than run the line again, and build nothing instead.
 
 **[docs/INSTALL.md](docs/INSTALL.md)** is the whole of it in order — what you need, from a release, from
 source, teaching it, asking whether it can work, starting it, and taking it off again — written to be
@@ -266,7 +282,7 @@ name — never which account a route binds — and the journal and the work item
 newest failures by their error's code — never by what they say. It never holds the capability token,
 request or response bodies, prompts, work-item results, the database, plugin packages, or a route's
 account and its identity. Only
-`--include-journal` adds what the journal entries say: campaign names and fields as they changed, campaign
+`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign
 and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
 do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with,
 the errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the
@@ -449,17 +465,11 @@ jason report submit --actor human:you@example.com --effect email_sent --tool rep
 jason report list --campaign <campaign-id> --human
 ```
 
-## Building from source
-
-The runtime's source is not published, so there is nothing in this repository to build. A person with access to it
-builds by that repository's own guide. A build from source knows no published tag, so it takes its skills from a
-checkout of this repository with `--source` ([docs/INSTALL.md](docs/INSTALL.md) §3 and §4).
-
 ## Ecosystem
 
 | Repository | Role |
 |---|---|
-| `reply-team/jason-ai` (this repo) | Product entry point: the runtime and business skills, the official plugins, the operation contracts, the install path, and every release of the runtime — the executable for each platform; the runtime's source is not published |
+| `reply-team/jason-ai` (this repo) | Product entry point: the runtime and business skills, the official plugins, the operation contracts, the install path, and every release of the runtime — the executable for each platform |
 | [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) | Reply.io provider CLI: auth, profiles, teams, full API v3 access, and the Reply-specific skills |
 | [`reply-team/reply-mcp`](https://github.com/reply-team/reply-mcp) | Remote MCP server exposing curated Reply tools to MCP-capable agents |
 | [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs. Both halves now live here: the runtime skills in [`skills/runtime`](skills/runtime), re-authored around the Runtime API, and the business skills in [`skills/business`](skills/business), moved across unchanged and then held to this repository's own guards. The Reply-specific half belongs with `reply-cli` |

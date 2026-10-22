@@ -1,0 +1,36 @@
+{
+  "operation": "campaign.add_contacts",
+  "case": "one-person",
+  "request": {
+    "campaign_id": "cmp_2",
+    "contacts": [
+      {
+        "contact_id": "cnt_4"
+      }
+    ],
+    "reason": "Fits the pilot.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_2",
+    "summary": {
+      "added": 1,
+      "already_member": 0,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "added",
+        "contact_id": "cnt_4",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      }
+    ]
+  }
+}

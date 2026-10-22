@@ -1,0 +1,10 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "one person's threads read on request, outside any work item: no campaign is named, because a person's threads are the account's",
+  "input": {
+    "args": { "limit": 20, "offset": 0, "source": "all" },
+    "contacts": [{ "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", "external_ids": { "contact": "48211" } }]
+  },
+  "expect": "valid"
+}

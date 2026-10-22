@@ -1,0 +1,7 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "case": "a formality outside the three a writer knows",
+  "value": { "summary": "Plain and warm.", "formality": "casual" },
+  "expect": { "invalid": [{ "pointer": "/formality", "reason": "enum" }] }
+}

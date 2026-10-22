@@ -3,6 +3,27 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.6.0
+
+- `message.send`, `social_invitation.send` and `contact.update` are `find_or_create` now, as their documents say: a
+  person Reply holds nobody for is created rather than refused as `contact_not_found`. The package needs reply-cli
+  0.15.0 or newer, whose direct sends and `reply contact update` take the person by their fields, given `--contact -`,
+  and import one Reply holds nobody for, as the add commands do; the person and the command's own input travel as one
+  object on stdin. It also needs Jason 0.14.0 or newer, the first release whose three documents hand it the person's
+  own fields; an input without them at all is refused before anything is called, naming the fields.
+- A person found by the pin or by `reply contact find` is read first, as before: opted out at Reply is `suppressed`,
+  another address or profile `contact_channel_conflict`, a missing LinkedIn profile filled. Only a person the lookup
+  found nobody for goes through the command's import, named by the value consumed alone, with the first name derived as
+  an add derives it; the route's `derive_first_name` set to false refuses one without a first name, as for an add, and a
+  profile that is not Jason's key is refused rather than imported. A send's command goes only to a contact it made:
+  where Reply already held the person — its own lookup found them, or its import matched a contact Reply's lookup did
+  not return — it sends nothing and answers `contact.already_held` with that contact, which the package then reads
+  first like any other and sends to by its identifier. `contact.update` changes a contact the import matched.
+- New refusals, in the words the add operations use: `limit_reached` for an account that holds no further contact, and
+  `invalid_channel_value` for a value Reply will not import. A contact Reply named and then answered it holds no longer
+  — one this attempt was not pinned to — fails as `provider_call_failed` and pins nothing; `contact_not_found` means
+  only a pin that no longer resolves.
+
 ## 0.5.0
 
 - `sender.list` lists the mailboxes and the LinkedIn accounts a send can go from, with `reply account list`, one channel

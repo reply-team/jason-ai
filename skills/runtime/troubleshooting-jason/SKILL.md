@@ -163,8 +163,8 @@ answer, not the item, went unmeasured, after the provider had acted.
 
 Three spellings to expect yourself to get wrong while you look. **A campaign id is an argument, not an
 option**: it is `campaign list-contacts cmp_…`, and `campaign list-contacts --campaign cmp_…` is refused —
-which is the one every session so far has reached for first. The campaign's own people are that verb, because
-`contact list` takes no campaign at all. And these listings print JSON already, so there is no `--json`;
+which is the one every session so far has reached for first. The campaign's own people, each with where they
+stand in it, are that verb; `contact list --campaign cmp_…` lists the ones not excluded. And these listings print JSON already, so there is no `--json`;
 `--human` is the option that changes the rendering.
 
 **What it means.** The arguments do not satisfy the operation's published contract, or the provider refused
@@ -284,7 +284,7 @@ fields withheld, and the bundle names each one. The home directory, a data direc
 or another the runtime reports — and the names of the account and the machine are rewritten before anything
 is written. It never carries the capability token, a request body or a prompt, and it reaches nothing beyond
 this machine. It writes one file and prints where; **sending it anywhere is the person's act, never yours.**
-`--include-journal` adds what the journal entries say: campaign names and fields as they changed, campaign and
+`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign and
 work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
 do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the
 errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the failure

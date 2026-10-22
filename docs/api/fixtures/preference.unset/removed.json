@@ -1,0 +1,22 @@
+{
+  "operation": "preference.unset",
+  "case": "removed",
+  "request": {
+    "key": "sender.identity",
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    },
+    "reason": "taken back"
+  },
+  "status": 200,
+  "response": {
+    "key": "sender.identity",
+    "value": null,
+    "value_hash": null,
+    "value_bytes": null,
+    "created_at": null,
+    "updated_at": null,
+    "updated_by": null
+  }
+}

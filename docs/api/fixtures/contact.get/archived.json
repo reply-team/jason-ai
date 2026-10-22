@@ -1,0 +1,32 @@
+{
+  "operation": "contact.get",
+  "case": "archived",
+  "request": {
+    "contact_id": "cnt_5"
+  },
+  "status": 200,
+  "response": {
+    "id": "cnt_5",
+    "first_name": "Marcos",
+    "last_name": "Vidal",
+    "company": "Puerto Digital",
+    "title": "CEO",
+    "time_zone": "America/Santiago",
+    "channels": [
+      {
+        "channel": "email",
+        "value": "marcos@puerto.example",
+        "label": null,
+        "primary": true,
+        "data": null
+      }
+    ],
+    "custom": {},
+    "external_ids": [],
+    "created_at": "2026-10-01T00:00:00.000Z",
+    "updated_at": "2026-10-01T00:00:00.000Z",
+    "archived_at": "2026-10-14T00:00:00.000Z",
+    "campaigns": [],
+    "last_activity": null
+  }
+}

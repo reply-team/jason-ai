@@ -1,0 +1,18 @@
+{
+  "operation": "preference.set",
+  "case": "no-actor",
+  "request": {
+    "key": "tone_of_voice",
+    "value": {
+      "summary": "Plain."
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "actor_required",
+      "message": "actor.id is required on a preference: what is recorded has to name the person whose word it is.",
+      "retryable": false
+    }
+  }
+}

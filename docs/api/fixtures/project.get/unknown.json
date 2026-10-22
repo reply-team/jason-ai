@@ -1,0 +1,15 @@
+{
+  "operation": "project.get",
+  "case": "unknown",
+  "request": {
+    "project_id": "prj_4"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "project_not_found",
+      "message": "No project with id 'prj_4'.",
+      "retryable": false
+    }
+  }
+}

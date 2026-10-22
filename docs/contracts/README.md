@@ -40,6 +40,9 @@ docs/contracts/
   notifications/<name>.md          the same contract explained, with a generated block
   events/<name>.json               the events contract, a third family, embedded the same way
   events/<name>.md                 the same contract explained, with a generated block
+  preferences/<key>.json           a named preference of the client, a fourth family, embedded the same way
+  preferences/<key>.md             the same preference explained, with a generated block
+  fixtures/preferences/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
 ```
 
 ## The published operations
@@ -59,7 +62,7 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | `not_used` | read one campaign from the provider |
 | [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | `not_used` | stop a provider campaign |
 | [`contact.delete`](operations/contact.delete.md) | `contact.delete` | `control` | `confirm_once` | `after_recovery_read` | `pinned_only` | delete the provider's contact for one person |
-| [`contact.update`](operations/contact.update.md) | `contact.update` | `control` | `auto` | `after_recovery_read` | `find_only` | change a person's fields on the provider's contact for them |
+| [`contact.update`](operations/contact.update.md) | `contact.update` | `control` | `auto` | `after_recovery_read` | `find_or_create` | change a person's fields on the provider's contact for them |
 | [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | `not_used` | file a thread under one of the provider's categories, with the provider's own meaning on its reserved names |
 | [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | `not_used` | set a thread aside as worked |
 | [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | `not_used` | read one thread before answering it |
@@ -70,10 +73,10 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | `not_used` | who is in a campaign at the provider |
 | [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
-| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_only` | send a person a message, outside any campaign, from one of the provider's accounts |
+| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
 | [`sender.list`](operations/sender.list.md) | `sender.list` | `read` | `auto` | `safe` | `not_used` | the provider's accounts a send can go from |
-| [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_only` | invite a person to connect, from one of the provider's accounts |
+| [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_or_create` | invite a person to connect, from one of the provider's accounts |
 
 <!-- END GENERATED operations -->
 
@@ -102,6 +105,28 @@ result, four failure codes, its timeout and its conformance list. What it return
 provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
 identifiers operations pinned and writes none. Its fixtures live beside the others' under
 [`fixtures/events.read/`](fixtures/events.read) and are run by the same tests.
+
+## The named preferences
+
+A fourth family is published here, and it is no work at all: the **named preferences**, structured facts about the
+client that a person states, each with a schema, so that a skill can check that one is set before it writes and a
+screen can show it. Two are published:
+
+- [`sender.identity`](preferences/sender.identity.md) — who messages are written as;
+- [`tone_of_voice`](preferences/tone_of_voice.md) — how the company sounds.
+
+A preference document is `{key, version, summary, value_schema}` and nothing else: no work item names a key, no route
+carries one and no plugin is invoked for one, so it is under `preferences/` and read by a catalog of its own. A key is
+lower-case words of letters, digits and underscores, each starting with a letter, joined by dots, at most 64
+characters, and its document is named for it. Every value is a JSON object, checked against the key's `value_schema`
+in the dialect below, of at most 64 KiB in its canonical form, in which every character outside ASCII is escaped at six
+bytes, and so are DEL and each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, while a character outside the Basic
+Multilingual Plane takes twelve
+(a preference reports the `value_bytes` the cap compares). A key's schema changes only by gaining an optional
+field, which raises the document's version, so a skill reading the document knows which fields may be present; anything
+else is a new key. There is one value per key for the whole installation, set and unset by a person
+and read by everyone else. Its fixtures live under [`fixtures/preferences/`](fixtures/preferences) and are run by the
+same tests.
 
 ## What a document states
 
@@ -172,7 +197,9 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
   contact. It carries exactly one person — an operation about a person addresses one person in this version, and a
   read about a person reads about one — and is cut to the declared projection: only the channel the operation consumes,
   or none, never the person's whole reachability.
-- `campaign` is Jason's record of the campaign the work item belongs to.
+- `campaign` is Jason's record of the campaign the work item belongs to. A read made on a person's request — their
+  threads, or one thread's messages — belongs to no work item and carries none; the documents of the operations it
+  performs say the campaign may go unnamed.
 - `idempotency_key` appears only when the operation requires one, and it is the **work item's** identifier: stable
   across every attempt, which is what makes "the prior run under this key" answerable.
 - Every `external_ids` object is filtered to the calling plugin's own pins. Another provider's identifier is never
@@ -378,6 +405,11 @@ lists.
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,
   enum value, property or schema changed. It keeps the version.
+- **Relaxation** — a refusal that becomes a success under unchanged fields, such as a pre-flight policy loosened from
+  `find_only` to `find_or_create`. It keeps the version: nothing a caller sends or reads changes, and only what the
+  plugin does at the provider grows. The operation's page says in one sentence what the policy was before. A refusal
+  that protects a person — `suppressed`, a channel conflict, a stop the register or the provider holds — never relaxes:
+  taking such a refusal away is breaking.
 
 A route to a plugin whose family versions do not contain the operation's version is refused when the
 route is activated, as `route_contract_incompatible`, and again at the claim as
@@ -399,7 +431,9 @@ output schema, or which pins an identifier of a kind the operation never declare
 writes into its record of provider identifiers from that answer, as `{kind: value}`. A **preview fixture** is
 `{operation, version, case, input, expect}`, where `input` is a composed input the operation's schema accepts and
 `expect` is `{summary, highlights}`: the line the template renders and the values it highlights, both compared
-whole. An operation has preview fixtures exactly when it declares a preview.
+whole. An operation has preview fixtures exactly when it declares a preview. A **value fixture** of a named preference
+is `{key, version, case, value, expect}`, with `expect` written as an input fixture's, and it lives in the directory
+named for its key; every key has at least one value it accepts and one it refuses.
 
 An `invalid` list names exactly what is wrong with the document, and it is written the same way in an input fixture
 and an outcome fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means

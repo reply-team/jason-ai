@@ -113,11 +113,12 @@ describe('Attention', () => {
         });
     });
 
-    it('switches the filter to decided ones and sends the statuses', async () => {
+    it('switches the filter to decided ones, keeps it in the address, and sends the statuses', async () => {
         const fake = pendingFake().answer('approval.list', 'approval.list/pending', 'approval.list/decided');
         renderApp(fake);
         await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
         fireEvent.click(screen.getByRole('button', { name: 'Decided' }));
+        expect(route.value).toEqual({ screen: 'attention', decided: true });
         await waitFor(() =>
             expect(fake.sent('approval.list')).toEqual({
                 statuses: ['approved', 'rejected', 'superseded', 'cancelled'],

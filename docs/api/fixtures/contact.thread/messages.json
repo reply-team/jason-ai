@@ -1,0 +1,89 @@
+{
+  "operation": "contact.thread",
+  "case": "messages",
+  "request": {
+    "contact_id": "cnt_1",
+    "plugin_id": "reply",
+    "thread_id": "t_501",
+    "limit": 20
+  },
+  "status": 200,
+  "response": {
+    "plugin_id": "reply",
+    "thread": {
+      "external_id": "t_501",
+      "channel": "email",
+      "subject": "Re: Soluna's next quarter",
+      "contact": {
+        "external_id": "16786993",
+        "name": "Mateo Ruiz"
+      },
+      "campaign_external_id": "c_7714",
+      "unread": true,
+      "vendor": {
+        "category": null,
+        "has_ai_draft": false
+      }
+    },
+    "messages": [
+      {
+        "external_id": "<m1@mail.example.com>",
+        "direction": "outbound",
+        "sent_at": "2026-10-16T08:15:00.000Z",
+        "from": "sdr@vendor.example",
+        "to": [
+          "mateo@soluna.example"
+        ],
+        "cc": null,
+        "bcc": null,
+        "subject": "Soluna's next quarter",
+        "body": "<p>Hi Mateo, congratulations on the Series A.</p><p style=\"color:red\" onclick=\"steal()\">Worth 20 minutes next week?</p><img src=\"https://t.example/p.gif\"><script>steal()</script><style>p { color: red }</style>",
+        "truncated": false,
+        "vendor": {
+          "state": "ok",
+          "status_code": null,
+          "ai_sent_type": null
+        }
+      },
+      {
+        "external_id": "<m2@mail.example.com>",
+        "direction": "inbound",
+        "sent_at": "2026-10-16T08:41:00.000Z",
+        "from": "mateo@soluna.example",
+        "to": [
+          "sdr@vendor.example"
+        ],
+        "cc": null,
+        "bcc": null,
+        "subject": "Re: Soluna's next quarter",
+        "body": "<p>Thanks, could we talk on Thursday? <a href=\"https://soluna.example/team\">Our team</a> or <a href=\"javascript:steal()\">this</a></p><blockquote>Worth 20 minutes next week?</blockquote><iframe src=\"https://frame.example\"></iframe><form><input name=\"q\"></form>",
+        "truncated": false,
+        "vendor": {
+          "state": "needs_attention",
+          "status_code": null,
+          "ai_sent_type": null
+        }
+      },
+      {
+        "external_id": "<m3@mail.example.com>",
+        "direction": "outbound",
+        "sent_at": "2026-10-16T08:50:00.000Z",
+        "from": "sdr@vendor.example",
+        "to": [
+          "mateo@soluna.example"
+        ],
+        "cc": null,
+        "bcc": null,
+        "subject": "Re: Soluna's next quarter",
+        "body": "Thursday works.\nTen in the morning, Mexico City time & no later?\n\nOn Thu, Mateo <mateo@soluna.example> wrote: <3",
+        "truncated": false,
+        "vendor": {
+          "state": "ok",
+          "status_code": null,
+          "ai_sent_type": null
+        }
+      }
+    ],
+    "has_more": false
+  }
+}

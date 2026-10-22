@@ -72,3 +72,29 @@ export function relative(at: Date, now: Date): string {
     if (days < 30) return ahead ? `in ${days} d` : `${days} d ago`;
     return `${at.getUTCDate()} ${shortMonths[at.getUTCMonth()]}`;
 }
+
+/**
+ * Where a person is and what time it is there: the time zone's last part as a place (`America/Mexico_City` is
+ * Mexico City) and the clock there now. Null for a zone the browser does not know.
+ */
+export function place(zone: string, now: Date): { city: string; time: string } | null {
+    try {
+        const time = clock(now, zone);
+        return { city: zone.split('/').at(-1)!.replaceAll('_', ' '), time };
+    } catch {
+        return null;
+    }
+}
+
+/** A day and a short month where the person is, `3 Oct`, and the year when it is not this one: `31 Dec 2025`. */
+export function shortDate(at: Date, zone: string, now: Date): string {
+    const p = parts(at, zone);
+    const date = `${Number(p['day'])} ${shortMonths[Number(p['month']) - 1]}`;
+    return p['year'] === parts(now, zone)['year'] ? date : `${date} ${p['year']}`;
+}
+
+/** A moment outside a list grouped by day: the clock alone today, else the short date before it, `3 Oct, 18:02`. */
+export function when(at: Date, now: Date, zone: string): string {
+    const time = clock(at, zone);
+    return dayKey(at, zone) === dayKey(now, zone) ? time : `${shortDate(at, zone, now)}, ${time}`;
+}
