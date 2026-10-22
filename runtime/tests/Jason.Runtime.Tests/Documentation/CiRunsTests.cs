@@ -15,8 +15,9 @@ namespace Jason.Runtime.Tests.Documentation;
 /// report every other check <c>main</c>'s ruleset requires as skipped by rule, under its own name. A push to <c>main</c> or
 /// to a release branch whose tree the merged pull request's last ready run tested runs the version alone; any other push to
 /// <c>main</c> runs every check, and any other push to a release branch the Linux set. A run started by hand runs every
-/// check, and nothing runs nightly. Read out of ci.yml, and the steps that decide are run rather than read, so what these
-/// facts hold is what a runner does.
+/// check, and nothing runs nightly. A draft's push tests the critical tier alone; every other run tests the whole suite,
+/// and only a run of the whole suite keeps a record of the tree it tested. Read out of ci.yml, and the steps that decide
+/// are run rather than read, so what these facts hold is what a runner does.
 /// </summary>
 public class CiRunsTests
 {
@@ -38,6 +39,12 @@ public class CiRunsTests
 
     /// <summary>The job that reports a check a rule skipped, as a success under that check's own name.</summary>
     private const string StandIn = "skipped-by-rule";
+
+    /// <summary>What a test step adds to the whole suite's command to test the critical tier alone.</summary>
+    private const string TierFilter = "-- --filter-trait \"Category=Critical\"";
+
+    /// <summary>What the linux-x64 leg is called when it tests the critical tier alone: not a name any ruleset requires.</summary>
+    private const string TierLeg = "linux-x64 (critical tier)";
 
     /// <summary>The eleven checks the main branch's ruleset requires before a merge.</summary>
     private static readonly string[] Required =
@@ -183,7 +190,7 @@ public class CiRunsTests
         var version = Mapping(Jobs(), "version");
 
         var outputs = Mapping(version, "outputs");
-        foreach (var output in new[] { "full", "linux", "macos", "platforms", "updates", "rids", "skipping", "skipped" })
+        foreach (var output in new[] { "full", "linux", "macos", "tier", "platforms", "updates", "rids", "skipping", "skipped" })
         {
             Assert.Equal($"${{{{ steps.legs.outputs.{output} }}}}", Scalar(outputs, output));
         }
@@ -290,6 +297,12 @@ public class CiRunsTests
 
         var (ran, byRule, byCondition) = Report(decided.Outputs);
         var (expectedRan, expectedByRule) = Sets[set];
+        if (Kinds[kind].Run is { Event: "pull_request", Draft: "true" })
+        {
+            // A draft's leg tests the critical tier alone, and says so in its name.
+            expectedRan = [.. expectedRan.Select(name => name == "linux-x64" ? TierLeg : name)];
+        }
+
         Assert.Equal(expectedRan.Order(StringComparer.Ordinal), ran.Order(StringComparer.Ordinal));
         Assert.Equal(expectedByRule.Order(StringComparer.Ordinal), byRule.Order(StringComparer.Ordinal));
 
@@ -442,6 +455,109 @@ public class CiRunsTests
             Assert.Equal(PullRequestNumber, (int)record["pull_request"]!);
             Assert.Equal(run.Listing ?? Tested, record["listing"]!.AsArray().Select(line => (string)line!));
         }
+    }
+
+    // Critical: a draft's push tests the tier, and a ready run into a release branch the whole suite.
+    public static TheoryData<string> CriticalKindsOfRunForTheTests() =>
+        CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["a draft's push"] or ["marking a pull request into a release branch ready"]);
+
+    /// <summary>
+    /// A draft's push tests the critical tier alone, on linux-x64, the one platform its Linux set builds; every other run
+    /// tests the whole suite. Of the linux-x64 job's two test steps exactly one runs, by the word the version job hands on,
+    /// and only the one a draft's push runs filters the suite.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CriticalKindsOfRunForTheTests))]
+    public void A_draft_s_push_tests_the_critical_tier_and_every_other_run_the_whole_suite(string kind)
+    {
+        var (run, set) = Kinds[kind];
+        var draft = run.Event == "pull_request" && run.Draft == "true";
+
+        var decided = Decide(run);
+
+        Assert.True(decided.Outputs["tier"] == (draft ? "true" : "false"), $"{kind} handed on tier '{decided.Outputs["tier"]}': {decided.Summary}");
+        var testing = Assert.Single(TestSteps(Mapping(Jobs(), "build-test-publish")), step => StepRuns(step, decided.Outputs));
+        var command = Scalar(testing, "run")!;
+        Assert.True(
+            command.Contains(TierFilter, StringComparison.Ordinal) == draft,
+            $"{kind} runs '{command}', and {(draft ? "a draft's push tests the critical tier alone" : "only a draft's push tests less than the whole suite")}");
+        Assert.Contains(draft ? "tests -> the critical tier" : set is "tested" or "none" ? "tests -> none" : "tests -> the whole suite", decided.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A leg that tests the critical tier alone never reports under a name a ruleset requires: between a pull request being
+    /// marked ready and its ready run creating its checks, a required <c>linux-x64</c> from a draft's push would read green
+    /// for a tree only the tier tested. Every other run's leg is exactly <c>linux-x64</c>.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(KindsOfRun))]
+    public void Only_a_run_of_the_whole_suite_reports_the_leg_the_rulesets_require(string kind)
+    {
+        var (run, set) = Kinds[kind];
+        var draft = run.Event == "pull_request" && run.Draft == "true";
+
+        var decided = Decide(run);
+
+        var (ran, _, _) = Report(decided.Outputs);
+        var legs = Legs(decided.Outputs["platforms"]).Select(leg => leg["name"]).ToList();
+        if (draft)
+        {
+            Assert.True(
+                !ran.Intersect(Required, StringComparer.Ordinal).Contains("linux-x64") && ran.Contains(TierLeg),
+                $"{kind} reports {string.Join(", ", ran)}, and a draft's tier-only leg must not be named as a ruleset requires");
+            Assert.Equal([TierLeg], legs);
+        }
+        else if (set is not ("tested" or "none"))
+        {
+            Assert.True(ran.Contains("linux-x64") && !ran.Contains(TierLeg), $"{kind} reports {string.Join(", ", ran)}, and its whole suite is the leg 'linux-x64'");
+            Assert.All(Legs(decided.Outputs["platforms"]), leg => Assert.Equal(leg["rid"], leg["name"]));
+        }
+    }
+
+    // Critical: a record of a tree only from a run of the whole suite.
+    public static TheoryData<string> CriticalKindsOfRunForTheRecord() =>
+        CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["marking a pull request into a release branch ready"]);
+
+    /// <summary>
+    /// A run that keeps a record of the tree it tested ran the whole suite on it: a later push skips its checks on that
+    /// record, so a tree only the critical tier ran on is never recorded. A draft's push keeps none.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CriticalKindsOfRunForTheRecord))]
+    public void A_run_that_keeps_a_record_of_its_tree_tested_the_whole_suite(string kind)
+    {
+        var (run, _) = Kinds[kind];
+
+        var decided = Decide(run);
+
+        Assert.True(
+            decided.Record is null || decided.Outputs["tier"] == "false",
+            $"{kind} keeps a record of tree {decided.Record?["tree"]} and tested the critical tier alone on it");
+    }
+
+    /// <summary>
+    /// Only one step of the workflows filters the suite: the linux-x64 job's step a draft's push runs, which is the job's
+    /// whole-suite step with the tier's filter after it, so both test the same build. Every other test step — the job's
+    /// whole-suite step, the suite under a release's version, and the release's own — runs the whole suite.
+    /// </summary>
+    [Fact]
+    [Critical(Family.B7, "the one filtered test step is a draft's, and the release tests the whole suite")]
+    public void Only_the_step_a_draft_s_push_runs_filters_the_suite()
+    {
+        var jobs = Jobs();
+        var steps = TestSteps(Mapping(jobs, "build-test-publish"));
+        var tier = Assert.Single(steps, step => Scalar(step, "if") == "needs.version.outputs.tier == 'true'");
+        var whole = Assert.Single(steps, step => Scalar(step, "if") == "needs.version.outputs.tier != 'true'");
+        Assert.Equal(2, steps.Count);
+        Assert.Equal($"{Scalar(whole, "run")} {TierFilter}", Scalar(tier, "run"));
+
+        var others = jobs.Children.Values.Cast<YamlMappingNode>().SelectMany(TestSteps)
+            .Concat(Mapping(Parse(Read(Release)), "jobs").Children.Values.Cast<YamlMappingNode>().SelectMany(TestSteps))
+            .Where(step => step != tier)
+            .Select(step => Scalar(step, "run")!)
+            .ToList();
+        Assert.True(others.Count >= 3, $"Only {others.Count} other test steps were found: {string.Join(" | ", others)}");
+        Assert.All(others, command => Assert.False(command.Contains("filter", StringComparison.Ordinal), $"'{command}' filters the suite"));
     }
 
     /// <summary>
@@ -887,6 +1003,22 @@ public class CiRunsTests
     }
 
     private static YamlMappingNode Jobs() => Mapping(Parse(Read(Ci)), "jobs");
+
+    /// <summary>A job's steps that run the test suite.</summary>
+    private static List<YamlMappingNode> TestSteps(YamlMappingNode job) =>
+        Node(job, "steps") is YamlSequenceNode steps
+            ? [.. steps.Children.Cast<YamlMappingNode>().Where(step => Scalar(step, "run")?.Contains("dotnet test", StringComparison.Ordinal) == true)]
+            : [];
+
+    /// <summary>Whether a step runs, given what the version job decided: on no condition, or on the tier's word.</summary>
+    private static bool StepRuns(YamlMappingNode step, Dictionary<string, string> decided) =>
+        Scalar(step, "if") switch
+        {
+            null => true,
+            "needs.version.outputs.tier == 'true'" => decided["tier"] == "true",
+            "needs.version.outputs.tier != 'true'" => decided["tier"] != "true",
+            var condition => throw new InvalidOperationException($"A test step runs on '{condition}', which is not the tier's word."),
+        };
 
     private static List<YamlMappingNode> Steps(YamlMappingNode job) =>
         [.. Assert.IsType<YamlSequenceNode>(Node(job, "steps")).Children.Cast<YamlMappingNode>()];

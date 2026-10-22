@@ -17,6 +17,8 @@
     <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
     <!-- The critical tier's attribute and its families, one vocabulary in every test assembly. -->
     <Compile Include="../Jason.Runtime.Tests/Critical.cs" Link="Critical.cs" />
+    <!-- The critical tier's table and its guard: each test assembly holds its own column of the table to what it discovers. -->
+    <Compile Include="../Jason.Runtime.Tests/CriticalTier.cs" Link="CriticalTier.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- What the repository teaches somebody to type, linked beside the tests that hand every printed command to the real parser. -->

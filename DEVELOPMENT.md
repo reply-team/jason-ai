@@ -116,14 +116,23 @@ place a tracker key is allowed: it is how the tracker links the pull request, an
 trait, about two minutes on a workstation — and never the whole suite, which takes seventeen minutes there and hours
 over a pull request's life. A pull request that touches `runtime/` runs the whole suite locally once before it is
 marked ready, in Release, with the log written to a file; one that changes Markdown only skips that. On CI, a draft's
-push runs the Linux set: the version check, the linux-x64 build and suite, an update on linux-x64, the install script
-on Ubuntu and the UI's checks. Marking a pull request into a release branch ready runs the whole suite on Linux, once.
+push runs the Linux set: the version check, the linux-x64 build and the critical tier, an update on linux-x64, the
+install script on Ubuntu and the UI's checks; it keeps no record of the tree it tested. Marking a pull request into a
+release branch ready runs the whole suite on Linux, once.
 The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
 and that run is the release's gate; a pull request into `main` from any other branch — the version after a release, a
 document — runs the Linux set and reports the rest as skipped by rule. A push to `main` whose tree the merging pull
 request's last full run tested runs the version check alone. Nothing runs nightly. The critical tier is the `Critical`
-trait, run with `--filter-trait "Category=Critical"`; what holds its share follows separately. `CiRunsTests` holds the
-rule the workflow carries.
+trait, run with `--filter-trait "Category=Critical"`, and one table pins it: how many critical cases each family has in
+each test assembly (`CriticalTier.cs`). Each test assembly discovers itself and holds its column to the table, so a row
+that leaves the tier, which a run of the tier cannot notice, turns that guard red; every family keeps a critical case;
+the tier stays at or under 15 % of the suite's methods and of its discovered cases, with no floor; and every mark gives
+its reason, the attribute's own or a `// Critical:` comment above a marked row or above the member that marks rows.
+The guard also holds each assembly to at least the test methods the table measured, and to nine tenths of its cases,
+since the ceiling is measured on them; so a commit that marks or unmarks a test, adds or removes a row of a critical
+theory, or removes test methods rewrites the table in the same commit, from the numbers the guard prints. The leg that
+tests the tier alone is named `linux-x64 (critical tier)`, so only a run of the whole suite reports the `linux-x64`
+that a ruleset requires. `CiRunsTests` holds the rule the workflow carries.
 
 **Draft while you build, ready when you are done.** Open the pull request as a draft with the first push and keep
 pushing to it; a draft is cheap. Mark it ready once, after the two readings below and the fixes they asked for, so

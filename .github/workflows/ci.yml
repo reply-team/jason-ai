@@ -3,7 +3,8 @@ name: CI
 # Which checks a run needs is decided once, by the version job, which every other job needs, from the event and the
 # branch a change lands on:
 # - a draft pull request's push runs the Linux set: the version, linux-x64, install.sh on ubuntu, the update on
-#   linux-x64 and the UI;
+#   linux-x64 and the UI; linux-x64 tests the critical tier alone, the tests that carry the Critical trait, where every
+#   other run tests the whole suite, and a draft's run keeps no record of the tree it tested;
 # - a pull request into a release branch runs the Linux set when it is ready as well, which is all a release branch's
 #   ruleset requires, and reports nothing as skipped; so does a pull request into any other branch but main;
 # - the release's pull request, from a release branch into main, runs every check, macOS included, when it is marked
@@ -57,6 +58,7 @@ jobs:
       full: ${{ steps.legs.outputs.full }}
       linux: ${{ steps.legs.outputs.linux }}
       macos: ${{ steps.legs.outputs.macos }}
+      tier: ${{ steps.legs.outputs.tier }}
       platforms: ${{ steps.legs.outputs.platforms }}
       updates: ${{ steps.legs.outputs.updates }}
       rids: ${{ steps.legs.outputs.rids }}
@@ -200,7 +202,7 @@ jobs:
           LISTING: ${{ steps.tree.outputs.listing }}
           RECORD: ${{ steps.earlier.outputs.record }}
           FOUND: ${{ steps.earlier.outputs.found }}
-          PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"},{"rid":"osx-arm64","os":"macos-latest"}]'
+          PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest","name":"linux-x64"},{"rid":"win-x64","os":"windows-latest","name":"win-x64"},{"rid":"osx-arm64","os":"macos-latest","name":"osx-arm64"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
         run: |
           # Documentation is Markdown a build compiles nothing of and no test runs as code: outside the runtime, the
@@ -304,11 +306,21 @@ jobs:
               @($updates | Where-Object { -not (Runs $_.rid) } | ForEach-Object { @{ check = "an update on $($_.rid)"; why = $why } })
           }
 
+          # A draft's push tests the critical tier alone, the tests that go red first when a rule the product rests on
+          # breaks; every other run tests the whole suite, and only such a run keeps a record of the tree it tested.
+          $tier = $env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true'
+
+          # The leg that tests the tier alone is not named as the leg a ruleset requires: a required check is judged by the
+          # latest check of its name on the commit, and a draft's tier must not stand in for the ready run's whole suite
+          # in the moments before that run creates its own.
+          $kept = @($kept | ForEach-Object { @{ rid = $_.rid; os = $_.os; name = $(if ($tier) { "$($_.rid) (critical tier)" } else { $_.rid }) } })
+
           function Word([bool] $yes) { if ($yes) { 'true' } else { 'false' } }
           "set=$set" >> $env:GITHUB_OUTPUT
           "full=$(Word ($set -eq 'everything'))" >> $env:GITHUB_OUTPUT
           "linux=$(Word ($set -notin 'tested', 'none'))" >> $env:GITHUB_OUTPUT
           "macos=$(Word ($set -eq 'everything'))" >> $env:GITHUB_OUTPUT
+          "tier=$(Word $tier)" >> $env:GITHUB_OUTPUT
           "platforms=$(@{ include = $kept } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
           "updates=$(@{ include = $keptUpdates } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
           "rids=$(@($kept | ForEach-Object { $_.rid }) -join ',')" >> $env:GITHUB_OUTPUT
@@ -328,7 +340,7 @@ jobs:
           "record=$recorded" >> $env:GITHUB_OUTPUT
 
           # Which case this run took, and why, in its log and on its summary page.
-          $legs = "platforms -> $(@($kept | ForEach-Object { $_.rid }) -join ', '); updates -> $(@($keptUpdates | ForEach-Object { $_.rid }) -join ', '); skipped by rule -> $(@($skipped | ForEach-Object { $_.check }) -join ', ')"
+          $legs = "platforms -> $(@($kept | ForEach-Object { $_.rid }) -join ', '); tests -> $(if ($tier) { 'the critical tier' } elseif ($set -in 'tested', 'none') { 'none' } else { 'the whole suite' }); updates -> $(@($keptUpdates | ForEach-Object { $_.rid }) -join ', '); skipped by rule -> $(@($skipped | ForEach-Object { $_.check }) -join ', ')"
           Write-Host "set -> ${set}; $why"
           Write-Host $legs
           if ($env:GITHUB_STEP_SUMMARY) {
@@ -384,7 +396,7 @@ jobs:
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.release }}
 
   build-test-publish:
-    name: ${{ matrix.rid }}
+    name: ${{ matrix.name }}
     needs: version
     if: needs.version.outputs.linux == 'true'
     runs-on: ${{ matrix.os }}
@@ -420,8 +432,15 @@ jobs:
           # A pwsh step ends with the last native command's exit code, which here is the refusal's own.
           exit 0
 
+      # A draft's push tests the critical tier alone, a few minutes where the whole suite takes many; every other run
+      # tests the whole suite, the same build under the same version.
       - name: Test (offline)
+        if: needs.version.outputs.tier != 'true'
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
+
+      - name: Test the critical tier (offline)
+        if: needs.version.outputs.tier == 'true'
+        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
 
       # The publish, the archive, the checksum and the manifest fragment: the same action release.yml runs on
       # a tag, so the packaging is exercised on every pull request long before a tag exists.
