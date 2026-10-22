@@ -21,6 +21,8 @@ public sealed class JournalKindInventoryTests
     {
         [JournalKinds.CampaignCreated] = "campaign names and fields as they changed",
         [JournalKinds.CampaignUpdated] = "campaign names and fields as they changed",
+        [JournalKinds.ProjectCreated] = "project names as they changed",
+        [JournalKinds.ProjectUpdated] = "project names as they changed",
         [JournalKinds.ContextUpdated] = "campaign and work-item contexts as they changed",
         [JournalKinds.WorkItemContextUpdated] = "campaign and work-item contexts as they changed",
         [JournalKinds.WorkItemUpdated] = "result formats",

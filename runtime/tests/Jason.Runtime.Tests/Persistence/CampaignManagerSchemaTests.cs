@@ -169,6 +169,7 @@ public class CampaignManagerSchemaTests
         {
             PublicId = "cmp_A",
             Name = "Work",
+            ProjectId = DefaultProject.Id,
             Status = CampaignStatus.Active,
             CreatedAt = Noon,
             UpdatedAt = Noon,

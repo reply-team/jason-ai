@@ -4,11 +4,16 @@ using Jason.Contracts.Json;
 
 namespace Jason.Contracts.Api;
 
-/// <summary>A campaign without its context: what <c>campaign.list</c> returns, so a listing stays small.</summary>
+/// <summary>
+/// A campaign without its context: what <c>campaign.list</c> returns, so a listing stays small. <c>project_id</c> and
+/// <c>project_slug</c> name the project it is in, so a listing can be shown by project without asking for each one.
+/// </summary>
 public sealed record CampaignSummaryDto(
     string Id,
     string Name,
     CampaignStatus Status,
+    string ProjectId,
+    string ProjectSlug,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ArchivedAt);
@@ -16,12 +21,15 @@ public sealed record CampaignSummaryDto(
 /// <summary>
 /// A campaign with its context: the shared knowledge every role working the campaign reads. <c>external_ids</c>
 /// is always a list, possibly empty, for the same reason a contact's is. <c>execution_profile</c> is the
-/// campaign's policy on which host its agent work uses, and null means it has none of its own.
+/// campaign's policy on which host its agent work uses, and null means it has none of its own. <c>project_id</c> and
+/// <c>project_slug</c> name the project it is in.
 /// </summary>
 public sealed record CampaignDto(
     string Id,
     string Name,
     CampaignStatus Status,
+    string ProjectId,
+    string ProjectSlug,
     JsonObject Context,
     IReadOnlyList<ExternalIdDto> ExternalIds,
     string? ExecutionProfile,
@@ -36,19 +44,30 @@ public sealed record CampaignDto(
 /// <summary>
 /// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign
 /// it made rather than making another. It is unique in the installation; null means no key, and nothing ever makes one up.
+/// <c>project_id</c> names the project the campaign is in; absent, it is the default project.
 /// </summary>
-public sealed record CampaignCreateRequest(string? Name, JsonObject? Context, ActorRef? Actor, string? Reason, string? IdempotencyKey = null);
+public sealed record CampaignCreateRequest(
+    string? Name,
+    JsonObject? Context,
+    ActorRef? Actor,
+    string? Reason,
+    string? IdempotencyKey = null,
+    string? ProjectId = null);
 
 public sealed record CampaignGetRequest(string? CampaignId);
 
-/// <summary><c>query</c> finds campaigns by any part of their name, whatever its case or accents.</summary>
-public sealed record CampaignListRequest(CampaignStatus? Status, int? Limit, string? Cursor, string? Query = null);
+/// <summary>
+/// <c>query</c> finds campaigns by any part of their name, whatever its case or accents; <c>project_id</c> keeps the
+/// campaigns of one project.
+/// </summary>
+public sealed record CampaignListRequest(CampaignStatus? Status, int? Limit, string? Cursor, string? Query = null, string? ProjectId = null);
 
 /// <summary>
 /// A partial patch: an absent <c>name</c> leaves the campaign's name alone, and an absent
 /// <c>execution_profile</c> leaves its policy alone. An explicit null clears the policy; a value has to name a
 /// profile this runtime knows. <c>review_seconds</c> behaves the same way, and null there means "however often
-/// the installation reviews everything else".
+/// the installation reviews everything else". <c>project_id</c> moves the campaign to another project; a campaign is
+/// always in one, so null is refused.
 /// </summary>
 public sealed record CampaignUpdateRequest(
     string? CampaignId,
@@ -56,7 +75,8 @@ public sealed record CampaignUpdateRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ExecutionProfile,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> ReviewSeconds,
     ActorRef? Actor,
-    string? Reason);
+    string? Reason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ProjectId = default);
 
 /// <summary>The body of <c>campaign.start</c>, <c>campaign.pause</c> and <c>campaign.archive</c>.</summary>
 public sealed record CampaignTransitionRequest(string? CampaignId, ActorRef? Actor, string? Reason);

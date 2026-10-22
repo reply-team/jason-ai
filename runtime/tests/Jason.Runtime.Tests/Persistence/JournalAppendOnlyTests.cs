@@ -55,7 +55,7 @@ public class JournalAppendOnlyTests
         using var database = new TestDatabase();
         using var db = database.Open();
         var now = DateTime.UtcNow;
-        var campaign = new Campaign { PublicId = "cmp_J", Name = "j", CreatedAt = now, UpdatedAt = now };
+        var campaign = new Campaign { PublicId = "cmp_J", Name = "j", ProjectId = DefaultProject.Id, CreatedAt = now, UpdatedAt = now };
         db.Campaigns.Add(campaign);
         db.SaveChanges();
 

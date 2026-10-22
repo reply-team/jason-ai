@@ -111,7 +111,7 @@ public class EventStoreAppendOnlyTests
     private static void Seed(TestDatabase database)
     {
         using var db = database.Open();
-        var campaign = new Campaign { PublicId = "cmp_E", Name = "e", CreatedAt = Noon, UpdatedAt = Noon };
+        var campaign = new Campaign { PublicId = "cmp_E", Name = "e", ProjectId = DefaultProject.Id, CreatedAt = Noon, UpdatedAt = Noon };
         var source = new EventSource { PublicId = "evs_A", PluginId = "reader", BindingIdentity = "none", CreatedAt = Noon };
         db.Campaigns.Add(campaign);
         db.EventSources.Add(source);

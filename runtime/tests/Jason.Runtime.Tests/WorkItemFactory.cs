@@ -19,6 +19,7 @@ public static class WorkItemFactory
         {
             PublicId = PublicId.New("cmp"),
             Name = name,
+            ProjectId = DefaultProject.Id,
             Status = status,
             CreatedAt = moment,
             UpdatedAt = moment,

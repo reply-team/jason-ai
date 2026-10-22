@@ -39,7 +39,7 @@ public class IdempotencyKeyContractTests
     [Fact]
     public void An_entity_with_no_key_is_answered_without_the_field_and_one_with_a_key_carries_it()
     {
-        var campaign = new CampaignDto("cmp_1", "Q3", CampaignStatus.Draft, [], [], null, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null);
+        var campaign = new CampaignDto("cmp_1", "Q3", CampaignStatus.Draft, "prj_1", "default", [], [], null, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null);
         Assert.False(Serialized(campaign).ContainsKey("idempotency_key"));
         Assert.Equal("q3-create", (string?)Serialized(campaign with { IdempotencyKey = "q3-create" })["idempotency_key"]);
 

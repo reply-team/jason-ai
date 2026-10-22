@@ -23,6 +23,7 @@ public class MembershipServiceTests
         {
             PublicId = PublicId.New("cmp"),
             Name = "Import",
+            ProjectId = DefaultProject.Id,
             Status = archivedAt is null ? CampaignStatus.Draft : CampaignStatus.Archived,
             CreatedAt = Noon.UtcDateTime,
             UpdatedAt = Noon.UtcDateTime,

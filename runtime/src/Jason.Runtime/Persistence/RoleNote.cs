@@ -11,16 +11,28 @@ namespace Jason.Runtime.Persistence;
 /// </summary>
 /// <remarks>
 /// Nothing in the runtime reads a note or acts on one: it is explicitly not authoritative, and where it
-/// disagrees with campaign state the state is what is true. One row per campaign and role, replaced whole; the
+/// disagrees with campaign state the state is what is true. One row per role at each level, replaced whole; the
 /// chronicle records that it changed, how big it is and what it hashes to, and never a word of what it says.
 /// </remarks>
 public sealed class RoleNote
 {
     public int Id { get; set; }
 
-    public int CampaignId { get; set; }
+    /// <summary>
+    /// The campaign the note is about, or null for a note at a project's level or the client's — a role's general craft,
+    /// refined per project and per campaign. Nothing writes a note at either of those levels yet.
+    /// </summary>
+    public int? CampaignId { get; set; }
 
     public Campaign? Campaign { get; set; }
+
+    /// <summary>
+    /// The project the note is about, for a note at a project's level; null for the client's level and for a campaign's
+    /// note, whose project is its campaign's and is never stored twice. A note names at most one of the two.
+    /// </summary>
+    public int? ProjectId { get; set; }
+
+    public Project? Project { get; set; }
 
     /// <summary>The role's name, as the roster spells it. A note exists only for a role the runtime knows.</summary>
     public required string Role { get; set; }

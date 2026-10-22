@@ -317,7 +317,7 @@ public class ContactServiceTests
             people[letter] = stored;
         }
 
-        var autumn = new Campaign { PublicId = "cmp_AUTUMN", Name = "Autumn", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        var autumn = new Campaign { PublicId = "cmp_AUTUMN", Name = "Autumn", ProjectId = DefaultProject.Id, CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
         db.Campaigns.Add(autumn);
         db.CampaignContacts.AddRange(
             new CampaignContact { Campaign = autumn, Contact = people["a"], AddedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime },

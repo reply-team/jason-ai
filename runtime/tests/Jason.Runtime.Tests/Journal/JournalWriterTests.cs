@@ -17,7 +17,7 @@ public class JournalWriterTests
         using var database = new TestDatabase();
         using var db = database.Open();
         var writer = new JournalWriter(new FixedClock(Noon));
-        var campaign = new Campaign { PublicId = "cmp_A", Name = "a", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        var campaign = new Campaign { PublicId = "cmp_A", Name = "a", ProjectId = DefaultProject.Id, CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
         db.Campaigns.Add(campaign);
 
         var entry = writer.Append(db, new ActorRef(ActorType.Role, "planner"), JournalKinds.CampaignCreated, campaign, key: "name", old: null, updated: JsonValue.Create("a"), reason: "because");
@@ -61,7 +61,7 @@ public class JournalWriterTests
         using var database = new TestDatabase();
         using var db = database.Open();
         var writer = new JournalWriter(new FixedClock(Noon));
-        var campaign = new Campaign { PublicId = "cmp_W", Name = "w", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        var campaign = new Campaign { PublicId = "cmp_W", Name = "w", ProjectId = DefaultProject.Id, CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
         db.Campaigns.Add(campaign);
         var item = new WorkItem
         {
@@ -110,7 +110,7 @@ public class JournalWriterTests
         using var database = new TestDatabase();
         using var db = database.Open();
         var writer = new JournalWriter(new FixedClock(Noon));
-        var campaign = new Campaign { PublicId = "cmp_P", Name = "p", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
+        var campaign = new Campaign { PublicId = "cmp_P", Name = "p", ProjectId = DefaultProject.Id, CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
         var ada = new Contact { PublicId = "cnt_ADA", FirstName = "Ada", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
         db.Campaigns.Add(campaign);
         db.Contacts.Add(ada);

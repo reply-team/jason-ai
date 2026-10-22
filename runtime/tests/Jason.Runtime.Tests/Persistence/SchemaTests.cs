@@ -22,7 +22,8 @@ public class SchemaTests
         Assert.Equal(
             ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile",
              "manager_event_watermark", "manager_review_anchor", "manager_review_seconds", "idempotency_digest", "idempotency_key",
-             "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from"],
+             "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from",
+             "project_id", "folder_path"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
         Assert.Equal(
             ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id", "contact_id"],
@@ -38,7 +39,8 @@ public class SchemaTests
 
         Assert.Equal(
             [
-                "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "event_attributions_no_delete",
+                "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "campaigns_project_required_insert",
+                "campaigns_project_required_update", "event_attributions_no_delete",
                 "event_attributions_no_update", "events_no_delete", "events_no_update", "execution_profile_revisions_no_delete",
                 "execution_profile_revisions_no_update", "journal_no_delete", "journal_no_update", "reports_no_delete",
                 "reports_no_update", "work_items_result_frozen",
@@ -142,21 +144,52 @@ public class SchemaTests
 
         Assert.Equal(
             [
-                "campaign_id", "created_at", "id", "note_bytes", "note_hash", "note_json", "role", "updated_at",
+                "campaign_id", "created_at", "id", "note_bytes", "note_hash", "note_json", "project_id", "role", "updated_at",
                 "updated_by_id", "updated_by_type",
             ],
             Sorted(connection, "SELECT name FROM pragma_table_info('role_notes')"));
 
-        // One document per campaign and role, which is what makes a write a replacement: there is nowhere for a
-        // second note to go.
-        var perRole = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_role_notes_one_per_campaign_role'");
-        Assert.Contains("UNIQUE", perRole, StringComparison.Ordinal);
+        // One document per role at each level — a campaign's, a project's, the client's — which is what makes a write a
+        // replacement: there is nowhere for a second note to go.
+        foreach (var level in new[] { "ix_role_notes_one_per_campaign_role", "ix_role_notes_one_per_project_role", "ix_role_notes_one_per_client_role" })
+        {
+            var perRole = Scalar(connection, $"SELECT sql FROM sqlite_master WHERE type = 'index' AND name = '{level}'");
+            Assert.True(perRole.Contains("UNIQUE", StringComparison.Ordinal), $"{level} is not unique: {perRole}");
+        }
 
-        // A note belongs to a campaign that exists, and what it holds is JSON — both enforced by the database
-        // rather than only by the service that writes through it.
+        // A note belongs to a campaign or a project that exists, never to both, and what it holds is JSON — all enforced
+        // by the database rather than only by the service that writes through it.
         var table = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'role_notes'");
         Assert.Contains("json_valid(note_json)", table, StringComparison.Ordinal);
         Assert.Contains("REFERENCES \"campaigns\" (\"id\")", table, StringComparison.Ordinal);
+        Assert.Contains("REFERENCES \"projects\" (\"id\")", table, StringComparison.Ordinal);
+        Assert.Contains("CHECK (campaign_id IS NULL OR project_id IS NULL)", table, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A project's note is found by its project and role through the index that holds it unique, and by the plan rather
+    /// than by a clock: SQLite uses a partial index only when its filter is one the query implies, and a filter with an
+    /// extra term would send this lookup to a scan of the table.
+    /// </summary>
+    [Fact]
+    public void A_project_notes_lookup_by_project_and_role_uses_its_index()
+    {
+        using var database = new TestDatabase();
+        using var connection = new SqliteConnection($"Data Source={database.File}");
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "EXPLAIN QUERY PLAN SELECT id FROM role_notes WHERE project_id = 1 AND role = 'manager'";
+        using var reader = command.ExecuteReader();
+        var plan = new List<string>();
+        while (reader.Read())
+        {
+            plan.Add(reader.GetString(reader.GetOrdinal("detail")));
+        }
+
+        Assert.True(
+            plan.Any(step => step.Contains("INDEX ix_role_notes_one_per_project_role", StringComparison.Ordinal)),
+            $"The lookup of a project's note does not use its index; the plan is: {string.Join(" | ", plan)}");
     }
 
     [Fact]
@@ -166,7 +199,7 @@ public class SchemaTests
         using var connection = new SqliteConnection($"Data Source={database.File}");
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "INSERT INTO campaigns (public_id, name, status, created_at, updated_at, context_json) VALUES ('cmp_X', 'x', 'draft', '2026-01-01', '2026-01-01', '{not json')";
+        command.CommandText = "INSERT INTO campaigns (public_id, name, status, created_at, updated_at, context_json, project_id) VALUES ('cmp_X', 'x', 'draft', '2026-01-01', '2026-01-01', '{not json', (SELECT id FROM projects WHERE is_default = 1))";
 
         Assert.Throws<SqliteException>(() => command.ExecuteNonQuery());
     }

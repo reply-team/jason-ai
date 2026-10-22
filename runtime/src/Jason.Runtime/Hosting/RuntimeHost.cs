@@ -107,7 +107,37 @@ public static class RuntimeHost
                 logger.Information(ProcessDetacher.LogTemplate, ProcessDetacher.Word(console));
             }
 
-            var migration = new DatabaseMigrator(paths).Migrate();
+            MigrationReport migration;
+            try
+            {
+                migration = new DatabaseMigrator(paths).Migrate();
+            }
+            catch (MigrationFailedException failed)
+            {
+                // Its sentence is said where the start was asked for. The log keeps what kind of failure it was and where the
+                // copy is, never the failure's own words.
+                if (failed.Created)
+                {
+                    logger.Error("The runtime did not start: a migration failed ({ExceptionType}) on a database this start made", failed.InnerException?.GetType().Name);
+                }
+                else if (failed.Restored)
+                {
+                    logger.Error("The runtime did not start: a migration failed ({ExceptionType}), and the database was put back from {Backup}", failed.InnerException?.GetType().Name, failed.Backup);
+                }
+                else
+                {
+                    logger.Error("The runtime did not start: a migration failed ({ExceptionType}), and the database could not be put back from {Backup}", failed.InnerException?.GetType().Name, failed.Backup);
+                }
+
+                throw;
+            }
+
+            if (migration.StaleMigrationLockCleared)
+            {
+                // By its kind alone, so a diagnostic bundle shows that a start stopped part way came before this one.
+                logger.Warning("A migration lock that a start stopped part way left taken was cleared before migrating");
+            }
+
             logger.Information("Database ready: {Applied} migrations applied, {New} newly applied, backup {Backup}", migration.AppliedMigrations.Count, migration.NewlyApplied.Count, migration.BackupFile ?? "none");
             if (migration.LinkedInKeys is { } linkedIn)
             {
@@ -279,9 +309,10 @@ public static class RuntimeHost
         // another failure or among several. So are settings the start cannot use: the file and the position, or the
         // setting's path and its type, refused before there is a log to read. And so is an endpoint descriptor that could not be
         // put in place, the last step of a start: without it no client could find this runtime. And so is a process that does
-        // not compose text, refused before anything else.
+        // not compose text, refused before anything else. And so is a migration that failed, with where the database was put
+        // back from.
         catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or InvalidSettingsException
-            or DescriptorUnpublishableException or TextCompositionUnavailableException
+            or DescriptorUnpublishableException or TextCompositionUnavailableException or MigrationFailedException
             || UnreadableStoredValueException.In(refused) is not null)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null
@@ -387,7 +418,7 @@ public static class RuntimeHost
         builder.Services.AddScoped<JournalWriter>();
         builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
-        builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
+        builder.Services.AddSystemModule().AddCampaignModule().AddProjectModule().AddContactModule();
         builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddEventsModule().AddNotificationsModule().AddCommandModule().AddUiModule();
         builder.Services.AddApprovalModule().AddDecisionModule().AddReportModule().AddProfileModule().AddRoleNoteModule();
         builder.Services.AddUpdateModule(options.FeedHandler);
@@ -418,6 +449,7 @@ public static class RuntimeHost
 
         app.MapSystemOperations();
         app.MapCampaignOperations();
+        app.MapProjectOperations();
         app.MapContactOperations();
         app.MapWorkItemOperations();
         app.MapExecutorOperations();

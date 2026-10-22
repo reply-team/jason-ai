@@ -80,7 +80,7 @@ public class ResultFrozenTriggerTests
     }
 
     private static void SeedCampaign(SqliteConnection connection) =>
-        Execute(connection, "INSERT INTO campaigns (id, public_id, name, status, context_json, created_at, updated_at) VALUES (1, 'cmp_A', 'a', 'active', '{}', '2026-01-01', '2026-01-01')");
+        Execute(connection, "INSERT INTO campaigns (id, public_id, name, status, context_json, created_at, updated_at, project_id) VALUES (1, 'cmp_A', 'a', 'active', '{}', '2026-01-01', '2026-01-01', (SELECT id FROM projects WHERE is_default = 1))");
 
     private static void SeedWorkItem(SqliteConnection connection, int id, string publicId, string status) =>
         Execute(

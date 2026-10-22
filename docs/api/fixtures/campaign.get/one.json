@@ -9,6 +9,8 @@
     "id": "cmp_2",
     "name": "SMB test",
     "status": "active",
+    "project_id": "prj_1",
+    "project_slug": "default",
     "context": {},
     "external_ids": [],
     "execution_profile": null,

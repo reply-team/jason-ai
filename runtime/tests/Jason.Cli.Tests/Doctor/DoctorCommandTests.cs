@@ -33,7 +33,7 @@ public sealed class DoctorCommandTests
     /// read from the constant, so that a change to the sentence is a change somebody makes on purpose.
     /// </summary>
     private const string JournalWarning =
-        "This bundle includes what the journal entries say: campaign names and fields as they changed, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed. Read it before you share it.";
+        "This bundle includes what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed. Read it before you share it.";
 
     /// <summary>Two in the afternoon two hours east of Greenwich, which is noon in UTC: the name is written in UTC.</summary>
     private static readonly DateTimeOffset Now = new(2026, 10, 4, 14, 0, 0, TimeSpan.FromHours(2));

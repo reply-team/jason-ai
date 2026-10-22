@@ -1,0 +1,16 @@
+{
+  "operation": "project.get",
+  "case": "by-id",
+  "request": {
+    "project_id": "prj_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "prj_1",
+    "name": "Acme Corp",
+    "slug": "acme-corp",
+    "default": false,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z"
+  }
+}

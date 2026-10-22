@@ -26,8 +26,8 @@ public class InboundSyncSchemaTests
         Execute(
             database.File,
             """
-            INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at)
-            VALUES ('cmp_new', 'new', 'draft', '{}', '2026-10-06T00:00:00Z', '2026-10-06T00:00:00Z');
+            INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at, project_id)
+            VALUES ('cmp_new', 'new', 'draft', '{}', '2026-10-06T00:00:00Z', '2026-10-06T00:00:00Z', (SELECT id FROM projects WHERE is_default = 1));
             """);
 
         using var db = database.Open();
@@ -46,7 +46,7 @@ public class InboundSyncSchemaTests
         using var database = new TestDatabase();
         using (var db = database.Open())
         {
-            db.Campaigns.Add(new Campaign { PublicId = "cmp_A", Name = "A", Status = CampaignStatus.Active, CreatedAt = Noon, UpdatedAt = Noon });
+            db.Campaigns.Add(new Campaign { PublicId = "cmp_A", Name = "A", ProjectId = DefaultProject.Id, Status = CampaignStatus.Active, CreatedAt = Noon, UpdatedAt = Noon });
             db.SaveChanges();
         }
 
@@ -64,7 +64,7 @@ public class InboundSyncSchemaTests
         using var database = new TestDatabase();
         using (var db = database.Open())
         {
-            var campaign = new Campaign { PublicId = "cmp_A", Name = "A", Status = CampaignStatus.Active, CreatedAt = Noon, UpdatedAt = Noon };
+            var campaign = new Campaign { PublicId = "cmp_A", Name = "A", ProjectId = DefaultProject.Id, Status = CampaignStatus.Active, CreatedAt = Noon, UpdatedAt = Noon };
             var item = new WorkItem
             {
                 PublicId = "wi_1",
@@ -196,9 +196,9 @@ public class InboundSyncSchemaTests
         Execute(
             database.File,
             """
-            INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at) VALUES
-              ('cmp_A', 'a', 'active', '{}', '2026-10-06T00:00:00Z', '2026-10-06T00:00:00Z'),
-              ('cmp_B', 'b', 'active', '{}', '2026-10-06T00:00:00Z', '2026-10-06T00:00:00Z');
+            INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at, project_id) VALUES
+              ('cmp_A', 'a', 'active', '{}', '2026-10-06T00:00:00Z', '2026-10-06T00:00:00Z', (SELECT id FROM projects WHERE is_default = 1)),
+              ('cmp_B', 'b', 'active', '{}', '2026-10-06T00:00:00Z', '2026-10-06T00:00:00Z', (SELECT id FROM projects WHERE is_default = 1));
 
             INSERT INTO journal (public_id, ts, actor_type, actor_id, kind, campaign_id, key) VALUES
               ('jrn_1', '2026-10-06T00:00:00Z', 'system', 'dispatcher', 'inbound_reply_observed', 1, 'sha256:k'),

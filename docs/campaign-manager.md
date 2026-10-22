@@ -57,7 +57,9 @@ Everything about profiles, plugins, routes and roles is operator maintenance, no
 one of them must be a kind **the runtime writes itself**: a kind that never appears could never fire,
 and a kind a caller can append through `journal.append` would let anything that can write a line
 summon a manager by naming it. A kind outside that vocabulary is a refusal to start, not a rule that
-quietly does nothing.
+quietly does nothing. A kind the runtime writes about no campaign — `profile_created`, `project_created`,
+`project_updated` among them — may be listed, and never summons anyone: a review is a campaign's, and such
+a line names none.
 
 **The dispatcher reads no meaning.** It reads a kind, some identifiers and an actor. It never reads a
 line's `old`, `new`, `key` or `reason`, and never a work item's context. The promotion from

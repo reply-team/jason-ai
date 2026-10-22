@@ -106,7 +106,7 @@ public class ConversionsTests
 
     private static WorkItem SeedWorkItem(JasonDbContext db)
     {
-        var campaign = new Campaign { PublicId = "cmp_W", Name = "w", Status = CampaignStatus.Active, CreatedAt = Noon, UpdatedAt = Noon };
+        var campaign = new Campaign { PublicId = "cmp_W", Name = "w", ProjectId = DefaultProject.Id, Status = CampaignStatus.Active, CreatedAt = Noon, UpdatedAt = Noon };
         db.Campaigns.Add(campaign);
         var item = new WorkItem
         {
@@ -223,7 +223,7 @@ public class ConversionsTests
         var now = DateTime.UtcNow;
         using (var db = database.Open())
         {
-            db.Campaigns.Add(new Campaign { PublicId = "cmp_J", Name = "j", CreatedAt = now, UpdatedAt = now, Context = new JsonObject { ["icp"] = "founders" } });
+            db.Campaigns.Add(new Campaign { PublicId = "cmp_J", Name = "j", ProjectId = DefaultProject.Id, CreatedAt = now, UpdatedAt = now, Context = new JsonObject { ["icp"] = "founders" } });
             db.SaveChanges();
         }
 
@@ -270,7 +270,7 @@ public class ConversionsTests
         var now = DateTime.UtcNow;
         using (var db = database.Open())
         {
-            db.Campaigns.Add(new Campaign { PublicId = "cmp_P", Name = "p", CreatedAt = now, UpdatedAt = now, Status = CampaignStatus.Paused });
+            db.Campaigns.Add(new Campaign { PublicId = "cmp_P", Name = "p", ProjectId = DefaultProject.Id, CreatedAt = now, UpdatedAt = now, Status = CampaignStatus.Paused });
             db.SaveChanges();
         }
 
@@ -300,8 +300,8 @@ public class ConversionsTests
 
             // Written the way a hand-edited database or a future version of the runtime would write it.
             command.CommandText =
-                "INSERT INTO campaigns (public_id, name, status, created_at, updated_at, context_json) "
-                + "VALUES ('cmp_U', 'u', 'pau_sed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '{}')";
+                "INSERT INTO campaigns (public_id, name, status, created_at, updated_at, context_json, project_id) "
+                + "VALUES ('cmp_U', 'u', 'pau_sed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '{}', (SELECT id FROM projects WHERE is_default = 1))";
             command.ExecuteNonQuery();
         }
 

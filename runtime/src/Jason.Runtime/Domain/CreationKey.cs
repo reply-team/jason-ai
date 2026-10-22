@@ -93,6 +93,10 @@ public static class CreationKey
         {
             ["name"] = Trimmed(request.Name),
             ["context"] = Document(request.Context),
+
+            // Named only when the request named it, so a key stored before campaigns had projects still matches the
+            // request that made it.
+            ["project_id"] = Trimmed(request.ProjectId),
         });
     }
 

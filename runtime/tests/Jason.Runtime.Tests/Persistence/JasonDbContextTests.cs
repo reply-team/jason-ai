@@ -26,7 +26,8 @@ public class JasonDbContextTests
         Assert.Equal(
             ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile",
              "manager_event_watermark", "manager_review_anchor", "manager_review_seconds", "idempotency_digest", "idempotency_key",
-             "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from"],
+             "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from",
+             "project_id", "folder_path"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
     }
 
@@ -42,7 +43,7 @@ public class JasonDbContextTests
         using (var db = new JasonDbContext(options))
         {
             db.Database.Migrate();
-            db.Campaigns.Add(new Campaign { PublicId = publicId, Name = "Latin America launch", Status = CampaignStatus.Draft, CreatedAt = now, UpdatedAt = now });
+            db.Campaigns.Add(new Campaign { PublicId = publicId, Name = "Latin America launch", ProjectId = DefaultProject.Id, Status = CampaignStatus.Draft, CreatedAt = now, UpdatedAt = now });
             db.SaveChanges();
         }
 
@@ -69,8 +70,8 @@ public class JasonDbContextTests
         using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
         db.Database.Migrate();
         var now = DateTime.UtcNow;
-        db.Campaigns.Add(new Campaign { PublicId = "cmp_A", Name = "one", CreatedAt = now, UpdatedAt = now });
-        db.Campaigns.Add(new Campaign { PublicId = "cmp_A", Name = "two", CreatedAt = now, UpdatedAt = now });
+        db.Campaigns.Add(new Campaign { PublicId = "cmp_A", Name = "one", ProjectId = DefaultProject.Id, CreatedAt = now, UpdatedAt = now });
+        db.Campaigns.Add(new Campaign { PublicId = "cmp_A", Name = "two", ProjectId = DefaultProject.Id, CreatedAt = now, UpdatedAt = now });
 
         Assert.Throws<DbUpdateException>(() => db.SaveChanges());
     }

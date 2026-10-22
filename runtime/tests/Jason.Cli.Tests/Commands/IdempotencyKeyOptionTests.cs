@@ -89,7 +89,7 @@ public class IdempotencyKeyOptionTests
     [Fact]
     public async Task Human_mode_shows_a_campaign_s_key_when_it_has_one_and_nothing_when_it_has_none()
     {
-        var keyed = new CampaignDto("cmp_A", "Q3", CampaignStatus.Draft, [], [], null, null, Moment, Moment, null, "launch-q3");
+        var keyed = new CampaignDto("cmp_A", "Q3", CampaignStatus.Draft, "prj_A", "default", [], [], null, null, Moment, Moment, null, "launch-q3");
         using (var cli = new CliRun(JsonSerializer.Serialize(keyed, JasonJson.Options)))
         {
             Assert.Equal(ExitCodes.Success, await cli.RunAsync("campaign", "get", "cmp_A", "--human"));

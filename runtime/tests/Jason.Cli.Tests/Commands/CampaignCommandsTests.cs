@@ -279,10 +279,52 @@ public class CampaignCommandsTests
     }
 
     [Fact]
+    public async Task Create_names_the_project_the_campaign_is_in()
+    {
+        using var cli = new CliRun();
+
+        await cli.RunAsync("campaign", "create", "--name", "Q3 leads", "--project", "prj_A");
+
+        cli.AssertPosted("campaign.create", """{"name":"Q3 leads","project_id":"prj_A"}""");
+    }
+
+    [Fact]
+    public async Task Update_moves_the_campaign_to_another_project()
+    {
+        using var cli = new CliRun();
+
+        await cli.RunAsync("campaign", "update", "cmp_A", "--project", "prj_B", "--reason", "it belongs there");
+
+        cli.AssertPosted("campaign.update", """{"campaign_id":"cmp_A","project_id":"prj_B","reason":"it belongs there"}""");
+    }
+
+    /// <summary>A campaign is always in a project, so the project is not something <c>--clear</c> can take away.</summary>
+    [Fact]
+    public async Task Update_cannot_clear_the_project()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "update", "cmp_A", "--clear", "project_id");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    [Fact]
+    public async Task List_keeps_one_project_s_campaigns()
+    {
+        using var cli = new CliRun();
+
+        await cli.RunAsync("campaign", "list", "--project", "prj_A");
+
+        cli.AssertPosted("campaign.list", """{"project_id":"prj_A"}""");
+    }
+
+    [Fact]
     public async Task Human_mode_renders_one_campaign()
     {
         var campaign = JsonSerializer.Serialize(
-            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null),
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -290,6 +332,7 @@ public class CampaignCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("cmp_A", cli.Text, StringComparison.Ordinal);
+        Assert.Matches("(?m)^Project: +default \\(prj_A\\)\\r?$", cli.Text);
         Assert.Contains("LatAm", cli.Text, StringComparison.Ordinal);
         Assert.Contains("active", cli.Text, StringComparison.Ordinal);
         Assert.Contains("icp, tone", cli.Text, StringComparison.Ordinal);
@@ -304,13 +347,18 @@ public class CampaignCommandsTests
     public async Task Human_mode_renders_a_campaign_listing_with_its_cursor()
     {
         var page = JsonSerializer.Serialize(
-            new Page<CampaignSummaryDto>([new CampaignSummaryDto("cmp_A", "LatAm", CampaignStatus.Draft, Moment, Moment, null)], "Y21wX0E"),
+            new Page<CampaignSummaryDto>([new CampaignSummaryDto("cmp_A", "LatAm", CampaignStatus.Draft, "prj_A", "default", Moment, Moment, null)], "Y21wX0E"),
             JasonJson.Options);
         using var cli = new CliRun(page);
 
         var exit = await cli.RunAsync("campaign", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
+
+        // The project is shown by the slug the listing carries: one request, nothing asked again per row.
+        Assert.Equal(1, cli.Requests);
+        Assert.Matches("(?m)^ID +NAME +STATUS +PROJECT +CREATED", cli.Text);
+        Assert.Matches("(?m)^cmp_A +LatAm +draft +default ", cli.Text);
         Assert.Contains("NAME", cli.Text, StringComparison.Ordinal);
         Assert.Contains("cmp_A", cli.Text, StringComparison.Ordinal);
         Assert.Contains("draft", cli.Text, StringComparison.Ordinal);
@@ -433,6 +481,7 @@ internal sealed class CliRun : IDisposable
             {
                 Url = request.RequestUri!.ToString();
                 Sent = request.Content!.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult();
+                Requests++;
                 return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
             }),
             standardInput is null ? null : new StringReader(standardInput),
@@ -446,6 +495,9 @@ internal sealed class CliRun : IDisposable
     public string? Url { get; private set; }
 
     public string? Sent { get; private set; }
+
+    /// <summary>How many requests the invocation sent: a renderer answers from the one response, never by asking again.</summary>
+    public int Requests { get; private set; }
 
     public string Text => Output.ToString();
 

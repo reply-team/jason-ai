@@ -137,6 +137,7 @@ public class IdempotencySchemaTests
     {
         PublicId = publicId,
         Name = "Work",
+        ProjectId = DefaultProject.Id,
         Status = CampaignStatus.Draft,
         CreatedAt = Noon,
         UpdatedAt = Noon,

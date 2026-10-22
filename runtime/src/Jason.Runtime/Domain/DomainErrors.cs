@@ -227,5 +227,24 @@ public static class DomainErrors
     public static ConflictException EventBackfillLimit(string id, int limit) =>
         new("event_backfill_limit", string.Create(CultureInfo.InvariantCulture, $"Account '{id}' already has {limit} spans waiting to be read again; one has to end before another is asked for."));
 
+    public static NotFoundException ProjectNotFound(string id) => new("project_not_found", $"No project with id '{id}'.");
+
+    public static NotFoundException ProjectSlugNotFound(string slug) => new("project_not_found", $"No project with slug '{slug}'.");
+
+    /// <summary>The installation's default project is gone, which only a hand on the database does; not to be retried.</summary>
+    public static NotFoundException NoDefaultProject() =>
+        new("project_not_found", "This installation has no default project; name the project with project_id.");
+
+    /// <summary>
+    /// The slug is taken: a project holds it already. The project is named, in the message and as <c>project_id</c> in the
+    /// details, because a create sent again after its answer was lost lands here and finds the project it made.
+    /// </summary>
+    public static DomainException ProjectExists(string slug, string id) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "project_exists",
+            $"Project '{id}' already has the slug '{slug}'; a slug names one project.",
+            details: [new ErrorDetail("project_id", "exists", id)]);
+
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
 }

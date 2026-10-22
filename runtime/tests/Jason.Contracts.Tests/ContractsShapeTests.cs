@@ -56,10 +56,10 @@ public class ContractsShapeTests
     [Fact]
     public void Campaign_dto_serializes_with_inline_context_and_snake_case_status()
     {
-        var dto = new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, new JsonObject { ["icp"] = "founders" }, [], "local-claude", 900, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null);
+        var dto = new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, "prj_A", "default", new JsonObject { ["icp"] = "founders" }, [], "local-claude", 900, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null);
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);
         Assert.Equal(
-            "{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"context\":{\"icp\":\"founders\"},\"external_ids\":[],\"execution_profile\":\"local-claude\",\"review_seconds\":900,"
+            "{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"project_id\":\"prj_A\",\"project_slug\":\"default\",\"context\":{\"icp\":\"founders\"},\"external_ids\":[],\"execution_profile\":\"local-claude\",\"review_seconds\":900,"
                 + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null}",
             json);
     }

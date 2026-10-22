@@ -106,9 +106,9 @@ public class EventStoreSchemaTests
         Execute(
             database.File,
             """
-            INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at) VALUES
-              ('cmp_A', 'a', 'active', '{}', '2026-10-18T00:00:00Z', '2026-10-18T00:00:00Z'),
-              ('cmp_B', 'b', 'active', '{}', '2026-10-18T00:00:00Z', '2026-10-18T00:00:00Z');
+            INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at, project_id) VALUES
+              ('cmp_A', 'a', 'active', '{}', '2026-10-18T00:00:00Z', '2026-10-18T00:00:00Z', (SELECT id FROM projects WHERE is_default = 1)),
+              ('cmp_B', 'b', 'active', '{}', '2026-10-18T00:00:00Z', '2026-10-18T00:00:00Z', (SELECT id FROM projects WHERE is_default = 1));
             INSERT INTO journal (public_id, ts, actor_type, actor_id, kind, campaign_id, key) VALUES
               ('jrn_1', '2026-10-18T00:00:00Z', 'system', 'dispatcher', 'provider_event_observed', 1, 'sha256:k'),
               ('jrn_2', '2026-10-18T00:00:00Z', 'system', 'dispatcher', 'provider_event_observed', 2, 'sha256:k'),

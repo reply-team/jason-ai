@@ -291,6 +291,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("execution_profile");
 
+                    b.Property<string>("FolderPath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("folder_path");
+
                     b.Property<string>("IdempotencyDigest")
                         .HasMaxLength(71)
                         .HasColumnType("TEXT")
@@ -345,6 +350,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("project_id");
+
                     b.Property<string>("PublicId")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -375,6 +384,9 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.HasIndex("PublicId")
                         .IsUnique()
                         .HasDatabaseName("ix_campaigns_public_id");
+
+                    b.HasIndex("ProjectId", "PublicId")
+                        .HasDatabaseName("ix_campaigns_project");
 
                     b.ToTable("campaigns", t =>
                         {
@@ -1265,6 +1277,127 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.Preference", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("key");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedById")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_by_id");
+
+                    b.Property<string>("UpdatedByType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_by_type");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("value_json");
+
+                    b.Property<long>("ValueBytes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("value_bytes");
+
+                    b.Property<string>("ValueHash")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("value_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_preferences");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_preferences_key");
+
+                    b.ToTable("preferences", t =>
+                        {
+                            t.HasCheckConstraint("ck_preferences_value_json", "json_valid(value_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Project", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FolderPath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("folder_path");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("slug");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_projects");
+
+                    b.HasIndex("IsDefault")
+                        .IsUnique()
+                        .HasDatabaseName("ix_projects_one_default")
+                        .HasFilter("is_default = 1");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_projects_public_id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ix_projects_slug");
+
+                    b.ToTable("projects");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.ProviderEvent", b =>
                 {
                     b.Property<int>("Id")
@@ -1572,7 +1705,7 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
-                    b.Property<int>("CampaignId")
+                    b.Property<int?>("CampaignId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("campaign_id");
 
@@ -1596,6 +1729,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("TEXT")
                         .HasColumnName("note_hash");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("project_id");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -1623,11 +1760,24 @@ namespace Jason.Runtime.Persistence.Migrations
 
                     b.HasIndex("CampaignId", "Role")
                         .IsUnique()
-                        .HasDatabaseName("ix_role_notes_one_per_campaign_role");
+                        .HasDatabaseName("ix_role_notes_one_per_campaign_role")
+                        .HasFilter("campaign_id IS NOT NULL");
+
+                    b.HasIndex(new[] { "Role" }, "ix_role_notes_one_per_client_role")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_notes_one_per_client_role")
+                        .HasFilter("campaign_id IS NULL AND project_id IS NULL");
+
+                    b.HasIndex("ProjectId", "Role")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_notes_one_per_project_role")
+                        .HasFilter("project_id IS NOT NULL");
 
                     b.ToTable("role_notes", t =>
                         {
                             t.HasCheckConstraint("ck_role_notes_note_json", "json_valid(note_json)");
+
+                            t.HasCheckConstraint("ck_role_notes_one_level", "campaign_id IS NULL OR project_id IS NULL");
                         });
                 });
 
@@ -1954,6 +2104,15 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasForeignKey("InboundSyncItemId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_campaigns_work_items_inbound_sync_item_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_campaigns_projects_project_id");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>
@@ -2167,10 +2326,17 @@ namespace Jason.Runtime.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("CampaignId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("fk_role_notes_campaigns_campaign_id");
 
+                    b.HasOne("Jason.Runtime.Persistence.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_role_notes_projects_project_id");
+
                     b.Navigation("Campaign");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>

@@ -25,6 +25,7 @@ public static class CampaignRenderers
             Line("Id:", campaign.Id),
             Line("Name:", campaign.Name),
             Line("Status:", RenderText.Snake(campaign.Status)),
+            Line("Project:", $"{campaign.ProjectSlug} ({campaign.ProjectId})"),
             Line("Created:", RenderText.Moment(campaign.CreatedAt)),
             Line("Updated:", RenderText.Moment(campaign.UpdatedAt)),
         };
@@ -54,7 +55,10 @@ public static class CampaignRenderers
         return RenderText.Lines(lines);
     }
 
-    /// <summary>A page of campaigns, and the cursor that continues it.</summary>
+    /// <summary>
+    /// A page of campaigns, and the cursor that continues it. Each campaign's project is shown by the slug the listing
+    /// carries, so a listing is one request however many projects it spans.
+    /// </summary>
     public static string? CampaignList(string json)
     {
         var page = RenderText.Read<Page<CampaignSummaryDto>>(json);
@@ -63,10 +67,10 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("ID", "NAME", "STATUS", "CREATED");
+        var table = new HumanTable("ID", "NAME", "STATUS", "PROJECT", "CREATED");
         foreach (var campaign in page.Items)
         {
-            table.Row(campaign.Id, campaign.Name, RenderText.Snake(campaign.Status), RenderText.Moment(campaign.CreatedAt));
+            table.Row(campaign.Id, campaign.Name, RenderText.Snake(campaign.Status), campaign.ProjectSlug, RenderText.Moment(campaign.CreatedAt));
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);

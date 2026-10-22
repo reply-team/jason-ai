@@ -151,6 +151,15 @@ public static partial class JournalKinds
     /// </summary>
     public const string EventsBackfillRequested = "events_backfill_requested";
 
+    /// <summary>
+    /// A project was made: keyed by its id, with the name and slug it was made with. It names no campaign. The default
+    /// project, made by the migration that brought projects in, was made by nobody and has no line.
+    /// </summary>
+    public const string ProjectCreated = "project_created";
+
+    /// <summary>A project's name changed, keyed by its id, with the name before and after. It names no campaign.</summary>
+    public const string ProjectUpdated = "project_updated";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -204,6 +213,8 @@ public static partial class JournalKinds
         EventsRead,
         EventsGapObserved,
         EventsBackfillRequested,
+        ProjectCreated,
+        ProjectUpdated,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

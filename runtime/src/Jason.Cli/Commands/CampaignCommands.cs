@@ -39,12 +39,14 @@ public static class CampaignCommands
         var command = new Command("create", "Create a campaign.");
         var name = new Option<string?>("--name") { Description = "The campaign name." };
         var context = new Option<string?>("--context") { Description = "The initial campaign context, as a JSON object." };
+        var project = ProjectOption("The project the campaign is in, as prj_…. Absent, it is the default project.");
         var idempotencyKey = VerbOptions.IdempotencyKey();
-        var file = VerbOptions.File("The object holds name, context and idempotency_key.");
+        var file = VerbOptions.File("The object holds name, context, project_id and idempotency_key.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Options.Add(name);
         command.Options.Add(context);
+        command.Options.Add(project);
         command.Options.Add(idempotencyKey);
         command.Options.Add(file);
         command.Options.Add(reason);
@@ -55,6 +57,7 @@ public static class CampaignCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("name", parseResult.GetValue(name))
                 .Set("context", VerbOptions.Object(parseResult.GetValue(context), "--context"))
+                .Set("project_id", parseResult.GetValue(project))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
@@ -90,11 +93,13 @@ public static class CampaignCommands
         var command = new Command("list", "List campaigns. Archived ones appear only when asked for by status.");
         var status = new Option<string?>("--status") { Description = "Only campaigns in this status: draft, active, paused or archived." };
         var query = new Option<string?>("--query") { Description = "Only campaigns whose name contains this text; case and accents do not matter." };
+        var project = ProjectOption("Only the campaigns of this project, as prj_….");
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
         command.Options.Add(status);
         command.Options.Add(query);
+        command.Options.Add(project);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
@@ -105,6 +110,7 @@ public static class CampaignCommands
             var body = RequestBody.Empty()
                 .Set("status", parseResult.GetValue(status))
                 .Set("query", parseResult.GetValue(query))
+                .Set("project_id", parseResult.GetValue(project))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 
@@ -127,16 +133,18 @@ public static class CampaignCommands
         {
             Description = "How often this campaign is reviewed, in seconds. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
         };
+        var project = ProjectOption("Move the campaign to this project, as prj_…. A campaign is always in one, so it cannot be cleared.");
         var clear = VerbOptions.Repeatable(
             "--clear",
             $"A field to set back to nothing: {string.Join(", ", Clearable)}. Repeat the option for more than one.");
-        var file = VerbOptions.File("The object holds the fields to patch (name, execution_profile, review_seconds).");
+        var file = VerbOptions.File("The object holds the fields to patch (name, execution_profile, review_seconds, project_id).");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
         command.Options.Add(name);
         command.Options.Add(executionProfile);
         command.Options.Add(reviewSeconds);
+        command.Options.Add(project);
         command.Options.Add(clear);
         command.Options.Add(file);
         command.Options.Add(reason);
@@ -148,7 +156,8 @@ public static class CampaignCommands
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("name", parseResult.GetValue(name))
                 .Set("execution_profile", parseResult.GetValue(executionProfile))
-                .Set("review_seconds", parseResult.GetValue(reviewSeconds));
+                .Set("review_seconds", parseResult.GetValue(reviewSeconds))
+                .Set("project_id", parseResult.GetValue(project));
 
             // An explicit null is what tells the runtime "take this away" from "say nothing about it", and it
             // is written after the value options so that clearing wins over a value given for the same field.
@@ -328,4 +337,7 @@ public static class CampaignCommands
     }
 
     private static Argument<string> CampaignId() => new("campaign-id") { Description = "The campaign, as cmp_…." };
+
+    /// <summary><c>--project</c> takes a project's id, as every verb that names a project does.</summary>
+    private static Option<string?> ProjectOption(string description) => new("--project") { Description = description };
 }

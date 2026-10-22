@@ -1,0 +1,18 @@
+{
+  "operation": "project.update",
+  "case": "renamed",
+  "request": {
+    "project_id": "prj_1",
+    "name": "Acme Inc",
+    "reason": "the client's new name"
+  },
+  "status": 200,
+  "response": {
+    "id": "prj_1",
+    "name": "Acme Inc",
+    "slug": "acme-corp",
+    "default": false,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z"
+  }
+}

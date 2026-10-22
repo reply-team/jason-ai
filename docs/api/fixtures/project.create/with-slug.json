@@ -1,0 +1,17 @@
+{
+  "operation": "project.create",
+  "case": "with-slug",
+  "request": {
+    "name": "Acme Europe",
+    "slug": "acme-eu"
+  },
+  "status": 200,
+  "response": {
+    "id": "prj_2",
+    "name": "Acme Europe",
+    "slug": "acme-eu",
+    "default": false,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z"
+  }
+}

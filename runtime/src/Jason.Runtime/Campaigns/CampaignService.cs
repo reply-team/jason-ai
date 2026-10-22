@@ -10,6 +10,7 @@ using Jason.Runtime.Decisions;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Projects;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,6 +36,11 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         ValidateName(request.Name, errors);
         ValidateReason(request.Reason, errors);
         var key = CreationKey.Read(request.IdempotencyKey, errors);
+        if (request.ProjectId is not null && string.IsNullOrWhiteSpace(request.ProjectId))
+        {
+            errors.Add("project_id", "invalid", "project_id must name a project; leave it out for the default project.");
+        }
+
         errors.ThrowIfAny();
 
         var name = request.Name!.Trim();
@@ -50,11 +56,16 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             return made;
         }
 
+        var project = request.ProjectId is null
+            ? await ProjectService.DefaultAsync(db, cancellationToken).ConfigureAwait(false)
+            : await ProjectService.LoadAsync(db, request.ProjectId.Trim(), cancellationToken).ConfigureAwait(false);
         var now = clock.GetUtcNow().UtcDateTime;
         var campaign = new Campaign
         {
             PublicId = PublicId.New("cmp"),
             Name = name,
+            ProjectId = project.Id,
+            Project = project,
             Status = CampaignStatus.Draft,
             Context = context,
             CreatedAt = now,
@@ -95,6 +106,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
     {
         var made = await db.Campaigns
             .Include(c => c.ExternalIds)
+            .Include(c => c.Project)
             .FirstOrDefaultAsync(c => c.IdempotencyKey == key, cancellationToken)
             .ConfigureAwait(false);
 
@@ -107,7 +119,10 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
     {
         ArgumentNullException.ThrowIfNull(request);
         var id = RequireId(request.CampaignId);
-        var campaign = await db.Campaigns.AsNoTracking().Include(c => c.ExternalIds).FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
+        var campaign = await db.Campaigns.AsNoTracking()
+            .Include(c => c.ExternalIds)
+            .Include(c => c.Project)
+            .FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
             ?? throw DomainErrors.CampaignNotFound(id);
         return CampaignMapper.ToDto(campaign);
     }
@@ -116,17 +131,34 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
     {
         ArgumentNullException.ThrowIfNull(request);
         var text = string.IsNullOrWhiteSpace(request.Query) ? null : request.Query.Trim();
+        var errors = new ValidationErrors();
         if (text is { Length: > ContactSearch.MaxLength })
         {
-            var errors = new ValidationErrors();
             errors.Add("query", "too_long", string.Create(CultureInfo.InvariantCulture, $"query must be at most {ContactSearch.MaxLength} characters."));
-            errors.ThrowIfAny();
         }
+
+        if (request.ProjectId is not null && string.IsNullOrWhiteSpace(request.ProjectId))
+        {
+            errors.Add("project_id", "invalid", "project_id must name a project; leave it out for the campaigns of every project.");
+        }
+
+        errors.ThrowIfAny();
 
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
-        var query = db.Campaigns.AsNoTracking();
+        // Each campaign is answered with its project, read beside it by the project's key rather than asked for again.
+        var query = db.Campaigns.AsNoTracking().Include(c => c.Project).AsQueryable();
+        if (request.ProjectId is not null)
+        {
+            var project = await db.Projects.AsNoTracking()
+                .Where(p => p.PublicId == request.ProjectId.Trim())
+                .Select(p => (int?)p.Id)
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw DomainErrors.ProjectNotFound(request.ProjectId.Trim());
+            query = query.Where(c => c.ProjectId == project);
+        }
+
         if (text is not null)
         {
             var pattern = TextFold.Containing(text);
@@ -171,6 +203,12 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
                 $"review_seconds must be between {ManagerOptions.MinimumReviewSeconds} and {ManagerOptions.MaximumReviewSeconds}; got {seconds}.");
         }
 
+        // A campaign is always in a project, so the patch can move it but never take it out of every one.
+        if (request.ProjectId is { IsSet: true, Value: var target } && string.IsNullOrWhiteSpace(target))
+        {
+            errors.Add("project_id", "required", "a campaign is always in a project; project_id names the one to move it to.");
+        }
+
         errors.ThrowIfAny();
 
         var campaign = await LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
@@ -189,6 +227,10 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
                 .ConfigureAwait(false);
             errors.ThrowIfAny();
         }
+
+        var project = request.ProjectId.IsSet
+            ? await ProjectService.LoadAsync(db, request.ProjectId.Value!.Trim(), cancellationToken).ConfigureAwait(false)
+            : campaign.Project!;
 
         // Only the fields that really moved, so asking a campaign for what it already says writes nothing: a
         // retry after a lost response is never a second event in the chronicle.
@@ -213,6 +255,14 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
                 JsonValue.Create(campaign.ManagerReviewSeconds),
                 JsonValue.Create(request.ReviewSeconds.Value)));
             campaign.ManagerReviewSeconds = request.ReviewSeconds.Value;
+        }
+
+        // A move says where the campaign was and where it went by the projects' ids: their names change, their ids do not.
+        if (project.Id != campaign.ProjectId)
+        {
+            changes.Add(new FieldChange("project_id", JsonValue.Create(campaign.Project!.PublicId), JsonValue.Create(project.PublicId)));
+            campaign.ProjectId = project.Id;
+            campaign.Project = project;
         }
 
         if (changes.Count == 0)
@@ -330,7 +380,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
     {
         ArgumentNullException.ThrowIfNull(db);
         var id = RequireId(publicId);
-        return await db.Campaigns.Include(c => c.ExternalIds).FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
+        return await db.Campaigns.Include(c => c.ExternalIds).Include(c => c.Project).FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
             ?? throw DomainErrors.CampaignNotFound(id);
     }
 

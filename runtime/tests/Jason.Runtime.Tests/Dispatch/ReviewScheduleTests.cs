@@ -75,6 +75,7 @@ public class ReviewScheduleTests
         {
             PublicId = "cmp_A",
             Name = "a",
+            ProjectId = DefaultProject.Id,
             Status = status,
             ManagerReviewAnchor = anchor,
             ManagerReviewSeconds = reviewSeconds,

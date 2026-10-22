@@ -31,7 +31,8 @@
         "20261019060108_EventBackfills",
         "20261020003554_WorkItemsByFinish",
         "20261020050039_LinkedInOneKey",
-        "20261020172838_JournalByPerson"
+        "20261020172838_JournalByPerson",
+        "20261022011335_ProjectsAndPreferences"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -53,7 +54,8 @@
         "20261019060108_EventBackfills",
         "20261020003554_WorkItemsByFinish",
         "20261020050039_LinkedInOneKey",
-        "20261020172838_JournalByPerson"
+        "20261020172838_JournalByPerson",
+        "20261022011335_ProjectsAndPreferences"
       ],
       "backup_file": null
     },

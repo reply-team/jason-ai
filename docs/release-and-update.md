@@ -508,6 +508,17 @@ rm -f ~/.jason/state/jason.db-wal ~/.jason/state/jason.db-shm
 ~/.jason/update/previous/jason runtime start
 ```
 
+There is one case the runtime puts a backup back itself: a start whose migration fails. Nothing has written to the
+database since that start took its backup, so it puts that copy back, does not start, and says so — the migration
+that failed, the backup, and that the version you ran before still runs on the database. A migration SQLite cannot
+make in one transaction would otherwise leave a database part migrated, which no later start can migrate. What no
+code survives — a power cut, a process ended while it migrated — still leaves one part migrated, and the next start
+then fails on it; so older backups are let go of only once a migration has succeeded, and the backup the stopped start
+took is still there for the steps above. Such a start also leaves the migration lock taken, which would hold every later
+start waiting; the runtime migrates only while it holds its instance lock, so the next start clears that lock, says so
+in the log, and migrates. A start in the same second as one before it names its backup `-2`, `-3` and
+on, rather than write over one. A start that made the database itself, on a new installation, has nothing to take a backup of: if its migration fails it deletes the half-made file, says that the file held nothing and no data is lost, and the next start begins from nothing.
+
 ### What an update refuses, and why
 
 Every refusal exits 1 with an error envelope on stdout, and the message names the file or the version, because

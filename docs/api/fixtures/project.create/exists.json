@@ -1,0 +1,22 @@
+{
+  "operation": "project.create",
+  "case": "exists",
+  "request": {
+    "name": "Acme Corp"
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "project_exists",
+      "message": "Project 'prj_1' already has the slug 'acme-corp'; a slug names one project.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "project_id",
+          "code": "exists",
+          "message": "prj_1"
+        }
+      ]
+    }
+  }
+}

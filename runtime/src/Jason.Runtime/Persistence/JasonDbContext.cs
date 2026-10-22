@@ -8,6 +8,8 @@ namespace Jason.Runtime.Persistence;
 
 public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : DbContext(options)
 {
+    public DbSet<Project> Projects => Set<Project>();
+
     public DbSet<Campaign> Campaigns => Set<Campaign>();
 
     public DbSet<Contact> Contacts => Set<Contact>();
@@ -51,6 +53,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
     public DbSet<EventAttribution> EventAttributions => Set<EventAttribution>();
 
     public DbSet<EventBackfill> EventBackfills => Set<EventBackfill>();
+
+    public DbSet<Preference> Preferences => Set<Preference>();
 
     /// <summary>
     /// The one connection string for a database file. Spelled once because the provider pools connections per
@@ -126,8 +130,34 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
         modelBuilder.HasDbFunction(typeof(TextFold).GetMethod(nameof(TextFold.Fold))!).HasName(TextFold.FunctionName);
 
+        modelBuilder.Entity<Project>(project =>
+        {
+            project.HasKey(p => p.Id);
+            project.Property(p => p.PublicId).HasMaxLength(40);
+            project.HasIndex(p => p.PublicId).IsUnique();
+            project.Property(p => p.Name).HasMaxLength(200);
+
+            // The slug names the project's folder and is a handle a person types, so two projects never share one.
+            project.Property(p => p.Slug).HasMaxLength(40);
+            project.HasIndex(p => p.Slug).IsUnique();
+
+            // Exactly one project is the default, and the database is what says so: a second row claiming it is refused.
+            project.HasIndex(p => p.IsDefault)
+                .IsUnique()
+                .HasFilter("is_default = 1")
+                .HasDatabaseName("ix_projects_one_default");
+            project.Property(p => p.FolderPath).HasMaxLength(1024);
+        });
+
         modelBuilder.Entity<Campaign>(campaign =>
         {
+            // A campaign's project is a project that exists, and a project's campaigns are read by the project, in the
+            // order a listing pages them. The database holds the column required by two triggers rather than NOT NULL,
+            // because it was added to campaigns where they stood (ProjectsAndPreferences); here it is required as it is.
+            campaign.HasOne(c => c.Project).WithMany().HasForeignKey(c => c.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            campaign.HasIndex(c => new { c.ProjectId, c.PublicId }).HasDatabaseName("ix_campaigns_project");
+            campaign.Property(c => c.FolderPath).HasMaxLength(1024);
+
             campaign.HasKey(c => c.Id);
             campaign.Property(c => c.PublicId).HasMaxLength(40);
             campaign.HasIndex(c => c.PublicId).IsUnique();
@@ -409,16 +439,33 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             note.Property(n => n.NoteHash).HasMaxLength(80);
             note.Property(n => n.UpdatedById).HasMaxLength(100);
             note.Property(n => n.Note).HasColumnName("note_json").IsRequired().HasDefaultValueSql("'{}'");
-            note.ToTable(t => t.HasCheckConstraint("ck_role_notes_note_json", "json_valid(note_json)"));
+            note.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_role_notes_note_json", "json_valid(note_json)");
 
-            // One document per campaign and role, which is what makes a write a replacement rather than an
-            // append: there is nowhere for a second note to go.
+                // A note is at one level: a campaign's, a project's, or — naming neither — the client's. A campaign's
+                // note is in the campaign's project already, and that is never stored twice.
+                t.HasCheckConstraint("ck_role_notes_one_level", "campaign_id IS NULL OR project_id IS NULL");
+            });
+
+            // One document per role at each level, which is what makes a write a replacement rather than an append:
+            // there is nowhere for a second note to go.
             note.HasIndex(n => new { n.CampaignId, n.Role })
-                .IsUnique().HasDatabaseName("ix_role_notes_one_per_campaign_role");
+                .IsUnique()
+                .HasFilter("campaign_id IS NOT NULL")
+                .HasDatabaseName("ix_role_notes_one_per_campaign_role");
+            note.HasIndex(n => new { n.ProjectId, n.Role })
+                .IsUnique()
+                .HasFilter("project_id IS NOT NULL")
+                .HasDatabaseName("ix_role_notes_one_per_project_role");
+            note.HasIndex(n => n.Role, "ix_role_notes_one_per_client_role")
+                .IsUnique()
+                .HasFilter("campaign_id IS NULL AND project_id IS NULL");
 
-            // A note belongs to its campaign and is not the campaign's business: nothing cascades, the way
+            // A note belongs to its campaign or its project and is not their business: nothing cascades, the way
             // nothing else in this schema does.
             note.HasOne(n => n.Campaign).WithMany().HasForeignKey(n => n.CampaignId).OnDelete(DeleteBehavior.Restrict);
+            note.HasOne(n => n.Project).WithMany().HasForeignKey(n => n.ProjectId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Attempt>(attempt =>
@@ -640,6 +687,19 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .IsUnique()
                 .HasFilter("status = 'pending'");
             backfill.HasOne(b => b.Source).WithMany().HasForeignKey(b => b.SourceId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Preference>(preference =>
+        {
+            preference.HasKey(p => p.Id);
+
+            // One value per key, at the client level: there is nowhere for a second to go.
+            preference.Property(p => p.Key).HasMaxLength(64);
+            preference.HasIndex(p => p.Key).IsUnique();
+            preference.Property(p => p.Value).HasColumnName("value_json").IsRequired();
+            preference.ToTable(t => t.HasCheckConstraint("ck_preferences_value_json", "json_valid(value_json)"));
+            preference.Property(p => p.ValueHash).HasMaxLength(80);
+            preference.Property(p => p.UpdatedById).HasMaxLength(100);
         });
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())

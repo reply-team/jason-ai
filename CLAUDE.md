@@ -163,7 +163,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   by receipt and the rest of the installation by rule, and keeps the data directory unless
   `--purge-data` says otherwise. `doctor` lists what it would write before it writes — `--dry-run`
   lists it and writes nothing — reaches no network and uploads nothing; only `--include-journal` adds
-  what the journal entries say: campaign names and fields as they changed, campaign and work-item
+  what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign and work-item
   contexts as they changed, result formats, the addresses and numbers put on or taken off the
   do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered
   with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report
@@ -181,10 +181,11 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign
   context, contact custom fields, channel data — is stored as JSON text through a converter, and
   channels live in `contact_channels`. Migrations apply automatically on runtime start after a
-  pre-migration backup. Never edit a migration after it has been committed; raw SQL such as the
-  journal triggers is added to a new migration when it is created. `work_items.result_json` is
-  frozen by a trigger once the item is finished; a filtered unique index allows one live attempt
-  per item.
+  pre-migration backup; a migration that fails puts that backup back and the start fails saying so,
+  and older backups are pruned only after a migration has succeeded. Never edit a migration after it
+  has been committed; raw SQL such as the journal triggers is added to a new migration when it is
+  created. `work_items.result_json` is frozen by a trigger once the item is finished; a filtered
+  unique index allows one live attempt per item.
 - Configuration: strongly typed options only; user overrides in `~/.jason/config/settings.json`,
   environment variables `JASON_*`; the data directory itself comes from `JASON_DATA_DIR` or
   defaults to `~/.jason`. Settings are bound through `IOptions<T>` with validation on start; the

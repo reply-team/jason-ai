@@ -18,6 +18,14 @@ public sealed class Campaign
 
     public required string Name { get; set; }
 
+    /// <summary>The project the campaign works toward. Every campaign has exactly one; a campaign made without naming one is in the default.</summary>
+    public required int ProjectId { get; set; }
+
+    public Project? Project { get; set; }
+
+    /// <summary>Where the campaign's folder is, once there are folders. Nothing writes it yet, and no answer carries it.</summary>
+    public string? FolderPath { get; set; }
+
     public CampaignStatus Status { get; set; } = CampaignStatus.Draft;
 
     /// <summary>Mutable current-state JSON: the campaign's shared knowledge. Changes are journaled by the caller.</summary>

@@ -15,6 +15,7 @@ public class MembershipEndpointTests
         {
             PublicId = PublicId.New("cmp"),
             Name = "Import",
+            ProjectId = DefaultProject.Id,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };

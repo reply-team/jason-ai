@@ -205,8 +205,8 @@ public class CampaignIdempotencyTests
 
     private static string Rival(string key, string digest, string publicId = "cmp_rival") =>
         $"""
-        INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at, idempotency_key, idempotency_digest)
-        VALUES ('{publicId}', 'Rival', 'draft', '{"{}"}', '2026-10-05 11:00:00', '2026-10-05 11:00:00', '{key}', '{digest}');
+        INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at, idempotency_key, idempotency_digest, project_id)
+        VALUES ('{publicId}', 'Rival', 'draft', '{"{}"}', '2026-10-05 11:00:00', '2026-10-05 11:00:00', '{key}', '{digest}', (SELECT id FROM projects WHERE is_default = 1));
         """;
 
     private static JasonDbContext Open(TestDatabase database, CompetingInsert rival) =>
