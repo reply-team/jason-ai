@@ -128,7 +128,7 @@ public class ProjectsAndPreferencesMigrationTests
 
         var report = new DatabaseMigrator(dir.Paths).Migrate();
 
-        Assert.Equal([Applied(dir, ThisMigration)], report.NewlyApplied);
+        Assert.Equal(AppliedFrom(dir, ThisMigration), report.NewlyApplied);
         using var after = Open(dir.Paths.DatabaseFile);
         foreach (var (table, rows) in before.Rows)
         {
@@ -157,7 +157,9 @@ public class ProjectsAndPreferencesMigrationTests
                 "reference campaigns.project_id", "reference role_notes.project_id",
                 "trigger campaigns.campaigns_project_required_insert", "trigger campaigns.campaigns_project_required_update",
             ],
-            shape.Select(KeyOf).Except(before.Shape.Select(KeyOf)).Where(key => !key.StartsWith("column projects.", StringComparison.Ordinal) && !key.StartsWith("column preferences.", StringComparison.Ordinal)));
+            shape.Select(KeyOf).Except(before.Shape.Select(KeyOf))
+                .Where(key => OwnTables.Contains(TableOf(key)))
+                .Where(key => !key.StartsWith("column projects.", StringComparison.Ordinal) && !key.StartsWith("column preferences.", StringComparison.Ordinal)));
         foreach (var expected in new[]
         {
             "column campaigns.project_id | INTEGER notnull=0 default=none pk=0",
@@ -475,7 +477,7 @@ public class ProjectsAndPreferencesMigrationTests
 
         var report = new DatabaseMigrator(dir.Paths).Migrate();
 
-        Assert.Equal([Applied(dir, ThisMigration)], report.NewlyApplied);
+        Assert.Equal(AppliedFrom(dir, ThisMigration), report.NewlyApplied);
         using var after = Open(dir.Paths.DatabaseFile);
         foreach (var (table, rows) in before.Rows)
         {
@@ -561,7 +563,7 @@ public class ProjectsAndPreferencesMigrationTests
 
         var again = new DatabaseMigrator(dir.Paths).Migrate();
 
-        Assert.Equal([Applied(dir, ThisMigration)], again.NewlyApplied);
+        Assert.Equal(AppliedFrom(dir, ThisMigration), again.NewlyApplied);
         using var after = Open(dir.Paths.DatabaseFile);
         Assert.Equal(["cmp_draft|1", "cmp_gone|1", "cmp_live|1"], Rows(after, "SELECT c.public_id, p.is_default FROM campaigns c JOIN projects p ON p.id = c.project_id ORDER BY c.public_id"));
     }
@@ -692,6 +694,12 @@ public class ProjectsAndPreferencesMigrationTests
         return [.. shape.Order(StringComparer.Ordinal)];
     }
 
+    /// <summary>The tables this migration changes; what a later migration adds elsewhere is not its gain.</summary>
+    private static readonly string[] OwnTables = ["campaigns", "projects", "preferences", "role_notes"];
+
+    /// <summary>The table a key of <see cref="ShapeOf"/> names: between its kind and its dot.</summary>
+    private static string TableOf(string key) => key[(key.IndexOf(' ', StringComparison.Ordinal) + 1)..key.IndexOf('.', StringComparison.Ordinal)];
+
     /// <summary>The key a line of <see cref="ShapeOf"/> begins with: its kind, its table and its name.</summary>
     private static string KeyOf(string line) => line[..line.IndexOf(" | ", StringComparison.Ordinal)];
 
@@ -723,6 +731,17 @@ public class ProjectsAndPreferencesMigrationTests
     {
         using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
         return Assert.Single(db.Database.GetMigrations(), name => name.EndsWith("_" + suffix, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// What a start from the migration before this one applies: this migration and every one the tree carries after it,
+    /// so the assertion holds on a branch where later migrations follow.
+    /// </summary>
+    private static List<string> AppliedFrom(TempDataDir dir, string suffix)
+    {
+        var from = Applied(dir, suffix);
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        return db.Database.GetMigrations().SkipWhile(name => name != from).ToList();
     }
 
     private static SqliteConnection Open(string file)

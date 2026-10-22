@@ -5,6 +5,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Tests.Plugins;
+using Jason.Runtime.Tests.Campaigns;
 using Jason.Runtime.Tests.Contacts;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Plugins.Registry;
@@ -307,6 +308,155 @@ public class RecordedExchangesTests
         var again = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "already-member", new { campaign_id = seed.LatAm, contacts = new[] { new { contact_id = seed.Mateo } }, actor = ada }, Ct);
         Assert.Equal(1, again.Summary.AlreadyMember);
         Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "archived-campaign", new { campaign_id = seed.OldList, contacts = new[] { new { contact_id = seed.Grace } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
+    }
+
+    /// <summary>
+    /// The Campaigns screen at 09:00 UTC on 16 October: the table in both views, a campaign's People tab under each count,
+    /// its Timeline under each chip, the rows a waiting person opens, and the three writes the panel makes. The counts are
+    /// CampaignWorld's, whose comments say who counts where.
+    /// </summary>
+    [Fact]
+    public async Task Campaign_exchanges_for_the_screen()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var seed = await Seed.CampaignsAsync(api);
+        var ada = new { type = "human", id = "ada" };
+        const string WeekStart = "2026-10-10T00:00:00.000Z";
+        const string Now = "2026-10-16T09:00:00.000Z";
+
+        var shown = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "screen", new { limit = 100 }, Ct);
+        Assert.Equal([seed.Spring, seed.Autumn, seed.Summer], shown.Items.Select(c => c.Id));
+        Assert.Equal([seed.Spring], (await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "screen-query", new { query = "spr", limit = 100 }, Ct)).Items.Select(c => c.Id));
+        var everything = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "include-archived", new { include_archived = true, limit = 100 }, Ct);
+        Assert.Equal([seed.Spring, seed.Autumn, seed.Winter, seed.Summer], everything.Items.Select(c => c.Id));
+        string[] listed = [.. shown.Items.Select(c => c.Id)];
+
+        var all = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all", new { campaign_ids = listed }, Ct);
+        Assert.Equal(
+            [
+                new CampaignSummaryRow(seed.Spring, 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow(seed.Autumn, 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(seed.Summer, 2, 0, 0, 0, 2, 0, 0, 0, Removed: 0, SequenceLinked: false),
+            ],
+            all.Campaigns);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some", new { campaign_ids = new[] { seed.Spring } }, Ct)).Campaigns);
+        Assert.Equal(4, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "with-archived", new { campaign_ids = everything.Items.Select(c => c.Id) }, Ct)).Campaigns.Count);
+
+        var week = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "last-7-days", new { campaign_ids = listed, since = WeekStart, until = Now }, Ct);
+        Assert.Equal(new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1), week.Campaigns[0]);
+        var today = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "today", new { campaign_ids = listed, since = "2026-10-16T00:00:00.000Z", until = Now }, Ct);
+        Assert.Equal(new CampaignActivityRow(seed.Spring, 0, 0, 0, 0, 0, 0, Removed: 0), today.Campaigns[0]);
+        Assert.Equal(
+            new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1),
+            Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "one", new { campaign_ids = new[] { seed.Spring }, since = WeekStart, until = Now }, Ct)).Campaigns));
+
+        async Task<string[]> PeopleAsync(string @case, object body) =>
+            [.. (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, @case, body, Ct)).Items.Select(item => item.Contact.FirstName!)];
+
+        Assert.Equal(["Ada", "Ben", "Pia"], await PeopleAsync("summary-waiting", new { campaign_id = seed.Spring, summary = "waiting", limit = 50 }));
+        Assert.Equal(["Cleo", "Eve", "Pia"], await PeopleAsync("summary-failed", new { campaign_id = seed.Spring, summary = "failed", limit = 50 }));
+        Assert.Equal(["Oli", "Rae"], await PeopleAsync("activity-replied", new { campaign_id = seed.Spring, activity = "replied", since = WeekStart, until = Now, limit = 50 }));
+        Assert.Equal(22, (await PeopleAsync("everyone", new { campaign_id = seed.Spring, limit = 50 })).Length);
+        Assert.Equal(["Ada"], await PeopleAsync("query", new { campaign_id = seed.Spring, query = "ada", limit = 50 }));
+        Assert.Equal(["Oli"], await PeopleAsync("summary-removed", new { campaign_id = seed.Spring, summary = "removed", limit = 50 }));
+        Assert.Equal(14, (await PeopleAsync("activity-people", new { campaign_id = seed.Spring, activity = "people", since = WeekStart, until = Now, limit = 50 })).Length);
+        Assert.Equal(["Oli"], await PeopleAsync("activity-removed", new { campaign_id = seed.Spring, activity = "removed", since = WeekStart, until = Now, limit = 50 }));
+        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.CampaignListContacts, "query-too-long", new { campaign_id = seed.Spring, query = new string('a', 201), limit = 50 }, HttpStatusCode.BadRequest, Ct)).Code);
+        Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "unlinked", new { campaign_ids = new[] { seed.Autumn } }, Ct)).Campaigns).SequenceLinked);
+        Assert.Empty((await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "unlinked", new { campaign_id = seed.Autumn }, Ct)).ExternalIds);
+        Assert.Equal(["Ada", "Hal"], await PeopleAsync("unlinked", new { campaign_id = seed.Autumn, limit = 50 }));
+
+        var details = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "details", new { campaign_id = seed.Spring }, Ct);
+        Assert.Equal(CampaignStatus.Archived, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "archived", new { campaign_id = seed.Winter }, Ct)).Status);
+        Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "archived", new { campaign_ids = new[] { seed.Winter } }, Ct)).Campaigns).SequenceLinked);
+        Assert.Equal("campaign", Assert.Single(details.ExternalIds).Kind);
+        Assert.Single((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-campaign-planned", new { campaign_id = seed.Spring, status = new[] { "created" }, order = "due", limit = 50 }, Ct)).Items);
+        Assert.Equal(2, (await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-campaign-running", new { campaign_id = seed.Spring, status = new[] { "scheduled", "processing" }, order = "due", limit = 50 }, Ct)).Items.Count);
+        Assert.Equal("campaign.enroll", (await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "for-campaign-row", new { approval_id = seed.AdaApproval }, Ct)).Operation);
+        Assert.Equal("Follow up on LinkedIn?", (await api.RecordAsync<DecisionDto>(Operations.DecisionGet, "for-campaign-row", new { decision_id = seed.BenQuestion }, Ct)).Question);
+
+        var paused = await api.RecordAsync<CampaignDto>(Operations.CampaignPause, "with-reason", new { campaign_id = seed.Spring, reason = "Holding the sends over the holiday.", actor = ada }, Ct);
+        Assert.Equal(CampaignStatus.Paused, paused.Status);
+        var said = (await api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { campaign_id = seed.Spring, kinds = new[] { "campaign_paused" }, limit = 1 }, Ct)).Items[0];
+        Assert.Equal((new ActorRef(ActorType.Human, "ada"), "Holding the sends over the holiday."), (said.Actor, said.Reason));
+        Assert.Equal(CampaignStatus.Active, (await api.RecordAsync<CampaignDto>(Operations.CampaignStart, "after-pause", new { campaign_id = seed.Spring, actor = ada }, Ct)).Status);
+        // The people Add people offers: the first page as it opens, and Zoe, who is in no campaign yet, as it is searched.
+        Assert.Contains(seed.Hal, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "campaign-picker", new { limit = 10 }, Ct)).Items.Select(c => c.Id));
+        Assert.Equal([seed.Zoe], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "campaign-picker-zoe", new { query = "zoe", limit = 10 }, Ct)).Items.Select(c => c.Id));
+        var added = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "several", new { campaign_id = seed.Spring, contacts = new[] { new { contact_id = seed.Zoe }, new { contact_id = seed.Hal } }, reason = "From the partner list.", actor = ada }, Ct);
+        Assert.Equal(new AddContactsSummary(1, 1, 0), added.Summary);
+        Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "to-archived", new { campaign_id = seed.Winter, contacts = new[] { new { contact_id = seed.Hal } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
+
+        string[] replies = ["inbound_reply_observed", "provider_event_observed"];
+        string[] work = ["workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired", "external_effect_reported"];
+        string[] decisions = ["approval_requested", "approval_approved", "approval_rejected", "decision_raised", "decision_answered"];
+        string[] changes = ["campaign_updated", "campaign_started", "campaign_paused", "context_updated", "contacts_added", "contacts_removed"];
+        async Task<int> LinesAsync(string @case, string[] kinds) =>
+            (await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, @case, new { campaign_id = seed.Spring, kinds, limit = 50 }, Ct)).Items.Count;
+        Assert.Equal(6, await LinesAsync("by-campaign-changes", changes));
+        Assert.Equal(17, await LinesAsync("by-campaign", [.. replies, .. work, .. decisions, .. changes]));
+
+        // What waits for a person in the campaign, the questions about the whole campaign included.
+        Assert.Equal(2, (await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "by-campaign-pending", new { status = "pending", campaign_id = seed.Spring, limit = 50 }, Ct)).Items.Count);
+        Assert.Equal(3, (await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "by-campaign-pending", new { status = "pending", campaign_id = seed.Spring, limit = 50 }, Ct)).Items.Count);
+
+        // A person waiting on an approval, approved from their row: they leave Waiting, and the campaign's numbers say so.
+        Assert.Equal(ApprovalStatus.Approved, (await api.RecordAsync<ApprovalDto>(Operations.ApprovalApprove, "from-campaign-row", new { approval_id = seed.AdaApproval, actor = ada }, Ct)).Status);
+        Assert.Equal("approval_not_pending", (await api.RecordErrorAsync(Operations.ApprovalApprove, "from-campaign-row-again", new { approval_id = seed.AdaApproval, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
+        Assert.Equal(["Ben", "Pia"], await PeopleAsync("summary-waiting-after", new { campaign_id = seed.Spring, summary = "waiting", limit = 50 }));
+        Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some-after", new { campaign_ids = new[] { seed.Spring } }, Ct)).Campaigns).Waiting);
+        Assert.Equal(2, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all-after", new { campaign_ids = listed }, Ct)).Campaigns[0].Waiting);
+    }
+
+    /// <summary>
+    /// An installation past a page: a hundred and one campaigns, which the screen lists a hundred at a time — the most one
+    /// read of their counts takes — asking for each page's counts with that page; and fifty-one people added to the first
+    /// in the week, whose People tab lists fifty at a time under the period it was opened with.
+    /// </summary>
+    [Fact]
+    public async Task Campaign_exchanges_past_a_page()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        const string WeekStart = "2026-10-10T00:00:00.000Z";
+        const string Now = "2026-10-16T09:00:00.000Z";
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var campaigns = new List<Campaign>();
+            for (var n = 1; n <= 101; n++)
+            {
+                var campaign = WorkItemFactory.NewCampaign($"Campaign {n:D3}", CampaignStatus.Active, Noon);
+                campaign.PublicId = $"cmp_01K7QN{n + 300:D20}";
+                campaigns.Add(campaign);
+            }
+
+            db.Campaigns.AddRange(campaigns);
+            var added = new DateTime(2026, 10, 12, 10, 0, 0, DateTimeKind.Utc);
+            for (var n = 1; n <= 51; n++)
+            {
+                var person = new Contact { PublicId = $"cnt_01K7QN{n + 500:D20}", FirstName = $"Person {n:D2}", LastName = "Example", CreatedAt = added, UpdatedAt = added };
+                db.CampaignContacts.Add(new CampaignContact { Campaign = campaigns[0], Contact = person, AddedAt = added, UpdatedAt = added });
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var first = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "screen-many", new { limit = 100 }, Ct);
+        Assert.Equal(100, first.Items.Count);
+        var rest = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "screen-many-next", new { limit = 100, cursor = first.NextCursor }, Ct);
+        Assert.Single(rest.Items);
+        string[] shown = [.. first.Items.Select(c => c.Id)];
+        Assert.Equal(100, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "many", new { campaign_ids = shown }, Ct)).Campaigns.Count);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "many-next", new { campaign_ids = rest.Items.Select(c => c.Id) }, Ct)).Campaigns);
+
+        var crowded = shown[0];
+        Assert.Equal(51, (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "many", new { campaign_ids = shown, since = WeekStart, until = Now }, Ct)).Campaigns[0].Added);
+        Assert.Equal(crowded, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "many", new { campaign_id = crowded }, Ct)).Id);
+        Assert.Equal(51, Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "many-one", new { campaign_ids = new[] { crowded }, since = WeekStart, until = Now }, Ct)).Campaigns).Added);
+        var page = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50 }, Ct);
+        Assert.Equal(50, page.Items.Count);
+        var next = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many-next", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50, cursor = page.NextCursor }, Ct);
+        Assert.Equal("Person 51", Assert.Single(next.Items).Contact.FirstName);
     }
 
     /// <summary>Rows written the way the claim and a role write them, with the ids fixed and a preview a person can read.</summary>
@@ -722,6 +872,77 @@ public class RecordedExchangesTests
                 RaisedAt = Noon,
             });
             await db.SaveChangesAsync(Ct);
+        }
+
+        internal sealed record CampaignIds(string Spring, string Autumn, string Winter, string Summer, string Hal, string Zoe, string AdaApproval, string BenQuestion);
+
+        /// <summary>
+        /// <see cref="CampaignWorld"/> at fixed ids, beside it a paused campaign two of its people are new in, a person in no
+        /// campaign yet, Spring's context, and the lines its Timeline shows under Work and Decisions.
+        /// </summary>
+        public static async Task<CampaignIds> CampaignsAsync(RuntimeApiFixture api)
+        {
+            var n = 200;
+            string Id(string prefix) => $"{prefix}_01K7QN{++n:D20}";
+
+            using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var world = await CampaignWorld.WriteAsync(db, Ct, Id);
+            world.Spring.Context = new JsonObject
+            {
+                ["offer"] = "A two-week pilot of the reconciliation tool.",
+                ["audience"] = "Heads of finance at Latin American fintechs, 50 to 500 people.",
+            };
+
+            var summer = WorkItemFactory.NewCampaign("Summer referrals", CampaignStatus.Paused, new DateTime(2026, 10, 1, 10, 0, 0, DateTimeKind.Utc));
+            summer.PublicId = Id("cmp");
+            db.Campaigns.Add(summer);
+            foreach (var name in new[] { "Ada", "Jon" })
+            {
+                db.CampaignContacts.Add(new CampaignContact { Campaign = summer, Contact = world.People[name], AddedAt = summer.CreatedAt, UpdatedAt = summer.CreatedAt });
+            }
+
+            var zoe = new Contact { PublicId = Id("cnt"), FirstName = "Zoe", LastName = "Example", Company = "Zoe Labs", CreatedAt = summer.CreatedAt, UpdatedAt = summer.CreatedAt };
+            zoe.Channels.Add(new ContactChannel { Channel = "email", Value = "zoe@example.test", IsPrimary = true });
+            db.Contacts.Add(zoe);
+            await db.SaveChangesAsync(Ct);
+
+            var items = await db.WorkItems.Include(item => item.Contact).Where(item => item.CampaignId == world.Spring.Id).ToListAsync(Ct);
+            WorkItem Of(string person, string operation) => items.Single(item => item.Contact?.FirstName == person && item.Operation == operation);
+            var adaApproval = await db.Approvals.SingleAsync(approval => approval.WorkItem!.Contact!.FirstName == "Ada" && approval.CampaignId == world.Spring.Id, Ct);
+            // The check-in raised two: the first names Ben's research, the second a journal line.
+            var benQuestion = await db.Decisions.Where(decision => decision.CampaignId == world.Spring.Id && decision.References != null).OrderBy(decision => decision.Id).FirstAsync(Ct);
+
+            void Line(DateTime at, ActorRef actor, string kind, string key, JsonNode updated, WorkItem item) => db.Journal.Add(new JournalEntry
+            {
+                PublicId = Id("jrn"),
+                Ts = at,
+                ActorType = actor.Type,
+                ActorId = actor.Id,
+                Kind = kind,
+                CampaignId = item.CampaignId,
+                WorkItemId = item.PublicId,
+                ContactId = item.ContactId,
+                Key = key,
+                New = updated,
+            });
+
+            var ivyEnrol = Of("Ivy", "campaign.enroll");
+            var cleoEnrol = Of("Cleo", "campaign.enroll");
+            var adaEnrol = Of("Ada", "campaign.enroll");
+            Line(ivyEnrol.FinishedAt!.Value, Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), ivyEnrol);
+            Line(cleoEnrol.FinishedAt!.Value, Actors.Runtime, JournalKinds.WorkItemFailed, "error", JsonNode.Parse("""{"code":"provider_error","message":"It did not work.","retriable":false}""")!, cleoEnrol);
+            Line(new DateTime(2026, 10, 15, 16, 0, 0, DateTimeKind.Utc), Actors.Dispatcher, JournalKinds.ApprovalRequested, "approval", new JsonObject { ["id"] = adaApproval.PublicId, ["operation"] = "campaign.enroll" }, adaEnrol);
+            var asked = await db.WorkItems.SingleAsync(item => item.Id == benQuestion.WorkItemId, Ct);
+            Line(asked.FinishedAt!.Value, Actors.Runtime, JournalKinds.DecisionRaised, "decision", new JsonObject { ["decision_id"] = benQuestion.PublicId }, asked);
+            var planned = WorkItemFactory.NewAiRole(world.Spring, "copywriter", new DateTime(2026, 10, 15, 9, 0, 0, DateTimeKind.Utc));
+            planned.PublicId = Id("wi");
+            planned.NotBefore = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc);
+            db.WorkItems.Add(planned);
+            await db.SaveChangesAsync(Ct);
+
+            return new CampaignIds(
+                world.Spring.PublicId, world.Autumn.PublicId, world.Winter.PublicId, summer.PublicId, world.People["Hal"].PublicId, zoe.PublicId, adaApproval.PublicId, benQuestion.PublicId);
         }
 
         private static async Task<Campaign> CampaignAsync(JasonDbContext db)

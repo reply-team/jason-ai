@@ -52,6 +52,26 @@ The runtime listens on `127.0.0.1:52766` by default, so the bookmark is stable. 
 next free one above it and `jason runtime status --human` says so; `Runtime:Port` in `settings.json` picks another, and
 `0` lets the OS choose, as before.
 
+## Campaigns
+
+Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
+**Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this browser's time
+zone (`jason campaign activity`). A person may be in several columns, and each column's name says on hover what it
+counts. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
+`--include-archived`); the view, the period and both filters are part of the page's address. Every number opens its
+campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
+each with why: a person waiting for you opens the approval or the question in place, as on Attention, and a failure
+shows the reason the runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
+its people and the provider campaign it is linked to. **Pause** stops Jason releasing its work while what is running
+finishes; the provider's own sequence keeps sending until a role pauses it there. **Start** releases the work again
+(`jason campaign pause`, `jason campaign start`, with your reason). **Add people** finds people and adds them (`jason
+campaign add-contacts`). Its **Timeline** puts what is planned, what waits for you and what is running above the now
+line, and the campaign's journal below it (`jason journal list --campaign`), narrowed by chips to replies, work,
+decisions or changes; its **People** are listed by the same counts with a search, Removed among them
+(`--summary removed`); in Activity the tab is **People Activity**, and everything it lists is the period's, All being
+everyone something happened to (`--activity people`); its **Details** are its record, its context as the roles read
+it, and what each provider calls it.
+
 ## Work items
 
 Three tabs over the same filters: **Now** is what is running and what waits for your approval, **Planned** is what

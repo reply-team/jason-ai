@@ -36,6 +36,9 @@ public class SchemaTests
         Assert.Contains("ix_campaign_contacts_campaign_id_contact_id", indexes);
         Assert.Contains("ix_suppressions_channel_value", indexes);
         Assert.Contains("ix_journal_contact_id_public_id", indexes);
+        Assert.Contains("ix_journal_suppression_added_ts", indexes);
+        Assert.Contains("ix_journal_contacts_added_campaign_ts", indexes);
+        Assert.Contains("ix_journal_contacts_removed_campaign_ts", indexes);
 
         Assert.Equal(
             [
@@ -91,6 +94,7 @@ public class SchemaTests
         Assert.Contains("ix_work_items_status_due_at", indexes);
         Assert.Contains("ix_work_items_status_finished_at", indexes);
         Assert.Contains("ix_work_items_contact_id", indexes);
+        Assert.Contains("ix_work_items_campaign_id_contact_id", indexes);
         Assert.Contains("ix_attempts_work_item_id_number", indexes);
         Assert.Contains("ix_attempts_status", indexes);
         Assert.Contains("ix_roles_name", indexes);

@@ -10,8 +10,8 @@ public sealed record ChannelDto(string Channel, string Value, string? Label, boo
 /// <summary>
 /// One contact as the API answers with it. <c>external_ids</c> is always a list, possibly empty: an absent field
 /// and an empty list would read alike to a client, and one of the two would be a lie about what is known.
-/// <c>campaigns</c> and <c>last_activity</c> are read beside the record by <c>contact.get</c> and <c>contact.list</c>
-/// only, and are null in every other answer.
+/// <c>campaigns</c> and <c>last_activity</c> are read beside the record by <c>contact.get</c>, <c>contact.list</c> and
+/// <c>campaign.list_contacts</c> only, and are null in every other answer.
 /// </summary>
 public sealed record ContactDto(
     string Id,

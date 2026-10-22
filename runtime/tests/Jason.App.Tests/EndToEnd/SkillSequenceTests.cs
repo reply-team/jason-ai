@@ -129,10 +129,13 @@ public class SkillSequenceTests
         const string HowMany = $"jason workitem count --campaign cmp_{Placeholder}";
         const string History = $"jason journal list --contact cnt_{Placeholder}";
         const string Moved = "jason contact list --order activity";
+        const string Standing = $"jason campaign summary cmp_{Placeholder}";
+        const string Lately = $"jason campaign activity cmp_{Placeholder} --since 2026-10-09T00:00:00Z --until now";
+        const string Behind = $"jason campaign list-contacts cmp_{Placeholder} --summary failed";
         const string Widened = "founders of seed-stage startups in Mexico, Colombia and Chile";
         const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason \"the person widened the audience\"";
 
-        foreach (var line in new[] { FindProject, MakeProject, Create, Add, List, Work, Start, Follow, Planned, HowMany, History, Moved, Change })
+        foreach (var line in new[] { FindProject, MakeProject, Create, Add, List, Work, Start, Follow, Planned, HowMany, History, Moved, Standing, Lately, Behind, Change })
         {
             Assert.Contains(line, printed);
         }
@@ -184,6 +187,11 @@ public class SkillSequenceTests
         var added = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, [.. Substituted(Add, ids, ("contacts.json", contacts))])));
         Assert.Equal(1, (int)added["summary"]!["added"]!);
+
+        // Where the campaign's people stand, by the line the skill prints for it: one person, and nothing done for them yet.
+        var standing = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Standing, ids)])))["campaigns"]!.AsArray();
+        Assert.Equal((1, 1), ((int)Assert.Single(standing)!["people"]!, (int)standing[0]!["new"]!));
+        Assert.Empty(GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Behind, ids)])))["items"]!.AsArray());
 
         var people = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(List, ids)])));
         var listed = Assert.Single(people["items"]!.AsArray())!;

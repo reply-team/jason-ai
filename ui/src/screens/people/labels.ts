@@ -273,6 +273,49 @@ export function entryLabel(entry: JournalEntry, me: string): EntryLabel {
         }
         case 'contact_archived':
             return { mark: { kind: 'off', glyph: '–' }, title: 'Archived', short: 'archived', note: entry.reason };
+        case 'campaign_paused':
+            return {
+                mark: { kind: 'off', glyph: '❚❚' },
+                title: `${who} paused it`,
+                short: 'paused',
+                note: entry.reason,
+            };
+        case 'campaign_started':
+            return {
+                mark: { kind: 'ok', glyph: '▶' },
+                title: `${who} started it`,
+                short: 'started',
+                note: entry.reason,
+            };
+        case 'campaign_updated':
+            return {
+                mark: { kind: 'off', glyph: '·' },
+                title: `${who} changed it`,
+                short: 'changed',
+                note: entry.reason,
+            };
+        case 'context_updated':
+            return {
+                mark: { kind: 'off', glyph: '·' },
+                title: `${who} changed its context`,
+                short: 'context changed',
+                note: entry.reason,
+            };
+        case 'contacts_added':
+        case 'contacts_removed': {
+            const many = Number(field(entry.new, entry.kind === 'contacts_added' ? 'added' : 'removed') ?? 0);
+            const people = `${many} ${many === 1 ? 'person' : 'people'}`;
+            const done = entry.kind === 'contacts_added' ? 'added' : 'removed';
+            return {
+                mark: {
+                    kind: entry.kind === 'contacts_added' ? 'ok' : 'off',
+                    glyph: entry.kind === 'contacts_added' ? '+' : '–',
+                },
+                title: `${who} ${done} ${people}`,
+                short: `${people} ${done}`,
+                note: entry.reason,
+            };
+        }
         default: {
             const said = entry.kind.replaceAll('_', ' ');
             return { mark: { kind: 'off', glyph: '·' }, title: capital(said), short: said, note: null };

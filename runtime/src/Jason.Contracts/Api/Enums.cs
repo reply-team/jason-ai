@@ -121,6 +121,37 @@ public enum ContactListOrder
 }
 
 /// <summary>
+/// Where a campaign's people stand now, one count each. A person may be in several at once, and the counts need not add
+/// up to the campaign's people: <c>docs/work-execution.md</c> defines each one.
+/// </summary>
+public enum CampaignSummaryFilter
+{
+    Waiting,
+    Failed,
+    Working,
+    New,
+    Idle,
+    Sequence,
+    Out,
+    Removed,
+}
+
+/// <summary>
+/// What happened to a campaign's people in a period, one count each, removed people included: a person may be in
+/// several. <c>docs/work-execution.md</c> defines each one.
+/// </summary>
+public enum CampaignActivityFilter
+{
+    People,
+    Added,
+    WorkedOn,
+    Contacted,
+    Replied,
+    OptedOut,
+    Removed,
+}
+
+/// <summary>
 /// Which of the four levels decided where an operation's work goes, most specific first. A campaign default
 /// hides every global operation override for that campaign: bringing one back takes an explicit campaign
 /// operation override, because a campaign that named its provider must not still be sending one operation

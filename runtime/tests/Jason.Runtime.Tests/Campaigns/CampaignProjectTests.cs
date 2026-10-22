@@ -164,7 +164,7 @@ public class CampaignProjectTests
         var rest = await service.ListAsync(new CampaignListRequest(null, 1, page.NextCursor, ProjectId: acme.Id), Ct);
         Assert.Equal([second.Id], rest.Items.Select(c => c.Id));
         Assert.Null(rest.NextCursor);
-        Assert.Equal([second.Id], (await service.ListAsync(new CampaignListRequest(null, null, null, "Q4", acme.Id), Ct)).Items.Select(c => c.Id));
+        Assert.Equal([second.Id], (await service.ListAsync(new CampaignListRequest(null, null, null, "Q4", ProjectId: acme.Id), Ct)).Items.Select(c => c.Id));
         Assert.Equal([gone.Id], (await service.ListAsync(new CampaignListRequest(CampaignStatus.Archived, null, null, ProjectId: acme.Id), Ct)).Items.Select(c => c.Id));
 
         var unknown = await Assert.ThrowsAsync<NotFoundException>(() => service.ListAsync(new CampaignListRequest(null, null, null, ProjectId: "prj_01K7QN0000000000000000NONE"), Ct));

@@ -1,12 +1,19 @@
 using System.Net;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Campaigns;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Contacts;
 
 public class MembershipEndpointTests
 {
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
     /// <summary>Campaigns get their own operations in a sibling slice; a membership test only needs one to exist.</summary>
     private static string SeedCampaign(RuntimeApiFixture fixture)
     {
@@ -94,9 +101,10 @@ public class MembershipEndpointTests
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(TestContext.Current.CancellationToken);
         var campaignId = SeedCampaign(fixture);
+        var ada = await fixture.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ada" }, Ct);
         await fixture.PostOkAsync<AddContactsResult>(
             Operations.CampaignAddContacts,
-            new { campaign_id = campaignId, contacts = new[] { new { first_name = "Ada" } } },
+            new { campaign_id = campaignId, contacts = new[] { new { contact_id = ada.Id } } },
             TestContext.Current.CancellationToken);
 
         var listed = await fixture.PostOkAsync<Page<MembershipItemDto>>(
@@ -107,6 +115,124 @@ public class MembershipEndpointTests
         var member = Assert.Single(listed.Items);
         Assert.Equal("Ada", member.Contact.FirstName);
         Assert.Equal(MembershipState.Enrolled, member.State);
+        Assert.Equal(campaignId, Assert.Single(member.Contact.Campaigns!).CampaignId);
+        Assert.Equal(JournalKinds.ContactCreated, member.Contact.LastActivity?.Kind);
+    }
+
+    [Fact]
+    public async Task A_waiting_row_says_what_waits()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+
+        var page = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Summary = CampaignSummaryFilter.Waiting }, Ct);
+        var why = page.Items.ToDictionary(item => item.Contact.FirstName!, item => item.Why!);
+
+        Assert.Equal(("approval", "Put one person into the campaign at the provider."), (why["Ada"].Kind, why["Ada"].Text));
+        Assert.StartsWith("apr_", why["Ada"].ApprovalId!, StringComparison.Ordinal);
+        Assert.Null(why["Ada"].DecisionId);
+        foreach (var asked in new[] { "Ben", "Pia" })
+        {
+            Assert.Equal(("question", "Follow up on LinkedIn?"), (why[asked].Kind, why[asked].Text));
+            Assert.StartsWith("dec_", why[asked].DecisionId!, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task A_failed_row_says_why()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+
+        var page = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Summary = CampaignSummaryFilter.Failed }, Ct);
+        var why = page.Items.ToDictionary(item => item.Contact.FirstName!, item => item.Why!);
+
+        Assert.Equal(
+            new MembershipWhy("failure", "It did not work.", "provider_error", new DateTimeOffset(2026, 10, 14, 10, 0, 0, TimeSpan.Zero), null, null),
+            why["Cleo"]);
+        Assert.Equal(
+            new MembershipWhy("failure", null, "expired", new DateTimeOffset(2026, 10, 10, 10, 0, 0, TimeSpan.Zero), null, null),
+            why["Eve"]);
+    }
+
+    [Fact]
+    public async Task An_activity_row_says_when_and_what()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+        var since = new DateTimeOffset(CampaignWorld.Since, TimeSpan.Zero);
+        var until = new DateTimeOffset(CampaignWorld.Until, TimeSpan.Zero);
+
+        var replied = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.Replied, Since = since, Until = until }, Ct);
+        var contacted = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.Contacted, Since = since, Until = until }, Ct);
+        var removed = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.Removed, Since = since, Until = until }, Ct);
+
+        var rae = replied.Items.Single(item => item.Contact.FirstName == "Rae");
+        Assert.Equal(new MembershipWhy("activity", null, "email", new DateTimeOffset(2026, 10, 12, 8, 0, 0, TimeSpan.Zero), null, null), rae.Why);
+        var oli = replied.Items.Single(item => item.Contact.FirstName == "Oli");
+        Assert.Equal(MembershipState.Excluded, oli.State);
+        var tess = contacted.Items.Single(item => item.Contact.FirstName == "Tess");
+        Assert.Equal(new MembershipWhy("activity", null, "message.send", new DateTimeOffset(2026, 10, 12, 10, 0, 0, TimeSpan.Zero), null, null), tess.Why);
+        Assert.Equal(
+            new MembershipWhy("activity", null, "removed", new DateTimeOffset(2026, 10, 13, 10, 0, 0, TimeSpan.Zero), null, null),
+            Assert.Single(removed.Items).Why);
+    }
+
+    [Fact]
+    public async Task The_search_finds_by_any_channel_value()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+        await using (var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var gus = await db.Contacts.SingleAsync(contact => contact.FirstName == "Gus", Ct);
+            db.ContactChannels.Add(new ContactChannel { ContactId = gus.Id, Channel = "phone", Value = "+380441234567" });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var byEmail = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Query = "kit@exa" }, Ct);
+        var byPhone = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Query = "+380 44 123" }, Ct);
+        var outAndFound = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Summary = CampaignSummaryFilter.Out, Query = "kit" }, Ct);
+        var foundButNotOut = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Summary = CampaignSummaryFilter.Out, Query = "ada" }, Ct);
+
+        Assert.Equal(["Kit"], byEmail.Items.Select(item => item.Contact.FirstName));
+        Assert.Equal(["Gus"], byPhone.Items.Select(item => item.Contact.FirstName));
+        Assert.Equal(["Kit"], outAndFound.Items.Select(item => item.Contact.FirstName));
+        Assert.Empty(foundButNotOut.Items);
+    }
+
+    /// <summary>A listing asks for one thing at a time, by one count and its own period, and is refused by the field at fault.</summary>
+    public static TheoryData<string, string[]> RefusedListings => new()
+    {
+        { """{"summary":"out","activity":"replied","since":"2026-10-09T00:00:00Z","until":"2026-10-16T00:00:00Z"}""", ["activity:invalid"] },
+        { """{"summary":"new","state":"excluded"}""", ["state:invalid"] },
+        { """{"since":"2026-10-09T00:00:00Z"}""", ["since:invalid"] },
+        { """{"activity":"added"}""", ["since:required", "until:required"] },
+        { $$"""{"query":"{{new string('a', 201)}}"}""", ["query:too_long"] },
+    };
+
+    [Theory]
+    [MemberData(nameof(RefusedListings))]
+    public async Task A_listing_asked_the_wrong_way_is_refused_by_the_field_at_fault(string asked, string[] faults)
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        var body = JsonNode.Parse(asked)!.AsObject();
+        body["campaign_id"] = SeedCampaign(fixture);
+
+        var error = await fixture.PostErrorAsync(Operations.CampaignListContacts, body, HttpStatusCode.BadRequest, Ct);
+
+        Assert.Equal("validation_failed", error.Code);
+        Assert.Equal(faults, error.Details!.Select(detail => $"{detail.Field}:{detail.Code}"));
     }
 
     [Fact]

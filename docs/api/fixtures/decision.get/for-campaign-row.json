@@ -1,0 +1,30 @@
+{
+  "operation": "decision.get",
+  "case": "for-campaign-row",
+  "request": {
+    "decision_id": "dec_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "dec_1",
+    "campaign_id": "cmp_1",
+    "work_item_id": "wi_7",
+    "attempt_id": "att_2",
+    "status": "pending",
+    "question": "Follow up on LinkedIn?",
+    "options": null,
+    "references": [
+      {
+        "kind": "work_item",
+        "id": "wi_8"
+      }
+    ],
+    "raised_at": "2026-10-13T10:00:00.000Z",
+    "answer": null,
+    "chosen_option": null,
+    "answered_at": null,
+    "answered_by": null,
+    "campaign_name": "Spring",
+    "contact_name": null
+  }
+}

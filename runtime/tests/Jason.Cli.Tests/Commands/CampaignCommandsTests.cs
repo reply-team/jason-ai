@@ -75,10 +75,12 @@ public class CampaignCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("campaign", "list", "--status", "active", "--query", "autumn", "--limit", "5", "--cursor", "Y21wX0E");
+        var exit = await cli.RunAsync(
+            "campaign", "list", "--status", "active", "--query", "autumn", "--limit", "5", "--cursor", "Y21wX0E", "--include-archived");
 
         Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.CampaignList, "{\"status\":\"active\",\"query\":\"autumn\",\"limit\":5,\"cursor\":\"Y21wX0E\"}");
+        cli.AssertPosted(
+            Operations.CampaignList, "{\"status\":\"active\",\"query\":\"autumn\",\"limit\":5,\"cursor\":\"Y21wX0E\",\"include_archived\":true}");
     }
 
     [Fact]
@@ -245,15 +247,85 @@ public class CampaignCommandsTests
             "{\"campaign_id\":\"cmp_A\",\"contact_ids\":[\"cnt_A\",\"cnt_B\"],\"reason\":\"they asked\"}");
     }
 
-    [Fact]
-    public async Task List_contacts_passes_the_state_filter()
+    [Theory]
+    [InlineData(new[] { "--state", "excluded", "--limit", "10" }, "{\"campaign_id\":\"cmp_A\",\"state\":\"excluded\",\"limit\":10}")]
+    [InlineData(new[] { "--summary", "failed", "--query", "ada" }, "{\"campaign_id\":\"cmp_A\",\"summary\":\"failed\",\"query\":\"ada\"}")]
+    [InlineData(
+        new[] { "--activity", "worked_on", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z" },
+        "{\"campaign_id\":\"cmp_A\",\"activity\":\"worked_on\",\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\"}")]
+    public async Task List_contacts_passes_its_filter(string[] options, string posted)
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("campaign", "list-contacts", "cmp_A", "--state", "excluded", "--limit", "10");
+        var exit = await cli.RunAsync(["campaign", "list-contacts", "cmp_A", .. options]);
 
         Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.CampaignListContacts, "{\"campaign_id\":\"cmp_A\",\"state\":\"excluded\",\"limit\":10}");
+        cli.AssertPosted(Operations.CampaignListContacts, posted);
+    }
+
+    [Fact]
+    public async Task Summary_asks_for_the_campaigns_named_or_for_every_one()
+    {
+        using var some = new CliRun();
+        using var every = new CliRun();
+
+        Assert.Equal(ExitCodes.Success, await some.RunAsync("campaign", "summary", "cmp_A", "cmp_B"));
+        Assert.Equal(ExitCodes.Success, await every.RunAsync("campaign", "summary"));
+
+        some.AssertPosted(Operations.CampaignSummary, "{\"campaign_ids\":[\"cmp_A\",\"cmp_B\"]}");
+        every.AssertPosted(Operations.CampaignSummary, "{}");
+    }
+
+    [Fact]
+    public async Task Activity_sends_its_period_and_the_campaigns_named()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "activity", "--since", "2026-10-09T00:00:00Z", "--until", "now", "cmp_A");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var sent = JsonNode.Parse(cli.Sent!)!;
+        Assert.Equal("[\"cmp_A\"]", sent["campaign_ids"]!.ToJsonString());
+        Assert.Equal("2026-10-09T00:00:00Z", sent["since"]!.GetValue<string>());
+        Assert.EndsWith("Z", sent["until"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.NotEqual("now", sent["until"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Human_mode_renders_the_summary_with_a_dash_where_no_sequence_is_linked()
+    {
+        var summary = JsonSerializer.Serialize(
+            new CampaignSummaryResponse(
+            [
+                new CampaignSummaryRow("cmp_A", 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
+            ]),
+            JasonJson.Options);
+        using var cli = new CliRun(summary);
+
+        var exit = await cli.RunAsync("campaign", "summary", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["CAMPAIGN", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED"], Cells(lines[0]));
+        Assert.Equal(["cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1"], Cells(lines[2]));
+        Assert.Equal(["cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(lines[3]));
+    }
+
+    [Fact]
+    public async Task Human_mode_renders_the_activity()
+    {
+        var activity = JsonSerializer.Serialize(
+            new CampaignActivityResponse([new CampaignActivityRow("cmp_A", 14, 2, 9, 4, 2, 2, Removed: 1)]),
+            JasonJson.Options);
+        using var cli = new CliRun(activity);
+
+        var exit = await cli.RunAsync("campaign", "activity", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["CAMPAIGN", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED"], Cells(lines[0]));
+        Assert.Equal(["cmp_A", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[2]));
     }
 
     [Fact]
@@ -453,6 +525,10 @@ public class CampaignCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("{\"unexpected\":true}", cli.Text, StringComparison.Ordinal);
     }
+
+    /// <summary>A rendered row's cells: columns are set apart by two spaces or more, and a header may hold one.</summary>
+    private static string[] Cells(string line) =>
+        System.Text.RegularExpressions.Regex.Split(line.Trim(), " {2,}");
 }
 
 /// <summary>

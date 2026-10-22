@@ -25,7 +25,13 @@ export type Approval = ApprovalSummary & {
     preview: Record<string, unknown>;
     decision_reason: string | null;
 };
-export type ApprovalListRequest = { status?: string; statuses?: string[]; limit?: number; cursor?: string };
+export type ApprovalListRequest = {
+    status?: string;
+    statuses?: string[];
+    campaign_id?: string;
+    limit?: number;
+    cursor?: string;
+};
 export type ApprovalDecisionRequest = { approval_id: string; actor: ActorRef; reason?: string };
 
 export type DecisionOption = { label: string; detail: string | null };
@@ -49,7 +55,13 @@ export type Decision = DecisionSummary & {
     answer: string | null;
     chosen_option: string | null;
 };
-export type DecisionListRequest = { status?: string; statuses?: string[]; limit?: number; cursor?: string };
+export type DecisionListRequest = {
+    status?: string;
+    statuses?: string[];
+    campaign_id?: string;
+    limit?: number;
+    cursor?: string;
+};
 export type DecisionAnswerRequest = {
     decision_id: string;
     actor: ActorRef;
@@ -212,6 +224,7 @@ export type JournalEntry = {
     actor_role: string | null;
 };
 export type JournalListRequest = {
+    campaign_id?: string;
     work_item_id?: string;
     contact_id?: string;
     kinds?: string[];
@@ -219,7 +232,71 @@ export type JournalListRequest = {
     cursor?: string;
 };
 export type CampaignSummary = { id: string; name: string; status: string };
-export type CampaignListRequest = { query?: string; limit?: number; cursor?: string };
+export type CampaignListRequest = { query?: string; include_archived?: boolean; limit?: number; cursor?: string };
+export type Campaign = CampaignSummary & {
+    context: Record<string, unknown>;
+    external_ids: ExternalId[];
+    execution_profile: string | null;
+    review_seconds?: number;
+    created_at: string;
+    updated_at: string;
+    archived_at: string | null;
+};
+export type CampaignTransitionRequest = { campaign_id: string; reason?: string; actor?: ActorRef };
+export type CampaignSummaryRequest = { campaign_ids?: string[] };
+export type CampaignSummaryRow = {
+    campaign_id: string;
+    people: number;
+    waiting: number;
+    failed: number;
+    working: number;
+    new: number;
+    idle: number;
+    sequence: number;
+    out: number;
+    removed: number;
+    sequence_linked: boolean;
+};
+export type CampaignSummaryResponse = { campaigns: CampaignSummaryRow[] };
+export type CampaignActivityRequest = { campaign_ids?: string[]; since: string; until: string };
+export type CampaignActivityRow = {
+    campaign_id: string;
+    people: number;
+    added: number;
+    worked_on: number;
+    contacted: number;
+    replied: number;
+    opted_out: number;
+    removed: number;
+};
+export type CampaignActivityResponse = { campaigns: CampaignActivityRow[] };
+/** What a listed person is counted for: an approval or a question waiting, a failure, or what happened in the period. */
+export type MembershipWhy = {
+    kind: string;
+    text: string | null;
+    code: string | null;
+    at: string | null;
+    approval_id: string | null;
+    decision_id: string | null;
+};
+export type MembershipItem = {
+    contact: Contact;
+    state: string;
+    added_at: string;
+    updated_at: string;
+    why?: MembershipWhy;
+};
+export type ListContactsRequest = {
+    campaign_id: string;
+    state?: string;
+    summary?: string;
+    activity?: string;
+    since?: string;
+    until?: string;
+    query?: string;
+    limit?: number;
+    cursor?: string;
+};
 export type Role = { id: string; name: string; builtin: boolean };
 export type Channel = { channel: string; value: string; primary: boolean };
 export type ExternalId = {
@@ -227,6 +304,7 @@ export type ExternalId = {
     kind: string;
     value: string;
     recorded_at: string;
+    recorded_by_attempt_id?: string;
     diverged_value?: string | null;
     diverged_at?: string | null;
 };
@@ -249,7 +327,7 @@ export type Contact = {
     external_ids?: ExternalId[];
     created_at?: string;
     archived_at?: string | null;
-    /** Read beside the record by contact.get and contact.list only. */
+    /** Read beside the record by contact.get, contact.list and campaign.list_contacts only. */
     campaigns?: ContactCampaign[] | null;
     last_activity?: JournalEntry | null;
 };

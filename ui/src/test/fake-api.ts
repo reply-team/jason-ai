@@ -11,6 +11,7 @@ type Call = { operation: string; body: object; kind: 'read' | 'write' };
 export class FakeApi implements Api {
     readonly calls: Call[] = [];
     private readonly answers = new Map<string, FixtureName[]>();
+    private readonly held = new Map<string, { when: (body: object) => boolean; until: Promise<void> }>();
 
     /** Queue cases for an operation; each call takes the next, the last one repeats. */
     answer(operation: string, ...cases: FixtureName[]): this {
@@ -18,8 +19,23 @@ export class FakeApi implements Api {
         return this;
     }
 
+    /**
+     * Holds the answers to an operation — those whose request matches, when a test says which — until the release it
+     * returns is called: what a screen shows while it waits. A call not held takes its case first.
+     */
+    hold(operation: string, when: (body: object) => boolean = () => true): () => void {
+        let release = () => {};
+        this.held.set(operation, { when, until: new Promise<void>((resolve) => (release = resolve)) });
+        return () => {
+            this.held.delete(operation);
+            release();
+        };
+    }
+
     async call<T>(operation: string, body: object = {}, kind: 'read' | 'write' = 'read'): Promise<T> {
         this.calls.push({ operation, body, kind });
+        const held = this.held.get(operation);
+        if (held?.when(body)) await held.until;
         const queue = this.answers.get(operation);
         const name = queue && (queue.length > 1 ? queue.shift() : queue[0]);
         if (!name) throw new Error(`FakeApi: no recorded case queued for ${operation}`);

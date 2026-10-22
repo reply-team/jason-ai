@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
+import { Search } from '../../lists/search';
 import { SearchPicker } from '../../pickers/pickers';
 import { href, navigate, replace, route, type PeopleFilters } from '../../router';
 import { AddDialog } from './add-dialog';
@@ -82,7 +83,12 @@ export function PeopleScreen() {
                     </button>
                 </div>
                 <div class="filters">
-                    <Search value={filters.q ?? ''} onSearch={(q) => narrow(withValue(filters, 'q', q))} />
+                    <Search
+                        value={filters.q ?? ''}
+                        label="Search people"
+                        placeholder="Search name, company, email, phone, LinkedIn…"
+                        onSearch={(q) => narrow(withValue(filters, 'q', q))}
+                    />
                     <SearchPicker
                         label={campaignLabel}
                         clearLabel="All campaigns"
@@ -170,32 +176,4 @@ function withValue<K extends keyof PeopleFilters>(
     if (value === undefined || value === '' || value === false) delete next[key];
     else next[key] = value;
     return next;
-}
-
-/** The search box: what is typed reaches the list once the person pauses, and only from two characters on. */
-function Search({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
-    const [text, setText] = useState(value);
-    // The address changed from outside (Back, a link): the box shows it. Not on mounting, which would erase what was
-    // typed before the first effects ran.
-    const mounted = useRef(false);
-    useEffect(() => {
-        if (mounted.current) setText(value);
-        mounted.current = true;
-    }, [value]);
-    useEffect(() => {
-        const query = text.trim();
-        if (query === value || (query.length > 0 && query.length < 2)) return;
-        const timer = setTimeout(() => onSearch(query), 250);
-        return () => clearTimeout(timer);
-    }, [text]);
-    return (
-        <input
-            class="search"
-            type="search"
-            aria-label="Search people"
-            placeholder="Search name, company, email, phone, LinkedIn…"
-            value={text}
-            onInput={(e) => setText((e.target as HTMLInputElement).value)}
-        />
-    );
 }

@@ -7,12 +7,23 @@ type Props = {
     now: Date;
     busy: boolean;
     remaining: string;
+    /** What the button that leaves this one says: the next waiting thing on Attention, the campaign elsewhere. */
+    skipLabel?: string;
     onAnswer: (choice: { option?: string; text?: string }, reason?: string) => void;
     onSkip: () => void;
     onClose: () => void;
 };
 
-export function QuestionPanel({ decision, now, busy, remaining, onAnswer, onSkip, onClose }: Props) {
+export function QuestionPanel({
+    decision,
+    now,
+    busy,
+    remaining,
+    skipLabel = 'Skip to next',
+    onAnswer,
+    onSkip,
+    onClose,
+}: Props) {
     const [option, setOption] = useState<string | null>(null);
     const [text, setText] = useState('');
     const [reason, setReason] = useState('');
@@ -139,7 +150,7 @@ export function QuestionPanel({ decision, now, busy, remaining, onAnswer, onSkip
                     <span class="next">{remaining}</span>
                     <span class="spacer" />
                     <button class="btn ghost" type="button" onClick={onSkip}>
-                        Skip to next
+                        {skipLabel}
                     </button>
                 </div>
             )}

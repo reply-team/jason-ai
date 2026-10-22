@@ -68,6 +68,7 @@ export function AttentionScreen() {
                             </button>
                         ))}
                     </div>
+                    <span class="spacer" />
                     <button
                         class={`iconbtn${store.refreshing.value ? ' spin' : ''}`}
                         type="button"

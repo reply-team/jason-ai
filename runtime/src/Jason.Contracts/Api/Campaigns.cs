@@ -61,10 +61,17 @@ public sealed record CampaignCreateRequest(
 public sealed record CampaignGetRequest(string? CampaignId);
 
 /// <summary>
-/// <c>query</c> finds campaigns by any part of their name, whatever its case or accents; <c>project_id</c> keeps the
-/// campaigns of one project.
+/// <c>query</c> finds campaigns by any part of their name, whatever its case or accents. Archived campaigns are hidden
+/// unless <c>include_archived</c> is true or <c>status</c> asks for them; <c>project_id</c> keeps the campaigns of one
+/// project.
 /// </summary>
-public sealed record CampaignListRequest(CampaignStatus? Status, int? Limit, string? Cursor, string? Query = null, string? ProjectId = null);
+public sealed record CampaignListRequest(
+    CampaignStatus? Status,
+    int? Limit,
+    string? Cursor,
+    string? Query = null,
+    bool? IncludeArchived = null,
+    string? ProjectId = null);
 
 /// <summary>
 /// A partial patch: an absent <c>name</c> leaves the campaign's name alone, and an absent
@@ -92,3 +99,40 @@ public sealed record CampaignUpdateContextRequest(
     IReadOnlyList<string>? Unset,
     ActorRef? Actor,
     string? Reason);
+
+/// <summary>
+/// <c>campaign_ids</c> names one to a hundred campaigns, archived ones included, answered in the order asked; absent, it
+/// means every campaign <c>campaign.list</c> shows by default, in its order.
+/// </summary>
+public sealed record CampaignSummaryRequest(IReadOnlyList<string>? CampaignIds);
+
+/// <summary>
+/// Where one campaign's people stand now, each count a number of people: one person may be in several, so they need not
+/// add up to <c>people</c>. <c>sequence_linked</c> is false while the campaign's provider campaign is not pinned, and
+/// nothing is known about a sequence there.
+/// </summary>
+public sealed record CampaignSummaryRow(
+    string CampaignId,
+    int People,
+    int Waiting,
+    int Failed,
+    int Working,
+    int New,
+    int Idle,
+    int Sequence,
+    int Out,
+    int Removed,
+    bool SequenceLinked);
+
+public sealed record CampaignSummaryResponse(IReadOnlyList<CampaignSummaryRow> Campaigns);
+
+/// <summary>The campaigns as <see cref="CampaignSummaryRequest"/> names them, and the period: <c>since</c> included, <c>until</c> not, both required.</summary>
+public sealed record CampaignActivityRequest(IReadOnlyList<string>? CampaignIds, DateTimeOffset? Since, DateTimeOffset? Until);
+
+/// <summary>
+/// What happened to one campaign's people in the period, each count a number of people, removed ones included:
+/// <c>people</c> is everyone anything happened to.
+/// </summary>
+public sealed record CampaignActivityRow(string CampaignId, int People, int Added, int WorkedOn, int Contacted, int Replied, int OptedOut, int Removed);
+
+public sealed record CampaignActivityResponse(IReadOnlyList<CampaignActivityRow> Campaigns);

@@ -37,7 +37,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
     {
         ArgumentNullException.ThrowIfNull(request);
         var contact = await LoadAsync(db, request.ContactId, cancellationToken).ConfigureAwait(false);
-        return (await WithCampaignsAndLatestLineAsync([contact], cancellationToken).ConfigureAwait(false))[0];
+        return (await WithCampaignsAndLatestLineAsync(db, [contact], cancellationToken).ConfigureAwait(false))[0];
     }
 
     public async Task<Page<ContactDto>> ListAsync(ContactListRequest request, CancellationToken cancellationToken)
@@ -109,7 +109,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
             var ids = page.Items.ToList();
             var people = await WithChannelsAndPins(db.Contacts).Where(contact => ids.Contains(contact.PublicId)).ToListAsync(cancellationToken).ConfigureAwait(false);
             var inOrder = ids.Select(id => people.Single(contact => contact.PublicId == id)).ToList();
-            return new Page<ContactDto>(await WithCampaignsAndLatestLineAsync(inOrder, cancellationToken).ConfigureAwait(false), page.NextCursor);
+            return new Page<ContactDto>(await WithCampaignsAndLatestLineAsync(db, inOrder, cancellationToken).ConfigureAwait(false), page.NextCursor);
         }
 
         if (after is not null)
@@ -121,17 +121,17 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
 
         var fetched = await WithChannelsAndPins(query).OrderBy(contact => contact.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
         var byId = Paging.ToPage(fetched, limit, contact => contact.PublicId, contact => contact);
-        return new Page<ContactDto>(await WithCampaignsAndLatestLineAsync(byId.Items, cancellationToken).ConfigureAwait(false), byId.NextCursor);
+        return new Page<ContactDto>(await WithCampaignsAndLatestLineAsync(db, byId.Items, cancellationToken).ConfigureAwait(false), byId.NextCursor);
     }
 
     private static IQueryable<Contact> WithChannelsAndPins(IQueryable<Contact> contacts) =>
         contacts.Include(contact => contact.Channels).Include(contact => contact.ExternalIds);
 
     /// <summary>
-    /// The people as the two reads answer them: each with the campaigns they are on, in any state, and the newest line
-    /// about them. One query for the memberships and one for the lines of the whole page, never one per person.
+    /// The people as the reads of people answer them: each with the campaigns they are on, in any state, and the newest
+    /// line about them. One query for the memberships and one for the lines of the whole page, never one per person.
     /// </summary>
-    private async Task<IReadOnlyList<ContactDto>> WithCampaignsAndLatestLineAsync(IReadOnlyList<Contact> contacts, CancellationToken ct)
+    internal static async Task<IReadOnlyList<ContactDto>> WithCampaignsAndLatestLineAsync(JasonDbContext db, IReadOnlyList<Contact> contacts, CancellationToken ct)
     {
         var keys = contacts.Select(contact => contact.Id).ToList();
         var memberships = await db.CampaignContacts.AsNoTracking()

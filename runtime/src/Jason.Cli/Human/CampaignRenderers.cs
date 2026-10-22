@@ -105,6 +105,56 @@ public static class CampaignRenderers
         return RenderText.WithCursor(table.Render(), page.NextCursor);
     }
 
+    /// <summary>Where each campaign's people stand now; the provider's two counts are a dash while no sequence is linked.</summary>
+    public static string? Summary(string json)
+    {
+        var summary = RenderText.Read<CampaignSummaryResponse>(json);
+        if (summary?.Campaigns is null)
+        {
+            return null;
+        }
+
+        var table = new HumanTable("CAMPAIGN", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED");
+        foreach (var row in summary.Campaigns)
+        {
+            table.Row(
+                row.CampaignId,
+                Count(row.People),
+                Count(row.Waiting),
+                Count(row.Failed),
+                Count(row.Working),
+                Count(row.New),
+                Count(row.Idle),
+                row.SequenceLinked ? Count(row.Sequence) : "-",
+                row.SequenceLinked ? Count(row.Out) : "-",
+                Count(row.Removed));
+        }
+
+        return table.Render();
+    }
+
+    /// <summary>What happened to each campaign's people in the period asked about.</summary>
+    public static string? Activity(string json)
+    {
+        var activity = RenderText.Read<CampaignActivityResponse>(json);
+        if (activity?.Campaigns is null)
+        {
+            return null;
+        }
+
+        var table = new HumanTable("CAMPAIGN", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED");
+        foreach (var row in activity.Campaigns)
+        {
+            table.Row(
+                row.CampaignId, Count(row.People), Count(row.Added), Count(row.WorkedOn), Count(row.Contacted), Count(row.Replied), Count(row.OptedOut),
+                Count(row.Removed));
+        }
+
+        return table.Render();
+    }
+
+    private static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
+
     /// <summary>The outcome of an import: the counts, then every item the runtime refused and why.</summary>
     public static string? Batch(string json)
     {

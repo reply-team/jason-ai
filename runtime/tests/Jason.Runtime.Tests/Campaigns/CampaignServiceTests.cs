@@ -207,11 +207,15 @@ public class CampaignServiceTests
         var live = await service.ListAsync(new CampaignListRequest(null, null, null), Ct);
         var archived = await service.ListAsync(new CampaignListRequest(CampaignStatus.Archived, null, null), Ct);
         var active = await service.ListAsync(new CampaignListRequest(CampaignStatus.Active, null, null), Ct);
+        var everything = await service.ListAsync(new CampaignListRequest(null, null, null, IncludeArchived: true), Ct);
+        var drafts = await service.ListAsync(new CampaignListRequest(CampaignStatus.Draft, null, null, IncludeArchived: true), Ct);
 
         Assert.Equal([kept.Id, running.Id], live.Items.Select(c => c.Id));
         Assert.Null(live.NextCursor);
         Assert.Equal(gone.Id, Assert.Single(archived.Items).Id);
         Assert.Equal(running.Id, Assert.Single(active.Items).Id);
+        Assert.Equal([kept.Id, running.Id, gone.Id], everything.Items.Select(c => c.Id));
+        Assert.Equal(kept.Id, Assert.Single(drafts.Items).Id);
 
         // A part of the name finds a campaign whatever its case or accents, under the same status rule.
         var cafe = await service.CreateAsync(new CampaignCreateRequest("Über Café founders", null, null, null), Ct);

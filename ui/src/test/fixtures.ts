@@ -18,6 +18,14 @@ import type {
     UiTokens,
     CampaignListRequest,
     CampaignSummary,
+    Campaign,
+    CampaignTransitionRequest,
+    CampaignSummaryRequest,
+    CampaignSummaryResponse,
+    CampaignActivityRequest,
+    CampaignActivityResponse,
+    ListContactsRequest,
+    MembershipItem,
     Contact,
     ContactListRequest,
     JournalEntry,
@@ -120,6 +128,58 @@ import workitemListPlanned from '../../../docs/api/fixtures/workitem.list/planne
 import workitemListPlannedNext from '../../../docs/api/fixtures/workitem.list/planned-next.json';
 import workitemUpdateDates from '../../../docs/api/fixtures/workitem.update/dates.json';
 import workitemUpdateTerminal from '../../../docs/api/fixtures/workitem.update/terminal.json';
+import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
+import campaignActivityLast7Days from '../../../docs/api/fixtures/campaign.activity/last-7-days.json';
+import campaignActivityOne from '../../../docs/api/fixtures/campaign.activity/one.json';
+import campaignActivityToday from '../../../docs/api/fixtures/campaign.activity/today.json';
+import campaignAddContactsSeveral from '../../../docs/api/fixtures/campaign.add_contacts/several.json';
+import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.json';
+import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
+import campaignListScreenQuery from '../../../docs/api/fixtures/campaign.list/screen-query.json';
+import campaignListScreen from '../../../docs/api/fixtures/campaign.list/screen.json';
+import campaignListContactsActivityReplied from '../../../docs/api/fixtures/campaign.list_contacts/activity-replied.json';
+import campaignListContactsQuery from '../../../docs/api/fixtures/campaign.list_contacts/query.json';
+import campaignListContactsSummaryFailed from '../../../docs/api/fixtures/campaign.list_contacts/summary-failed.json';
+import campaignListContactsSummaryWaiting from '../../../docs/api/fixtures/campaign.list_contacts/summary-waiting.json';
+import campaignPauseWithReason from '../../../docs/api/fixtures/campaign.pause/with-reason.json';
+import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/after-pause.json';
+import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
+import campaignSummarySome from '../../../docs/api/fixtures/campaign.summary/some.json';
+import campaignSummaryWithArchived from '../../../docs/api/fixtures/campaign.summary/with-archived.json';
+import decisionGetForCampaignRow from '../../../docs/api/fixtures/decision.get/for-campaign-row.json';
+import journalListByCampaignChanges from '../../../docs/api/fixtures/journal.list/by-campaign-changes.json';
+import journalListByCampaign from '../../../docs/api/fixtures/journal.list/by-campaign.json';
+import approvalApproveFromCampaignRow from '../../../docs/api/fixtures/approval.approve/from-campaign-row.json';
+import campaignSummaryAllAfter from '../../../docs/api/fixtures/campaign.summary/all-after.json';
+import campaignListContactsSummaryRemoved from '../../../docs/api/fixtures/campaign.list_contacts/summary-removed.json';
+import campaignListContactsActivityRemoved from '../../../docs/api/fixtures/campaign.list_contacts/activity-removed.json';
+import campaignListContactsActivityPeople from '../../../docs/api/fixtures/campaign.list_contacts/activity-people.json';
+import campaignListContactsEveryone from '../../../docs/api/fixtures/campaign.list_contacts/everyone.json';
+import campaignSummaryArchived from '../../../docs/api/fixtures/campaign.summary/archived.json';
+import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/approval.approve/from-campaign-row-again.json';
+import campaignActivityMany from '../../../docs/api/fixtures/campaign.activity/many.json';
+import campaignActivityManyOne from '../../../docs/api/fixtures/campaign.activity/many-one.json';
+import campaignAddContactsToArchived from '../../../docs/api/fixtures/campaign.add_contacts/to-archived.json';
+import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
+import campaignListContactsActivityMany from '../../../docs/api/fixtures/campaign.list_contacts/activity-many.json';
+import campaignListContactsActivityManyNext from '../../../docs/api/fixtures/campaign.list_contacts/activity-many-next.json';
+import contactListCampaignPicker from '../../../docs/api/fixtures/contact.list/campaign-picker.json';
+import contactListCampaignPickerZoe from '../../../docs/api/fixtures/contact.list/campaign-picker-zoe.json';
+import campaignListContactsSummaryWaitingAfter from '../../../docs/api/fixtures/campaign.list_contacts/summary-waiting-after.json';
+import campaignSummarySomeAfter from '../../../docs/api/fixtures/campaign.summary/some-after.json';
+import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
+import decisionListByCampaignPending from '../../../docs/api/fixtures/decision.list/by-campaign-pending.json';
+import campaignGetArchived from '../../../docs/api/fixtures/campaign.get/archived.json';
+import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinked.json';
+import campaignListScreenManyNext from '../../../docs/api/fixtures/campaign.list/screen-many-next.json';
+import campaignListScreenMany from '../../../docs/api/fixtures/campaign.list/screen-many.json';
+import campaignListContactsQueryTooLong from '../../../docs/api/fixtures/campaign.list_contacts/query-too-long.json';
+import campaignListContactsUnlinked from '../../../docs/api/fixtures/campaign.list_contacts/unlinked.json';
+import campaignSummaryManyNext from '../../../docs/api/fixtures/campaign.summary/many-next.json';
+import campaignSummaryMany from '../../../docs/api/fixtures/campaign.summary/many.json';
+import campaignSummaryUnlinked from '../../../docs/api/fixtures/campaign.summary/unlinked.json';
+import workitemListByCampaignPlanned from '../../../docs/api/fixtures/workitem.list/by-campaign-planned.json';
+import workitemListByCampaignRunning from '../../../docs/api/fixtures/workitem.list/by-campaign-running.json';
 
 export type Exchange<Req, Res> = { operation: string; case: string; request: Req; status: number; response: Res };
 
@@ -254,6 +314,166 @@ export const fixtures = {
         Page<JournalEntry>
     >,
     'workitem.list/by-contact-open': workitemListByContactOpen satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
+    'campaign.activity/last-7-days': campaignActivityLast7Days satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
+    'campaign.activity/one': campaignActivityOne satisfies Exchange<CampaignActivityRequest, CampaignActivityResponse>,
+    'campaign.activity/today': campaignActivityToday satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
+    'campaign.add_contacts/several': campaignAddContactsSeveral satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
+    'campaign.get/details': campaignGetDetails satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.list/include-archived': campaignListIncludeArchived satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.list/screen-query': campaignListScreenQuery satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.list/screen': campaignListScreen satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'campaign.list_contacts/activity-replied': campaignListContactsActivityReplied satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/query': campaignListContactsQuery satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/summary-failed': campaignListContactsSummaryFailed satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/summary-waiting': campaignListContactsSummaryWaiting satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.pause/with-reason': campaignPauseWithReason satisfies Exchange<CampaignTransitionRequest, Campaign>,
+    'campaign.start/after-pause': campaignStartAfterPause satisfies Exchange<CampaignTransitionRequest, Campaign>,
+    'campaign.summary/all': campaignSummaryAll satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
+    'campaign.summary/some': campaignSummarySome satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
+    'campaign.summary/with-archived': campaignSummaryWithArchived satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'decision.get/for-campaign-row': decisionGetForCampaignRow satisfies Exchange<{ decision_id: string }, Decision>,
+    'journal.list/by-campaign-changes': journalListByCampaignChanges satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-campaign': journalListByCampaign satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'approval.approve/from-campaign-row-again': approvalApproveFromCampaignRowAgain satisfies Exchange<
+        ApprovalDecisionRequest,
+        ErrorEnvelope
+    >,
+    'campaign.activity/many': campaignActivityMany satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
+    'campaign.activity/many-one': campaignActivityManyOne satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
+    'campaign.add_contacts/to-archived': campaignAddContactsToArchived satisfies Exchange<
+        AddContactsRequest,
+        ErrorEnvelope
+    >,
+    'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.list_contacts/activity-many': campaignListContactsActivityMany satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/activity-many-next': campaignListContactsActivityManyNext satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'contact.list/campaign-picker': contactListCampaignPicker satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/campaign-picker-zoe': contactListCampaignPickerZoe satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'campaign.list_contacts/everyone': campaignListContactsEveryone satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.summary/archived': campaignSummaryArchived satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.list_contacts/summary-removed': campaignListContactsSummaryRemoved satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/activity-removed': campaignListContactsActivityRemoved satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/activity-people': campaignListContactsActivityPeople satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.summary/all-after': campaignSummaryAllAfter satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'approval.approve/from-campaign-row': approvalApproveFromCampaignRow satisfies Exchange<
+        ApprovalDecisionRequest,
+        Approval
+    >,
+    'campaign.list_contacts/summary-waiting-after': campaignListContactsSummaryWaitingAfter satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.summary/some-after': campaignSummarySomeAfter satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'approval.list/by-campaign-pending': approvalListByCampaignPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'decision.list/by-campaign-pending': decisionListByCampaignPending satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
+    'campaign.get/archived': campaignGetArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.list/screen-many-next': campaignListScreenManyNext satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.list/screen-many': campaignListScreenMany satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'campaign.list_contacts/query-too-long': campaignListContactsQueryTooLong satisfies Exchange<
+        ListContactsRequest,
+        ErrorEnvelope
+    >,
+    'campaign.list_contacts/unlinked': campaignListContactsUnlinked satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.summary/many-next': campaignSummaryManyNext satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/many': campaignSummaryMany satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
+    'campaign.summary/unlinked': campaignSummaryUnlinked satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'workitem.list/by-campaign-planned': workitemListByCampaignPlanned satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/by-campaign-running': workitemListByCampaignRunning satisfies Exchange<
         WorkItemListRequest,
         Page<WorkItemSummary>
     >,

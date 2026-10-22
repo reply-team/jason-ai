@@ -1264,10 +1264,22 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_journal_campaign_kind_key_events")
                         .HasFilter("kind = 'provider_event_observed'");
 
+                    b.HasIndex(new[] { "CampaignId", "Ts" }, "ix_journal_contacts_added_campaign_ts")
+                        .HasDatabaseName("ix_journal_contacts_added_campaign_ts")
+                        .HasFilter("kind = 'contacts_added'");
+
+                    b.HasIndex(new[] { "CampaignId", "Ts" }, "ix_journal_contacts_removed_campaign_ts")
+                        .HasDatabaseName("ix_journal_contacts_removed_campaign_ts")
+                        .HasFilter("kind = 'contacts_removed'");
+
                     b.HasIndex(new[] { "Kind", "Key" }, "ix_journal_kind_key_gaps")
                         .IsUnique()
                         .HasDatabaseName("ix_journal_kind_key_gaps")
                         .HasFilter("kind = 'events_gap_observed'");
+
+                    b.HasIndex(new[] { "Ts" }, "ix_journal_suppression_added_ts")
+                        .HasDatabaseName("ix_journal_suppression_added_ts")
+                        .HasFilter("kind = 'suppression_added'");
 
                     b.ToTable("journal", null, t =>
                         {
@@ -1763,15 +1775,15 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_role_notes_one_per_campaign_role")
                         .HasFilter("campaign_id IS NOT NULL");
 
-                    b.HasIndex(new[] { "Role" }, "ix_role_notes_one_per_client_role")
-                        .IsUnique()
-                        .HasDatabaseName("ix_role_notes_one_per_client_role")
-                        .HasFilter("campaign_id IS NULL AND project_id IS NULL");
-
                     b.HasIndex("ProjectId", "Role")
                         .IsUnique()
                         .HasDatabaseName("ix_role_notes_one_per_project_role")
                         .HasFilter("project_id IS NOT NULL");
+
+                    b.HasIndex(new[] { "Role" }, "ix_role_notes_one_per_client_role")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_notes_one_per_client_role")
+                        .HasFilter("campaign_id IS NULL AND project_id IS NULL");
 
                     b.ToTable("role_notes", t =>
                         {
@@ -2043,6 +2055,9 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.HasIndex("PublicId")
                         .IsUnique()
                         .HasDatabaseName("ix_work_items_public_id");
+
+                    b.HasIndex("CampaignId", "ContactId")
+                        .HasDatabaseName("ix_work_items_campaign_id_contact_id");
 
                     b.HasIndex("CampaignId", "IdempotencyKey")
                         .IsUnique()

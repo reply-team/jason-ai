@@ -16,6 +16,12 @@ export function Sidebar() {
                     Attention {pendingMark.value && <span class="dot" aria-label="something needs you" />}
                 </a>
                 <a
+                    class={current === 'campaigns' ? 'active' : ''}
+                    href={href({ screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} })}
+                >
+                    Campaigns
+                </a>
+                <a
                     class={current === 'workitems' ? 'active' : ''}
                     href={href({ screen: 'workitems', tab: 'now', filters: {} })}
                 >

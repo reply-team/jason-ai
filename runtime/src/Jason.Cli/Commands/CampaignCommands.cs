@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Text.Json.Nodes;
 using Jason.Cli.Folders;
 using Jason.Cli.Human;
 using Jason.Contracts.Api;
@@ -32,6 +33,8 @@ public static class CampaignCommands
         campaign.Subcommands.Add(AddContacts(env, actor));
         campaign.Subcommands.Add(RemoveContacts(env, actor));
         campaign.Subcommands.Add(ListContacts(env, actor));
+        campaign.Subcommands.Add(Summary(env, actor));
+        campaign.Subcommands.Add(Activity(env, actor));
         return campaign;
     }
 
@@ -97,12 +100,13 @@ public static class CampaignCommands
 
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("list", "List campaigns. Archived ones appear only when asked for by status.");
+        var command = new Command("list", "List campaigns. Archived ones appear only when asked for, by status or with --include-archived.");
         var status = new Option<string?>("--status") { Description = "Only campaigns in this status: draft, active, paused or archived." };
         var query = new Option<string?>("--query") { Description = "Only campaigns whose name contains this text; case and accents do not matter." };
         var project = ProjectOption(
             "Only the campaigns of this project, as prj_…. Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and every project elsewhere.");
         var everyProject = new Option<bool>("--all-projects") { Description = "The campaigns of every project, wherever the command runs; not with --project." };
+        var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived campaigns, which are hidden by default." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
@@ -110,6 +114,7 @@ public static class CampaignCommands
         command.Options.Add(query);
         command.Options.Add(project);
         command.Options.Add(everyProject);
+        command.Options.Add(includeArchived);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
@@ -129,6 +134,10 @@ public static class CampaignCommands
                 .Set("project_id", parseResult.GetValue(project))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
+            if (parseResult.GetValue(includeArchived))
+            {
+                body.Set("include_archived", true);
+            }
 
             var fill = every ? FolderFill.None : await WorkingFolder.FillProjectAsync(env, body, WorkingFolder.ByProjectOption, cancellationToken).ConfigureAwait(false);
             if (fill.ExitCode is { } stopped)
@@ -338,14 +347,34 @@ public static class CampaignCommands
 
     private static Command ListContacts(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("list-contacts", "List the contacts of a campaign. Excluded ones appear only when asked for by state.");
+        var command = new Command(
+            "list-contacts",
+            "List the contacts of a campaign, or exactly the people one count of campaign summary or campaign activity counts. "
+            + "Excluded ones appear only when asked for by state.");
         var id = CampaignId();
         var state = new Option<string?>("--state") { Description = "Only members in this state: enrolled, paused, finished or excluded." };
+        var summary = new Option<string?>("--summary")
+        {
+            Description = "Only the people one count of campaign summary counts: waiting, failed, working, new, idle, sequence, out or removed.",
+        };
+        var activity = new Option<string?>("--activity")
+        {
+            Description = "Only the people one count of campaign activity counts in the period of --since and --until: "
+                + "people (anything at all), added, worked_on, contacted, replied, opted_out or removed. Removed people are included.",
+        };
+        var since = VerbOptions.Moment("--since", "With --activity: the period's start, included, as ISO-8601 UTC, or now.");
+        var until = VerbOptions.Moment("--until", "With --activity: the period's end, not included, as ISO-8601 UTC, or now.");
+        var query = new Option<string?>("--query") { Description = "Only people found by this text: a name, company, title or any channel value." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
         command.Options.Add(state);
+        command.Options.Add(summary);
+        command.Options.Add(activity);
+        command.Options.Add(since);
+        command.Options.Add(until);
+        command.Options.Add(query);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
@@ -356,6 +385,11 @@ public static class CampaignCommands
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(id))
                 .Set("state", parseResult.GetValue(state))
+                .Set("summary", parseResult.GetValue(summary))
+                .Set("activity", parseResult.GetValue(activity))
+                .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
+                .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System))
+                .Set("query", parseResult.GetValue(query))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 
@@ -364,6 +398,68 @@ public static class CampaignCommands
 
         return command;
     }
+
+    private static Command Summary(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "summary",
+            "How many of each campaign's people are waiting on you, failed, working, new, idle, in the sequence, out or removed, now. "
+            + "A person may be in several counts; campaign list-contacts --summary lists who.");
+        var ids = CampaignIds();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(ids);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            var body = RequestBody.Empty().Set("campaign_ids", Ids(parseResult.GetValue(ids)));
+            return OperationRunner.RunAsync(env, Operations.CampaignSummary, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Summary), cancellationToken);
+        });
+
+        return command;
+    }
+
+    private static Command Activity(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "activity",
+            "How many of each campaign's people had anything happen to them, were added, worked on, contacted, replied for the first time, "
+            + "opted out or removed in a period. "
+            + "A person may be in several counts; campaign list-contacts --activity lists who.");
+        var ids = CampaignIds();
+        var since = VerbOptions.Moment("--since", "The period's start, included, as ISO-8601 UTC, or now.");
+        since.Required = true;
+        var until = VerbOptions.Moment("--until", "The period's end, not included, as ISO-8601 UTC, or now.");
+        until.Required = true;
+        var human = VerbOptions.Human();
+        command.Arguments.Add(ids);
+        command.Options.Add(since);
+        command.Options.Add(until);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            var body = RequestBody.Empty()
+                .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
+                .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
+                .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System));
+            return OperationRunner.RunAsync(env, Operations.CampaignActivity, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Activity), cancellationToken);
+        });
+
+        return command;
+    }
+
+    /// <summary>The campaigns named, or nothing at all when none is: then the runtime answers for every campaign campaign list shows.</summary>
+    private static JsonArray? Ids(string[]? ids) =>
+        ids is null || ids.Length == 0 ? null : new JsonArray([.. ids.Select(id => (JsonNode?)JsonValue.Create(id))]);
+
+    private static Argument<string[]> CampaignIds() => new("campaign-id")
+    {
+        Description = "The campaigns, as cmp_…; none means every campaign campaign list shows.",
+        Arity = ArgumentArity.ZeroOrMore,
+    };
 
     private static Argument<string> CampaignId() => new("campaign-id") { Description = "The campaign, as cmp_…." };
 

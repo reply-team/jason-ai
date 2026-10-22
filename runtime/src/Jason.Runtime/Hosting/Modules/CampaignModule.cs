@@ -13,7 +13,7 @@ public static class CampaignModule
     public static IServiceCollection AddCampaignModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        return services.AddScoped<CampaignService>().AddScoped<JournalService>();
+        return services.AddScoped<CampaignService>().AddScoped<CampaignNumbers>().AddScoped<JournalService>();
     }
 
     public static void MapCampaignOperations(this IEndpointRouteBuilder app)
@@ -36,6 +36,11 @@ public static class CampaignModule
             Operations.CampaignArchive, (service, request, cancellationToken) => service.ArchiveAsync(request, cancellationToken));
         app.MapOperation<CampaignService, CampaignUpdateContextRequest, CampaignDto>(
             Operations.CampaignUpdateContext, (service, request, cancellationToken) => service.UpdateContextAsync(request, cancellationToken));
+
+        app.MapOperation<CampaignNumbers, CampaignSummaryRequest, CampaignSummaryResponse>(
+            Operations.CampaignSummary, (service, request, cancellationToken) => service.SummaryAsync(request, cancellationToken));
+        app.MapOperation<CampaignNumbers, CampaignActivityRequest, CampaignActivityResponse>(
+            Operations.CampaignActivity, (service, request, cancellationToken) => service.ActivityAsync(request, cancellationToken));
 
         app.MapOperation<JournalService, JournalAppendRequest, JournalEntryDto>(
             Operations.JournalAppend, (service, request, cancellationToken) => service.AppendAsync(request, cancellationToken));

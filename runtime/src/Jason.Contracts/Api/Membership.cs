@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace Jason.Contracts.Api;
 
@@ -43,8 +44,45 @@ public sealed record RemoveContactsSummary(int Removed, int NotMember, int Alrea
 
 public sealed record RemoveContactsResult(string CampaignId, RemoveContactsSummary Summary, IReadOnlyList<RemoveContactsItemResult> Items);
 
-/// <summary>Excluded members are hidden unless <c>state</c> asks for them.</summary>
-public sealed record ListContactsRequest(string? CampaignId, MembershipState? State, int? Limit, string? Cursor);
+/// <summary>
+/// Excluded members are hidden unless <c>state</c> asks for them. <c>summary</c> lists the people one count of
+/// <c>campaign.summary</c> counts, and <c>activity</c>, with its <c>since</c> and <c>until</c>, the people one count of
+/// <c>campaign.activity</c> counts, removed ones included; one of the two at most, and neither takes a <c>state</c>.
+/// <c>query</c> finds people as <c>contact.list</c> does.
+/// </summary>
+public sealed record ListContactsRequest(
+    string? CampaignId,
+    MembershipState? State,
+    int? Limit,
+    string? Cursor,
+    CampaignSummaryFilter? Summary = null,
+    CampaignActivityFilter? Activity = null,
+    DateTimeOffset? Since = null,
+    DateTimeOffset? Until = null,
+    string? Query = null);
 
-/// <summary>A membership carries the whole contact so an agent listing a campaign avoids a get per member.</summary>
-public sealed record MembershipItemDto(ContactDto Contact, MembershipState State, DateTimeOffset AddedAt, DateTimeOffset UpdatedAt);
+/// <summary>
+/// A membership carries the whole contact so an agent listing a campaign avoids a get per member. <c>why</c> is there
+/// when a filter asked: what the person is counted for.
+/// </summary>
+public sealed record MembershipItemDto(
+    ContactDto Contact,
+    MembershipState State,
+    DateTimeOffset AddedAt,
+    DateTimeOffset UpdatedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipWhy? Why = null);
+
+/// <summary>
+/// Why a listed person is counted. <c>approval</c>: the approval that waits on a person (<c>approval_id</c>, and what it
+/// would do as <c>text</c>). <c>question</c>: the question that does (<c>decision_id</c>, and the question as
+/// <c>text</c>). <c>failure</c>: how their latest work ended (<c>code</c>, the error's message as <c>text</c>, and
+/// <c>at</c>). <c>activity</c>: when it happened in the period (<c>at</c>) and what (<c>code</c>: the operation or role of
+/// the work, the channel of a reply or an opt-out, <c>added</c> for an addition).
+/// </summary>
+public sealed record MembershipWhy(
+    string Kind,
+    string? Text,
+    string? Code,
+    DateTimeOffset? At,
+    string? ApprovalId,
+    string? DecisionId);

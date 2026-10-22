@@ -320,6 +320,51 @@ what is still to run), `--order finished` lists newest first and leaves open wor
 without that time left out. `jason workitem count` takes the same filters and answers how many items the listing would
 return, without paging through them.
 
+## A campaign's people, counted
+
+`jason campaign summary` (`campaign.summary`) answers, for each campaign named or every one `jason campaign list` shows,
+where its people stand now; `jason campaign activity` (`campaign.activity`) answers what happened to them between
+`--since`, included, and `--until`, not included. Each count is a number of people, never of work items: a person may
+be in several counts at once, so the counts need not add up. `jason campaign list-contacts` with `--summary <count>`, or
+with `--activity <count>` and the same period, lists exactly the people one count counts, each with why it counts
+them: the approval or question waiting, how their latest work ended, or when in the period it happened. Work about a
+person is work in that campaign whose person they are, and a line about them a journal line of that campaign that names
+them.
+
+Now:
+
+- `people` — Everyone in the campaign; removed people are not counted.
+- `waiting` — An approval or a question about their work is waiting for you. A question counts for the people whose
+  work raised it or whose work it names; a question about the whole campaign counts for nobody.
+- `failed` — Their latest work failed or expired, and nothing else is planned for them. A rejected approval is a
+  person's decision and a cancel is one too: neither is a failure, and either, finishing after a failure, is the newer
+  finish, so the person is no longer `failed`.
+- `working` — Work about them is planned or running. Work waiting for an approval is `waiting`'s.
+- `new` — Nothing has been done or planned for them yet.
+- `idle` — Their work finished without failing, nothing is planned, and they were never put into the sequence.
+- `sequence` — They were put into the provider's sequence and are not out of it.
+- `out` — They replied, opted out, were stopped in the sequence, or hard-bounced. A reply is one the inbound read or
+  the provider's events observed; opted out means on the do-not-contact register now; a soft bounce takes nobody out.
+- `removed` — They were taken out of the campaign. They count in nothing else now, and stay listed, so a re-import
+  never adds them back.
+
+`sequence_linked` is false while the campaign's provider campaign is not pinned: until it is, nobody can be in the
+provider's sequence.
+
+In a period, removed people included, so a past period does not change when somebody is taken out today:
+
+- `people` — Something happened to them in the period: they are in at least one of the period's counts.
+- `added` — Added to the campaign, or added back after a removal, in the period.
+- `worked_on` — Work about them finished in the period, whether it succeeded or failed.
+- `contacted` — Something was sent to them, or they were put into the provider's sequence, in the period. That is a
+  `campaign.enroll`, `message.send`, `conversation.reply` or `social_invitation.send` about them that succeeded, even
+  an enrollment into a provider campaign not live yet; research never counts.
+- `replied` — Their first reply in this campaign came in the period. A reply is dated by the moment the provider gives
+  it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
+- `opted_out` — One of their addresses was put on the do-not-contact register in the period. It is read from the
+  journal, so an entry lifted since still counts.
+- `removed` — They were taken out of the campaign in the period, whether added back since or not.
+
 ## Launching an executor
 
 An `ai_role` item is run by starting an **agent host** as a child process. Which host, and with which

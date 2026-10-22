@@ -10,13 +10,26 @@ type Props = {
     zone: string;
     busy: boolean;
     remaining: string;
+    /** What the button that leaves this one says: the next waiting thing on Attention, the campaign elsewhere. */
+    skipLabel?: string;
     onApprove: () => void;
     onReject: (reason?: string) => void;
     onSkip: () => void;
     onClose: () => void;
 };
 
-export function ApprovalPanel({ approval, now, zone, busy, remaining, onApprove, onReject, onSkip, onClose }: Props) {
+export function ApprovalPanel({
+    approval,
+    now,
+    zone,
+    busy,
+    remaining,
+    skipLabel = 'Skip to next',
+    onApprove,
+    onReject,
+    onSkip,
+    onClose,
+}: Props) {
     const [rejecting, setRejecting] = useState(false);
     const preview = approval.preview as { intent?: unknown; contact?: { name?: string; value?: string } };
     const intent = typeof preview.intent === 'string' ? preview.intent : null;
@@ -92,7 +105,7 @@ export function ApprovalPanel({ approval, now, zone, busy, remaining, onApprove,
                     <span class="next">{remaining}</span>
                     <span class="spacer" />
                     <button class="btn ghost" type="button" onClick={onSkip}>
-                        Skip to next
+                        {skipLabel}
                     </button>
                 </div>
             )}

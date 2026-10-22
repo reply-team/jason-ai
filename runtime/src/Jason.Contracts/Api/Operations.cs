@@ -34,6 +34,8 @@ public static class Operations
     public const string CampaignAddContacts = "campaign.add_contacts";
     public const string CampaignRemoveContacts = "campaign.remove_contacts";
     public const string CampaignListContacts = "campaign.list_contacts";
+    public const string CampaignSummary = "campaign.summary";
+    public const string CampaignActivity = "campaign.activity";
 
     public const string ProjectCreate = "project.create";
     public const string ProjectGet = "project.get";

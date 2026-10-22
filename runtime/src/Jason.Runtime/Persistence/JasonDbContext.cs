@@ -278,6 +278,9 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             item.HasIndex(w => new { w.Status, w.DueAt });
             item.HasIndex(w => new { w.Status, w.FinishedAt });
             item.HasIndex(w => w.ContactId);
+
+            // A campaign's work by person, in order: how the campaign's people are counted, one pass per campaign asked.
+            item.HasIndex(w => new { w.CampaignId, w.ContactId });
             item.HasOne(w => w.Campaign).WithMany().HasForeignKey(w => w.CampaignId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne(w => w.Contact).WithMany().HasForeignKey(w => w.ContactId).OnDelete(DeleteBehavior.Restrict);
             item.HasMany(w => w.Attempts).WithOne(a => a.WorkItem).HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
@@ -603,6 +606,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.WorkItemId, e.PublicId });
             entry.HasIndex(e => e.Kind);
             entry.HasOne(e => e.Campaign).WithMany().HasForeignKey(e => e.CampaignId).OnDelete(DeleteBehavior.Restrict);
+
+            // The opt-outs of a period and a campaign's additions and removals of a period, read for every campaign's
+            // numbers: each kind's own lines by time, so the read grows with the period, never with the journal.
+            entry.HasIndex(e => e.Ts, "ix_journal_suppression_added_ts").HasFilter("kind = 'suppression_added'");
+            entry.HasIndex(e => new { e.CampaignId, e.Ts }, "ix_journal_contacts_added_campaign_ts").HasFilter("kind = 'contacts_added'");
+            entry.HasIndex(e => new { e.CampaignId, e.Ts }, "ix_journal_contacts_removed_campaign_ts").HasFilter("kind = 'contacts_removed'");
 
             // One person's lines, newest first: their timeline, and the newest of them is their latest activity.
             entry.HasIndex(e => new { e.ContactId, e.PublicId });

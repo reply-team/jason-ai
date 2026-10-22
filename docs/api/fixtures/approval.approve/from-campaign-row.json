@@ -1,0 +1,43 @@
+{
+  "operation": "approval.approve",
+  "case": "from-campaign-row",
+  "request": {
+    "approval_id": "apr_1",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_1",
+    "work_item_id": "wi_1",
+    "campaign_id": "cmp_1",
+    "operation": "campaign.enroll",
+    "operation_version": 1,
+    "status": "approved",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-4",
+    "subject": {
+      "operation": "campaign.enroll",
+      "work_item": "wi_1"
+    },
+    "preview": {
+      "intent": "Put one person into the campaign at the provider."
+    },
+    "plugin_id": "reply",
+    "binding_identity": null,
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-01T10:00:00.000Z",
+    "decided_at": "2026-10-16T09:00:00.000Z",
+    "decided_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "decision_reason": null,
+    "campaign_name": "Spring",
+    "contact_name": "Ada Example"
+  }
+}

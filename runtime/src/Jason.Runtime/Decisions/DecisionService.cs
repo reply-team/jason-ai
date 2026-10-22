@@ -58,7 +58,7 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
             AttemptId = attempt.Id,
             Question = question,
             Options = DecisionMapper.ToJson(request.Options),
-            References = DecisionMapper.ToJson(request.References),
+            References = DecisionMapper.ToJson(request.References?.Select(reference => reference with { Id = reference.Id.Trim() }).ToList()),
             Status = DecisionStatus.Pending,
             RaisedAt = now,
         };

@@ -1,0 +1,38 @@
+{
+  "operation": "contact.list",
+  "case": "campaign-picker-zoe",
+  "request": {
+    "query": "zoe",
+    "limit": 10
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cnt_24",
+        "first_name": "Zoe",
+        "last_name": "Example",
+        "company": "Zoe Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "zoe@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [],
+        "last_activity": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

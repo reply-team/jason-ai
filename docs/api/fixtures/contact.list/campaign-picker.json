@@ -1,0 +1,462 @@
+{
+  "operation": "contact.list",
+  "case": "campaign-picker",
+  "request": {
+    "limit": 10
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cnt_1",
+        "first_name": "Ada",
+        "last_name": "Example",
+        "company": "Ada Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "ada@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_2",
+            "campaign_name": "Autumn",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          },
+          {
+            "campaign_id": "cmp_3",
+            "campaign_name": "Summer referrals",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          },
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-12T09:00:00.000Z",
+            "updated_at": "2026-10-12T09:00:00.000Z"
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_1",
+          "ts": "2026-10-15T16:00:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": "dispatcher"
+          },
+          "kind": "approval_requested",
+          "campaign_id": "cmp_1",
+          "work_item_id": "wi_1",
+          "attempt_id": null,
+          "key": "approval",
+          "old": null,
+          "new": {
+            "id": "apr_1",
+            "operation": "campaign.enroll"
+          },
+          "reason": null,
+          "contact_id": "cnt_1",
+          "campaign_name": "Spring",
+          "contact_name": "Ada Example",
+          "work_item_kind": "provider_op",
+          "work_item_role": null,
+          "work_item_operation": "campaign.enroll",
+          "actor_role": null
+        }
+      },
+      {
+        "id": "cnt_2",
+        "first_name": "Ben",
+        "last_name": "Example",
+        "company": "Ben Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "ben@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": null
+      },
+      {
+        "id": "cnt_4",
+        "first_name": "Cleo",
+        "last_name": "Example",
+        "company": "Cleo Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "cleo@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_2",
+          "ts": "2026-10-14T10:00:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": "runtime"
+          },
+          "kind": "workitem_failed",
+          "campaign_id": "cmp_1",
+          "work_item_id": "wi_2",
+          "attempt_id": null,
+          "key": "error",
+          "old": null,
+          "new": {
+            "code": "provider_error",
+            "message": "It did not work.",
+            "retriable": false
+          },
+          "reason": null,
+          "contact_id": "cnt_4",
+          "campaign_name": "Spring",
+          "contact_name": "Cleo Example",
+          "work_item_kind": "provider_op",
+          "work_item_role": null,
+          "work_item_operation": "campaign.enroll",
+          "actor_role": null
+        }
+      },
+      {
+        "id": "cnt_8",
+        "first_name": "Dan",
+        "last_name": "Example",
+        "company": "Dan Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "dan@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": null
+      },
+      {
+        "id": "cnt_5",
+        "first_name": "Eve",
+        "last_name": "Example",
+        "company": "Eve Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "eve@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": null
+      },
+      {
+        "id": "cnt_9",
+        "first_name": "Finn",
+        "last_name": "Example",
+        "company": "Finn Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "finn@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": null
+      },
+      {
+        "id": "cnt_10",
+        "first_name": "Gus",
+        "last_name": "Example",
+        "company": "Gus Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "gus@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": null
+      },
+      {
+        "id": "cnt_11",
+        "first_name": "Hal",
+        "last_name": "Example",
+        "company": "Hal Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "hal@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          },
+          {
+            "campaign_id": "cmp_2",
+            "campaign_name": "Autumn",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": null
+      },
+      {
+        "id": "cnt_12",
+        "first_name": "Ivy",
+        "last_name": "Example",
+        "company": "Ivy Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "ivy@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_5",
+          "ts": "2026-10-12T10:00:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": "runtime"
+          },
+          "kind": "workitem_succeeded",
+          "campaign_id": "cmp_1",
+          "work_item_id": "wi_3",
+          "attempt_id": null,
+          "key": "result_present",
+          "old": null,
+          "new": true,
+          "reason": null,
+          "contact_id": "cnt_12",
+          "campaign_name": "Spring",
+          "contact_name": "Ivy Example",
+          "work_item_kind": "provider_op",
+          "work_item_role": null,
+          "work_item_operation": "campaign.enroll",
+          "actor_role": null
+        }
+      },
+      {
+        "id": "cnt_13",
+        "first_name": "Jon",
+        "last_name": "Example",
+        "company": "Jon Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "jon@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          },
+          {
+            "campaign_id": "cmp_3",
+            "campaign_name": "Summer referrals",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z"
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_6",
+          "ts": "2026-10-14T10:00:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": null
+          },
+          "kind": "inbound_reply_observed",
+          "campaign_id": "cmp_1",
+          "work_item_id": null,
+          "attempt_id": null,
+          "key": null,
+          "old": null,
+          "new": {
+            "plugin": "reply",
+            "thread": "t-Jon",
+            "channel": "email",
+            "last_activity_at": "2026-10-14T08:00:00.000Z",
+            "contact_id": "cnt_13"
+          },
+          "reason": null,
+          "contact_id": "cnt_13",
+          "campaign_name": "Spring",
+          "contact_name": "Jon Example",
+          "work_item_kind": null,
+          "work_item_role": null,
+          "work_item_operation": null,
+          "actor_role": null
+        }
+      }
+    ],
+    "next_cursor": "Y250XzAxSzdRTjAwMDAwMDAwMDAwMDAwMDAwMjI4"
+  }
+}

@@ -32,7 +32,8 @@
         "20261020003554_WorkItemsByFinish",
         "20261020050039_LinkedInOneKey",
         "20261020172838_JournalByPerson",
-        "20261022011335_ProjectsAndPreferences"
+        "20261022011335_ProjectsAndPreferences",
+        "20261023115917_CampaignPeopleIndexes"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -55,7 +56,8 @@
         "20261020003554_WorkItemsByFinish",
         "20261020050039_LinkedInOneKey",
         "20261020172838_JournalByPerson",
-        "20261022011335_ProjectsAndPreferences"
+        "20261022011335_ProjectsAndPreferences",
+        "20261023115917_CampaignPeopleIndexes"
       ],
       "backup_file": null
     },

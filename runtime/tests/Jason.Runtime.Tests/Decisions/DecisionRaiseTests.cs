@@ -182,7 +182,7 @@ public class DecisionRaiseTests
                 "which of these?",
                 null,
                 [
-                    new DecisionReference(DecisionReferenceKind.WorkItem, seed.Item.PublicId),
+                    new DecisionReference(DecisionReferenceKind.WorkItem, $"  {seed.Item.PublicId} "),
                     new DecisionReference(DecisionReferenceKind.Attempt, seed.Attempt.PublicId),
                     new DecisionReference(DecisionReferenceKind.JournalEntry, entry),
                     new DecisionReference(DecisionReferenceKind.Report, report),
@@ -192,6 +192,10 @@ public class DecisionRaiseTests
             Ct);
 
         Assert.Equal(5, raised.References!.Count);
+        // Kept as the id it resolved to, so whoever reads it later finds the row by it.
+        await using var fresh = database.Open();
+        var stored = await fresh.Decisions.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(seed.Item.PublicId, stored.References![0]!["id"]!.GetValue<string>());
     }
 
     /// <summary>And each of them refuses a row that belongs to somebody else's campaign.</summary>

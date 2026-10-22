@@ -371,6 +371,27 @@ public sealed partial class CanonicalReadsDocTests
         Assert.All(never, contract => Assert.Contains($"`{contract.Id}` says `never`", section, StringComparison.Ordinal));
     }
 
+    /// <summary>Every count campaign.summary and campaign.activity answer, as their wire names say it, with its definition.</summary>
+    public static TheoryData<string> Counts =>
+    [
+        .. new[] { "people" }
+            .Concat(Enum.GetValues<Jason.Contracts.Api.CampaignSummaryFilter>().Select(count => count.ToString()))
+            .Concat(Enum.GetValues<Jason.Contracts.Api.CampaignActivityFilter>().Select(count => count.ToString()))
+            .Select(System.Text.Json.JsonNamingPolicy.SnakeCaseLower.ConvertName)
+            .Distinct(),
+    ];
+
+    [Theory]
+    [MemberData(nameof(Counts))]
+    public void Work_execution_defines_every_count_of_a_campaign_s_people(string count)
+    {
+        var page = Source("docs/work-execution.md");
+        var start = page.IndexOf("## A campaign's people, counted", StringComparison.Ordinal);
+        Assert.True(start >= 0, "docs/work-execution.md has no section \"A campaign's people, counted\".");
+        var end = page.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        Assert.Contains($"- `{count}` — ", page[start..(end < 0 ? page.Length : end)], StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Work_execution_names_where_the_operations_are_rather_than_listing_them() =>
         Assert.Contains(

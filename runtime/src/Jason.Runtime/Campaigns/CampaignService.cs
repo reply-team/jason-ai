@@ -186,10 +186,15 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         // Archived campaigns are the only ones a listing hides: a finished campaign should not crowd the work
-        // in front of a role, but asking for them by status still shows them.
-        query = request.Status is { } status
-            ? query.Where(c => c.Status == status)
-            : query.Where(c => c.Status != CampaignStatus.Archived);
+        // in front of a role, but asking for them by status, or for every campaign, still shows them.
+        if (request.Status is { } status)
+        {
+            query = query.Where(c => c.Status == status);
+        }
+        else if (request.IncludeArchived != true)
+        {
+            query = query.Where(c => c.Status != CampaignStatus.Archived);
+        }
 
         if (after is not null)
         {

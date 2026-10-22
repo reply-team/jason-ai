@@ -1,0 +1,37 @@
+{
+  "operation": "campaign.start",
+  "case": "after-pause",
+  "request": {
+    "campaign_id": "cmp_1",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "cmp_1",
+    "name": "Spring",
+    "status": "active",
+    "project_id": "prj_1",
+    "project_slug": "default",
+    "context": {
+      "offer": "A two-week pilot of the reconciliation tool.",
+      "audience": "Heads of finance at Latin American fintechs, 50 to 500 people."
+    },
+    "external_ids": [
+      {
+        "plugin_id": "reply",
+        "kind": "campaign",
+        "value": "4711",
+        "recorded_at": "2026-10-01T10:00:00.000Z",
+        "recorded_by_attempt_id": "att_1"
+      }
+    ],
+    "execution_profile": null,
+    "created_at": "2026-10-01T10:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "archived_at": null,
+    "folder_path": null
+  }
+}

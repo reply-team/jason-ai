@@ -95,10 +95,10 @@ export function Timeline({ person, me, now, zone }: Props) {
     const chip = store.chip.value;
     const [expanded, setExpanded] = useState<string | null>(null);
     useEffect(() => {
-        void store.loadTimeline(api, person.id, 'all');
+        void store.loadTimeline(api, { contact_id: person.id }, 'all');
     }, [api, person.id]);
 
-    const mine = store.timelineOf.value === person.id;
+    const mine = store.timelineOf.value === store.subjectKey({ contact_id: person.id });
     const lines: Happened[] = (mine ? store.lines.value : []).map((entry) => {
         const label = entryLabel(entry, me);
         return {
@@ -131,7 +131,7 @@ export function Timeline({ person, me, now, zone }: Props) {
                         type="button"
                         class={`chip${chip === each ? ' on' : ''}`}
                         aria-pressed={chip === each}
-                        onClick={() => void store.loadTimeline(api, person.id, each)}
+                        onClick={() => void store.loadTimeline(api, { contact_id: person.id }, each)}
                     >
                         {label}
                     </button>
@@ -226,7 +226,7 @@ export function Timeline({ person, me, now, zone }: Props) {
                         })}
                     </div>
                 ))}
-                <More more={store.linesCursor.value ? () => store.moreLines(api, person.id) : null} />
+                <More more={store.linesCursor.value ? () => store.moreLines(api, { contact_id: person.id }) : null} />
             </div>
         </div>
     );

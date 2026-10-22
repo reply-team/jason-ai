@@ -234,20 +234,35 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         ArgumentNullException.ThrowIfNull(request);
 
         var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        var text = ValidateListing(request, out var period);
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
-        var query = db.CampaignContacts
-            .Include(membership => membership.Contact!)
-            .ThenInclude(contact => contact.Channels)
-            .Include(membership => membership.Contact!)
-            .ThenInclude(contact => contact.ExternalIds)
-            .Where(membership => membership.CampaignId == campaign.Id);
+        // A filter decides who is listed by its own definition — the counts' — so it takes no state: a summary count lists
+        // today's members, and an activity count everyone it happened to, removed since or not.
+        IQueryable<CampaignContact> query;
+        if (request.Summary is { } summary)
+        {
+            query = CampaignPeople.Matching(db, [campaign.Id], summary);
+        }
+        else if (request.Activity is { } activity)
+        {
+            query = CampaignPeople.Happened(db, [campaign.Id], activity, period.Since, period.Until);
+        }
+        else
+        {
+            // Excluded members are the answer to "who did we take out", never to "who is in this campaign".
+            query = db.CampaignContacts.Where(membership => membership.CampaignId == campaign.Id);
+            query = request.State is { } state
+                ? query.Where(membership => membership.State == state)
+                : query.Where(membership => membership.State != MembershipState.Excluded);
+        }
 
-        // Excluded members are the answer to "who did we take out", never to "who is in this campaign".
-        query = request.State is { } state
-            ? query.Where(membership => membership.State == state)
-            : query.Where(membership => membership.State != MembershipState.Excluded);
+        if (text is not null)
+        {
+            var found = ContactSearch.Apply(db.Contacts, text);
+            query = query.Where(membership => found.Any(contact => contact.Id == membership.ContactId));
+        }
 
         if (after is not null)
         {
@@ -255,20 +270,68 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         }
 
         var fetched = await query
+            .Include(membership => membership.Contact!)
+            .ThenInclude(contact => contact.Channels)
+            .Include(membership => membership.Contact!)
+            .ThenInclude(contact => contact.ExternalIds)
             .OrderBy(membership => membership.Contact!.PublicId)
             .Take(limit + 1)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return Paging.ToPage(
-            fetched,
-            limit,
-            membership => membership.Contact!.PublicId,
-            membership => new MembershipItemDto(
-                ContactMapper.ToDto(membership.Contact!),
+        var page = Paging.ToPage(fetched, limit, membership => membership.Contact!.PublicId, membership => membership);
+        var people = page.Items.Select(membership => membership.Contact!).ToList();
+        var contacts = await ContactService.WithCampaignsAndLatestLineAsync(db, people, cancellationToken).ConfigureAwait(false);
+        var why = request switch
+        {
+            { Summary: { } counted } => await CampaignWhy.ForSummaryAsync(db, campaign.Id, people, counted, cancellationToken).ConfigureAwait(false),
+            { Activity: { } happened } => await CampaignWhy.ForActivityAsync(db, campaign.Id, people, happened, period.Since, period.Until, cancellationToken).ConfigureAwait(false),
+            _ => null,
+        };
+
+        return new Page<MembershipItemDto>(
+            [.. page.Items.Zip(contacts, (membership, contact) => new MembershipItemDto(
+                contact,
                 membership.State,
                 ContactMapper.ToOffset(membership.AddedAt),
-                ContactMapper.ToOffset(membership.UpdatedAt)));
+                ContactMapper.ToOffset(membership.UpdatedAt),
+                why?.GetValueOrDefault(membership.ContactId)))],
+            page.NextCursor);
+    }
+
+    /// <summary>One filter at most; an activity's period, and a period only with an activity; no state beside a filter.</summary>
+    private static string? ValidateListing(ListContactsRequest request, out (DateTime Since, DateTime Until) period)
+    {
+        period = default;
+        var errors = new ValidationErrors();
+        if (request.Summary is not null && request.Activity is not null)
+        {
+            errors.Add("activity", "invalid", "Ask for one count: summary or activity, not both.");
+        }
+
+        if ((request.Summary is not null || request.Activity is not null) && request.State is not null)
+        {
+            errors.Add("state", "invalid", "A count decides who is listed; send state without summary or activity.");
+        }
+
+        if (request.Activity is null && (request.Since is not null || request.Until is not null))
+        {
+            errors.Add(request.Since is not null ? "since" : "until", "invalid", "since and until bound an activity; send activity as well.");
+        }
+
+        var text = string.IsNullOrWhiteSpace(request.Query) ? null : request.Query.Trim();
+        if (text is { Length: > ContactSearch.MaxLength })
+        {
+            errors.Add("query", "too_long", string.Create(CultureInfo.InvariantCulture, $"query must be at most {ContactSearch.MaxLength} characters."));
+        }
+
+        errors.ThrowIfAny();
+        if (request.Activity is not null && request.Summary is null)
+        {
+            period = CampaignNumbers.Period(request.Since, request.Until);
+        }
+
+        return text;
     }
 
     private async Task<AddContactsItemResult> AddByIdAsync(
