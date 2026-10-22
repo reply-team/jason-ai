@@ -4,8 +4,9 @@ using System.Text.Json.Nodes;
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The three commands on one contact by its Reply id — <c>contact get</c>, <c>contact update</c> and <c>contact delete</c>
-/// — answered as reply-cli 0.13.0 documents them, from the same files the account keeps.
+/// The three commands on one contact — <c>contact get</c>, <c>contact update</c> and <c>contact delete</c> — answered as
+/// reply-cli documents them, from the same files the account keeps. <c>contact update</c> also takes the person by their
+/// fields, which find or import them as the add commands do.
 /// </summary>
 internal static partial class Account
 {
@@ -38,17 +39,48 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// Changes the fields stdin names and leaves the rest; a null clears one. A custom field is matched against the
-    /// account's own, ignoring case, and written as the account spells it; one the account has none of is refused before
-    /// anything is written. Every refusal says which contact it was about.
+    /// Changes the fields stdin names and leaves the rest; a null clears one. The contact is its id, as the argument or
+    /// <c>--contact-id</c>, or the person by their fields, found or imported as the add commands do — those fields only
+    /// name the person, and the change is the fields alone; the person and the fields are then one object on stdin. A
+    /// custom field is matched against the account's own, ignoring case, and written as the account spells it; one the
+    /// account has none of is refused before anything is written or imported. Every refusal says which contact it was
+    /// about, once there is one; the answer says whether the command made it.
     /// </summary>
     private static Ending ContactUpdate(string root, Parsed line, string? stdin)
     {
-        if (IdOf(line.Operands[0]) is not { } id)
+        var (contactStdin, fieldsStdin, badStdin) = StdinOf(line, "--fields", stdin);
+        if (badStdin is not null)
         {
-            return BadId("Contact id");
+            return badStdin;
         }
 
+        ContactRef contact;
+        if (line.Operands.Count == 1)
+        {
+            if (new[] { "--contact-id", "--email", "--first-name", "--last-name", "--company", "--title", "--contact" }.Any(flag => line.Option(flag) is not null))
+            {
+                return Refused("usage.contact", "The contact was given more than one way.", exit: 2);
+            }
+
+            if (IdOf(line.Operands[0]) is not { } operand)
+            {
+                return BadId("Contact id");
+            }
+
+            contact = new ContactRef(operand, null);
+        }
+        else
+        {
+            var (named, badContact) = ContactOf(line, contactStdin);
+            if (badContact is not null)
+            {
+                return badContact;
+            }
+
+            contact = named!;
+        }
+
+        stdin = fieldsStdin;
         if (line.Option("--fields") != "-")
         {
             return Refused("usage.fields", "--fields takes only -: the fields are read from stdin.", exit: 2);
@@ -132,7 +164,7 @@ internal static partial class Account
             }
         }
 
-        var ids = new JsonObject { ["contact_id"] = id };
+        var ids = contact.Id is { } known ? new JsonObject { ["contact_id"] = known } : new JsonObject();
         var resolved = new List<(string Title, string? Value)>();
         if (custom.Count > 0)
         {
@@ -159,20 +191,27 @@ internal static partial class Account
             }
         }
 
+        var (id, created, notEnsured) = FindOrImport(root, contact, ids);
+        if (notEnsured is not null)
+        {
+            return notEnsured;
+        }
+
+        ids["contact_id"] = id;
         var contacts = Read(root, ContactsFile);
-        if (Find(contacts, id) is not { } contact)
+        if (Find(contacts, id) is not { } record)
         {
             return NoContact(id, ids);
         }
 
         foreach (var (name, value) in patch)
         {
-            contact[name] = value;
+            record[name] = value;
         }
 
         if (resolved.Count > 0)
         {
-            var held = contact["customFields"] as JsonArray ?? [];
+            var held = record["customFields"] as JsonArray ?? [];
             foreach (var (title, value) in resolved)
             {
                 foreach (var existing in held.OfType<JsonObject>().Where(entry => Text(entry, "key") == title).ToList())
@@ -186,11 +225,11 @@ internal static partial class Account
                 }
             }
 
-            contact["customFields"] = held.DeepClone();
+            record["customFields"] = held.DeepClone();
         }
 
         Write(root, ContactsFile, contacts);
-        return Done(new JsonObject { ["status"] = "updated", ["contact_id"] = id });
+        return Done(new JsonObject { ["status"] = "updated", ["contact_id"] = id, ["contact_created"] = created });
     }
 
     /// <summary>

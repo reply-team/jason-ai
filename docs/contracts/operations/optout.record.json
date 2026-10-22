@@ -86,7 +86,7 @@
       "contact": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "first_name", "last_name", "company", "title", "time_zone", "channels", "external_ids"],
+        "required": ["id", "channels", "external_ids"],
         "properties": {
           "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
           "first_name": { "type": ["string", "null"], "maxLength": 200 },

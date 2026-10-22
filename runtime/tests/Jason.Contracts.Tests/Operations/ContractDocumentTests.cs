@@ -138,8 +138,9 @@ public class ContractDocumentTests
         Assert.Equal(RepeatAfterAmbiguous.AfterRecoveryRead, delete.RepeatAfterAmbiguous);
         Assert.Empty(delete.ExternalIds);
 
-        // Each reads the person's identifier and the one channel it consumes, and nothing else of them.
-        Assert.Equal(["id"], update.ContactProjection!.Fields);
+        // The update reads what a person the provider holds nobody for is created from, as every write that may create
+        // them does; the delete reads the person's identifier and the one channel it consumes, and nothing else of them.
+        Assert.Equal(["id", "first_name", "last_name", "company", "title", "time_zone"], update.ContactProjection!.Fields);
         Assert.Equal(["id"], delete.ContactProjection!.Fields);
     }
 
@@ -187,11 +188,11 @@ public class ContractDocumentTests
     }
 
     /// <summary>
-    /// How each document finds the provider's own contact for its person, stated as data rather than in a sentence: the
-    /// writes that may make the person create them only where the provider holds nobody, the stop, the reply, the update,
-    /// the invitation and the message find them and create nobody, the read of a person's threads and the delete work by the pin alone, and the
-    /// rest name nobody. A document that
-    /// moved between these would change what a plugin does with a person it holds no pin for, so the map is held whole.
+    /// How each document finds the provider's own contact for its person, stated as data rather than in a sentence: every
+    /// write that takes a person — the enrollment, the list add, the opt-out, the update, the invitation and the message —
+    /// creates them only where the provider holds nobody, the stop and the reply find them and create nobody, the read of
+    /// a person's threads and the delete work by the pin alone, and the rest name nobody. A document that moved between
+    /// these would change what a plugin does with a person it holds no pin for, so the map is held whole.
     /// </summary>
     [Fact]
     public void Each_document_says_how_the_provider_s_contact_is_found()
@@ -201,11 +202,11 @@ public class ContractDocumentTests
             ["campaign.enroll"] = ProviderContact.FindOrCreate,
             ["list_membership.add"] = ProviderContact.FindOrCreate,
             ["optout.record"] = ProviderContact.FindOrCreate,
+            ["contact.update"] = ProviderContact.FindOrCreate,
+            ["social_invitation.send"] = ProviderContact.FindOrCreate,
+            ["message.send"] = ProviderContact.FindOrCreate,
             ["enrollment.stop"] = ProviderContact.FindOnly,
-            ["contact.update"] = ProviderContact.FindOnly,
             ["conversation.reply"] = ProviderContact.FindOnly,
-            ["social_invitation.send"] = ProviderContact.FindOnly,
-            ["message.send"] = ProviderContact.FindOnly,
             ["conversation.list"] = ProviderContact.PinnedOnly,
             ["contact.delete"] = ProviderContact.PinnedOnly,
         };
@@ -213,6 +214,23 @@ public class ContractDocumentTests
         Assert.All(OperationCatalog.All, contract => Assert.True(
             contract.Preflight.ProviderContact == (expected.TryGetValue(contract.Id, out var mode) ? mode : ProviderContact.NotUsed),
             $"{contract.Id} says the provider's contact is found `{contract.Preflight.ProviderContact}`."));
+    }
+
+    /// <summary>
+    /// A write that may create the person is handed what they are created from: the person's own fields, the same on
+    /// every such document, so a provider that requires a name can be given the one Jason holds rather than one made up
+    /// from an address — and a LinkedIn profile, which is no name at all, does not leave a person Jason knows by name
+    /// impossible to create.
+    /// </summary>
+    [Fact]
+    public void A_write_that_may_create_the_person_is_handed_their_own_fields()
+    {
+        var creating = OperationCatalog.All.Where(contract => contract.Preflight.ProviderContact == ProviderContact.FindOrCreate).ToList();
+
+        Assert.NotEmpty(creating);
+        Assert.All(creating, contract => Assert.True(
+            contract.ContactProjection!.Fields.SequenceEqual(["id", "first_name", "last_name", "company", "title", "time_zone"]),
+            $"{contract.Id} may create the person and projects only {string.Join(", ", contract.ContactProjection.Fields)}."));
     }
 
     /// <summary>

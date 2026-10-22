@@ -1,0 +1,27 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "the provider held nobody under the consumed address: the contact was created from it and the person's own fields, the email sent to it, and the new identifier comes back to be pinned",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "sent",
+          "channel": "email",
+          "format": "email",
+          "sender_external_id": "s_12",
+          "message": { "external_id": "<60018.direct@mail.example.com>", "sent_at": null },
+          "external_ids": { "contact": "p_90113" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_90113" },
+    "error": null,
+    "diagnostics": { "duration_ms": 1100, "exec_calls": 4, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false, "pinned": { "contact": "p_90113" } }
+}

@@ -514,6 +514,21 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// A contact Reply's exact lookup does not return, though its import matches it — by the email, or by the LinkedIn URL
+    /// where the person has no email. Reply documents neither how the lookup nor how the import compares a value, so the
+    /// two may disagree; this is the contact they disagree about. <c>contact get</c> reads it as any other.
+    /// </summary>
+    public ReplyAccount Unlisted(int contact)
+    {
+        var contacts = ReadArray(ContactsFile);
+        var planted = contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == contact)
+            ?? throw new InvalidOperationException($"no contact {contact} has been planted to keep from the lookup.");
+        planted["_unlisted"] = true;
+        Write(ContactsFile, contacts);
+        return this;
+    }
+
     /// <summary>A contact the LinkedIn account is already connected with: an invitation to them sends nothing, and a message or a voice message may go.</summary>
     public ReplyAccount WithConnection(int contact, long account)
     {

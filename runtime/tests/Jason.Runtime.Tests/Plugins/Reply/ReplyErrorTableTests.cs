@@ -230,6 +230,27 @@ public class ReplyErrorTableTests
         Assert.DoesNotContain(ReplyErrorTable.Rows("campaign.get"), entry => Text(entry.Row, "code") == "limit_reached");
     }
 
+    /// <summary>
+    /// An input without the person's own fields comes only from a runtime older than 0.14.0, whose documents projected
+    /// the identifier and the channel alone, so it is refused in a code those documents already declare rather than in one
+    /// of its own: a runtime that knew a new code would never compose such an input, and one that does not know it would
+    /// refuse it as a protocol failure. The row is `invalid_channel_value`, and it says that it is the older runtime's case.
+    /// </summary>
+    [Fact]
+    public void An_input_without_the_person_s_fields_is_the_older_runtime_s_case_of_invalid_channel_value()
+    {
+        foreach (var operation in new[] { "message.send", "social_invitation.send", "contact.update" })
+        {
+            var row = Assert.Single(ReplyErrorTable.Rows(operation), entry => entry.Key == "person_not_projected").Row;
+
+            Assert.True(
+                (Text(row, "code"), Text(row, "class")) == ("invalid_channel_value", "validation"),
+                $"{operation} reports an input without the person's fields as {Text(row, "code")} ({Text(row, "class")}).");
+            Assert.Contains("older than 0.14.0", Text(row, "when"), StringComparison.Ordinal);
+            Assert.Contains("Update Jason to 0.14.0 or newer", Text(row, "note"), StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void Every_command_the_package_runs_is_marked_a_read_or_a_write()
     {

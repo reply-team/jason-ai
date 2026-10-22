@@ -12,8 +12,9 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// Reply would send as written, the account to the address the person approving read, the person found and their contact
 /// read before anything goes — opted out at Reply is a stop, another address or profile is a refusal, no LinkedIn profile
 /// is filled — and then the one command made for the format, with the text on stdin: <c>reply contact send-email</c>, the
-/// text written as HTML, or <c>linkedin-message</c>, <c>linkedin-inmail</c> or <c>linkedin-voice</c>. What went out is read
-/// back from the account.
+/// text written as HTML, or <c>linkedin-message</c>, <c>linkedin-inmail</c> or <c>linkedin-voice</c>. A person Reply holds
+/// nobody for is imported by that same command, from their fields on stdin beside the text. What went out is read back
+/// from the account.
 /// </summary>
 [Collection(ProcessEnvironmentCollection.Name)]
 public class ReplyMessageSendTests
@@ -302,20 +303,289 @@ public class ReplyMessageSendTests
         Assert.Single(account.Contacts);
     }
 
+    /// <summary>
+    /// Reply holds nobody under the address: nobody is read, and the send's own command imports the person from their
+    /// fields — the consumed address, never another — with the text beside them in one object on stdin, then sends. The
+    /// contact it made is the one pinned.
+    /// </summary>
     [Fact]
-    public async Task A_person_reply_holds_nobody_for_is_not_found_and_nothing_is_sent_or_made()
+    public async Task A_person_reply_holds_nobody_for_is_imported_by_the_send_and_pinned()
     {
         using var account = new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email")));
+        var result = await InvokeAsync(api, Input("email"));
 
-        Assert.Equal(("contact_not_found", FailureClass.Permanent), (error.Code, error.Class));
-        Assert.Contains("on a list", error.Message, StringComparison.Ordinal);
+        var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!;
+        Assert.Equal("1001", (string?)item["external_ids"]!["contact"]);
+        Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal(["account list", "contact find", "contact send-email"], Lines(account));
+        var send = account.Calls[^1];
+        Assert.Equal(["--json", "-q", "contact", "send-email", "--contact", "-", "--email-account-id", "12", "--message", "-"], send.Args);
+        Assert.Equal(
+            $$$"""{"contact":{"email":"{{{Address}}}","first_name":"Marta","last_name":"Alvarez","company":"Puerto Analytics","title":"Head of Growth"},"message":{"subject":"{{{Subject}}}","body":"{{{Body}}}"}}""",
+            JsonNode.Parse(send.Body!)!.ToJsonString());
+        var made = Assert.Single(account.Contacts)!;
+        Assert.Equal((1001, Address, "Marta"), ((int)made["id"]!, (string?)made["email"], (string?)made["firstName"]));
+        Assert.Equal(1001, (int)Assert.Single(account.Sent)!["contactId"]!);
+    }
+
+    /// <summary>
+    /// On LinkedIn the person is named by the consumed profile alone, as the runtime keys it, and imported keyed by it; an
+    /// InMail needs no connection, so it reaches a person nobody held a moment before.
+    /// </summary>
+    [Fact]
+    public async Task A_person_reply_holds_nobody_for_on_linkedin_is_imported_by_the_profile_and_sent_to()
+    {
+        using var account = new ReplyAccount().WithSender(34, "linkedin", "Ann Owner", SenderProfile);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input("linkedin_inmail"));
+
+        ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal(["account list", "contact find", "contact linkedin-inmail"], Lines(account));
+        var person = JsonNode.Parse(account.Calls[^1].Body!)!["contact"]!.AsObject();
+        Assert.Equal(["company", "first_name", "last_name", "linkedin_url", "title"], person.Select(member => member.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(Profile, (string?)person["linkedin_url"]);
+        Assert.Equal(Profile, (string?)Assert.Single(account.Contacts)!["linkedInUrl"]);
+        Assert.Single(account.Sent);
+    }
+
+    /// <summary>
+    /// A person with no first name is imported under one derived from what Jason holds, exactly as an add derives it, and
+    /// a route that forbids deriving refuses the message instead: nothing is imported and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_person_with_no_first_name_is_imported_under_a_derived_one_unless_the_route_forbids_it(bool forbidden)
+    {
+        using var account = new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var binding = forbidden ? new JsonObject { ["derive_first_name"] = false } : null;
+        var result = await ReplyOperations.InvokeAsync(api, Operation, Input("email", firstName: null), Ct, binding: binding);
+
+        if (forbidden)
+        {
+            var error = ReplyOperations.Failed(Operation, result);
+            Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+            Assert.Equal("the route forbids deriving a first name", (string?)error.Details!["reason"]);
+            Assert.Equal(["account list", "contact find"], Lines(account));
+            Assert.Empty(account.Contacts);
+            Assert.Empty(account.Sent);
+            return;
+        }
+
+        ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal("Alvarez", (string?)JsonNode.Parse(account.Calls[^1].Body!)!["contact"]!["first_name"]);
+        Assert.Equal("Alvarez", (string?)Assert.Single(account.Contacts)!["firstName"]);
+        Assert.Single(account.Sent);
+    }
+
+    /// <summary>
+    /// A profile stored before the key is no key: imported, Reply would hold it under a spelling the register was not
+    /// asked about, so the message is refused before the import, as it is before a profile is written onto a contact.
+    /// </summary>
+    [Fact]
+    public async Task A_value_stored_before_the_key_is_never_imported_and_nothing_is_sent()
+    {
+        using var account = new ReplyAccount().WithSender(34, "linkedin", "Ann Owner", SenderProfile);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("linkedin_inmail", value: ReplyProfileKeys.LeftAsItStood)));
+
+        Assert.Equal(("contact_channel_conflict", FailureClass.Permanent), (error.Code, error.Class));
         Assert.Equal(["account list", "contact find"], Lines(account));
         Assert.Empty(account.Contacts);
         Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// The command's own refusals of the import, in the words the add operations report them in: an account that holds
+    /// no further contact, an address or a profile Reply will not take, and a second contact under the address. Nothing is
+    /// sent, and nobody is pinned.
+    /// </summary>
+    [Theory]
+    [InlineData("email", "account.contact_limit_reached", 400, "contact.limitExceeded", null, "limit_reached", "permanent")]
+    [InlineData("email", "contact.invalid_email", 400, null, null, "invalid_channel_value", "validation")]
+    [InlineData("email", "reply.invalid_request", 400, null, "email", "invalid_channel_value", "validation")]
+    [InlineData("linkedin_inmail", "contact.invalid_linkedin_url", 400, null, null, "invalid_channel_value", "validation")]
+    [InlineData("email", "contact.not_unique", 200, null, null, "contact_not_unique", "permanent")]
+    public async Task A_refusal_of_the_import_is_reported_as_an_add_reports_it(
+        string format, string code, int status, string? replyCode, string? field, string expected, string expectedClass)
+    {
+        using var account = new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox).WithSender(34, "linkedin", "Ann Owner", SenderProfile);
+        account.Refuses(FormatCommand(format), code, status: status, replyCode: replyCode, details: field is null ? null : new JsonObject { ["fields"] = new JsonArray(field) });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(format)));
+
+        Assert.Equal((expected, expectedClass), (error.Code, error.Class.ToString().ToLowerInvariant()));
+        Assert.Null(error.ExternalIds);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// The lookup found nobody, and the command's own import matched a contact Reply already held, so the command sent
+    /// nothing and named it. That contact is read before anything is sent, as every contact Reply holds is, and the message
+    /// then goes to it by its identifier, which is pinned: one more command, never a send to a contact nobody read.
+    /// </summary>
+    [Fact]
+    public async Task A_person_the_import_matched_though_the_lookup_missed_is_read_first_and_then_sent_to_by_its_identifier()
+    {
+        using var account = ByEmail().Unlisted(1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input("email"));
+
+        ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal(["account list", "contact find", "contact send-email", "contact get 1001", "contact send-email"], Lines(account));
+        Assert.Equal("-", account.Calls[2].Option("--contact"));
+        Assert.Equal(["--json", "-q", "contact", "send-email", "--contact-id", "1001", "--email-account-id", "12", "--message", "-"], account.Calls[^1].Args);
+        Assert.Equal($$"""{"subject":"{{Subject}}","body":"{{Body}}"}""", account.Calls[^1].Body);
+        Assert.Single(account.Contacts);
+        Assert.Equal(1001, (int)Assert.Single(account.Sent)!["contactId"]!);
+    }
+
+    /// <summary>
+    /// A contact the import matched is held to everything a contact Reply holds is held to, because it is read first: one
+    /// Reply holds as opted out is a stop, on either channel, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("email")]
+    [InlineData("linkedin_inmail")]
+    public async Task A_person_the_import_matched_though_the_lookup_missed_held_as_opted_out_is_suppressed_and_nothing_is_sent(string format)
+    {
+        using var account = (format == "email" ? ByEmail(optedOut: true) : OnLinkedIn(optedOut: true)).Unlisted(1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(format)));
+
+        Assert.Equal(("suppressed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Equal(["account list", "contact find", FormatCommand(format), "contact get 1001"], Lines(account));
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// The command said Reply already held the person and did not say whom, so there is no contact to read first: nothing
+    /// is sent, and the attempt ends in the package's own word for it rather than as a refusal it has no word for.
+    /// </summary>
+    [Fact]
+    public async Task A_command_that_says_the_person_is_held_without_naming_them_sends_nothing()
+    {
+        using var account = new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox);
+        account.Refuses("contact send-email", "contact.already_held", status: 200, ids: new JsonObject { ["email_account_id"] = 12 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email")));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Contains("did not say which", error.Message, StringComparison.Ordinal);
+        Assert.Null(error.ExternalIds);
+        Assert.Equal(["account list", "contact find", "contact send-email"], Lines(account));
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A contact that this attempt was not pinned to — one the command's own import made, or one the lookup found — that
+    /// Reply then answers it holds no longer is no stale pin: the attempt fails without calling it one, and nobody is
+    /// pinned.
+    /// </summary>
+    [Theory]
+    [InlineData("contact send-email")]
+    [InlineData("contact get")]
+    public async Task A_contact_reply_named_and_then_denies_is_no_stale_pin_and_is_pinned_nowhere(string denies)
+    {
+        using var account = denies == "contact get" ? ByEmail() : new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox);
+        account.Refuses(
+            denies, "contact.not_found", status: 404, replyCode: "contact.notFound",
+            ids: denies == "contact get" ? null : new JsonObject { ["contact_id"] = 1009, ["email_account_id"] = 12 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email")));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal("contact.not_found", (string?)error.Details!["cli_code"]);
+        Assert.Null(error.ExternalIds);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A person the lookup found, with no pin, is read before anything is sent exactly as a pinned one is: one Reply holds
+    /// as opted out is a stop, and the contact found is pinned on the failure.
+    /// </summary>
+    [Fact]
+    public async Task A_person_the_lookup_found_held_as_opted_out_is_suppressed_and_nothing_is_sent()
+    {
+        using var account = ByEmail(optedOut: true);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email")));
+
+        Assert.Equal(("suppressed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Equal(["account list", "contact find", "contact get 1001"], Lines(account));
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A runtime whose documents project the person's identifier and channel alone hands over no first name, last name,
+    /// company, title or time zone at all — absent, which is not the null a runtime that projects them writes for a field
+    /// Jason holds nothing in. A person imported from that would be named from their address, so the message is refused
+    /// before anything is called, naming the fields.
+    /// </summary>
+    [Theory]
+    [InlineData("first_name,last_name,company,title,time_zone")]
+    [InlineData("time_zone")]
+    public async Task An_input_without_the_person_s_projected_fields_is_refused_before_anything_is_called(string absent)
+    {
+        using var account = new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("email");
+        foreach (var field in absent.Split(','))
+        {
+            input["contacts"]![0]!.AsObject().Remove(field);
+        }
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(ReplyOperations.ProjectionRefused, (error.Code, error.Class));
+        Assert.Equal(ReplyOperations.ProjectionReason(absent), (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+    }
+
+    /// <summary>
+    /// An import whose answer was lost before the send may have been followed by the send: the command's lost answer is
+    /// ambiguous and never repeated, and the contact the command had named by then is pinned.
+    /// </summary>
+    [Fact]
+    public async Task A_lost_answer_to_a_send_that_imported_is_ambiguous_and_pins_the_contact_it_named()
+    {
+        using var account = new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox);
+        account.LosesTheOutcome("contact send-email");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email")));
+
+        Assert.Equal(("provider_answer_lost", FailureClass.Ambiguous), (error.Code, error.Class));
+        Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Single(account.Sent);
     }
 
     /// <summary>
@@ -654,6 +924,16 @@ public class ReplyMessageSendTests
 
     private static IReadOnlyList<string> Lines(ReplyAccount account) => [.. account.Calls.Select(call => call.Line)];
 
+    /// <summary>The package's own diagnostic lines, as the child wrote them on stderr.</summary>
+    private static IReadOnlyList<JsonObject> PluginLines(PluginInvocationResult result)
+    {
+        var log = Path.Combine(result.Launch!.WorkDir, "stderr.log");
+        return [.. (File.Exists(log) ? File.ReadAllText(log) : string.Empty).Split('\n')
+            .Where(line => line.TrimStart().StartsWith('{'))
+            .Select(line => JsonNode.Parse(line)!.AsObject())
+            .Where(line => (string?)line["source"] == "plugin")];
+    }
+
     /// <summary>
     /// One message of the format named, its subject where the format takes one; the channel and the account follow the
     /// format: the caller's mailbox on email, its LinkedIn account otherwise.
@@ -665,7 +945,8 @@ public class ReplyMessageSendTests
         string body = Body,
         string? sender = null,
         string? senderAddress = null,
-        string? value = null)
+        string? value = null,
+        string? firstName = "Marta")
     {
         var channel = format == "email" ? "email" : "linkedin";
         var message = new JsonObject { ["format"] = format, ["body"] = body };
@@ -689,6 +970,11 @@ public class ReplyMessageSendTests
             ["contacts"] = new JsonArray(new JsonObject
             {
                 ["id"] = ContactId,
+                ["first_name"] = firstName,
+                ["last_name"] = "Alvarez",
+                ["company"] = "Puerto Analytics",
+                ["title"] = "Head of Growth",
+                ["time_zone"] = null,
                 ["channels"] = new JsonArray(new JsonObject { ["channel"] = channel, ["value"] = value ?? (channel == "email" ? Address : Profile), ["primary"] = true }),
                 ["external_ids"] = pinned is null ? new JsonObject() : new JsonObject { ["contact"] = pinned },
             }),

@@ -197,18 +197,19 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
-    /// The pin passage and the precondition row speak for every operation about a person, the stop included: the stop
-    /// creates nobody, and a pin the provider no longer holds is, for the stop, the completed stop it cannot be told
-    /// apart from.
+    /// The pin passage and the precondition row speak for every operation about a person, the stop included: every
+    /// other write that takes a person creates them where the provider holds nobody, the stop creates nobody, and a pin
+    /// the provider no longer holds is, for the stop, the completed stop it cannot be told apart from.
     /// </summary>
     [Theory]
     [InlineData("the stop never creates anybody")]
-    [InlineData("the enrollment, the list add and the opt-out look the person up and create them only when nobody matches")]
-    [InlineData("the update changes a contact the provider holds and makes none")]
+    [InlineData("the enrollment, the list add, the opt-out, the update, the invitation and the message look the person up and create them only when nobody matches")]
+    [InlineData("Every one of them but the stop creates the contact when the provider holds nobody under the value, and only then")]
+    [InlineData("a person Jason holds is not refused for being new to the provider")]
     [InlineData("the read of a person's threads and the delete work by the pin and fail `contact_not_linked` without one")]
-    [InlineData("Seven of the writes about a person declare `contact_not_found` for it")]
+    [InlineData("Eight of the writes about a person declare `contact_not_found` for it")]
     [InlineData("for `contact.delete` the same missing contact is `contact_not_found` on a first attempt and `already_deleted` on any later attempt, since an earlier attempt may have deleted it")]
-    [InlineData("The eighth, the reply in a thread, declares none")]
+    [InlineData("The ninth, the reply in a thread, declares none")]
     [InlineData("for `enrollment.stop` a pin the provider no longer holds reads as the completed stop it cannot be told apart from")]
     [InlineData("except the stop, which reads it as a person who takes no part")]
     [InlineData("it also covers a lookup by address the plugin could not finish")]

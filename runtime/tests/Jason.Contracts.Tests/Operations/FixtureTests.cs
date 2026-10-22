@@ -95,6 +95,31 @@ public class FixtureTests
     }
 
     /// <summary>
+    /// Every operation that may create the person — <c>find_or_create</c> — publishes the refusal that keeps it from
+    /// creating a second one: <c>outcome-contact-not-unique.json</c>, two of the provider's contacts under the consumed
+    /// value, failed and permanent, so a plugin author reads that the lookup is never guessed past into an import.
+    /// </summary>
+    [Fact]
+    public void Every_operation_that_may_create_the_person_publishes_the_refusal_of_two_held()
+    {
+        var creating = OperationCatalog.All.Where(contract => contract.Preflight.ProviderContact == ProviderContact.FindOrCreate).ToList();
+
+        Assert.NotEmpty(creating);
+        foreach (var contract in creating)
+        {
+            var path = Path.Combine(ContractFiles.Fixtures, contract.Id, "outcome-contact-not-unique.json");
+            Assert.True(File.Exists(path), $"{contract.Id} may create the person and publishes no {ContractFiles.Relative(path)}.");
+
+            var fixture = Read(ContractFiles.Relative(path));
+            var answered = (string?)fixture["outcome"]?["error"]?["code"];
+            var expected = (JsonObject)fixture["expect"]!;
+            Assert.True(
+                answered == "contact_not_unique" && (string?)expected["status"] == "failed" && (string?)expected["class"] == "permanent",
+                $"{ContractFiles.Relative(path)} answers {answered ?? "no code"} and expects {expected.ToJsonString()}.");
+        }
+    }
+
+    /// <summary>
     /// A preview is proven by rendering it, so an operation that declares one has fixtures that render it, and one
     /// that declares none has nothing to render. An operation nobody approves declares none (the document tests hold
     /// that), so it has no preview fixtures either.

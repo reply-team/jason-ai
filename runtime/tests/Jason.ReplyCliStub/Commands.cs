@@ -1,14 +1,19 @@
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The grammar reply-cli 0.14.0 documents for the twenty-eight work commands the official package runs, and for
-/// <c>auth whoami</c>, the one command it runs that is not a work command: how many ids each takes, which options take a
-/// value, and which are switches. An option outside a command's own list is commander's usage error, exit 2.
+/// The grammar reply-cli documents, as of the release <see cref="Jason.ReplyCliStub.ReplyCliRelease"/> names, for the
+/// twenty-eight work commands the official package runs, and for <c>auth whoami</c>, the one command it runs that is not
+/// a work command: how many ids each takes, which options take a value, and which are switches. An option outside a
+/// command's own list is commander's usage error, exit 2. <c>contact update</c> takes its id as an optional argument, or
+/// the contact by the contact options instead.
 /// </summary>
 internal static class Commands
 {
     private static readonly string[] ContactOptions =
         ["--contact-id", "--email", "--first-name", "--last-name", "--company", "--title", "--contact"];
+
+    /// <summary>The count of a command whose one id may be left out: <c>contact update [contact-id]</c>.</summary>
+    private const int OptionalId = -1;
 
     private static readonly Dictionary<string, (int Operands, string[] Values, string[] Switches)> Grammar =
         new(StringComparer.Ordinal)
@@ -25,7 +30,7 @@ internal static class Commands
             ["contact-list add-contact"] = (1, ContactOptions, ["--refuse-opted-out"]),
             ["contact find"] = (0, ["--contact"], []),
             ["contact get"] = (1, [], []),
-            ["contact update"] = (1, ["--fields"], []),
+            ["contact update"] = (OptionalId, [.. ContactOptions, "--fields"], []),
             ["contact delete"] = (1, [], []),
             ["contact opt-out"] = (0, ContactOptions, []),
             ["inbox list"] = (0, ["--contact-id", "--sequence-id", "--source", "--channel", "--category-id", "--since", "--limit", "--offset"], []),
@@ -35,11 +40,11 @@ internal static class Commands
             ["inbox categorize"] = (1, ["--category-id"], ["--clear"]),
             ["inbox mark-read"] = (1, [], []),
             ["inbox mark-unread"] = (1, [], []),
-            ["contact linkedin-connect"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
-            ["contact send-email"] = (0, ["--contact-id", "--email-account-id", "--message"], []),
-            ["contact linkedin-message"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
-            ["contact linkedin-inmail"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
-            ["contact linkedin-voice"] = (0, ["--contact-id", "--linkedin-account-id", "--message"], []),
+            ["contact linkedin-connect"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
+            ["contact send-email"] = (0, [.. ContactOptions, "--email-account-id", "--message"], []),
+            ["contact linkedin-message"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
+            ["contact linkedin-inmail"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
+            ["contact linkedin-voice"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
             ["account list"] = (0, ["--channel"], []),
             ["auth whoami"] = (0, [], []),
         };
@@ -99,7 +104,7 @@ internal static class Commands
             options[token] = rest[++at];
         }
 
-        if (operands.Count != count)
+        if (count == OptionalId ? operands.Count > 1 : operands.Count != count)
         {
             return Parsed.Usage(operands.Count < count ? "missing required argument" : $"too many arguments for '{command}'");
         }

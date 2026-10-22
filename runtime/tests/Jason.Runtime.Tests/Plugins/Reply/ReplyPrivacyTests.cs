@@ -523,6 +523,11 @@ public class ReplyPrivacyTests
             ["contacts"] = new JsonArray(new JsonObject
             {
                 ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                ["first_name"] = null,
+                ["last_name"] = null,
+                ["company"] = null,
+                ["title"] = null,
+                ["time_zone"] = null,
                 ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address, ["primary"] = true }),
                 ["external_ids"] = new JsonObject(),
             }),
@@ -645,6 +650,11 @@ public class ReplyPrivacyTests
             ["contacts"] = new JsonArray(new JsonObject
             {
                 ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                ["first_name"] = null,
+                ["last_name"] = null,
+                ["company"] = null,
+                ["title"] = null,
+                ["time_zone"] = null,
                 ["channels"] = new JsonArray(new JsonObject { ["channel"] = "linkedin", ["value"] = Profile, ["primary"] = true }),
                 ["external_ids"] = new JsonObject { ["contact"] = "1001" },
             }),
@@ -754,6 +764,11 @@ public class ReplyPrivacyTests
                 ["contacts"] = new JsonArray(new JsonObject
                 {
                     ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                    ["first_name"] = null,
+                    ["last_name"] = null,
+                    ["company"] = null,
+                    ["title"] = null,
+                    ["time_zone"] = null,
                     ["channels"] = new JsonArray(new JsonObject { ["channel"] = email ? "email" : "linkedin", ["value"] = email ? Address : Profile, ["primary"] = true }),
                     ["external_ids"] = new JsonObject(),
                 }),

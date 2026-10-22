@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.ReplyCliStub;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins.Invocation;
@@ -33,7 +34,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.5.0", plugin.Version);
+        Assert.Equal("0.6.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record", "sender.list", "social_invitation.send"],
@@ -60,7 +61,9 @@ public class ReplyPackageTests
 
         // The manifest asks for a minimum version, so the reload ran the version command on whatever it resolved.
         // That it answered, and that the answer satisfied the minimum, is why the package is valid at all.
-        Assert.Equal("0.14.0", executable.MinVersion);
+        Assert.Equal(ReplyCliRelease.Version, executable.MinVersion);
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md"));
+        Assert.Contains($"**Version {ReplyCliRelease.Version} or newer.**", readme, StringComparison.Ordinal);
         Assert.NotNull(executable.Version);
         Assert.NotNull(executable.MinVersion);
         Assert.True(Version.Parse(executable.Version) >= Version.Parse(executable.MinVersion));
@@ -143,7 +146,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.5.0", result.Provenance.Version);
+        Assert.Equal("0.6.0", result.Provenance.Version);
     }
 
     /// <summary>
@@ -302,7 +305,7 @@ public class ReplyPackageTests
         var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
         Assert.True(start >= 0, "The README has no section on what the package cannot do.");
         var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
-        var entry = Flat(ChangelogSection(1));
+        var entry = Flat(ChangelogSection(2));
 
         Assert.All(
             new[]
@@ -326,14 +329,53 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// The release in which the sends and the update create the person Reply holds nobody for: the three operations it
+    /// changes, the CLI release and the Jason release it needs, and what a person reads in it about the read that still
+    /// comes first — for a contact the command's own import matched too — the one command that imports, the route's word
+    /// on deriving and the new refusals. No send reaches a contact Reply held without that read, so nothing says one does.
+    /// </summary>
+    [Fact]
+    public void The_changelog_opens_with_0_6_0_and_the_three_operations_that_now_create_the_person()
+    {
+        var section = Flat(ChangelogSection(0));
+
+        Assert.StartsWith(" ## 0.6.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "`message.send`", "`social_invitation.send`", "`contact.update`", "`find_or_create`", $"reply-cli {ReplyCliRelease.Version}",
+                "Jason 0.14.0", "read first", "`--contact -`", "`contact.already_held`", "`derive_first_name`", "`limit_reached`",
+                "`contact_channel_conflict`",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("unread", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The plugin needs the person's own fields in what a write that may create them is handed, and the first Jason release
+    /// that projects them is named where an operator reads what the package needs.
+    /// </summary>
+    [Fact]
+    public void The_readme_names_the_jason_release_that_projects_the_person_s_fields()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf("## What you need", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The README has no section on what the package needs.");
+        var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
+
+        Assert.Contains("**Jason 0.14.0 or newer.**", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("Jason 0.13.0 or newer", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The release that sends outside a sequence: the three operations it adds, the CLI it needs, and what a person reads
     /// in it about the stop Reply does not make on such a send, the note Reply refuses, the one write before a send, the
     /// email written as HTML, and the address keyed as the runtime keys it.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_5_0_and_the_three_operations_it_adds()
+    public void The_changelog_keeps_0_5_0_and_the_three_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(0));
+        var section = Flat(ChangelogSection(1));
 
         Assert.StartsWith(" ## 0.5.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -349,7 +391,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_4_0_and_the_four_inbox_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(1));
+        var section = Flat(ChangelogSection(2));
 
         Assert.StartsWith(" ## 0.4.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -366,7 +408,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_2_and_the_operation_it_added()
     {
-        var section = ChangelogSection(2);
+        var section = ChangelogSection(3);
 
         Assert.StartsWith("\n## 0.3.2\n", section, StringComparison.Ordinal);
         Assert.Contains("`campaign.create`", section, StringComparison.Ordinal);
@@ -377,7 +419,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_1_and_the_rule()
     {
-        var section = ChangelogSection(3);
+        var section = ChangelogSection(4);
 
         Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
         Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);
@@ -396,6 +438,9 @@ public class ReplyPackageTests
         Assert.False(ReplyErrorTable.Own("optout.record").ContainsKey("first_name_derivation_forbidden"));
         Assert.True(ReplyErrorTable.Own("list_membership.add").ContainsKey("first_name_derivation_forbidden"));
         Assert.True(ReplyErrorTable.Own("campaign.enroll").ContainsKey("first_name_derivation_forbidden"));
+        Assert.All(
+            new[] { "message.send", "social_invitation.send", "contact.update" },
+            operation => Assert.True(ReplyErrorTable.Own(operation).ContainsKey("first_name_derivation_forbidden"), $"{operation} has no row for a forbidden derivation."));
     }
 
     /// <summary>

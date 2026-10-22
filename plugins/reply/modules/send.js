@@ -7,23 +7,33 @@
 // - The sender. The arguments name the account by its identifier and by its address, and the address is what the
 //   person approving read, so the account is read from `reply account list` and held to it: an account Reply holds
 //   under another address — or under one where the arguments say none — is not the one that was approved.
-// - The person. By the pin, or else by `reply contact find`, Reply's exact lookup of the consumed value, and nobody is
-//   made: a person Reply holds nobody for is enrolled or put on a list first.
-// - Reply's record of them, read with `reply contact get`. Reply does not refuse a direct send to a person it holds as
-//   opted out, so that read is what keeps the stop Reply holds. The value the send reaches has to be the one the
-//   runtime asked its suppression register about: an email the contact's own address, and a LinkedIn profile the
-//   contact's own profile — and a contact that carries no profile is given the consumed one, which is the only thing
-//   this package ever writes to a contact before a send. A contact that carries another is never changed.
+// - The person. By the pin, or else by `reply contact find`, Reply's exact lookup of the consumed value, as every write
+//   that may create the person names them (contacts.js): a person Reply holds is named by that identifier, and one it
+//   holds nobody for by their fields, which the send's own command imports before it sends.
+// - Reply's record of a person it holds, read with `reply contact get`. Reply does not refuse a direct send to a person
+//   it holds as opted out, so that read is what keeps the stop Reply holds. The value the send reaches has to be the
+//   one the runtime asked its suppression register about: an email the contact's own address, and a LinkedIn profile
+//   the contact's own profile — and a contact that carries no profile is given the consumed one, which is the only
+//   thing this package ever writes to a contact before a send. A contact that carries another is never changed. A
+//   person Reply holds nobody for has no record to read: the command imports them from the consumed value itself, so
+//   the contact it makes is reached there and holds no stop. The command sends only to a contact it made: one Reply
+//   already held — found by the command's own lookup, which runs again, or matched by its import where Reply's lookup
+//   did not return it — it names as `contact.already_held` and sends nothing to, and that contact is then read like
+//   any other before the send is made to it by its identifier. No send reaches a contact Reply held without that read.
 //
-// A lost answer from that one write is asked again as a read is: nothing was sent, and the next attempt reads the
-// contact first. A send's own lost answer is never repeated: Reply keeps no key on a send.
-import { run } from "./cli.js";
+// A lost answer from the one write before a send is asked again as a read is: nothing was sent, and the next attempt
+// reads the contact first. A send's own lost answer is never repeated: Reply keeps no key on a send, and a command that
+// imported the person may have sent too.
+import { run, runOrHeld } from "./cli.js";
 import { describe, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, sameAddress, sameValue, toFind, writtenAsItIs } from "./contacts.js";
+import { contactNumber, sameAddress, sameValue, toEnsure, writtenAsItIs } from "./contacts.js";
 
 const SENDERS = "account list";
 const READ = "contact get";
 const PATCH = "contact update";
+
+// The row for a contact this attempt was not pinned to that Reply named and then held nothing under (cli.js).
+const GONE = "contact_gone";
 
 // How Reply writes a placeholder it fills in for each person.
 const PLACEHOLDER = "{{";
@@ -92,21 +102,83 @@ export function senderFor(operation, context, channel, sender) {
 }
 
 /**
- * Reply's identifier for the person, once Reply's record of them is one this send may reach: found by the pin or by the
- * consumed value, not held as opted out, and reached at the consumed value — a LinkedIn profile written onto the contact
- * first where it carries none. What comes back is what the package knows Reply calls the person, which travels out with
- * every failure from here on.
+ * Runs the send's one command for the person this send may reach, with `flags` after the person's own and `text` — the
+ * command's own input, or none — on stdin, and answers `{ sent, learned }`: what the command answered, and what this
+ * package knows Reply calls the person, which travels out with every failure from here on.
+ *
+ * A person found by the pin or by the consumed value is read first and named by Reply's identifier. A person Reply holds
+ * nobody for is named by their fields, for the command to import; where the command answers that Reply already held
+ * them, it sent nothing, and the contact it names is read exactly as a found one is and the send made to it by its
+ * identifier — one more command in that case, never a send to a contact nobody read.
  */
-export function personFor(operation, context, input) {
-  const consumed = input.contacts[0].channels[0];
-  const named = toFind(operation, context, input, undefined);
-  if (named === null) {
-    fail(operation, { call: null, row: "nobody_under_the_value" }, undefined);
+export function sendTo(operation, context, input, command, flags, text) {
+  const named = personFor(operation, context, input);
+  if (named.stdin === undefined) {
+    return { sent: run(context, sendRequest(operation, command, named, flags, text)), learned: named.learned };
   }
 
+  const first = runOrHeld(context, sendRequest(operation, command, named, flags, text));
+  if (first.held === undefined) {
+    return { sent: first.result, learned: named.learned };
+  }
+
+  const held = read(operation, context, input, { flags: ["--contact-id", first.held], learned: { contact: first.held } });
+  return { sent: run(context, sendRequest(operation, command, held, flags, text)), learned: held.learned };
+}
+
+// One run of the send's command: the person as `named` gives them, then `flags`, and on stdin the command's own input
+// alone for a person named by Reply's identifier, or one object, the person under `contact` and the input under
+// `message`, for a person named by their fields — or the person alone where the command reads no input of its own.
+function sendRequest(operation, command, named, flags, text) {
+  const stdin = named.stdin === undefined ? text : text === undefined ? named.stdin : { contact: named.stdin, message: text };
+  return {
+    operation: operation,
+    command: command,
+    operands: [],
+    flags: named.flags.concat(flags),
+    stdin: stdin,
+    learned: named.learned,
+    gone: named.pinned ? undefined : GONE,
+  };
+}
+
+/**
+ * How the send names the person, once that is a person this send may reach: `{ flags, stdin, learned, pinned }` as
+ * `toEnsure` gives it. A person found by the pin or by the consumed value is named by Reply's identifier once Reply's
+ * record of them is read — not held as opted out, and reached at the consumed value, a LinkedIn profile written onto the
+ * contact first where it carries none. A person Reply holds nobody for is named by their fields, for the send's own
+ * command to import.
+ */
+function personFor(operation, context, input) {
+  const consumed = input.contacts[0].channels[0];
+  const named = toEnsure(operation, context, input, undefined);
+  if (named.stdin !== undefined) {
+    if (consumed.channel === "linkedin" && !writtenAsItIs(consumed.value)) {
+      // Imported, the profile would be held at Reply under another spelling than the one the register was asked about,
+      // exactly as it would be written onto a contact that carries none.
+      fail(operation, {
+        call: null,
+        row: "channel_value_conflict",
+        reason: "Reply holds nobody for this person, and the profile this work item consumes would be held there as another.",
+      }, undefined);
+    }
+
+    return named;
+  }
+
+  return read(operation, context, input, named);
+}
+
+/**
+ * Reply's record of a contact it holds — pinned, found by the lookup, or named by a command that did not act on it — read
+ * before anything is sent to it: `named` once the contact is one this send may reach, and a failure otherwise.
+ */
+function read(operation, context, input, named) {
+  const consumed = input.contacts[0].channels[0];
+  const gone = named.pinned ? undefined : GONE;
   const learned = named.learned;
   const id = learned.contact;
-  const held = run(context, { operation: operation, command: READ, operands: [id], learned: learned });
+  const held = run(context, { operation: operation, command: READ, operands: [id], learned: learned, gone: gone });
   const field = consumed.channel === "linkedin" ? "linkedInUrl" : "email";
   if (contactNumber(held.id) !== id || typeof held.isOptedOut !== "boolean" || !states(held, field)) {
     // A read that does not say whom it read, whether Reply holds them as opted out, or where it reaches them — a null or
@@ -124,7 +196,7 @@ export function personFor(operation, context, input) {
   const value = consumed.channel === "linkedin" ? held.linkedInUrl : held.email;
   const reached = typeof value === "string" && value.length > 0 ? value : null;
   if (reached !== null && sameValue(consumed.channel, reached, consumed.value)) {
-    return learned;
+    return named;
   }
 
   if (reached !== null || consumed.channel !== "linkedin") {
@@ -154,6 +226,7 @@ export function personFor(operation, context, input) {
     stdin: { linkedin_url: consumed.value },
     learned: learned,
     lost: "patch_answer_lost",
+    gone: gone,
   });
   if (patched.status !== "updated" || contactNumber(patched.contact_id) !== id) {
     fail(operation, { call: PATCH, row: "patch_answer_lost" }, learned);
@@ -161,5 +234,5 @@ export function personFor(operation, context, input) {
 
   // Which field was written, and never its value: the runtime keeps this line, and its logs hold no person.
   host.log("info", "Reply's contact held no LinkedIn profile, so the one the send consumes was written onto it first.", { field: "linkedin_url" });
-  return learned;
+  return named;
 }

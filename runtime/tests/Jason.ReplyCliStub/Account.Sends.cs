@@ -5,13 +5,17 @@ using System.Text.Json.Nodes;
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The sends outside any sequence, answered as reply-cli 0.14.0 documents them: the contact and the account by their ids,
-/// the text from stdin and from nowhere else, held to the lengths Reply publishes before anything is sent, and Reply's
-/// refusals in the CLI's words, each one saying which contact and account it was about. A send that goes out is appended
-/// to the account's record of what was sent, which is how a test says whether anything went. Reply's own checks are kept
-/// in the order a live account was seen to make them: a note too long is refused before the ids are looked at. Reply does
-/// not refuse a contact it holds as opted out on these sends, and neither does this; it consults its blacklist on an
-/// email alone.
+/// The sends outside any sequence, answered as reply-cli documents them: the account by its id, the contact by its id or
+/// by the person's fields — looked up by every address given, the one the send reaches them at first, and imported as
+/// the add commands import one when Reply holds nobody under any of them — the text from stdin and from nowhere else,
+/// held to the lengths Reply publishes before anything is sent, and Reply's refusals in the CLI's words, each one saying
+/// which contact and account it was about. When the person and the text both read stdin, they are one object. A send
+/// given a person's fields goes only to a contact it creates: one a lookup finds, or one the import matched, is
+/// <c>contact.already_held</c>, named and not sent to. Every answer names the contact it went to and whether the command
+/// made it. A send that goes out is appended to the account's record of what was sent, which is how a test says whether
+/// anything went. Reply's own checks are kept in the order a live account was seen to make them: a note too long is
+/// refused before the ids are looked at. Reply does not refuse a contact it holds as opted out on these sends, and
+/// neither does this; it consults its blacklist on an email alone.
 /// </summary>
 internal static partial class Account
 {
@@ -54,17 +58,28 @@ internal static partial class Account
 
     private static bool IsDirectSend(string command) => DirectSends.ContainsKey(command);
 
-    /// <summary>What a send's every failure after its ids were read says it was about: the contact and the account.</summary>
-    private static JsonObject? DirectSendIds(string command, Parsed line)
+    /// <summary>The name a send's failure gives the account it was to go from: <c>email_account_id</c> or <c>linkedin_account_id</c>.</summary>
+    private static string AccountKey(DirectSend send) => send.AccountOption[2..].Replace('-', '_');
+
+    /// <summary>
+    /// What a send whose answer was lost says it was about, as its every other ending does: the ids its refusal carried,
+    /// or, for one that went, the contact it went to and the account.
+    /// </summary>
+    private static JsonObject? LostSendIds(string command, Parsed line, Ending effect)
     {
-        if (!DirectSends.TryGetValue(command, out var send)
-            || IdOf(line.Option("--contact-id") ?? string.Empty) is not { } contact
+        if (effect.Error?["ids"] is JsonObject said)
+        {
+            return (JsonObject)said.DeepClone();
+        }
+
+        var send = DirectSends[command];
+        if (effect.Result is not JsonObject done || done["contact_id"] is null
             || AccountIdOf(send, line.Option(send.AccountOption) ?? string.Empty) is not { } account)
         {
             return null;
         }
 
-        return new JsonObject { ["contact_id"] = contact, [send.AccountOption[2..].Replace('-', '_')] = account };
+        return new JsonObject { ["contact_id"] = done["contact_id"]!.DeepClone(), [AccountKey(send)] = account };
     }
 
     /// <summary>An account's id as reply-cli reads one: a mailbox's up to 2^53 − 1, a LinkedIn account's in 32 bits.</summary>
@@ -85,14 +100,27 @@ internal static partial class Account
     private static Ending DirectSendCommand(string root, string command, Parsed line, string? stdin)
     {
         var send = DirectSends[command];
-        if (line.Option("--contact-id") is not { } contactRaw)
+        var (contactStdin, textStdin, badStdin) = StdinOf(line, "--message", stdin);
+        if (badStdin is not null)
         {
-            return Refused("usage.id", "No --contact-id was given.", exit: 2);
+            return badStdin;
         }
 
-        if (IdOf(contactRaw) is not { } contactId)
+        var (contact, badContact) = ContactOf(line, contactStdin);
+        if (badContact is not null)
         {
-            return BadId("--contact-id");
+            return badContact;
+        }
+
+        // A person given by their fields is looked up by the address the send reaches them at, so one without it is
+        // refused before anything is asked.
+        var reachedBy = send.Channel == "email" ? "email" : "linkedin_url";
+        if (contact!.Person is { } person && person[reachedBy] is null)
+        {
+            return Refused(
+                "usage.contact",
+                send.Channel == "email" ? $"{command} needs the contact's email: the email goes to it." : $"{command} needs the contact's linkedin_url: the send goes to that profile.",
+                exit: 2);
         }
 
         if (line.Option(send.AccountOption) is not { } accountRaw)
@@ -108,7 +136,7 @@ internal static partial class Account
         JsonObject? text = null;
         if (line.Option("--message") is not null || !send.TextOptional)
         {
-            var (read, refusal) = DirectTextOf(line.Option("--message"), stdin, send);
+            var (read, refusal) = DirectTextOf(line.Option("--message"), textStdin, send);
             if (refusal is not null)
             {
                 return refusal;
@@ -117,7 +145,17 @@ internal static partial class Account
             text = read;
         }
 
-        var ids = DirectSendIds(command, line)!;
+        // The contact first: the id given, or a contact this send creates; one Reply already held is named and not sent to.
+        var created = contact.Id is null;
+        var (contactId, notCreated) = contact.Id is { } given
+            ? (given, (Ending?)null)
+            : CreatedFor(root, contact.Person!, send.Channel, new JsonObject { [AccountKey(send)] = accountId });
+        if (notCreated is not null)
+        {
+            return notCreated;
+        }
+
+        var ids = new JsonObject { ["contact_id"] = contactId, [AccountKey(send)] = accountId };
         var refused = send.Channel == "email"
             ? EmailRefusal(root, contactId, accountId, text!, ids)
             : LinkedInRefusal(root, command, send, contactId, accountId, text, ids);
@@ -128,7 +166,7 @@ internal static partial class Account
 
         if (command == "contact linkedin-connect" && Connected(root, contactId, accountId))
         {
-            return Done(new JsonObject { ["status"] = "already_connected", ["contact_id"] = contactId, ["activity_id"] = null, ["sent_at"] = null });
+            return Done(new JsonObject { ["status"] = "already_connected", ["contact_id"] = contactId, ["contact_created"] = created, ["activity_id"] = null, ["sent_at"] = null });
         }
 
         var sent = Read(root, SentFile);
@@ -142,6 +180,7 @@ internal static partial class Account
             {
                 ["status"] = "sent",
                 ["contact_id"] = contactId,
+                ["contact_created"] = created,
                 ["message_id"] = $"<{60_000 + sent.Count}.direct@mail.example.com>",
                 ["sent_at"] = null,
                 ["reply_status"] = "sent",
@@ -152,6 +191,7 @@ internal static partial class Account
         {
             ["status"] = "sent",
             ["contact_id"] = contactId,
+            ["contact_created"] = created,
             ["activity_id"] = 70_000 + sent.Count,
             ["sent_at"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
         });
@@ -316,6 +356,51 @@ internal static partial class Account
         }
 
         return (text, null);
+    }
+
+    /// <summary>
+    /// reply-cli's contact for a send given a person's fields, which it sends only to a contact it creates: the person is
+    /// looked up by every address given, the one the send reaches them at first, and imported as the add commands import
+    /// one only when Reply holds nobody under any of them. A contact a lookup finds, or one the import matched rather than
+    /// made, is <c>contact.already_held</c>, naming it, and nothing is sent.
+    /// </summary>
+    private static (int Id, Ending? Refusal) CreatedFor(string root, JsonObject person, string channel, JsonObject ids)
+    {
+        foreach (var by in channel == "email" ? new[] { "email", "linkedin" } : ["linkedin", "email"])
+        {
+            if (person[by == "email" ? "email" : "linkedin_url"] is null)
+            {
+                continue;
+            }
+
+            var (found, refused) = Lookup(root, new ContactRef(null, person), ids, by);
+            if (refused is not null)
+            {
+                return (0, refused);
+            }
+
+            if (found is { } held)
+            {
+                return (0, AlreadyHeld(held, ids));
+            }
+        }
+
+        var (made, created, notImported) = Import(root, person, ids);
+        if (notImported is not null)
+        {
+            return (0, notImported);
+        }
+
+        return created ? (made, null) : (0, AlreadyHeld(made, ids));
+    }
+
+    private static Ending AlreadyHeld(int contactId, JsonObject ids)
+    {
+        ids["contact_id"] = contactId;
+        return Refused(
+            "contact.already_held",
+            $"Reply already holds contact {contactId} under what was given, so nothing was sent: a send given a person's fields goes only to a contact it creates.",
+            status: 200, ids: ids);
     }
 
     private static bool Connected(string root, int contact, long account) =>

@@ -62,22 +62,94 @@ public class ReplyContactUpdateTests
     }
 
     /// <summary>
-    /// The update changes a record Reply holds and makes none: a person Reply holds nobody for under the address is not
-    /// found, nothing is imported, and nobody is pinned. They are enrolled or put on a list first, then updated.
+    /// A person Reply holds nobody for under the address is created by the update's own command: the person's fields
+    /// name and import them, the arguments' fields are then set on the contact made — the one pinned — and the person
+    /// and the fields travel as one object on stdin, with no identifier on the command line.
     /// </summary>
     [Fact]
-    public async Task A_person_reply_holds_nobody_for_is_not_found_and_nobody_is_created()
+    public async Task A_person_reply_holds_nobody_for_is_created_by_the_update_and_given_its_fields()
     {
         using var account = new ReplyAccount().WithContact(1001, "ana@example.com", "Ana");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(Fields(("title", "CTO")))));
+        var result = await InvokeAsync(api, Input(Fields(("title", "CTO"))));
 
-        Assert.Equal(("contact_not_found", FailureClass.Permanent), (error.Code, error.Class));
+        ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal("1002", (string?)((InvocationOutcome.Succeeded)result.Outcome).ExternalIds!["contact"]);
+        Assert.Equal(["contact find", "contact update"], Lines(account));
+        var update = account.Calls[^1];
+        Assert.Equal(["--json", "-q", "contact", "update", "--contact", "-", "--fields", "-"], update.Args);
+        Assert.Equal(
+            $$$"""{"contact":{"email":"{{{Address}}}","first_name":"Marta","last_name":"Alvarez","company":"Puerto Analytics","title":"Head of Growth"},"fields":{"title":"CTO"}}""",
+            JsonNode.Parse(update.Body!)!.ToJsonString());
+        var made = account.ContactOf(1002)!;
+        Assert.Equal((Address, "Marta", "CTO"), ((string?)made["email"], (string?)made["firstName"], (string?)made["title"]));
+        Assert.Equal("Ana", (string?)account.ContactOf(1001)!["firstName"]);
+    }
+
+    /// <summary>
+    /// The command reads the account's custom field names before it imports anybody, so a name the account defines none of
+    /// creates nobody and changes nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_custom_field_the_account_defines_none_of_creates_nobody()
+    {
+        using var account = new ReplyAccount().WithCustomField(1, "leadSource");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var custom = new JsonArray(new JsonObject { ["name"] = "favouriteColour", ["value"] = "teal" });
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(null, custom: custom)));
+
+        Assert.Equal(("field_not_found", FailureClass.Validation), (error.Code, error.Class));
         Assert.Null(error.ExternalIds);
-        Assert.Equal(["contact find"], Lines(account));
-        Assert.Single(account.Contacts);
+        Assert.Empty(account.Contacts);
+    }
+
+    /// <summary>
+    /// A person with no first name, whom Reply holds nobody for, is created under the name an add would derive; a route that
+    /// forbids deriving refuses the update before anything is written; and an account that holds no further contact is
+    /// <c>limit_reached</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("derived")]
+    [InlineData("forbidden")]
+    [InlineData("limit")]
+    public async Task A_person_reply_holds_nobody_for_is_created_as_an_add_creates_them(string way)
+    {
+        using var account = new ReplyAccount();
+        if (way == "limit")
+        {
+            account.Refuses("contact update", "account.contact_limit_reached", status: 400, replyCode: "contact.limitExceeded");
+        }
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(Fields(("title", "CTO")));
+        input["contacts"]![0]!["first_name"] = null;
+        var binding = way == "forbidden" ? new JsonObject { ["derive_first_name"] = false } : null;
+        var result = await ReplyOperations.InvokeAsync(api, Operation, input, Ct, binding: binding);
+
+        switch (way)
+        {
+            case "derived":
+                ReplyOperations.Succeeded(Operation, result);
+                Assert.Equal(("Alvarez", "CTO"), ((string?)account.ContactOf(1001)!["firstName"], (string?)account.ContactOf(1001)!["title"]));
+                break;
+            case "forbidden":
+                var refused = ReplyOperations.Failed(Operation, result);
+                Assert.Equal(("provider_call_failed", "the route forbids deriving a first name"), (refused.Code, (string?)refused.Details!["reason"]));
+                Assert.Equal(["contact find"], Lines(account));
+                Assert.Empty(account.Contacts);
+                break;
+            default:
+                var full = ReplyOperations.Failed(Operation, result);
+                Assert.Equal(("limit_reached", FailureClass.Permanent), (full.Code, full.Class));
+                Assert.Empty(account.Contacts);
+                break;
+        }
     }
 
     [Fact]
@@ -175,6 +247,97 @@ public class ReplyContactUpdateTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(fields: null, custom: custom)));
 
         Assert.Equal(("invalid_field_value", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Empty(account.Calls);
+    }
+
+    /// <summary>
+    /// The command's refusals of the import of a person Reply holds nobody for, in the words the add operations report them
+    /// in: an address or a profile Reply will not take, and an invalid request naming the email, which is the person's
+    /// address rather than a field the arguments set. Nothing is changed, and nobody is pinned.
+    /// </summary>
+    [Theory]
+    [InlineData("email", Address, "contact.invalid_email", null)]
+    [InlineData("linkedin", "https://www.linkedin.com/in/marta-example", "contact.invalid_linkedin_url", null)]
+    [InlineData("email", Address, "reply.invalid_request", "email")]
+    public async Task A_refusal_of_the_import_is_reported_as_an_add_reports_it(string channel, string value, string code, string? field)
+    {
+        using var account = new ReplyAccount();
+        account.Refuses("contact update", code, status: 400, details: field is null ? null : new JsonObject { ["fields"] = new JsonArray(field) });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(Fields(("title", "CTO")), channel: channel, value: value)));
+
+        Assert.Equal(("invalid_channel_value", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Null(error.ExternalIds);
+        Assert.Equal(["contact find", "contact update"], Lines(account));
+        Assert.Empty(account.Contacts);
+    }
+
+    /// <summary>
+    /// The lookup found nobody and the command's own import matched a contact Reply already held: the update changes that
+    /// contact, as an add acts on a contact it matched, and pins it.
+    /// </summary>
+    [Fact]
+    public async Task A_person_the_import_matched_though_the_lookup_missed_is_changed_and_pinned()
+    {
+        using var account = new ReplyAccount().WithContact(1001, Address, "Marta").Unlisted(1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(Fields(("title", "CTO"))));
+
+        ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal("1001", (string?)((InvocationOutcome.Succeeded)result.Outcome).ExternalIds!["contact"]);
+        Assert.Equal(["contact find", "contact update"], Lines(account));
+        Assert.Single(account.Contacts);
+        Assert.Equal("CTO", (string?)account.ContactOf(1001)!["title"]);
+    }
+
+    /// <summary>
+    /// A contact this attempt was not pinned to — one the command's own import made or matched, or one the lookup found —
+    /// which Reply then answers it holds no longer is no stale pin: the attempt fails without calling it one, and nobody is
+    /// pinned.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_contact_reply_named_and_then_denies_is_no_stale_pin_and_is_pinned_nowhere(bool foundByTheLookup)
+    {
+        using var account = foundByTheLookup ? new ReplyAccount().WithContact(1001, Address, "Marta") : new ReplyAccount();
+        account.Refuses("contact update", "contact.not_found", status: 404, replyCode: "contact.notFound", ids: new JsonObject { ["contact_id"] = foundByTheLookup ? 1001 : 1009 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(Fields(("title", "CTO")))));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal("contact.not_found", (string?)error.Details!["cli_code"]);
+        Assert.Null(error.ExternalIds);
+        Assert.Equal(["contact find", foundByTheLookup ? "contact update 1001" : "contact update"], Lines(account));
+    }
+
+    /// <summary>
+    /// An input composed without the person's own fields — absent, not null — is refused before anything is called: a
+    /// person Reply holds nobody for could not be created under the name Jason holds.
+    /// </summary>
+    [Fact]
+    public async Task An_input_without_the_person_s_projected_fields_is_refused_before_anything_is_called()
+    {
+        using var account = new ReplyAccount();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(Fields(("title", "CTO")), pinned: "1001");
+        foreach (var field in new[] { "first_name", "company" })
+        {
+            input["contacts"]![0]!.AsObject().Remove(field);
+        }
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(ReplyOperations.ProjectionRefused, (error.Code, error.Class));
+        Assert.Equal(ReplyOperations.ProjectionReason("first_name,company"), (string?)error.Details!["reason"]);
         Assert.Empty(account.Calls);
     }
 
@@ -324,6 +487,11 @@ public class ReplyContactUpdateTests
             ["contacts"] = new JsonArray(new JsonObject
             {
                 ["id"] = ContactId,
+                ["first_name"] = "Marta",
+                ["last_name"] = "Alvarez",
+                ["company"] = "Puerto Analytics",
+                ["title"] = "Head of Growth",
+                ["time_zone"] = null,
                 ["channels"] = new JsonArray(new JsonObject { ["channel"] = channel, ["value"] = value, ["primary"] = true }),
                 ["external_ids"] = pinned is null ? new JsonObject() : new JsonObject { ["contact"] = pinned },
             }),

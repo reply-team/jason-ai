@@ -1,0 +1,23 @@
+{
+  "operation": "contact.update",
+  "version": 1,
+  "case": "the provider held nobody under the consumed address: the contact was created from it and the person's own fields, the arguments' fields set on it, and the new identifier comes back to be pinned",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "updated",
+          "external_ids": { "contact": "p_90113" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_90113" },
+    "error": null,
+    "diagnostics": { "duration_ms": 980, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false, "pinned": { "contact": "p_90113" } }
+}

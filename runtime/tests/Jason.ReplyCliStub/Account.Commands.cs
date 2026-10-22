@@ -6,9 +6,9 @@ using System.Text.Json.Nodes;
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The work commands, answered as reply-cli 0.14.0 documents them, from the same files the account keeps. What each one
-/// answers is reply-cli's contract — its result, its error code, its exit code — and never how reply-cli gets there: no
-/// Reply endpoint is imitated here.
+/// The work commands, answered as the reply-cli release <see cref="Jason.ReplyCliStub.ReplyCliRelease"/> names
+/// documents them, from the same files the account keeps. What each one answers is reply-cli's contract — its result,
+/// its error code, its exit code — and never how reply-cli gets there: no Reply endpoint is imitated here.
 /// </summary>
 internal static partial class Account
 {
@@ -21,6 +21,12 @@ internal static partial class Account
 
     /// <summary>A contact as reply-cli takes one: an id, or a person's fields.</summary>
     private sealed record ContactRef(int? Id, JsonObject? Person);
+
+    /// <summary>
+    /// What a test plants on a contact Reply's exact lookup does not return, though its import matches it: Reply documents
+    /// neither how the one nor how the other compares a value, so the two may disagree.
+    /// </summary>
+    private const string Unlisted = "_unlisted";
 
     public static async Task<int> RunCommandAsync(string profile, string command, string[] rest, string? stdin, string[] argv)
     {
@@ -77,7 +83,7 @@ internal static partial class Account
                     var learned = command == "sequence create"
                         ? null
                         : IsDirectSend(command)
-                            ? DirectSendIds(command, line)
+                            ? LostSendIds(command, line, effect)
                             : effect.Result is JsonObject done ? IdsOf(done) : effect.Error?["ids"]?.DeepClone() as JsonObject;
                     return await PrintAsync(Refused(
                         "outcome.unknown", "The request may have reached Reply, but no answer came back.", exit: 3, ids: learned));
@@ -926,8 +932,9 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// reply-cli's import: keyed by the email, filling only fields the match left empty, or — with no email — keyed by the
-    /// LinkedIn URL and writing it as its key; refused without a first name, as Reply refuses it, even for somebody it holds.
+    /// reply-cli's import: keyed by the email, or — with no email — by the LinkedIn URL, written as its key; matching a
+    /// contact Reply holds under the key, the one the lookup does not return included, and filling only the fields it left
+    /// empty; refused without a first name, as Reply refuses it, even for somebody it holds.
     /// </summary>
     private static (int Id, bool Created, Ending? Refusal) Import(string root, JsonObject person, JsonObject ids)
     {
@@ -939,9 +946,11 @@ internal static partial class Account
         var contacts = Read(root, ContactsFile);
         var email = person["email"]?.GetValue<string>();
         var key = person["linkedin_url"] is JsonValue link ? LinkedInKey(link.GetValue<string>()) : null;
-        var held = email is null
-            ? null
-            : contacts.OfType<JsonObject>().FirstOrDefault(entry => string.Equals(Text(entry, "email"), email, StringComparison.OrdinalIgnoreCase));
+        var held = email is not null
+            ? contacts.OfType<JsonObject>().FirstOrDefault(entry => string.Equals(Text(entry, "email"), email, StringComparison.OrdinalIgnoreCase))
+            : key is null
+                ? null
+                : contacts.OfType<JsonObject>().FirstOrDefault(entry => Text(entry, "linkedInUrl") is { Length: > 0 } profile && LinkedInKey(profile) == key);
         if (held is not null)
         {
             foreach (var (field, name) in new[] { ("first_name", "firstName"), ("last_name", "lastName"), ("company", "company"), ("title", "title") })
@@ -979,11 +988,76 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// reply-cli's find: an id as given, or the one contact under the address — by its email when there is one, equal
-    /// ignoring case; with only a LinkedIn URL, by its key, which is what asking Reply for the lowercased slug and then
-    /// for the spelling as given finds. Two is <c>contact.not_unique</c>.
+    /// reply-cli's find-or-import, for <c>contact update</c>, which acts on the person it names: an id as given; else the
+    /// one contact Reply holds under the address a lookup uses, looked up first, even for a person with an email; else the
+    /// person imported as an add imports them. Whether the import made the contact or matched one Reply holds is in the
+    /// answer.
     /// </summary>
-    private static (int? Id, Ending? Refusal) Lookup(string root, ContactRef contact, JsonObject ids)
+    private static (int Id, bool Created, Ending? Refusal) FindOrImport(string root, ContactRef contact, JsonObject ids)
+    {
+        if (contact.Id is { } id)
+        {
+            return (id, false, null);
+        }
+
+        var (found, refused) = Lookup(root, contact, ids);
+        if (refused is not null)
+        {
+            return (0, false, refused);
+        }
+
+        if (found is { } held)
+        {
+            return (held, false, null);
+        }
+
+        return Import(root, contact.Person!, ids);
+    }
+
+    /// <summary>
+    /// What a command reads from stdin when the contact and its own input both name it: one object, the contact under
+    /// <c>contact</c> and the input under the input flag's own name, read once — a stdin that is not one object, or one with
+    /// another member or without either, is <c>usage.stdin</c> — and each member handed to its own flag's reading as the
+    /// text it would have read alone, so one that is not an object is refused by that reading. When only one of them reads
+    /// stdin, it reads it as it stands.
+    /// </summary>
+    private static (string? Contact, string? Input, Ending? Refusal) StdinOf(Parsed line, string inputFlag, string? stdin)
+    {
+        var contactReads = line.Option("--contact") == "-";
+        var inputReads = line.Option(inputFlag) == "-";
+        if (!contactReads || !inputReads)
+        {
+            return (contactReads ? stdin : null, inputReads ? stdin : null, null);
+        }
+
+        var name = inputFlag[2..];
+        JsonNode? both;
+        try
+        {
+            both = JsonNode.Parse(stdin ?? string.Empty);
+        }
+        catch (JsonException)
+        {
+            both = null;
+        }
+
+        if (both is not JsonObject pair || pair.Any(member => member.Key != "contact" && member.Key != name)
+            || !pair.ContainsKey("contact") || !pair.ContainsKey(name))
+        {
+            return (null, null, Refused("usage.stdin", $"With --contact - and {inputFlag} - both, stdin holds one object: {{\"contact\": {{…}}, \"{name}\": {{…}}}}.", exit: 2));
+        }
+
+        return (pair["contact"]?.ToJsonString() ?? "null", pair[name]?.ToJsonString() ?? "null", null);
+    }
+
+    /// <summary>
+    /// reply-cli's find: an id as given, or the one contact under the address — <paramref name="by"/> the channel named
+    /// where the person carries it, else by its email when there is one, equal ignoring case; with only a LinkedIn URL, by
+    /// its key, which is what asking Reply for the lowercased slug and then for the spelling as given finds. Two is
+    /// <c>contact.not_unique</c>. A contact a test planted as one Reply's lookup does not return is never found here, though
+    /// the import still matches it.
+    /// </summary>
+    private static (int? Id, Ending? Refusal) Lookup(string root, ContactRef contact, JsonObject ids, string? by = null)
     {
         if (contact.Id is { } id)
         {
@@ -991,9 +1065,10 @@ internal static partial class Account
         }
 
         var person = contact.Person!;
-        var holding = person["email"] is JsonValue email
-            ? Records(root, ContactsFile).Where(entry => string.Equals(Text(entry, "email"), email.GetValue<string>(), StringComparison.OrdinalIgnoreCase))
-            : Records(root, ContactsFile).Where(entry =>
+        var listed = Records(root, ContactsFile).Where(entry => !Flag(entry, Unlisted));
+        var holding = person["email"] is JsonValue email && by != "linkedin"
+            ? listed.Where(entry => string.Equals(Text(entry, "email"), email.GetValue<string>(), StringComparison.OrdinalIgnoreCase))
+            : listed.Where(entry =>
                 Text(entry, "linkedInUrl") is { Length: > 0 } held && LinkedInKey(held) == LinkedInKey(person["linkedin_url"]!.GetValue<string>()));
         var found = holding.Select(entry => entry["id"]!.GetValue<int>()).Distinct().ToList();
 

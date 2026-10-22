@@ -62,7 +62,7 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | `not_used` | read one campaign from the provider |
 | [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | `not_used` | stop a provider campaign |
 | [`contact.delete`](operations/contact.delete.md) | `contact.delete` | `control` | `confirm_once` | `after_recovery_read` | `pinned_only` | delete the provider's contact for one person |
-| [`contact.update`](operations/contact.update.md) | `contact.update` | `control` | `auto` | `after_recovery_read` | `find_only` | change a person's fields on the provider's contact for them |
+| [`contact.update`](operations/contact.update.md) | `contact.update` | `control` | `auto` | `after_recovery_read` | `find_or_create` | change a person's fields on the provider's contact for them |
 | [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | `not_used` | file a thread under one of the provider's categories, with the provider's own meaning on its reserved names |
 | [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | `not_used` | set a thread aside as worked |
 | [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | `not_used` | read one thread before answering it |
@@ -73,10 +73,10 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | `not_used` | who is in a campaign at the provider |
 | [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
-| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_only` | send a person a message, outside any campaign, from one of the provider's accounts |
+| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
 | [`sender.list`](operations/sender.list.md) | `sender.list` | `read` | `auto` | `safe` | `not_used` | the provider's accounts a send can go from |
-| [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_only` | invite a person to connect, from one of the provider's accounts |
+| [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_or_create` | invite a person to connect, from one of the provider's accounts |
 
 <!-- END GENERATED operations -->
 
@@ -403,6 +403,11 @@ lists.
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,
   enum value, property or schema changed. It keeps the version.
+- **Relaxation** — a refusal that becomes a success under unchanged fields, such as a pre-flight policy loosened from
+  `find_only` to `find_or_create`. It keeps the version: nothing a caller sends or reads changes, and only what the
+  plugin does at the provider grows. The operation's page says in one sentence what the policy was before. A refusal
+  that protects a person — `suppressed`, a channel conflict, a stop the register or the provider holds — never relaxes:
+  taking such a refusal away is breaking.
 
 A route to a plugin whose family versions do not contain the operation's version is refused when the
 route is activated, as `route_contract_incompatible`, and again at the claim as

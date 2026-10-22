@@ -8,8 +8,8 @@
 // Without a pin the person is looked up by the value of the channel the operation consumes, with `reply contact find`:
 // Reply's exact lookup by email, or by LinkedIn URL, read to its end, two contacts under one address refused rather
 // than guessed between. A person Reply holds is named by that identifier, so nothing is written to their record. Only
-// a write that may make the person — `find_or_create` — names one Reply does not hold by their fields, for the CLI to
-// import; a stop creates nobody.
+// a write that may make the person — `find_or_create`: an add, an opt-out, a send, an update — names one Reply does not
+// hold by their fields, for the CLI to import with the command that acts on them; a stop creates nobody.
 //
 // Reply requires a first name for every contact it holds and Jason does not, and making one fit the other is this
 // package's job, never the runtime's. Only an import needs one, so a person Reply holds nobody for and who has no first
@@ -25,6 +25,10 @@ const LARGEST_CONTACT_NUMBER = 2147483647;
 
 // The exact lookup, a read: it creates nobody.
 const FIND = "contact find";
+
+// The person's own fields, which every document of a write that may create them projects — as null where Jason holds
+// nothing in one. A runtime whose documents projected the identifier and the channel alone leaves them out altogether.
+const PROJECTED = ["first_name", "last_name", "company", "title", "time_zone"];
 
 // What the CLI takes a person by, for each channel a document may name that Reply can look a person up by: an email,
 // or a LinkedIn URL. Any other channel names a value no attempt could look anybody up by.
@@ -43,10 +47,12 @@ function compact(request) {
 }
 
 /**
- * How a write that may create somebody — a list add, an enrolment, an opt-out — names the person to the CLI: the pin;
- * or the identifier the exact lookup finds; or, when Reply holds nobody under the value, the person's fields on stdin,
- * with a first name derived from what Jason holds where they have none. A person Reply holds is named by that
- * identifier, so nothing derived, and nothing at all, reaches their record.
+ * How a write that may create somebody — a list add, an enrolment, an opt-out, a send, an update — names the person to
+ * the CLI: the pin, marked `pinned`; or the identifier the exact lookup finds; or, when Reply holds nobody under the
+ * value, the person's fields for stdin (`--contact -`), with a first name derived from what Jason holds where they have
+ * none. A person the lookup finds is named by that identifier, so nothing derived, and nothing at all, reaches their
+ * record. Only a contact Reply's import matches though its lookup did not return it can be touched by the import: Reply
+ * fills that contact's empty fields from the ones given.
  *
  * `options.protective` marks a write that protects the person rather than reaching them: an opt-out greets nobody, so
  * the route's word against deriving, which exists so that no sequence greets a person by a made-up name, does not
@@ -57,7 +63,7 @@ export function toEnsure(operation, context, input, learned, options) {
   const contact = input.contacts[0];
   const pinned = pinOf(operation, contact, learned);
   if (pinned !== null) {
-    return { flags: ["--contact-id", pinned], learned: withContact(learned, pinned) };
+    return { flags: ["--contact-id", pinned], learned: withContact(learned, pinned), pinned: true };
   }
 
   const channel = channelOf(operation, contact, input.args.channel, learned);
@@ -84,6 +90,27 @@ export function toEnsure(operation, context, input, learned, options) {
     first_name_from: named.source,
   });
   return { flags: ["--contact", "-"], stdin: named.person, learned: learned };
+}
+
+/**
+ * Refuses an input composed without the person's own fields — absent, which is not the null a runtime that projects
+ * them writes for a field Jason holds nothing in — before anything is called. Only a runtime older than 0.14.0, whose
+ * documents projected the identifier and the channel alone, composes one, and a person imported from it would be named
+ * from their address while Jason holds their name. It is refused in a code those documents already declare,
+ * `invalid_channel_value`: a runtime that knew a code of its own for it would never compose such an input. The reason
+ * names the cause and the fields lacking, never anything they hold.
+ */
+export function refuseUnprojected(operation, input) {
+  const contact = input.contacts[0];
+  const absent = PROJECTED.filter(field => !Object.prototype.hasOwnProperty.call(contact, field));
+  if (absent.length > 0) {
+    fail(operation, {
+      call: null,
+      row: "person_not_projected",
+      reason: "the runtime that composed this input is older than 0.14.0 and carries no " + absent.join(", ")
+        + " for the person, so the person as given cannot be created; update the runtime",
+    }, undefined);
+  }
 }
 
 /**

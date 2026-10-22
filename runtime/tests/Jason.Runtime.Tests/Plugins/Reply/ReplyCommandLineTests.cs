@@ -348,6 +348,21 @@ internal static class ReplyOperations
             kill);
     }
 
+    /// <summary>
+    /// What a write that may create the person answers an input its runtime composed without the person's own fields:
+    /// a refusal of the input, decided before anything is called, in the code the documents of that older runtime already
+    /// declare.
+    /// </summary>
+    public static readonly (string Code, FailureClass Class) ProjectionRefused = ("invalid_channel_value", FailureClass.Validation);
+
+    /// <summary>
+    /// The reason that refusal gives: the cause — a runtime older than 0.14.0 — the fields the input arrived without, by
+    /// name and never by value, and what to do.
+    /// </summary>
+    public static string ProjectionReason(string absent) =>
+        "the runtime that composed this input is older than 0.14.0 and carries no " + string.Join(", ", absent.Split(','))
+        + " for the person, so the person as given cannot be created; update the runtime";
+
     /// <summary>The result the plugin answered with, having first been held to the operation's own document.</summary>
     /// <remarks>
     /// An outcome that is not a success is reported with everything it carried. Every test in this area drives

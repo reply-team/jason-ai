@@ -3,15 +3,14 @@
 //
 // Everything before the invitation is the send path every send outside a sequence takes (send.js): the note is held to
 // what Reply would send as written, the account to the address the person approving read, and the person to the profile
-// the runtime asked its suppression register about. Reply refuses notes over 200 characters; the document holds a note
-// to that already, so a longer one never reaches this package, and Reply's own refusal of one is mapped as the backstop.
-// The note goes on stdin and nowhere else, and an invitation without one sends no `--message` at all. Reply answers a
-// person who is already a connection without sending anything. An invitation that may have gone is never sent again:
-// the document says `never`.
-import { run } from "./cli.js";
+// the runtime asked its suppression register about — a person Reply holds nobody for is imported by the same command,
+// from their fields. Reply refuses notes over 200 characters; the document holds a note to that already, so a longer one
+// never reaches this package, and Reply's own refusal of one is mapped as the backstop. The note goes on stdin and
+// nowhere else, and an invitation without one sends no `--message` at all. Reply answers a person who is already a
+// connection without sending anything. An invitation that may have gone is never sent again: the document says `never`.
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber } from "./contacts.js";
-import { personFor, refusePlaceholders, senderFor } from "./send.js";
+import { contactNumber, refuseUnprojected } from "./contacts.js";
+import { refusePlaceholders, senderFor, sendTo } from "./send.js";
 
 const OPERATION = "social_invitation.send";
 const COMMAND = "contact linkedin-connect";
@@ -23,19 +22,17 @@ export function socialInvitationSend(input, context) {
   const args = input.args;
   const person = input.contacts[0];
 
+  refuseUnprojected(OPERATION, input);
   refusePlaceholders(OPERATION, [args.note]);
   const sender = senderFor(OPERATION, context, "linkedin", args.sender);
-  const learned = personFor(OPERATION, context, input);
 
   const withNote = args.note !== null;
-  const sent = run(context, {
-    operation: OPERATION,
-    command: COMMAND,
-    operands: [],
-    flags: ["--contact-id", learned.contact, "--linkedin-account-id", sender].concat(withNote ? ["--message", "-"] : []),
-    stdin: withNote ? { note: args.note } : undefined,
-    learned: learned,
-  });
+  const done = sendTo(
+    OPERATION, context, input, COMMAND,
+    ["--linkedin-account-id", sender].concat(withNote ? ["--message", "-"] : []),
+    withNote ? { note: args.note } : undefined);
+  const sent = done.sent;
+  const learned = done.learned;
 
   const activity = sent.activity_id;
   const named = activity === null || activity === undefined ? null : typeof activity === "number" && Number.isSafeInteger(activity) && activity > 0 ? String(activity) : undefined;

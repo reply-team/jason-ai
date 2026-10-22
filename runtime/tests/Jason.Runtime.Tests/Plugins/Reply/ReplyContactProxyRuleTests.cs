@@ -48,7 +48,8 @@ public class ReplyContactProxyRuleTests
     /// a channel of its own, reads the account it goes from before anyone is looked up, and reads the contact it found
     /// before it sends; one whose document takes only the channels Reply looks a person up by cannot be asked about another.
     /// The message is driven on LinkedIn, where its path writes the most; its email half finds the person the same way,
-    /// which its own tests hold.
+    /// which its own tests hold. A command that imports the person names them by <c>--contact -</c> instead: an update then
+    /// takes no operand, and a message reached by email runs the email's own command.
     /// </summary>
     private sealed record Driver(
         string Command,
@@ -56,12 +57,14 @@ public class ReplyContactProxyRuleTests
         Func<int, JsonObject>? AnsweredAs,
         bool ThroughTheThread = false,
         bool ByOperand = false,
-        string? NobodyIs = null,
         string Channel = "email",
         string[]? Before = null,
         bool ReadsTheContact = false,
         bool FixedChannel = false,
-        bool CarriesText = false);
+        bool CarriesText = false,
+        string? Imports = null,
+        string? EmailCommand = null,
+        bool LinkedInOnly = false);
 
     private const string SenderProfile = "https://www.linkedin.com/in/ann-owner";
 
@@ -91,31 +94,31 @@ public class ReplyContactProxyRuleTests
         ["contact.update"] = new(
             "contact update 1001",
             account => account,
-            id => new JsonObject { ["status"] = "updated", ["contact_id"] = id },
+            id => new JsonObject { ["status"] = "updated", ["contact_id"] = id, ["contact_created"] = false },
             ByOperand: true,
-            NobodyIs: "contact_not_found"),
+            Imports: "contact update"),
         ["social_invitation.send"] = new(
             "contact linkedin-connect",
             account => account.WithSender(34, "linkedin", "Ann Owner", SenderProfile),
-            id => new JsonObject { ["status"] = "sent", ["contact_id"] = id, ["activity_id"] = 70001, ["sent_at"] = null },
-            NobodyIs: "contact_not_found",
+            id => new JsonObject { ["status"] = "sent", ["contact_id"] = id, ["contact_created"] = false, ["activity_id"] = 70001, ["sent_at"] = null },
             Channel: "linkedin",
             Before: ["account list"],
             ReadsTheContact: true,
-            FixedChannel: true),
+            FixedChannel: true,
+            LinkedInOnly: true),
         ["message.send"] = new(
             "contact linkedin-message",
             account => account
                 .WithSender(12, "email", "Ann Owner", "ann@example.com")
                 .WithSender(34, "linkedin", "Ann Owner", SenderProfile)
                 .WithConnection(1001, 34),
-            id => new JsonObject { ["status"] = "sent", ["contact_id"] = id, ["activity_id"] = 70001, ["sent_at"] = null },
-            NobodyIs: "contact_not_found",
+            id => new JsonObject { ["status"] = "sent", ["contact_id"] = id, ["contact_created"] = false, ["activity_id"] = 70001, ["sent_at"] = null },
             Channel: "linkedin",
             Before: ["account list"],
             ReadsTheContact: true,
             FixedChannel: true,
-            CarriesText: true),
+            CarriesText: true,
+            EmailCommand: "contact send-email"),
     };
 
     public static TheoryData<string> Finding => Of(ProviderContact.FindOrCreate, ProviderContact.FindOnly);
@@ -191,32 +194,35 @@ public class ReplyContactProxyRuleTests
 
     /// <summary>
     /// Reply holds nobody under the value, and the way is <c>find_or_create</c>: the lookup finds nobody, the command
-    /// imports the person from stdin, and the identifier Reply gave them is pinned.
+    /// imports the person from stdin, and the identifier Reply gave them is pinned. Nobody is read first, since there is
+    /// nobody to read. The person is reached by email wherever the document takes it; an invitation goes to a profile.
     /// </summary>
     [Theory]
     [MemberData(nameof(Creating))]
     public async Task A_person_reply_holds_nobody_for_is_imported_and_pinned(string operation)
     {
         var driver = Drivers[operation];
+        var channel = driver.LinkedInOnly ? "linkedin" : "email";
+        var value = channel == "email" ? Address : Profile;
         using var account = driver.Plant(new ReplyAccount());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, "email", Address), Ct);
+        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, channel, value), Ct);
 
         ReplyOperations.Succeeded(operation, result);
         Assert.Equal("1001", PinnedContact(result));
-        Assert.Equal(["contact find", driver.Command], Lines(account));
-        Assert.Equal("-", account.Calls[1].Option("--contact"));
-        Assert.Contains(Address, account.Calls[1].Body!, StringComparison.Ordinal);
+        Assert.Equal([.. driver.Before ?? [], "contact find", Importing(driver, channel)], Lines(account));
+        var command = account.Calls[^1];
+        Assert.Equal("-", command.Option("--contact"));
+        Assert.Contains(value, command.Body!, StringComparison.Ordinal);
         var made = Assert.Single(account.Contacts)!;
-        Assert.Equal((1001, Address), ((int)made["id"]!, (string?)made["email"]));
+        Assert.Equal((1001, value), ((int)made["id"]!, (string?)made[channel == "email" ? "email" : "linkedInUrl"]));
     }
 
     /// <summary>
     /// The way is <c>find_only</c>: Reply holding nobody creates nobody. The stop answers that the person takes part in
-    /// nothing, the update refuses with <c>contact_not_found</c> — there is no record to change — and the reply, whose
-    /// thread names nobody Reply still holds, sends nothing; none of them pins anybody.
+    /// nothing, and the reply, whose thread names nobody Reply still holds, sends nothing; neither pins anybody.
     /// </summary>
     [Theory]
     [MemberData(nameof(FindingOnly))]
@@ -244,12 +250,6 @@ public class ReplyContactProxyRuleTests
 
         Assert.Null(PinnedContact(result));
         Assert.Equal([.. driver.Before ?? [], "contact find"], Lines(account));
-        if (driver.NobodyIs is { } code)
-        {
-            Assert.Equal((code, FailureClass.Permanent), (ReplyOperations.Failed(operation, result).Code, ReplyOperations.Failed(operation, result).Class));
-            return;
-        }
-
         var answer = ReplyOperations.Succeeded(operation, result);
         Assert.Equal("already_stopped", (string?)answer["items"]![0]!["status"]);
     }
@@ -410,8 +410,8 @@ public class ReplyContactProxyRuleTests
 
         ReplyOperations.Succeeded(operation, result);
         Assert.Equal("1001", PinnedContact(result));
-        Assert.Equal(["contact find", driver.Command], Lines(account));
-        var person = JsonNode.Parse(account.Calls[1].Body!)!.AsObject();
+        Assert.Equal([.. driver.Before ?? [], "contact find", Importing(driver, "linkedin")], Lines(account));
+        var person = PersonOn(account.Calls[^1]);
         Assert.Equal((Profile, "Marta"), ((string?)person["linkedin_url"], (string?)person["first_name"]));
         Assert.False(person.ContainsKey("email"));
         var made = Assert.Single(account.Contacts)!;
@@ -531,6 +531,20 @@ public class ReplyContactProxyRuleTests
         }
 
         return input;
+    }
+
+    /// <summary>The command line a driver's operation runs when it imports the person, on the channel named.</summary>
+    private static string Importing(Driver driver, string channel) =>
+        channel == "email" && driver.EmailCommand is { } email ? email : driver.Imports ?? driver.Command;
+
+    /// <summary>
+    /// The person a command that imports them read from stdin: the whole of it, or — where the command reads its own input
+    /// from stdin too, the text a send carries or the fields an update sets — the object under <c>contact</c>.
+    /// </summary>
+    private static JsonObject PersonOn(ReplyCall call)
+    {
+        var body = JsonNode.Parse(call.Body!)!.AsObject();
+        return body["contact"] is JsonObject person ? person : body;
     }
 
     /// <summary>The value the driver's channel reaches the person at: the address, or the profile as Jason keys it.</summary>

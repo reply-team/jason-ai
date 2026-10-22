@@ -2,15 +2,14 @@
 //
 //     reply [--json] [-q] [--profile <name>] [--team-id <id>] <noun> <verb> [<id>] [options]
 //
-// It stands in for the program from the outside: each work command prints what reply-cli 0.14.0 documents — its
-// result as JSON on stdout, or one `{"error":…}` line on stderr with exit 1, 2 or 3 — from a small record of what the
-// account holds, so a test can plant a world and read back what happened. It never imitates Reply's API: the plugin
-// makes no raw call, so `api` is a command this program does not know, and a plugin that reached for it fails here. A
-// flag this program does not know is a usage error too, so a plugin that reached for `--api-key`, `--verbose`,
-// `--user-id`, `--user-email`, `--pretty` or `--idempotency-key` fails here, before any assertion about the argument
-// vector runs. Which account it works in is
-// never on the command line: it finds its store the way the real CLI does, from the platform's own configuration
-// directory and the profile name.
+// It stands in for the program from the outside: each work command prints what the reply-cli release `ReplyCliRelease`
+// names documents — its result as JSON on stdout, or one `{"error":…}` line on stderr with exit 1, 2 or 3 — from a
+// small record of what the account holds, so a test can plant a world and read back what happened. It never imitates
+// Reply's API: the plugin makes no raw call, so `api` is a command this program does not know, and a plugin that
+// reached for it fails here. A flag this program does not know is a usage error too, so a plugin that reached for
+// `--api-key`, `--verbose`, `--user-id`, `--user-email`, `--pretty` or `--idempotency-key` fails here, before any
+// assertion about the argument vector runs. Which account it works in is never on the command line: it finds its store
+// the way the real CLI does, from the platform's own configuration directory and the profile name.
 
 // Read and written as reply-cli is, a node program: UTF-8 on every stream, whatever the console's code page, with no
 // byte-order mark looked for, as node's JSON.parse looks for none. A stand-in that used the console's page would agree
@@ -25,7 +24,7 @@ Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush
 // resolved, long before any account is involved. reply-cli prints the bare version.
 if (args.Length == 1 && (args[0] == "--version" || args[0] == "-v"))
 {
-    await Console.Out.WriteLineAsync("0.14.0");
+    await Console.Out.WriteLineAsync(Jason.ReplyCliStub.ReplyCliRelease.Version);
     return 0;
 }
 

@@ -20,10 +20,10 @@
   "meter": null,
   "invariants": ["A1"],
 
-  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_only" },
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" },
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
-    "fields": ["id"],
+    "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
     "channels": "consumed"
   },
   "precondition": "Every custom field the arguments name is one the provider's account defines.",
@@ -33,7 +33,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "urn:jason:operation:contact.update:1:input",
     "title": "contact.update input",
-    "description": "One person, the fields to change on the provider's contact for them, and one key. The values are the planner's: Jason's own record of the person is not copied to the provider by this operation.",
+    "description": "One person, the fields to change on the provider's contact for them, and one key. The values are the planner's. Jason's own record of the person reaches the provider only where the provider holds nobody for them: the contact is then created from it, as by every write that may create the person, and the values are set on it.",
     "type": "object",
     "additionalProperties": false,
     "required": ["args", "contacts", "campaign", "idempotency_key"],
@@ -121,6 +121,11 @@
         "required": ["id", "channels", "external_ids"],
         "properties": {
           "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "first_name": { "type": ["string", "null"], "maxLength": 200 },
+          "last_name": { "type": ["string", "null"], "maxLength": 200 },
+          "company": { "type": ["string", "null"], "maxLength": 200 },
+          "title": { "type": ["string", "null"], "maxLength": 200 },
+          "time_zone": { "type": ["string", "null"], "maxLength": 200 },
           "channels": {
             "type": "array",
             "minItems": 1,
@@ -197,20 +202,21 @@
   "external_ids": {
     "contact": {
       "entity": "contact",
-      "description": "The provider's identifier for the contact this call changed, pinned so no later call has to match the person by address again."
+      "description": "The provider's identifier for the contact this call changed — found, or created when the provider held nobody under the consumed value — pinned so no later call has to match the person by address again."
     }
   },
 
   "recovery_read": {
-    "reads": "With a pin learned on the failure, nothing more: the update sets each field it names outright, so a repeat worked by that contact lands on the same values. With no pin learned, the person is found again by the consumed value, as the first attempt found them, and nobody is created.",
-    "justification": "A second performance of the same update changes nothing at the provider, so the only read a repeat needs is the one that names the contact, and the pin learned on the failure makes even that one unnecessary."
+    "reads": "With a pin learned on the failure, nothing more: the update sets each field it names outright, so a repeat worked by that contact lands on the same values. With no pin learned, the person is looked up by the consumed value first, so the contact the first attempt may have made is found by that read and never created again; one is created only when the provider still holds nobody under the value.",
+    "justification": "A second performance of the same update changes nothing at the provider, so the only read a repeat needs is the one that names the contact, and the pin learned on the failure makes even that one unnecessary. The lookup before any creation is what keeps a lost answer from leaving two contacts for one person."
   },
   "repeat_after_ambiguous": "after_recovery_read",
 
   "failure_codes": [
-    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on — working by the pinned identifier is the rule, so this is reported rather than re-matched by address; or, with no pin, the provider holds nobody under the consumed value — the person is enrolled or put on a list first, then updated." },
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on. Working by the pinned identifier is the rule, so this is reported rather than re-matched by address, and nobody is created in its place." },
     { "code": "contact_not_unique", "class": "permanent", "when": "More than one provider contact carries this address, so picking one would be guessing and nothing was changed. A person resolves the duplicate at the provider, then proposes the work again." },
-    { "code": "invalid_channel_value", "class": "validation", "when": "The person carries no value the provider looks anybody up by on the channel named, so no later attempt can find them by it either." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The person carries no value the provider looks anybody up by on the channel named, so no later attempt can find or create them by it either." },
+    { "code": "limit_reached", "class": "permanent", "when": "The provider held nobody under the consumed value and its account will not hold another contact, so the person could not be created and nothing was changed." },
     { "code": "invalid_field_value", "class": "validation", "when": "The provider refused a value the arguments give a field, or the arguments name one custom field twice, the same name whatever its case. Nothing was changed." },
     { "code": "field_not_found", "class": "validation", "when": "A custom field the arguments name is one the provider's account defines none of, so nothing was changed. Name the field as the account names it." },
     { "code": "feature_unavailable", "class": "permanent", "when": "The provider says the account's plan or role does not include changing a contact." },
@@ -218,17 +224,17 @@
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it change contacts for this account." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
     { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
-    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the fields may already have been changed. The next attempt works by the contact pinned on the failure or, with none, by the one a read finds." }
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the contact may already have been made and the fields changed. The next attempt works by the contact pinned on the failure or, with none, by the one a read finds, and creates one only when the read finds nobody." }
   ],
 
   "timeout_ms": 120000,
 
   "conformance": [
     "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
-    "A contact with no pin is looked up by the channel value first, and the identifier the provider holds them under comes back under `external_ids.contact`; a person the provider holds nobody for fails `contact_not_found`, and nobody is created.",
-    "A field the arguments leave out stays as the provider holds it, and a field given as null is cleared.",
+    "A contact with no pin is looked up by the channel value first and created from it only when the provider holds nobody under it; the provider's identifier comes back under `external_ids.contact` either way, and a contact created is given the fields the arguments name as one found is.",
+    "A field the arguments leave out stays as the provider holds it — on a contact just created, as it was created — and a field given as null is cleared.",
     "A custom field is named as the provider's account names it, and one the account defines none of fails `field_not_found` with nothing changed.",
-    "An attempt after a lost answer works by the contact pinned on the failure and, with no pin, by the contact a read finds, and sets the same values again: one crash leaves one change.",
+    "An attempt after a lost answer works by the contact pinned on the failure and, with no pin, by the contact a read finds, and sets the same values again: one crash leaves one contact and one change.",
     "The result carries exactly one item, and its `contact_id` is the identifier the call was given."
   ]
 }
