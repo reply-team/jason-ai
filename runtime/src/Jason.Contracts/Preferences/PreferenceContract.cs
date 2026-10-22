@@ -24,7 +24,8 @@ public sealed record PreferenceContract(string Key, int Version, string Summary,
 
     /// <summary>
     /// What one value may carry, measured over its canonical form as a role's note is: characters outside ASCII are
-    /// escaped there, six bytes for a character UTF-8 spells in two.
+    /// escaped there at six bytes, and so are DEL and each of <c>&lt;</c>, <c>&gt;</c>, <c>&amp;</c>, <c>'</c>, <c>"</c>, <c>+</c>
+    /// and the backtick, while a character outside the Basic Multilingual Plane takes twelve.
     /// </summary>
     public const int MaxValueBytes = 64 * 1024;
 

@@ -33,7 +33,11 @@ from a message they like and then confirmed by them. It is kept once, so that a 
 - `examples` are up to three messages the person likes, with the recipient's details taken out before they are kept.
 
 A standing rule about what every message says — "always include one proof point" — is an instruction for the work
-rather than how the company sounds, and has no field here. A value is at most 64 KiB in its canonical form, which is its compact JSON with the keys sorted and every character outside ASCII escaped, six bytes for a character UTF-8 spells in two; the `value_bytes` a preference reports is the number the cap compares. Text outside ASCII, in Cyrillic, Greek or Japanese for one, holds roughly a third of the characters the figure suggests: about ten thousand characters outside ASCII in all. A value its schema accepts can still be refused as too large.
+rather than how the company sounds, and has no field here. A value is at most 64 KiB in its canonical form, which is its
+compact JSON with the keys sorted, in which every character outside ASCII is escaped at six bytes, and so are DEL and
+each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, while a character outside the Basic Multilingual Plane takes
+twelve; the `value_bytes` a preference reports is the number the cap compares. Two or three UTF-8 bytes become six:
+about ten thousand characters outside ASCII in all. A value its schema accepts can still be refused as too large.
 
 ## Setting it
 

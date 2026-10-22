@@ -27,12 +27,13 @@ record. No field this version names is an opt-out, an owner or a stop, so no upd
 ## Finding the person
 
 The fields belong on the provider's own contact for the person, so an update finds that contact or makes it:
-`preflight.provider_contact` is `find_or_create`, as for every write that takes a person except the stop, and the call
+`preflight.provider_contact` is `find_or_create`, as for the other five operations that may create the person — the list
+add, the enrolment, the opt-out and the two sends; the stop, the reply and the delete create nobody — and the call
 projects the person as every operation that may create them does. The policy was `find_only` before, when a person the
 provider held nobody for failed `contact_not_found`; that is a relaxation, so the document keeps its version (the
 contracts [README](../README.md), "Versioning"). The composed input now carries the person's own fields too, but an
-update is approved automatically, so no approval parked before this change is parked once more as `input_changed`:
-none was ever parked.
+update is approved automatically, so no approval parked before this change is parked once more as `input_changed`: none
+was ever parked.
 
 1. If `contacts[0].external_ids.contact` is present, that is the provider's identifier for this person. Work by it.
 2. Otherwise look the person up by the value of the channel named by `args.channel`. One contact found is the person.
@@ -53,7 +54,7 @@ says how the lookup compares and when it is refused.
     "fields": { "title": "Chief Revenue Officer", "last_name": null },
     "custom_fields": [ { "name": "lead_source", "value": "Webinar" } ]
   },
-  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "channels": [ { "channel": "email", "value": "marta@example.com", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
+  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "company": null, "title": null, "time_zone": null, "channels": [ { "channel": "email", "value": "marta@example.com", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
   "campaign": { "id": "cmp_…", "name": "Q3 LatAm founders", "status": "active", "external_ids": { "campaign": "c_7714" } },
   "idempotency_key": "wi_…"
 }
@@ -72,7 +73,8 @@ one it holds — the one channel named by `args.channel`, and the pin.
 
 `status` is `updated`. A refusal by the provider is a **failed outcome with its class**: a custom field the account
 defines none of is `field_not_found`, a value the provider refuses is `invalid_field_value`, and in both nothing is
-changed.
+changed. `limit_reached` is the provider's account full: it will hold no further contact, and the person had to be
+created, so nothing was changed.
 
 ## Repeating after a lost answer
 

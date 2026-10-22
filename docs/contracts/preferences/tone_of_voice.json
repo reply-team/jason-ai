@@ -3,6 +3,7 @@
   "version": 1,
   "summary": "How the company sounds, as agreed with the person: the tone in words, how formal it is, how a first message opens and closes, and messages the person likes.",
   "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "required": ["summary"],
     "additionalProperties": false,

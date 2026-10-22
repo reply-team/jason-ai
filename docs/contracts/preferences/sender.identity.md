@@ -49,7 +49,11 @@ should be written by somebody else names that sender by `name` or by one of thei
 - `details` is anything else a writer has to know to write as them.
 
 Which mailbox or account a message goes out from is not part of this value: that is the provider's account, chosen
-where the send is. A value is at most 64 KiB in its canonical form, which is its compact JSON with the keys sorted and every character outside ASCII escaped, six bytes for a character UTF-8 spells in two; the `value_bytes` a preference reports is the number the cap compares. Text outside ASCII holds roughly a third of the characters the figure suggests: about ten thousand in all.
+where the send is. A value is at most 64 KiB in its canonical form, which is its compact JSON with the keys sorted, in
+which every character outside ASCII is escaped at six bytes, and so are DEL and each of `<`, `>`, `&`, `'`, `"`, `+` and
+the backtick, while a character outside the Basic Multilingual Plane takes twelve; the `value_bytes` a preference
+reports is the number the cap compares. Two or three UTF-8 bytes become six: about ten thousand characters outside ASCII
+in all.
 
 ## Setting it
 

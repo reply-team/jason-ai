@@ -146,9 +146,11 @@ schema.
   second value here.
 - **A key and its value.** A key is lower-case words of letters, digits and underscores, each starting with a letter,
   joined by dots, at most 64 characters. A value is a JSON object the key's schema accepts, of at most 64 KiB in its
-  canonical form — measured as a role's note is, with characters outside ASCII escaped at six bytes each, so the size the cap
-  refuses is the size the chronicle reports. A key's schema changes only by gaining an optional field, which raises the
-  document's version, so a skill reading the document knows which fields may be present; anything else is a new key.
+  canonical form — measured as a role's note is, with every character outside ASCII escaped at six bytes, and so are DEL
+  and each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, while a character outside the Basic Multilingual Plane
+  takes twelve, so the size the cap refuses is the size the chronicle reports. A key's schema changes only by gaining an
+  optional field, which raises the document's version, so a skill reading the document knows which fields may be
+  present; anything else is a new key.
 - **A person's word.** Only a person sets or unsets a preference, and the request names them, as a decision on an
   approval does: an actor that is not a person is refused as `preference_not_human`, and one that names nobody as
   `actor_required`. In the planner's session, on the person's answer, the session skill runs

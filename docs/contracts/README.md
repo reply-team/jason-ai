@@ -119,8 +119,10 @@ A preference document is `{key, version, summary, value_schema}` and nothing els
 carries one and no plugin is invoked for one, so it is under `preferences/` and read by a catalog of its own. A key is
 lower-case words of letters, digits and underscores, each starting with a letter, joined by dots, at most 64
 characters, and its document is named for it. Every value is a JSON object, checked against the key's `value_schema`
-in the dialect below, of at most 64 KiB in its canonical form, in which characters outside ASCII are escaped, six bytes for a character UTF-8 spells
-in two (a preference reports the `value_bytes` the cap compares). A key's schema changes only by gaining an optional
+in the dialect below, of at most 64 KiB in its canonical form, in which every character outside ASCII is escaped at six
+bytes, and so are DEL and each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, while a character outside the Basic
+Multilingual Plane takes twelve
+(a preference reports the `value_bytes` the cap compares). A key's schema changes only by gaining an optional
 field, which raises the document's version, so a skill reading the document knows which fields may be present; anything
 else is a new key. There is one value per key for the whole installation, set and unset by a person
 and read by everyone else. Its fixtures live under [`fixtures/preferences/`](fixtures/preferences) and are run by the

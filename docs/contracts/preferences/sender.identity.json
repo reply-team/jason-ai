@@ -3,6 +3,7 @@
   "version": 1,
   "summary": "Who messages are written as: one or more senders, the first of whom writes whenever a campaign names no other.",
   "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "required": ["senders"],
     "additionalProperties": false,

@@ -57,7 +57,7 @@ at the claim is a check for exactly the value reached.
     "sender": { "external_id": "12", "address": "ann@example.com" },
     "message": { "format": "email", "subject": "The Lisbon meetup", "body": "Hi Marta,\nthanks for the chat at the meetup." }
   },
-  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "channels": [ { "channel": "email", "value": "marta@example.com", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
+  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "company": null, "title": null, "time_zone": null, "channels": [ { "channel": "email", "value": "marta@example.com", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
   "campaign": { "id": "cmp_…", "name": "Q3 LatAm founders", "status": "active", "external_ids": {} },
   "idempotency_key": "wi_…"
 }

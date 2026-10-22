@@ -54,7 +54,7 @@ check for exactly the profile reached.
     "sender": { "external_id": "34", "address": "https://www.linkedin.com/in/ann-owner" },
     "note": "Hi Marta, we met at the Lisbon meetup."
   },
-  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "channels": [ { "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
+  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "last_name": "Alvarez", "company": null, "title": null, "time_zone": null, "channels": [ { "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true } ], "external_ids": { "contact": "p_88421" } } ],
   "campaign": { "id": "cmp_…", "name": "Q3 LatAm founders", "status": "active", "external_ids": {} },
   "idempotency_key": "wi_…"
 }
