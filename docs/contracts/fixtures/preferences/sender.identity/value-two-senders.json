@@ -1,0 +1,25 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "case": "two senders, every field given; the first writes whenever a campaign names no other",
+  "value": {
+    "senders": [
+      {
+        "name": "Marta Lind",
+        "addressed_as": "Marta",
+        "gender_forms": "feminine",
+        "title": "Head of Partnerships",
+        "company": "Example Analytics",
+        "aliases": ["Marta", "M. Lind"],
+        "details": "Writes in the first person; signs with her first name only."
+      },
+      {
+        "name": "Sam Ortega",
+        "gender_forms": "neutral",
+        "title": "Founder",
+        "company": "Example Analytics"
+      }
+    ]
+  },
+  "expect": "valid"
+}

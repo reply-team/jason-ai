@@ -1,0 +1,29 @@
+{
+  "operation": "preference.set",
+  "case": "unknown-key",
+  "request": {
+    "key": "tone",
+    "value": {
+      "summary": "Plain."
+    },
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: key: unknown.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "key",
+          "code": "unknown",
+          "message": "key must name a preference this build knows: sender.identity, tone_of_voice."
+        }
+      ]
+    }
+  }
+}

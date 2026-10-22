@@ -1,0 +1,15 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "case": "every field given: the tone, how formal it is, how a first message opens and closes, and a message the person likes",
+  "value": {
+    "summary": "Plain and warm; short sentences; one concrete detail about the reader's company; no exclamation marks.",
+    "formality": "informal",
+    "greeting": "Hi and the first name, never Dear",
+    "sign_off": "Best, and the sender's first name",
+    "examples": [
+      "Hi Alex, saw that Example Retail opened a second warehouse in May. We help teams that size cut picking errors by a third. Worth a short call next week? Best, Marta"
+    ]
+  },
+  "expect": "valid"
+}

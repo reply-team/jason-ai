@@ -1,0 +1,9 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "case": "one sender, with only what is required: the name they sign with and the forms their messages use",
+  "value": {
+    "senders": [{ "name": "Marta Lind", "gender_forms": "feminine" }]
+  },
+  "expect": "valid"
+}

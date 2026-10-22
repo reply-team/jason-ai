@@ -1,0 +1,7 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "case": "a field of its own: a standing rule about what every message says is not part of how the company sounds",
+  "value": { "summary": "Plain and warm.", "rules": ["Always include one proof point."] },
+  "expect": { "invalid": [{ "pointer": "/rules", "reason": "additional_properties" }] }
+}

@@ -160,6 +160,16 @@ public static partial class JournalKinds
     /// <summary>A project's name changed, keyed by its id, with the name before and after. It names no campaign.</summary>
     public const string ProjectUpdated = "project_updated";
 
+    /// <summary>
+    /// A person set a named preference: keyed by the preference's key, with the size and hash of the value before (null
+    /// where it was not set) and after. It names no campaign, and never holds the value: a preference can be personal
+    /// data, and the chronicle could never forget it.
+    /// </summary>
+    public const string PreferenceSet = "preference_set";
+
+    /// <summary>A person unset a named preference and its value was deleted: keyed by the key, with the size and hash it had.</summary>
+    public const string PreferenceUnset = "preference_unset";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -215,6 +225,8 @@ public static partial class JournalKinds
         EventsBackfillRequested,
         ProjectCreated,
         ProjectUpdated,
+        PreferenceSet,
+        PreferenceUnset,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

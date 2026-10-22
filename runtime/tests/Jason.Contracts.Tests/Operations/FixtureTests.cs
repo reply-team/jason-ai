@@ -315,9 +315,10 @@ public class FixtureTests
     /// compared as a sorted set; and where a fixture names the reason as well — one of the reason codes the
     /// package publishes, which travels outwards as the code of an API error rather than staying inside the
     /// runtime — that is held against the report too, so that a constraint quietly changing kind at that pointer
-    /// fails here rather than passing for a reason nobody wrote down.
+    /// fails here rather than passing for a reason nobody wrote down. The named preferences' value fixtures are held by
+    /// the same routine, for the same reason.
     /// </summary>
-    private static void TheStatedProblemsAndNoOthers(string relative, JsonObject expected, IReadOnlyList<SchemaProblem> problems)
+    internal static void TheStatedProblemsAndNoOthers(string relative, JsonObject expected, IReadOnlyList<SchemaProblem> problems)
     {
         var stated = expected["invalid"] as JsonArray;
 

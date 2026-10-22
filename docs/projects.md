@@ -4,8 +4,9 @@ A project is one business goal of the client — in practice, usually one produc
 Every campaign is in exactly one project, always. A project is Jason's own: it never reaches a plugin's input, is never
 pinned to a provider, and no provider has to understand it.
 
-There is no client entity. One installation serves one client, so the client's level is the installation itself.
-"Account" keeps the one meaning it has in Jason: a provider account a route's binding names ([routing](routing.md)).
+There is no client entity. One installation serves one client, so the client's level is the installation itself, and
+what a person states about the client as a whole is kept as its named preferences (§7). "Account" keeps the one
+meaning it has in Jason: a provider account a route's binding names ([routing](routing.md)).
 
 ## 1. The default project
 
@@ -124,7 +125,70 @@ jason campaign list --project prj_01K7QN0000000000000000ACME --human
 
 `jason campaign list --human` shows each campaign's project by its slug, from the listing it already has.
 
-## 7. What the schema holds for later
+## 7. The client's named preferences
+
+A named preference is a structured fact about the client that a person states, with a schema of its own, so that a
+skill can check that it is set before it writes for a person to send and a screen can show it. The catalog is a contract
+family of its own, one document per key under `docs/contracts/preferences/`, embedded into the runtime and read by a
+catalog of its own, never the operation catalog: no work item names a key, no route carries one and no plugin is
+invoked for one ([the contracts README](contracts/README.md) describes the family). It holds two keys:
+
+| Key | What it says |
+|---|---|
+| `sender.identity` | Who messages are written as: one or more senders, the first of whom writes whenever a campaign names no other — each with the name they sign with, the forms a message uses for them in a language that marks them, and what else a writer needs. |
+| `tone_of_voice` | How the company sounds: the tone in words, how formal it is, how a first message opens and closes, and up to three messages the person likes. |
+
+Each key's page under `docs/contracts/preferences/` gives its fields, and the fixtures beside them are run against the
+schema.
+
+- **At the client's level only.** One value per key for the whole installation; there is no project's or campaign's
+  value. A project or a campaign that needs another sender or another voice says so in its own words, never as a
+  second value here.
+- **A key and its value.** A key is lower-case words of letters, digits and underscores, each starting with a letter,
+  joined by dots, at most 64 characters. A value is a JSON object the key's schema accepts, of at most 64 KiB in its
+  canonical form — measured as a role's note is, with characters outside ASCII escaped at six bytes each, so the size the cap
+  refuses is the size the chronicle reports. A key's schema changes only by gaining an optional field, which raises the
+  document's version, so a skill reading the document knows which fields may be present; anything else is a new key.
+- **A person's word.** Only a person sets or unsets a preference, and the request names them, as a decision on an
+  approval does: an actor that is not a person is refused as `preference_not_human`, and one that names nobody as
+  `actor_required`. In the planner's session, on the person's answer, the session skill runs
+  `jason preference set <key> …` with the person's name as the actor, as approvals are given in a session. A role Jason
+  launches reads the preferences and never writes one.
+
+| Operation | Request | Answer and refusals |
+|---|---|---|
+| `preference.set` | `key`, `value`, `actor`, `reason?` | The preference. `validation_failed` on `key` when the catalog does not know it, naming the keys it does; on `value` when it is missing or not an object, at `value/<pointer>` for each problem the key's schema finds, and as `too_large` past the cap; `preference_not_human`; `actor_required`. The value a key already has — in whatever order its members were written — writes nothing. |
+| `preference.unset` | `key`, `actor`, `reason?` | The same answer with `value` null and nothing said about it: the row is deleted, so the value is gone. A key that is not set writes nothing. The same refusals for the key and the actor. |
+| `preference.list` | `limit?`, `cursor?` | Every key the catalog knows, in key order, set or not, so a reader learns what is missing in the same call as what is there. |
+
+A preference answers as `key`, `value`, `value_hash` (the `sha256:` of the value's canonical form), `value_bytes`,
+`created_at`, `updated_at` and `updated_by`; for a key that is not set, every field but the key is null. `unset` goes
+beyond setting and listing on purpose: the sender's identity is personal data, and a person must be able to take it
+back.
+
+The chronicle says each change as a line of the installation's, naming no campaign:
+
+| Kind | What the line holds |
+|---|---|
+| `preference_set` | Keyed by the preference's key; the size and hash of the value before — null where it was not set — and after. |
+| `preference_unset` | Keyed by the preference's key; the size and hash of the value that was deleted. |
+
+Never the value itself: the chronicle is append-only and could never forget it, and a size and a hash are enough to
+tell a value that changed from one that did not. Both kinds are the runtime's own, so `journal.append` refuses them;
+`Manager:Triggers` may name them, and, naming no campaign, they summon nobody. A value never reaches a log, and
+`jason doctor --include-journal` carries nothing of one, because no line holds it.
+
+```sh
+jason preference list --human
+jason preference set tone_of_voice --value '{"summary":"Plain and warm; no exclamation marks."}' --actor human:Marta
+jason preference set sender.identity --value-file sender.json --actor human:Marta --reason "the person's answer"
+jason preference unset sender.identity --actor human:Marta
+```
+
+The value is given on the line or from a file — `-` reads standard input — never both. `--human` renders each key
+with its value from the answer it already has.
+
+## 8. What the schema holds for later
 
 - **A folder per project and per campaign.** Both tables have a column for the path of one; nothing writes it yet, and no
   answer carries it.

@@ -65,8 +65,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
 ## Conventions
 
 - Terminology: **plugin** (not adapter), **WorkItem** (not Task), **channels** (not handles).
-  Skills, campaign context, role notes and learned practice are four distinct knowledge concepts;
-  do not blur them. Membership in a Jason campaign is local; `campaign.enroll` — a later,
+  Skills, named preferences, campaign context, role notes and learned practice are five distinct
+  knowledge concepts; do not blur them. Membership in a Jason campaign is local; `campaign.enroll` — a later,
   provider-side, approval-gated act — is a different thing.
 - Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included. Success is 200
   with a bare DTO; errors are `{"error":{"code","message","retryable"}}` with snake_case codes.
@@ -141,6 +141,12 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   read are notified as a pointer —
   counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
   `docs/notifications.md` is the contract.
+- Projects and preferences: every campaign is in exactly one project — the default one, which every installation has,
+  unless it names another — and a project's slug is unique and never changes. The client is the installation and has
+  no entity; what a person states about it is a named preference, a fourth contract family under
+  `docs/contracts/preferences/` embedded like the others and never in the operation catalog: one value per key for the
+  installation, checked against the key's schema, set and unset by a named person only, and journaled by its size and
+  hash, never its value. `docs/projects.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Events;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
+using Jason.Contracts.Preferences;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +11,8 @@ namespace Jason.Runtime.Hosting;
 
 /// <summary>
 /// The runtime's own act at start: every pattern this build publishes — in each canonical operation's input and output
-/// schema, in the delivery contract's and in the events contract's — compiled and matched once, before the plugin load and before the
+/// schema, in the delivery contract's, in the events contract's and in each named preference's value schema — compiled and matched
+/// once, before the plugin load and before the
 /// dispatcher's first scan, outside any request. A cold engine pays for its automaton and its compiled code inside
 /// its first match's timeout, and on a loaded machine that alone could run past the timeout; paid here, it is paid
 /// where nobody is waiting, and a request meets a warm engine.
@@ -42,11 +44,15 @@ public sealed class PatternWarmUp(PatternTiming timing, ILogger<PatternWarmUp> l
         new EventId(2, nameof(PartlyWarmed)),
         "Published schema patterns warmed: {Finished}; {Unfinished} did not finish warming in {DurationMs} ms and are left to a request's own second match");
 
-    /// <summary>Every schema this build publishes and the runtime applies: the operations' first, then the delivery family's.</summary>
+    /// <summary>
+    /// Every schema this build publishes and the runtime applies: the operations' first, then the delivery family's, the
+    /// events family's and each named preference's value schema.
+    /// </summary>
     public static IEnumerable<JsonObject> PublishedSchemas() =>
         OperationCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema })
             .Concat(DeliveryCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }))
-            .Concat(EventsCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }));
+            .Concat(EventsCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }))
+            .Concat(PreferenceCatalog.All.Select(contract => contract.ValueSchema));
 
     public Task StartAsync(CancellationToken cancellationToken)
     {

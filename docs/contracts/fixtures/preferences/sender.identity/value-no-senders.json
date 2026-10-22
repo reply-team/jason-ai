@@ -1,0 +1,7 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "case": "an empty list of senders, which leaves nobody to write as",
+  "value": { "senders": [] },
+  "expect": { "invalid": [{ "pointer": "/senders", "reason": "min_items" }] }
+}

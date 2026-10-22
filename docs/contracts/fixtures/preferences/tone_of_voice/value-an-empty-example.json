@@ -1,0 +1,7 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "case": "an example with nothing in it",
+  "value": { "summary": "Plain and warm.", "examples": [""] },
+  "expect": { "invalid": [{ "pointer": "/examples/0", "reason": "min_length" }] }
+}

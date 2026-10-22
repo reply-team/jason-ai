@@ -490,4 +490,23 @@ public class ContractsShapeTests
         var session = new UiSessionResponse("tok", "uit_1", "ada", "v1", "rt_1");
         Assert.Equal("{\"token\":\"tok\",\"token_id\":\"uit_1\",\"actor_id\":\"ada\",\"api_version\":\"v1\",\"instance_id\":\"rt_1\"}", JsonSerializer.Serialize(session, JasonJson.Options));
     }
+
+    /// <summary>A key that is not set says so with nulls throughout, rather than leaving fields out a reader then has to guess at.</summary>
+    [Fact]
+    public void A_preference_serializes_its_value_inline_and_says_null_for_everything_about_an_unset_key()
+    {
+        var set = new PreferenceDto(
+            "tone_of_voice", new JsonObject { ["summary"] = "Plain." }, "sha256:ab", 20, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, new ActorRef(ActorType.Human, "Marta"));
+        var unset = new PreferenceDto("sender.identity", null, null, null, null, null, null);
+
+        Assert.Equal(
+            "{\"key\":\"tone_of_voice\",\"value\":{\"summary\":\"Plain.\"},\"value_hash\":\"sha256:ab\",\"value_bytes\":20,"
+                + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"updated_by\":{\"type\":\"human\",\"id\":\"Marta\"}}",
+            JsonSerializer.Serialize(set, JasonJson.Options));
+        Assert.Equal(
+            "{\"key\":\"sender.identity\",\"value\":null,\"value_hash\":null,\"value_bytes\":null,\"created_at\":null,\"updated_at\":null,\"updated_by\":null}",
+            JsonSerializer.Serialize(unset, JasonJson.Options));
+        Assert.Equal("/v1/preference.set", Operations.Route(Operations.PreferenceSet));
+        Assert.Equal(("preference.unset", "preference.list"), (Operations.PreferenceUnset, Operations.PreferenceList));
+    }
 }

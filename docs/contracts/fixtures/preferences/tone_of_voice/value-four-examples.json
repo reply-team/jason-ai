@@ -1,0 +1,7 @@
+{
+  "key": "tone_of_voice",
+  "version": 1,
+  "case": "four examples, one more than a writer is given",
+  "value": { "summary": "Plain and warm.", "examples": ["One.", "Two.", "Three.", "Four."] },
+  "expect": { "invalid": [{ "pointer": "/examples", "reason": "max_items" }] }
+}

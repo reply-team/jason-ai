@@ -40,6 +40,9 @@ docs/contracts/
   notifications/<name>.md          the same contract explained, with a generated block
   events/<name>.json               the events contract, a third family, embedded the same way
   events/<name>.md                 the same contract explained, with a generated block
+  preferences/<key>.json           a named preference of the client, a fourth family, embedded the same way
+  preferences/<key>.md             the same preference explained, with a generated block
+  fixtures/preferences/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
 ```
 
 ## The published operations
@@ -102,6 +105,26 @@ result, four failure codes, its timeout and its conformance list. What it return
 provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
 identifiers operations pinned and writes none. Its fixtures live beside the others' under
 [`fixtures/events.read/`](fixtures/events.read) and are run by the same tests.
+
+## The named preferences
+
+A fourth family is published here, and it is no work at all: the **named preferences**, structured facts about the
+client that a person states, each with a schema, so that a skill can check that one is set before it writes and a
+screen can show it. Two are published:
+
+- [`sender.identity`](preferences/sender.identity.md) — who messages are written as;
+- [`tone_of_voice`](preferences/tone_of_voice.md) — how the company sounds.
+
+A preference document is `{key, version, summary, value_schema}` and nothing else: no work item names a key, no route
+carries one and no plugin is invoked for one, so it is under `preferences/` and read by a catalog of its own. A key is
+lower-case words of letters, digits and underscores, each starting with a letter, joined by dots, at most 64
+characters, and its document is named for it. Every value is a JSON object, checked against the key's `value_schema`
+in the dialect below, of at most 64 KiB in its canonical form, in which characters outside ASCII are escaped, six bytes for a character UTF-8 spells
+in two (a preference reports the `value_bytes` the cap compares). A key's schema changes only by gaining an optional
+field, which raises the document's version, so a skill reading the document knows which fields may be present; anything
+else is a new key. There is one value per key for the whole installation, set and unset by a person
+and read by everyone else. Its fixtures live under [`fixtures/preferences/`](fixtures/preferences) and are run by the
+same tests.
 
 ## What a document states
 
@@ -401,7 +424,9 @@ output schema, or which pins an identifier of a kind the operation never declare
 writes into its record of provider identifiers from that answer, as `{kind: value}`. A **preview fixture** is
 `{operation, version, case, input, expect}`, where `input` is a composed input the operation's schema accepts and
 `expect` is `{summary, highlights}`: the line the template renders and the values it highlights, both compared
-whole. An operation has preview fixtures exactly when it declares a preview.
+whole. An operation has preview fixtures exactly when it declares a preview. A **value fixture** of a named preference
+is `{key, version, case, value, expect}`, with `expect` written as an input fixture's, and it lives in the directory
+named for its key; every key has at least one value it accepts and one it refuses.
 
 An `invalid` list names exactly what is wrong with the document, and it is written the same way in an input fixture
 and an outcome fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means

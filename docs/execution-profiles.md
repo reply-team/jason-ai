@@ -243,9 +243,10 @@ role's words, from whenever it was written. Where a note disagrees with campaign
 what is true** and the note is out of date. Nothing in the runtime reads a note, and no decision is
 taken because of what one says.
 
-It is also none of the other three knowledge concepts: a **skill** teaches the job, **campaign
-context** is the campaign's shared knowledge, **learned practice** would be cross-campaign and does not
-exist in this version.
+It is also none of the other four knowledge concepts: a **skill** teaches the job, a **named
+preference** is a fact about the client a person states and only a person sets ([projects](projects.md)),
+**campaign context** is the campaign's shared knowledge, **learned practice** would be cross-campaign and
+does not exist in this version.
 
 One document per campaign and role:
 

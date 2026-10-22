@@ -13,6 +13,9 @@
     <!-- The events contracts are a third family: a read of an account belongs to no campaign, so it is neither an
          operation nor a delivery, and is read under a prefix of its own by EventsCatalog. -->
     <EmbeddedResource Include="..\..\..\docs\contracts\events\*.json" Link="Events\%(Filename)%(Extension)" />
+    <!-- The named preferences are a fourth family: a fact about the client a person states is no work anybody performs,
+         so it is read under a prefix of its own by PreferenceCatalog. -->
+    <EmbeddedResource Include="..\..\..\docs\contracts\preferences\*.json" Link="Preferences\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Friend assemblies so the tests that use the shared pattern timing read the form a schema pattern is compiled in

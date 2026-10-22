@@ -1,0 +1,31 @@
+{
+  "operation": "preference.set",
+  "case": "tone",
+  "request": {
+    "key": "tone_of_voice",
+    "value": {
+      "summary": "Plain and warm; no exclamation marks.",
+      "formality": "informal"
+    },
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    }
+  },
+  "status": 200,
+  "response": {
+    "key": "tone_of_voice",
+    "value": {
+      "summary": "Plain and warm; no exclamation marks.",
+      "formality": "informal"
+    },
+    "value_hash": "sha256:recorded-2",
+    "value_bytes": 74,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "updated_by": {
+      "type": "human",
+      "id": "Marta"
+    }
+  }
+}

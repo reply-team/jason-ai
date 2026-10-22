@@ -1,0 +1,22 @@
+{
+  "operation": "preference.set",
+  "case": "not-human",
+  "request": {
+    "key": "tone_of_voice",
+    "value": {
+      "summary": "Loud."
+    },
+    "actor": {
+      "type": "role",
+      "id": "copywriter"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "preference_not_human",
+      "message": "An actor of type 'role' cannot set or unset a preference; a preference is a person's word.",
+      "retryable": false
+    }
+  }
+}

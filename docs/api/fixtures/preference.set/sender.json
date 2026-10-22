@@ -1,0 +1,46 @@
+{
+  "operation": "preference.set",
+  "case": "sender",
+  "request": {
+    "key": "sender.identity",
+    "value": {
+      "senders": [
+        {
+          "name": "Marta Lind",
+          "addressed_as": "Marta",
+          "gender_forms": "feminine",
+          "title": "Head of Partnerships",
+          "company": "Example Analytics"
+        }
+      ]
+    },
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    },
+    "reason": "the person's answer"
+  },
+  "status": 200,
+  "response": {
+    "key": "sender.identity",
+    "value": {
+      "senders": [
+        {
+          "name": "Marta Lind",
+          "addressed_as": "Marta",
+          "gender_forms": "feminine",
+          "title": "Head of Partnerships",
+          "company": "Example Analytics"
+        }
+      ]
+    },
+    "value_hash": "sha256:recorded-1",
+    "value_bytes": 145,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "updated_by": {
+      "type": "human",
+      "id": "Marta"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "key": "sender.identity",
+  "version": 1,
+  "case": "forms outside the three a writer knows",
+  "value": { "senders": [{ "name": "Marta Lind", "gender_forms": "female" }] },
+  "expect": { "invalid": [{ "pointer": "/senders/0/gender_forms", "reason": "enum" }] }
+}

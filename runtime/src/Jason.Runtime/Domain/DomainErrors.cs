@@ -246,5 +246,18 @@ public static class DomainErrors
             $"Project '{id}' already has the slug '{slug}'; a slug names one project.",
             details: [new ErrorDetail("project_id", "exists", id)]);
 
+    /// <summary>
+    /// A named preference is the person's word about their business: a role or a run that sets one is deciding it for
+    /// them, so it reads a preference and never writes one, as it never decides an approval.
+    /// </summary>
+    public static InvalidRequestException PreferenceNotHuman(ActorType type) =>
+        new(
+            "preference_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot set or unset a preference; a preference is a person's word.");
+
+    /// <summary>The same code a decision without a named person is refused with: a preference records whose word it is.</summary>
+    public static InvalidRequestException PreferenceActorRequired() =>
+        new("actor_required", "actor.id is required on a preference: what is recorded has to name the person whose word it is.");
+
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
 }

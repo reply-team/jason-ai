@@ -40,6 +40,10 @@ public static class Operations
     public const string ProjectList = "project.list";
     public const string ProjectUpdate = "project.update";
 
+    public const string PreferenceSet = "preference.set";
+    public const string PreferenceUnset = "preference.unset";
+    public const string PreferenceList = "preference.list";
+
     public const string ContactCreate = "contact.create";
     public const string ContactGet = "contact.get";
     public const string ContactList = "contact.list";

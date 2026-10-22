@@ -41,7 +41,8 @@ public sealed class JournalKindInventoryTests
 
     /// <summary>
     /// The kinds whose entries hold only metadata: ids, counts, statuses, attempt numbers, moments, codes, sizes and
-    /// hashes, the names of fields that changed, and the names of roles, profiles and plugins.
+    /// hashes, the names of fields that changed, the names of roles, profiles and plugins, and the keys of named
+    /// preferences — whose values the chronicle never holds.
     /// </summary>
     /// <remarks>
     /// <c>profile_created</c> also carries two strings its author wrote. <c>program</c> is a path: machine configuration
@@ -86,6 +87,8 @@ public sealed class JournalKindInventoryTests
         JournalKinds.EventsRead,
         JournalKinds.EventsGapObserved,
         JournalKinds.EventsBackfillRequested,
+        JournalKinds.PreferenceSet,
+        JournalKinds.PreferenceUnset,
     };
 
     /// <summary>

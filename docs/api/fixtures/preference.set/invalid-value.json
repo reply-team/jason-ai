@@ -1,0 +1,34 @@
+{
+  "operation": "preference.set",
+  "case": "invalid-value",
+  "request": {
+    "key": "sender.identity",
+    "value": {
+      "senders": [
+        {
+          "name": "Marta Lind",
+          "gender_forms": "female"
+        }
+      ]
+    },
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: value/senders/0/gender_forms: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "value/senders/0/gender_forms",
+          "code": "invalid",
+          "message": "The values accepted here are \"feminine\", \"masculine\", \"neutral\"."
+        }
+      ]
+    }
+  }
+}
