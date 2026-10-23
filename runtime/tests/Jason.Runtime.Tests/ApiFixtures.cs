@@ -190,9 +190,11 @@ public static class ApiFixtures
 
 /// <summary>
 /// Replaces what varies between runs with stable words: ids by prefix in order of first appearance, digests by
-/// count, the data directory by a mark, and the values the clock does not control by fixed ones.
+/// count, the data directory by a mark, the home the runtime was given by <c>~</c> — so a folder under the harness root
+/// reads as it would on a person's machine, <c>~/Jason/projects/…</c> — and the values the clock does not control by
+/// fixed ones.
 /// </summary>
-public sealed partial class FixtureScrubber(string dataDir)
+public sealed partial class FixtureScrubber(string dataDir, string? home = null)
 {
     public const string FixedMoment = "2026-10-16T09:00:00.000Z";
 
@@ -253,6 +255,12 @@ public sealed partial class FixtureScrubber(string dataDir)
             _digests++;
             // Not hex on purpose: the catalog test holds every file free of real digests.
             return "sha256:recorded-" + _digests.ToString(CultureInfo.InvariantCulture);
+        }
+
+        // The home first: it is named after the data directory, so the data directory's mark would take its beginning.
+        if (home is not null && text.Contains(home, StringComparison.Ordinal))
+        {
+            text = text.Replace(home, "~", StringComparison.Ordinal).Replace('\\', '/');
         }
 
         if (text.Contains(dataDir, StringComparison.Ordinal))

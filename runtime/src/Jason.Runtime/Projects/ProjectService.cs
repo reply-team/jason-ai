@@ -5,6 +5,7 @@ using Jason.Contracts.Ids;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -14,9 +15,10 @@ namespace Jason.Runtime.Projects;
 /// <summary>
 /// The projects a client's campaigns work toward, and the default one every installation has. A project is the runtime's
 /// own: nothing here reaches a plugin. Every change is written to the chronicle in the same transaction as the change, as a
-/// line of the installation's — a project is not a campaign — keyed by the project's id.
+/// line of the installation's — a project is not a campaign — keyed by the project's id. A project made here gets its
+/// folder under the harness root in the same request, and is not made when its folder cannot be.
 /// </summary>
-public sealed class ProjectService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class ProjectService(JasonDbContext db, JournalWriter journal, TimeProvider clock, HarnessFolders folders)
 {
     /// <summary>
     /// The default project, asked for by the filter of the index that holds there is one, word for word: SQLite reads a
@@ -52,6 +54,11 @@ public sealed class ProjectService(JasonDbContext db, JournalWriter journal, Tim
 
         var now = clock.GetUtcNow().UtcDateTime;
         var project = new Project { PublicId = publicId, Name = name, Slug = slug, CreatedAt = now, UpdatedAt = now };
+
+        // The row is written first and held uncommitted while the folder is made: the unique slug decides a race before
+        // any folder exists, the write lock keeps two creates from choosing a folder name at once, and a folder that
+        // cannot be made takes the row and its line back with it.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         db.Projects.Add(project);
         journal.Append(
             db,
@@ -79,7 +86,49 @@ public sealed class ProjectService(JasonDbContext db, JournalWriter journal, Tim
             throw;
         }
 
+        project.FolderPath = folders.MakeProjectFolder(project.PublicId, project.Slug);
+
+        // Once the folder stands, the create is finished whether or not its caller is still there, as a campaign's is: a
+        // row rolled back now would leave a folder marked for nobody, and that folder would refuse the same create again.
+        await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
         return ProjectMapper.ToDto(project);
+    }
+
+    /// <summary>
+    /// Where a campaign of <paramref name="project"/> goes, with nothing made: the folder recorded for it, which has to be
+    /// there still and carry its marker, or where the policy would make one.
+    /// </summary>
+    internal static string PlannedFolder(Project project, HarnessFolders folders)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(folders);
+        return project.FolderPath is { } recorded
+            ? folders.RequireProjectFolder(project.PublicId, recorded)
+            : folders.ProjectFolderOf(project.Slug);
+    }
+
+    /// <summary>
+    /// A project's first need: the folder a campaign of it is made in or moved to. A recorded one has to be there still
+    /// and carry its marker. Where none is recorded, the policy makes one now and records it on the tracked project in a
+    /// step of its own, saved before anything of the campaign's is written — the caller has nothing else pending — so the
+    /// folder stands, and is recorded, whatever the campaign's request then meets.
+    /// </summary>
+    internal static async Task<string> FirstNeedAsync(JasonDbContext db, Project project, HarnessFolders folders)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(folders);
+        if (project.FolderPath is { } recorded)
+        {
+            return folders.RequireProjectFolder(project.PublicId, recorded);
+        }
+
+        // Once the folder stands its path is recorded, whether or not the caller is still there to hear it.
+        var made = folders.MakeProjectFolder(project.PublicId, project.Slug);
+        project.FolderPath = made;
+        await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+        return made;
     }
 
     public async Task<ProjectDto> GetAsync(ProjectGetRequest request, CancellationToken cancellationToken)

@@ -3,6 +3,7 @@ using Jason.Runtime.Campaigns;
 using Jason.Runtime.Decisions;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -96,7 +97,7 @@ public class DecisionCancellationTests
     private static CampaignService Campaigns(JasonDbContext db)
     {
         var clock = new FixedClock(Noon);
-        return new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        return new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
     }
 
     private static WorkItemService Items(JasonDbContext db)

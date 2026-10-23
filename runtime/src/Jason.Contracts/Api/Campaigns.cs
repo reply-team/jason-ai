@@ -6,7 +6,8 @@ namespace Jason.Contracts.Api;
 
 /// <summary>
 /// A campaign without its context: what <c>campaign.list</c> returns, so a listing stays small. <c>project_id</c> and
-/// <c>project_slug</c> name the project it is in, so a listing can be shown by project without asking for each one.
+/// <c>project_slug</c> name the project it is in, so a listing can be shown by project without asking for each one;
+/// <c>folder_path</c> is the full path of its folder under the harness root, null where none is recorded.
 /// </summary>
 public sealed record CampaignSummaryDto(
     string Id,
@@ -16,13 +17,15 @@ public sealed record CampaignSummaryDto(
     string ProjectSlug,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? ArchivedAt);
+    DateTimeOffset? ArchivedAt,
+    string? FolderPath = null);
 
 /// <summary>
 /// A campaign with its context: the shared knowledge every role working the campaign reads. <c>external_ids</c>
 /// is always a list, possibly empty, for the same reason a contact's is. <c>execution_profile</c> is the
 /// campaign's policy on which host its agent work uses, and null means it has none of its own. <c>project_id</c> and
-/// <c>project_slug</c> name the project it is in.
+/// <c>project_slug</c> name the project it is in. <c>folder_path</c> is the full path of its folder under the harness root,
+/// null where none is recorded — a campaign made before folders were.
 /// </summary>
 public sealed record CampaignDto(
     string Id,
@@ -39,7 +42,8 @@ public sealed record CampaignDto(
     DateTimeOffset? ArchivedAt,
 
     /// <summary>The key the campaign was created with, when its creator gave one; absent otherwise.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null,
+    string? FolderPath = null);
 
 /// <summary>
 /// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign

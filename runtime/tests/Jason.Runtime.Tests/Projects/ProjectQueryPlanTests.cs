@@ -5,9 +5,10 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Notes;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Projects;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Projects;
 
@@ -56,7 +57,7 @@ public class ProjectQueryPlanTests
         var recorder = new Recorder();
         using (var db = Open(database, recorder))
         {
-            var acme = await new ProjectService(db, new JournalWriter(new FixedClock(Noon)), new FixedClock(Noon))
+            var acme = await new ProjectService(db, new JournalWriter(new FixedClock(Noon)), new FixedClock(Noon), TestHarness.FoldersFor(db))
                 .CreateAsync(new ProjectCreateRequest("Acme", null, null, null), Ct);
             var service = Campaigns(db);
             for (var n = 0; n < 3; n++)
@@ -173,6 +174,6 @@ public class ProjectQueryPlanTests
     private static CampaignService Campaigns(JasonDbContext db)
     {
         var clock = new FixedClock(Noon);
-        return new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        return new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
     }
 }

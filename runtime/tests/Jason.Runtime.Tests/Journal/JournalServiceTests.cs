@@ -4,6 +4,7 @@ using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 
 namespace Jason.Runtime.Tests.Journal;
 
@@ -383,7 +384,7 @@ public class JournalServiceTests
     private static async Task<string> CreateAsync(CampaignService campaigns) =>
         (await campaigns.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct)).Id;
 
-    private static CampaignService NewCampaignService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+    private static CampaignService NewCampaignService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
 
     private static JournalService NewJournalService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock));
 }

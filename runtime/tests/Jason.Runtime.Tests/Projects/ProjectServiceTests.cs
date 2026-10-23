@@ -5,6 +5,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Projects;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Projects;
@@ -28,7 +29,7 @@ public class ProjectServiceTests
         var project = await NewService(db).CreateAsync(new ProjectCreateRequest("  Acme Corp  ", null, new ActorRef(ActorType.Human, "marta"), "the first product"), Ct);
 
         Assert.Matches("^prj_[0-9A-HJKMNP-TV-Z]{26}$", project.Id);
-        Assert.Equal(new ProjectDto(project.Id, "Acme Corp", "acme-corp", false, Noon, Noon), project);
+        Assert.Equal(new ProjectDto(project.Id, "Acme Corp", "acme-corp", false, Noon, Noon, Path.Combine(TestHarness.RootFor(db), "projects", "acme-corp")), project);
         var line = Assert.Single(await db.Journal.AsNoTracking().ToListAsync(Ct));
         Assert.Equal(JournalKinds.ProjectCreated, line.Kind);
         Assert.Equal(project.Id, line.Key);
@@ -252,6 +253,6 @@ public class ProjectServiceTests
     private static ProjectService NewService(JasonDbContext db, TimeProvider? clock = null)
     {
         clock ??= new FixedClock(Noon);
-        return new ProjectService(db, new JournalWriter(clock), clock);
+        return new ProjectService(db, new JournalWriter(clock), clock, TestHarness.FoldersFor(db));
     }
 }

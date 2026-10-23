@@ -2,6 +2,7 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Campaigns;
@@ -76,5 +77,5 @@ public class InboundWatermarkTests
     }
 
     private static CampaignService Campaigns(JasonDbContext db, TimeProvider clock) =>
-        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
 }

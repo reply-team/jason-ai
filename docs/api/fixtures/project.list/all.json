@@ -13,7 +13,8 @@
         "slug": "default",
         "default": true,
         "created_at": "2026-10-16T09:00:00.000Z",
-        "updated_at": "2026-10-16T09:00:00.000Z"
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "folder_path": null
       },
       {
         "id": "prj_1",
@@ -21,7 +22,8 @@
         "slug": "acme-corp",
         "default": false,
         "created_at": "2026-10-16T09:00:00.000Z",
-        "updated_at": "2026-10-16T09:00:00.000Z"
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "folder_path": "~/Jason/projects/acme-corp"
       },
       {
         "id": "prj_2",
@@ -29,7 +31,8 @@
         "slug": "acme-eu",
         "default": false,
         "created_at": "2026-10-16T09:00:00.000Z",
-        "updated_at": "2026-10-16T09:00:00.000Z"
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "folder_path": "~/Jason/projects/acme-eu"
       }
     ],
     "next_cursor": null

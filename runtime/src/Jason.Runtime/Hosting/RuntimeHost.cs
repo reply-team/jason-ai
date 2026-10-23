@@ -6,6 +6,7 @@ using Jason.Runtime.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Logging;
@@ -393,7 +394,9 @@ public static class RuntimeHost
         builder.Services.AddSingleton(new ListeningEndpoint(configuredPort));
 
         // The options bind against the standalone root, not builder.Configuration, which was cleared above.
-        builder.Services.AddJasonOptions(configuration, paths);
+        var home = options.Home?.Invoke(paths) ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        builder.Services.AddJasonOptions(configuration, paths, home);
+        builder.Services.AddSingleton(new HarnessHome(home));
 
         // Stopping has to outlast the dispatcher's drain, or the host would cut short the very wait it asked for.
         builder.Services.Configure<HostOptions>(host => host.ShutdownTimeout = TimeSpan.FromSeconds(Math.Max(0, settings.Dispatcher.DrainSeconds) + 5));

@@ -599,6 +599,7 @@ internal static class GoldenPath
         {
             try
             {
+                TempDataDir.RemoveHome(directory);
                 Directory.Delete(directory, recursive: true);
                 return;
             }

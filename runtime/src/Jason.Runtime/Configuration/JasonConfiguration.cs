@@ -228,13 +228,18 @@ public static class JasonConfiguration
     /// </summary>
     /// <param name="paths">
     /// Where the installed plugins are listed from, for a refusal whose path names one — by the binder or by a
-    /// section's validator.
+    /// section's validator — and the data directory the harness root may never be in.
     /// </param>
-    public static IServiceCollection AddJasonOptions(this IServiceCollection services, IConfiguration configuration, JasonPaths paths)
+    /// <param name="home">
+    /// The home directory the harness root's default is made in, and the one folder the root may never be; null means the
+    /// account's own.
+    /// </param>
+    public static IServiceCollection AddJasonOptions(this IServiceCollection services, IConfiguration configuration, JasonPaths paths, string? home = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(paths);
+        home ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
         IReadOnlySet<string> Installed() => SafeBinding.InstalledPluginIds(paths);
 
@@ -250,6 +255,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<NotificationsOptions>, BindingFailureValidator<NotificationsOptions>>();
         services.AddSingleton<IValidateOptions<RoutesOptions>, BindingFailureValidator<RoutesOptions>>();
         services.AddSingleton<IValidateOptions<InboundOptions>, BindingFailureValidator<InboundOptions>>();
+        services.AddSingleton<IValidateOptions<HarnessOptions>, BindingFailureValidator<HarnessOptions>>();
 
         services.AddSingleton<IValidateOptions<RuntimeOptions>, RuntimeOptionsValidator>();
         services.AddSingleton<IValidateOptions<LoggingOptions>, LoggingOptionsValidator>();
@@ -270,6 +276,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<UpdateOptions>, UpdateOptionsValidator>();
         services.AddSingleton<IValidateOptions<InboundOptions>, InboundOptionsValidator>();
         services.AddSingleton<IValidateOptions<NotificationsOptions>>(new NotificationsOptionsValidator(Installed));
+        services.AddSingleton<IValidateOptions<HarnessOptions>>(new HarnessOptionsValidator(paths, home));
 
         Bound<RuntimeOptions>(services, configuration.GetSection(RuntimeOptions.Section), Installed).ValidateOnStart();
         Bound<LoggingOptions>(services, configuration.GetSection(LoggingOptions.Section), Installed).ValidateOnStart();
@@ -277,6 +284,7 @@ public static class JasonConfiguration
         Bound<RolesOptions>(services, configuration.GetSection(RolesOptions.Section), Installed).ValidateOnStart();
         Bound<UpdateOptions>(services, configuration.GetSection(UpdateOptions.Section), Installed).ValidateOnStart();
         Bound<InboundOptions>(services, configuration.GetSection(InboundOptions.Section), Installed).ValidateOnStart();
+        Bound<HarnessOptions>(services, configuration.GetSection(HarnessOptions.Section), Installed).ValidateOnStart();
 
         // The scalars and each named plugin's Enabled are bound; each binding is JSON, which the binder cannot make,
         // so it is read afterwards from the same section, the way a route's binding is.

@@ -8,6 +8,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Decisions;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Projects;
@@ -19,9 +20,10 @@ namespace Jason.Runtime.Campaigns;
 /// <summary>
 /// The campaign lifecycle and the campaign context. Every change a role could later have to explain — a rename,
 /// a transition, a context edit — is written to the chronicle in the same transaction as the change itself, so
-/// there is no state the journal cannot account for.
+/// there is no state the journal cannot account for. A campaign made here gets its folder in its project's folder in
+/// the same request, and a campaign moved to another project takes its folder with it, or is not moved at all.
 /// </summary>
-public sealed class CampaignService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
+public sealed class CampaignService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller, HarnessFolders folders)
 {
     public const int MaxNameLength = 200;
 
@@ -59,6 +61,11 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         var project = request.ProjectId is null
             ? await ProjectService.DefaultAsync(db, cancellationToken).ConfigureAwait(false)
             : await ProjectService.LoadAsync(db, request.ProjectId.Trim(), cancellationToken).ConfigureAwait(false);
+
+        // The project's first need, where it has no folder recorded — the default project of an installation that had
+        // campaigns before folders, say — is met in a step of its own before the campaign's: its folder then stands, and is
+        // recorded, whatever happens to the campaign's. A recorded one the person moved is refused, never made again beside it.
+        var projectFolder = await ProjectService.FirstNeedAsync(db, project, folders).ConfigureAwait(false);
         var now = clock.GetUtcNow().UtcDateTime;
         var campaign = new Campaign
         {
@@ -77,6 +84,10 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         // The line says a campaign was made and what it is called, as it always has; the key stays on the row.
         db.Campaigns.Add(campaign);
         journal.Append(db, actor, JournalKinds.CampaignCreated, campaign, key: "name", updated: JsonValue.Create(name), reason: reason);
+
+        // The row is written first and held uncommitted while the folders are made, as a project's is: the key decides a
+        // race before any folder exists, and a folder that cannot be made takes the row and its line back with it.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -95,6 +106,15 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             throw;
         }
 
+        campaign.FolderPath = await folders
+            .MakeCampaignFolderAsync(projectFolder, campaign.PublicId, name, id => HoldsAsync(id, cancellationToken))
+            .ConfigureAwait(false);
+
+        // Once the folders stand, the create is finished whether or not its caller is still there: a caller that went
+        // away now would roll back a row its folder's marker already names, and that folder would refuse the retry the
+        // key exists for. Cancellation lands only before anything is on the disk.
+        await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
         return CampaignMapper.ToDto(campaign);
     }
 
@@ -232,6 +252,19 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             ? await ProjectService.LoadAsync(db, request.ProjectId.Value!.Trim(), cancellationToken).ConfigureAwait(false)
             : campaign.Project!;
 
+        // A campaign with a folder that changes project takes the folder along. First what can be decided without writing
+        // anything — its folder is where it was recorded, the new project's recorded folder holds, the name is free there,
+        // the two are on one volume — then the new project's first need, in a step of its own, and only then is anything
+        // of the campaign's written. A campaign with no folder recorded moves in the database alone.
+        (string Folder, string ProjectFolder, string Leaf)? move = null;
+        if (project.Id != campaign.ProjectId && campaign.FolderPath is { } from)
+        {
+            var leaf = await folders
+                .PlanCampaignMoveAsync(from, campaign.PublicId, ProjectService.PlannedFolder(project, folders), id => HoldsAsync(id, cancellationToken))
+                .ConfigureAwait(false);
+            move = (from, await ProjectService.FirstNeedAsync(db, project, folders).ConfigureAwait(false), leaf);
+        }
+
         // Only the fields that really moved, so asking a campaign for what it already says writes nothing: a
         // retry after a lost response is never a second event in the chronicle.
         var changes = new List<FieldChange>();
@@ -258,7 +291,8 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         // A move says where the campaign was and where it went by the projects' ids: their names change, their ids do not.
-        if (project.Id != campaign.ProjectId)
+        var moved = project.Id != campaign.ProjectId;
+        if (moved)
         {
             changes.Add(new FieldChange("project_id", JsonValue.Create(campaign.Project!.PublicId), JsonValue.Create(project.PublicId)));
             campaign.ProjectId = project.Id;
@@ -277,7 +311,31 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             journal.Append(db, actor, JournalKinds.CampaignUpdated, campaign, key: change.Key, old: change.Old, updated: change.New, reason: updateReason);
         }
 
+        if (move is not { } taking)
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return CampaignMapper.ToDto(campaign);
+        }
+
+        // The update is written and held uncommitted, the folder moves by one rename into the new project's, and only then
+        // does the update commit. A rename the disk refuses takes the whole update back, and its refusal is the final
+        // word; once the folder has moved, the update is finished whether or not its caller is still there, and a save
+        // that fails puts the folder back first.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var to = folders.MoveCampaignFolder(taking.Folder, taking.ProjectFolder, taking.Leaf);
+        try
+        {
+            campaign.FolderPath = to;
+            await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+            await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            HarnessFolders.MoveBack(to, taking.Folder);
+            throw;
+        }
+
         return CampaignMapper.ToDto(campaign);
     }
 
@@ -374,6 +432,13 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return CampaignMapper.ToDto(campaign);
     }
+
+    /// <summary>
+    /// Whether a campaign of that id is one this runtime holds: a campaign's leaf taken by another of them is numbered,
+    /// since campaign names are not unique, and one marked for an id nobody holds is refused as taken.
+    /// </summary>
+    private Task<bool> HoldsAsync(string publicId, CancellationToken cancellationToken) =>
+        db.Campaigns.AsNoTracking().AnyAsync(c => c.PublicId == publicId, cancellationToken);
 
     /// <summary>Shared by the membership and journal services: 404 when unknown.</summary>
     public static async Task<Campaign> LoadAsync(JasonDbContext db, string? publicId, CancellationToken cancellationToken)

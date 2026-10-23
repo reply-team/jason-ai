@@ -29,9 +29,10 @@ backup taken before that migration has another default id once it upgrades again
 |---|---|
 | `id` | `prj_` and a ULID, made when the project is. |
 | `name` | At most 200 characters, required. A rename changes it and nothing else. |
-| `slug` | Made once, unique, never changed; a handle a person types (`jason project get --slug acme-corp`), and the name of the project's folder once there are folders. |
+| `slug` | Made once, unique, never changed; a handle a person types (`jason project get --slug acme-corp`), and the name of the project's folder (§8). |
 | `default` | Whether this is the project a campaign that names none lands in. Exactly one is; the database holds it to one. |
 | `created_at`, `updated_at` | ISO-8601 UTC. |
+| `folder_path` | The full path of the project's folder under the harness root (§8); null until one is made — when the project is, or, for a project that existed before folders did, at its first campaign. |
 
 A slug is lower-case ASCII letters and digits, in runs joined by single hyphens, two to forty characters, and never a
 name Windows keeps for a device (`con`, `prn`, `aux`, `nul`, `com1`–`com9`, `lpt1`–`lpt9`), which no folder can have
@@ -52,10 +53,10 @@ A project is never deleted or archived.
 
 | Operation | Request | Answer and refusals |
 |---|---|---|
-| `project.create` | `name`, `slug?`, `actor?`, `reason?` | The project. `project_exists` (409) when the slug is taken; `validation_failed` for the name or the slug. |
+| `project.create` | `name`, `slug?`, `actor?`, `reason?` | The project, with the folder it was made with (§8). `project_exists` (409) when the slug is taken; `validation_failed` for the name or the slug; `harness_folder_unavailable`, `harness_root_taken` or `harness_folder_taken` (409) when its folder cannot be made, and then no project is made. |
 | `project.get` | exactly one of `project_id` and `slug` | The project. `project_not_found` (404); `validation_failed` when neither or both are given. |
 | `project.list` | `query?`, `limit?`, `cursor?` | A page of projects, in the order they were made. `query` finds a name by any part of it, whatever its case or accents. |
-| `project.update` | `project_id`, `name?`, `actor?`, `reason?` | The project. An absent `name` leaves it alone; the slug never changes, and asking for the name a project already has writes nothing. `project_not_found` (404). |
+| `project.update` | `project_id`, `name?`, `actor?`, `reason?` | The project. An absent `name` leaves it alone; the slug and the folder never change, and asking for the name a project already has writes nothing. `project_not_found` (404). |
 
 ### Creating again: the slug, not a key
 
@@ -83,16 +84,18 @@ project, and gives its own a slug of its own.
   database takes it away — answers a campaign that names none with `project_not_found` too, not to be retried, saying
   that there is no default project and to name one with `project_id`. The digest a creation key is held to names
   `project_id` only when the request did, so a key stored before campaigns had projects still matches the request that
-  made it, and the same key sent with another project is another request: `idempotency_key_reused`.
+  made it, and the same key sent with another project is another request: `idempotency_key_reused`. The campaign is
+  made with its folder in its project's (§8), or not at all.
 - **`campaign.update`** takes `project_id`, which moves the campaign. A campaign is always in a project, so `null` is
   refused (`validation_failed` on `project_id`); an archived campaign is refused as for every change
   (`campaign_archived`); a project nobody made is `project_not_found`. A move is said once in the campaign's chronicle as
   `campaign_updated` with the key `project_id`, the old and the new project's ids; moving a campaign to the project it is
-  in says nothing.
+  in says nothing. The campaign's folder moves with it, or the move is refused with nothing changed (§8).
 - **`campaign.list`** takes `project_id` and keeps that project's campaigns, read through the index by project; a blank
   one names no project and is refused (`validation_failed` on `project_id`).
 - **Every campaign answer** — a campaign and a listing's summary alike — carries `project_id` and `project_slug`, read
-  with the campaign, so a listing shown by project needs no second request.
+  with the campaign, so a listing shown by project needs no second request, and `folder_path`, the full path of the
+  campaign's folder, null for a campaign made before folders were.
 
 Nothing else is read by project yet: approvals, decisions, work items, reports and the chronicle are filtered by
 campaign, and a notification names no project — the pointer it carries is counts and campaign ids, and a project's name
@@ -196,10 +199,159 @@ jason preference unset sender.identity --actor human:Marta
 The value is given on the line or from a file — `-` reads standard input — never both. `--human` renders each key
 with its value from the answer it already has.
 
-## 8. What the schema holds for later
+## 8. The folders
 
-- **A folder per project and per campaign.** Both tables have a column for the path of one; nothing writes it yet, and no
-  answer carries it.
+What a person tells Jason about their business in their own words is kept in plain files they can read and edit: a
+memory file, `AGENTS.md`, for the client, for each project and for each campaign, each in a folder of its own, nested in
+that order under the harness root. Claude Code, started in a campaign's folder, reads the three by itself through each
+level's `CLAUDE.md`, the client's first and the campaign's last. A memory file is the person's guidance, never a fact the
+runtime holds: the runtime never reads one, and where one disagrees with what the runtime records, the record wins.
+
+```text
+~/Jason/                                  the root: the client's level, Harness:Root
+  AGENTS.md                               the client's memory file
+  CLAUDE.md                               @AGENTS.md
+  .jason/marker.json                      {"marker_version":1,"kind":"root"}
+  projects/
+    acme-corp/                            a project's folder, named by its slug
+      AGENTS.md
+      CLAUDE.md
+      .jason/marker.json                  {"marker_version":1,"kind":"project","id":"prj_…"}
+      campaigns/
+        q3-marketing-leads/               a campaign's folder, named from its name
+          AGENTS.md
+          CLAUDE.md
+          .jason/marker.json              {"marker_version":1,"kind":"campaign","id":"cmp_…"}
+```
+
+### The root
+
+| Setting | Default | What it does |
+|---|---|---|
+| `Harness:Root` | `Jason` in the home directory | The folder the levels are made in, as an absolute path. |
+
+The root is named in `settings.json` (`{"Harness":{"Root":"…"}}`) or by `JASON_Harness__Root`, like every other setting.
+It is an absolute path, starting at a drive, a share or `/`, since a relative one would mean wherever the runtime
+happened to start; `~` is a shell's word that the runtime does not expand. A `CLAUDE.md` at the root is read by every
+agent session started anywhere below it, so the root is never the home directory itself, a folder that holds it, or the
+top of a drive, a share or the file system; and the data directory is the runtime's own, so the root is never the data
+directory, a folder inside it or a folder that holds it. Each is compared where it leads, not as it is spelled: a
+junction, a symbolic link or a Windows device prefix such as `\\?\` does not make the home or the data directory
+another folder, and Windows and macOS ignore case as their file systems do. A root refused for any of these stops the
+start, naming `Harness:Root` and never the value, as any setting that is wrong does; an edit refused while the runtime
+runs keeps the root it had and says so in its log. Left out, the root is `Jason` in the home directory, beside the data
+directory `~/.jason`; a data directory moved by `JASON_DATA_DIR` onto that very folder, into it or around it has the
+default refused the same way, saying to set `Harness:Root`.
+
+The root is read at every create and every move, so an edit applies to the next one. It moves nothing that was made and
+changes no path that was recorded: a project whose folder is recorded keeps having its campaigns' folders made there,
+wherever that is, and only a project with none gets one under the root as it is then.
+
+### Made at the first need
+
+Nothing is asked before the first folder is made. The first `project.create` or `campaign.create` makes the root if it
+is not there, and the folders the request needs:
+
+- **The root.** Made with its marker, a `CLAUDE.md` and an `AGENTS.md`. A folder already there with no marker is taken
+  as the root by writing its marker, and `CLAUDE.md` and `AGENTS.md` where it has none; nothing it holds is changed. A
+  folder whose marker names anything but a root — a project's folder, a campaign's, a marker this runtime cannot read —
+  is refused as `harness_root_taken`, and nothing is written into it.
+- **A project's folder**, `projects/<slug>/`, made by `project.create`, and by `campaign.create` or a campaign's move for
+  a project that has none recorded — the default project of an installation that had campaigns before it had folders,
+  for instance. A project's folder made for a campaign, at its create or its move, is made and recorded in a step of its
+  own that commits before the campaign's, so it stands, and is recorded, when the campaign's own folder is then refused.
+- **A campaign's folder**, `campaigns/<leaf>/` in its project's folder, made by `campaign.create`. The leaf is made from
+  the campaign's name the way a slug is made from a project's (§2): `Q3 Marketing Leads` is `q3-marketing-leads`; a name
+  that leaves fewer than two characters is `campaign-` and six hexadecimal characters, and a device name has `-campaign`
+  added. A campaign has no slug, and only the path is recorded: campaigns are addressed by id, and their names are not
+  unique.
+
+A folder already at a level's path is a fact the person must see, never one Jason walks around:
+
+- **With no marker**, it becomes the level's as the root does: its marker is written, and `CLAUDE.md` and `AGENTS.md`
+  where it has none; not a word of what it holds changes.
+- **Marked for this very project or campaign** — left by a create that was refused after it made it — it is used again.
+- **Marked for another campaign this runtime holds**, at a campaign's leaf, the leaf is followed by `-2`, `-3` and so
+  on, cut where needed so it stays within forty characters: campaign names are not unique. A project's folder is never
+  numbered: its slug is.
+- **Marked for anything else** — a level of another kind, another project, an id no project or campaign here holds, a
+  marker this runtime cannot read — it is refused as `harness_folder_taken`, naming the path, and nothing is written.
+  The person renames or moves it; Jason never deletes it.
+- **A file** where a folder belongs is in the way, never taken for nothing: `harness_folder_unavailable`.
+
+Inside the create's transaction the row is written first, then the folders — each level's marker first, naming the
+row's id, so a folder whose path another marker reached first has nothing written in it, and its two files after it —
+and then the transaction commits, so a folder step that fails — the account may not write there, a file stands where a
+folder belongs — rolls the row and its line in the chronicle back. A caller that goes away once the folders stand does
+not take the create back; it is finished, and the request sent again answers what it made. A step that fails after a
+level's marker, and a commit that fails after the folders stand, leave a folder whose marker names an id no row holds,
+and the next create that reaches its path names it as `harness_folder_taken`.
+
+A campaign for a project whose recorded folder is no longer there, or no longer carries the project's marker, is
+refused as `harness_folder_missing`, and its folder is not made again beside the moved one, which would leave the
+person's words in one folder and the work in another. The refusal names the repair that works at once — move the folder
+back to the recorded path — and then `jason project link`, which records where a moved folder is now. A create sent
+again under its `idempotency_key` answers the campaign it made and makes no second folder.
+
+The path of the folder made is recorded on the project or the campaign, and every answer that carries one carries it as
+`folder_path`, null where none is recorded.
+
+### The marker
+
+A folder is Jason's by its marker, `.jason/marker.json`, and never by its name. The marker says the format's version, the
+level and, below the root, the id of the project or campaign the folder belongs to — no name, since names change and the
+runtime holds them, and no parent, since a copy of which project a campaign is in would drift from the record that says
+so. The data directory `~/.jason` has no marker and is never taken for a level.
+
+### What the runtime never does
+
+It writes structure only: a directory, its marker, and, where none is there, a `CLAUDE.md` holding exactly `@AGENTS.md`
+and an empty `AGENTS.md`. Then it leaves them to the person.
+
+- It never reads, writes or deletes a word of any `AGENTS.md`, and never writes over a `CLAUDE.md` that is there, the
+  person's own included: whether one is there is asked of its name, and it is never opened.
+- It never deletes a folder or a file. Archiving a campaign leaves its folder where it is.
+- It never runs `git` and never writes a `.gitignore`: the root is a repository only if the person makes it one.
+- A rename changes the name and nothing else; the folder keeps its name, since a session may have it open and a person's
+  own shortcuts point at it.
+- It writes nothing outside the three levels: `projects/` and `campaigns/` are plain directories, with no marker and no
+  files of their own.
+
+### A campaign changing project
+
+`campaign.update` with `project_id` moves the campaign's folder into the new project's `campaigns/` by one rename, in the
+same request, under the name it had there — `-2`, `-3` where another campaign this runtime holds has that name there.
+The project it moves to gets its own folder first when it has none recorded. A project whose folder is one of the
+person's own takes the move the same way: the campaign's folder is the policy's, the project's is theirs.
+
+When the rename cannot be done, the whole update is refused: the campaign's folder and every row stay as they were. The
+project it moves to keeps the folder made for it as its first need, recorded as any first need's is, and its
+`campaigns/`: those are the project's own structure, not the campaign's.
+
+- `harness_folder_unavailable` — a program holds a file in the folder open or is working in it, as an agent session
+  started there is, the account may not write in one of the two folders, a file stands where `campaigns/` or the folder
+  belongs, or the two are on different volumes. A folder is never copied and deleted instead.
+- `harness_folder_taken` — any other folder stands at the name in the new project's `campaigns/`, marked or not: a
+  rename never lands on a folder that is there.
+- `harness_folder_missing` — the campaign's folder is not where it was recorded, or the new project's is not.
+
+A campaign with no folder recorded — one made before folders were — moves in the database alone, and its folder is made
+when `jason project link` makes its project's.
+
+### The refusals
+
+| Code | Status | When |
+|---|---|---|
+| `harness_folder_unavailable` | 409 | A folder could not be made or moved: the account may not write there, a file stands where a folder belongs, a file in it is held open or a program is working in it, or the two folders are on different volumes. The project or campaign the request is about, its row and its folder, is as it was; once what is in the way is repaired, the same request can be sent again. |
+| `harness_root_taken` | 409 | The folder at the root is marked as something other than the root. Nothing was written into it; set `Harness:Root` to another folder, or move that one away. |
+| `harness_folder_taken` | 409 | A folder already stands at the path a project's or a campaign's folder takes and is marked for something else — another level, another project, an id nobody here holds — or, for a move, any folder stands there. Nothing was written into it, and the project or campaign the request is about is as it was; rename or move that folder away, then send the request again. |
+| `harness_folder_missing` | 409 | The folder recorded for the project, or for the campaign being moved, is not there or no longer carries its marker. The project or campaign the request is about is as it was; move the folder back to the recorded path, or, for a project's, record where it is now with `jason project link`, and for a campaign's, relink its project, which finds a campaign's folder by its marker. |
+
+Each message names the folder, so the person who reads it knows where to look. No folder's path reaches the runtime's
+log: a campaign's folder is named from the campaign's name.
+
+## 9. What the schema holds for later
+
 - **A role's own notes at three levels.** A role note is at one level: the client's, naming no campaign and no project —
   a role's general craft; a project's; or a campaign's. There is one per role at each, and a note never names both a
   campaign and a project: a campaign's project is the campaign's, and it is never stored twice. A reader composes them

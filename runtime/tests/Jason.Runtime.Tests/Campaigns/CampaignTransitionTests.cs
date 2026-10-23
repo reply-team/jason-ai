@@ -5,6 +5,7 @@ using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Campaigns;
@@ -186,5 +187,5 @@ public class CampaignTransitionTests
         return campaign.Id;
     }
 
-    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
 }

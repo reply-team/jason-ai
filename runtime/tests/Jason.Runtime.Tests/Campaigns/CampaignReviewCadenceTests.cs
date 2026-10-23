@@ -1,11 +1,12 @@
 using System.Globalization;
 using Jason.Contracts.Api;
-using Jason.Runtime.Configuration;
 using Jason.Contracts.Json;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Campaigns;
@@ -126,5 +127,5 @@ public class CampaignReviewCadenceTests
         new(campaignId, Optional<string?>.Absent, Optional<string?>.Absent, Optional<int?>.Of(seconds), null, null);
 
     private static CampaignService NewService(JasonDbContext db, TimeProvider clock) =>
-        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
 }

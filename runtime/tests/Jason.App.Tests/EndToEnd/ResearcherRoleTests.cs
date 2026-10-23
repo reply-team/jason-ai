@@ -295,6 +295,7 @@ public class ResearcherRoleTests
     {
         try
         {
+            TempDataDir.RemoveHome(root);
             Directory.Delete(root, recursive: true);
         }
         catch (IOException)

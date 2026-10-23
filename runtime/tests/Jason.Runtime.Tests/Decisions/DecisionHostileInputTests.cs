@@ -5,6 +5,7 @@ using Jason.Runtime.Decisions;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Decisions;
@@ -160,7 +161,7 @@ public class DecisionHostileInputTests
         var decision = await Service(db).RaiseAsync(
             new DecisionRaiseRequest(seed.Item.PublicId, seed.Attempt.PublicId, "which?", null, null, null), Ct);
 
-        await new CampaignService(db, new JournalWriter(new FixedClock(Noon)), new FixedClock(Noon), TestCanceller.New(new FixedClock(Noon)))
+        await new CampaignService(db, new JournalWriter(new FixedClock(Noon)), new FixedClock(Noon), TestCanceller.New(new FixedClock(Noon)), TestHarness.FoldersFor(db))
             .ArchiveAsync(new CampaignTransitionRequest(seed.Campaign.PublicId, Ada, null), Ct);
 
         var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(db).AnswerAsync(

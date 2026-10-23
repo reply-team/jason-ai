@@ -2,8 +2,10 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Configuration;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Update;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Plugins.Manifest;
@@ -413,6 +415,24 @@ public sealed class InboundOptionsValidator : IValidateOptions<InboundOptions>
         OptionRules.Range(failures, "Inbound:LookbackSeconds", options.LookbackSeconds, 0, InboundOptions.MaximumLookbackSeconds);
 
         return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
+/// The harness root, refused where it may never be: a relative path; the home directory, a folder holding it or the top
+/// of a drive, where every session of the account would read its memory files; the data directory, a folder inside it
+/// or one holding it (<see cref="HarnessRoot.Refusal"/>), each compared where it leads. Nothing here makes or opens a
+/// file: it asks only whether the parts of a path are links, and whether the folder exists or can be made is a question
+/// for the first create that needs it, not for the start.
+/// </summary>
+/// <param name="paths">The data directory this runtime keeps its state in.</param>
+/// <param name="home">The home directory the default root is made in, and the one folder the root may never be.</param>
+public sealed class HarnessOptionsValidator(JasonPaths paths, string home) : IValidateOptions<HarnessOptions>
+{
+    public ValidateOptionsResult Validate(string? name, HarnessOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return HarnessRoot.Refusal(options, paths, home) is { } refusal ? ValidateOptionsResult.Fail(refusal) : ValidateOptionsResult.Success;
     }
 }
 

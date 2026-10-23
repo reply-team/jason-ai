@@ -23,12 +23,12 @@ public sealed class PreferencesDocTests
     }
 
     [Fact]
-    public void The_repository_s_instructions_count_five_knowledge_concepts_and_point_at_the_contract()
+    public void The_repository_s_instructions_count_six_knowledge_concepts_and_point_at_the_contract()
     {
         var instructions = string.Join(' ', File.ReadAllText(Path.Combine(Publication.RepositoryRoot(), "CLAUDE.md")).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
         Assert.Contains(
-            "Skills, named preferences, campaign context, role notes and learned practice are five distinct knowledge concepts; do not blur them.",
+            "Skills, memory files, named preferences, campaign context, role notes and learned practice are six distinct knowledge concepts; do not blur them.",
             instructions,
             StringComparison.Ordinal);
         Assert.Contains("`docs/projects.md` is the contract.", instructions, StringComparison.Ordinal);

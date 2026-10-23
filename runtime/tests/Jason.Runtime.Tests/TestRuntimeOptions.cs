@@ -49,6 +49,10 @@ public static class TestRuntimeOptions
         // Every test runtime on a random port: a suite of hundreds would otherwise climb from 52766 and collide
         // with a developer's own running Jason.
         Port = 0,
+        // Every test runtime in a home of its own beside its data directory, so the harness root its first create makes
+        // is a folder the test removes, never ~/Jason. A property rather than a line in the hook, for the reason the
+        // feed's handler is one: a test that replaces the hook replaces it whole.
+        Home = paths => TempDataDir.HomeOf(paths.Root),
     };
 
     /// <summary>

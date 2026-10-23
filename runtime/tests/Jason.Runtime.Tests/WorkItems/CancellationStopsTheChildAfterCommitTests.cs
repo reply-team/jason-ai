@@ -5,6 +5,7 @@ using Jason.Runtime.Contacts;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.WorkItems;
@@ -80,7 +81,7 @@ public class CancellationStopsTheChildAfterCommitTests
                     .ArchiveAsync(new ContactArchiveRequest(contact.PublicId, null, "asked to be forgotten"), Ct);
                 break;
             default:
-                await new CampaignService(db, journal, clock, canceller)
+                await new CampaignService(db, journal, clock, canceller, TestHarness.FoldersFor(db))
                     .ArchiveAsync(new CampaignTransitionRequest(campaign.PublicId, null, "finished"), Ct);
                 break;
         }

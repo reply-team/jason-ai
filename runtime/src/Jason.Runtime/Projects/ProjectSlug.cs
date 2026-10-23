@@ -33,9 +33,18 @@ public static partial class ProjectSlug
     /// makes the same slug and a create sent again finds the project the first one made; a device name has
     /// <c>-project</c> added.
     /// </summary>
-    public static string From(string name)
+    public static string From(string name) => Leaf(name, "project");
+
+    /// <summary>
+    /// The folder name a name makes, by the rule a project's slug is made by, with <paramref name="noun"/> where that rule
+    /// says <c>project</c>: <c>campaign-</c> and six hexadecimal characters for a campaign whose name leaves too little,
+    /// <c>-campaign</c> after a device name. A campaign has no slug — only its folder's leaf is made this way, once, when
+    /// the folder is.
+    /// </summary>
+    public static string Leaf(string name, string noun)
     {
         ArgumentNullException.ThrowIfNull(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(noun);
 
         var folded = TextFold.Text(name.Trim());
         var spaced = Whitespace().Replace(folded, " ");
@@ -47,10 +56,24 @@ public static partial class ProjectSlug
 
         if (slug.Length < MinLength)
         {
-            return "project-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(spaced)))[..6];
+            return noun + "-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(spaced)))[..6];
         }
 
-        return DeviceNames.Contains(slug) ? slug + "-project" : slug;
+        return DeviceNames.Contains(slug) ? slug + "-" + noun : slug;
+    }
+
+    /// <summary>
+    /// The leaf a folder takes when <paramref name="leaf"/> is taken: <c>-2</c>, <c>-3</c> and so on after it, the leaf cut
+    /// first where the number would carry it past forty characters, never ending on a hyphen before the number.
+    /// </summary>
+    public static string Numbered(string leaf, int number)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaf);
+        ArgumentOutOfRangeException.ThrowIfLessThan(number, 2);
+
+        var suffix = "-" + number.ToString(CultureInfo.InvariantCulture);
+        var stem = leaf.Length + suffix.Length > MaxLength ? leaf[..(MaxLength - suffix.Length)].TrimEnd('-') : leaf;
+        return stem + suffix;
     }
 
     /// <summary>A slug given by the caller, taken exactly as given when it has a slug's shape; otherwise refused by the field.</summary>

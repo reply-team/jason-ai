@@ -516,6 +516,7 @@ public class EventsE2ETests
         {
             try
             {
+                TempDataDir.RemoveHome(directory);
                 Directory.Delete(directory, recursive: true);
             }
             catch (IOException)

@@ -34,6 +34,14 @@ public static class TestRuntimeEnvironment
     public static readonly string PortVariable =
         JasonConfiguration.EnvironmentPrefix + RuntimeOptions.Section + "__" + nameof(RuntimeOptions.Port);
 
+    /// <summary>
+    /// The harness root's switch: a spawned runtime keeps the folders its creates make in the home
+    /// <see cref="TempDataDir.HomeOf"/> gives its data directory, never in the account's own home, and the test removes
+    /// it with <see cref="TempDataDir.RemoveHome"/>.
+    /// </summary>
+    public static readonly string HarnessRootVariable =
+        JasonConfiguration.EnvironmentPrefix + HarnessOptions.Section + "__" + nameof(HarnessOptions.Root);
+
     public static void Offline(IDictionary<string, string?> environment, string dataDirectory)
     {
         ArgumentNullException.ThrowIfNull(environment);
@@ -41,5 +49,6 @@ public static class TestRuntimeEnvironment
         environment[CheckEnabledVariable] = "false";
         environment[NotificationsVariable] = "false";
         environment[PortVariable] = "0";
+        environment[HarnessRootVariable] = Path.Combine(TempDataDir.HomeOf(dataDirectory), HarnessOptions.DefaultFolder);
     }
 }

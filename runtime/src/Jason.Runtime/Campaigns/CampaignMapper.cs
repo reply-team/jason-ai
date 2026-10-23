@@ -28,7 +28,8 @@ public static class CampaignMapper
             Utc(campaign.CreatedAt),
             Utc(campaign.UpdatedAt),
             campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null,
-            campaign.IdempotencyKey);
+            campaign.IdempotencyKey,
+            campaign.FolderPath);
     }
 
     public static CampaignSummaryDto ToSummary(Campaign campaign)
@@ -43,7 +44,8 @@ public static class CampaignMapper
             project.Slug,
             Utc(campaign.CreatedAt),
             Utc(campaign.UpdatedAt),
-            campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null);
+            campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null,
+            campaign.FolderPath);
     }
 
     private static Project ProjectOf(Campaign campaign) =>

@@ -7,6 +7,7 @@ using Jason.Runtime.Contacts;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Plugins;
@@ -374,7 +375,7 @@ public class ExternalIdStoreTests
         await db.SaveChangesAsync(Ct);
         var clock = new FixedClock(new DateTimeOffset(Noon));
 
-        var campaign = await new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock))
+        var campaign = await new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db))
             .GetAsync(new CampaignGetRequest(scene.Campaign.PublicId), Ct);
 
         var pin = Assert.Single(campaign.ExternalIds);

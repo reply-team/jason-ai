@@ -69,7 +69,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
 ## Conventions
 
 - Terminology: **plugin** (not adapter), **WorkItem** (not Task), **channels** (not handles).
-  Skills, named preferences, campaign context, role notes and learned practice are five distinct
+  Skills, memory files, named preferences, campaign context, role notes and learned practice are six distinct
   knowledge concepts; do not blur them. Membership in a Jason campaign is local; `campaign.enroll` — a later,
   provider-side, approval-gated act — is a different thing.
 - Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included. Success is 200
@@ -150,7 +150,11 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   no entity; what a person states about it is a named preference, a fourth contract family under
   `docs/contracts/preferences/` embedded like the others and never in the operation catalog: one value per key for the
   installation, checked against the key's schema, set and unset by a named person only, and journaled by its size and
-  hash, never its value. `docs/projects.md` is the contract.
+  hash, never its value. The client, each project and each campaign have a folder under the harness root, made at the
+  first create that needs it, with a marker naming its level and id and the person's memory file, `AGENTS.md`, beside a
+  `CLAUDE.md` that imports it; the runtime writes structure only — never a word of a memory file, never a delete, never
+  `git` — and moves a campaign's folder by one rename when the campaign changes project, or refuses the move. A path
+  is recorded on the entity; a folder is known by its marker, never its name. `docs/projects.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable
@@ -198,7 +202,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   unique index allows one live attempt per item.
 - Configuration: strongly typed options only; user overrides in `~/.jason/config/settings.json`,
   environment variables `JASON_*`; the data directory itself comes from `JASON_DATA_DIR` or
-  defaults to `~/.jason`. Settings are bound through `IOptions<T>` with validation on start; the
+  defaults to `~/.jason`, and the harness root from `Harness:Root` or defaults to `~/Jason` — an absolute path, never
+  the home directory, a folder holding it or the top of a drive, nor the data directory, a folder inside it or one
+  holding it, read at every create and move; a test runtime is given a home of its own, so no test makes a folder in a
+  real one. Settings are bound through `IOptions<T>` with validation on start; the
   dispatcher reads `IOptionsMonitor<T>` each tick, so edits to `settings.json` apply live except
   `Dispatcher:MaxParallel`, which sizes the handler pool when the runtime starts, and
   `Dispatcher:Enabled`, which decides at start whether this runtime has a dispatch loop at all. A live

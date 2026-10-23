@@ -505,7 +505,9 @@ what is still published elsewhere is superseded whether or not it has been withd
 Files may still be useful for large or human-readable artifacts, exported reports and
 snapshots, role-produced documents, explicitly non-authoritative contextual memory,
 import/export or diagnostic bundles, and executable plugin packages with candidate
-configuration supplied for validation and activation.
+configuration supplied for validation and activation. The person's memory files in the harness root are contextual
+memory of this kind: the Runtime makes the folders that hold them and never reads a word of them (DEC-HARNESS-001,
+INV-FILE-002).
 
 A file must never silently become a competing source of truth for current statuses,
 schedules, approvals, work ownership, or accepted execution outcomes. Plugin packages and
@@ -1681,6 +1683,7 @@ original chat session.
 | DEC-TOPO-001 | One user-scoped Runtime installation manages multiple logically isolated business campaigns for one OS user. |
 | DEC-PROJ-001 | Every campaign is in exactly one project — one business goal of the client, a runtime entity of Jason's own that never reaches a plugin; the client is the installation and has no entity. Every installation has one default project, made by the migration that brought projects in under an id of its own; a campaign that names no project lands there, and a campaign can be moved. A project's slug is made once, is unique and never changes, which is also why `project.create` needs no idempotency key: a repeat is refused as `project_exists`, naming the project. `docs/projects.md` is the contract. |
 | DEC-PREF-001 | What a person states about the client as a whole — who messages are written as, how the company sounds — is a named preference: one value per key for the installation, at the client's level only, each key a document of its own under `docs/contracts/preferences/` whose schema the value is checked against, a family of its own beside the operations. Only a named person sets or unsets one, as only a person decides an approval; a launched role reads it and never writes it. Unsetting deletes the value, and the chronicle holds a value's size and hash, never the value, because the person must be able to take personal data back and the chronicle could never forget it. `docs/projects.md` is the contract. |
+| DEC-HARNESS-001 | What a person tells Jason in their own words is kept in memory files they can read and edit: an `AGENTS.md` for the client, each project and each campaign, in folders nested in that order under a visible harness root — `Harness:Root`, `~/Jason` by default, an absolute path that is never the home directory, a folder holding it or the top of a drive, nor the data directory, a folder inside it or one holding it — each beside a `CLAUDE.md` that imports it and a marker, `.jason/marker.json`, naming the level, its id and the format's version and nothing else. The folders are made silently at the first create that needs them, the row first and the folders inside its transaction, a project's folder made for a campaign in a step of its own before it; a project's is named by its slug and a campaign's from its name, numbered only where another campaign has the name; a folder already at a level's path is adopted by its marker when it has none and refused when marked for anything else, never walked around and never deleted; the absolute path is recorded on the entity and a folder is known by its marker, never its name. A create whose folder cannot be made is refused whole; a campaign that changes project takes its folder along by one rename in the same request, or is refused with the campaign's folder and every row as they were. The runtime never reads a memory file and the root is never made a repository by it. `docs/projects.md` is the contract. |
 | DEC-STATE-001 | Runtime API is the only supported external boundary for authoritative Jason state. |
 | DEC-STATE-002 | EF Core over SQLite is authoritative for Jason operational/orchestration state. |
 | DEC-STATE-003 | The published Markdown operational-state/workspace model is superseded, with no parallel skills-only file runtime. |
@@ -1750,10 +1753,11 @@ architecture is explicitly revised with new evidence.
 | INV-AUTH-002 | Agents, plugins, CLI clients, UI, and generic tools never mutate Jason SQLite directly. |
 | INV-AUTH-003 | External providers remain authoritative for their own state; Jason's local view may be incomplete or uncertain. |
 | INV-FILE-001 | Markdown/files never form a competing operational state machine or dual-write Runtime mode. |
+| INV-FILE-002 | In the harness root the Runtime writes structure only — a level's directory, its marker, and a `CLAUDE.md` and an empty `AGENTS.md` where none is there. It never reads, writes or deletes a word of any `AGENTS.md`, never writes over an existing `CLAUDE.md`, never deletes a folder or a file (archiving a campaign leaves its folder), never runs `git` and never writes a `.gitignore`; a rename changes a name, never a folder. Its one move is a campaign's folder, by one rename, when the campaign changes project. |
 | INV-API-001 | All supported authoritative Jason reads and mutations pass through Runtime-owned contracts. |
 | INV-ROLE-001 | Dispatcher is deterministic; AI roles own semantic judgment. |
 | INV-ROLE-002 | Semantic judgment never implicitly grants approval, credentials, or execution authority. |
-| INV-MEM-001 | Role memory is contextual and non-authoritative; current Runtime state wins on conflict. |
+| INV-MEM-001 | Role memory and the person's memory files are contextual and non-authoritative; current Runtime state wins on conflict. |
 | INV-CAMP-001 | Campaign-scoped context, work, memory, route/binding overrides, and lineage remain logically isolated; explicitly configured user-level defaults are shared by design. |
 | INV-TOPO-001 | Exactly one Runtime state owner exists per OS user in the accepted local topology. |
 | INV-SAFE-001 | Deterministic guardrails protect Runtime-managed effects based on facts known to Runtime. |

@@ -7,9 +7,10 @@ namespace Jason.Contracts.Api;
 /// A project: one business goal of the client — usually one product — and the campaigns that work toward it. Every
 /// campaign is in exactly one. <c>slug</c> is made once, from the name or as given, is unique and never changes;
 /// <c>default</c> says whether this is the project a campaign created without naming one lands in, which every installation
-/// has exactly one of.
+/// has exactly one of. <c>folder_path</c> is the full path of the project's folder under the harness root, null until one
+/// is made — at its creation, or at its first campaign's for a project that existed before folders did.
 /// </summary>
-public sealed record ProjectDto(string Id, string Name, string Slug, bool Default, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+public sealed record ProjectDto(string Id, string Name, string Slug, bool Default, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? FolderPath = null);
 
 /// <summary>
 /// <c>slug</c> is optional: absent, it is made from the name. There is no idempotency key, and none is needed: the slug is

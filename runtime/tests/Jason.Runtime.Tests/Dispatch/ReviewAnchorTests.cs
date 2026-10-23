@@ -4,6 +4,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -117,7 +118,7 @@ public class ReviewAnchorTests
     }
 
     private static CampaignService Campaigns(JasonDbContext db, TimeProvider clock) =>
-        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
 
     private static WorkItemService Items(JasonDbContext db, TimeProvider clock) =>
         new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestOptions.PluginSettings());

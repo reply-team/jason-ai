@@ -545,6 +545,7 @@ public class ProviderOperationE2ETests
     {
         try
         {
+            TempDataDir.RemoveHome(directory);
             Directory.Delete(directory, recursive: true);
         }
         catch (IOException)

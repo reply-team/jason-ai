@@ -1,11 +1,12 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Campaigns;
@@ -196,7 +197,9 @@ public class CampaignIdempotencyTests
         using var database = new TestDatabase();
         var rival = new CompetingInsert(
             database.File,
-            context => Rival("another-key", "sha256:" + new string('0', 64), context.ChangeTracker.Entries<Campaign>().Single(e => e.State == EntityState.Added).Entity.PublicId));
+            context => context.ChangeTracker.Entries<Campaign>().SingleOrDefault(e => e.State == EntityState.Added)?.Entity.PublicId is { } added
+                ? Rival("another-key", "sha256:" + new string('0', 64), added)
+                : null);
         using var db = Open(database, rival);
         var service = NewService(db, new FixedClock(Noon));
 
@@ -212,5 +215,5 @@ public class CampaignIdempotencyTests
     private static JasonDbContext Open(TestDatabase database, CompetingInsert rival) =>
         new(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(rival).Options);
 
-    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
 }

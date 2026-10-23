@@ -122,6 +122,7 @@ public class CampaignFlowEndToEndTests
 
             try
             {
+                TempDataDir.RemoveHome(root);
                 Directory.Delete(root, recursive: true);
             }
             catch (IOException)

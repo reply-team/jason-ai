@@ -1,3 +1,4 @@
+using Jason.Contracts.Discovery;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Hosting;
@@ -39,6 +40,14 @@ public sealed record RuntimeHostOptions(
 
     /// <summary>The port to listen on, overriding the settings when set. The test suite sets 0 so every test runtime is on a random port.</summary>
     public int? Port { get; init; }
+
+    /// <summary>
+    /// The home directory for the data directory this runtime starts on: where the harness root's default is made and the
+    /// one folder the root may never be. Null means the account's own. The test suite gives every test a home of its own
+    /// beside its data directory, so no test makes a folder in a real one; kept apart from <see cref="ConfigureServices"/>
+    /// for the reason <see cref="FeedHandler"/> is, since a test that replaces that hook replaces it whole.
+    /// </summary>
+    public Func<JasonPaths, string>? Home { get; init; }
 
     /// <summary>
     /// Handed the configuration as soon as it is built, before anything can refuse the start. A refused start returns no

@@ -61,6 +61,7 @@ public class SettingsVocabularyTests
                 typeof(UpdateOptions),
                 typeof(NotificationsOptions),
                 typeof(InboundOptions),
+                typeof(HarnessOptions),
             },
             new HashSet<Type>(Sections()));
     }

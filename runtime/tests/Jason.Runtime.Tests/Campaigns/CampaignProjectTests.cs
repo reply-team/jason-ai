@@ -7,6 +7,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Json;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Projects;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Campaigns;
@@ -176,12 +177,12 @@ public class CampaignProjectTests
     private static CampaignService Campaigns(JasonDbContext db)
     {
         var clock = new FixedClock(Noon);
-        return new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        return new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
     }
 
     private static ProjectService Projects(JasonDbContext db)
     {
         var clock = new FixedClock(Noon);
-        return new ProjectService(db, new JournalWriter(clock), clock);
+        return new ProjectService(db, new JournalWriter(clock), clock, TestHarness.FoldersFor(db));
     }
 }

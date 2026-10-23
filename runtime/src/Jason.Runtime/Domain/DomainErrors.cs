@@ -247,6 +247,87 @@ public static class DomainErrors
             details: [new ErrorDetail("project_id", "exists", id)]);
 
     /// <summary>
+    /// The folder at the harness root holds a marker that names something other than a root — a project's folder, a
+    /// campaign's, or a marker this runtime cannot read. Nothing is written into it: whose folder it is was said by
+    /// whoever marked it, and the runtime never takes a folder over.
+    /// </summary>
+    public static DomainException HarnessRootTaken(string root) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_root_taken",
+            $"The folder '{root}' is marked as something other than the harness root, so nothing was written there or changed; set Harness:Root to another folder, or move that one away.");
+
+    /// <summary>
+    /// The disk refused to make a folder the request needed — the account may not write there, or a file stands where a
+    /// folder belongs. The request is refused whole: its project's or campaign's row and folder are as they were, and only
+    /// a project's first need, met in a step of its own before, stands. Not retryable as it stands,
+    /// since what is in the way is for the person to see and repair.
+    /// </summary>
+    public static DomainException HarnessFolderUnavailable(string path) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_unavailable",
+            $"The folder '{path}' could not be made, so the request was refused and its project or campaign is as it was; check that this account may write there and that no file stands where a folder belongs, then try again.");
+
+    /// <summary>
+    /// A campaign's folder could not be moved into its new project's folder by one rename. A folder is never copied and
+    /// deleted instead: the update is refused whole, and the campaign stays where it was, on the disk and in the database;
+    /// the project it was to move to keeps its first need and its <c>campaigns/</c>, its own structure.
+    /// </summary>
+    public static DomainException HarnessFolderNotMoved(string from, string to) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_unavailable",
+            $"The folder '{from}' could not be moved into '{to}' by one rename, so the campaign and its folder stay where they were; check that no program holds a file in it open or is working in it, such as an agent session started there, that this account may write in both, and that both are on one volume, then try again.");
+
+    /// <summary>
+    /// A folder is already at the path a project's or a campaign's folder takes, and its marker names something else — a
+    /// level of another kind, another project, an id no row of this runtime holds, a marker that cannot be read. It is a
+    /// problem for the person to see, not one to walk around: nothing is written, and the person renames or moves the
+    /// folder. The runtime never deletes it. A create whose commit failed after its folders were made leaves such a folder,
+    /// and it is named here at the next attempt.
+    /// </summary>
+    public static DomainException HarnessFolderTaken(string path) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_taken",
+            $"The folder '{path}' is already there and is marked for something else, so nothing was written into it; rename or move that folder away, then try again.");
+
+    /// <summary>
+    /// A folder already stands at the name a campaign's folder would take in its new project's <c>campaigns/</c>, marked or
+    /// not, and is not another campaign's this runtime holds. A rename never lands on a folder that is there, whose ever it
+    /// is: the move is refused, and the person renames or moves that folder.
+    /// </summary>
+    public static DomainException HarnessMoveTargetTaken(string path) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_taken",
+            $"The folder '{path}' is already there, where the campaign's folder would move, and a move never lands on a folder that is there, so nothing was moved; rename or move that folder away, then try again.");
+
+    /// <summary>
+    /// The folder recorded for a project is not where it was recorded, or no longer carries the marker that names it —
+    /// moved, renamed or replaced by hand — so a campaign is neither made in it nor moved to it. Never made again by the
+    /// policy, which would leave the person's words in one folder and the work in another: the folder is put back, or the
+    /// recorded path changes when the person says where it went.
+    /// </summary>
+    public static DomainException HarnessFolderMissing(string owner, string path) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_missing",
+            $"The folder recorded for '{owner}', '{path}', is not there or no longer carries its marker, so the campaign was not made or moved; move it back to '{path}', or record where it is now with jason project link.");
+
+    /// <summary>
+    /// The folder recorded for a campaign being moved is not where it was recorded, or no longer carries the campaign's
+    /// marker. The campaign stays where it was. The repair that works at once is to put the folder back; relinking the
+    /// campaign's project finds the folder wherever it is below the project's, by its marker.
+    /// </summary>
+    public static DomainException HarnessCampaignFolderMissing(string campaign, string path) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_missing",
+            $"The folder recorded for '{campaign}', '{path}', is not there or no longer carries its marker, so the campaign stays where it was; move it back to '{path}', or relink its project with jason project link, which finds a campaign's folder by its marker.");
+
+    /// <summary>
     /// A named preference is the person's word about their business: a role or a run that sets one is deciding it for
     /// them, so it reads a preference and never writes one, as it never decides an approval.
     /// </summary>

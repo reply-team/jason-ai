@@ -4,6 +4,7 @@ using Jason.Runtime.Campaigns;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Harness;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -94,7 +95,7 @@ public class ExclusionCancelsWorkTests
         db.WorkItems.AddRange(open, claimed, done);
         await db.SaveChangesAsync(Ct);
 
-        var campaigns = new CampaignService(db, new JournalWriter(clock), clock, NewCanceller(clock));
+        var campaigns = new CampaignService(db, new JournalWriter(clock), clock, NewCanceller(clock), TestHarness.FoldersFor(db));
         await campaigns.ArchiveAsync(new CampaignTransitionRequest(campaign.PublicId, null, "finished"), Ct);
 
         Assert.Equal(WorkItemStatus.Cancelled, await StatusOf(db, open, Ct));
