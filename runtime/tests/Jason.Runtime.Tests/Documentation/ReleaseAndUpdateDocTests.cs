@@ -887,7 +887,7 @@ public class ReleaseAndUpdateDocTests
         // states above.
         var register = Source("docs/architecture.md");
         Assert.Contains(
-            "| INV-PROC-001 | Every child process the product starts is made at one door, `ChildProcess.StartInfo`, with no shell and no console window of its own, held by a guard over the compiled IL of the production assemblies. |",
+            "| INV-PROC-001 | Every child process the product starts is made and started at one door, `ChildProcess.StartInfo` and `ChildProcess.Start`, on Windows under the start's error mode, with no shell and no console window of its own, held by a guard over the compiled IL of the production assemblies. |",
             register,
             StringComparison.Ordinal);
     }

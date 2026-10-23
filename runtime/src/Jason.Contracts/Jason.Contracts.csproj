@@ -25,4 +25,10 @@
     <InternalsVisibleTo Include="Jason.Contracts.Tests" />
     <InternalsVisibleTo Include="Jason.Runtime.Tests" />
   </ItemGroup>
+
+  <!-- And the application's tests, whose guard over the compiled product holds every start the door makes to the
+       error mode it is made under (StartErrorMode). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jason.App.Tests" />
+  </ItemGroup>
 </Project>

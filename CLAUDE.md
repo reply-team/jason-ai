@@ -34,10 +34,14 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   `Jason.PluginHost` never references `Jason.Runtime`; manifests are read with YamlDotNet in
   `Jason.Runtime` only, so the contracts, the CLI and the host stay YAML-free.
 - The dispatcher is deterministic runtime code; it never reads the meaning of a work item's context.
-- Every child process is made by `ChildProcess.StartInfo`, with no console window of its own and no shell; a
-  guard reads the compiled IL of every production assembly and refuses a `ProcessStartInfo` made anywhere else,
-  a write to `CreateNoWindow` or `UseShellExecute`, `Process.Start` from a file name, and a read of a
-  process's `StartInfo`. Reflection, expression trees and `new T()` are beyond what it reads.
+- Every child process is made by `ChildProcess.StartInfo` and started by `ChildProcess.Start`, with no console
+  window of its own and no shell, and on Windows with the starting thread's error mode keeping the boxes the start
+  itself raises, for a file that is no program image, off the desktop (`StartErrorMode`); a started child's own
+  loader errors, a missing DLL say, follow the process error mode it inherits; a guard reads the compiled IL of
+  every production assembly and refuses a
+  `ProcessStartInfo` made anywhere else, a `Process.Start` anywhere else, a write to `CreateNoWindow` or
+  `UseShellExecute`, `Process.Start` from a file name, and a read of a process's `StartInfo`. Reflection,
+  expression trees and `new T()` are beyond what it reads.
 - Publication: the open set — exactly the paths `.github/publish/open-set.txt` lists — and the public repository's own
   files under `.github/publish/public/` are published to `reply-team/jason-ai` at each release, through a pull request
   a person reviews. The release workflow's publish job makes the public tree a pure function of the tag: the open set,

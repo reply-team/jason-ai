@@ -33,7 +33,7 @@ public sealed class PlatformUrlOpener : IUrlOpener
 
         try
         {
-            using var process = System.Diagnostics.Process.Start(start);
+            using var process = ChildProcess.Start(start);
             return process is not null;
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or PlatformNotSupportedException)

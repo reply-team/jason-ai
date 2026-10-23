@@ -57,7 +57,7 @@ public class NoChildGetsAWindowTests
     /// No child gets a window, and none speaks in an encoding its caller chose, as a property of what ships. The
     /// runtime a logon task starts has no console, so a child it starts without <c>CreateNoWindow</c> puts a window
     /// on the person's desktop for as long as it runs. Every child therefore comes out of <see cref="ChildProcess"/>,
-    /// and nothing afterwards turns the window back on or picks its streams again.
+    /// is started there, and nothing afterwards turns the window back on or picks its streams again.
     /// </summary>
     [Fact]
     [Critical(Family.B1, "the IL guard over ChildProcess.StartInfo")]
@@ -70,7 +70,7 @@ public class NoChildGetsAWindowTests
             .Distinct()
             .ToList();
 
-        Assert.True(offenders.Count == 0, "a child could get a window or streams the door did not choose: " + string.Join("; ", offenders));
+        Assert.True(offenders.Count == 0, "a child could get a window, streams or a start the door did not choose: " + string.Join("; ", offenders));
     }
 
     /// <summary>
@@ -95,6 +95,28 @@ public class NoChildGetsAWindowTests
         Assert.Contains(callers, method => method.DeclaringType is { } type && typeof(IAsyncStateMachine).IsAssignableFrom(type));
     }
 
+    /// <summary>
+    /// Every start the door makes is made under <see cref="StartErrorMode"/>. On Windows a file named like a program
+    /// that is no program image otherwise makes the starting process put a modal box on the desktop, and a runtime a
+    /// logon task started may have nobody there to close it. Read from the door's own IL, so that a third way to start
+    /// added to the door later cannot leave the mode out.
+    /// </summary>
+    [Fact]
+    [Critical(Family.B1, "every start the door makes runs under the error mode, or a broken executable raises a modal box")]
+    public void Every_start_the_door_makes_is_made_with_the_loaders_error_boxes_off()
+    {
+        var starts = IlReferences.Methods(typeof(ChildProcess))
+            .Where(method => IlReferences.Called(method).Any(called => called.DeclaringType == typeof(Process) && called.Name == nameof(Process.Start)))
+            .ToList();
+        var unguarded = starts
+            .Where(method => !IlReferences.Called(method).Any(called => called.DeclaringType == typeof(StartErrorMode) && called.Name == nameof(StartErrorMode.Enter)))
+            .Select(Name)
+            .ToList();
+
+        Assert.True(starts.Count > 0, "the scan found no start in the door at all, so it read nothing: " + typeof(ChildProcess).FullName);
+        Assert.True(unguarded.Count == 0, "a start is made with the loader's error boxes on: " + string.Join("; ", unguarded));
+    }
+
     [Theory]
     // Critical: its own ProcessStartInfo, UseShellExecute, CreateNoWindow.
     [InlineData(nameof(Offenders.MakesItsOwn), "makes a ProcessStartInfo", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B1)])]
@@ -104,6 +126,9 @@ public class NoChildGetsAWindowTests
     // Critical: its own ProcessStartInfo, UseShellExecute, CreateNoWindow.
     [InlineData(nameof(Offenders.AsksForTheShell), "sets UseShellExecute", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B1)])]
     [InlineData(nameof(Offenders.StartsAFileName), "starts a process from a file name")]
+    [InlineData(nameof(Offenders.StartsAStartOfItsOwn), "starts a process outside the door")]
+    [InlineData(nameof(Offenders.StartsAProcessOfItsOwn), "starts a process outside the door")]
+    [InlineData(nameof(Offenders.StartsThroughAMethodGroup), "starts a process outside the door")]
     [InlineData(nameof(Offenders.ReachesIntoAProcess), "reads a process's StartInfo")]
     [InlineData(nameof(Offenders.InALambda), "makes a ProcessStartInfo")]
     [InlineData(nameof(Offenders.InAnAsyncMethod), "makes a ProcessStartInfo")]
@@ -160,6 +185,10 @@ public class NoChildGetsAWindowTests
                     && called.GetParameters() is [{ ParameterType: var first }, ..] && first == typeof(string))
                 {
                     yield return "starts a process from a file name";
+                }
+                else if (called.Name == nameof(Process.Start))
+                {
+                    yield return "starts a process outside the door";
                 }
                 else if (called.Name == "get_StartInfo")
                 {

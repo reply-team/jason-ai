@@ -29,9 +29,13 @@ namespace Jason.Contracts.Discovery;
 /// <c>JSON.parse</c> refuses — and a system tool is read in the console's page, which is what it writes.
 /// </para>
 /// <para>
+/// A start is made here too, under <see cref="StartErrorMode"/>: on Windows a file named like a program that is no
+/// program image fails with its error code and puts no box on the desktop.
+/// </para>
+/// <para>
 /// <c>NoChildGetsAWindowTests</c> reads the compiled product and holds it to this door: nothing else makes a start
-/// info, nothing sets the window, the shell, a redirect or an encoding, nothing starts a process from a bare file
-/// name, and nothing reaches into a process for the start info it was given.
+/// info or starts a process, nothing sets the window, the shell, a redirect or an encoding, nothing starts a process
+/// from a bare file name, and nothing reaches into a process for the start info it was given.
 /// </para>
 /// </remarks>
 public static class ChildProcess
@@ -77,5 +81,30 @@ public static class ChildProcess
         }
 
         return start;
+    }
+
+    /// <summary>
+    /// Starts a child from a start this class made, under <see cref="StartErrorMode"/>: every child is started here,
+    /// as every start is made here.
+    /// </summary>
+    public static Process? Start(ProcessStartInfo start)
+    {
+        using (StartErrorMode.Enter())
+        {
+            return Process.Start(start);
+        }
+    }
+
+    /// <summary>
+    /// Starts <paramref name="process"/>, whose start this class made, for a caller that holds the process before it
+    /// starts.
+    /// </summary>
+    public static bool Start(Process process)
+    {
+        ArgumentNullException.ThrowIfNull(process);
+        using (StartErrorMode.Enter())
+        {
+            return process.Start();
+        }
     }
 }

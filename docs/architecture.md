@@ -1780,7 +1780,7 @@ architecture is explicitly revised with new evidence.
 | INV-ADP-004 | `host.exec` uses structured executable/argument invocation rather than arbitrary shell interpolation. |
 | INV-ADP-005 | Plugin capability declaration is not permission; Runtime/user policy grants capabilities. |
 | INV-ADP-006 | Process/Jint isolation reduces blast radius but is not represented as an OS sandbox. |
-| INV-PROC-001 | Every child process the product starts is made at one door, `ChildProcess.StartInfo`, with no shell and no console window of its own, held by a guard over the compiled IL of the production assemblies. |
+| INV-PROC-001 | Every child process the product starts is made and started at one door, `ChildProcess.StartInfo` and `ChildProcess.Start`, on Windows under the start's error mode, with no shell and no console window of its own, held by a guard over the compiled IL of the production assemblies. |
 | INV-SECRET-001 | Raw secrets do not belong in ordinary campaign state, routes, manifests, prompts, artifacts, or logs. |
 | INV-CONFIG-001 | Candidate files affect active routing/binding only after Runtime-controlled validation and atomic activation. |
 | INV-REPLY-001 | Reply is configured as default rather than embedded as mandatory Runtime behavior. |

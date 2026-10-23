@@ -24,6 +24,13 @@ internal static class Offenders
 
     public static Process? StartsAFileName() => Process.Start("x");
 
+    // A start the door made, started somewhere else: whatever the door decides a start is made under would not hold.
+    public static Process? StartsAStartOfItsOwn(ProcessStartInfo start) => Process.Start(start);
+
+    public static bool StartsAProcessOfItsOwn(Process process) => process.Start();
+
+    public static Func<ProcessStartInfo, Process?> StartsThroughAMethodGroup() => Process.Start;
+
     public static ProcessStartInfo ReachesIntoAProcess(Process process) => process.StartInfo;
 
     public static Func<ProcessStartInfo> InALambda() => () => new ProcessStartInfo("x");

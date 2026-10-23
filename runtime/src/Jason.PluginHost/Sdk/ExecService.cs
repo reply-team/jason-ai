@@ -173,7 +173,7 @@ public sealed partial class ExecService(HostServices services)
         Process process;
         try
         {
-            process = Process.Start(startInfo) ?? throw new IOException($"Starting '{executable.Name}' produced no process.");
+            process = ChildProcess.Start(startInfo) ?? throw new IOException($"Starting '{executable.Name}' produced no process.");
         }
         catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
         {

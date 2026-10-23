@@ -152,10 +152,18 @@ public class ExecutableResolverTests
 
         var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, NoEnvironment, TimeSpan.FromSeconds(30), Ct);
 
-        // The file is not a program at all; whether starting it fails or it answers with nothing, the check did
-        // not produce a version and the plugin is held back rather than the package blamed.
+        // The file is not a program at all; the check did not produce a version and the plugin is held back rather
+        // than the package blamed.
         Assert.Equal(ProblemCodes.ExecutableVersionCheckFailed, result.Problem!.Code);
         Assert.True(result.Problem.Environmental);
+
+        // On Windows the start itself is refused: the loader takes the file for no valid image. That refusal is the
+        // whole of what a person is shown, an error code and no box on the desktop, because the door starts every
+        // child with the loader's error boxes off (ChildProcessTests holds the mode in force inside the start).
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Contains("could not be started", result.Problem.Message, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

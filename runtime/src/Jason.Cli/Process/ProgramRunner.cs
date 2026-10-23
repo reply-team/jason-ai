@@ -69,7 +69,7 @@ public static class ProgramRunners
             using var process = new OperatingSystemProcess { StartInfo = startInfo };
             try
             {
-                process.Start();
+                ChildProcess.Start(process);
             }
             catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
             {

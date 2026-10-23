@@ -63,7 +63,7 @@ public sealed class ProcessToastLauncher : IToastLauncher
         Process process;
         try
         {
-            process = Process.Start(start) ?? throw new InvalidOperationException("The process did not start.");
+            process = Jason.Contracts.Discovery.ChildProcess.Start(start) ?? throw new InvalidOperationException("The process did not start.");
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {

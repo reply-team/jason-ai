@@ -449,7 +449,7 @@ public static class InstallationRemovers
 
             try
             {
-                using var process = System.Diagnostics.Process.Start(start);
+                using var process = ChildProcess.Start(start);
                 if (process is null)
                 {
                     return null;

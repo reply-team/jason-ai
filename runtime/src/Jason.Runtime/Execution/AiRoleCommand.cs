@@ -96,7 +96,7 @@ public sealed class AiRoleCommand(
         Process process;
         try
         {
-            process = Process.Start(startInfo)
+            process = ChildProcess.Start(startInfo)
                 ?? throw new IOException($"Starting '{context.EntryCommand[0]}' produced no process.");
         }
         catch (Win32Exception ex)

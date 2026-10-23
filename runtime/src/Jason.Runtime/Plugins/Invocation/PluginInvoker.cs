@@ -292,7 +292,7 @@ public sealed partial class PluginInvoker(
         Process process;
         try
         {
-            process = Process.Start(startInfo) ?? throw new IOException($"Starting '{command[0]}' produced no process.");
+            process = Jason.Contracts.Discovery.ChildProcess.Start(startInfo) ?? throw new IOException($"Starting '{command[0]}' produced no process.");
         }
         catch (Exception exception) when (exception is Win32Exception or IOException or InvalidOperationException)
         {

@@ -174,7 +174,7 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
         using var process = new Process { StartInfo = start };
         try
         {
-            process.Start();
+            ChildProcess.Start(process);
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {

@@ -33,7 +33,7 @@ internal static partial class CriticalTier
     public static readonly IReadOnlyDictionary<Family, int[]> Cases = new Dictionary<Family, int[]>
     {
         //              App  Cli  Contracts  PluginHost  Runtime
-        [Family.B1] =  [  6,   2,   4,   2,   5],
+        [Family.B1] =  [  7,   2,   4,   2,   5],
         [Family.B2] =  [  4,   2,   0,   0,   6],
         [Family.B3] =  [  0,   0,   3,   1,  29],
         [Family.B4] =  [  0,   0,   0,   0,  11],
@@ -100,7 +100,7 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
     [
-        (22, 202, 295),       // Jason.App.Tests
+        (23, 203, 298),       // Jason.App.Tests
         (140, 1566, 2567),    // Jason.Cli.Tests
         (99, 481, 1990),      // Jason.Contracts.Tests
         (41, 185, 277),       // Jason.PluginHost.Tests

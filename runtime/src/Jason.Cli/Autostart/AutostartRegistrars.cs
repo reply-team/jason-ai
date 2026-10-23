@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Security.Principal;
 using System.Text;
 using Jason.Contracts.Discovery;
-using OperatingSystemProcess = System.Diagnostics.Process;
 
 namespace Jason.Cli.Autostart;
 
@@ -167,7 +166,7 @@ public static class AutostartRegistrars
 
         try
         {
-            using var process = OperatingSystemProcess.Start(start)
+            using var process = ChildProcess.Start(start)
                 ?? throw new AutostartException(AutostartCodes.Refused, $"'{command[0]}' could not be started.");
 
             // Both pipes are drained at once, and only then is the exit waited for. Reading one to its end

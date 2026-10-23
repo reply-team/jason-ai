@@ -100,7 +100,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
 
         StandardStreams.KeepOutOfChildren();
 
-        var process = OperatingSystemProcess.Start(startInfo)
+        var process = ChildProcess.Start(startInfo)
             ?? throw new IOException($"The runtime executable '{fileName}' could not be started.");
 
         // Standard input is closed rather than left open: a service process has nothing to read from anyone.
