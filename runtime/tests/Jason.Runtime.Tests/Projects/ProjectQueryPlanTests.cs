@@ -115,6 +115,46 @@ public class ProjectQueryPlanTests
             $"The note is not read through its campaign and role:{Environment.NewLine}{string.Join(Environment.NewLine, plan)}{Environment.NewLine}{read.Text}");
     }
 
+    /// <summary>
+    /// A note at the client's and at a project's level is read, and each level listed, through that level's own index of
+    /// one per role — never a walk of every note, and a listing never sorted after it is read: the condition each read
+    /// sends is the index's filter, or implies it, and the index already holds the roles in a page's order.
+    /// </summary>
+    [Fact]
+    public async Task A_client_s_and_a_project_s_notes_are_read_and_listed_through_their_own_indexes()
+    {
+        using var database = new TestDatabase();
+        var recorder = new Recorder();
+        using (var db = Open(database, recorder))
+        {
+            var acme = await new ProjectService(db, new JournalWriter(new FixedClock(Noon)), new FixedClock(Noon), TestHarness.FoldersFor(db))
+                .CreateAsync(new ProjectCreateRequest("Acme", null, null, null), Ct);
+            var notes = new RoleNoteService(db, new JournalWriter(new FixedClock(Noon)), new FixedClock(Noon));
+            recorder.Commands.Clear();
+            await notes.GetAsync(new RoleNoteGetRequest(null, "researcher"), Ct);
+            await notes.GetAsync(new RoleNoteGetRequest(null, "researcher", acme.Id), Ct);
+            await notes.ListAsync(new RoleNoteListRequest(null, 2, null), Ct);
+            await notes.ListAsync(new RoleNoteListRequest(null, 2, "cmVzZWFyY2hlcg", acme.Id), Ct);
+        }
+
+        var reads = recorder.Commands.Where(command => command.Text.Contains("FROM \"role_notes\"", StringComparison.Ordinal)).ToList();
+        string[] expected =
+        [
+            "SEARCH r USING INDEX ix_role_notes_one_per_client_role (role=?)",
+            "SEARCH r USING INDEX ix_role_notes_one_per_project_role (project_id=? AND role=?)",
+            "SCAN r USING INDEX ix_role_notes_one_per_client_role",
+            "SEARCH r USING INDEX ix_role_notes_one_per_project_role (project_id=? AND role>?)",
+        ];
+        Assert.Equal(expected.Length, reads.Count);
+        foreach (var (read, step) in reads.Zip(expected))
+        {
+            var plan = PlanOf(database, read);
+            Assert.True(
+                plan.SequenceEqual([step]),
+                $"The note's read is not '{step}':{Environment.NewLine}{string.Join(Environment.NewLine, plan)}{Environment.NewLine}{read.Text}");
+        }
+    }
+
     private sealed record Command(string Text, IReadOnlyList<(string Name, object Value)> Parameters);
 
     /// <summary>Every query a context sends, with its parameters, as it is sent.</summary>

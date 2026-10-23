@@ -412,15 +412,15 @@ public class ManagerLoopTests
     /// </summary>
     /// <remarks>
     /// The envelope cannot hand a note's content to a role even in principle: what it carries is the note's
-    /// <em>address</em> — a campaign and a role — so the note and the state are read the same way, through the
-    /// same API, and cannot be confused for one another by the thing reading them.
+    /// <em>address</em> — a campaign, its project and a role — so the note and the state are read the same way,
+    /// through the same API, and cannot be confused for one another by the thing reading them.
     /// </remarks>
     [Fact]
     public async Task A_manager_reports_the_state_where_its_note_disagrees_with_it()
     {
-        // The address, by shape: two identifiers and nowhere to put a note.
+        // The address, by shape: three identifiers and nowhere to put a note.
         Assert.Equal(
-            ["CampaignId", "Role"],
+            ["CampaignId", "ProjectId", "Role"],
             typeof(RoleMemoryLocation).GetProperties().Select(property => property.Name).Order());
 
         await using var host = await FakeHostRuntime.StartAsync(Ct, Settings(reviewSeconds: 3_600, "--note-check"));

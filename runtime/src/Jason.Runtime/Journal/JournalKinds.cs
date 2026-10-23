@@ -64,8 +64,9 @@ public static partial class JournalKinds
     public const string RoleUpdated = "role_updated";
 
     /// <summary>
-    /// A role replaced its memory of a campaign. The line names the campaign, the role, how big the note is and
-    /// what it hashes to — never what it says, because a note holds half-formed guesses about people and the
+    /// A role replaced its memory at one level. The line names the level — the campaign, as a line of that campaign;
+    /// the project, as a line of the installation; or neither, for the client's — the role, how big the note is and
+    /// what it hashes to; never what it says, because a note holds half-formed guesses about people and the
     /// chronicle is the one table nobody can edit afterwards.
     /// </summary>
     public const string RoleNoteSet = "role_note_set";

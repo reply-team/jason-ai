@@ -238,30 +238,58 @@ Jason launches gets a fresh work directory per attempt and loses it afterwards, 
 file has to live somewhere the next attempt can reach: here, in the runtime's own store. That is the
 whole of why notes are a table. It does not make them true.
 
-**A note is not authoritative** (INV-MEM-001). It is one role's own memory of one campaign, in that
-role's words, from whenever it was written. Where a note disagrees with campaign state, **the state is
-what is true** and the note is out of date. Nothing in the runtime reads a note, and no decision is
+**A note is not authoritative** (INV-MEM-001). It is one role's own memory, in that role's words, from
+whenever it was written. Where a note disagrees with campaign state, **the state is what is true** and the
+note is out of date; and a role's notes never outrank what a person has said — a named preference, or what
+they wrote for the work — however the note puts it. Nothing in the runtime reads a note, and no decision is
 taken because of what one says.
 
-It is also none of the other four knowledge concepts: a **skill** teaches the job, a **named
-preference** is a fact about the client a person states and only a person sets ([projects](projects.md)),
-**campaign context** is the campaign's shared knowledge, **learned practice** would be cross-campaign and
-does not exist in this version.
+It is also none of the other five knowledge concepts: a **skill** teaches the job, the person's **memory
+files** are their own standing guidance at each level, read by the host and never by the runtime, a **named
+preference** is a fact about the client a person states and only a person sets (both in
+[projects](projects.md)), and **campaign context** is the campaign's shared knowledge. A client-level note is
+still a role's own working memory, written by that role for itself, in its own words, and shared across
+campaigns only because the role's craft is; learned practice, which does not exist in this version, would be
+the installation's own knowledge, distilled from what happened across campaigns and written by no role for
+itself.
 
-One document per campaign and role:
+**Three levels.** A role keeps one note at each of three levels: **the client's** — its general craft, for
+all of this installation's work — **a project's**, and **a campaign's**. Every call names exactly one level:
+`campaign_id` for a campaign's, `project_id` for a project's, and neither for the client's. Naming both is
+refused as `validation_failed`, with both fields named: a campaign's project is the campaign's, and a note is
+never at two levels. A blank id is refused by its field rather than read as the client's level, where a
+write would replace the role's general craft. A project nobody made is `project_not_found`; a campaign keeps
+its own refusals.
+
+A reader composes the levels in one order — **the client's, then the project's, then the campaign's** — and
+where two say different things **the lower wins**: the project's over the client's, the campaign's over
+both. The runtime composes nothing: it answers each level on its own, and a level nobody wrote at reads
+empty.
 
 ```sh
-jason rolenote get <campaign-id> researcher
-jason rolenote set <campaign-id> researcher --note '{"gatekeeper":"the switchboard hangs up after six"}'
-jason rolenote list <campaign-id> --human
+jason rolenote get --role researcher
+jason rolenote get --role researcher --project <project-id>
+jason rolenote get --role researcher --campaign <campaign-id>
+jason rolenote set --role researcher --campaign <campaign-id> --note '{"gatekeeper":"the switchboard hangs up after six"}'
+jason rolenote set --role copywriter --project <project-id> --note '{"voice":"short sentences; the product named once"}'
+jason rolenote list --human
+jason rolenote list --campaign <campaign-id> --human
 ```
+
+The older form, `jason rolenote get <campaign-id> researcher`, which skills already written print, is still
+accepted as the campaign's note — but only whole: exactly the campaign and the role, and none of `--role`,
+`--campaign` or `--project`. One argument alone is refused, because it is what the older form becomes when the
+variable that held the campaign is empty, and read as the role it would reach the client's note. **A note is read
+or written at the client's level — `get` and `set` — only by `--role` with neither scope option**, so a script that
+meant a campaign never reads or writes the client's note by accident. `list` with neither option lists the client's
+level: which roles have written there, how much and when, never what they wrote.
 
 - **Written in one command.** A launched role has no file-writing tool (§7), so its note travels inside the
   call as one compact JSON object; a person at a keyboard may use `--note-file` instead.
 - **Replaced whole.** There is no patch verb: a role merging into its own memory would have to reason
   about what an earlier session of itself meant by a key, and the rule that needs no reasoning is that
   the last writer owns the document. Clearing a note is writing `{}`.
-- **A JSON object, at most 64 KiB** of its canonical form. A role that needs more than that is keeping
+- **A JSON object, at most 64 KiB** of its canonical form, at every level. A role that needs more than that is keeping
   a record rather than a note. The measurement is the **UTF-8 bytes of the canonical form**, with
   nothing escaped, so a character costs what UTF-8 spells it in: a note in Cyrillic, Greek or Hebrew
   holds about half the characters the figure suggests and one in Japanese about a third, as it would
@@ -273,18 +301,27 @@ jason rolenote list <campaign-id> --human
   beside a `new` one in UTF-8. The note's hash is still taken over the escaped form,
   the one this runtime names everything by — a report's assertion and a route's binding are hashed in
   the same one.
-- **A role that has never written reads an empty note**, with `updated_at: null`, rather than a 404.
-  Reading its memory is the first thing a launched role does, and every role would otherwise carry the
-  code that tells "nothing yet" from "something went wrong".
-- **The chronicle records that a note was set** — the campaign, the role, its size, its content hash,
-  the actor, and the size and hash it replaced — and **never what it said**. A note holds half-formed
-  guesses about people, and the journal is the one table nobody can edit afterwards.
+- **A role that has never written reads an empty note**, with `updated_at: null`, rather than a 404, at
+  every level. Reading its memory is the first thing a launched role does, and every role would otherwise
+  carry the code that tells "nothing yet" from "something went wrong".
+- **A listing is one level's**: which roles have written there, how much and when — never what they wrote.
+  Naming neither id lists the client's notes, never every note in the installation.
+- **The chronicle records that a note was set** — its level, the role, its size, its content hash, the
+  actor, and the size and hash it replaced — and **never what it said**. A note holds half-formed guesses
+  about people, and the journal is the one table nobody can edit afterwards. A campaign's note is a line of
+  that campaign; a project's note is a line of the installation that names the project, and the client's a
+  line of the installation that names neither.
 - An archived campaign takes no more notes, like every other write against one. Reading stays open.
 
-The launch envelope carries `role_memory: {campaign_id, role}` and never the content. A document
-copied in at launch would be what the role believed then, arriving beside the brief as though it were
-current; read through the API at the moment it is wanted, it is plainly a document with an age — and
-current runtime state is read the same way, through the same CLI, so the two are never confused.
+The launch envelope carries `role_memory: {campaign_id, role, project_id}` — the address of the role's
+note at each of the three levels — and never the content. A document copied in at launch would be what
+the role believed then, arriving beside the brief as though it were current; read through the API at the
+moment it is wanted, it is plainly a document with an age — and current runtime state is read the same
+way, through the same CLI, so the two are never confused. Beside it, `memory_files` gives the paths of
+the person's memory files — the `AGENTS.md` of the client, of the campaign's project and of the campaign —
+and never their words. They are the person's guidance rather than the role's memory, so a note never
+outranks them, and current state outranks both; which paths are given, and when one is null, is in the
+launch envelope's section of [work-execution.md](work-execution.md).
 
 ## 9. When AI work cannot run
 

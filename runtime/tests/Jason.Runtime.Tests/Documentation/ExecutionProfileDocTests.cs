@@ -102,6 +102,56 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// A role's notes at three levels are a decision of the architecture's, and the isolation it promises between
+    /// campaigns says which of them it covers — in the isolation line, in the campaign invariant and in the manager's own
+    /// decision: a campaign's own notes stay in it, and the client's and a project's are shared by design across the
+    /// campaigns they cover. A page that still called role memory a campaign's alone would
+    /// promise an isolation the runtime does not keep; one that still called learned practice "cross-campaign" would make
+    /// a client's note one.
+    /// </summary>
+    [Fact]
+    public void The_architecture_records_a_role_s_notes_at_three_levels_and_which_of_them_are_shared()
+    {
+        var architecture = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "architecture.md")));
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains(
+            "| DEC-ROLE-003 | A role's memory is kept at three levels, the client's (its general craft), a project's and a campaign's,",
+            architecture,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "the runtime composes nothing and reads none. `docs/execution-profiles.md` §8 is the contract. |",
+            architecture,
+            StringComparison.Ordinal);
+        Assert.Contains("## 8. Role notes", contract, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "campaign-scoped state, a role's notes at the campaign's level, configuration overrides, work, execution lineage, plugin routes, and provider bindings must not leak between campaigns.",
+            architecture,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "and a role's notes at the client's and a project's level, which cover every campaign of that scope, are shared by design.",
+            architecture,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "| Role memory | Non-authoritative contextual continuity for an AI role, kept at one of three levels: the client's, a project's or a campaign's. |",
+            architecture,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "| DEC-MGR-001 | Campaign manager is an AI role with isolated logical context and non-authoritative memory, kept per campaign and, above it, per project and for the client (DEC-ROLE-003). |",
+            architecture,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "| INV-CAMP-001 | Campaign-scoped context, work, a role's campaign-level memory, route/binding overrides, and lineage remain logically isolated; explicitly configured user-level defaults, and a role's notes at the client's and a project's level, are shared by design. |",
+            architecture,
+            StringComparison.Ordinal);
+
+        Assert.Contains("none of the other five knowledge concepts", contract, StringComparison.Ordinal);
+        Assert.Contains("written by no role for itself", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("would be cross-campaign", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The one sentence a reader has to be able to trust: a profile holds no credential. It is true because the
     /// revision has nowhere to put one, and the document says so — if the entity ever grows a field that could
     /// hold a secret, the sentence becomes a lie and this is where it is noticed.

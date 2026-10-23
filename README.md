@@ -378,7 +378,7 @@ everything else keeps running:
 jason profile create local-claude --host claude_code --program claude   --deny Write --host-version-verified 2.1.275
 jason profile list --human
 jason workitem create <campaign-id> --kind ai_role --role researcher --execution-profile local-claude
-jason rolenote get <campaign-id> researcher
+jason rolenote get --role researcher --campaign <campaign-id>
 ```
 
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
@@ -400,8 +400,8 @@ into `<data>/skills/roles/<role>/` from the packs under [`skills/`](skills) and 
 into each attempt's own work directory. The packs contribute different files to it — this repository's
 runtime pack the `SKILL.md` holding the launch contract, a business pack the profession's method beside
 it — so that installing one never overwrites the other. What a role *remembers* is a **role note** — one document per
-campaign and role, written by that role for its own later runs, and deliberately not authoritative:
-where a note disagrees with campaign state, the state is what is true.
+role at each of three levels, the client's, a project's and a campaign's, written by that role for its own later
+runs, and deliberately not authoritative: where a note disagrees with campaign state, the state is what is true.
 
 What a plugin package is, every rule its manifest is held to, what the Host SDK offers and under
 which limits, how capabilities are granted, and the invocation protocol between the runtime and the

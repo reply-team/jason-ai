@@ -8,6 +8,7 @@ using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution.Hosts;
+using Jason.Runtime.Harness;
 using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Execution;
@@ -28,6 +29,7 @@ public sealed class AiRoleCommand(
     JasonPaths paths,
     TokenRedactor redactor,
     LiveSettings<RolesOptions> roles,
+    HarnessFolders folders,
     ILogger<AiRoleCommand> logger) : ICommand
 {
     /// <summary>How much of the child's stderr is worth keeping on the attempt: enough to explain, not enough to store a log.</summary>
@@ -70,6 +72,10 @@ public sealed class AiRoleCommand(
         // What this attempt was given, kept where the rest of the launch is kept: which rules the agent ran
         // under, and whether it was taught anything at all.
         launch = launch with { Deny = context.Deny, RoleSkill = prepared.Skill };
+
+        // Where the person's memory files are, as this launch finds the root and the records: decided before the
+        // child exists, and never a word of what the files say.
+        var memoryFiles = MemoryFiles(context);
 
         // An agent speaks to Jason, and writes UTF-8: its transcript and the words it ends with are read as UTF-8,
         // whatever this console's code page.
@@ -136,7 +142,7 @@ public sealed class AiRoleCommand(
             var transcript = OutputPump.PumpAsync(process.StandardOutput, Path.Combine(context.WorkDir, "stdout.log"), redactor, null, StderrTailBytes, maxBytes);
             var diagnostics = OutputPump.PumpAsync(process.StandardError, Path.Combine(context.WorkDir, "stderr.log"), redactor, tail, StderrTailBytes, maxBytes);
 
-            await WriteEnvelopeAsync(process, context).ConfigureAwait(false);
+            await WriteEnvelopeAsync(process, context, memoryFiles).ConfigureAwait(false);
 
             // Deliberately not the runtime's own token: a shutdown drains and lets children finish, and a
             // survivor completes its attempt against the next runtime instance rather than dying with this one.
@@ -195,10 +201,23 @@ public sealed class AiRoleCommand(
             TaskScheduler.Default);
 
     /// <summary>
+    /// The three memory files by path, each where Jason knows its folder is its own: the root's where the root carries
+    /// its marker now, which no record holds; the project's and the campaign's in the folders recorded on them, named
+    /// without a look, since a stale one is the host's to find. A level it does not know is null, and the object is
+    /// there whatever is known.
+    /// </summary>
+    private MemoryFileLocations MemoryFiles(CommandContext context) => new(
+        MemoryFileIn(folders.MarkedRoot()),
+        MemoryFileIn(context.ProjectFolderPath),
+        MemoryFileIn(context.CampaignFolderPath));
+
+    private static string? MemoryFileIn(string? folder) => folder is { Length: > 0 } ? Path.Combine(folder, HarnessFolders.MemoryFile) : null;
+
+    /// <summary>
     /// One JSON object, then end of file. Closing stdin is part of the contract: a host reads until the stream
     /// ends rather than guessing where the envelope stops.
     /// </summary>
-    private async Task WriteEnvelopeAsync(Process process, CommandContext context)
+    private async Task WriteEnvelopeAsync(Process process, CommandContext context, MemoryFileLocations memoryFiles)
     {
         var envelope = new LaunchEnvelope(
             LaunchEnvelope.CurrentVersion,
@@ -218,9 +237,11 @@ public sealed class AiRoleCommand(
             context.WorkDir,
             new RuntimeLocation(paths.DescriptorFile, ApiVersion.Current, ProgramResolver.CliCommandFor(context.CliCommand)),
 
-            // A signpost, not a copy. The role is told where its own memory of this campaign is so it never has
-            // to work the address out; what the note says it reads through the API, at the moment it wants it.
-            context.Role is { Length: > 0 } role ? new RoleMemoryLocation(context.CampaignId, role) : null);
+            // A signpost, not a copy. The role is told where its own memory of this campaign is — and, by the
+            // campaign's project, of the levels above it — so it never has to work the address out; what the notes
+            // say it reads through the API, at the moment it wants them.
+            context.Role is { Length: > 0 } role ? new RoleMemoryLocation(context.CampaignId, role, context.ProjectId) : null,
+            memoryFiles);
 
         try
         {

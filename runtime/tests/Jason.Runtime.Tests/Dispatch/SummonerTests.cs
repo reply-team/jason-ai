@@ -7,6 +7,7 @@ using Jason.Runtime.Decisions;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Notes;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -36,6 +37,31 @@ public class SummonerTests
         var item = await SingleCheckInAsync(harness);
         Assert.Equal("triggered", (string?)item.Context["review_intent"]);
         Assert.Equal(JournalKinds.WorkItemFailed, (string?)item.Context["trigger"]);
+    }
+
+    /// <summary>
+    /// A role's note at the client's or a project's level is a line of the installation's, naming no campaign, so it
+    /// summons nobody even where <c>role_note_set</c> is named a trigger: there is no campaign for a review to be of. A
+    /// campaign's own note still summons its review.
+    /// </summary>
+    [Fact]
+    public async Task A_note_above_a_campaign_summons_nobody_where_its_kind_is_a_trigger()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { Triggers = [JournalKinds.RoleNoteSet] });
+        var campaign = await SeedAsync(harness, live: true);
+        string project;
+        await using (var db = harness.Open())
+        {
+            project = (await db.Campaigns.Include(c => c.Project).SingleAsync(Ct)).Project!.PublicId;
+        }
+
+        await NoteAsync(harness, new RoleNoteSetRequest(null, "researcher", new JsonObject { ["craft"] = "ask first" }, null, null));
+        await NoteAsync(harness, new RoleNoteSetRequest(null, "researcher", new JsonObject { ["voice"] = "plain" }, null, null, project));
+        Assert.Equal(0, await SummonAsync(harness));
+
+        await NoteAsync(harness, new RoleNoteSetRequest(campaign, "researcher", new JsonObject { ["seen"] = "here" }, null, null));
+        Assert.Equal(1, await SummonAsync(harness));
+        Assert.Equal(JournalKinds.RoleNoteSet, (string?)(await SingleCheckInAsync(harness)).Context["trigger"]);
     }
 
     [Fact]
@@ -660,6 +686,12 @@ public class SummonerTests
         var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignPublicId, Ct);
         new JournalWriter(harness.Clock).Append(db, Actors.Dispatcher, kind, campaign, key: "status");
         await db.SaveChangesAsync(Ct);
+    }
+
+    private static async Task NoteAsync(DispatchHarness harness, RoleNoteSetRequest request)
+    {
+        await using var db = harness.Open();
+        await new RoleNoteService(db, new JournalWriter(harness.Clock), harness.Clock).SetAsync(request, Ct);
     }
 
     private static Task<int> SummonAsync(DispatchHarness harness) => harness.SummonAsync(Ct);

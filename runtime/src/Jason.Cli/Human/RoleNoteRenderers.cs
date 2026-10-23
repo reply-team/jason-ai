@@ -16,6 +16,9 @@ public static class RoleNoteRenderers
     /// </summary>
     public const string Heading = "A role's own note — its working memory, not what the runtime knows.";
 
+    /// <summary>What a note naming no campaign and no project is: the role's craft for all of the client's work.</summary>
+    public const string ClientLevel = "the client's — the role's general craft";
+
     private const int Label = 12;
 
     public static string? Note(string json)
@@ -29,7 +32,12 @@ public static class RoleNoteRenderers
         var text = new StringBuilder();
         text.AppendLine(Heading);
         text.AppendLine();
-        text.AppendLine(Line("Campaign:", note.CampaignId));
+        text.AppendLine(note switch
+        {
+            { CampaignId: { } campaign } => Line("Campaign:", campaign),
+            { ProjectId: { } project } => Line("Project:", project),
+            _ => Line("Level:", ClientLevel),
+        });
         text.AppendLine(Line("Role:", note.Role));
         text.AppendLine(Line("Written:", RenderText.Moment(note.UpdatedAt) ?? "never"));
         text.AppendLine(Line("By:", RenderText.Actor(note.UpdatedBy)));
@@ -41,7 +49,7 @@ public static class RoleNoteRenderers
     }
 
     /// <summary>
-    /// A campaign's memory at a glance. The listing carries no note, so this table cannot show one: what it
+    /// One level's memory at a glance. The listing carries no note, so this table cannot show one: what it
     /// shows is which roles have written and how much, which is what somebody scanning a campaign is asking.
     /// </summary>
     public static string? NoteList(string json)

@@ -26,6 +26,9 @@ namespace Jason.Runtime.Execution;
 /// The bare word the launched agent calls home with, as its profile names it. Null means this executable's own
 /// name, which is the one the launcher puts within the child's reach.
 /// </param>
+/// <param name="ProjectId">The campaign's project, by its public id, as the runtime records it when the attempt starts.</param>
+/// <param name="ProjectFolderPath">The folder recorded for the campaign's project when the attempt starts; null where none is.</param>
+/// <param name="CampaignFolderPath">The folder recorded for the campaign when the attempt starts; null where none is.</param>
 public sealed record CommandContext(
     string WorkItemId,
     string AttemptId,
@@ -45,7 +48,10 @@ public sealed record CommandContext(
     string? Operation = null,
     ProviderOpPlan? Plan = null,
     IReadOnlyList<string>? Deny = null,
-    string? CliCommand = null);
+    string? CliCommand = null,
+    string? ProjectId = null,
+    string? ProjectFolderPath = null,
+    string? CampaignFolderPath = null);
 
 /// <summary>How the run ended, as the command saw it. What it means for the work item is decided elsewhere.</summary>
 public abstract record CommandOutcome

@@ -366,11 +366,12 @@ public class ContractsShapeTests
             DateTimeOffset.UnixEpoch,
             "/work/wi_A/att_A",
             new RuntimeLocation("/run/runtime.json", "v1", "jason"),
-            new RoleMemoryLocation("cmp_A", "researcher"));
+            new RoleMemoryLocation("cmp_A", "researcher", "prj_A"),
+            new MemoryFileLocations("/home/marta/Jason/AGENTS.md", "/home/marta/Jason/projects/acme-corp/AGENTS.md", null));
 
         var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
 
-        Assert.Contains("\"envelope_version\":3", json, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":4", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_id\":\"att_A\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":\"/work/wi_A/att_A\"", json, StringComparison.Ordinal);
@@ -381,7 +382,13 @@ public class ContractsShapeTests
 
         // The address of the role's memory, and never the memory: what the note says is read through the API at
         // the moment the role wants it, so a stale document can never arrive looking like current truth.
-        Assert.Contains("\"role_memory\":{\"campaign_id\":\"cmp_A\",\"role\":\"researcher\"}", json, StringComparison.Ordinal);
+        Assert.Contains("\"role_memory\":{\"campaign_id\":\"cmp_A\",\"role\":\"researcher\",\"project_id\":\"prj_A\"}", json, StringComparison.Ordinal);
+
+        // The person's memory files by path, a level whose folder Jason does not know as null beside the others.
+        Assert.Contains(
+            "\"memory_files\":{\"client\":\"/home/marta/Jason/AGENTS.md\",\"project\":\"/home/marta/Jason/projects/acme-corp/AGENTS.md\",\"campaign\":null}",
+            json,
+            StringComparison.Ordinal);
 
         var back = JsonSerializer.Deserialize<LaunchEnvelope>(json, JasonJson.Options)!;
         Assert.Equal(LaunchEnvelope.CurrentVersion, back.EnvelopeVersion);
@@ -391,7 +398,75 @@ public class ContractsShapeTests
         Assert.Equal("founders", (string?)back.Context["icp"]);
         Assert.Equal(envelope.Runtime, back.Runtime);
         Assert.Equal(envelope.RoleMemory, back.RoleMemory);
+        Assert.Equal(envelope.MemoryFiles, back.MemoryFiles);
         Assert.Equal(DateTimeOffset.UnixEpoch, back.LockUntil);
+    }
+
+    /// <summary>
+    /// A host written against version 3 reads what version 4 is written as: it knows <c>role_memory</c> as a campaign and
+    /// a role, and nothing it reads was renamed, moved or given another shape. What 4 added it never asked for, so it
+    /// never sees it.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W7, "a host written against version 3 keeps working at 4")]
+    public void A_host_written_against_version_3_reads_an_envelope_of_version_4()
+    {
+        var envelope = new LaunchEnvelope(
+            LaunchEnvelope.CurrentVersion,
+            "att_A",
+            1,
+            "wi_A",
+            "cmp_A",
+            "cnt_A",
+            WorkItemKind.AiRole,
+            "researcher",
+            "local-host",
+            new JsonObject { ["icp"] = "founders" },
+            null,
+            3600,
+            120,
+            DateTimeOffset.UnixEpoch,
+            "/work/wi_A/att_A",
+            new RuntimeLocation("/run/runtime.json", "v1", "jason"),
+            new RoleMemoryLocation("cmp_A", "researcher", "prj_A"),
+            new MemoryFileLocations("/home/marta/Jason/AGENTS.md", null, null));
+
+        var read = JsonSerializer.Deserialize<Version3Envelope>(JsonSerializer.Serialize(envelope, JasonJson.Options), JasonJson.Options)!;
+
+        Assert.Equal(LaunchEnvelope.CurrentVersion, read.EnvelopeVersion);
+        Assert.Equal("att_A", read.AttemptId);
+        Assert.Equal("cmp_A", read.CampaignId);
+        Assert.Equal("cnt_A", read.ContactId);
+        Assert.Equal(WorkItemKind.AiRole, read.Kind);
+        Assert.Equal("researcher", read.Role);
+        Assert.Equal("local-host", read.ExecutionProfile);
+        Assert.Equal("founders", (string?)read.Context["icp"]);
+        Assert.Equal(3600, read.TimeoutSeconds);
+        Assert.Equal(120, read.HeartbeatSeconds);
+        Assert.Equal(DateTimeOffset.UnixEpoch, read.LockUntil);
+        Assert.Equal("/work/wi_A/att_A", read.WorkDir);
+        Assert.Equal(new RuntimeLocation("/run/runtime.json", "v1", "jason"), read.Runtime);
+        Assert.Equal(new Version3RoleMemory("cmp_A", "researcher"), read.RoleMemory);
+    }
+
+    [Fact]
+    public void An_envelope_written_before_the_memory_files_existed_still_reads()
+    {
+        // Version 3, as this runtime wrote it before an envelope named the project or the memory files.
+        const string version3 = """
+            {"envelope_version":3,"attempt_id":"att_A","attempt_number":1,"work_item_id":"wi_A","campaign_id":"cmp_A",
+             "contact_id":null,"kind":"ai_role","role":"researcher","execution_profile":null,"context":{},
+             "result_format":null,"timeout_seconds":3600,"heartbeat_seconds":120,"lock_until":"1970-01-01T00:00:00.000Z",
+             "work_dir":"/work/wi_A/att_A","runtime":{"descriptor_file":"/run/runtime.json","api_version":"v1","cli_command":"jason"},
+             "role_memory":{"campaign_id":"cmp_A","role":"researcher"}}
+            """;
+
+        var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(version3, JasonJson.Options)!;
+
+        Assert.Equal(3, envelope.EnvelopeVersion);
+        Assert.Equal(new RoleMemoryLocation("cmp_A", "researcher"), envelope.RoleMemory);
+        Assert.Null(envelope.RoleMemory!.ProjectId);
+        Assert.Null(envelope.MemoryFiles);
     }
 
     [Fact]
@@ -509,4 +584,27 @@ public class ContractsShapeTests
         Assert.Equal("/v1/preference.set", Operations.Route(Operations.PreferenceSet));
         Assert.Equal(("preference.unset", "preference.list"), (Operations.PreferenceUnset, Operations.PreferenceList));
     }
+
+    /// <summary>The envelope as a host written against version 3 declares it: every member that version had, and nothing after it.</summary>
+    private sealed record Version3Envelope(
+        int EnvelopeVersion,
+        string AttemptId,
+        int AttemptNumber,
+        string WorkItemId,
+        string CampaignId,
+        string? ContactId,
+        WorkItemKind Kind,
+        string? Role,
+        string? ExecutionProfile,
+        JsonObject Context,
+        JsonNode? ResultFormat,
+        int TimeoutSeconds,
+        int HeartbeatSeconds,
+        DateTimeOffset LockUntil,
+        string WorkDir,
+        RuntimeLocation Runtime,
+        Version3RoleMemory? RoleMemory);
+
+    /// <summary><c>role_memory</c> as version 3 has it: a campaign and a role.</summary>
+    private sealed record Version3RoleMemory(string CampaignId, string Role);
 }

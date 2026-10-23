@@ -405,7 +405,7 @@ One JSON object is written to the child's standard input, which is then closed:
 
 ```json
 {
-  "envelope_version": 3,
+  "envelope_version": 4,
   "attempt_id": "att_…",
   "attempt_number": 1,
   "work_item_id": "wi_…",
@@ -421,7 +421,12 @@ One JSON object is written to the child's standard input, which is then closed:
   "lock_until": "2026-09-14T13:00:00.000Z",
   "work_dir": "…/.jason/work/wi_…/att_…",
   "runtime": { "descriptor_file": "…/.jason/run/runtime.json", "api_version": "v1", "cli_command": "jason" },
-  "role_memory": { "campaign_id": "cmp_…", "role": "researcher" }
+  "role_memory": { "campaign_id": "cmp_…", "role": "researcher", "project_id": "prj_…" },
+  "memory_files": {
+    "client": "…/Jason/AGENTS.md",
+    "project": "…/Jason/projects/acme-corp/AGENTS.md",
+    "campaign": "…/Jason/projects/acme-corp/campaigns/q3-marketing-leads/AGENTS.md"
+  }
 }
 ```
 
@@ -429,18 +434,30 @@ One JSON object is written to the child's standard input, which is then closed:
 
 `runtime.cli_command` is the bare word that reaches this runtime, so an agent never has to guess it.
 
-`role_memory` is the address of the role's own note for this campaign, and never the note. A document
-copied in here would be what the role believed when the attempt was launched, arriving beside the
-brief as though it were current; read through the API at the moment it is wanted, it is plainly a
-document with an age. It is null for work that is not a role — which is true by
-construction rather than by a decision taken at launch: the only command that writes an envelope is the
-one that runs `ai_role` work. What a note is worth — and why a
-launched role's memory lives in the runtime's store at all — is in the role-notes section of
+`role_memory` is the address of the role's own notes, and never a note: the campaign, the campaign's
+project and the role name its note at each of the three levels — the campaign's, the project's, and the
+client's, which names neither. A document copied in here would be what the role believed when the
+attempt was launched, arriving beside the brief as though it were current; read through the API at the
+moment it is wanted, it is plainly a document with an age. It is null for work that is not a role —
+which is true by construction rather than by a decision taken at launch: the only command that writes an
+envelope is the one that runs `ai_role` work. What a note is worth — and why a launched role's memory
+lives in the runtime's store at all — is in the role-notes section of
 [execution-profiles.md](execution-profiles.md).
 
-Every change to this envelope is additive — `cli_command` took it to version 2 and `role_memory` to
-version 3 — so a host written against an earlier version keeps working: it reads the fields it knows
-and ignores the rest.
+`memory_files` are the paths of the person's three memory files — the `AGENTS.md` of the client at the
+harness root, of the campaign's project and of the campaign ([projects.md](projects.md) says where they
+are kept) — and never their words, for the reason `role_memory` is an address. The host reads them by
+path; the runtime never reads one. Which paths are given follows one rule: a path is given when Jason
+knows the folder is its own — the recorded `folder_path` for a project and a campaign, the root marker
+for the root, which no record holds; no existence check on a recorded path, a stale one is the host's to
+find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
+reading order is the skill's, never the runtime's. A level whose folder Jason does not know is null: a
+project or a campaign with no folder recorded, a root that is not there or carries no root marker when
+the attempt is launched. Each path is absolute, as the platform writes it.
+
+Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
+version 3, and `memory_files`, with `role_memory`'s `project_id`, to version 4 — so a host written
+against an earlier version keeps working: it reads the fields it knows and ignores the rest.
 
 ### Finding the API
 

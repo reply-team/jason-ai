@@ -225,10 +225,11 @@ one operating-system user
         └── shared runtime services, registries and control API
 ```
 
-Per-campaign isolation exists inside the Runtime domain: campaign-scoped state, role memory,
-configuration overrides, work, execution lineage, plugin routes, and provider bindings must
-not leak between campaigns. Explicitly configured user-level defaults and shared Runtime
-services are shared by design.
+Per-campaign isolation exists inside the Runtime domain: campaign-scoped state, a role's notes
+at the campaign's level, configuration overrides, work, execution lineage, plugin routes, and
+provider bindings must not leak between campaigns. Explicitly configured user-level defaults,
+shared Runtime services, and a role's notes at the client's and a project's level, which cover
+every campaign of that scope, are shared by design.
 
 Multi-user shared-server operation, remote Runtime topology, and coordinated multi-machine
 execution are not part of the currently accepted architecture.
@@ -1691,8 +1692,9 @@ original chat session.
 | DEC-SKILL-001 | Skills own SDR knowledge, role reasoning, tool guidance, and guardrails — not queues, schedules, retries, or state authority. |
 | DEC-ROLE-001 | Runtime supports a coordinated/versioned role set operationally; role semantics live in skills. |
 | DEC-ROLE-002 | Arbitrary new runtime-visible roles and a public role plug-in contract are deferred. |
+| DEC-ROLE-003 | A role's memory is kept at three levels, the client's (its general craft), a project's and a campaign's, one note per role at each, through one verb family that names exactly one level per call; a reader composes them client, then project, then campaign, the lower winning where two differ; a note never outranks current state or the person's words (INV-MEM-001); the runtime composes nothing and reads none. `docs/execution-profiles.md` §8 is the contract. |
 | DEC-DISP-001 | Dispatcher is deterministic Runtime code, not an AI role. |
-| DEC-MGR-001 | Campaign manager is an AI role with isolated logical context and non-authoritative memory per campaign. |
+| DEC-MGR-001 | Campaign manager is an AI role with isolated logical context and non-authoritative memory, kept per campaign and, above it, per project and for the client (DEC-ROLE-003). |
 | DEC-MGR-002 | Management combines reactive triggers with scheduled proactive reconciliation. |
 | DEC-WORK-001 | Runtime manages heterogeneous work through a common conceptual envelope without forcing identical payloads/results. |
 | DEC-WORK-002 | Predetermined continuations proceed deterministically; semantic continuations become AI-role work. |
@@ -1758,7 +1760,7 @@ architecture is explicitly revised with new evidence.
 | INV-ROLE-001 | Dispatcher is deterministic; AI roles own semantic judgment. |
 | INV-ROLE-002 | Semantic judgment never implicitly grants approval, credentials, or execution authority. |
 | INV-MEM-001 | Role memory and the person's memory files are contextual and non-authoritative; current Runtime state wins on conflict. |
-| INV-CAMP-001 | Campaign-scoped context, work, memory, route/binding overrides, and lineage remain logically isolated; explicitly configured user-level defaults are shared by design. |
+| INV-CAMP-001 | Campaign-scoped context, work, a role's campaign-level memory, route/binding overrides, and lineage remain logically isolated; explicitly configured user-level defaults, and a role's notes at the client's and a project's level, are shared by design. |
 | INV-TOPO-001 | Exactly one Runtime state owner exists per OS user in the accepted local topology. |
 | INV-SAFE-001 | Deterministic guardrails protect Runtime-managed effects based on facts known to Runtime. |
 | INV-WORK-001 | Every Runtime-managed execution produces an accountable outcome or durable non-terminal state. |
@@ -1941,7 +1943,7 @@ are visible — none of them should be read as settled or implemented.
 | Plugin binding | Opaque, non-secret selection/configuration for the provider identity/workspace used by a plugin. | Credentials, routing, or campaign memory. |
 | Managed execution | Runtime owns an operation attempt before its external effect. | A direct external side effect or a post-factum report. |
 | External-effect report | Provenance-bearing assertion/observation about an effect already performed outside Runtime. | Retroactive approval, a managed attempt, or proof of truth. |
-| Role memory | Non-authoritative contextual continuity for an AI role within a campaign. | Runtime facts or current provider state. |
+| Role memory | Non-authoritative contextual continuity for an AI role, kept at one of three levels: the client's, a project's or a campaign's. | Runtime facts or current provider state. |
 | Artifact | A document or output referenced by Runtime or roles. | Automatically authoritative operational state. |
 
 Use qualified terms where **provider** would otherwise be ambiguous: **SDR execution

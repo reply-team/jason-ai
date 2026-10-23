@@ -7,8 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Hosting.Modules;
 
 /// <summary>
-/// What a role remembers about a campaign. Three verbs, no patch and no delete of anything but the content
-/// itself — a note is replaced whole, and clearing one is writing an empty document.
+/// What a role remembers, at one of three levels: a campaign's, a project's, or the client's. Three verbs for all
+/// three, each call naming one level, no patch and no delete of anything but the content itself — a note is replaced
+/// whole, and clearing one is writing an empty document.
 /// </summary>
 public static class RoleNoteModule
 {

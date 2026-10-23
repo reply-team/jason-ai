@@ -38,6 +38,9 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     /// <summary>What a level's <c>CLAUDE.md</c> holds when the runtime writes one: the import of the level's <c>AGENTS.md</c>, and nothing else.</summary>
     public const string ClaudeImport = "@AGENTS.md";
 
+    /// <summary>A level's memory file, the person's own words: made empty where absent, and never opened.</summary>
+    public const string MemoryFile = "AGENTS.md";
+
     /// <summary>How many numbered leaves are tried for one campaign before the disk is said to have none free.</summary>
     private const int MaxNumbered = 999;
 
@@ -77,6 +80,30 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
             }
 
             return HarnessRoot.Of(options, home.Directory);
+        }
+    }
+
+    /// <summary>
+    /// The root as the settings in force name it, when it is there with its root marker; null when it is not — nothing
+    /// made it yet, the folder there has no marker or one of anything else, the disk will not say, or no settings were
+    /// ever in force. Only the marker is read: nothing is made, taken or written, and no memory file is opened. No record
+    /// holds the root, so its marker is the one way to know the folder is Jason's.
+    /// </summary>
+    public string? MarkedRoot()
+    {
+        if (!settings.TryCurrent(out var options))
+        {
+            return null;
+        }
+
+        var root = HarnessRoot.Of(options, home.Directory);
+        try
+        {
+            return HarnessMarker.In(root)?.Names(HarnessMarker.Root, null) == true ? root : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
@@ -388,7 +415,7 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     private static void WriteFilesIfAbsent(string folder)
     {
         TryCreate(Path.Combine(folder, "CLAUDE.md"), System.Text.Encoding.UTF8.GetBytes(ClaudeImport));
-        TryCreate(Path.Combine(folder, "AGENTS.md"), []);
+        TryCreate(Path.Combine(folder, MemoryFile), []);
     }
 
     /// <summary>

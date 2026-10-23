@@ -350,12 +350,21 @@ when `jason project link` makes its project's.
 Each message names the folder, so the person who reads it knows where to look. No folder's path reaches the runtime's
 log: a campaign's folder is named from the campaign's name.
 
-## 9. What the schema holds for later
+## 9. A role's notes, by project
 
-- **A role's own notes at three levels.** A role note is at one level: the client's, naming no campaign and no project —
-  a role's general craft; a project's; or a campaign's. There is one per role at each, and a note never names both a
-  campaign and a project: a campaign's project is the campaign's, and it is never stored twice. A reader composes them
-  in that order — the client's, then the project's, then the campaign's — and where two say different things the lower
-  wins: the project's over the client's, the campaign's over both. Nothing writes a note at the client's or a project's
-  level yet; the operations on notes still name a campaign ([execution profiles](execution-profiles.md) describe the
-  notes a role keeps).
+A role keeps its own notes at three levels, one per role at each: the client's, which is its general craft for all of
+this installation's work and names neither a campaign nor a project; a project's; and a campaign's
+([execution profiles](execution-profiles.md) describe the notes a role keeps). A note never names both a campaign and a
+project: a campaign's project is the campaign's, and it is never stored twice. A reader composes them in one order — the
+client's, then the project's, then the campaign's — and where two say different things the lower wins: the project's
+over the client's, the campaign's over both. The runtime composes nothing; it answers each level on its own.
+
+```sh
+jason rolenote set --role copywriter --project prj_01K7QN0000000000000000ACME --note '{"voice":"short sentences; the product named once"}'
+jason rolenote get --role copywriter --project prj_01K7QN0000000000000000ACME
+jason rolenote list --project prj_01K7QN0000000000000000ACME --human
+```
+
+A project's note is said in the chronicle as a `role_note_set` line of the installation that names the project, and the
+client's as one that names neither; like a campaign's, it says the note's size and hash and never a word of it. Naming no
+campaign, neither summons a review, whatever `Manager:Triggers` names.

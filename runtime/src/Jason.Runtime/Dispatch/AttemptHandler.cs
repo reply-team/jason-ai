@@ -83,7 +83,10 @@ public static class AttemptHandler
         await using var scope = scopes.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<JasonDbContext>();
+        // The campaign's project with it: a role is told the project its notes are kept under, and where the folders
+        // recorded for the two are, as they stand when the attempt starts.
         var item = await db.WorkItems.WithNavigation().Include(w => w.Attempts)
+            .Include(w => w.Campaign!).ThenInclude(c => c.Project)
             .FirstOrDefaultAsync(w => w.Id == work.WorkItemId)
             .ConfigureAwait(false);
         var attempt = item?.Attempts.FirstOrDefault(a => a.Id == work.AttemptId);
@@ -359,5 +362,8 @@ public static class AttemptHandler
         item.Operation,
         plan,
         agent?.Deny,
-        agent?.CliCommand);
+        agent?.CliCommand,
+        item.Campaign.Project?.PublicId,
+        item.Campaign.Project?.FolderPath,
+        item.Campaign.FolderPath);
 }

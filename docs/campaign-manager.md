@@ -217,8 +217,8 @@ the answer, the chosen option, who decided and when.
 
 A reference is `kind:id`, and the kinds are `work_item`, `attempt`, `journal_entry`, `report` and
 `approval` — the entities that have a public identifier and a campaign. A role note is deliberately not
-one of them: a note is addressed by a campaign and a role rather than by an id, and both are in hand
-wherever a question is read.
+one of them: a note is addressed by its level — a campaign, a project, or neither for the client's — and a
+role rather than by an id, and both are in hand wherever a question is read.
 
 ### The verbs
 

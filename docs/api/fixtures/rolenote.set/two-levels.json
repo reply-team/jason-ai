@@ -1,0 +1,32 @@
+{
+  "operation": "rolenote.set",
+  "case": "two-levels",
+  "request": {
+    "campaign_id": "cmp_1",
+    "project_id": "prj_1",
+    "role": "researcher",
+    "note": {
+      "craft": "anything"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: campaign_id: not_allowed; project_id: not_allowed.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "campaign_id",
+          "code": "not_allowed",
+          "message": "a note is at one level: name campaign_id or project_id, not both, or neither for the client's."
+        },
+        {
+          "field": "project_id",
+          "code": "not_allowed",
+          "message": "a note is at one level: name campaign_id or project_id, not both, or neither for the client's."
+        }
+      ]
+    }
+  }
+}

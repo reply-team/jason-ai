@@ -278,20 +278,20 @@ public class RoleNoteHostileInputTests
     }
 
     /// <summary>
-    /// A campaign's memory is asked for one campaign at a time. A listing with no campaign is a validation
-    /// failure rather than every note in the installation, which is a way to sweep up what roles have written
-    /// about people.
+    /// Memory is asked for one level at a time. A listing that names no campaign and no project is the client's level —
+    /// the roles' general craft — and never every note in the installation, which would be a way to sweep up what roles
+    /// have written about people.
     /// </summary>
     [Fact]
-    public async Task A_listing_without_a_campaign_is_refused_rather_than_answering_with_all_of_them()
+    public async Task A_listing_without_a_campaign_is_the_client_s_level_rather_than_all_of_them()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var campaign = await RoleNoteTests.NewCampaignAsync(api);
         await RoleNoteTests.SetAsync(api, campaign, "researcher", new { held = "something" });
 
-        var error = await api.PostErrorAsync(Operations.RoleNoteList, new { limit = 100 }, HttpStatusCode.BadRequest, Ct);
+        var page = await api.PostOkAsync<Page<RoleNoteSummaryDto>>(Operations.RoleNoteList, new { limit = 100 }, Ct);
 
-        Assert.Equal("validation_failed", error.Code);
+        Assert.True(page.Items.Count == 0, $"A listing at the client's level carried another level's notes: {string.Join(", ", page.Items)}");
     }
 
     /// <summary><c>{"filler":"…"}</c> — two braces, the quoted key, the colon and two quotes around the value.</summary>
