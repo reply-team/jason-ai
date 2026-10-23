@@ -121,23 +121,26 @@ public partial class InteractiveSkillTests
     /// work, and the keys they carry. A session file that printed one would be a second copy of those rules, which is how
     /// one of the two ends up wrong — and one that printed <c>rolenote set</c> would write the launched planner's memory
     /// from a conversation that planner was never in. Printed means inside any fence, and written whole in a code span
-    /// in the prose as well: a command is as typeable from either.
+    /// in the prose as well: a command is as typeable from either. One write is the session's own: the person's answer
+    /// about who writes and how the company sounds, set under their name. The opening sentence names a verb for the
+    /// person to run, and is held whole by a test of its own, so it is the one place that verb may stand.
     /// </summary>
     [Fact]
-    public async Task The_planner_in_a_persons_session_prints_only_reads()
+    public async Task The_planner_in_a_persons_session_prints_only_reads_and_the_persons_own_preferences()
     {
         var file = SkillPack.Find("planner-in-session").File;
         var printed = SkillPack.PrintedCommands(file);
         Assert.True(printed.Count > 0, "planner-in-session prints nothing, so this guard holds nothing.");
 
-        var inline = InlineCommand().Matches(Flattened("planner-in-session")).Select(match => match.Groups[1].Value);
+        var prose = Flattened("planner-in-session").Replace(OpeningSentence, " ", StringComparison.Ordinal);
+        var inline = InlineCommand().Matches(prose).Select(match => match.Groups[1].Value);
         foreach (var command in printed.Concat(inline))
         {
             Assert.True(
-                await IsReadAsync(command),
-                $"planner-in-session prints '{command}', which is not a read of the Runtime API. What changes campaign "
-                + "state is managed-campaign-work's to print, and what is about the installation is "
-                + "operating-the-installation's.");
+                await IsReadOrThePersonsPreferenceAsync(command),
+                $"planner-in-session prints '{command}', which is neither a read of the Runtime API nor a preference set "
+                + "under a person's name. What changes campaign state is managed-campaign-work's to print, and what is "
+                + "about the installation is operating-the-installation's.");
         }
     }
 
@@ -154,16 +157,159 @@ public partial class InteractiveSkillTests
     [InlineData("jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{}'", false)]
     [InlineData("jason workitem heartbeat wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", false)]
     [InlineData("jason runtime status", false)]
+    [InlineData("jason project link prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", false)]
+    [InlineData("jason preference list", true)]
+    [InlineData("jason preference set tone_of_voice --value '{\"summary\":\"Plain.\"}' --actor human:Marta", true)]
+    [InlineData("jason preference set tone_of_voice --value '{\"summary\":\"Plain.\"}'", false)]
+    [InlineData("jason preference set tone_of_voice --value '{\"summary\":\"Plain.\"}' --actor role:planner", false)]
+    [InlineData("jason preference unset tone_of_voice --actor human:Marta", false)]
     public async Task What_counts_as_a_read_is_what_the_program_says_reads(string command, bool read) =>
         Assert.True(
-            await IsReadAsync(command) == read,
-            $"'{command}' is {(read ? "refused, and it is a read of the Runtime API" : "taken for a read, and it is not one")}.");
+            await IsReadOrThePersonsPreferenceAsync(command) == read,
+            $"'{command}' is {(read ? "refused, and it is a read of the Runtime API or a preference set under a person's name" : "let through, and it is neither a read nor a preference set under a person's name")}.");
 
-    private static async Task<bool> IsReadAsync(string command)
+    private static async Task<bool> IsReadOrThePersonsPreferenceAsync(string command)
     {
         var words = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length > 2 && words[0] == "jason" && words[1] == "preference" && words[2] == "set")
+        {
+            return PersonsActor().IsMatch(command);
+        }
+
         return words.Length > 2 && words[0] == "jason" && await ProgramVerbs.IsReadAsync(words[1], words[2]);
     }
+
+    /// <summary>
+    /// The planner's first words, before its first question: where the person's files live and how to change that.
+    /// Install says the same; a session that opened without it would keep the one fact a person needs to read and edit
+    /// what Jason learns about their business — the place — to itself. Held whole, and as the first section after the
+    /// shared judgement, so a sentence moved down below the questions or reworded fails here.
+    /// </summary>
+    [Fact]
+    public void The_planners_first_words_say_where_the_files_live_and_how_to_change_that()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var end = text.IndexOf(CraftBlock.End, StringComparison.Ordinal);
+        var first = end < 0 ? -1 : text.IndexOf("\n## ", end, StringComparison.Ordinal);
+        var heading = first < 0 ? string.Empty : text[(first + 1)..text.IndexOf('\n', first + 1)];
+        Assert.True(heading == "## Your first words", $"The first section after the shared judgement is '{heading}', and it must be '## Your first words'.");
+
+        var next = text.IndexOf("\n## ", first + 1, StringComparison.Ordinal);
+        var section = Whitespace().Replace(text[first..(next < 0 ? text.Length : next)], " ");
+        Assert.True(
+            section.Contains(OpeningSentence, StringComparison.Ordinal),
+            $"The section 'Your first words' reads '{section.Trim()}', without the sentence '{OpeningSentence}'.");
+        Assert.Contains("in place of the path", section, StringComparison.Ordinal);
+        Assert.Contains("Ask nothing about the place", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The opening asks in the order a real start needs, and the shared judgement says that order once for both seats:
+    /// who writes first, the first message on one real person last and confirmed before anything is sent. A plan made
+    /// before the sender is known writes as nobody; a first message nobody saw is sent unseen to the first person on the
+    /// list. Each step is said once in the paragraph, so a step moved or dropped fails here.
+    /// </summary>
+    [Theory]
+    [InlineData("planner-in-session")]
+    [InlineData("planner")]
+    public void The_planners_judgement_opens_a_first_campaign_in_the_order_a_real_start_needs(string skill)
+    {
+        var block = CraftBlock.Extract(SkillPack.Find(skill).File) ?? string.Empty;
+        const string Lead = "**A first campaign opens in the order a real start needs.**";
+        var from = block.IndexOf(Lead, StringComparison.Ordinal);
+        Assert.True(from >= 0, $"The planner's judgement in '{skill}' no longer says '{Lead}'.");
+        var to = block.IndexOf("\n\n", from, StringComparison.Ordinal);
+        var paragraph = Whitespace().Replace(block[from..(to < 0 ? block.Length : to)], " ");
+
+        var steps = new[]
+        {
+            "Who the messages are written as comes first",
+            "what is sold",
+            "whom this campaign sells to",
+            "a list the person brings or from a search, and by which principle",
+            "the channels",
+            "the clean-up of a brought list",
+            "how the company sounds",
+            "the first message, written for one real person",
+        };
+        var at = steps.Select(step => paragraph.IndexOf(step, StringComparison.Ordinal)).ToList();
+        var once = steps.All(step => paragraph.IndexOf(step, StringComparison.Ordinal) == paragraph.LastIndexOf(step, StringComparison.Ordinal));
+        Assert.True(
+            once && at.All(index => index >= 0) && at.Zip(at.Skip(1)).All(pair => pair.First < pair.Second),
+            $"The opening names its steps at [{string.Join(", ", at)}] for [{string.Join(" | ", steps)}]: each must be said "
+            + $"once, in that order. It reads: '{paragraph.Trim()}'.");
+
+        Assert.Contains("confirms it before anything is sent", paragraph, StringComparison.Ordinal);
+        Assert.Contains("never as a form", paragraph, StringComparison.Ordinal);
+        Assert.Contains("nothing that would write to anybody is settled while either is unknown", paragraph, StringComparison.Ordinal);
+        Assert.Contains("is a rule for the messages after it, so it is kept at the level it belongs to", paragraph, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Who writes and how the company sounds are the person's word: read before the first question, asked when the order
+    /// reaches each, and set on the answer under the person's own name — a preference is refused from anything but a
+    /// person, and one set under another name records a word nobody gave. Nothing is agreed or created while either has
+    /// no value, so the section stands before the agreement, and the read before the two sets.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_has_both_preferences_before_it_plans_and_sets_them_as_the_persons()
+    {
+        var skill = Flattened("planner-in-session");
+        Assert.Contains("Until both have a value, nothing is agreed and nothing is created.", skill, StringComparison.Ordinal);
+        Assert.Contains("under their own name as the actor", skill, StringComparison.Ordinal);
+        Assert.Contains("Ask for the forms; a name does not tell you them.", skill, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("planner-in-session").File).ToList();
+        var read = printed.IndexOf("jason preference list");
+        var sender = printed.FindIndex(line => line.StartsWith("jason preference set sender.identity ", StringComparison.Ordinal) && PersonsActor().IsMatch(line));
+        var tone = printed.FindIndex(line => line.StartsWith("jason preference set tone_of_voice ", StringComparison.Ordinal) && PersonsActor().IsMatch(line));
+        Assert.True(
+            read >= 0 && sender > read && tone > sender,
+            $"planner-in-session prints the preferences' read at {read}, the sender's set at {sender} and the tone's at {tone}: "
+            + "the read comes first, then each set under a person's name, the sender's before the tone's.");
+
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var headings = new[]
+        {
+            "## Your first words",
+            "## Who writes, and how the company sounds",
+            "## Take the brief as it comes",
+            "## Agree the direction before anything is created",
+            "## Commit it",
+            "## The first message, before anything is sent",
+            "## When the campaign already exists",
+        };
+        var order = headings.Select(heading => text.IndexOf("\n" + heading + "\n", StringComparison.Ordinal)).ToList();
+        Assert.True(
+            order.All(index => index >= 0) && order.Zip(order.Skip(1)).All(pair => pair.First < pair.Second),
+            $"planner-in-session has its sections at [{string.Join(", ", order)}] for [{string.Join(" | ", headings)}]: each "
+            + "must be there, in the order the opening runs.");
+    }
+
+    /// <summary>
+    /// The first message is seen as it would go out and confirmed before anything is sent, and confirming its words
+    /// approves no send. What the person says about it that holds beyond it is a standing rule, kept in their own memory
+    /// file at the level it belongs to — never in a preference's value, and never in a role's note, which is that role's
+    /// own and written from no conversation it was in.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_shows_the_first_message_and_keeps_a_standing_rule_at_its_level()
+    {
+        var skill = Flattened("planner-in-session");
+        Assert.Contains("show it to the person as it would go out. Change it with them until they confirm it.", skill, StringComparison.Ordinal);
+        Assert.Contains("Their confirmation is of the words; a send still waits for its own approval.", skill, StringComparison.Ordinal);
+        Assert.Contains("into their memory file at the level it belongs to: the client's when it holds for all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign alone", skill, StringComparison.Ordinal);
+        Assert.Contains("nor a role's note, which is that role's own", skill, StringComparison.Ordinal);
+
+        // A launched planner cannot write the person's file and raises the rule as a decision instead; a session that did
+        // not know it is the one that writes it would leave that rule in a decision nobody carries to the file.
+        Assert.Contains("A launched planner that was given such a rule raises it as a decision that names its file; once the person says yes, you write it there the same way.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>The sentence the planner opens with, as the install says it.</summary>
+    private const string OpeningSentence =
+        "Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and "
+        + "campaign, in `C:\\Users\\…\\Jason`; to keep them somewhere else, set `Harness:Root` and run `jason project link`.";
 
     /// <summary>
     /// Each rule is written once. The session file owns the seat; the method is campaign-planning's, the commit
@@ -241,6 +387,10 @@ public partial class InteractiveSkillTests
 
     [GeneratedRegex(@"`(jason [^`]+)`")]
     private static partial Regex InlineCommand();
+
+    /// <summary>An actor that is a person with a name.</summary>
+    [GeneratedRegex(@"(?<!\S)--actor human:[^\s']+")]
+    private static partial Regex PersonsActor();
 
     /// <summary>A session giving an approval: on somebody's behalf, or "approve it" here, itself or for them.</summary>
     [GeneratedRegex(@"\bon (the person's|their|his|her|somebody's|someone's) behalf\b|\bapprove (it|them|this|that|the \w+) (here|now|yourself|for (them|the person|him|her))\b", RegexOptions.IgnoreCase)]

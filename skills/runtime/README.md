@@ -39,8 +39,10 @@ description that promises everything matches nothing.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 - [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
-  conversation about a campaign: taking a brief as it comes, what stays a quick look, what is agreed with the
-  person before anything is created, and when it becomes campaign work. The session file of the planner, below.
+  conversation about a campaign: its first words on where the person's files live, an opening in the order a real
+  start needs, with who writes and how the company sounds set as the person's word, taking a brief as it comes, what
+  stays a quick look, what is agreed with the person before anything is created, when it becomes campaign work, and
+  the first message seen before anything is sent. The session file of the planner, below.
 
 ### Installing them
 
@@ -84,8 +86,8 @@ for a role that sits with a person, the judgement it shares with its session fil
   woken, what it reads and in which order, what it may decide alone, how it asks a person the one question it
   cannot answer, and the line it leaves in the chronicle every time.
 - [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
-  before it plans, what this build stores of a plan and what it does not, and how a horizon becomes work items
-  a dispatcher will claim.
+  before it plans, the order a first campaign opens in, what this build stores of a plan and what it does not, and
+  how a horizon becomes work items a dispatcher will claim.
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, where the copy goes when it is written, and why writing it is not
   sending it.

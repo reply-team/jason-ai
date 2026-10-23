@@ -190,6 +190,16 @@ Do not send a test notification through the operating system's own tools, and do
 shows, and what it leaves in the account, is the runtime's to write and `jason uninstall`'s to remove. Do not disturb
 is invisible to Jason: a toast sent then goes to the notification center without a banner, and is recorded delivered.
 
+## Where the person's files live
+
+What the person tells Jason about their business in their own words is kept in plain files under one folder, the
+harness root: `Jason` in the home directory, unless `Harness:Root` in `~/.jason/config/settings.json` names another
+folder as an absolute path; `jason runtime status` says which root is in force. Move it only when the person asks:
+move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it:
+`jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the
+project by the marker there. Nothing moves by itself, and a campaign created in a project not linked again is
+refused until it is.
+
 ## The plugins it has loaded and where work goes
 
 A plugin is a package of provider operations. A route says which plugin performs which operation for which

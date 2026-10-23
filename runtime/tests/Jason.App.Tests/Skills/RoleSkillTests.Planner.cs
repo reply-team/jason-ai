@@ -120,4 +120,46 @@ public partial class RoleSkillTests
         // manager's.
         Assert.Contains("The manager keeps the work moving; you do not watch it.", skill, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void The_launched_planner_asks_what_the_opening_needs_through_a_decision()
+    {
+        var skill = Flattened("planner");
+
+        // The opening's order is the shared judgement's; a launched planner has nobody to ask in a conversation. One that
+        // planned a first message while nobody had said who writes it would guess the sender from an account's name.
+        Assert.Contains("The order the judgement above gives a first campaign is yours as well", skill, StringComparison.Ordinal);
+        Assert.Contains("raise one decision that names what is missing, and answer with the plan up to that step", skill, StringComparison.Ordinal);
+        Assert.Contains("Who writes and how they sound are the person's word, never a guess", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A standing rule the person gives has one route from a launched planner, whatever its level: a decision that
+    /// carries the rule in the person's words and names the memory file it belongs in, which the person or their own
+    /// session writes. The planner's note is read by the planner alone, so a rule kept there never reaches the role that
+    /// writes the next message; campaign context is the direction, not the person's file; and a launched role writes no
+    /// file of theirs. The note may hold only that the decision was raised. Held whole, so a second route, a note made the
+    /// rule's home again, or a dropped "until then" fails here.
+    /// </summary>
+    [Fact]
+    public void The_launched_planner_raises_a_standing_rule_as_a_decision_and_keeps_it_nowhere_else()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        const string Lead = "**A standing rule reaches the person's file through the person.**";
+        var from = text.IndexOf(Lead, StringComparison.Ordinal);
+        Assert.True(from >= 0, $"roles/planner no longer says '{Lead}'.");
+        var to = text.IndexOf("\n\n", from, StringComparison.Ordinal);
+
+        Assert.Equal(
+            "**A standing rule reaches the person's file through the person.** When the person gives a rule for the messages "
+            + "after one — \"always include one proof point\" — you write no file of theirs, at any level, and you do not put "
+            + "the rule into campaign context. Raise one decision that gives the rule in the person's own words and names the "
+            + "file it belongs in: the client's, the project's or the campaign's `AGENTS.md`. The person, or their own session "
+            + "the next time they sit with Jason, writes it there; until then the messages that follow do not carry it. Your "
+            + "note may say that you raised that decision for that rule, so that it is not raised twice, and never holds the "
+            + "rule itself.",
+            Whitespace().Replace(text[from..(to < 0 ? text.Length : to)], " ").Trim());
+
+        Assert.DoesNotContain("goes into your note at the level it belongs to", Flattened("planner"), StringComparison.Ordinal);
+    }
 }

@@ -5,6 +5,19 @@ namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>
+    /// Moving the harness root is the installation's act, and the planner's first words send the person here for it. It
+    /// is a change of the setting and then a link of each project whose folder moved, in that order: nothing moves by
+    /// itself, and a session that only edited the setting would leave every project recorded where it no longer is.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_moves_the_root_by_the_setting_and_then_a_link_per_project()
+    {
+        var skill = Flattened("operating-the-installation");
+        Assert.Contains("Move it only when the person asks: move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it: `jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the project by the marker there.", skill, StringComparison.Ordinal);
+        Assert.Contains("Nothing moves by itself", skill, StringComparison.Ordinal);
+    }
+
     /// <summary>How every place that brings a session to a stop points at the one rule for it.</summary>
     private const string StopPointer = "ask first, as \"Starting and stopping it\" says";
 
