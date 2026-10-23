@@ -109,7 +109,7 @@ independent things are two pull requests, even when they were written in one sit
 first, its branch is cut from the first's and rebased onto the release branch once the first has merged; it is
 reviewed as the difference from the first and merges after it. The reason is the review: a reader who finds a problem
 in one half must not hold up the other, and the commit on the release branch should say one thing. A pull request that
-has grown two things is split before it is marked ready, not after a review has found it.
+has grown two things is split before it is read, not after a review has found it.
 
 **The branch is named after the story it implements**, `REPLY-<key>-<slug>`, the key first. That name is the one
 place a tracker key is allowed: it is how the tracker links the pull request, and it never reaches a release branch or
@@ -118,12 +118,13 @@ document — is named after the standing story kept for such changes.
 
 **Tests by stage.** A commit runs the critical tier locally before it is pushed — the tests that carry the `Critical`
 trait, about two minutes on a workstation — and never the whole suite, which takes seventeen minutes there and hours
-over a pull request's life. A pull request that touches `runtime/` runs the whole suite locally once before it is
-marked ready, in Release, with the log written to a file; one that changes Markdown only skips that. On CI, a draft's
+over a pull request's life. A branch that touches `runtime/` runs the whole suite locally once, in Release, with the log
+written to a file, while it is read (the paragraph below); one that changes Markdown only skips that. On CI, a draft's
 push runs the Linux set: the version check, the linux-x64 build and the critical tier, an update on linux-x64, the
-install script on Ubuntu and the UI's checks; it keeps no record of the tree it tested. Marking a pull request into a
-release branch ready runs the Linux set with the critical tier on linux-x64; the whole suite runs once per release, on
-the release's pull request, and locally before ready for a change under `runtime/`.
+install script on Ubuntu and the UI's checks; it keeps no record of the tree it tested, and the release's pull request
+is the one draft this flow opens. Marking a pull request into a release branch ready runs the Linux set with the
+critical tier on linux-x64; the whole suite runs once per release, on the release's pull request, and locally, once per
+branch, while the branch is read, for a change under `runtime/`.
 The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
 and that run is the release's gate; a pull request into `main` from any other branch — a document, a change to the
 pipeline — runs the Linux set and reports the rest as skipped by rule. The version pull request into `main` runs the
@@ -142,25 +143,28 @@ theory, or removes test methods rewrites the table in the same commit, from the 
 leg that tests the tier alone is named `linux-x64 (critical tier)`, so only a ready run reports the `linux-x64` that a
 ruleset requires. `CiRunsTests` holds the rule the workflow carries.
 
-**Build on a branch, open the pull request as a draft when the work is done.** A branch is pushed as the work goes, and
-no pull request is opened while it is built: the critical tier runs locally for each commit before it is pushed, and a
-pushed branch without a pull request runs nothing on CI, where an open draft would run the Linux set on every push.
-When the work is done the pull request opens as a draft, and opening it runs the Linux set once, whose test leg is the
-critical tier on linux-x64. Then come the two readings below and the fixes they asked for, as commits on the draft.
-Mark it ready once, after that, and the ready run is the Linux set with the critical tier on linux-x64; the whole suite
-runs once per release, on the release's pull request into `main`, and locally before ready for a change under
-`runtime/`. On the release's pull request, a push after ready that changes nothing but documentation since the tree
-the last full run tested — Markdown outside `runtime/`, `.github/` and `plugins/` that no build compiles and no test
-runs as code — runs the Linux set and reports the rest as skipped; any other push after ready runs the full run again. The ruleset on a release branch lets a pull request
-merge only when the Linux set reports green at the head that merges; the ruleset on `main` waits for every check.
+**Build on a branch, open the pull request after the readings.** A branch is pushed as the work goes, and no pull
+request is opened while it is built or read: the critical tier runs locally for each commit before it is pushed, and a
+pushed branch without a pull request runs nothing on CI, where an open pull request would run the Linux set on every
+push. When the work is done, the two readings below read the pushed branch and its comparison against the release
+branch, and the fixes they asked for land as commits on it, each with the tier. A change under `runtime/` runs the whole
+suite locally once, in Release, with the log written to a file, while the readers read, and that run is green before the
+pull request opens. Then the pull request opens, ready, and its one run is the Linux set with the critical tier on
+linux-x64; it merges on green. The reason is that a pull request open before that is read by nobody and waited for by
+nobody, and every push to it would run CI for no one. The whole suite runs once per release, on the release's pull
+request into `main`. On the release's pull request, a push after ready that changes nothing but documentation since the
+tree the last full run tested — Markdown outside `runtime/`, `.github/` and `plugins/` that no build compiles and no
+test runs as code — runs the Linux set and reports the rest as skipped; any other push after ready runs the full run
+again. The ruleset on a release branch lets a pull request merge only when the Linux set reports green at the head that
+merges; the ruleset on `main` waits for every check.
 
-**Two readers at ready.** Before a pull request into a release branch is marked ready it is read twice: by the session
-that leads the release, which knows the scope and what the release's other pull requests do, and by a reviewer with no
-part in the change, started fresh for this reading, whose model and effort follow the size of the change — a document
-reads cheaply, a migration, a contract or a change to a guard reads at the highest effort. Each records in the pull
-request what it found and that it approves; what was found is fixed before ready. The pull request merges into its
-release branch on both approvals and a green run, and the session that leads the release merges it. Nothing is
-reviewed on commits; a complex commit may be read by a peer when the lead asks.
+**Two readers before the pull request.** Before a pull request into a release branch opens, its branch is read twice: by
+the session that leads the release, which knows the scope and what the release's other pull requests do, and by a
+reviewer with no part in the change, started fresh for this reading, whose model and effort follow the size of the
+change — a document reads cheaply, a migration, a contract or a change to a guard reads at the highest effort. Each says
+what it found and that it approves, and the pull request carries both when it opens; what was found is fixed before it
+opens. The pull request merges into its release branch on both approvals and a green run, and the session that leads the
+release merges it. Nothing is reviewed on commits; a complex commit may be read by a peer when the lead asks.
 
 **The release review.** The pull request from a release branch into `main` is read by the architecture session alone,
 its sub-agents reading the diff by blocks: the release against its scope and the direction, the seams, the hygiene of
