@@ -75,7 +75,10 @@ public static class RouteChecks
     /// <summary>
     /// What the plugin's own binding schema makes of this binding: empty when it objects to nothing, which
     /// includes a plugin that declares no schema and therefore asks for nothing. A route carrying no binding at
-    /// all is measured too — a plugin whose schema requires one is unusable without it.
+    /// all is measured as the empty object — it says nothing, which is what an empty binding says — so a plugin
+    /// requires a binding exactly when its schema refuses <c>{}</c>, and is unusable without one then. Measured as
+    /// itself, no binding would fail every schema's <c>type: object</c>, and a plugin whose every field is
+    /// optional could not be routed to without an empty binding nobody needs to write.
     /// </summary>
     /// <remarks>
     /// A pattern of that schema that did not finish matching, twice, comes back as
@@ -87,6 +90,6 @@ public static class RouteChecks
         ArgumentNullException.ThrowIfNull(plugin);
         ArgumentNullException.ThrowIfNull(timing);
 
-        return plugin.Manifest.Binding is { } schema ? SchemaValidator.Validate(binding, schema, timing) : [];
+        return plugin.Manifest.Binding is { } schema ? SchemaValidator.Validate(binding ?? [], schema, timing) : [];
     }
 }

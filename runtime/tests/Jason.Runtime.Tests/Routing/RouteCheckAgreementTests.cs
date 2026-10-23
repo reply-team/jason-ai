@@ -36,6 +36,17 @@ public class RouteCheckAgreementTests
     };
 
     /// <summary>
+    /// A binding schema whose every field is optional and which declares nothing else, the shape a plugin that can
+    /// act on its tool's own defaults declares: a route with no binding asks it for nothing it did not allow.
+    /// </summary>
+    private static readonly JsonObject Optional = new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["properties"] = new JsonObject { ["workspace"] = new JsonObject { ["type"] = "string" } },
+    };
+
+    /// <summary>
     /// The one bridge between the two vocabularies: every verdict activation can reach about a route, and the
     /// attempt error the claim answers the same fact with. Nothing else may translate between them.
     /// </summary>
@@ -73,6 +84,19 @@ public class RouteCheckAgreementTests
 
         ["the binding is exactly what the plugin's schema asks for"] =
             new([Provider(binding: Schema)], Routed, new JsonObject { ["workspace"] = "west" }, null),
+
+        // No binding is measured as the empty object: refused only by a schema that refuses `{}`.
+        ["the route carries an empty binding where the plugin requires one"] =
+            new([Provider(binding: Schema)], Routed, [], RouteProblemCodes.BindingInvalid),
+
+        ["the route carries no binding where the plugin's schema requires nothing"] =
+            new([Provider(binding: Optional)], Routed, null, null),
+
+        ["the route carries an empty binding where the plugin's schema requires nothing"] =
+            new([Provider(binding: Optional)], Routed, [], null),
+
+        ["the binding names a field the plugin's schema does not declare"] =
+            new([Provider(binding: Optional)], Routed, new JsonObject { ["workspaces"] = "west" }, RouteProblemCodes.BindingInvalid),
     };
 
     public static TheoryData<string> EveryQuestionBothGatesAsk() => [.. Shared.Keys];
@@ -95,6 +119,30 @@ public class RouteCheckAgreementTests
         // The case says what activation answers, so that a pair agreeing for the wrong reason cannot pass.
         Assert.Equal(scenario.Activation, activation?.Code);
         Assert.Equal(Translated(activation?.Code), claim?.Code);
+    }
+
+    /// <summary>
+    /// A route with no binding is measured as the empty object, so where a plugin's schema refuses that, both gates
+    /// say the route carries none — never that a binding is the wrong kind of value, since there is no binding at all.
+    /// </summary>
+    [Fact]
+    public void Both_gates_say_a_route_carries_no_binding_where_the_plugin_requires_one()
+    {
+        var plugins = Set([Provider(binding: Schema)]);
+
+        var activation = RouteActivator.Check(plugins, Operation, Routed, binding: null)!;
+        var claim = ProviderOpPreflight.Routable(plugins, Contract, new Route(Routed, null, null))!;
+
+        foreach (var message in new[] { activation.Message, claim.Message })
+        {
+            Assert.True(
+                message is not null
+                    && message.Contains("carries no binding", StringComparison.Ordinal)
+                    && !message.Contains("Expected object", StringComparison.Ordinal),
+                $"a route with no binding was refused as: {message}");
+        }
+
+        Assert.Equal("/workspace", Assert.Single(claim.Details!).Field);
     }
 
     /// <summary>

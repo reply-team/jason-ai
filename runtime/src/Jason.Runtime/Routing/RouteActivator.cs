@@ -200,7 +200,9 @@ public sealed class RouteActivator(
         {
             return new RouteProblem(
                 RouteProblemCodes.BindingInvalid,
-                $"the binding does not satisfy what '{plugin.Manifest.Id}' declares a route to it must carry: {Where(wrong[0].Pointer)}{wrong[0].Message}");
+                binding is null
+                    ? $"the route carries no binding, and '{plugin.Manifest.Id}' declares that a route to it must carry one: {Where(wrong[0].Pointer)}{wrong[0].Message}"
+                    : $"the binding does not satisfy what '{plugin.Manifest.Id}' declares a route to it must carry: {Where(wrong[0].Pointer)}{wrong[0].Message}");
         }
 
         // Not one of the route problems: a pattern that did not finish says nothing about the binding, so the answer

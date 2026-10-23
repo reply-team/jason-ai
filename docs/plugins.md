@@ -135,9 +135,12 @@ workspace, which mailbox. It never carries the credential: the plugin reaches th
 environment variables the user granted it, and a binding is written and read by the people who
 operate the installation, so a field named like a secret is refused rather than filled in. Every route
 to this plugin is held to that schema — at activation, and again at the claim against the package in
-front of it — so a route that does not satisfy it never reaches your code. The key is optional and
-additive, so `manifest_version` stays `1`. §7 is the same key from the plugin's side: what a binding
-is for, and what reaches the code as `context.binding`.
+front of it — so a route that does not satisfy it never reaches your code. A route with no binding is
+measured against the schema as the empty object and reaches your code as `null`, so a plugin requires a binding
+exactly when its schema refuses `{}`. It is still a route of its own: it has no identity where `{}` has one,
+so trading one for the other is a change of account in provenance, in event sources and in reads by the
+account a person was learned in. The key is optional and additive, so `manifest_version` stays `1`. §7 is the
+same key from the plugin's side: what a binding is for, and what reaches the code as `context.binding`.
 
 An invocation's effective timeout and memory are `min(what the manifest asks for, the installation's
 ceiling)`, and a caller's own budget may lower the timeout further, never raise it. A manifest with
@@ -353,7 +356,7 @@ no CLR**; `eval` and `new Function` do not compile. Everything a plugin can reac
 ```
 
 `binding` is the caller's non-secret note to the plugin, in the shape the manifest's `binding` schema
-declares (§3 and §7), at most 64 KiB; `attempt_id`,
+declares (§3 and §7), or `null` when the route carries none, at most 64 KiB; `attempt_id`,
 `attempt_number`, `work_item_id` and `campaign_id` are filled once provider operations are routed —
 `attempt_number` is what tells a plugin it is being repeated. No secret is ever in `context`.
 
@@ -757,7 +760,8 @@ the write may have happened — and its class is the write's own.
 
 `binding:` in the manifest (§3) is a schema — in the same dialect as the contracts — for what an
 installation must tell your plugin before it can act: which account, which workspace, which mailbox.
-The value satisfying it reaches you as `context.binding`.
+The value satisfying it reaches you as `context.binding`. A route with no binding hands you `null`, also when your
+schema declares fields (all of them optional); read it as `{}`.
 
 **A binding selects an identity; it never carries a credential.** A declared property named anything
 like one is refused at load with `binding_secret_like`, because a binding is written and read by the

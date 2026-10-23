@@ -249,6 +249,70 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// Every field of this package's binding is optional, so a campaign route with no binding at all is a valid
+    /// route: it is written, frozen again by a reload, and resolves usable with no binding and no identity. An empty
+    /// binding is a route of its own, and a field the schema does not declare is still refused.
+    /// </summary>
+    [Fact]
+    public async Task A_campaign_route_to_this_package_needs_no_binding()
+    {
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
+
+        await TestRoutes.SetCampaignAsync(api, campaign, operation: null, ReplyPlugins.PluginId, binding: null, Ct);
+        var written = await ResolveAsync(api, campaign);
+        await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+        var reloaded = await ResolveAsync(api, campaign);
+
+        foreach (var resolved in new[] { written, reloaded })
+        {
+            Assert.True(resolved.Usable, string.Join("; ", resolved.Problems.Select(problem => problem.Code + " " + problem.Message)));
+            Assert.Equal(RouteScope.CampaignDefault, resolved.Scope);
+            Assert.True(resolved.Binding is null, $"a route written with no binding resolved with {resolved.Binding?.ToJsonString()}");
+            Assert.True(resolved.BindingIdentity is null, $"a route with no binding resolved with the identity {resolved.BindingIdentity}");
+        }
+
+        await TestRoutes.SetCampaignAsync(api, campaign, operation: null, ReplyPlugins.PluginId, [], Ct);
+        var empty = await ResolveAsync(api, campaign);
+
+        Assert.True(empty.Usable, string.Join("; ", empty.Problems.Select(problem => problem.Code + " " + problem.Message)));
+        Assert.True(empty.Binding is { Count: 0 }, $"a route written with an empty binding resolved with {empty.Binding?.ToJsonString() ?? "none"}");
+        Assert.NotNull(empty.BindingIdentity);
+
+        var error = await api.PostErrorAsync(
+            Operations.RouteSet,
+            new { campaign_id = campaign, plugin = ReplyPlugins.PluginId, binding = new { profiles = "outbound" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal(RouteProblemCodes.BindingInvalid, Assert.Single(error.Details!).Code);
+    }
+
+    /// <summary>
+    /// The same in <c>settings.json</c>: a global route naming this package and no <c>Binding</c> is activated by the
+    /// reload that freezes it, rather than refusing the whole reload.
+    /// </summary>
+    [Fact]
+    public async Task A_global_route_to_this_package_needs_no_binding()
+    {
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
+        await TestRoutes.WriteGlobalAsync(api, TestRoutes.GlobalDefault(ReplyPlugins.PluginId), Ct);
+
+        var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+        var resolved = await ResolveAsync(api, campaign);
+
+        Assert.True(reloaded.Activated, $"the reload was not activated: {string.Join("; ", reloaded.LastReload?.Routes.Select(route => route.Code + " " + route.Message) ?? [])}");
+        Assert.True(resolved.Usable, string.Join("; ", resolved.Problems.Select(problem => problem.Code + " " + problem.Message)));
+        Assert.Equal(RouteScope.GlobalDefault, resolved.Scope);
+        Assert.True(resolved.Binding is null, $"a global route written with no binding resolved with {resolved.Binding?.ToJsonString()}");
+    }
+
+    private static Task<RouteResolutionDto> ResolveAsync(RuntimeApiFixture api, string campaign) =>
+        api.PostOkAsync<RouteResolutionDto>(
+            Operations.RouteResolve, new { campaign_id = campaign, operation = "list_membership.add" }, Ct);
+
+    /// <summary>
     /// The rule a person reads before they route a campaign to Reply: how a first name is derived, the switch that
     /// forbids it, and that an opt-out derives whatever the switch says. It lives where the binding is described.
     /// </summary>

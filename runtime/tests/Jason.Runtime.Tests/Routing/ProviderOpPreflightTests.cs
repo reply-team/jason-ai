@@ -404,6 +404,30 @@ public class ProviderOpPreflightTests
     }
 
     /// <summary>
+    /// A route with no binding to a plugin whose schema declares only optional fields passes the check as the empty
+    /// object, and what reaches the plugin is still no binding: <c>null</c>, with no identity, never <c>{}</c>.
+    /// </summary>
+    [Fact]
+    public void A_route_with_no_binding_to_a_plugin_with_only_optional_fields_hands_it_null()
+    {
+        var schema = Scenario.BindingSchema;
+        schema["required"] = new JsonArray();
+
+        var plan = new Scenario
+        {
+            Operation = Add,
+            Plugin = Scenario.Package(binding: schema),
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+        }.Check().Plan;
+
+        Assert.NotNull(plan);
+        Assert.True(plan.Binding is null, $"binding handed on: {plan.Binding?.ToJsonString()}");
+        Assert.True(plan.BindingIdentity is null, $"identity handed on: {plan.BindingIdentity}");
+    }
+
+    /// <summary>
     /// The claim answers exactly what <c>route.resolve</c> would, because it reads the same snapshot through the
     /// same pure function: the level the route won at travels with the plan and is recorded against the attempt.
     /// </summary>

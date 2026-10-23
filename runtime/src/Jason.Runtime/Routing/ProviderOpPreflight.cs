@@ -307,15 +307,18 @@ public static class ProviderOpPreflight
 
         // Activation already held this binding to the same schema. It is checked again because the plan a run is
         // given has to be true of the package in front of it, not of the one the route was written against. A
-        // route that carries no binding at all is checked too: a plugin whose schema requires one is unusable
-        // without it, and passing the item on to a child that cannot work would be the dishonest answer.
+        // route that carries no binding at all is checked too, as the empty object: a plugin whose schema refuses
+        // that requires a binding and is unusable without one, and passing the item on to a child that cannot work
+        // would be the dishonest answer.
         var bindingProblems = RouteChecks.BindingProblems(plugin, route.Binding, timing);
         if (SchemaValidator.Verdicts(bindingProblems) is { Count: > 0 } wrong)
         {
             return Refused(
                 null,
                 AttemptErrors.BindingInvalid,
-                $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
+                route.Binding is null
+                    ? $"The route to plugin '{plugin.Manifest.Id}' carries no binding, and the schema that plugin declares requires one."
+                    : $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
                 Details(wrong));
         }
 

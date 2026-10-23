@@ -206,6 +206,27 @@ public class RouteActivationTests
     }
 
     /// <summary>
+    /// No binding is measured as the empty object, so a plugin whose schema requires a field still refuses a route
+    /// that carries none — and the refusal says there is no binding rather than describing one.
+    /// </summary>
+    [Fact]
+    public async Task A_route_with_no_binding_to_a_plugin_that_requires_one_refuses_the_reload()
+    {
+        await using var api = await StartAsync(prepare: paths => TestPlugins.InstallFakeProvider(paths));
+        var campaign = await CampaignAsync(api);
+        await WriteRouteAsync(api, campaign, operation: null, TestPlugins.FakeProviderId, binding: null);
+
+        var detail = await RefusedAsync(api);
+
+        Assert.Equal($"campaign:{campaign}/routes/default", detail.Field);
+        Assert.Equal(RouteProblemCodes.BindingInvalid, detail.Code);
+        Assert.True(
+            detail.Message.Contains("carries no binding", StringComparison.Ordinal)
+                && detail.Message.Contains("workspace", StringComparison.Ordinal),
+            $"the refusal of a route with no binding was: {detail.Message}");
+    }
+
+    /// <summary>
     /// A binding is journaled and listed, so a field named like a credential is refused rather than redacted —
     /// and refused wherever it sits, not only where a plugin's schema happens to look. The binding is built here
     /// rather than written as text, and it is deliberately one fake-provider's schema would refuse too: the

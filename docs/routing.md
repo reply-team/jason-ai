@@ -200,10 +200,14 @@ The escape hatch is real and is in the same place: set that binding **per campai
 
 A plugin's manifest may declare `binding:` — a schema, in the dialect of `docs/contracts/`, for what
 an installation must tell it before it can act. A route to a plugin that declares one must satisfy it;
-a route to a plugin that declares none may carry any JSON object, up to 64 KiB. The value reaches the
-plugin as `context.binding`. **Nothing in the runtime interprets what it means** — that is the plugin's
-business — though the runtime does hold it to the plugin's schema, refuse a credential-shaped name in
-it, hash it into each attempt's provenance, journal it and show it in `route list`.
+a route to a plugin that declares none may carry any JSON object, up to 64 KiB. A route with no binding
+is measured against the plugin's schema as the empty object, so a plugin requires a binding exactly when its schema
+refuses `{}`. It is still a route of its own: it has no identity where `{}` has one, so trading one for the other is a change
+of account in provenance, in event sources and in reads by the account a person was learned in. The
+value reaches the plugin as `context.binding`, and no binding reaches it as `null`. **Nothing in the
+runtime interprets what it means** — that is the plugin's business — though the runtime does hold it to
+the plugin's schema, refuse a credential-shaped name in it, hash it into each attempt's provenance,
+journal it and show it in `route list`.
 
 **The 64 KiB is measured where the binding is written**, at activation, over the same canonical JSON the
 binding's `sha256:` identity is taken from — so both write paths are covered, `route set` and the `Routes`
@@ -318,7 +322,7 @@ asked to approve reaching somebody the suppression register already protects.
 | 4 | `plugin_unavailable` | permanent | the package is installed and listed, but its environment holds it back — usually a program it declares is not on the machine. Repair what `jason plugin list --human` names, then reload |
 | 5 | `plugin_operation_unsupported` | permanent | the plugin does not perform this operation, or is not a kind of plugin that performs any. Route this operation to a plugin that claims it |
 | 6 | `contract_incompatible` | permanent | the plugin speaks no version of this operation's contract that this runtime publishes. Upgrade the plugin |
-| 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one. Fix the binding. A pattern of that schema that did not finish matching, twice, is not `binding_invalid`: nothing was found wrong, so the attempt ends `validation_timed_out`, `transient`, and comes back |
+| 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one, which is a plugin whose schema refuses `{}`. Fix the binding. A pattern of that schema that did not finish matching, twice, is not `binding_invalid`: nothing was found wrong, so the attempt ends `validation_timed_out`, `transient`, and comes back |
 | 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
 | 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out declares `preflight.suppression: not_applicable` — today `optout.record` and `enrollment.stop` — and meets neither the check nor the read: a suppressed person is exactly who it is for |
@@ -341,7 +345,7 @@ message names the pinned value.
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
 | `route_binding_secret_like` | the binding carries a field named like a credential, at any depth |
 | `route_binding_too_large` | the binding's canonical JSON is larger than the 64 KiB the protocol carries |
-| `route_binding_invalid` | the binding does not satisfy the schema the plugin declares |
+| `route_binding_invalid` | the binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin whose schema refuses `{}` |
 
 The ninth is not a problem with a route but with the **section**: `routes_settings_invalid` is the
 `Routes` section itself failing the validator that reads it, which happens when the file is edited into
