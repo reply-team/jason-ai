@@ -1,3 +1,4 @@
+using Jason.Contracts.Harness;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Harness;
 
@@ -17,7 +18,7 @@ public sealed class FoldersDocTests
         var page = Page("docs", "projects.md");
 
         Assert.All(
-            [$"{HarnessOptions.Section}:{nameof(HarnessOptions.Root)}", "harness_folder_unavailable", "harness_root_taken", "harness_folder_taken", "harness_folder_missing"],
+            [$"{HarnessOptions.Section}:{nameof(HarnessOptions.Root)}", "harness_folder_unavailable", "harness_root_taken", "harness_folder_taken", "harness_folder_missing", "harness_folder_present"],
             name => Assert.True(page.Contains($"| `{name}` |", StringComparison.Ordinal), $"docs/projects.md has no row for `{name}`."));
     }
 

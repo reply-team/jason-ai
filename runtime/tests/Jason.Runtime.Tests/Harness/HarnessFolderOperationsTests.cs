@@ -1,5 +1,6 @@
 using System.Net;
 using Jason.Contracts.Api;
+using Jason.Contracts.Harness;
 using Jason.Runtime.Harness;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;

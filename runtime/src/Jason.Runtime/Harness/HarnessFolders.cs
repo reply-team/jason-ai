@@ -1,3 +1,5 @@
+using Jason.Contracts.Api;
+using Jason.Contracts.Harness;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Projects;
@@ -191,6 +193,137 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
         return recorded;
     }
 
+    /// <summary>
+    /// The root in force and what stands there, as the next create will meet it, with nothing made or written: the runtime
+    /// says where the person's files live, and a reader never works the root out for itself. A folder this account cannot
+    /// list, or whose marker it cannot read, is unreadable: a marker looked for in a folder that cannot be listed is not
+    /// found, which would say a root the next create is refused at has no marker yet.
+    /// </summary>
+    public HarnessInfo Report()
+    {
+        var root = Root;
+        HarnessRootState state;
+        try
+        {
+            state = File.Exists(root) ? HarnessRootState.NotAFolder
+                : !Directory.Exists(root) ? HarnessRootState.Absent
+                : !Listed(root) ? HarnessRootState.Unreadable
+                : HarnessMarker.In(root) switch
+                {
+                    null => HarnessRootState.Unmarked,
+                    var marker when marker.Names(HarnessMarker.Root, null) => HarnessRootState.Marked,
+                    _ => HarnessRootState.Taken,
+                };
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            state = HarnessRootState.Unreadable;
+        }
+
+        return new HarnessInfo(root, state);
+
+        // Whether the folder's entries can be read at all, which asks for the first and nothing more.
+        static bool Listed(string folder)
+        {
+            try
+            {
+                using var entries = Directory.EnumerateFileSystemEntries(folder).GetEnumerator();
+                entries.MoveNext();
+                return true;
+            }
+            catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>The home this runtime resolved when it started: where the root's default is, and a folder no level may be.</summary>
+    public string Home => home.Directory;
+
+    /// <summary>
+    /// The marker of a folder a person names: null where it has none, and read as naming nothing where it cannot be read.
+    /// A file at the path is in the way, and refused as such.
+    /// </summary>
+    public static HarnessMarker? MarkerOf(string folder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+        return Disk(folder, () => File.Exists(folder) ? throw DomainErrors.HarnessFolderUnavailable(folder) : HarnessMarker.In(folder));
+    }
+
+    /// <summary>Whether <paramref name="folder"/> is there as a folder and carries the marker of <paramref name="kind"/> and <paramref name="id"/>; a folder the disk will not let be read does not.</summary>
+    public static bool Holds(string folder, string kind, string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+        try
+        {
+            return !File.Exists(folder) && Directory.Exists(folder) && HarnessMarker.In(folder)?.Names(kind, id) == true;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Takes a folder of the person's own, one with no marker, as a project's: its marker first, then a <c>CLAUDE.md</c> and
+    /// an <c>AGENTS.md</c> where it has none, and not a word of anything it holds. A marker of something else that turned out
+    /// to be there first is refused as taken, with nothing written.
+    /// </summary>
+    public static void AdoptProjectFolder(string folder, string projectId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        var mine = new HarnessMarker(HarnessMarker.Project, projectId);
+        Disk(folder, () =>
+        {
+            if (!Claim(folder, mine, Standing.Unmarked))
+            {
+                throw DomainErrors.HarnessFolderTaken(folder);
+            }
+        });
+    }
+
+    /// <summary>
+    /// The folders directly in a project's <c>campaigns/</c> that carry a marker, each with its marker as it reads, in the
+    /// order of their paths: one level below the project's folder, and never deeper — the disk is never searched. A folder
+    /// with no marker is the person's own and is not among them; one whose marker the disk will not let be read is, read
+    /// as naming nothing.
+    /// </summary>
+    public static IReadOnlyList<(string Folder, HarnessMarker Marker)> MarkedCampaignFolders(string projectFolder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectFolder);
+        var campaigns = Path.Combine(projectFolder, CampaignsDirectory);
+        return Disk(campaigns, () =>
+        {
+            var found = new List<(string Folder, HarnessMarker Marker)>();
+            if (!Directory.Exists(campaigns))
+            {
+                return found;
+            }
+
+            foreach (var folder in Directory.GetDirectories(campaigns).Order(StringComparer.Ordinal))
+            {
+                HarnessMarker? marker;
+                try
+                {
+                    marker = HarnessMarker.In(folder);
+                }
+                catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+                {
+                    marker = new HarnessMarker(null, null);
+                }
+
+                if (marker is not null)
+                {
+                    found.Add((folder, marker));
+                }
+            }
+
+            return found;
+        });
+    }
+
     /// <summary>Where the policy puts a project's folder, <c>projects/&lt;slug&gt;/</c> under the root as the settings in force name it, with nothing made.</summary>
     public string ProjectFolderOf(string slug)
     {
@@ -237,7 +370,7 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
                 throw DomainErrors.HarnessMoveTargetTaken(target);
             }
 
-            if (!string.Equals(Path.GetPathRoot(Path.GetFullPath(campaignFolder)), Path.GetPathRoot(Path.GetFullPath(target)), HarnessRoot.Comparison))
+            if (!string.Equals(Volume(campaignFolder), Volume(target), HarnessRoot.Comparison))
             {
                 throw DomainErrors.HarnessFolderNotMoved(campaignFolder, campaigns);
             }
@@ -271,7 +404,9 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
 
         try
         {
-            Directory.Move(campaignFolder, target);
+            // Both sides as their drive or share names them: .NET refuses a rename whose two roots are spelled apart, as a
+            // device prefix on one side spells it.
+            Directory.Move(FolderPaths.Undevice(campaignFolder), FolderPaths.Undevice(target));
             return target;
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
@@ -288,7 +423,7 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     {
         try
         {
-            Directory.Move(moved, recorded);
+            Directory.Move(FolderPaths.Undevice(moved), FolderPaths.Undevice(recorded));
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
         {
@@ -379,6 +514,9 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
             throw kind == HarnessMarker.Campaign ? DomainErrors.HarnessCampaignFolderMissing(id, folder) : DomainErrors.HarnessFolderMissing(id, folder);
         }
     }
+
+    /// <summary>The volume a path is on, as its drive or share names it: a Windows device prefix in front of it names the same one.</summary>
+    private static string? Volume(string path) => Path.GetPathRoot(FolderPaths.Normal(FolderPaths.Undevice(path)));
 
     /// <summary>The name, then the name with <c>-2</c>, <c>-3</c> and so on after it.</summary>
     private static IEnumerable<string> Names(string leaf)

@@ -6,6 +6,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
@@ -52,7 +53,8 @@ public static class SystemModule
              LiveSettings<NotificationsOptions> notificationSettings,
              Presence presence,
              ListeningEndpoint listening,
-             UiModule ui) =>
+             UiModule ui,
+             HarnessFolders harness) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -86,7 +88,10 @@ public static class SystemModule
                     // runtime starts, so it is said before anything has been sent.
                     notifications.Info(notificationSettings.Current, presence),
                     Listening: new ListeningInfo(listening.Port, listening.ConfiguredPort),
-                    Ui: ui.Active())));
+                    Ui: ui.Active(),
+                    // Where the person's files live, as the runtime will make and find them, so a status line shows the
+                    // root in force rather than working one out for itself.
+                    Harness: harness.Report())));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

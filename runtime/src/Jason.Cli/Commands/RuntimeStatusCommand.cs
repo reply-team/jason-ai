@@ -96,6 +96,7 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Instance:   {info.InstanceId}");
         output.WriteLine($"Started:    {info.StartedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture)}");
         output.WriteLine($"Data dir:   {info.DataDir}");
+        output.WriteLine($"Harness:    {Harness(info.Harness)}");
         output.WriteLine($"Migrations: {info.Database.AppliedMigrations.Count} applied");
         output.WriteLine($"Dispatcher: {Dispatcher(info.Dispatcher)}");
         output.WriteLine($"Plugins:    {Plugins(info.Plugins)}");
@@ -112,6 +113,22 @@ public static class RuntimeStatusCommand
         { ConfiguredPort: 0 } => $"{listening.Port} (chosen by the OS; set Runtime:Port for a stable one)",
         { Port: var port, ConfiguredPort: var configured } when port == configured => port.ToString(CultureInfo.InvariantCulture),
         _ => $"{listening.Port} ({listening.ConfiguredPort} was taken)",
+    };
+
+    /// <summary>The harness root the runtime reports and what stands there; a runtime older than the report says nothing of it.</summary>
+    private static string Harness(HarnessInfo? harness) => harness?.RootState switch
+    {
+        null => "unknown: the runtime is older than this CLI",
+        HarnessRootState.Absent => $"{harness.Root}, made at the first project or campaign",
+        HarnessRootState.Marked => $"{harness.Root}, with its marker",
+        HarnessRootState.Unmarked => $"{harness.Root}, a folder with no marker yet, taken as the root at the first project or campaign",
+        HarnessRootState.Taken => $"{harness.Root}, marked as something else: the first project or campaign is refused until Harness:Root names another folder or that one is moved away",
+        HarnessRootState.NotAFolder => $"{harness.Root}, a file: the first project or campaign is refused until Harness:Root names a folder or the file is moved away",
+        HarnessRootState.Unreadable => $"{harness.Root}, which this account cannot list or read: the first project or campaign is refused until this account may read and write it or Harness:Root names a folder it can",
+
+        // Every state the runtime says has its arm above; the words are read by name, never as numbers, so no other value
+        // is ever read from an answer.
+        _ => throw new ArgumentOutOfRangeException(nameof(harness), harness.RootState, "There is no such harness root state."),
     };
 
     private static string Ui(UiModuleInfo? ui) => ui switch

@@ -162,6 +162,13 @@ public static partial class JournalKinds
     public const string ProjectUpdated = "project_updated";
 
     /// <summary>
+    /// A project's folder, or its campaigns', recorded again by <c>project.link</c>: keyed by the project's id, with the
+    /// folder recorded before and after and, for each campaign whose path changed, the path before and after. It names no
+    /// campaign, and holds paths and ids only: a folder's name is made from a name, and no memory file is ever read.
+    /// </summary>
+    public const string ProjectLinked = "project_linked";
+
+    /// <summary>
     /// A person set a named preference: keyed by the preference's key, with the size and hash of the value before (null
     /// where it was not set) and after. It names no campaign, and never holds the value: a preference can be personal
     /// data, and the chronicle could never forget it.
@@ -226,6 +233,7 @@ public static partial class JournalKinds
         EventsBackfillRequested,
         ProjectCreated,
         ProjectUpdated,
+        ProjectLinked,
         PreferenceSet,
         PreferenceUnset,
     };

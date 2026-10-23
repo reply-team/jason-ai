@@ -1,4 +1,5 @@
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
 using Jason.Runtime.Configuration;
 
 namespace Jason.Runtime.Harness;
@@ -6,16 +7,12 @@ namespace Jason.Runtime.Harness;
 /// <summary>
 /// The rule for where the harness root may be, written once for the validator that refuses a setting and for the folders
 /// that are made under the root. A refusal compares where the paths lead, not how they are spelled, and compares them as
-/// the platform's file systems do by default: Windows and macOS ignore case, Linux does not.
+/// the platform's file systems do by default: Windows and macOS ignore case, Linux does not (<see cref="FolderPaths"/>).
 /// </summary>
 public static class HarnessRoot
 {
-    /// <summary>How many links one path is followed through before it is compared as it was reached: a chain that goes round is not followed for ever.</summary>
-    private const int MaxLinks = 40;
-
     /// <summary>How two paths are compared here: as the file system of this platform would tell them apart by default.</summary>
-    public static StringComparison Comparison { get; } =
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    public static StringComparison Comparison => FolderPaths.Comparison;
 
     /// <summary>
     /// The root the options name, as a full path without a separator at its end, or <see cref="HarnessOptions.DefaultFolder"/>
@@ -48,14 +45,18 @@ public static class HarnessRoot
 
         // Every place is compared where it leads: a device prefix, a junction or a symbolic link does not make the home or
         // the data directory another folder.
-        var root = Real(Of(options, home));
-        var data = Real(paths.Root);
+        var root = Of(options, home);
 
-        // Where the root stands to the data directory, the runtime's own: it may be none of the three.
-        var toData = Same(root, data) ? ("is the data directory", "be the data directory", "is the data directory")
-            : Inside(root, data) ? ("is inside the data directory", "be inside the data directory", "is inside it")
-            : Inside(data, root) ? ("holds the data directory", "hold the data directory", "holds it")
-            : default((string Is, string Rule, string Written)?);
+        // Where the root stands to the data directory, the runtime's own: it may be none of the three. Decided apart from
+        // the home's relations, since an unset root is held to this one alone: a default that leads to the home, through a
+        // junction say, and so holds the data directory beside it, is refused for that.
+        var toData = ToData(Real(root), paths) switch
+        {
+            Place.Data => ("is the data directory", "be the data directory", "is the data directory"),
+            Place.InsideData => ("is inside the data directory", "be inside the data directory", "is inside it"),
+            Place.HoldsData => ("holds the data directory", "hold the data directory", "holds it"),
+            _ => default((string Is, string Rule, string Written)?),
+        };
         if (written is null)
         {
             return toData is { } standing
@@ -65,103 +66,101 @@ public static class HarnessRoot
 
         // A CLAUDE.md at the root is read by every agent session started anywhere below it, so the root is never where
         // every session of the account starts below: the home directory, a folder that holds it, the top of a drive.
-        var account = Real(home);
-        if (Same(root, account))
+        return Where(root, paths, home) switch
         {
-            return $"{Setting} must not be the home directory itself: every agent session started anywhere in it would read the memory files kept at the root; the value written is the home directory.";
-        }
+            Place.Home => $"{Setting} must not be the home directory itself: every agent session started anywhere in it would read the memory files kept at the root; the value written is the home directory.",
+            Place.Top => $"{Setting} must not be the top of a drive, a share or the file system: every agent session started anywhere below it would read the memory files kept at the root; the value written is such a top.",
+            Place.HoldsHome => $"{Setting} must not hold the home directory: every agent session started anywhere in the home would read the memory files kept at the root; the value written holds it.",
+            _ => toData is { } where ? $"{Setting} must not {where.Rule}, which is the runtime's own; the value written {where.Written}." : null,
+        };
+    }
 
-        if (Same(root, Normal(Path.GetPathRoot(root) ?? root)))
+    /// <summary>
+    /// Why a folder a person names for a project may not be one, as the message of a refused field, or null when it may:
+    /// the places the root may not be are no level's — a <c>CLAUDE.md</c> in the home directory, a folder holding it or the
+    /// top of a drive is read by every agent session below it, and the data directory is the runtime's own. The sentence
+    /// never says the path back.
+    /// </summary>
+    public static string? FolderRefusal(string folder, JasonPaths paths, string home)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(home);
+        return Where(folder, paths, home) switch
         {
-            return $"{Setting} must not be the top of a drive, a share or the file system: every agent session started anywhere below it would read the memory files kept at the root; the value written is such a top.";
-        }
+            Place.Home => "path must not be the home directory: every agent session started anywhere in it would read the project's memory file.",
+            Place.Top => "path must not be the top of a drive, a share or the file system: every agent session started below it would read the project's memory file.",
+            Place.HoldsHome => "path must not hold the home directory: every agent session started anywhere in the home would read the project's memory file.",
+            Place.Data => "path must not be the data directory, which is the runtime's own.",
+            Place.InsideData => "path must not be inside the data directory, which is the runtime's own.",
+            Place.HoldsData => "path must not hold the data directory, which is the runtime's own.",
+            _ => null,
+        };
+    }
 
-        if (Inside(account, root))
-        {
-            return $"{Setting} must not hold the home directory: every agent session started anywhere in the home would read the memory files kept at the root; the value written holds it.";
-        }
-
-        return toData is { } place
-            ? $"{Setting} must not {place.Rule}, which is the runtime's own; the value written {place.Written}."
+    /// <summary>
+    /// Why a folder a person names for a project may not be one by where it stands to the harness root, as the message of a
+    /// refused field, or null when it may: the root is the client's level, a folder holding it would have its memory file
+    /// read by every session started in any project or campaign, and the root's <c>projects/</c> holds every project's
+    /// folder and is no level's. Each is compared where it leads; the sentence never says the path back.
+    /// </summary>
+    public static string? RootRefusal(string folder, string root)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+        ArgumentNullException.ThrowIfNull(root);
+        var at = Real(folder);
+        var level = Real(root);
+        return Same(at, level) ? "path must not be the harness root, which is the client's level and no project's."
+            : Inside(level, at) ? "path must not hold the harness root: every agent session started in any project or campaign would read the project's memory file."
+            : Same(at, Real(Path.Combine(root, HarnessFolders.ProjectsDirectory))) ? "path must not be the root's projects directory, which holds every project's folder and is no level's."
             : null;
+    }
+
+    /// <summary>Where a folder stands to the places no level of the harness may be, each compared where it leads.</summary>
+    private enum Place
+    {
+        Apart,
+        Home,
+        Top,
+        HoldsHome,
+        Data,
+        InsideData,
+        HoldsData,
+    }
+
+    /// <summary>
+    /// Where <paramref name="folder"/> stands, the home's relations first — the home itself, the top of a drive, a folder
+    /// holding the home — and then the data directory's: the data directory itself, a folder inside it, one holding it.
+    /// </summary>
+    private static Place Where(string folder, JasonPaths paths, string home)
+    {
+        var at = Real(folder);
+        var account = Real(home);
+        return Same(at, account) ? Place.Home
+            : Same(at, Normal(Path.GetPathRoot(at) ?? at)) ? Place.Top
+            : Inside(account, at) ? Place.HoldsHome
+            : ToData(at, paths);
+    }
+
+    /// <summary>Where a folder, already where it leads, stands to the data directory alone: the directory itself, a folder inside it, one holding it, or apart.</summary>
+    private static Place ToData(string at, JasonPaths paths)
+    {
+        var data = Real(paths.Root);
+        return Same(at, data) ? Place.Data
+            : Inside(at, data) ? Place.InsideData
+            : Inside(data, at) ? Place.HoldsData
+            : Place.Apart;
     }
 
     private static string? Written(HarnessOptions options) => string.IsNullOrWhiteSpace(options.Root) ? null : options.Root;
 
-    private static string Normal(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+    private static string Normal(string path) => FolderPaths.Normal(path);
 
-    /// <summary>
-    /// Where a path leads, as the file system finds it rather than as it is spelled: full, without a device prefix, and
-    /// with every part of it that is a link — a junction or a symbolic link — replaced by where the link leads, however
-    /// deep. A part that is not there yet, or cannot be read, is taken as written, and so is everything after it.
-    /// </summary>
-    private static string Real(string path)
-    {
-        var real = Normal(Undevice(path));
-        for (var hops = 0; hops < MaxLinks && Linked(real) is { } further; hops++)
-        {
-            real = further;
-        }
+    private static string Real(string path) => FolderPaths.Real(path);
 
-        return real;
-    }
+    private static string Undevice(string path) => FolderPaths.Undevice(path);
 
-    /// <summary>The path with its first part that is a link replaced by where that link finally leads, or null when no part of it is one.</summary>
-    private static string? Linked(string path)
-    {
-        var top = Path.GetPathRoot(path) ?? string.Empty;
-        var parts = path[top.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-        var at = top;
-        for (var part = 0; part < parts.Length; part++)
-        {
-            at = Path.Combine(at, parts[part]);
-            try
-            {
-                if (new DirectoryInfo(at).ResolveLinkTarget(returnFinalTarget: true) is { } target)
-                {
-                    return Normal(Undevice(Path.Combine([target.FullName, .. parts[(part + 1)..]])));
-                }
-            }
-            catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
-            {
-                return null;
-            }
-        }
+    private static bool Same(string left, string right) => FolderPaths.Same(left, right);
 
-        return null;
-    }
-
-    /// <summary>
-    /// A Windows device path — <c>\\?\C:\…</c>, <c>\\.\C:\…</c>, <c>\??\C:\…</c>, <c>\\?\UNC\server\share\…</c> — as the
-    /// drive or share path behind its prefix, which turns off Windows' own reading of a path and names the same folder.
-    /// One whose rest names no drive and no share is left a relative path, which the rule refuses. Elsewhere a path is
-    /// as it is written.
-    /// </summary>
-    private static string Undevice(string path)
-    {
-        var device = OperatingSystem.IsWindows()
-            && path.Length >= 4
-            && (path.StartsWith(@"\??\", StringComparison.Ordinal)
-                || (IsSeparator(path[0]) && IsSeparator(path[1]) && (path[2] is '?' or '.') && IsSeparator(path[3])));
-        if (!device)
-        {
-            return path;
-        }
-
-        var rest = path[4..];
-        return rest.StartsWith(@"UNC", StringComparison.OrdinalIgnoreCase) && rest.Length > 3 && IsSeparator(rest[3])
-            ? @"\\" + rest[4..]
-            : rest;
-    }
-
-    private static bool IsSeparator(char c) => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar;
-
-    private static bool Same(string left, string right) => string.Equals(left, right, Comparison);
-
-    /// <summary>Below the folder, by whole names: <c>.jason-old</c> begins with <c>.jason</c> and is beside it, not inside.</summary>
-    private static bool Inside(string path, string folder)
-    {
-        var prefix = Path.EndsInDirectorySeparator(folder) ? folder : folder + Path.DirectorySeparatorChar;
-        return path.Length > prefix.Length && path.StartsWith(prefix, Comparison);
-    }
+    private static bool Inside(string path, string folder) => FolderPaths.Inside(path, folder);
 }

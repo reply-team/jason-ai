@@ -215,6 +215,7 @@ internal static class StatusChecks
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
+            checks.Add(HarnessRoot(info));
         }
         finally
         {
@@ -295,10 +296,40 @@ internal static class StatusChecks
     }
 
     /// <summary>
-    /// A skill problem's sentence with its code after it, in brackets, where the runtime gave one: the code is what a
-    /// reader of a bundle has where the sentence is withheld, and what a reader of this fact can search for. A runtime
-    /// from before the codes gives none, and its sentence stands alone.
+    /// The harness root the runtime uses and what stands there, as the runtime reports it: where the person's files live is
+    /// the runtime's to say, so nothing here works the root out. Optional, because the root is made at the first project or
+    /// campaign; failed where the runtime can tell that first one would be refused, and no more, and the fact says what to
+    /// change, since no command does it.
     /// </summary>
+    private static StatusCheck HarnessRoot(SystemInfoResponse? info)
+    {
+        const string Name = "harness_root";
+        if (info is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so the harness root it uses was not asked.", null);
+        }
+
+        if (info.Harness is not { } harness)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime is older than this CLI and does not say which harness root it uses.", null);
+        }
+
+        var root = harness.Root;
+        return harness.RootState switch
+        {
+            HarnessRootState.Absent => new StatusCheck(Name, false, CheckState.Ok, $"The harness root is {root}; it is made at the first project or campaign.", null),
+            HarnessRootState.Marked => new StatusCheck(Name, false, CheckState.Ok, $"The harness root is {root}, with its marker.", null),
+            HarnessRootState.Unmarked => new StatusCheck(Name, false, CheckState.Ok, $"The harness root is {root}, a folder with no marker yet; the first project or campaign takes it as the root and changes nothing in it.", null),
+            HarnessRootState.Taken => new StatusCheck(Name, false, CheckState.Failed, $"The harness root {root} is marked as something else, so the first project or campaign is refused until that is repaired: set Harness:Root to another folder, or move that folder away.", null),
+            HarnessRootState.NotAFolder => new StatusCheck(Name, false, CheckState.Failed, $"A file stands at the harness root {root}, so the first project or campaign is refused until that is repaired: set Harness:Root to a folder, or move the file away.", null),
+            HarnessRootState.Unreadable => new StatusCheck(Name, false, CheckState.Failed, $"The harness root {root} cannot be listed or read by this account, so the first project or campaign is refused until that is repaired: let this account read and write that folder, or set Harness:Root to one it can.", null),
+
+            // Every state the runtime says has its arm above; the words are read by name, never as numbers, so no other
+            // value is ever read from an answer.
+            _ => throw new ArgumentOutOfRangeException(nameof(info), harness.RootState, "There is no such harness root state."),
+        };
+    }
+
     /// <summary>
     /// Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness. The
     /// default build is the release's, so one from another release is named with the command that places this one's —
@@ -346,6 +377,11 @@ internal static class StatusChecks
         return new StatusCheck("ui_module", false, CheckState.Ok, $"Serving {ui.Source} {ui.Version} from {ui.Directory}; built for API {ui.ApiVersion}, this runtime's; {ui.Digest}.", null);
     }
 
+    /// <summary>
+    /// A skill problem's sentence with its code after it, in brackets, where the runtime gave one: the code is what a
+    /// reader of a bundle has where the sentence is withheld, and what a reader of this fact can search for. A runtime
+    /// from before the codes gives none, and its sentence stands alone.
+    /// </summary>
     private static string Coded(string problem, string? code) => code is null ? problem : $"{problem} [{code}]";
 
     /// <summary>

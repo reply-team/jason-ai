@@ -77,7 +77,13 @@ namespace Jason.Cli;
 /// default for the reason <paramref name="Removes"/> gives: winget's record is in this account's registry, and a test
 /// that read it would read the registry of whoever ran the suite. <see cref="Default"/> names this machine's.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null)
+/// <param name="WorkingDirectory">
+/// The folder the command was typed in, from which a verb that takes a project and was given none finds it by the nearest
+/// marker of the harness (<see cref="Folders.WorkingFolder"/>). Null finds nothing, which is the answer everywhere but
+/// <see cref="Default"/>, and the default for the reason <paramref name="Harnesses"/> gives: a test that walked up from
+/// its own folder would read whatever folders the person running the suite has above it.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null)
 {
     public static CliEnvironment Default() =>
         new(
@@ -94,5 +100,24 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             null,
             InstallationRemovers.ForThisMachine(),
             Managers: ManagerRecords.ForThisMachine(),
-            Opener: new PlatformUrlOpener());
+            Opener: new PlatformUrlOpener(),
+            WorkingDirectory: WorkingDirectoryOf(() => Environment.CurrentDirectory));
+
+    /// <summary>
+    /// The folder the command was typed in, or null where the platform cannot name it — on Linux and macOS, a folder
+    /// deleted under the shell standing in it — which finds nothing, as everywhere a verb is given no folder: a verb that
+    /// does not need one, <c>jason status</c> above all, is never ended by it before it starts.
+    /// </summary>
+    internal static string? WorkingDirectoryOf(Func<string> read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        try
+        {
+            return read();
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 }

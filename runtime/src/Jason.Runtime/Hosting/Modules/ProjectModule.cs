@@ -8,7 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Hosting.Modules;
 
-/// <summary>The projects campaigns work toward. Four verbs: a project is made, read, listed and renamed, never removed.</summary>
+/// <summary>
+/// The projects campaigns work toward. Five verbs: a project is made, read, listed, renamed and linked to where its folder
+/// is, and never removed.
+/// </summary>
 public static class ProjectModule
 {
     public static IServiceCollection AddProjectModule(this IServiceCollection services)
@@ -19,6 +22,7 @@ public static class ProjectModule
         // the last root that validated.
         services.AddSingleton(DispatcherModule.Seam<HarnessOptions>(HarnessOptions.Section));
         services.AddSingleton<HarnessFolders>();
+        services.AddScoped<ProjectLinker>();
         return services.AddScoped<ProjectService>();
     }
 
@@ -34,5 +38,7 @@ public static class ProjectModule
             Operations.ProjectList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
         app.MapOperation<ProjectService, ProjectUpdateRequest, ProjectDto>(
             Operations.ProjectUpdate, (service, request, cancellationToken) => service.UpdateAsync(request, cancellationToken));
+        app.MapOperation<ProjectLinker, ProjectLinkRequest, ProjectLinkResult>(
+            Operations.ProjectLink, (linker, request, cancellationToken) => linker.LinkAsync(request, cancellationToken));
     }
 }

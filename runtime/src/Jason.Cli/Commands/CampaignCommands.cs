@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Jason.Cli.Folders;
 using Jason.Cli.Human;
 using Jason.Contracts.Api;
 
@@ -39,7 +40,8 @@ public static class CampaignCommands
         var command = new Command("create", "Create a campaign.");
         var name = new Option<string?>("--name") { Description = "The campaign name." };
         var context = new Option<string?>("--context") { Description = "The initial campaign context, as a JSON object." };
-        var project = ProjectOption("The project the campaign is in, as prj_…. Absent, it is the default project.");
+        var project = ProjectOption(
+            "The project the campaign is in, as prj_…. Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and the default project elsewhere.");
         var idempotencyKey = VerbOptions.IdempotencyKey();
         var file = VerbOptions.File("The object holds name, context, project_id and idempotency_key.");
         var reason = VerbOptions.Reason();
@@ -61,6 +63,11 @@ public static class CampaignCommands
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+
+            if ((await WorkingFolder.FillProjectAsync(env, body, WorkingFolder.ByProjectOption, cancellationToken).ConfigureAwait(false)).ExitCode is { } stopped)
+            {
+                return stopped;
+            }
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignCreate, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
@@ -93,20 +100,29 @@ public static class CampaignCommands
         var command = new Command("list", "List campaigns. Archived ones appear only when asked for by status.");
         var status = new Option<string?>("--status") { Description = "Only campaigns in this status: draft, active, paused or archived." };
         var query = new Option<string?>("--query") { Description = "Only campaigns whose name contains this text; case and accents do not matter." };
-        var project = ProjectOption("Only the campaigns of this project, as prj_….");
+        var project = ProjectOption(
+            "Only the campaigns of this project, as prj_…. Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and every project elsewhere.");
+        var everyProject = new Option<bool>("--all-projects") { Description = "The campaigns of every project, wherever the command runs; not with --project." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
         command.Options.Add(status);
         command.Options.Add(query);
         command.Options.Add(project);
+        command.Options.Add(everyProject);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
 
-        command.SetAction((parseResult, cancellationToken) =>
+        command.SetAction(async (parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor));
+            var every = parseResult.GetValue(everyProject);
+            if (every && parseResult.GetValue(project) is not null)
+            {
+                throw new UsageException("--all-projects lists every project's campaigns, so it takes no --project.");
+            }
+
             var body = RequestBody.Empty()
                 .Set("status", parseResult.GetValue(status))
                 .Set("query", parseResult.GetValue(query))
@@ -114,7 +130,20 @@ public static class CampaignCommands
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 
-            return OperationRunner.RunAsync(env, Operations.CampaignList, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.CampaignList), cancellationToken);
+            var fill = every ? FolderFill.None : await WorkingFolder.FillProjectAsync(env, body, WorkingFolder.ByProjectOption, cancellationToken).ConfigureAwait(false);
+            if (fill.ExitCode is { } stopped)
+            {
+                return stopped;
+            }
+
+            // A listing scoped by the folder it was typed in says so above its rows, so a person reading it knows why it
+            // holds one project's campaigns, from the project the fill already read.
+            Func<string, string?> render = fill.Project is { } scoped
+                ? json => CampaignRenderers.CampaignList(json) is { } rows ? CampaignRenderers.ScopedByFolder(scoped, rows) : null
+                : CampaignRenderers.CampaignList;
+            return await OperationRunner
+                .RunAsync(env, Operations.CampaignList, body, new RunOptions(parseResult.GetValue(human), render), cancellationToken)
+                .ConfigureAwait(false);
         });
 
         return command;

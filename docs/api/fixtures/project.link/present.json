@@ -1,0 +1,15 @@
+{
+  "operation": "project.link",
+  "case": "present",
+  "request": {
+    "path": "~/acme-copy"
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "harness_folder_present",
+      "message": "Project 'prj_1' still has its folder at '~/Clients/acme-corp', with its marker, so '~/acme-copy' was not linked and nothing was written; a link records where a folder went and never moves or copies one: remove or rename one of the two folders, then link again.",
+      "retryable": false
+    }
+  }
+}

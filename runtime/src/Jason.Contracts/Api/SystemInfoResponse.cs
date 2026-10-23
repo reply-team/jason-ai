@@ -21,7 +21,37 @@ public sealed record SystemInfoResponse(
     SkillsInfo? Skills = null,
     NotificationsInfo? Notifications = null,
     ListeningInfo? Listening = null,
-    UiModuleInfo? Ui = null);
+    UiModuleInfo? Ui = null,
+    HarnessInfo? Harness = null);
+
+/// <summary>
+/// The harness root in force — the settings' <c>Harness:Root</c>, or <c>Jason</c> in the home directory, the last value
+/// that validated — and what stands there now. A runtime that has the section always answers it; null is a runtime older
+/// than the section.
+/// </summary>
+public sealed record HarnessInfo(string Root, HarnessRootState RootState);
+
+/// <summary>What stands at the harness root, as the next project or campaign made will meet it.</summary>
+public enum HarnessRootState
+{
+    /// <summary>Nothing: the root is made, with its marker, at the first project or campaign.</summary>
+    Absent,
+
+    /// <summary>A folder with the root's marker.</summary>
+    Marked,
+
+    /// <summary>A folder with no marker: the first project or campaign takes it as the root, and changes nothing in it.</summary>
+    Unmarked,
+
+    /// <summary>A folder whose marker names something other than a root: a project or campaign is refused as <c>harness_root_taken</c>.</summary>
+    Taken,
+
+    /// <summary>A file where the folder belongs: a project or campaign is refused as <c>harness_folder_unavailable</c>.</summary>
+    NotAFolder,
+
+    /// <summary>A folder this account cannot list, or whose marker it cannot read: a project or campaign is refused as <c>harness_folder_unavailable</c>.</summary>
+    Unreadable,
+}
 
 /// <summary>The port Kestrel took, and the one the settings asked for (0 when the OS chose). They differ when the configured one was taken.</summary>
 public sealed record ListeningInfo(int Port, int ConfiguredPort);

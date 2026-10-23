@@ -32,7 +32,7 @@ backup taken before that migration has another default id once it upgrades again
 | `slug` | Made once, unique, never changed; a handle a person types (`jason project get --slug acme-corp`), and the name of the project's folder (§8). |
 | `default` | Whether this is the project a campaign that names none lands in. Exactly one is; the database holds it to one. |
 | `created_at`, `updated_at` | ISO-8601 UTC. |
-| `folder_path` | The full path of the project's folder under the harness root (§8); null until one is made — when the project is, or, for a project that existed before folders did, at its first campaign. |
+| `folder_path` | The full path of the project's folder (§8) — under the harness root, or one of the person's own that `project.link` recorded; null until one is made — when the project is, or, for a project that existed before folders did, at its first campaign or its link. |
 
 A slug is lower-case ASCII letters and digits, in runs joined by single hyphens, two to forty characters, and never a
 name Windows keeps for a device (`con`, `prn`, `aux`, `nul`, `com1`–`com9`, `lpt1`–`lpt9`), which no folder can have
@@ -57,6 +57,7 @@ A project is never deleted or archived.
 | `project.get` | exactly one of `project_id` and `slug` | The project. `project_not_found` (404); `validation_failed` when neither or both are given. |
 | `project.list` | `query?`, `limit?`, `cursor?` | A page of projects, in the order they were made. `query` finds a name by any part of it, whatever its case or accents. |
 | `project.update` | `project_id`, `name?`, `actor?`, `reason?` | The project. An absent `name` leaves it alone; the slug and the folder never change, and asking for the name a project already has writes nothing. `project_not_found` (404). |
+| `project.link` | `project_id?`, `path?`, `actor?`, `reason?` | Where the project's folder is, and its campaigns' (§8, "Linking a folder"): the project, what became of its folder and of each of its campaigns', and what was found and left as it is. `validation_failed` when neither is given, or for a path that is not absolute, names no folder or is a place no level may be; `project_not_found` (404); `harness_folder_taken`, `harness_folder_present`, `harness_folder_missing`, `harness_folder_unavailable` or `harness_root_taken` (409), and then the database is as it was; §8 says what a disk refusal leaves. |
 
 ### Creating again: the slug, not a key
 
@@ -107,10 +108,12 @@ never travels for the reason a campaign's never does ([notifications](notificati
 |---|---|
 | `project_created` | Keyed by the project's id; the name and slug it was made with. |
 | `project_updated` | Keyed by the project's id; the name before and after. |
+| `project_linked` | Keyed by the project's id; the project's folder before and after, and for each campaign whose path a link recorded, its path before and after. A link that records nothing has no line. |
 
-Both are lines of the installation, naming no campaign: a project is not a campaign. Both are the runtime's own, so
+All three are lines of the installation, naming no campaign: a project is not a campaign. All three are the runtime's own, so
 `journal.append` refuses them. A project's name is a value somebody gave, so it never reaches a log, and
-`jason doctor --include-journal` names "project names as they changed" among what it carries.
+`jason doctor --include-journal` names "project names as they changed" and "the folders a project link recorded" among
+what it carries: a campaign's folder is named from the campaign's name.
 
 ## 6. From the command line
 
@@ -124,9 +127,51 @@ jason project update prj_01K7QN0000000000000000ACME --name "Acme Inc" --reason "
 jason campaign create --name "Q3 leads" --project prj_01K7QN0000000000000000ACME
 jason campaign update cmp_01K7QN000000000000000000Q3 --project prj_01K7QN0000000000000000ACME
 jason campaign list --project prj_01K7QN0000000000000000ACME --human
+jason project link --path ~/Clients/acme-corp --reason "moved with the other clients"
+jason project link prj_01K7QN0000000000000000ACME --path ~/work/acme
+jason project link prj_01K7QN0000000000000000ACME
+jason campaign list --all-projects
 ```
 
 `jason campaign list --human` shows each campaign's project by its slug, from the listing it already has.
+`jason project link --human` shows what a link did by ids and paths, never a name.
+
+### The project from the folder a command runs in
+
+A verb that takes a project and is given none takes it from the folder the command runs in, the way a person working in
+a project's folder means it. The CLI walks up from that folder to the first `.jason/marker.json`: a project's marker
+gives that project; a campaign's marker gives the campaign's project as the runtime records it, read once, since a
+marker names no parent; the root's marker, or none up to the top of the file system, gives nothing, and the verb does
+what it does anywhere else. Every fill is said once on stderr, in one line: the project by its slug and its id, that it
+came from the working directory, the folder whose marker said so, and how that verb is given another project — `--project`,
+or for `project get` an id or `--slug`. `campaign list --human` shows a listing scoped
+this way under that project's slug, so a person reading it knows why it holds one project's campaigns. The CLI reads a
+marker with the runtime's own reader — one definition of the format for both — and never writes one. A role Jason
+launches runs in its attempt's work directory, which carries no marker, so nothing is ever filled for it.
+
+| Verb | Takes a project as | Filled from the folder |
+|---|---|---|
+| `campaign create` | `--project`, the project the campaign is in | yes; elsewhere it is the default project |
+| `campaign list` | `--project`, a filter | yes; `--all-projects` lists every project's campaigns from anywhere |
+| `project get` | the id, or `--slug` | yes, when neither is given |
+| `campaign update` | `--project`, the project it moves to | never: a move addressed by where a shell stands is how the wrong campaign moves |
+| `project update` | the id | never: a rename names its project |
+| `project link` | the id | never: with `--path`, the project is the one the marker at that path names; with neither the id nor `--path`, the folder of the nearest project marker above the working directory is linked by its marker; never otherwise |
+| `rolenote` | its level | never: a note that names neither a project nor a campaign is the client's, wherever it is written from |
+
+A marker is used only when the folder it is in is the folder the runtime records for what it names, compared where the
+paths lead and as the platform compares names. A copied folder, one moved and not yet linked, one naming an id the
+runtime does not hold, and one that cannot be read are said on stderr and never used, and the verb goes on as if there
+were no marker. A project given on the line or in the request's file is never replaced, and no marker is read for it.
+A campaign is never taken from a folder: a write addressed by where a shell happens to stand is how the wrong campaign
+gets changed. When the runtime cannot be asked what a marker names, the verb ends as any verb does that cannot reach
+the runtime, with exit code 3, rather than going on without its project. A working directory the platform cannot name
+— on Linux and macOS, a folder deleted under the shell standing in it — gives nothing, and every verb goes on as it
+would outside a project's folder.
+
+`jason project link --path` reads a relative path from the folder the command runs in, and sends it absolute; where
+that folder cannot be named, a relative path is a usage error. An empty `--path`, or one of spaces only, names no
+folder and is a usage error too, never the working directory.
 
 ## 7. The client's named preferences
 
@@ -243,6 +288,16 @@ runs keeps the root it had and says so in its log. Left out, the root is `Jason`
 directory `~/.jason`; a data directory moved by `JASON_DATA_DIR` onto that very folder, into it or around it has the
 default refused the same way, saying to set `Harness:Root`.
 
+The runtime says the root it uses, so nothing else works it out: `system.info` carries `harness`, with `root`, the root
+in force — the last value of the setting that validated — and `root_state`, what stands there as the next create will
+meet it: `absent` (made then), `marked`, `unmarked` (taken as the root then, with nothing in it changed), `taken` (a
+marker of something else: refused as `harness_root_taken`), `not_a_folder` or `unreadable` (a folder this account
+cannot list, or whose marker it cannot read; both refused as `harness_folder_unavailable`). `jason runtime status` shows
+it, and `jason status` has a check of it, `harness_root`, which never decides readiness and fails where the runtime can
+tell that the next create would be refused, and no more: what the disk refuses only once a write is tried — a folder
+that can be read and not written, say — is said by that create. A runtime older than the report answers no `harness`,
+and the CLI says the root is unknown.
+
 The root is read at every create and every move, so an edit applies to the next one. It moves nothing that was made and
 changes no path that was recorded: a project whose folder is recorded keeps having its campaigns' folders made there,
 wherever that is, and only a project with none gets one under the root as it is then.
@@ -285,7 +340,10 @@ and then the transaction commits, so a folder step that fails — the account ma
 folder belongs — rolls the row and its line in the chronicle back. A caller that goes away once the folders stand does
 not take the create back; it is finished, and the request sent again answers what it made. A step that fails after a
 level's marker, and a commit that fails after the folders stand, leave a folder whose marker names an id no row holds,
-and the next create that reaches its path names it as `harness_folder_taken`.
+and the next create that reaches its path names it as `harness_folder_taken`. A write the disk stops halfway leaves its
+file as far as it got, and the next attempt meets that file rather than writing it again: a marker cut short reads as no
+marker of Jason's, so its folder is refused as `harness_folder_taken` — at the root, `harness_root_taken` — naming it,
+until the person removes that marker.
 
 A campaign for a project whose recorded folder is no longer there, or no longer carries the project's marker, is
 refused as `harness_folder_missing`, and its folder is not made again beside the moved one, which would leave the
@@ -336,7 +394,73 @@ project it moves to keeps the folder made for it as its first need, recorded as 
 - `harness_folder_missing` — the campaign's folder is not where it was recorded, or the new project's is not.
 
 A campaign with no folder recorded — one made before folders were — moves in the database alone, and its folder is made
-when `jason project link` makes its project's.
+by `jason project link` on its project.
+
+### Linking a folder
+
+A folder the person moves or renames leaves a path recorded where it no longer is; one of their own they want a project
+to use has none. `project.link` (`jason project link`) records where it is, the one act by which the filesystem changes
+a fact the runtime holds, and that fact is only ever a recorded path. A rename never needs it: a folder keeps its name.
+
+A path given is taken by the rule a folder already at a level's path meets (above), applied to that path:
+
+- **With no marker** — a folder of the person's own — it is **adopted**: its marker is written, and a `CLAUDE.md` and an
+  `AGENTS.md` where there are none; not a word of what it holds changes, and a `CLAUDE.md` of the person's own does not
+  import `AGENTS.md` until they make it. `project_id` names the project it becomes.
+- **Marked for this project** — the folder moved — it is **relinked**: the path is recorded for the project again.
+  Without `project_id`, the project is the one the marker names; with it, the marker must name that project.
+- **Marked for anything else** — another project, another level, an id this runtime does not hold, a marker that cannot
+  be read — or the folder another project records, it is **taken**: refused as `harness_folder_taken`, and nothing is
+  written.
+
+Another path for a project whose recorded folder is still there with its marker — a copy, most often — is refused as
+`harness_folder_present`, naming both: a link records where a folder went, and never moves, copies or deletes one. A
+recorded folder that is there with no marker is missing, by the rule above: a link to another folder goes ahead, and
+the old one stays the person's, untouched. The path that is recorded already is the project's folder looked through
+again, never a refusal.
+
+**A project alone**, with no path, is the one form that can answer **made**: where the project has no folder recorded —
+the default project of an installation that had campaigns before it had folders — it gets its own under the root, as
+its first need does at a create. Where one is recorded and is there with its marker, that folder is looked through
+again; one that is gone is not made again beside it: `harness_folder_missing`, until a path says where it went.
+
+A path is absolute, names a folder that is there — a link never makes the folder it is named — and is never one of the
+places the root may not be: the home directory, a folder holding it, the top of a drive, the data directory, a folder
+inside it or one holding it. It is recorded as the platform writes it, without a Windows device prefix such as `\\?\`,
+which names the same folder. Nor is it the root, a folder holding the root or the root's `projects/`, refused by the field
+as those are; and a folder at, inside or holding one the runtime records for another project or for any campaign, or
+below a folder with a project's or a campaign's marker — decided by the recorded paths and a walk up from the path,
+never by a search below it or by a folder's name — is refused as `harness_folder_taken`, naming that folder, since a
+session started in one would read the other's memory files.
+
+The link then reads two fixed levels, never a search of the disk: the project's folder, and each folder directly in its
+`campaigns/`, by its marker. The database decides which project a campaign is in, never the folder it is found in.
+
+| Below `campaigns/` | What the link does |
+|---|---|
+| A folder marked for a campaign of this project, somewhere other than recorded | Records that path for it. |
+| The folder recorded for a campaign of this project | Nothing: it is where it is recorded. |
+| Two or more folders marked for one campaign, none of them the recorded one | Nothing: the recorded path stays, and each folder is reported. |
+| A folder marked for a campaign the runtime puts in another project | Nothing: it is reported, with both ids. |
+| A folder marked for an id nobody holds, for another level, or with a marker that cannot be read | Nothing: it is reported. |
+| A folder with no marker | Nothing, and it is not mentioned: it is the person's. |
+
+A campaign of the project found nowhere there keeps the path it had and is reported as not found, a marker one level
+deeper included. One with no folder recorded gets one made by the policy, unless it is archived: an archived campaign is
+relinked like any other where its folder is found, and none is ever made for it. A campaign's folder that cannot be made
+refuses the link whole, as a create's does.
+
+The answer is the project as it is now, what became of its folder — `relinked`, `adopted`, `made` or `kept` — every
+campaign of the project with the folder now recorded for it and what became of it — `relinked`, `kept`, `made`,
+`not_found`, `duplicate` or `archived` — and the folders found and left as they are, each with its reason —
+`another_project`, `unknown` or `duplicate` — by id and path, never a name. It lists every campaign the project has and
+is not paged. The checks that refuse run before anything is written; the disk's acts then come inside the link's
+transaction, each level's marker first, and every path and one `project_linked` line are saved together, so a disk
+refusal takes the database back. A link taken back leaves the folders it marked marked for this very project or
+campaign, and the next attempt uses them again. A link that records nothing writes no line.
+
+A moved root is a change of `Harness:Root` and then a link of each project whose folder moved with it: nothing moves by
+itself.
 
 ### The refusals
 
@@ -344,8 +468,9 @@ when `jason project link` makes its project's.
 |---|---|---|
 | `harness_folder_unavailable` | 409 | A folder could not be made or moved: the account may not write there, a file stands where a folder belongs, a file in it is held open or a program is working in it, or the two folders are on different volumes. The project or campaign the request is about, its row and its folder, is as it was; once what is in the way is repaired, the same request can be sent again. |
 | `harness_root_taken` | 409 | The folder at the root is marked as something other than the root. Nothing was written into it; set `Harness:Root` to another folder, or move that one away. |
-| `harness_folder_taken` | 409 | A folder already stands at the path a project's or a campaign's folder takes and is marked for something else — another level, another project, an id nobody here holds — or, for a move, any folder stands there. Nothing was written into it, and the project or campaign the request is about is as it was; rename or move that folder away, then send the request again. |
-| `harness_folder_missing` | 409 | The folder recorded for the project, or for the campaign being moved, is not there or no longer carries its marker. The project or campaign the request is about is as it was; move the folder back to the recorded path, or, for a project's, record where it is now with `jason project link`, and for a campaign's, relink its project, which finds a campaign's folder by its marker. |
+| `harness_folder_taken` | 409 | A folder already stands at the path a project's or a campaign's folder takes and is marked for something else — another level, another project, an id nobody here holds — or, for a move, any folder stands there; or, for a link, the folder named is marked for anything but the project, is the folder another project records, or is at, inside or holding another project's or a campaign's folder, or below a project's or a campaign's marker. Nothing was written into it, and the project or campaign the request is about is as it was; rename or move that folder away, or name another, then send the request again. |
+| `harness_folder_missing` | 409 | The folder recorded for the project — at a create, a move, or a link of the project alone — or for the campaign being moved, is not there or no longer carries its marker. The project or campaign the request is about is as it was; move the folder back to the recorded path, or, for a project's, record where it is now with `jason project link`, and for a campaign's, relink its project, which finds a campaign's folder by its marker. |
+| `harness_folder_present` | 409 | A link named a folder for a project whose recorded folder is still there and still carries its marker. Nothing was written; a link records where a folder went and never moves or copies one, so the person removes or renames one of the two, then links again. |
 
 Each message names the folder, so the person who reads it knows where to look. No folder's path reaches the runtime's
 log: a campaign's folder is named from the campaign's name.

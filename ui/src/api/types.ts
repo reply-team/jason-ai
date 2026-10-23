@@ -94,6 +94,10 @@ export type SystemInfo = {
         digest: string | null;
         problem: string | null;
     } | null;
+    harness?: {
+        root: string;
+        root_state: string;
+    } | null;
 };
 export type Plugin = {
     id: string;

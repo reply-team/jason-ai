@@ -122,6 +122,10 @@
       "api_version_matches": true,
       "digest": "sha256:recorded-1",
       "problem": null
+    },
+    "harness": {
+      "root": "~/Jason",
+      "root_state": "absent"
     }
   }
 }

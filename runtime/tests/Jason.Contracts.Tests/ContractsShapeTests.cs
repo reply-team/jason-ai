@@ -181,13 +181,13 @@ public class ContractsShapeTests
         Assert.EndsWith(
             "\"skills\":{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":1048576,"
                 + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null,\"problem_code\":null,\"problem_exception\":null}],"
-                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null},\"notifications\":null,\"listening\":null,\"ui\":null}",
+                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null},\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
         // A runtime older than this section reports none at all, which every other section here also does and
         // which the CLI renders as "unknown" rather than as an empty deployment.
-        Assert.EndsWith("\"skills\":null,\"notifications\":null,\"listening\":null,\"ui\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"skills\":null,\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -212,12 +212,30 @@ public class ContractsShapeTests
             "\"notifications\":{\"enabled\":true,\"channels\":[{\"channel\":\"toast\",\"kind\":\"toast\",\"on\":true,"
                 + "\"outcome\":\"silenced\",\"reason\":\"disabled_for_application\",\"code\":null,\"class\":null,\"detail\":null,"
                 + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null}],"
-                + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"},\"listening\":null,\"ui\":null}",
+                + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"},\"listening\":null,\"ui\":null,\"harness\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
         // A runtime older than this section reports none, which the CLI renders as "unknown".
-        Assert.EndsWith("\"notifications\":null,\"listening\":null,\"ui\":null}", JsonSerializer.Serialize(info with { Notifications = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null}", JsonSerializer.Serialize(info with { Notifications = null }, JasonJson.Options), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The harness root the runtime uses rides on <c>system.info</c> as the last section: the root in force and what
+    /// stands there, its state a snake_case word. A runtime older than the section reports none.
+    /// </summary>
+    [Fact]
+    public void System_info_says_the_harness_root_in_force_and_what_stands_there()
+    {
+        var info = SystemInfo() with { Harness = new HarnessInfo("/home/marta/Jason", HarnessRootState.NotAFolder) };
+
+        Assert.EndsWith(
+            "\"ui\":null,\"harness\":{\"root\":\"/home/marta/Jason\",\"root_state\":\"not_a_folder\"}}",
+            JsonSerializer.Serialize(info, JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.Equal(
+            ["absent", "marked", "unmarked", "taken", "not_a_folder", "unreadable"],
+            Enum.GetValues<HarnessRootState>().Select(state => JsonSerializer.Serialize(state, JasonJson.Options).Trim('"')));
     }
 
     /// <summary>A role the walk could not measure says so, rather than reporting a skill of no bytes.</summary>

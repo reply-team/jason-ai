@@ -211,7 +211,12 @@ public class DocumentedPageCommandsTests
             // deletes an executable it resolves for itself -- which, with no InstallPath given, is the test
             // host. A remover that records rather than removes is the only safe one here, and forgetting it
             // costs a refusal rather than a developer's PATH.
-            Removes: new Uninstall.RecordingRemover());
+            Removes: new Uninstall.RecordingRemover(),
+            // A person types each line in a shell that stands in some folder, and a relative path is read from it — a
+            // `~` too, which a shell would have expanded and these lines are not. This test's own directory, so no line
+            // names a folder of the machine's; a walk up from it for a project's marker writes nothing, and what a
+            // marker it meets names is asked of a runtime that is not there.
+            WorkingDirectory: dir.Paths.Root);
 
     /// <summary>
     /// Every request refused before it leaves the process. Most of these commands never get this far — there is

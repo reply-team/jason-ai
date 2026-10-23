@@ -282,6 +282,34 @@ public class HarnessOptionsTests
             result.Failures);
     }
 
+    /// <summary>
+    /// An unset root is held to the data directory's rule apart from the home's: a default that leads to the home itself —
+    /// <c>Jason</c> in the home made a link to the home — holds the data directory beside it, and is refused for that.
+    /// </summary>
+    [Fact]
+    public void A_default_that_leads_to_the_home_holding_the_data_directory_is_refused_saying_what_to_set()
+    {
+        using var tree = new TempTree();
+        var home = Path.Combine(tree.Root, "home");
+        var data = new JasonPaths(Path.Combine(home, ".jason"));
+        Directory.CreateDirectory(data.Root);
+        var link = Path.Combine(home, HarnessOptions.DefaultFolder);
+        Link(link, home);
+        try
+        {
+            var result = new HarnessOptionsValidator(data, home).Validate(null, new HarnessOptions());
+
+            Assert.Equal(
+                ["Harness:Root is not set, and its default, Jason in the home directory, holds the data directory, which is the runtime's own; set Harness:Root to an absolute path apart from it."],
+                result.Failures ?? []);
+        }
+        finally
+        {
+            // The link alone, before the tree goes: a link that leads to the folder holding it goes round.
+            Directory.Delete(link);
+        }
+    }
+
     [Fact]
     public void A_default_that_lands_inside_the_data_directory_is_refused_saying_what_to_set()
     {

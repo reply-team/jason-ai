@@ -113,6 +113,51 @@ public class ProjectEndpointTests
     }
 
     /// <summary>
+    /// A project's folder linked over the API, each exchange recorded: one the person moved, recorded again by its marker
+    /// with its campaign's; the default project of an installation that upgraded, given its folder and its campaigns' by
+    /// the policy, an archived one excepted; and another folder named for a project whose own is still there, refused.
+    /// </summary>
+    [Fact]
+    public async Task A_project_s_folder_is_linked_over_the_api()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        await HoldTheDefaultsMomentsAsync(api);
+        var home = TempDataDir.HomeOf(api.Paths.Root);
+        var acme = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Acme Corp" }, Ct);
+        var leads = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads", project_id = acme.Id }, Ct);
+        var moved = Path.Combine(home, "Clients", "acme-corp");
+        Directory.CreateDirectory(Path.GetDirectoryName(moved)!);
+        Directory.Move(acme.FolderPath!, moved);
+
+        var relinked = await api.RecordAsync<ProjectLinkResult>(Operations.ProjectLink, "relinked", new { path = moved, reason = "moved with the other clients" }, Ct);
+        Assert.Equal((moved, LinkFolderOutcome.Relinked), (relinked.Project.FolderPath, relinked.Folder));
+        Assert.Equal([new LinkedCampaign(leads.Id, Path.Combine(moved, "campaigns", "q3-leads"), LinkCampaignOutcome.Relinked)], relinked.Campaigns);
+
+        var spring = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring push" }, Ct);
+        var autumn = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn push" }, Ct);
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = autumn.Id }, Ct);
+        var standing = await api.PostOkAsync<ProjectDto>(Operations.ProjectGet, new { slug = "default" }, Ct);
+        await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile)))
+        {
+            await db.Campaigns.Where(c => c.PublicId == spring.Id || c.PublicId == autumn.Id).ExecuteUpdateAsync(set => set.SetProperty(c => c.FolderPath, (string?)null), Ct);
+            await db.Projects.Where(p => p.IsDefault).ExecuteUpdateAsync(set => set.SetProperty(p => p.FolderPath, (string?)null), Ct);
+        }
+
+        Directory.Delete(standing.FolderPath!, recursive: true);
+        var made = await api.RecordAsync<ProjectLinkResult>(Operations.ProjectLink, "made", new { project_id = standing.Id }, Ct);
+        Assert.Equal((standing.FolderPath, LinkFolderOutcome.Made), (made.Project.FolderPath, made.Folder));
+        Assert.Equal(
+            new[] { (spring.Id, LinkCampaignOutcome.Made), (autumn.Id, LinkCampaignOutcome.Archived) }.OrderBy(c => c.Item1, StringComparer.Ordinal),
+            made.Campaigns.Select(c => (c.CampaignId, c.Outcome)));
+
+        var copy = Path.Combine(home, "acme-copy");
+        Directory.CreateDirectory(Path.Combine(copy, ".jason"));
+        File.Copy(Path.Combine(moved, ".jason", "marker.json"), Path.Combine(copy, ".jason", "marker.json"));
+        var present = await api.RecordErrorAsync(Operations.ProjectLink, "present", new { path = copy }, HttpStatusCode.Conflict, Ct);
+        Assert.Equal("harness_folder_present", present.Code);
+    }
+
+    /// <summary>
     /// The default project's moments are those of the migration that made it, which no clock of a test holds; a recording
     /// that answers with it holds them to the recording's own moment first, so its file is the same on every run.
     /// </summary>

@@ -109,4 +109,69 @@ public class ProjectCommandsTests
         Assert.Matches("(?m)^prj_A +Acme Corp +acme-corp +no ", cli.Text);
         Assert.Contains("next cursor: cHJqX0E", cli.Text, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Link_sends_the_project_the_folder_and_the_reason()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "acme-moved");
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("project", "link", "prj_A", "--path", folder, "--reason", "moved to the shared drive");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.ProjectLink, $$"""{"project_id":"prj_A","path":{{JsonSerializer.Serialize(Path.GetFullPath(folder))}},"reason":"moved to the shared drive"}""");
+    }
+
+    [Fact]
+    public async Task Link_sends_a_project_alone_or_a_folder_alone()
+    {
+        using (var alone = new CliRun())
+        {
+            Assert.Equal(ExitCodes.Success, await alone.RunAsync("project", "link", "prj_A"));
+            alone.AssertPosted(Operations.ProjectLink, """{"project_id":"prj_A"}""");
+        }
+
+        var folder = Path.Combine(Path.GetTempPath(), "acme-moved");
+        using var byFolder = new CliRun();
+        Assert.Equal(ExitCodes.Success, await byFolder.RunAsync("project", "link", "--path", folder));
+        byFolder.AssertPosted(Operations.ProjectLink, $$"""{"path":{{JsonSerializer.Serialize(Path.GetFullPath(folder))}}}""");
+    }
+
+    /// <summary>A link with neither, typed where no project's folder is above, has nothing to link: a usage error, and nothing is sent.</summary>
+    [Fact]
+    public async Task Link_with_neither_a_project_nor_a_folder_outside_a_project_s_folder_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("project", "link");
+
+        Assert.True(exit == ExitCodes.Usage, $"'project link' exited {exit}: {cli.Error}");
+        Assert.Null(cli.Url);
+        Assert.Contains("--path", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_renders_a_link_by_ids_and_paths()
+    {
+        var project = new ProjectDto("prj_A", "Acme Corp", "acme-corp", false, Moment, Moment, "/home/marta/Clients/acme-corp");
+        var result = new ProjectLinkResult(
+            project,
+            LinkFolderOutcome.Relinked,
+            [
+                new LinkedCampaign("cmp_Q3", "/home/marta/Clients/acme-corp/campaigns/q3-leads", LinkCampaignOutcome.Relinked),
+                new LinkedCampaign("cmp_Q2", "/home/marta/Jason/projects/acme-corp/campaigns/q2-leads", LinkCampaignOutcome.NotFound),
+            ],
+            [new LinkReport("/home/marta/Clients/acme-corp/campaigns/beta-launch", LinkReportReason.AnotherProject, "cmp_B", "prj_B")]);
+        using var cli = new CliRun(JsonSerializer.Serialize(result, JasonJson.Options));
+
+        var exit = await cli.RunAsync("project", "link", "prj_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Matches("(?m)^Project: +prj_A\r?$", cli.Text);
+        Assert.Matches("(?m)^Folder: +relinked +/home/marta/Clients/acme-corp\r?$", cli.Text);
+        Assert.Matches("(?m)^cmp_Q3 +relinked +/home/marta/Clients/acme-corp/campaigns/q3-leads\r?$", cli.Text);
+        Assert.Matches("(?m)^cmp_Q2 +not_found +/home/marta/Jason/projects/acme-corp/campaigns/q2-leads\r?$", cli.Text);
+        Assert.Matches("(?m)^/home/marta/Clients/acme-corp/campaigns/beta-launch +another_project +cmp_B +prj_B\r?$", cli.Text);
+        Assert.DoesNotContain("Acme Corp", cli.Text, StringComparison.Ordinal);
+    }
 }

@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace Jason.Runtime.Harness;
+namespace Jason.Contracts.Harness;
 
 /// <summary>
 /// The file that makes a folder one of Jason's: <c>.jason/marker.json</c>, saying which level the folder is and, below

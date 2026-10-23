@@ -282,7 +282,8 @@ name — never which account a route binds — and the journal and the work item
 newest failures by their error's code — never by what they say. It never holds the capability token,
 request or response bodies, prompts, work-item results, the database, plugin packages, or a route's
 account and its identity. Only
-`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign
+`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
+project link recorded, campaign
 and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
 do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with,
 the errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the

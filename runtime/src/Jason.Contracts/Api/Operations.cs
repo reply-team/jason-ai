@@ -39,6 +39,7 @@ public static class Operations
     public const string ProjectGet = "project.get";
     public const string ProjectList = "project.list";
     public const string ProjectUpdate = "project.update";
+    public const string ProjectLink = "project.link";
 
     public const string PreferenceSet = "preference.set";
     public const string PreferenceUnset = "preference.unset";

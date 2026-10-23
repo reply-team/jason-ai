@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
+using Jason.Contracts.Harness;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Harness;
 using Jason.Runtime.Projects;
@@ -425,6 +426,25 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal(Path.Combine(other, "campaigns", "q3-leads"), moved);
         Assert.False(Directory.Exists(campaign), "the folder was copied rather than moved.");
         Assert.Equal(before, Snapshot(moved));
+    }
+
+    /// <summary>
+    /// A folder recorded behind a Windows device prefix is on the volume its drive names: a move between it and a project
+    /// spelled plainly is one rename, never refused as a move to another volume.
+    /// </summary>
+    [Fact]
+    public async Task A_move_between_a_path_behind_a_device_prefix_and_a_plain_one_is_on_one_volume()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Device prefixes are Windows' own; elsewhere such a path is a relative one.");
+        var folders = TestHarness.Folders(Home);
+        var acme = folders.MakeProjectFolder(Project, "acme");
+        var other = folders.MakeProjectFolder(Other, "other");
+        var campaign = await MakeAsync(folders, @"\\?\" + acme, Campaign, "Q3 leads");
+
+        var moved = await MoveAsync(folders, campaign, Campaign, other);
+
+        Assert.Equal(Path.Combine(other, "campaigns", "q3-leads"), moved);
+        Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, Campaign), HarnessMarker.In(moved));
     }
 
     [Fact]

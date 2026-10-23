@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 using Jason.Runtime.Harness;
 

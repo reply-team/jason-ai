@@ -155,7 +155,11 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   first create that needs it, with a marker naming its level and id and the person's memory file, `AGENTS.md`, beside a
   `CLAUDE.md` that imports it; the runtime writes structure only — never a word of a memory file, never a delete, never
   `git` — and moves a campaign's folder by one rename when the campaign changes project, or refuses the move. A path
-  is recorded on the entity; a folder is known by its marker, never its name. `docs/projects.md` is the contract.
+  is recorded on the entity; a folder is known by its marker, never its name, and a folder the person moves is
+  recorded again only by `project.link`, which reads the project's folder and each folder directly in its
+  `campaigns/` and never takes a campaign's project from a folder. A verb that takes a project and is given none takes
+  it from the nearest marker above the folder the CLI runs in, when that folder is the one recorded, and says so on
+  stderr; never a campaign. `docs/projects.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable
@@ -178,7 +182,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   by receipt and the rest of the installation by rule, and keeps the data directory unless
   `--purge-data` says otherwise. `doctor` lists what it would write before it writes — `--dry-run`
   lists it and writes nothing — reaches no network and uploads nothing; only `--include-journal` adds
-  what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign and work-item
+  what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link
+  recorded, campaign and work-item
   contexts as they changed, result formats, the addresses and numbers put on or taken off the
   do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered
   with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report

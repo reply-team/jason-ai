@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Harness;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Harness;

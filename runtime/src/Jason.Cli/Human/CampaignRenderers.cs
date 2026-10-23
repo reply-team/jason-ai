@@ -76,6 +76,13 @@ public static class CampaignRenderers
         return RenderText.WithCursor(table.Render(), page.NextCursor);
     }
 
+    /// <summary>
+    /// A listing the CLI scoped to the project of the folder it runs in, said above its rows, so a person reading it knows
+    /// why it holds one project's campaigns.
+    /// </summary>
+    public static string ScopedByFolder(string project, string rows) =>
+        RenderText.Lines([$"Project: {project}, from the working directory (--all-projects lists every project's)", string.Empty, rows]);
+
     /// <summary>A page of memberships: who is in the campaign, where they stand, and how to recognize them.</summary>
     public static string? Members(string json)
     {

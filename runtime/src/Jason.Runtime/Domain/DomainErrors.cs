@@ -328,6 +328,49 @@ public static class DomainErrors
             $"The folder recorded for '{campaign}', '{path}', is not there or no longer carries its marker, so the campaign stays where it was; move it back to '{path}', or relink its project with jason project link, which finds a campaign's folder by its marker.");
 
     /// <summary>
+    /// A link names another folder for a project whose recorded folder is still there with its marker — a copy, most
+    /// often. A link records where a folder went and never moves or copies one, so two folders would then claim one
+    /// project: nothing is written, and the person removes or renames one of the two.
+    /// </summary>
+    public static DomainException HarnessFolderPresent(string project, string recorded, string path) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_present",
+            $"Project '{project}' still has its folder at '{recorded}', with its marker, so '{path}' was not linked and nothing was written; a link records where a folder went and never moves or copies one: remove or rename one of the two folders, then link again.");
+
+    /// <summary>
+    /// A link of a project alone, whose recorded folder is not there or no longer carries the project's marker. The policy
+    /// never makes it again beside the moved one; the person says where it went.
+    /// </summary>
+    public static DomainException HarnessLinkFolderMissing(string project, string recorded) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_missing",
+            $"The folder recorded for '{project}', '{recorded}', is not there or no longer carries its marker, so nothing was linked; move it back to '{recorded}', or name where it is now with jason project link --path.");
+
+    /// <summary>
+    /// A link names, for one project, the folder another project records — marked or not, it is that project's — so it
+    /// never becomes a second project's, and nothing is written.
+    /// </summary>
+    public static DomainException HarnessFolderRecorded(string path, string owner) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_taken",
+            $"The folder '{path}' is the folder recorded for project '{owner}', so it does not become another project's and nothing was written; name another folder, or link '{owner}' somewhere else first.");
+
+    /// <summary>
+    /// A link names a folder at, inside or holding another level's — one the runtime records for another project or for a
+    /// campaign, or one carrying a project's or a campaign's marker above it. A session started in one would read the other's
+    /// memory files, so it never becomes a project's, and nothing is written.
+    /// </summary>
+    /// <param name="standing">Where it stands to the other folder, naming it: "is inside '…/campaigns/q3-leads', the folder recorded for campaign 'cmp_…'".</param>
+    public static DomainException HarnessFolderNested(string path, string standing) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "harness_folder_taken",
+            $"The folder '{path}' {standing}, so it does not become a project's and nothing was written: an agent session started in one would read the other's memory files. Name a folder apart from every project's and campaign's, then link again.");
+
+    /// <summary>
     /// A named preference is the person's word about their business: a role or a run that sets one is deciding it for
     /// them, so it reads a preference and never writes one, as it never decides an approval.
     /// </summary>
