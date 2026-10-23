@@ -3,11 +3,13 @@ name: CI
 # Which checks a run needs is decided once, by the version job, which every other job needs, from the event and the
 # branch a change lands on:
 # - a draft pull request's push runs the Linux set: the version, linux-x64, install.sh on ubuntu, the update on
-#   linux-x64 and the UI; linux-x64 tests the critical tier alone, the tests that carry the Critical trait, where every
-#   other run but the version pull request's tests the whole suite, and a draft's run keeps no record of the tree it
-#   tested;
+#   linux-x64 and the UI; linux-x64 tests the critical tier alone, the tests that carry the Critical trait, and a
+#   draft's run keeps no record of the tree it tested;
 # - a pull request into a release branch runs the Linux set when it is ready as well, which is all a release branch's
-#   ruleset requires, and reports nothing as skipped; so does a pull request into any other branch but main;
+#   ruleset requires, and reports nothing as skipped; its linux-x64 tests the critical tier there too, under its own
+#   name once the pull request is ready. The whole suite runs once per release, on the release's pull request into main,
+#   and a change under runtime/ ran it locally before it was marked ready. A pull request into any other branch but main
+#   runs the Linux set as well, and tests the whole suite;
 # - the release's pull request, from a release branch into main, runs every check, macOS included, when it is marked
 #   ready for review and on every push after that; a push after that which changes nothing but documentation since the
 #   tree its last run of every check tested runs the Linux set, and reports the rest as skipped;
@@ -19,11 +21,16 @@ name: CI
 #   rule;
 # - every ready run of a pull request into main or into a release branch keeps a record of the tree it tested and of
 #   the set it ran, whichever set that is, but for a push to the release's pull request that changes documentation
-#   only; a draft's run keeps none;
-# - a push to main runs every check, macOS included, unless its tree is the one its pull request's last ready run
-#   tested, whichever set that run ran: then only the version runs, and the rest report as skipped;
-# - a push to a release branch runs the Linux set, unless its tree is the one its pull request's last ready run tested:
-#   then only the version runs. No ruleset reads a push to a release branch, so nothing reports as skipped;
+#   only, and so does a push to main that runs every check; a draft's run keeps none. A record is named by the tree it
+#   tested, so a later run finds it by that tree's id, whatever ref the run that kept it ran on;
+# - a push to main or to a release branch whose tree a run that passed recorded runs the version alone, and on main the
+#   rest report as skipped. Main passes over the record of a pull request into a release branch, whose test was the
+#   critical tier, and a run still in progress, cancelled or failed has recorded nothing;
+# - a push to main whose tree no run recorded, and whose one commit changes nothing but documentation against its
+#   parent, runs the version alone as well, and the rest report as skipped. Any other push to main runs every check,
+#   macOS included;
+# - any other push to a release branch runs the Linux set and the whole suite. No ruleset reads a push to a release
+#   branch, so nothing reports as skipped there;
 # - a run started by hand runs every check, macOS included. Nothing runs nightly. A release runs its own checks, macOS
 #   among them, in release.yml.
 # Every check the main branch's ruleset requires reports on every ready pull request into main and on every push to
@@ -55,11 +62,10 @@ jobs:
   version:
     name: The version this tree carries
     runs-on: ubuntu-latest
-    # Deciding which checks a run needs reads earlier runs, their artifacts and the pull request a commit merged.
+    # Deciding which checks a run needs reads earlier runs and their artifacts.
     permissions:
       contents: read
       actions: read
-      pull-requests: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -75,7 +81,8 @@ jobs:
       skipped: ${{ steps.legs.outputs.skipped }}
     steps:
       # A pull request's checkout is its merge with the base branch, and the merge's first parent is the base branch's
-      # head: two commits deep, the checkout holds both, and so both sides of what the pull request changes.
+      # head: two commits deep, the checkout holds both, and so both sides of what the pull request changes. A push's
+      # checkout holds its commit and that commit's parent the same way.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
@@ -103,13 +110,16 @@ jobs:
           "release=$release" >> $env:GITHUB_OUTPUT
 
       # The tree this run tests, and its listing, which a later run compares with. A pull request's checkout is its merge
-      # with the base branch, so its tree is the one a squash of it puts on main. And for a pull request, the listing of
-      # its base, the merge's first parent, which is what the pull request changes against.
+      # with the base branch, so its tree is the one a squash of it puts on main. And the listing of the base, the
+      # checkout's first parent, which is what the change is read against: for a pull request, the base branch's head;
+      # for a push to main of one commit, that commit's parent, which is where main was before the push.
       - id: tree
         name: The tree this run tests
         shell: pwsh
         env:
           EVENT: ${{ github.event_name }}
+          TARGET: ${{ github.base_ref || github.ref_name }}
+          BEFORE: ${{ github.event.before }}
         run: |
           $tree = git rev-parse 'HEAD^{tree}'
           if ($LASTEXITCODE -ne 0 -or -not $tree) { throw "git did not name this checkout's tree" }
@@ -119,20 +129,32 @@ jobs:
           "tree=$tree" >> $env:GITHUB_OUTPUT
           "listing=$listing" >> $env:GITHUB_OUTPUT
 
+          # Which base, if any, this run reads its change against. A push to main is read against its commit's parent only
+          # where the push is that one commit: a merge's two parents, a commit with none, or a push that moves main by more
+          # than one commit or not from the commit's parent has no one parent its whole change is against.
+          $listsBase = $env:EVENT -eq 'pull_request'
+          if ($env:EVENT -eq 'push' -and $env:TARGET -ceq 'main') {
+            $parents = @("$(git rev-list --parents -n 1 HEAD)".Split(' ', [StringSplitOptions]::RemoveEmptyEntries) | Select-Object -Skip 1)
+            if ($LASTEXITCODE -ne 0) { Write-Host "git did not name the parents of this push's commit" }
+            elseif ($parents.Count -ne 1) { Write-Host "this push's commit has $($parents.Count) parents, so its change is read against none" }
+            elseif ($parents[0] -cne $env:BEFORE) { Write-Host "this push moves main from $($env:BEFORE), not from its commit's parent $($parents[0]), so its change is read against none" }
+            else { $listsBase = $true }
+          }
+
           # A base that cannot be listed is said and left out: without it no pull request is taken for the version pull
-          # request, which costs minutes and skips nothing.
+          # request, and no push to main for one of documentation alone, which costs minutes and skips nothing.
           $base = ''
-          if ($env:EVENT -eq 'pull_request') {
+          if ($listsBase) {
             $base = Join-Path $env:RUNNER_TEMP 'base.txt'
             git ls-tree -r --full-tree 'HEAD^1' | Set-Content -LiteralPath $base
-            if ($LASTEXITCODE -ne 0) { Write-Host "git did not list the tree of this pull request's base"; $base = '' }
+            if ($LASTEXITCODE -ne 0) { Write-Host "git did not list the tree of this change's base"; $base = '' }
           }
           "base=$base" >> $env:GITHUB_OUTPUT
 
       # What an earlier run tested, asked only where the answer can let this run skip a leg: for a push to main or to a
-      # release branch, the record that the last passing run of the pull request it merged kept; for a push to the
-      # release's pull request once it is ready, the record its own last passing run of every check kept. Whatever goes
-      # wrong here - an API error, no such run, a record that cannot be had - is an answer of nothing found, and on
+      # release branch, the record of this very tree that the newest run to pass kept, on whatever ref it ran; for a push
+      # to the release's pull request once it is ready, the record its own last passing run of every check kept. Whatever
+      # goes wrong here - an API error, no such run, a record that cannot be had - is an answer of nothing found, and on
       # nothing found the step after this skips nothing the branch requires.
       - id: earlier
         name: Find what an earlier run tested
@@ -143,10 +165,10 @@ jobs:
           EVENT: ${{ github.event_name }}
           ACTION: ${{ github.event.action }}
           DRAFT: ${{ github.event.pull_request.draft }}
-          SHA: ${{ github.sha }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.head_ref }}
           TARGET: ${{ github.base_ref || github.ref_name }}
+          TREE: ${{ steps.tree.outputs.tree }}
         run: |
           $runs = "repos/$env:REPOSITORY/actions/workflows/ci.yml/runs"
 
@@ -156,36 +178,59 @@ jobs:
             ($answer -join "`n") | ConvertFrom-Json
           }
 
+          # A record a run kept, under the name it was kept by, downloaded and read: its file, and what it says.
+          function Download([string] $run, [string] $name) {
+            $directory = Join-Path $env:RUNNER_TEMP "earlier/$run"
+            gh run download $run --repo $env:REPOSITORY --name $name --dir $directory | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "the record run $run kept could not be downloaded" }
+            $file = (Get-ChildItem -LiteralPath $directory -Recurse -Filter record.json | Select-Object -First 1).FullName
+            if (-not $file) { throw "the record run $run kept holds no record.json" }
+            @{ file = $file; record = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json }
+          }
+
+          # A record is kept under the name of the tree it tested, and only by a ready pull request's run or a push to main
+          # that runs every check, naming the set it ran.
+          $named = 'tested-tree-*'
+
           # The newest of these runs that kept a record of the tree it tested for this pull request, downloaded. Only
-          # runs that passed are asked about, and only a ready pull request's run keeps a record, naming the set it ran,
-          # so a record names a tree that set passed on.
+          # runs that passed are asked about, so a record names a tree that set passed on.
           function Recorded($candidates, [string] $number) {
             foreach ($run in @($candidates | Where-Object { $_ })) {
-              $kept = @((Api "repos/$env:REPOSITORY/actions/runs/$($run.id)/artifacts?name=tested-tree").artifacts | Where-Object { $_ -and -not $_.expired })
+              $kept = @((Api "repos/$env:REPOSITORY/actions/runs/$($run.id)/artifacts?per_page=100").artifacts | Where-Object { $_ -and -not $_.expired -and "$($_.name)" -clike $named })
               if ($kept.Count -eq 0) { continue }
-              $directory = Join-Path $env:RUNNER_TEMP "earlier/$($run.id)"
-              gh run download $run.id --repo $env:REPOSITORY --name tested-tree --dir $directory
-              if ($LASTEXITCODE -ne 0) { throw "the record run $($run.id) kept could not be downloaded" }
-              $file = (Get-ChildItem -LiteralPath $directory -Recurse -Filter record.json | Select-Object -First 1).FullName
-              if (-not $file) { throw "the record run $($run.id) kept holds no record.json" }
-              $record = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json
-              if ("$($record.pull_request)" -ne $number) { continue }
-              return @{ file = $file; said = "run $($run.id) of pull request #$number tested tree $($record.tree)" }
+              $read = Download "$($run.id)" "$($kept[0].name)"
+              if ("$($read.record.pull_request)" -ne $number) { continue }
+              return @{ file = $read.file; said = "run $($run.id) of pull request #$number tested tree $($read.record.tree)" }
             }
+          }
+
+          # The record of this run's tree that the newest run to pass kept, on any ref, downloaded: the artifacts named by
+          # this tree, newest first, each asked about the run that kept it, since an artifact is there from the moment its
+          # run uploads it. A run still in progress, cancelled or failed is passed over, and on main so is the record of a
+          # pull request into a release branch, whose ready run tested the critical tier alone: main takes a tree tested
+          # by the whole suite, or by the version pull request, whose tier is its ready run by rule.
+          function OfThisTree {
+            $passed = @()
+            $artifacts = @((Api "repos/$env:REPOSITORY/actions/artifacts?name=tested-tree-$($env:TREE)&per_page=20").artifacts |
+              Where-Object { $_ -and -not $_.expired -and $_.workflow_run.id } | Sort-Object -Property created_at -Descending)
+            foreach ($artifact in $artifacts) {
+              $id = "$($artifact.workflow_run.id)"
+              $run = Api "repos/$env:REPOSITORY/actions/runs/$id"
+              if ($run.status -cne 'completed') { $passed += "run $id is $($run.status)"; continue }
+              if ($run.conclusion -cne 'success') { $passed += "run $id concluded $($run.conclusion)"; continue }
+              $read = Download $id "$($artifact.name)"
+              if ("$($read.record.tree)" -cne $env:TREE) { $passed += "run $id kept a record of another tree"; continue }
+              if ($env:TARGET -ceq 'main' -and "$($read.record.checks)" -ceq 'linux') { $passed += "run $id on $($read.record.ref) tested the critical tier alone, into a release branch"; continue }
+              return @{ file = $read.file; said = "run $id on $($read.record.ref) tested tree $($read.record.tree)" }
+            }
+            @{ file = ''; said = "no run that passed kept a record of tree $($env:TREE)$(if ($passed.Count -gt 0) { " ($($passed -join '; '))" })" }
           }
 
           $record = ''
           try {
             if ($env:EVENT -eq 'push') {
-              $merged = @(Api "repos/$env:REPOSITORY/commits/$($env:SHA)/pulls" | Where-Object { $_.merged_at -and $_.merge_commit_sha -eq $env:SHA })
-              if ($merged.Count -ne 1) {
-                $said = "$($merged.Count) merged pull requests name $($env:SHA) as their merge"
-              } else {
-                $pull = $merged[0]
-                $found = Recorded (Api "$($runs)?event=pull_request&head_sha=$($pull.head.sha)&status=success&per_page=20").workflow_runs "$($pull.number)"
-                if ($found) { $record = $found.file; $said = $found.said }
-                else { $said = "no passing run of pull request #$($pull.number) at $($pull.head.sha) kept a record of its tree" }
-              }
+              $found = OfThisTree
+              $record = $found.file; $said = $found.said
             } elseif ($env:EVENT -eq 'pull_request' -and $env:ACTION -eq 'synchronize' -and $env:DRAFT -eq 'false' -and
                 $env:TARGET -ceq 'main' -and $env:BRANCH -clike 'release/*') {
               $branch = [uri]::EscapeDataString($env:BRANCH)
@@ -212,7 +257,9 @@ jobs:
       # `if: needs.version.outputs.full == 'true'`, one the Linux set needs `linux`, the platform legs, which every set
       # that builds anything needs, `build`, and a job its condition skips reports success to the checks the ruleset
       # requires. A leg is skipped only on what was found: nothing found, or a record that cannot be read, skips nothing
-      # the branch requires.
+      # the branch requires. A pull request into a release branch tests the critical tier, ready or draft: the whole
+      # suite's run per release is the release's pull request's, and a change under runtime/ ran it locally before it
+      # was marked ready.
       - id: legs
         name: Decide which checks this run needs
         shell: pwsh
@@ -222,6 +269,7 @@ jobs:
           DRAFT: ${{ github.event.pull_request.draft }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
           BRANCH: ${{ github.head_ref }}
           TARGET: ${{ github.base_ref || github.ref_name }}
           TREE: ${{ steps.tree.outputs.tree }}
@@ -327,7 +375,8 @@ jobs:
           $toRelease = $env:TARGET -clike 'release/*'
           $fromRelease = $env:BRANCH -clike 'release/*'
 
-          # The paths a ready pull request into main that is not the release's changes against its base, once they are read.
+          # The paths a ready pull request into main that is not the release's, or a push to main with no record of its
+          # tree, changes against its base, once they are read.
           $seen = $null
 
           try {
@@ -370,8 +419,23 @@ jobs:
               $tested = "$($record.tree)"
               if ($tested -and $tested -ceq $env:TREE) { $set = 'tested'; $why = "$($env:FOUND), which is this commit's tree, and that run ran $(Ran $record)" }
               else { $set = 'everything'; $why = "$($env:FOUND), and this commit's tree is $($env:TREE)" }
+            } elseif ($env:EVENT -eq 'push' -and $env:BASE) {
+              # No run recorded this tree, so what the push's one commit changes against its parent decides: documentation
+              # alone needs no leg, since the parent's tree is what main held before. A commit that changes nothing is a
+              # push made to run the checks again, and runs them.
+              $before = Entries @(Get-Content -LiteralPath $env:BASE)
+              $after = Entries @(Get-Content -LiteralPath $env:LISTING)
+              $seen = Differing $before $after
+              $others = @($seen | Where-Object { -not (Documentation $_ @((Kind $before $_), (Kind $after $_))) })
+              if ($seen.Count -gt 0 -and $others.Count -eq 0) {
+                $set = 'tested'; $why = "every path this push changes against its parent is documentation: $(Some $seen); $($env:FOUND)"
+              } elseif ($seen.Count -eq 0) {
+                $set = 'everything'; $why = "a push to main runs every check: $($env:FOUND), and its commit changes nothing against its parent"
+              } else {
+                $set = 'everything'; $why = "a push to main runs every check: $($env:FOUND), and it changes $(Some $others) against its parent, which is not documentation"
+              }
             } elseif ($env:EVENT -eq 'push') {
-              $set = 'everything'; $why = "a push to main runs every check: $($env:FOUND)"
+              $set = 'everything'; $why = "a push to main runs every check: $($env:FOUND), and what it changes against its parent was not listed"
             } else {
               $set = 'everything'; $why = 'a run started by hand runs every check'
             }
@@ -412,14 +476,16 @@ jobs:
           }
 
           # A draft's push tests the critical tier alone, the tests that go red first when a rule the product rests on
-          # breaks, and so does the version pull request when it is ready: for that pull request the tier is the ready run,
-          # by rule. Every other run tests the whole suite.
+          # breaks, and so do a pull request into a release branch and the version pull request when they are ready: for
+          # them the tier is the ready run, by rule. The whole suite's run per release is the release's pull request's,
+          # and a change under runtime/ ran the whole suite locally before it was marked ready. Every other run tests the
+          # whole suite.
           $draft = $env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true'
-          $tier = $draft -or $set -eq 'version-only'
+          $tier = $draft -or $set -eq 'version-only' -or ($env:EVENT -eq 'pull_request' -and $toRelease)
 
           # A draft's leg is not named as the leg a ruleset requires: a required check is judged by the latest check of its
-          # name on the commit, and a draft's tier must not stand in for the ready run's whole suite in the moments before
-          # that run creates its own. The version pull request's leg is: there the tier is the ready run.
+          # name on the commit, and a draft's tier must not stand in for the ready run in the moments before that run
+          # creates its own. A ready leg is, the tier's included where the tier is the ready run.
           $kept = @($kept | ForEach-Object { @{ rid = $_.rid; os = $_.os; name = $(if ($draft) { "$($_.rid) (critical tier)" } else { $_.rid }) } })
 
           function Word([bool] $yes) { if ($yes) { 'true' } else { 'false' } }
@@ -435,25 +501,28 @@ jobs:
           "skipping=$(Word ($skipped.Count -gt 0))" >> $env:GITHUB_OUTPUT
           "skipped=$(@{ include = $skipped } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
 
-          # Every ready run of a pull request into main or a release branch keeps a record of the tree it tested and of the
-          # set it ran, for the runs after it: the release's run of every check, for a push after it that changes
-          # documentation only and for the push to main its merge makes; a run of the Linux set into a release branch, for
-          # the push to the release branch its merge makes; and the run of any other pull request into main, the version
-          # pull request's among them, for the push to main its squash makes. A draft's run keeps none, and neither does a
-          # push to the release's pull request that changes documentation only: the push after it compares with the tree
-          # that pull request's last run of every check tested.
+          # Every ready run of a pull request into main or a release branch keeps a record of the tree it tested, of the set
+          # it ran and of the ref it ran on, for the runs after it: the release's run of every check, for a push after it
+          # that changes documentation only and for the push to main its merge makes; a run of the Linux set into a release
+          # branch, for the push to the release branch its merge makes; and the run of any other pull request into main, the
+          # version pull request's among them, for the push to main its squash makes. So does a push to main that runs every
+          # check, for a release branch that takes main as it is. A draft's run keeps none, and neither does a push to the
+          # release's pull request that changes documentation only: the push after it compares with the tree that pull
+          # request's last run of every check tested.
           $recorded = ''
-          if ($env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'false' -and
-              ($set -in 'everything', 'not-the-release', 'version-only' -or ($set -eq 'linux' -and $toRelease))) {
+          if (($env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'false' -and
+                ($set -in 'everything', 'not-the-release', 'version-only' -or ($set -eq 'linux' -and $toRelease))) -or
+              ($env:EVENT -eq 'push' -and -not $toRelease -and $set -eq 'everything')) {
             $recorded = Join-Path $env:RUNNER_TEMP 'tested-tree'
             New-Item -ItemType Directory -Force -Path $recorded | Out-Null
-            [ordered] @{ tree = $env:TREE; commit = $env:SHA; pull_request = [int] $env:PULL_REQUEST; checks = $set; listing = @(Get-Content -LiteralPath $env:LISTING) } |
+            $number = if ($env:PULL_REQUEST) { [int] $env:PULL_REQUEST } else { $null }
+            [ordered] @{ tree = $env:TREE; commit = $env:SHA; ref = $env:REF; pull_request = $number; checks = $set; listing = @(Get-Content -LiteralPath $env:LISTING) } |
               ConvertTo-Json -Compress -Depth 3 | Set-Content -LiteralPath (Join-Path $recorded 'record.json')
           }
           "record=$recorded" >> $env:GITHUB_OUTPUT
 
           # Which case this run took, and why, in its log and on its summary page, with the paths a pull request into main
-          # that is not the release's changes against its base.
+          # that is not the release's, or a push to main whose tree no run recorded, changes against its base.
           $legs = "platforms -> $(@($kept | ForEach-Object { $_.rid }) -join ', '); tests -> $(if ($tier) { 'the critical tier' } elseif ($set -in 'tested', 'none') { 'none' } else { 'the whole suite' }); updates -> $(@($keptUpdates | ForEach-Object { $_.rid }) -join ', '); skipped by rule -> $(@($skipped | ForEach-Object { $_.check }) -join ', ')"
           $saw = @(if ($null -ne $seen) { "changed against the base -> $(Some $seen)" })
           Write-Host "set -> ${set}; $why"
@@ -463,13 +532,13 @@ jobs:
             @('### Which checks this run needs', '', "**$set**: $why", '', $legs) + @($saw | ForEach-Object { '', $_ }) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
 
-      # The record, kept fourteen days: as long as a pull request may wait for its merge. A record that has gone skips
-      # nothing.
+      # The record, kept fourteen days under the name of the tree it tested: as long as a pull request may wait for its
+      # merge. A record that has gone skips nothing.
       - name: Keep the record of the tree this run tested
         if: steps.legs.outputs.record != ''
         uses: actions/upload-artifact@v7
         with:
-          name: tested-tree
+          name: tested-tree-${{ steps.tree.outputs.tree }}
           path: ${{ steps.legs.outputs.record }}
           retention-days: 14
           if-no-files-found: error
@@ -549,8 +618,9 @@ jobs:
           # A pwsh step ends with the last native command's exit code, which here is the refusal's own.
           exit 0
 
-      # A draft's push tests the critical tier alone, a few minutes where the whole suite takes many; every other run
-      # tests the whole suite, the same build under the same version.
+      # A draft's push, a pull request into a release branch and the version pull request test the critical tier alone, a
+      # few minutes where the whole suite takes many; every other run tests the whole suite, the same build under the
+      # same version.
       - name: Test (offline)
         if: needs.version.outputs.tier != 'true'
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
@@ -1419,9 +1489,10 @@ jobs:
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not
   # the release's, and on a push to the release's pull request that changes documentation only; win-x64, osx-arm64 and
   # both updates on the version pull request; every platform and update on a push to main whose tree was tested
-  # already. A matrix row that is absent would never report, and a merge would wait for it, so the version job hands the
-  # legs it leaves out to this job. A job without a matrix reports under its own name when its condition skips it, so
-  # every other check the ruleset requires reports without a stand-in.
+  # already, or whose one commit changes documentation alone. A matrix row that is absent would never report, and a
+  # merge would wait for it, so the version job hands the legs it leaves out to this job. A job without a matrix reports
+  # under its own name when its condition skips it, so every other check the ruleset requires reports without a
+  # stand-in.
   skipped-by-rule:
     name: ${{ matrix.check }}
     needs: version

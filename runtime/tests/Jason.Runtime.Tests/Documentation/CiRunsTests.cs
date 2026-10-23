@@ -15,12 +15,15 @@ namespace Jason.Runtime.Tests.Documentation;
 /// branch, that changes the version prefix's line and the pins the version guards hold to it and nothing else — runs
 /// linux-x64 alone, testing the critical tier under the leg's own name. Any other pull request into <c>main</c> runs the
 /// Linux set. All three report every other check <c>main</c>'s ruleset requires as skipped by rule, under its own name.
-/// Every ready pull request's run keeps a record of the tree it tested and of the set it ran, and a push to <c>main</c> or
-/// to a release branch whose tree the merged pull request's last ready run tested runs the version alone; any other push to
-/// <c>main</c> runs every check, and any other push to a release branch the Linux set. A run started by hand runs every
-/// check, and nothing runs nightly. A draft's push and the version pull request test the critical tier alone; every other
-/// run tests the whole suite. Read out of ci.yml, and the steps that decide are run rather than read, so what these facts
-/// hold is what a runner does.
+/// Every ready pull request's run, and a push to <c>main</c> that runs every check, keeps a record named by the tree it
+/// tested, of the set it ran and the ref it ran on. A push to <c>main</c> or to a release branch whose tree a run that
+/// passed recorded, on any ref, runs the version alone, and <c>main</c> passes over the record of a pull request into a
+/// release branch; a push to <c>main</c> with no such record whose one commit changes documentation alone against its
+/// parent runs the version alone as well. Any other push to <c>main</c> runs every check, and any other push to a release
+/// branch the Linux set. A run started by hand runs every check, and nothing runs nightly. A draft's push, a pull request
+/// into a release branch and the version pull request test the critical tier alone; every other run tests the whole
+/// suite, which runs once per release on the release's pull request. Read out of ci.yml, and the steps that decide are run
+/// rather than read, so what these facts hold is what a runner does.
 /// </summary>
 public class CiRunsTests
 {
@@ -175,12 +178,14 @@ public class CiRunsTests
         ["a push after ready to the version pull request"] = (TheVersionPullRequest("synchronize"), VersionOnly),
         ["a push to the version pull request while it is a draft"] = (TheVersionPullRequest("synchronize", "true"), "linux"),
         ["a push to main"] = (new Run("push", TestedTree: AnotherTree), "everything"),
-        ["a push to main of the tree its pull request's last ready run tested"] = (new Run("push", TestedTree: Tree), "tested"),
+        ["a push to main of a tree a run that passed recorded"] = (new Run("push", TestedTree: Tree), "tested"),
         ["a push to main of the tree another pull request into main tested when it was ready"] = (new Run("push", TestedTree: Tree, TestedSet: "not-the-release"), "tested"),
         ["a push to main of a tree other than the one another pull request into main tested"] = (new Run("push", TestedTree: AnotherTree, TestedSet: "not-the-release"), "everything"),
-        ["a push to main with no record found"] = (new Run("push"), "everything"),
+        ["a push to main with no record found and no parent listed"] = (new Run("push"), "everything"),
+        ["a push to main with no record found whose one commit changes documentation alone"] = (new Run("push", Listing: Changed("docs/plugins.md"), Base: Tested), "tested"),
+        ["a push to main with no record found whose one commit changes code"] = (new Run("push", Listing: Changed("runtime/src/Jason.App/Program.cs"), Base: Tested), "everything"),
         ["a push to a release branch"] = (new Run("push", TestedTree: AnotherTree, Target: ReleaseBranch), "linux"),
-        ["a push to a release branch of the tree its pull request's last ready run tested"] = (new Run("push", TestedTree: Tree, Target: ReleaseBranch), "none"),
+        ["a push to a release branch of a tree a run that passed recorded"] = (new Run("push", TestedTree: Tree, Target: ReleaseBranch), "none"),
         ["a push to a release branch with no record found"] = (new Run("push", Target: ReleaseBranch), "linux"),
         ["a run started by hand"] = (new Run("workflow_dispatch"), "everything"),
     };
@@ -237,8 +242,8 @@ public class CiRunsTests
 
     /// <summary>
     /// The version job, which every other job needs, decides once, and hands on a word for each kind of job, the legs each
-    /// matrix runs and the checks reported as skipped by rule. It may read runs, their artifacts and the pull request a commit
-    /// merged, which is what deciding reads, and nothing more.
+    /// matrix runs and the checks reported as skipped by rule. It may read runs and their artifacts, which is what deciding
+    /// reads, and nothing more: a tested tree is found by its id, not through the pull request a commit merged.
     /// </summary>
     [Fact]
     public void The_version_job_hands_on_what_it_decided_and_may_read_what_deciding_reads()
@@ -253,7 +258,7 @@ public class CiRunsTests
 
         var permissions = Mapping(version, "permissions");
         Assert.Equal(
-            ["actions=read", "contents=read", "pull-requests=read"],
+            ["actions=read", "contents=read"],
             permissions.Children.Select(pair => $"{pair.Key}={pair.Value}").Order(StringComparer.Ordinal));
         Assert.Equal("read", Scalar(Mapping(Parse(Read(Ci)), "permissions"), "contents"));
     }
@@ -262,8 +267,13 @@ public class CiRunsTests
     [Fact]
     public void The_steps_that_decide_are_told_the_event_and_what_was_found()
     {
-        var listing = Assert.Single(Variables(Mapping(Step("tree"), "env")));
-        Assert.Equal(("EVENT", "${{ github.event_name }}"), (listing.Key, listing.Value));
+        var listing = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["EVENT"] = "${{ github.event_name }}",
+            ["TARGET"] = "${{ github.base_ref || github.ref_name }}",
+            ["BEFORE"] = "${{ github.event.before }}",
+        };
+        Assert.Equal(listing.OrderBy(pair => pair.Key, StringComparer.Ordinal), Variables(Mapping(Step("tree"), "env")).OrderBy(pair => pair.Key, StringComparer.Ordinal));
 
         var looking = Mapping(Step("earlier"), "env");
         var said = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -273,10 +283,10 @@ public class CiRunsTests
             ["EVENT"] = "${{ github.event_name }}",
             ["ACTION"] = "${{ github.event.action }}",
             ["DRAFT"] = "${{ github.event.pull_request.draft }}",
-            ["SHA"] = "${{ github.sha }}",
             ["PULL_REQUEST"] = "${{ github.event.pull_request.number }}",
             ["BRANCH"] = "${{ github.head_ref }}",
             ["TARGET"] = "${{ github.base_ref || github.ref_name }}",
+            ["TREE"] = "${{ steps.tree.outputs.tree }}",
         };
         Assert.Equal(said.OrderBy(pair => pair.Key, StringComparer.Ordinal), Variables(looking).OrderBy(pair => pair.Key, StringComparer.Ordinal));
 
@@ -288,6 +298,7 @@ public class CiRunsTests
             ["DRAFT"] = "${{ github.event.pull_request.draft }}",
             ["PULL_REQUEST"] = "${{ github.event.pull_request.number }}",
             ["SHA"] = "${{ github.sha }}",
+            ["REF"] = "${{ github.ref }}",
             ["BRANCH"] = "${{ github.head_ref }}",
             ["TARGET"] = "${{ github.base_ref || github.ref_name }}",
             ["TREE"] = "${{ steps.tree.outputs.tree }}",
@@ -341,14 +352,20 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// For a pull request the tree step lists its base as well: the first parent of the merge the checkout is, which is the
-    /// base branch's head, so a change is read against what it merges into. The checkout is two commits deep, which holds
-    /// both parents of the merge. A push lists no base. Run in a repository of this test's own, on a merge made there.
+    /// The tree step lists the base a change is read against: for a pull request, the first parent of the merge the checkout
+    /// is, which is the base branch's head; for a push to <c>main</c> of one commit, that commit's parent, which is where
+    /// <c>main</c> was before the push. A push of a merge, of a commit with no parent, of more than one commit, and a push to
+    /// a release branch list none. The checkout is two commits deep, which holds both parents of a merge. Run in a repository
+    /// of this test's own: a base, a branch, the base moving on, the merge, and one commit after it.
     /// </summary>
     [Theory]
-    [InlineData("pull_request", true)]
-    [InlineData("push", false)]
-    public void The_tree_step_lists_a_pull_request_s_base_as_its_merge_s_first_parent(string @event, bool listsBase)
+    [InlineData("pull_request", "main", "the merge", "", "the base moved on")]
+    [InlineData("push", "main", "the merge", "the base moved on", null)]
+    [InlineData("push", "main", "the commit after the merge", "the merge", "the merge")]
+    [InlineData("push", "main", "the commit after the merge", "the base moved on", null)]
+    [InlineData("push", "main", "the base", "", null)]
+    [InlineData("push", ReleaseBranch, "the commit after the merge", "the merge", null)]
+    public void The_tree_step_lists_the_base_a_change_is_read_against(string @event, string target, string head, string before, string? listed)
     {
         var checkout = Assert.Single(Steps(Mapping(Jobs(), "version")), step => Scalar(step, "uses")?.StartsWith("actions/checkout@", StringComparison.Ordinal) == true);
         Assert.Equal("2", Scalar(Mapping(checkout, "with"), "fetch-depth"));
@@ -357,19 +374,28 @@ public class CiRunsTests
         var repository = Path.Combine(tree.Root, "repository");
         Directory.CreateDirectory(Path.Combine(repository, "docs"));
         Git(repository, "init", "--quiet");
+        var commits = new Dictionary<string, string>(StringComparer.Ordinal);
+        string Commit(string message)
+        {
+            Git(repository, "add", "-A");
+            Git(repository, "commit", "--quiet", "-m", message);
+            return commits[message] = Git(repository, "rev-parse", "HEAD").Trim();
+        }
+
         File.WriteAllText(Path.Combine(repository, "README.md"), "# Jason\n");
-        Git(repository, "add", "-A");
-        Git(repository, "commit", "--quiet", "-m", "The base");
+        Commit("the base");
         Git(repository, "checkout", "--quiet", "-b", "feature/the-change");
         File.WriteAllText(Path.Combine(repository, "docs", "plugins.md"), "# Plugins\n");
-        Git(repository, "add", "-A");
-        Git(repository, "commit", "--quiet", "-m", "The change");
+        Commit("the change");
         Git(repository, "checkout", "--quiet", "main");
         Directory.CreateDirectory(Path.Combine(repository, "docs"));
         File.WriteAllText(Path.Combine(repository, "docs", "INSTALL.md"), "# Install\n");
-        Git(repository, "add", "-A");
-        Git(repository, "commit", "--quiet", "-m", "The base moves on");
-        Git(repository, "merge", "--quiet", "--no-ff", "-m", "The merge a pull request's checkout is", "feature/the-change");
+        Commit("the base moved on");
+        Git(repository, "merge", "--quiet", "--no-ff", "-m", "the merge", "feature/the-change");
+        commits["the merge"] = Git(repository, "rev-parse", "HEAD").Trim();
+        File.WriteAllText(Path.Combine(repository, "README.md"), "# Jason, once more\n");
+        Commit("the commit after the merge");
+        Git(repository, "checkout", "--quiet", "--detach", commits[head]);
 
         var step = Step("tree");
         var script = Path.Combine(tree.Root, "tree.ps1");
@@ -377,23 +403,29 @@ public class CiRunsTests
         var output = Path.Combine(tree.Root, "output");
         File.WriteAllText(output, string.Empty);
         var ran = Pwsh(
-            new Dictionary<string, string> { ["EVENT"] = @event, ["GITHUB_OUTPUT"] = output, ["RUNNER_TEMP"] = tree.Root, ["GIT_CONFIG_NOSYSTEM"] = "1" },
+            new Dictionary<string, string>
+            {
+                ["EVENT"] = @event,
+                ["TARGET"] = target,
+                ["BEFORE"] = before.Length > 0 ? commits[before] : string.Empty,
+                ["GITHUB_OUTPUT"] = output,
+                ["RUNNER_TEMP"] = tree.Root,
+                ["GIT_CONFIG_NOSYSTEM"] = "1",
+            },
             "-Command",
             $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{repository}'; & '{script}'");
         Assert.True(ran.Exit == 0, ran.Stderr);
 
         var said = Outputs(output);
-        if (listsBase)
+        if (listed is not null)
         {
             Assert.Equal(
-                Git(repository, "ls-tree", "-r", "--full-tree", "HEAD^1").Split('\n', StringSplitOptions.RemoveEmptyEntries),
+                Git(repository, "ls-tree", "-r", "--full-tree", commits[listed]).Split('\n', StringSplitOptions.RemoveEmptyEntries),
                 File.ReadAllLines(said["base"]));
-            Assert.Contains(File.ReadAllLines(said["base"]), line => line.EndsWith("\tdocs/INSTALL.md", StringComparison.Ordinal));
-            Assert.DoesNotContain(File.ReadAllLines(said["base"]), line => line.EndsWith("\tdocs/plugins.md", StringComparison.Ordinal));
         }
         else
         {
-            Assert.Equal(string.Empty, said["base"]);
+            Assert.True(said["base"].Length == 0, $"a {@event} to {target} of {head}, main having been at {before}, listed a base: {ran.Stdout}");
         }
     }
 
@@ -643,23 +675,91 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// A push to <c>main</c> whose tree a ready run of the pull request it merged tested runs the version alone, whichever set
-    /// that run ran — another pull request's into <c>main</c>, the version pull request's, the release's — and its reason says
-    /// which set the record came from; a record kept before records named their set says that instead.
+    /// A push to <c>main</c> whose tree a run that passed recorded runs the version alone, whichever set that run ran —
+    /// another pull request's into <c>main</c>, the version pull request's, the release's, a push to <c>main</c>'s — and its
+    /// reason names the run, the ref it ran on and the set the record came from; a record that names no set says that
+    /// instead.
     /// </summary>
     [Theory]
     [InlineData("not-the-release")]
     [InlineData(VersionOnly)]
     [InlineData("everything")]
     [InlineData(null)]
-    public void A_push_to_main_of_the_tree_a_ready_run_tested_runs_the_version_alone_and_says_which_set_tested_it(string? checks)
+    public void A_push_to_main_of_a_tree_a_run_that_passed_recorded_runs_the_version_alone_and_names_the_run_the_ref_and_the_set(string? checks)
     {
         var decided = Decide(new Run("push", TestedTree: Tree, TestedSet: checks));
 
         Assert.True(decided.Outputs["set"] == "tested", $"a push to main of a tree the set '{checks}' tested took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains($"run 301 on {FoundRef} tested tree {Tree}", decided.Summary, StringComparison.Ordinal);
         Assert.Contains(checks is null ? "that run ran a set its record does not name" : $"that run ran the set {checks}", decided.Summary, StringComparison.Ordinal);
         var (ran, _, _) = Report(decided.Outputs);
         Assert.Equal(["The version this tree carries"], ran);
+    }
+
+    /// <summary>
+    /// A push to <c>main</c> whose tree no run recorded is read against its one commit's parent: when every path that differs
+    /// is documentation — Markdown outside <c>runtime/</c>, <c>.github/</c> and <c>plugins/</c>, a plain file, and neither the
+    /// wiring check's page nor the runtime's licence — it runs the version alone, its reason naming the paths, and the rest
+    /// report as skipped by rule. One path that is not documentation runs every check, and so does a commit that changes
+    /// nothing, which is a push made to run the checks again.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md docs/a-new-page.md", "tested")]
+    [InlineData("README.md docs/a-new-page.md runtime/src/Jason.Runtime/Dispatcher.cs", "everything")]
+    [InlineData("README.md docs/golden-path.md", "everything")]
+    [InlineData("", "everything")]
+    public void A_push_to_main_with_no_record_runs_the_version_alone_when_its_commit_changes_documentation_alone(string paths, string set)
+    {
+        var changed = paths.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var listing = Tested.Where(line => !changed.Contains(line[(line.IndexOf('\t') + 1)..], StringComparer.Ordinal))
+            .Concat(changed.Select(path => $"100644 blob 5555555555555555555555555555555555555555\t{path}"))
+            .ToArray();
+
+        var decided = Decide(new Run("push", Listing: listing, Base: Tested));
+
+        Assert.True(decided.Outputs["set"] == set, $"a push to main changing '{paths}' took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        if (set == "tested")
+        {
+            Assert.Contains($"every path this push changes against its parent is documentation: {string.Join(", ", changed)}", decided.Summary, StringComparison.Ordinal);
+            var (ran, byRule, _) = Report(decided.Outputs);
+            Assert.Equal(["The version this tree carries"], ran);
+            Assert.Equal(Sets["tested"].SkippedByRule.Order(StringComparer.Ordinal), byRule.Order(StringComparer.Ordinal));
+            Assert.Null(decided.Record);
+        }
+        else
+        {
+            Assert.Contains(changed.Length == 0 ? "its commit changes nothing against its parent" : $"it changes {changed[^1]} against its parent", decided.Summary, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>A push to <c>main</c> whose base was not listed — a merge, several commits, a commit with no parent — runs every check.</summary>
+    [Fact]
+    public void A_push_to_main_whose_base_was_not_listed_runs_every_check()
+    {
+        var decided = Decide(new Run("push", Listing: Changed("docs/plugins.md")));
+
+        Assert.True(decided.Outputs["set"] == "everything", $"a push to main with no base listed took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains("what it changes against its parent was not listed", decided.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>The record is asked first: a push to <c>main</c> whose tree a run that passed recorded is decided by that record, whatever its commit changes.</summary>
+    [Fact]
+    public void A_push_to_main_is_decided_by_the_record_of_its_tree_before_its_change_is_read()
+    {
+        var decided = Decide(new Run("push", TestedTree: Tree, TestedSet: "not-the-release", Listing: Changed("runtime/src/Jason.App/Program.cs"), Base: Tested));
+
+        Assert.True(decided.Outputs["set"] == "tested", $"a push to main of a recorded tree took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains("that run ran the set not-the-release", decided.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("against its parent", decided.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>A push to a release branch is never read against its parent: its set is the Linux set already, and no ruleset reads it.</summary>
+    [Fact]
+    public void A_push_to_a_release_branch_is_not_read_against_its_parent()
+    {
+        var decided = Decide(new Run("push", Target: ReleaseBranch, Listing: Changed("docs/plugins.md"), Base: Tested));
+
+        Assert.True(decided.Outputs["set"] == "linux", $"a push of documentation to a release branch took the set '{decided.Outputs["set"]}': {decided.Summary}");
     }
 
     /// <summary>A push to <c>main</c> whose tree is not the one a ready run of another pull request into <c>main</c> tested runs every check.</summary>
@@ -673,50 +773,54 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// Every ready pull request's run keeps a record of the tree it tested and of the set it ran, for the runs after it: the
-    /// release's run of every check, for a push to it that changes documentation only and for the push to <c>main</c> its
-    /// merge makes; a run of the Linux set into a release branch, for the push to the release branch its merge makes; and the
-    /// run of any other pull request into <c>main</c>, the version pull request's among them, for the push to <c>main</c> its
-    /// squash makes. A draft's run keeps none, and neither does a push to the release's pull request that changes
-    /// documentation only, whose next push compares with its last run of every check. The record is trusted only from a run
-    /// that passed, which the step that looks asks for.
+    /// Every ready pull request's run keeps a record of the tree it tested, of the set it ran and of the ref it ran on, for
+    /// the runs after it: the release's run of every check, for a push to it that changes documentation only and for the push
+    /// to <c>main</c> its merge makes; a run of the Linux set into a release branch, for the push to the release branch its
+    /// merge makes; and the run of any other pull request into <c>main</c>, the version pull request's among them, for the
+    /// push to <c>main</c> its squash makes. So does a push to <c>main</c> that runs every check, for a release branch that
+    /// takes <c>main</c> as it is; a push's record names no pull request. A draft's run keeps none, and neither does a push to
+    /// the release's pull request that changes documentation only, whose next push compares with its last run of every check.
+    /// The record is trusted only from a run that passed, which the step that looks asks the run.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
-    public void Every_ready_pull_request_s_run_keeps_a_record_of_its_tree_and_its_set(string kind)
+    public void Every_ready_run_and_a_push_to_main_that_runs_every_check_keep_a_record_of_their_tree_set_and_ref(string kind)
     {
         var (run, set) = Kinds[kind];
         var decided = Decide(run);
 
-        var keeps = run.Event == "pull_request" && run.Draft == "false" &&
-            (set is "everything" or "not-the-release" or VersionOnly || (set == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)));
+        var keeps = (run.Event == "pull_request" && run.Draft == "false" &&
+            (set is "everything" or "not-the-release" or VersionOnly || (set == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)))) ||
+            (run is { Event: "push", Target: "main" } && set == "everything");
         Assert.True(keeps == decided.Record is not null, $"{kind} {(keeps ? "kept no record" : $"kept a record: {decided.Record}")}");
         if (decided.Record is { } record)
         {
             Assert.Equal(Tree, (string?)record["tree"]);
             Assert.Equal(Sha, (string?)record["commit"]);
-            Assert.Equal(PullRequestNumber, (int)record["pull_request"]!);
+            Assert.Equal(RefOf(run), (string?)record["ref"]);
+            Assert.Equal(run.Event == "pull_request" ? PullRequestNumber : null, (int?)record["pull_request"]);
             Assert.Equal(set, (string?)record["checks"]);
             Assert.Equal(decided.Listing, record["listing"]!.AsArray().Select(line => (string)line!));
         }
     }
 
-    // Critical: a draft's push tests the tier, and a ready run into a release branch the whole suite.
+    // Critical: a draft's push tests the tier, and the release's pull request, the one run of the whole suite per release, the whole suite.
     public static TheoryData<string> CriticalKindsOfRunForTheTests() =>
-        CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["a draft's push"] or ["marking a pull request into a release branch ready"]);
+        CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["a draft's push"] or ["marking the release's pull request ready"]);
 
     /// <summary>
-    /// A draft's push tests the critical tier alone, on linux-x64, the one platform its Linux set builds, and so does the
-    /// version pull request once it is ready, for which the tier is the ready run by rule; every other run tests the whole
-    /// suite. Of the linux-x64 job's two test steps exactly one runs, by the word the version job hands on, and only the one
-    /// those two run filters the suite.
+    /// A draft's push tests the critical tier alone, on linux-x64, the one platform its Linux set builds, and so do a pull
+    /// request into a release branch and the version pull request once they are ready, for which the tier is the ready run
+    /// by rule: the whole suite runs once per release, on the release's pull request, and locally before ready for a change
+    /// under <c>runtime/</c>. Every other run tests the whole suite. Of the linux-x64 job's two test steps exactly one runs,
+    /// by the word the version job hands on, and only the one those two run filters the suite.
     /// </summary>
     [Theory]
     [MemberData(nameof(CriticalKindsOfRunForTheTests))]
-    public void A_draft_s_push_and_the_version_pull_request_test_the_critical_tier_and_every_other_run_the_whole_suite(string kind)
+    public void A_draft_s_push_a_pull_request_into_a_release_branch_and_the_version_pull_request_test_the_critical_tier_and_every_other_run_the_whole_suite(string kind)
     {
         var (run, set) = Kinds[kind];
-        var tier = (run.Event == "pull_request" && run.Draft == "true") || set == VersionOnly;
+        var tier = (run.Event == "pull_request" && (run.Draft == "true" || run.Target.StartsWith("release/", StringComparison.Ordinal))) || set == VersionOnly;
 
         var decided = Decide(run);
 
@@ -725,15 +829,15 @@ public class CiRunsTests
         var command = Scalar(testing, "run")!;
         Assert.True(
             command.Contains(TierFilter, StringComparison.Ordinal) == tier,
-            $"{kind} runs '{command}', and {(tier ? "it tests the critical tier alone" : "only a draft's push and the version pull request test less than the whole suite")}");
+            $"{kind} runs '{command}', and {(tier ? "it tests the critical tier alone" : "only a draft's push, a pull request into a release branch and the version pull request test less than the whole suite")}");
         Assert.Contains(tier ? "tests -> the critical tier" : set is "tested" or "none" ? "tests -> none" : "tests -> the whole suite", decided.Stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// A draft's leg, which tests the critical tier alone, never reports under a name a ruleset requires: between a pull
     /// request being marked ready and its ready run creating its checks, a required <c>linux-x64</c> from a draft's push
-    /// would read green for a tree only the tier tested. Every ready run's leg is exactly <c>linux-x64</c>, the version pull
-    /// request's included, whose tier is its ready run by rule.
+    /// would read green for a tree only the tier tested. Every ready run's leg is exactly <c>linux-x64</c>, a pull request's
+    /// into a release branch and the version pull request's included, whose tier is their ready run by rule.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
@@ -760,31 +864,43 @@ public class CiRunsTests
         }
     }
 
-    // Critical: a record of a tree only from a run of the whole suite.
+    // Critical: main never skips its checks on a record of the critical tier alone, but the version pull request's.
     public static TheoryData<string> CriticalKindsOfRunForTheRecord() =>
         CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["marking a pull request into a release branch ready"]);
 
     /// <summary>
     /// A run that keeps a record of the tree it tested ran the whole suite on it, but for the version pull request, whose
-    /// ready run the critical tier is by rule: a later push skips its checks on that record, so a tree a draft's tier ran on
-    /// is never recorded. A draft's push keeps none.
+    /// ready run the critical tier is by rule, and a pull request into a release branch, whose record is for the push to the
+    /// release branch its merge makes, which no ruleset reads: a push to <c>main</c> passes that record over, and a push to a
+    /// release branch takes it. A later push skips its checks on a record, so a tree a draft's tier ran on is never
+    /// recorded, and <c>main</c> takes no tree the tier alone tested but the version pull request's.
     /// </summary>
     [Theory]
     [MemberData(nameof(CriticalKindsOfRunForTheRecord))]
-    public void A_run_that_keeps_a_record_of_its_tree_tested_the_whole_suite_or_is_the_version_pull_request(string kind)
+    public void A_record_main_takes_was_kept_by_a_run_of_the_whole_suite_or_by_the_version_pull_request(string kind)
     {
         var (run, _) = Kinds[kind];
 
         var decided = Decide(run);
 
+        var tierAlone = decided.Record is not null && decided.Outputs["tier"] == "true" && decided.Outputs["set"] != VersionOnly;
         Assert.True(
-            decided.Record is null || decided.Outputs["tier"] == "false" || decided.Outputs["set"] == VersionOnly,
+            !tierAlone || (decided.Outputs["set"] == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)),
             $"{kind} keeps a record of tree {decided.Record?["tree"]} and tested the critical tier alone on it");
+        if (tierAlone)
+        {
+            var record = decided.Record!.ToJsonString();
+            var onMain = LookForTheRecord("main", record);
+            Assert.True(onMain.Record is null, $"a push to main took the record {kind} kept: {onMain.Outputs["found"]}");
+            var onTheReleaseBranch = LookForTheRecord(ReleaseBranch, record);
+            Assert.True(onTheReleaseBranch.Record is not null, $"a push to a release branch passed over the record {kind} kept: {onTheReleaseBranch.Outputs["found"]}");
+        }
     }
 
     /// <summary>
-    /// Only one step of the workflows filters the suite: the linux-x64 job's step a draft's push and the version pull request
-    /// run, which is the job's whole-suite step with the tier's filter after it, so both test the same build. Every other
+    /// Only one step of the workflows filters the suite: the linux-x64 job's step a draft's push, a pull request into a
+    /// release branch and the version pull request run, which is the job's whole-suite step with the tier's filter after it,
+    /// so both test the same build. Every other
     /// test step — the job's whole-suite step, the suite under a release's version, and the release's own — runs the whole
     /// suite.
     /// </summary>
@@ -809,71 +925,150 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// The record is uploaded under one name, when the deciding step wrote one, and kept fourteen days, as long as a pull
-    /// request may wait for its merge: a record that has gone skips nothing. The step that looks reads that name, and no
-    /// other upload of this workflow takes it.
+    /// The record is uploaded under the name of the tree it tested, when the deciding step wrote one, and kept fourteen days,
+    /// as long as a pull request may wait for its merge: a record that has gone skips nothing. The step that looks asks for
+    /// that name, or for any name of that kind a run of the release's pull request kept, and no other upload of this
+    /// workflow takes a name of that kind.
     /// </summary>
     [Fact]
-    public void The_record_is_kept_under_one_name_long_enough_for_a_merge()
+    public void The_record_is_kept_under_its_tree_s_name_long_enough_for_a_merge()
     {
         var keeping = Assert.Single(Steps(Mapping(Jobs(), "version")), step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true);
         Assert.Equal("steps.legs.outputs.record != ''", Scalar(keeping, "if"));
         var with = Mapping(keeping, "with");
-        Assert.Equal("tested-tree", Scalar(with, "name"));
+        Assert.Equal("tested-tree-${{ steps.tree.outputs.tree }}", Scalar(with, "name"));
         Assert.Equal("${{ steps.legs.outputs.record }}", Scalar(with, "path"));
         Assert.Equal("14", Scalar(with, "retention-days"));
         Assert.Equal("error", Scalar(with, "if-no-files-found"));
 
         var looking = Scalar(Step("earlier"), "run")!;
-        Assert.Contains("artifacts?name=tested-tree", looking, StringComparison.Ordinal);
-        Assert.Contains("--name tested-tree", looking, StringComparison.Ordinal);
+        Assert.Contains("actions/artifacts?name=tested-tree-$($env:TREE)&", looking, StringComparison.Ordinal);
+        Assert.Contains("$named = 'tested-tree-*'", looking, StringComparison.Ordinal);
 
         var named = Jobs().Children.Values.Cast<YamlMappingNode>()
             .SelectMany(job => Node(job, "steps") is YamlSequenceNode steps ? steps.Children.Cast<YamlMappingNode>() : [])
-            .Where(step => Node(step, "with") is YamlMappingNode stepWith && Scalar(stepWith, "name") == "tested-tree")
+            .Where(step => Node(step, "with") is YamlMappingNode stepWith && Scalar(stepWith, "name")?.StartsWith("tested-tree", StringComparison.Ordinal) == true)
             .ToList();
         Assert.Single(named);
     }
 
     /// <summary>
-    /// A push to <c>main</c> or to a release branch finds the pull request whose merge is this commit, and the newest of that
-    /// pull request's runs at its last head that passed and kept a record; a run that kept none is passed over.
+    /// A push to <c>main</c> or to a release branch finds the record of its own tree by the tree's id, whatever ref the run
+    /// that kept it ran on: the artifacts named by the tree, newest first, each asked about the run that kept it. An artifact
+    /// that has expired is passed over without asking, and so is a run still in progress; the record of the newest run that
+    /// passed is the one downloaded. Then <c>main</c> runs the version alone, and a release branch that takes <c>main</c> as it
+    /// is runs nothing more, the reason naming the run, the ref it ran on and its set.
     /// </summary>
     [Theory]
-    [InlineData("main")]
-    [InlineData(ReleaseBranch)]
-    public void A_push_finds_the_record_its_merged_pull_request_s_newest_passing_run_kept(string target)
+    [InlineData("main", "refs/pull/9/merge", "everything", "tested")]
+    [InlineData("main", "refs/pull/9/merge", "not-the-release", "tested")]
+    [InlineData("main", "refs/heads/main", "everything", "tested")]
+    [InlineData(ReleaseBranch, "refs/heads/main", "everything", "none")]
+    [InlineData(ReleaseBranch, "refs/pull/8/merge", "linux", "none")]
+    public void A_push_finds_the_record_of_its_tree_that_the_newest_run_to_pass_kept_on_any_ref(string target, string @ref, string checks, string set)
     {
+        int? number = @ref.StartsWith("refs/pull/", StringComparison.Ordinal) ? int.Parse(@ref.Split('/')[2], System.Globalization.CultureInfo.InvariantCulture) : null;
         var answers = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [$"api repos/acme/jason/commits/{Sha}/pulls"] = $"[{Pull(9, merged: false, AnotherSha)},{Pull(7, merged: true, Sha)}]",
-            [$"api repos/acme/jason/actions/workflows/ci.yml/runs?event=pull_request&head_sha={Head}&status=success&per_page=20"] = RunsAnswer(302, 301),
-            ["api repos/acme/jason/actions/runs/302/artifacts?name=tested-tree"] = ArtifactsAnswer(),
-            ["api repos/acme/jason/actions/runs/301/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true),
+            [OfTheTree] = TreeArtifactsAnswer((303, "2026-10-22T12:00:00Z", true), (301, "2026-10-22T10:00:00Z", false), (302, "2026-10-22T11:00:00Z", false)),
+            ["api repos/acme/jason/actions/runs/302"] = RunAnswer("in_progress", null),
+            ["api repos/acme/jason/actions/runs/301"] = RunAnswer("completed", "success"),
         };
+        var records = new Dictionary<long, string> { [302] = RecordFor(number, Tree, checks, @ref), [301] = RecordFor(number, Tree, checks, @ref) };
 
-        var looked = Look(Facts("push", target: target), answers, new Dictionary<long, string> { [301] = RecordFor(7, Tree) });
+        var looked = Look(Facts("push", target: target), answers, records);
 
         Assert.True(looked.Record is not null, $"nothing was found: {looked.Outputs["found"]}");
-        Assert.Equal(Tree, (string?)JsonNode.Parse(looked.Record!)!["tree"]);
-        Assert.Contains("301", looked.Outputs["found"], StringComparison.Ordinal);
-        Assert.Contains(looked.Calls, call => call.StartsWith("run download 301 --repo acme/jason --name tested-tree --dir ", StringComparison.Ordinal));
+        Assert.Equal($"run 301 on {@ref} tested tree {Tree}", looked.Outputs["found"]);
+        Assert.Contains(looked.Calls, call => call.StartsWith($"run download 301 --repo acme/jason --name tested-tree-{Tree} --dir ", StringComparison.Ordinal));
+        Assert.Contains("api repos/acme/jason/actions/runs/302", looked.Calls);
         Assert.DoesNotContain(looked.Calls, call => call.StartsWith("run download 302", StringComparison.Ordinal));
+        Assert.DoesNotContain(looked.Calls, call => call.Contains("303", StringComparison.Ordinal));
+
+        var decided = Decide(new Run("push", Target: target), looked.Record, found: looked.Outputs["found"]);
+
+        Assert.True(decided.Outputs["set"] == set, $"a push to {target} of a tree {@ref} recorded took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains($"run 301 on {@ref} tested tree {Tree}, which is this commit's tree, and that run ran the set {checks}", decided.Summary, StringComparison.Ordinal);
     }
 
-    /// <summary>A push to <c>main</c> that no merged pull request names as its merge finds nothing, and asks for no runs.</summary>
-    [Fact]
-    public void A_push_no_merged_pull_request_names_finds_nothing()
+    /// <summary>
+    /// A record is trusted only from a run that passed, and the step asks the run, since an artifact is there from the moment
+    /// its run uploads it: a run still queued or in progress, cancelled or failed has recorded nothing, and its record is not
+    /// downloaded. The step says what it passed over, and a push to <c>main</c> that finds nothing runs every check.
+    /// </summary>
+    [Theory]
+    [InlineData("queued", null, "run 301 is queued")]
+    [InlineData("in_progress", null, "run 301 is in_progress")]
+    [InlineData("completed", "cancelled", "run 301 concluded cancelled")]
+    [InlineData("completed", "failure", "run 301 concluded failure")]
+    public void A_record_whose_run_has_not_passed_is_not_found(string status, string? conclusion, string passedOver)
     {
         var answers = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [$"api repos/acme/jason/commits/{Sha}/pulls"] = $"[{Pull(7, merged: true, AnotherSha)}]",
+            [OfTheTree] = TreeArtifactsAnswer((301, "2026-10-22T10:00:00Z", false)),
+            ["api repos/acme/jason/actions/runs/301"] = RunAnswer(status, conclusion),
         };
+
+        var looked = Look(Facts("push"), answers, new Dictionary<long, string> { [301] = RecordFor(9, Tree, "everything", "refs/pull/9/merge") });
+
+        Assert.True(looked.Record is null, $"a record was found: {looked.Outputs["found"]}");
+        Assert.Contains(passedOver, looked.Outputs["found"], StringComparison.Ordinal);
+        Assert.DoesNotContain(looked.Calls, call => call.StartsWith("run download", StringComparison.Ordinal));
+
+        var decided = Decide(new Run("push"), found: looked.Outputs["found"]);
+        Assert.True(decided.Outputs["set"] == "everything", $"a push to main whose tree only a run that did not pass recorded took the set '{decided.Outputs["set"]}': {decided.Summary}");
+    }
+
+    /// <summary>A push whose tree no run kept a record of finds nothing, and asks about no run.</summary>
+    [Fact]
+    public void A_push_whose_tree_no_run_kept_a_record_of_finds_nothing()
+    {
+        var answers = new Dictionary<string, string>(StringComparer.Ordinal) { [OfTheTree] = TreeArtifactsAnswer() };
 
         var looked = Look(Facts("push"), answers);
 
         Assert.True(looked.Record is null, $"a record was found: {looked.Outputs["found"]}");
-        Assert.DoesNotContain(looked.Calls, call => call.Contains("/runs", StringComparison.Ordinal));
+        Assert.Equal([OfTheTree], looked.Calls);
+        Assert.Equal($"no run that passed kept a record of tree {Tree}", looked.Outputs["found"]);
+    }
+
+    /// <summary>
+    /// <c>main</c> passes over the record of a pull request into a release branch, whose ready run tested the critical tier
+    /// alone, and takes an older record of the same tree that a run of the whole suite kept, if there is one; a release
+    /// branch takes the newest record whatever set kept it.
+    /// </summary>
+    [Theory]
+    [InlineData("main", true, "run 301 on refs/pull/9/merge tested tree ")]
+    [InlineData("main", false, null)]
+    [InlineData(ReleaseBranch, true, "run 302 on refs/pull/8/merge tested tree ")]
+    public void Main_passes_over_the_record_of_a_pull_request_into_a_release_branch(string target, bool olderRecord, string? found)
+    {
+        var answers = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OfTheTree] = olderRecord
+                ? TreeArtifactsAnswer((302, "2026-10-22T11:00:00Z", false), (301, "2026-10-22T10:00:00Z", false))
+                : TreeArtifactsAnswer((302, "2026-10-22T11:00:00Z", false)),
+            ["api repos/acme/jason/actions/runs/302"] = RunAnswer("completed", "success"),
+            ["api repos/acme/jason/actions/runs/301"] = RunAnswer("completed", "success"),
+        };
+        var records = new Dictionary<long, string>
+        {
+            [302] = RecordFor(8, Tree, "linux", "refs/pull/8/merge"),
+            [301] = RecordFor(9, Tree, "not-the-release", "refs/pull/9/merge"),
+        };
+
+        var looked = Look(Facts("push", target: target), answers, records);
+
+        if (found is null)
+        {
+            Assert.True(looked.Record is null, $"a record was found: {looked.Outputs["found"]}");
+            Assert.Contains("run 302 on refs/pull/8/merge tested the critical tier alone, into a release branch", looked.Outputs["found"], StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.True(looked.Record is not null, $"nothing was found: {looked.Outputs["found"]}");
+            Assert.Equal(found + Tree, looked.Outputs["found"]);
+        }
     }
 
     /// <summary>
@@ -886,9 +1081,9 @@ public class CiRunsTests
         var answers = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["api repos/acme/jason/actions/workflows/ci.yml/runs?event=pull_request&branch=release%2F0.15&status=success&per_page=20"] = RunsAnswer(403, 402, 401),
-            ["api repos/acme/jason/actions/runs/403/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true),
-            ["api repos/acme/jason/actions/runs/402/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true, expired: true),
-            ["api repos/acme/jason/actions/runs/401/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true),
+            ["api repos/acme/jason/actions/runs/403/artifacts?per_page=100"] = RunArtifactsAnswer(("linux-x64", false), ($"tested-tree-{AnotherTree}", false)),
+            ["api repos/acme/jason/actions/runs/402/artifacts?per_page=100"] = RunArtifactsAnswer(($"tested-tree-{Tree}", true)),
+            ["api repos/acme/jason/actions/runs/401/artifacts?per_page=100"] = RunArtifactsAnswer(("linux-x64", false), ($"tested-tree-{Tree}", false)),
         };
         var records = new Dictionary<long, string> { [403] = RecordFor(8, AnotherTree), [401] = RecordFor(7, Tree) };
 
@@ -896,6 +1091,8 @@ public class CiRunsTests
 
         Assert.True(looked.Record is not null, $"nothing was found: {looked.Outputs["found"]}");
         Assert.Equal(7, (int?)JsonNode.Parse(looked.Record!)!["pull_request"]);
+        Assert.Equal($"run 401 of pull request #7 tested tree {Tree}", looked.Outputs["found"]);
+        Assert.Contains(looked.Calls, call => call.StartsWith($"run download 401 --repo acme/jason --name tested-tree-{Tree} --dir ", StringComparison.Ordinal));
         Assert.DoesNotContain(looked.Calls, call => call.StartsWith("run download 402", StringComparison.Ordinal));
     }
 
@@ -912,9 +1109,8 @@ public class CiRunsTests
         var answers = new Dictionary<string, string>(StringComparer.Ordinal);
         if (downloadFails)
         {
-            answers[$"api repos/acme/jason/commits/{Sha}/pulls"] = $"[{Pull(7, merged: true, Sha)}]";
-            answers[$"api repos/acme/jason/actions/workflows/ci.yml/runs?event=pull_request&head_sha={Head}&status=success&per_page=20"] = RunsAnswer(301);
-            answers["api repos/acme/jason/actions/runs/301/artifacts?name=tested-tree"] = ArtifactsAnswer(kept: true);
+            answers[OfTheTree] = TreeArtifactsAnswer((301, "2026-10-22T10:00:00Z", false));
+            answers["api repos/acme/jason/actions/runs/301"] = RunAnswer("completed", "success");
         }
 
         var looked = Look(@event == "push" ? Facts("push") : Facts("pull_request", "synchronize", "false", branch: ReleaseBranch), answers);
@@ -1050,7 +1246,7 @@ public class CiRunsTests
     /// instead. A pull request whose props file is given on both sides runs in a repository of its own that holds the two
     /// texts as objects, and both listings name them, as a checkout holds the merge and its base.
     /// </summary>
-    private static Decided Decide(Run run, string? record = null, bool recordIsThere = true)
+    private static Decided Decide(Run run, string? record = null, bool recordIsThere = true, string? found = null)
     {
         var step = Step("legs");
         var env = Mapping(step, "env");
@@ -1091,7 +1287,7 @@ public class CiRunsTests
             Directory.CreateDirectory(Path.GetDirectoryName(recorded)!);
             if (recordIsThere)
             {
-                File.WriteAllText(recorded, record ?? RecordFor(PullRequestNumber, run.TestedTree!, run.TestedSet));
+                File.WriteAllText(recorded, record ?? RecordFor(PullRequestNumber, run.TestedTree!, run.TestedSet, FoundRef));
             }
         }
 
@@ -1102,13 +1298,14 @@ public class CiRunsTests
             ["DRAFT"] = run.Draft,
             ["PULL_REQUEST"] = run.Event == "pull_request" ? PullRequest : string.Empty,
             ["SHA"] = Sha,
+            ["REF"] = RefOf(run),
             ["BRANCH"] = run.Event == "pull_request" ? run.Branch : string.Empty,
             ["TARGET"] = run.Target,
             ["TREE"] = Tree,
             ["LISTING"] = listing,
             ["BASE"] = listed,
             ["RECORD"] = recorded,
-            ["FOUND"] = recorded.Length > 0 ? "run 301 of pull request #7 tested tree " + run.TestedTree : "nothing was found",
+            ["FOUND"] = found ?? (recorded.Length > 0 ? $"run 301 on {FoundRef} tested tree {run.TestedTree}" : $"no run that passed kept a record of tree {Tree}"),
             ["PLATFORMS"] = Scalar(env, "PLATFORMS")!,
             ["UPDATES"] = Scalar(env, "UPDATES")!,
             ["GITHUB_OUTPUT"] = output,
@@ -1129,6 +1326,9 @@ public class CiRunsTests
 
         return new Decided(said, File.ReadAllText(summary), ran.Stdout, kept, lines);
     }
+
+    /// <summary>The ref a run runs on, as the workflow tells the deciding step: a pull request's merge, or the branch a push lands on.</summary>
+    private static string RefOf(Run run) => run.Event == "pull_request" ? $"refs/pull/{PullRequest}/merge" : $"refs/heads/{run.Target}";
 
     /// <summary>The props file's entry in a listing: <paramref name="text"/> written as an object of the repository at <paramref name="checkout"/>.</summary>
     private static string PropsEntry(string checkout, string text)
@@ -1204,8 +1404,14 @@ public class CiRunsTests
 
     // --- what the step that looks finds ---------------------------------------------------------------------------
 
-    /// <summary>The head of the pull request whose merge the push to main is. Made up.</summary>
+    /// <summary>The head a run of the release's pull request ran at. Made up.</summary>
     private const string Head = "feed0000000000000000000000000000000000c3";
+
+    /// <summary>The ref of the run that kept the record a run is given, unless it is given another. Made up.</summary>
+    private const string FoundRef = "refs/pull/7/merge";
+
+    /// <summary>The call that asks for the records of <see cref="Tree"/>, the tree of the push a lookup runs for.</summary>
+    private const string OfTheTree = $"api repos/acme/jason/actions/artifacts?name=tested-tree-{Tree}&per_page=20";
 
     private static Dictionary<string, string> Facts(string @event, string action = "", string draft = "", string target = "main", string branch = FeatureBranch) =>
         new(StringComparer.Ordinal)
@@ -1213,25 +1419,47 @@ public class CiRunsTests
         ["EVENT"] = @event,
         ["ACTION"] = action,
         ["DRAFT"] = draft,
-        ["SHA"] = Sha,
         ["PULL_REQUEST"] = @event == "pull_request" ? PullRequest : string.Empty,
         ["BRANCH"] = @event == "pull_request" ? branch : string.Empty,
         ["TARGET"] = target,
+        ["TREE"] = Tree,
         ["REPOSITORY"] = "acme/jason",
         ["GH_TOKEN"] = "not-a-token",
     };
 
-    private static string Pull(int number, bool merged, string mergeCommit) =>
-        $"{{\"number\":{number},\"merged_at\":{(merged ? "\"2026-10-20T10:00:00Z\"" : "null")},\"merge_commit_sha\":\"{mergeCommit}\",\"head\":{{\"sha\":\"{Head}\"}}}}";
-
     private static string RunsAnswer(params long[] ids) =>
         $"{{\"workflow_runs\":[{string.Join(',', ids.Select(id => $"{{\"id\":{id},\"head_sha\":\"{Head}\"}}"))}]}}";
 
-    private static string ArtifactsAnswer(bool kept = false, bool expired = false) =>
-        kept ? $"{{\"artifacts\":[{{\"name\":\"tested-tree\",\"expired\":{(expired ? "true" : "false")}}}]}}" : "{\"artifacts\":[]}";
+    /// <summary>A run's artifacts, as the API lists them: each by its name, expired or not.</summary>
+    private static string RunArtifactsAnswer(params (string Name, bool Expired)[] artifacts) =>
+        new JsonObject
+        {
+            ["artifacts"] = new JsonArray(artifacts.Select(artifact => (JsonNode)new JsonObject { ["name"] = artifact.Name, ["expired"] = artifact.Expired }).ToArray()),
+        }.ToJsonString();
 
-    /// <summary>A record as a ready run keeps it, naming the set it ran; one kept before records named their set names none.</summary>
-    private static string RecordFor(int pullRequest, string tree, string? checks = null)
+    /// <summary>The artifacts named by <see cref="Tree"/>, as the API lists them: each with the run that kept it, when, and whether it has expired.</summary>
+    private static string TreeArtifactsAnswer(params (long Run, string Created, bool Expired)[] artifacts) =>
+        new JsonObject
+        {
+            ["total_count"] = artifacts.Length,
+            ["artifacts"] = new JsonArray(artifacts.Select(artifact => (JsonNode)new JsonObject
+            {
+                ["name"] = $"tested-tree-{Tree}",
+                ["expired"] = artifact.Expired,
+                ["created_at"] = artifact.Created,
+                ["workflow_run"] = new JsonObject { ["id"] = artifact.Run, ["head_sha"] = Head },
+            }).ToArray()),
+        }.ToJsonString();
+
+    /// <summary>A run as the API answers for it: whether it has finished, and how.</summary>
+    private static string RunAnswer(string status, string? conclusion) =>
+        new JsonObject { ["status"] = status, ["conclusion"] = conclusion }.ToJsonString();
+
+    /// <summary>
+    /// A record as a run keeps it, naming the set it ran and the ref it ran on; one that names no set, or no ref, names none.
+    /// A push's record names no pull request.
+    /// </summary>
+    private static string RecordFor(int? pullRequest, string tree, string? checks = null, string? @ref = null)
     {
         var record = new JsonObject
         {
@@ -1239,6 +1467,11 @@ public class CiRunsTests
             ["commit"] = AnotherSha,
             ["pull_request"] = pullRequest,
         };
+        if (@ref is not null)
+        {
+            record["ref"] = @ref;
+        }
+
         if (checks is not null)
         {
             record["checks"] = checks;
@@ -1302,6 +1535,20 @@ public class CiRunsTests
         var found = said.TryGetValue("record", out var path) && path.Length > 0 ? File.ReadAllText(path) : null;
         return (said, [.. File.ReadAllLines(calls).Where(line => line.Length > 0)], found);
     }
+
+    /// <summary>
+    /// The step that looks, for a push to <paramref name="target"/> of <see cref="Tree"/>, where the one artifact named by that
+    /// tree holds <paramref name="record"/> and its run passed.
+    /// </summary>
+    private static (Dictionary<string, string> Outputs, List<string> Calls, string? Record) LookForTheRecord(string target, string record) =>
+        Look(
+            Facts("push", target: target),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [OfTheTree] = TreeArtifactsAnswer((301, "2026-10-22T10:00:00Z", false)),
+                ["api repos/acme/jason/actions/runs/301"] = RunAnswer("completed", "success"),
+            },
+            new Dictionary<long, string> { [301] = record });
 
     // --- reading the workflow -------------------------------------------------------------------------------------
 

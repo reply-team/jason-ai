@@ -122,12 +122,14 @@ over a pull request's life. A pull request that touches `runtime/` runs the whol
 marked ready, in Release, with the log written to a file; one that changes Markdown only skips that. On CI, a draft's
 push runs the Linux set: the version check, the linux-x64 build and the critical tier, an update on linux-x64, the
 install script on Ubuntu and the UI's checks; it keeps no record of the tree it tested. Marking a pull request into a
-release branch ready runs the whole suite on Linux, once.
+release branch ready runs the Linux set with the critical tier on linux-x64; the whole suite runs once per release, on
+the release's pull request, and locally before ready for a change under `runtime/`.
 The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
 and that run is the release's gate; a pull request into `main` from any other branch — a document, a change to the
 pipeline — runs the Linux set and reports the rest as skipped by rule. The version pull request into `main` runs the
 critical tier alone, on linux-x64 and under the `linux-x64` name a ruleset requires, since for it the tier is the ready
-run, and a push to `main` whose tree a pull request's ready run tested runs the version check alone. Nothing runs
+run. A push to `main` or to a release branch whose tree a passing run recorded runs the version check alone, and so does
+a push to `main` whose change against its parent is documentation alone. Nothing runs
 nightly. The critical tier is the `Critical`
 trait, run with `--filter-trait "Category=Critical"`, and one table pins it: how many critical cases each family has in
 each test assembly (`CriticalTier.cs`). Each test assembly discovers itself and holds its column to the table, so a row
@@ -145,10 +147,11 @@ no pull request is opened while it is built: the critical tier runs locally for 
 pushed branch without a pull request runs nothing on CI, where an open draft would run the Linux set on every push.
 When the work is done the pull request opens as a draft, and opening it runs the Linux set once, whose test leg is the
 critical tier on linux-x64. Then come the two readings below and the fixes they asked for, as commits on the draft.
-Mark it ready once, after that, and the whole suite runs on Linux, so that the full run is paid once: a push after
-ready that changes nothing but documentation since the tree the last full run tested — Markdown outside `runtime/`,
-`.github/` and `plugins/` that no build compiles and no test runs as code — runs the Linux set and reports the rest as
-skipped; any other push after ready runs the full run again. The ruleset on a release branch lets a pull request
+Mark it ready once, after that, and the ready run is the Linux set with the critical tier on linux-x64; the whole suite
+runs once per release, on the release's pull request into `main`, and locally before ready for a change under
+`runtime/`. On the release's pull request, a push after ready that changes nothing but documentation since the tree
+the last full run tested — Markdown outside `runtime/`, `.github/` and `plugins/` that no build compiles and no test
+runs as code — runs the Linux set and reports the rest as skipped; any other push after ready runs the full run again. The ruleset on a release branch lets a pull request
 merge only when the Linux set reports green at the head that merges; the ruleset on `main` waits for every check.
 
 **Two readers at ready.** Before a pull request into a release branch is marked ready it is read twice: by the session
