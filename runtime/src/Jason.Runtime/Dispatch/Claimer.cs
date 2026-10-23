@@ -56,6 +56,17 @@ public sealed class Claimer(
         new EventId(2, nameof(EndedAtClaim)),
         "Attempt {AttemptId} of work item {WorkItemId} ended at the claim: {Code}");
 
+    private static readonly Action<ILogger, string, string, string, Exception?> MemoryFileUnreadable = LoggerMessage.Define<string, string, string>(
+        LogLevel.Warning,
+        new EventId(3, nameof(MemoryFileUnreadable)),
+        "Attempt {AttemptId} of work item {WorkItemId}: the {Level} memory file's path cannot be written as a read rule, so the role cannot read it");
+
+    /// <summary>
+    /// A memory file the claim named and the host could not write as a rule for one file, by the ids a person can type
+    /// and the level, one of three closed words: never the path, which is built from names a person gave.
+    /// </summary>
+    private readonly record struct UnreadableFile(string CampaignId, string WorkItemId, string AttemptId, string Level);
+
     /// <summary>
     /// An attempt the claim itself ended, by the ids a person can type and the code the attempt recorded. The code is
     /// one of the closed words in <see cref="AttemptErrors"/>: never the attempt's message, which names what the work
@@ -79,6 +90,7 @@ public sealed class Claimer(
         var current = settings.Current;
         var claimed = new List<ClaimedWork>();
         var ended = new List<AttemptEnd>();
+        var unreadable = new List<UnreadableFile>();
 
         // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
         // and an activation that happens mid-scan belongs to the next one.
@@ -166,11 +178,32 @@ public sealed class Claimer(
                     attempt.PublicId,
                     item.Campaign!.PublicId,
                     plan,
-                    agent is AgentLaunchDecision.Ready ready ? new AgentLaunch(ready.Plan.Deny, ready.Plan.CliCommand) : null));
+                    agent is AgentLaunchDecision.Ready ready ? new AgentLaunch(ready.Plan.Deny, ready.Plan.CliCommand) : null,
+                    agent switch
+                    {
+                        AgentLaunchDecision.Ready launched => launched.Plan.MemoryFiles,
+                        AgentLaunchDecision.Legacy legacy => legacy.MemoryFiles,
+                        _ => null,
+                    }));
+
+                if (agent is AgentLaunchDecision.Ready { Plan.Unreadable: { Count: > 0 } levels })
+                {
+                    unreadable.AddRange(levels.Select(level => new UnreadableFile(item.Campaign!.PublicId, item.PublicId, attempt.PublicId, level)));
+                }
             }
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
+
+        // Said once the claim is committed, for the same reason as the ends below: a file the role was never going to
+        // be given leave to read, about an attempt a failed commit took back, would describe a launch that never was.
+        foreach (var file in unreadable)
+        {
+            using (AttemptLogScope.Begin(logger, file.CampaignId, file.WorkItemId, file.AttemptId))
+            {
+                MemoryFileUnreadable(logger, file.AttemptId, file.WorkItemId, file.Level, null);
+            }
+        }
 
         // Said once the ends are committed, as the scan says its own claims: a line about an attempt that a failed
         // commit then took back would describe something that never happened.

@@ -1,10 +1,12 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Ids;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
@@ -12,7 +14,7 @@ using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -323,6 +325,106 @@ public class AgentPreflightTests
         Assert.Contains("a-host-nobody-installed", stored.LastError.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Where the person's memory files are is decided once, at the claim, beside the command that may read them: the
+    /// files the claim hands on to the envelope and the files the read rules on the recorded command name are the same
+    /// three, so a role is given leave to read no file it was not told of — and here, where every path can be written
+    /// as a rule, told of none it may not read.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W7, "the claim hands the launch the memory files it decided, the files its recorded rules read")]
+    public async Task The_claim_decides_the_memory_files_once_and_the_rules_it_records_read_exactly_those()
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "chosen", "claude");
+        var projectFolder = await RecordProjectFolderAsync(db, harness);
+        var campaignFolder = Path.Combine(projectFolder, "campaigns", "q3-marketing-leads");
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "chosen", campaign: c => c.FolderPath = campaignFolder);
+
+        var claimed = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        var expected = new MemoryFileLocations(
+            Path.Combine(harness.Folders.Root, "AGENTS.md"),
+            Path.Combine(projectFolder, "AGENTS.md"),
+            Path.Combine(campaignFolder, "AGENTS.md"));
+        Assert.Equal(expected, claimed.MemoryFiles);
+
+        var recorded = Reads((await AgentOf(database, item)).Args!);
+        var composed = Reads(new ClaudeCodeHost().Compose(new ExecutionProfileRevision { Program = "claude" }, ["claude"], expected).Command);
+        Assert.True(recorded.Count == 3, $"The recorded command reads [{string.Join(", ", recorded)}].");
+        Assert.Equal(composed, recorded);
+        Assert.DoesNotContain(harness.Logs.All, line => line.Contains("memory file", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Work its role's own command runs has no rules composed for it, and its envelope names the memory files all the
+    /// same — as the claim found them, the one decision every role launch is given.
+    /// </summary>
+    [Fact]
+    public async Task Work_its_role_s_own_command_runs_is_handed_the_memory_files_the_claim_found()
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaignFolder = Path.Combine(harness.Folders.Root, "projects", "acme-corp", "campaigns", "q3-marketing-leads");
+        await SeedItemAsync(db, campaign: c => c.FolderPath = campaignFolder);
+
+        var claimed = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Null(claimed.Agent);
+        Assert.Equal(new MemoryFileLocations(null, null, Path.Combine(campaignFolder, "AGENTS.md")), claimed.MemoryFiles);
+    }
+
+    /// <summary>
+    /// A memory file whose path the host would read as a pattern, or split at a parenthesis, is still named — the folder
+    /// is Jason's, and null means a folder Jason does not know — and gets no rule, so the role's read is refused. The
+    /// claim says so once, as a warning under the attempt, by the level alone: the path is built from names a person gave
+    /// and never reaches a log.
+    /// </summary>
+    [Theory]
+    [InlineData("q3 [draft]")]
+    [InlineData("q3 (EU) archive")]
+    public async Task A_memory_file_the_rules_cannot_name_is_said_once_by_its_level_and_never_by_its_path(string folder)
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "chosen", "claude");
+        var campaignFolder = Path.Combine(harness.Folders.Root, "projects", "acme-corp", "campaigns", folder);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "chosen", campaign: c => c.FolderPath = campaignFolder);
+
+        var claimed = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(Path.Combine(campaignFolder, "AGENTS.md"), claimed.MemoryFiles!.Campaign);
+        var recorded = Reads((await AgentOf(database, item)).Args!);
+        Assert.True(recorded.Count == 0, $"The recorded command reads [{string.Join(", ", recorded)}].");
+
+        var line = Assert.Single(harness.Logs.Lines, each => each.Message.Contains("memory file", StringComparison.Ordinal));
+        Assert.Equal(LogLevel.Warning, line.Level);
+        Assert.Equal(
+            $"Attempt {claimed.AttemptPublicId} of work item {item.PublicId}: the campaign memory file's path cannot be written as a read rule, so the role cannot read it",
+            line.Message);
+        Assert.Equal(claimed.AttemptPublicId, line.Scope["AttemptId"]);
+        Assert.False(harness.Logs.Mentions(folder), $"a log line names the campaign's folder '{folder}'");
+    }
+
+    /// <summary>The read rules of a command, in its order.</summary>
+    private static List<string> Reads(IEnumerable<string> command) =>
+        [.. command.Where(argument => argument.StartsWith("Read(", StringComparison.Ordinal))];
+
+    /// <summary>
+    /// The default project's folder, made under the harness's root — which marks the root — and recorded on the project.
+    /// </summary>
+    private static async Task<string> RecordProjectFolderAsync(JasonDbContext db, Harness harness)
+    {
+        var project = await db.Projects.SingleAsync(p => p.Id == DefaultProject.Id, Ct);
+        project.FolderPath = harness.Folders.MakeProjectFolder(project.PublicId, "acme-corp");
+        await db.SaveChangesAsync(Ct);
+        return project.FolderPath;
+    }
+
     private static async Task<AgentProvenanceDto> AgentOf(TestDatabase database, WorkItem item)
     {
         await using var db = database.Open();
@@ -409,9 +511,12 @@ public class AgentPreflightTests
     private sealed class Harness : IDisposable
     {
         private readonly TempDataDir _dir = new();
+        private readonly ILoggerFactory _logging;
 
         public Harness(string? globalDefault = null)
         {
+            _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
+            Folders = global::Jason.Runtime.Tests.Harness.TestHarness.Folders(_dir.Home);
             var clock = new FixedClock(Noon);
             var settings = TestOptions.Settings();
             var journal = new JournalWriter(clock);
@@ -426,7 +531,8 @@ public class AgentPreflightTests
                 new AgentLaunchPlanner(
                     new AgentPreflight(),
                     new ProgramResolver(new OneProgramOnly(_dir.Paths.Root)),
-                    [new ClaudeCodeHost()]),
+                    [new ClaudeCodeHost()],
+                    Folders),
                 roles,
                 plugins,
                 new RouteRegistry(clock, plugins),
@@ -434,12 +540,22 @@ public class AgentPreflightTests
                 new NothingIsSuppressed(),
                 settings,
                 _dir.Paths,
-                NullLogger<Claimer>.Instance);
+                _logging.CreateLogger<Claimer>());
         }
 
         public Claimer Claimer { get; }
 
-        public void Dispose() => _dir.Dispose();
+        /// <summary>The folders the claim finds the memory files by: a root of this test's own, made only where a test makes it.</summary>
+        public HarnessFolders Folders { get; }
+
+        /// <summary>What the claim logged, with the scope each line was written under.</summary>
+        public RecordingLogs Logs { get; } = new();
+
+        public void Dispose()
+        {
+            _logging.Dispose();
+            _dir.Dispose();
+        }
 
         /// <summary>A search path holding one directory, in which only <c>claude</c> can be found.</summary>
         private sealed class OneProgramOnly : ISearchPath

@@ -3,7 +3,9 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Harness;
+using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Tests.Integration;
 
@@ -89,11 +91,12 @@ public class RoleMemoryTests
         await File.WriteAllTextAsync(Path.Combine(project, "AGENTS.md"), "Acme sells to clinics.", Ct);
         await File.WriteAllTextAsync(Path.Combine(folder, "AGENTS.md"), "This quarter: dentists in Lyon.", Ct);
 
-        var (envelope, echoed) = await LaunchAsync(host, campaign);
+        var (envelope, echoed, recorded) = await LaunchAsync(host, campaign);
 
         Assert.Equal(
             new MemoryFileLocations(Path.Combine(root, "AGENTS.md"), Path.Combine(project, "AGENTS.md"), Path.Combine(folder, "AGENTS.md")),
             envelope.MemoryFiles);
+        AssertTheRulesReadWhatTheEnvelopeNames(envelope, recorded, 3);
         foreach (var fragment in (string[])["Marta", "plainly", "clinics", "dentists", "Lyon"])
         {
             Assert.DoesNotContain(fragment, echoed, StringComparison.OrdinalIgnoreCase);
@@ -116,9 +119,10 @@ public class RoleMemoryTests
         Directory.Delete(folder, recursive: true);
         File.Delete(HarnessMarker.PathIn(root));
 
-        var (envelope, _) = await LaunchAsync(host, campaign);
+        var (envelope, _, recorded) = await LaunchAsync(host, campaign);
 
         Assert.Equal(new MemoryFileLocations(null, Path.Combine(project, "AGENTS.md"), Path.Combine(folder, "AGENTS.md")), envelope.MemoryFiles);
+        AssertTheRulesReadWhatTheEnvelopeNames(envelope, recorded, 2);
         Assert.False(Directory.Exists(folder), $"the launch made the campaign's folder again at '{folder}'");
     }
 
@@ -169,8 +173,11 @@ public class RoleMemoryTests
         return (host.Fixture.Resolve<HarnessFolders>().Root, project.FolderPath, campaign.FolderPath);
     }
 
-    /// <summary>One role's attempt that echoes its envelope and ends, and the envelope as it was read and as it was written.</summary>
-    private static async Task<(LaunchEnvelope Envelope, string Echoed)> LaunchAsync(FakeHostRuntime host, string campaign)
+    /// <summary>
+    /// One role's attempt that echoes its envelope and ends: the envelope as it was read and as it was written, and the
+    /// command line the attempt's provenance recorded.
+    /// </summary>
+    private static async Task<(LaunchEnvelope Envelope, string Echoed, IReadOnlyList<string> Recorded)> LaunchAsync(FakeHostRuntime host, string campaign)
     {
         var item = await host.CreateAsync(
             new
@@ -189,7 +196,22 @@ public class RoleMemoryTests
         var ended = await host.WaitForStatusAsync(item.Id, WorkItemStatus.Failed, Ct);
         var echoed = await File.ReadAllTextAsync(
             Path.Combine(host.Paths.AttemptWorkDirectory(item.Id, ended.Attempts![0].Id), "stdout.log"), Ct);
-        return (JsonSerializer.Deserialize<LaunchEnvelope>(echoed, JasonJson.Options)!, echoed);
+        return (JsonSerializer.Deserialize<LaunchEnvelope>(echoed, JasonJson.Options)!, echoed, ended.Attempts[0].Provenance!.Agent!.Args!);
+    }
+
+    /// <summary>
+    /// The files the recorded command's read rules let the role read are the files the envelope named: the host's own
+    /// composition for exactly the envelope's files gives the same rules, and there is one per file named.
+    /// </summary>
+    private static void AssertTheRulesReadWhatTheEnvelopeNames(LaunchEnvelope envelope, IReadOnlyList<string> recorded, int named)
+    {
+        static List<string> Reads(IEnumerable<string> command) =>
+            [.. command.Where(argument => argument.StartsWith("Read(", StringComparison.Ordinal))];
+
+        var reads = Reads(recorded);
+        var composed = Reads(new ClaudeCodeHost().Compose(new ExecutionProfileRevision { Program = "claude" }, ["claude"], envelope.MemoryFiles!).Command);
+        Assert.True(reads.Count == named, $"The recorded command reads [{string.Join(", ", reads)}] for {named} files named.");
+        Assert.Equal(composed, reads);
     }
 
     private static async Task ProfileAsync(FakeHostRuntime host, string name) =>

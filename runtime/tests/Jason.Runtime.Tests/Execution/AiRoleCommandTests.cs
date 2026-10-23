@@ -5,14 +5,11 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
-using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
-using Jason.Runtime.Harness;
 using Jason.Runtime.Hosting;
-using Jason.Runtime.Tests.Harness;
 using Jason.Runtime.WorkItems;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -187,91 +184,28 @@ public class AiRoleCommandTests
     }
 
     /// <summary>
-    /// The client's memory file is named where Jason knows the root is its own, and that is known by the root's marker
-    /// alone, which no record holds: a folder there with no marker, one marked as something else — a project, or a root
-    /// that names an id, which no root marker this runtime writes does — or none at all names nothing. A marker the disk
-    /// will not give up, held open by another program or denied to this account, names nothing either, and the launch
-    /// goes ahead without it. The marker is all that is read — the root marked here has no <c>AGENTS.md</c>, and its path
-    /// is given all the same — and nothing is made, taken or written at the root by a launch.
+    /// The envelope names the memory files the claim decided, exactly as they were handed over: the launcher never looks
+    /// them up again, so what the role is told is what the attempt's provenance recorded beside the rules that let it
+    /// read them. Where nothing was handed over the object is there all the same, every level null.
     /// </summary>
     [Theory]
-    [InlineData("marked", true)]
-    [InlineData("unmarked", false)]
-    [InlineData("marked as a project", false)]
-    [InlineData("marked as a root that names an id", false)]
-    [InlineData("marked, and the marker cannot be read", false)]
-    [InlineData("absent", false)]
-    [Critical(Family.W7, "the client's memory file is named only where the root carries its marker")]
-    public async Task The_client_s_memory_file_is_named_only_where_the_root_carries_its_marker(string root, bool named)
+    // Critical: the envelope names the memory files the claim handed over, never none in their place.
+    [InlineData(true, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W7)])]
+    [InlineData(false)]
+    public async Task The_envelope_names_the_memory_files_the_claim_decided_and_the_object_is_always_there(bool decided)
     {
         using var directory = new TempDataDir();
         var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
-        var folders = TestHarness.Folders(directory.Home);
-        var at = folders.Root;
-        switch (root)
-        {
-            case "marked":
-            case "marked, and the marker cannot be read":
-                Mark(at, new HarnessMarker(HarnessMarker.Root, null));
-                break;
-            case "unmarked":
-                Directory.CreateDirectory(at);
-                break;
-            case "marked as a project":
-                Mark(at, new HarnessMarker(HarnessMarker.Project, "prj_one"));
-                break;
-            case "marked as a root that names an id":
-                Mark(at, new HarnessMarker(HarnessMarker.Root, "prj_one"));
-                break;
-        }
+        var claimed = new MemoryFileLocations(
+            Path.Combine(directory.Home, "Jason", "AGENTS.md"),
+            null,
+            Path.Combine(directory.Home, "Jason", "projects", "acme-corp", "campaigns", "q3-marketing-leads", "AGENTS.md"));
 
-        var before = Entries(at);
-
-        CommandOutcome outcome;
-        using (root == "marked, and the marker cannot be read" ? Unreadable(HarnessMarker.PathIn(at)) : null)
-        {
-            outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), folders: folders);
-        }
-
-        Assert.True(outcome is CommandOutcome.Exited { ExitCode: 0 }, $"With the root {root}, the launch ended as {outcome}.");
-        var memory = Envelope(workDir).MemoryFiles;
-        Assert.NotNull(memory);
-        Assert.Equal(named ? Path.Combine(at, "AGENTS.md") : null, memory.Client);
-        Assert.Equal(before, Entries(at));
-    }
-
-    /// <summary>
-    /// A project's and a campaign's memory files are where their folders were recorded, and a level with no folder
-    /// recorded is null beside the others, so the object is there whatever is known. A recorded folder is named without
-    /// a look: the folders recorded here were never made, and a stale one is the host's to find.
-    /// </summary>
-    [Theory]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [Critical(Family.W7, "the memory files are the recorded folders, never looked at, and the object is always there")]
-    public async Task A_project_s_and_a_campaign_s_memory_files_are_their_recorded_folders_named_without_a_look(bool project, bool campaign)
-    {
-        using var directory = new TempDataDir();
-        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
-        var projectFolder = Path.Combine(directory.Home, "Jason", "projects", "acme-corp");
-        var campaignFolder = Path.Combine(projectFolder, "campaigns", "q3-marketing-leads");
-
-        await RunAsync(
-            directory.Paths,
-            workDir,
-            FakeAgentHost.EntryCommand("echo-envelope"),
-            projectFolder: project ? projectFolder : null,
-            campaignFolder: campaign ? campaignFolder : null);
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), memoryFiles: decided ? claimed : null);
 
         var echoed = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
-        var memory = Envelope(workDir).MemoryFiles;
-        Assert.NotNull(memory);
-        Assert.Null(memory.Client);
-        Assert.Equal(project ? Path.Combine(projectFolder, "AGENTS.md") : null, memory.Project);
-        Assert.Equal(campaign ? Path.Combine(campaignFolder, "AGENTS.md") : null, memory.Campaign);
-        Assert.False(Directory.Exists(projectFolder), $"a launch made the folder recorded at '{projectFolder}'");
-        if (!project)
+        Assert.Equal(decided ? claimed : new MemoryFileLocations(null, null, null), Envelope(workDir).MemoryFiles);
+        if (!decided)
         {
             Assert.Contains("\"memory_files\":{\"client\":null,\"project\":null,\"campaign\":null}", echoed, StringComparison.Ordinal);
         }
@@ -401,16 +335,13 @@ public class AiRoleCommandTests
         IReadOnlyList<string>? deny = null,
         RolesOptions? roles = null,
         JsonObject? brief = null,
-        HarnessFolders? folders = null,
         string? projectId = null,
-        string? projectFolder = null,
-        string? campaignFolder = null)
+        MemoryFileLocations? memoryFiles = null)
     {
         var command = new AiRoleCommand(
             paths,
             new TokenRedactor(new RuntimeSecrets(Token)),
             TestOptions.RoleSettings(roles),
-            folders ?? TestHarness.Folders(TempDataDir.HomeOf(paths.Root)),
             NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
             WorkItemId,
@@ -430,8 +361,7 @@ public class AiRoleCommandTests
             kill?.Token ?? CancellationToken.None,
             Deny: deny,
             ProjectId: projectId,
-            ProjectFolderPath: projectFolder,
-            CampaignFolderPath: campaignFolder);
+            MemoryFiles: memoryFiles);
 
         return command.RunAsync(context, Ct);
     }
@@ -439,72 +369,6 @@ public class AiRoleCommandTests
     /// <summary>The envelope the host echoed to its standard output.</summary>
     private static LaunchEnvelope Envelope(string workDir) =>
         JsonSerializer.Deserialize<LaunchEnvelope>(File.ReadAllText(Path.Combine(workDir, "stdout.log")), JasonJson.Options)!;
-
-    /// <summary>A folder at <paramref name="folder"/> with <paramref name="marker"/> as its marker, and nothing else in it.</summary>
-    private static void Mark(string folder, HarnessMarker marker)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(HarnessMarker.PathIn(folder))!);
-        File.WriteAllBytes(HarnessMarker.PathIn(folder), marker.Bytes());
-    }
-
-    /// <summary>
-    /// <paramref name="file"/> kept from this account until disposed: on Windows held open for this test alone, so a read
-    /// meets a sharing violation, as it does while another program holds the file; elsewhere stripped of every permission,
-    /// so a read meets a denial. An account that reads a file whatever its mode says, as root does, has no denial to meet.
-    /// </summary>
-    private static IDisposable Unreadable(string file)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-        }
-
-        var denied = DenyByMode(file);
-        if (Readable(file))
-        {
-            denied.Dispose();
-            Assert.Skip("This account reads a file whatever its mode says, as root does, so there is no denial to meet.");
-        }
-
-        return denied;
-    }
-
-    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
-    private static Lifted DenyByMode(string file)
-    {
-        var mode = File.GetUnixFileMode(file);
-        File.SetUnixFileMode(file, UnixFileMode.None);
-        return new Lifted(() => LiftByMode(file, mode));
-    }
-
-    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
-    private static void LiftByMode(string file, UnixFileMode mode) => File.SetUnixFileMode(file, mode);
-
-    private static bool Readable(string file)
-    {
-        try
-        {
-            using var read = File.OpenRead(file);
-            return true;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    private sealed class Lifted(Action lift) : IDisposable
-    {
-        public void Dispose() => lift();
-    }
-
-    /// <summary>Everything below <paramref name="folder"/>, by its path there, with each file's size; empty where there is no folder.</summary>
-    private static List<string> Entries(string folder) =>
-        Directory.Exists(folder)
-            ? [.. new DirectoryInfo(folder).EnumerateFileSystemInfos("*", SearchOption.AllDirectories)
-                .Select(entry => $"{Path.GetRelativePath(folder, entry.FullName)} {(entry as FileInfo)?.Length}")
-                .Order(StringComparer.Ordinal)]
-            : [];
 
     /// <summary>The role's own skill, where the runtime keeps them.</summary>
     private static Task SkillAsync(JasonPaths paths, string text) =>

@@ -1,27 +1,37 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Dispatch;
 
 /// <summary>
 /// The per-item half of an agent launch, resolved at the claim: what the child is started with, what it may not
-/// do where it runs, and the word it calls home by.
+/// do where it runs, the word it calls home by, and the memory files it was given leave to read.
 /// </summary>
+/// <param name="MemoryFiles">The person's memory files as the claim found them, which the envelope names as they are.</param>
+/// <param name="Unreadable">The levels whose file the claim named and the host could not write as a read rule.</param>
 public sealed record AgentPlan(
     IReadOnlyList<string> Command,
     IReadOnlyList<string> Deny,
     string CliCommand,
-    AgentProvenanceDto Provenance);
+    AgentProvenanceDto Provenance,
+    MemoryFileLocations MemoryFiles,
+    IReadOnlyList<string> Unreadable);
 
 /// <summary>What the claim decided about launching one agent work item.</summary>
 public abstract record AgentLaunchDecision
 {
     public sealed record Ready(AgentPlan Plan) : AgentLaunchDecision;
 
-    /// <summary>No profile anywhere: the role's own entry command runs it, and the attempt says that is what happened.</summary>
-    public sealed record Legacy(AgentProvenanceDto Provenance) : AgentLaunchDecision;
+    /// <summary>
+    /// No profile anywhere: the role's own entry command runs it, and the attempt says that is what happened. The
+    /// memory files are decided here all the same, so the envelope names what the claim found whoever composed the
+    /// command.
+    /// </summary>
+    public sealed record Legacy(AgentProvenanceDto Provenance, MemoryFileLocations MemoryFiles) : AgentLaunchDecision;
 
     /// <param name="Decided">
     /// How far the choice got before it was refused, where a level did name a profile. Null where nothing was
@@ -39,8 +49,13 @@ public abstract record AgentLaunchDecision
 /// will not exist on the next scan either, and an item that quietly went back in the queue would look claimable
 /// for ever while never running.
 /// </para>
+/// <para>
+/// The person's memory files are decided here too, once: where the command that may read them is composed and the
+/// provenance that records it is written. They travel from here to the envelope, so the files a role is told about
+/// and the files its rules let it read are one decision, and the envelope never knows better than the provenance.
+/// </para>
 /// </summary>
-public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver programs, IEnumerable<IAgentHost> hosts)
+public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver programs, IEnumerable<IAgentHost> hosts, HarnessFolders folders)
 {
     /// <param name="globalDefault">The configured default profile, read once for the whole scan.</param>
     public async Task<AgentLaunchDecision> PlanAsync(
@@ -59,17 +74,35 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
                 return new AgentLaunchDecision.Refused(refused.Code, refused.Message, Decided(refused));
 
             case AgentVerdict.Legacy:
-                return new AgentLaunchDecision.Legacy(new AgentProvenanceDto(ProfileResolutionSource.RoleEntryCommand));
+                return new AgentLaunchDecision.Legacy(
+                    new AgentProvenanceDto(ProfileResolutionSource.RoleEntryCommand),
+                    await MemoryFilesAsync(db, item, cancellationToken).ConfigureAwait(false));
 
             case AgentVerdict.Launch launch:
-                return Compose(launch);
+                return Compose(launch, await MemoryFilesAsync(db, item, cancellationToken).ConfigureAwait(false));
 
             default:
                 throw new InvalidOperationException($"Unknown agent verdict '{verdict.GetType().Name}'.");
         }
     }
 
-    private AgentLaunchDecision Compose(AgentVerdict.Launch launch)
+    /// <summary>
+    /// Where the person's memory files are, as this claim finds the root and the records: the campaign's folder and its
+    /// project's, as recorded now, and the root by its marker. Never a word of what the files say.
+    /// </summary>
+    private async Task<MemoryFileLocations> MemoryFilesAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
+    {
+        var campaign = item.Campaign ?? throw new InvalidOperationException($"Work item '{item.PublicId}' was claimed without its campaign.");
+        var project = db.Entry(campaign).Reference(c => c.Project);
+        if (!project.IsLoaded)
+        {
+            await project.LoadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return folders.MemoryFiles(campaign.Project?.FolderPath, campaign.FolderPath);
+    }
+
+    private AgentLaunchDecision Compose(AgentVerdict.Launch launch, MemoryFileLocations memoryFiles)
     {
         var revision = launch.Revision;
 
@@ -94,7 +127,7 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
                 Chosen(launch));
         }
 
-        var composed = host.Compose(revision, startedAs);
+        var composed = host.Compose(revision, startedAs, memoryFiles);
         var provenance = new AgentProvenanceDto(
             launch.Source,
             launch.Profile.PublicId,
@@ -114,7 +147,9 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             composed.Command,
             revision.Deny,
             ProgramResolver.CliCommandFor(revision.CliCommand),
-            provenance));
+            provenance,
+            memoryFiles,
+            composed.Unreadable));
     }
 
     /// <summary>What the pre-flight had decided when it refused: the level and the profile, and no more.</summary>

@@ -72,6 +72,26 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// The three forms a launched session is composed with beyond the bare callback — the read rule per memory file,
+    /// the callback through PowerShell, the exclusion of every <c>CLAUDE.md</c> — each with the host version it was
+    /// measured on and where it was not, so that a later host has a line to be checked against rather than a
+    /// behaviour somebody remembers.
+    /// </summary>
+    [Fact]
+    public void The_profile_contract_records_what_a_launched_role_may_read_and_where_that_was_measured()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains("`Read(//c/Users/…/AGENTS.md)`", contract, StringComparison.Ordinal);
+        Assert.Contains("`PowerShell(jason *)` beside `Bash(jason *)`", contract, StringComparison.Ordinal);
+        Assert.Contains("`\"claudeMdExcludes\": [\"**/CLAUDE.md\", \"**/.claude/rules/**\", \"**/AGENTS.md\"]`", contract, StringComparison.Ordinal);
+        Assert.Contains("Claude Code 2.1.309 on Windows", contract, StringComparison.Ordinal);
+        Assert.Contains("a launched role loads no `CLAUDE.md` at all", contract, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Count(contract, "not measured\\*\\* on Linux or macOS"));
+        Assert.Contains("gets no rule", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Why a launched role's memory is a table here at all, and what that does not make it. The claim is easy
     /// to lose in a later edit — a section about a feature drifts into describing what it does and stops saying
     /// what it is worth — and a reader who loses it will write code that believes a note.

@@ -8,7 +8,6 @@ using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution.Hosts;
-using Jason.Runtime.Harness;
 using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Execution;
@@ -29,9 +28,11 @@ public sealed class AiRoleCommand(
     JasonPaths paths,
     TokenRedactor redactor,
     LiveSettings<RolesOptions> roles,
-    HarnessFolders folders,
     ILogger<AiRoleCommand> logger) : ICommand
 {
+    /// <summary>What the envelope names where the claim handed over no memory files: every level unknown.</summary>
+    private static readonly MemoryFileLocations NoMemoryFiles = new(null, null, null);
+
     /// <summary>How much of the child's stderr is worth keeping on the attempt: enough to explain, not enough to store a log.</summary>
     public const int StderrTailBytes = 4096;
 
@@ -73,9 +74,9 @@ public sealed class AiRoleCommand(
         // under, and whether it was taught anything at all.
         launch = launch with { Deny = context.Deny, RoleSkill = prepared.Skill };
 
-        // Where the person's memory files are, as this launch finds the root and the records: decided before the
-        // child exists, and never a word of what the files say.
-        var memoryFiles = MemoryFiles(context);
+        // Where the person's memory files are, as the claim decided it with the command that may read them: named
+        // here as they are, never looked up again, so the envelope cannot know better than the provenance.
+        var memoryFiles = context.MemoryFiles ?? NoMemoryFiles;
 
         // An agent speaks to Jason, and writes UTF-8: its transcript and the words it ends with are read as UTF-8,
         // whatever this console's code page.
@@ -199,19 +200,6 @@ public sealed class AiRoleCommand(
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
-
-    /// <summary>
-    /// The three memory files by path, each where Jason knows its folder is its own: the root's where the root carries
-    /// its marker now, which no record holds; the project's and the campaign's in the folders recorded on them, named
-    /// without a look, since a stale one is the host's to find. A level it does not know is null, and the object is
-    /// there whatever is known.
-    /// </summary>
-    private MemoryFileLocations MemoryFiles(CommandContext context) => new(
-        MemoryFileIn(folders.MarkedRoot()),
-        MemoryFileIn(context.ProjectFolderPath),
-        MemoryFileIn(context.CampaignFolderPath));
-
-    private static string? MemoryFileIn(string? folder) => folder is { Length: > 0 } ? Path.Combine(folder, HarnessFolders.MemoryFile) : null;
 
     /// <summary>
     /// One JSON object, then end of file. Closing stdin is part of the contract: a host reads until the stream

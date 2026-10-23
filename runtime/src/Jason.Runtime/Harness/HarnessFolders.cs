@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Harness;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
@@ -108,6 +109,19 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
             return null;
         }
     }
+
+    /// <summary>
+    /// The three memory files by path, each where Jason knows its folder is its own: the root's where the root carries
+    /// its marker now, which no record holds; the project's and the campaign's in the folders recorded on them, named
+    /// without a look, since a stale one is the host's to find. A level it does not know is null, and the object is
+    /// there whatever is known. Only the root's marker is read, and no memory file is opened.
+    /// </summary>
+    public MemoryFileLocations MemoryFiles(string? projectFolder, string? campaignFolder) => new(
+        MemoryFileIn(MarkedRoot()),
+        MemoryFileIn(projectFolder),
+        MemoryFileIn(campaignFolder));
+
+    private static string? MemoryFileIn(string? folder) => folder is { Length: > 0 } ? Path.Combine(folder, MemoryFile) : null;
 
     /// <summary>
     /// Makes a project's folder, <c>projects/&lt;slug&gt;/</c> under the root — the root first, where there is none — and

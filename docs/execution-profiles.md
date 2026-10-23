@@ -146,7 +146,8 @@ can be read rather than guessed.
 The per-attempt work directory is the per-item half of the launch. The runtime writes, before the
 child starts:
 
-- `.claude/settings.json` holding the revision's **deny** rules and nothing else;
+- `.claude/settings.json` holding the revision's **deny** rules and three exclusions,
+  `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]` (§7), and nothing else;
 - `.claude/skills/<role>/` copied from `<data>/skills/roles/<role>/`, files only, no link followed.
 
 **Only one half of a policy can travel there.** A directory the runtime creates is not a workspace
@@ -154,10 +155,10 @@ the host trusts, and an allow rule in an untrusted directory is ignored without 
 what the agent *may* do goes on the command line, where it is read, and what it *may not* do goes in
 the directory, where a deny rule is honoured either way. Verified against Claude Code 2.1.275.
 
-The allow rule is composed from a **bare command word** and never a path: bare words are what has been
-verified, and a path inside an allow pattern has not been. The runtime therefore puts its own directory at the
-front of the child's `PATH` and tells the agent the word in the launch envelope, so the skill can teach exactly
-what the rule permits. In a published installation that directory holds the one executable; in a development
+The callback rule is composed from a **bare command word** and never a path — `Bash(jason *)`, and beside it
+`PowerShell(jason *)`. The runtime therefore puts its own directory at the front of the child's `PATH` and tells
+the agent the word in the launch envelope, so the skill can teach exactly what the rule permits. The only paths
+in an allow rule are the person's memory files, one file each (§7). In a published installation that directory holds the one executable; in a development
 layout it holds everything built beside it, which is worth knowing before concluding that a child reached
 something by accident. An allow rule matches the command the agent actually issues, so a skill teaches the
 plain form and nothing built around it. What the rule does **not** do is bound the session: the host decides
@@ -185,8 +186,9 @@ own: nothing in the launch depends on a second file being there, or on the role 
 An agent host is installed and configured by a person, for their own work. Starting one for a background work
 item borrows that installation, and unless the launch says otherwise it borrows the whole of it. The launch says
 otherwise, and this section is what that comes to. What follows was **measured** by running the composed command
-against Claude Code 2.1.275; where a sentence states the mode's own rule rather than something measured, it says
-so, because the two are not equally strong.
+against Claude Code 2.1.275 — and what a role may read, how it calls back and the exclusion of `CLAUDE.md` against
+Claude Code 2.1.309 on Windows; where a sentence states the mode's own rule rather than something measured, it
+says so, because the two are not equally strong.
 
 **Settings come from the work directory and nowhere else.** The command carries `--setting-sources project`, so
 the only settings the session reads are the ones the launcher wrote into `.claude/`. The operator's own
@@ -196,15 +198,65 @@ launched session has none. Measured on one machine, the same brief ran with 79 t
 commands and three MCP servers when those flags were absent, and with 27 built-in tools, 19 skills — the
 built-ins plus the role's own, which still loads — 54 commands and no MCP server when they were present.
 
-**The tools are all still listed; the mode and the allow rule decide what runs.** Every built-in tool the host
-has appears to the session, and the allow rule names one thing: the callback. Of the tools a role reached for,
-the host let `Read` through on its own, while `Glob`, `Write`, `Edit` and its PowerShell tool were **refused by
-the mode**. One chained read-only shell command ran and one piped one was refused, so the host's own reading of
-what is harmless is a floor under the rule, and how far that floor extends was not isolated.
+Settings, but not the operator's own memory: their user-level `~/.claude/CLAUDE.md` reached every launched
+session in spite of `--setting-sources project`, and the roles answered in the language it asks for. So the work
+directory's settings carry `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]`,
+patterns the host matches against each file's absolute path, and **a launched role loads no `CLAUDE.md` at all** —
+the operator's, and any above the work directory. The second pattern names the files of a `.claude/rules` folder,
+which the host loads beside a `CLAUDE.md`: the operator's own `~/.claude/rules/`, and the one in each folder above
+the work directory. A rules file in a folder above the work directory was measured not to reach the role; the
+operator's own folder was **not measured**, because a measurement here never writes into a real home, and the host
+decides both by the same list. The third names every `AGENTS.md`. Where the host finds no `CLAUDE.md` above a
+session it loads each `AGENTS.md` above it instead, and with every `CLAUDE.md` excluded it finds none: an
+`AGENTS.md` and a `.claude/AGENTS.md` in a folder above the work directory, standing for the operator's home, both
+reached the role under the first two patterns, and neither did once the third was added, in a second session over
+the same folders. The person's guidance for the work reaches the role as the memory files the envelope names
+instead, which the role reads through its read rules and never through this list. An organisation's managed
+`CLAUDE.md` cannot be excluded, by the host's own rule.
+
+**The tools are all still listed; the mode and the allow rules decide what runs.** Every built-in tool the host
+has appears to the session, and the allow rules name two things: the callback, and the memory files. Of the tools
+a role reached for, the host let `Read` through on its own inside the work directory, while `Glob`, `Write`,
+`Edit` and a state-changing PowerShell command were **refused by the mode**, and so was a `Read` anywhere outside
+the work directory that no rule names. Through either shell the rules grant the callback and nothing else; any
+other command falls to the host's own read-only floor, which lets harmless output through. One chained read-only
+shell command ran and one piped one was refused, so the host's own reading of what is harmless is a floor under
+the rules, and how far that floor extends was not isolated: a read outside the work directory through a shell,
+rather than through the `Read` tool, was not tried.
+
+**What a role may read, and how it calls back.** Three forms, each measured against Claude Code 2.1.309 on
+Windows, so that a later host has a line to be checked against:
+
+- **One read rule per memory file**, `Read(//c/Users/…/AGENTS.md)`: two slashes for "from the root", the drive
+  letter lower-cased and every separator a forward slash. It makes exactly that file readable — a space or a
+  comma in the path included, and by the path the envelope gives, drive letter upper-cased — while the
+  `CLAUDE.md` beside it and another campaign's `AGENTS.md` stay refused. A level the envelope gives as null gets no rule, and no rule
+  names a folder or a pattern: no directory is added either, because the levels nest and a folder would reach
+  every project and campaign below it. Off Windows the rule is `Read(//home/…/AGENTS.md)`, the form the host's
+  documentation gives for an absolute path; it was **not measured** on Linux or macOS.
+- **The callback through either shell**, `PowerShell(jason *)` beside `Bash(jason *)`, exactly as narrow. On
+  Windows the host offers its PowerShell tool beside Bash, and a role that called back through it under the Bash
+  rule alone was refused, so its attempt ended without its result. What `PowerShell(jason *)` grants is the
+  callback and nothing else. Any other PowerShell command falls to the host's own read-only floor, the same as for
+  Bash, which lets harmless output through — `Write-Output` ran with no rule — and refused the one state-changing
+  command tried. It is composed on every platform: where the host offers no PowerShell tool it approves nothing.
+- **No `CLAUDE.md`, rules file or `AGENTS.md`**,
+  `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]` in the work directory's
+  settings, as above. The patterns were **not measured** on Linux or macOS.
+
+In this version a memory file whose path holds `[`, `]`, `*`, `?`, `(` or `)` — or, off Windows, a backslash, and
+on Windows a path that does not start at a drive letter — gets no rule. The host does not escape a rule written by
+hand, so an escaped guess could grant more than the one file; and it splits its allow list at a space or a comma
+that follows a closing parenthesis, so a folder named `Acme (EU) Ltd` would be read as a rule for part of its name,
+and one whose name starts with `) ` as a rule for the whole folder above it. The envelope still names the file; the
+role's read is refused in the host's usual words, and the role reports the refusal as it reports any refused tool.
+Nothing the role sees says that the folder's name is the cause: the claim's warning does, one line naming the
+attempt and the level — `client`, `project` or `campaign` — and never the path. Renaming the folder fixes it, once
+Jason has the new path (`jason project link` records a project's and its campaigns').
 
 The mode's rule — as the mode states it, not as a measurement here — is that anything needing permission is
 refused. What was seen is narrower: nothing outside the callback was seen to change anything, and nothing
-state-changing outside it was tried. So this is not a sandbox, the allow rule is not a ceiling, and an
+state-changing outside it was tried but the one PowerShell command above. So this is not a sandbox, the allow rule is not a ceiling, and an
 installation that needs one should not read this section as providing it.
 
 **The role has no file-writing tool.** A rule naming the file-editing tools, in the host's own documented form,

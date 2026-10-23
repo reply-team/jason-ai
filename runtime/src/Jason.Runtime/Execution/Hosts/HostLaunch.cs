@@ -11,4 +11,9 @@ namespace Jason.Runtime.Execution.Hosts;
 /// the session an attempt ran in without asking anybody. It is recorded on the attempt's provenance; a later
 /// attempt of the same work item is a different session, because it is a different run.
 /// </param>
-public sealed record HostLaunch(IReadOnlyList<string> Command, string SessionId);
+/// <param name="Unreadable">
+/// The levels — <c>client</c>, <c>project</c>, <c>campaign</c>, as the envelope names them — whose memory file the launch
+/// named and the host could not write as a rule for one file, so the session cannot read it. A level that was null is
+/// not here: nothing was named.
+/// </param>
+public sealed record HostLaunch(IReadOnlyList<string> Command, string SessionId, IReadOnlyList<string> Unreadable);

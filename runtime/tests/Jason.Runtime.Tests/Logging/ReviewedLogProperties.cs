@@ -85,6 +85,10 @@ internal static class ReviewedLogProperties
         // Summoner: the chronicle kind that summoned a manager, or "scheduled".
         "Intent",
 
+        // Claimer: the level of a memory file the host could not write as a read rule, "client", "project" or
+        // "campaign" — never the file's path, which is built from names a person gave.
+        "Level",
+
         // ToastChannel: why there is no desktop, one of the channel's own presence words.
         "Detail",
 

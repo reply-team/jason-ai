@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Execution.Hosts;
@@ -34,5 +35,10 @@ public interface IAgentHost
     /// purpose — a host that is not installed is a fact about the machine, decided before a child exists rather
     /// than discovered by failing to start one.
     /// </param>
-    HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch);
+    /// <param name="memoryFiles">
+    /// The person's memory files this launch names, which the session may read and nothing else outside its work
+    /// directory. A level that is null is not readable; a host that cannot write a path as one file leaves it unreadable
+    /// rather than guess at a wider rule.
+    /// </param>
+    HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles);
 }

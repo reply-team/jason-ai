@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Execution.Hosts;
@@ -7,22 +8,52 @@ namespace Jason.Runtime.Execution.Hosts;
 /// One headless Claude Code session, started for one attempt. The runtime composes the whole of the session's
 /// shape and leaves a profile only the program and whatever it wants to add at the end, so no profile can take
 /// away the three things every attempt depends on: the session is non-interactive, it says what it is doing
-/// while it does it, and it may call the runtime back and nothing else.
+/// while it does it, and it may call the runtime back, read the person's memory files, and nothing else.
 /// <para>
-/// Verified against Claude Code 2.1.275 with a bare command word in the allow rule; a path inside an allow
-/// pattern has not been verified. The version a profile was checked against is recorded on the revision and
-/// reported, never enforced: a host is installed and updated by a person, not by this runtime.
+/// The allow rules were measured against Claude Code 2.1.309 on Windows. The callback as a bare command word runs
+/// through the host's Bash tool and through its PowerShell tool alike. A rule naming one file by its absolute path,
+/// in the form <c>Read(//c/Users/…/AGENTS.md)</c> — the drive letter lower-cased, every separator a forward slash —
+/// makes exactly that file readable, a space or a comma in the path included, while the file beside it and another
+/// campaign's file of the same name stay refused: without one, the mode refuses every read outside the work directory. The
+/// host does not escape a rule written by hand, and it splits its allow list at a space or a comma that follows a
+/// closing parenthesis, so in this version a path holding <c>[</c>, <c>]</c>, <c>*</c>, <c>?</c>, <c>(</c> or
+/// <c>)</c>, or off Windows a backslash, and on Windows a path that does not start at a drive letter, gets no rule:
+/// the envelope still names it, the role's read is refused, and the role reports the refusal as it reports any
+/// refused tool. Off Windows the form is the host's documented one for an absolute path, not measured there.
+/// </para>
+/// <para>
+/// The version a profile was checked against is recorded on the revision and reported, never enforced: a host is
+/// installed and updated by a person, not by this runtime.
 /// </para>
 /// </summary>
-public sealed class ClaudeCodeHost : IAgentHost
+/// <param name="windows">
+/// Whether the paths this host is given are Windows paths, which decides how a path is written as a rule. The
+/// platform this runs on, unless a test says otherwise.
+/// </param>
+public sealed class ClaudeCodeHost(bool windows) : IAgentHost
 {
+    /// <summary>
+    /// The characters the host reads in a path rule as something other than themselves: a pattern's, and the
+    /// parentheses its allow list is split by — after a closing one, a space or a comma ends the rule, so a folder named
+    /// <c>Acme (EU) Ltd</c> becomes a rule for part of its name, and one named <c>) notes</c> a rule for the folder above
+    /// it. Off Windows the backslash, which escapes a pattern's characters, is one more; on Windows it is the separator
+    /// and becomes a forward slash.
+    /// </summary>
+    private static readonly char[] PatternCharacters = ['*', '?', '[', ']', '(', ')'];
+
+    public ClaudeCodeHost()
+        : this(OperatingSystem.IsWindows())
+    {
+    }
+
     public AgentHostKind Kind => AgentHostKind.ClaudeCode;
 
     /// <summary>
     /// Everything this host reads that would change the shape composed below, plus the ones that would undo the
     /// confinement it rests on. A profile says which program and what to add; it does not get to say that the
     /// session is interactive, that it reports in another format, that it may do anything it likes, or that the
-    /// per-attempt work directory is inert. Verified against Claude Code 2.1.275.
+    /// per-attempt work directory is inert. Verified against Claude Code 2.1.275, and <c>--attach-serve</c> against
+    /// 2.1.309.
     /// </summary>
     public IReadOnlySet<string> ReservedFlags { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -54,12 +85,16 @@ public sealed class ClaudeCodeHost : IAgentHost
         "--settings",
         "--add-dir",
         "--disable-slash-commands",
+
+        // A session served for attaching reads the work directory's settings without claudeMdExcludes.
+        "--attach-serve",
     };
 
-    public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch)
+    public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentNullException.ThrowIfNull(launch);
+        ArgumentNullException.ThrowIfNull(memoryFiles);
         if (launch.Count == 0)
         {
             throw new ArgumentException("A launch names at least the program to start.", nameof(launch));
@@ -69,11 +104,16 @@ public sealed class ClaudeCodeHost : IAgentHost
         // its own would leave the runtime with a session id it could only learn by reading the transcript.
         var session = Guid.NewGuid().ToString("D");
 
-        // What the agent may do, as one rule: run the command that calls this runtime back. It travels on the
-        // command line because a work directory the runtime created is not a workspace the host trusts, and an
-        // allow rule written into an untrusted directory is ignored without being reported. What the agent may
-        // not do travels the other way, in that same directory — see WorkDirectory.
-        var allow = $"Bash({ProgramResolver.CliCommandFor(revision.CliCommand)} *)";
+        // What the agent may do: run the command that calls this runtime back, through whichever shell tool it
+        // reaches for — on Windows the host offers PowerShell beside Bash, and a callback refused there ends the
+        // attempt without its result; where the host has no such tool the rule approves nothing — and read the
+        // person's memory files the launch names, one rule per file. It travels on the command line because a work
+        // directory the runtime created is not a workspace the host trusts, and an allow rule written into an
+        // untrusted directory is ignored without being reported. What the agent may not do travels the other way,
+        // in that same directory — see WorkDirectory.
+        var word = ProgramResolver.CliCommandFor(revision.CliCommand);
+        var (reads, unreadable) = ReadRules(memoryFiles);
+        string[] allow = [$"Bash({word} *)", $"PowerShell({word} *)", .. reads];
 
         // Two flags are deliberately absent. --restricted would make the per-attempt work directory inert: it
         // reads no project settings file and loads no project skill, so neither the deny rules nor the role's
@@ -92,11 +132,12 @@ public sealed class ClaudeCodeHost : IAgentHost
                 "--include-partial-messages",
                 "--verbose",
 
-                // One rule, and it is the callback. A rule for the file-editing tools was tried against 2.1.275
-                // and granted neither writing nor editing, so it is not composed: an unproven rule on the
-                // command line reads afterwards as a permission the role had.
+                // The callback and the reads, as one list: the host reads the flag as a list that the next flag
+                // ends, which is why it is never last. A rule for the file-editing tools was tried against
+                // 2.1.275 and granted neither writing nor editing, so it is not composed: an unproven rule on
+                // the command line reads afterwards as a permission the role had.
                 "--allowed-tools",
-                allow,
+                .. allow,
                 "--permission-mode",
                 "dontAsk",
                 "--session-id",
@@ -114,6 +155,61 @@ public sealed class ClaudeCodeHost : IAgentHost
                 // Last, and nothing after them: a profile adds to the shape above and never rewrites it.
                 .. revision.Args,
             ],
-            session);
+            session,
+            unreadable);
+    }
+
+    /// <summary>
+    /// One rule for each memory file the launch names, in the order of the levels, and one only for a file named
+    /// twice; and the levels whose file was named and could not be written as a rule. A level the launch does not know
+    /// is null and gets nothing: never a folder, never a pattern.
+    /// </summary>
+    private (List<string> Rules, List<string> Unreadable) ReadRules(MemoryFileLocations memoryFiles)
+    {
+        var rules = new List<string>();
+        var unreadable = new List<string>();
+        foreach (var (level, path) in new[] { ("client", memoryFiles.Client), ("project", memoryFiles.Project), ("campaign", memoryFiles.Campaign) })
+        {
+            if (path is null)
+            {
+                continue;
+            }
+
+            if (ReadRule(path) is not { } rule)
+            {
+                unreadable.Add(level);
+            }
+            else if (!rules.Contains(rule, StringComparer.Ordinal))
+            {
+                rules.Add(rule);
+            }
+        }
+
+        return (rules, unreadable);
+    }
+
+    /// <summary>
+    /// The host's form of "this one file, by its absolute path", or null where the path cannot be written as one file:
+    /// it holds a character the host would read as a pattern, or it is not a path the form covers.
+    /// </summary>
+    private string? ReadRule(string path)
+    {
+        if (path.IndexOfAny(PatternCharacters) >= 0)
+        {
+            return null;
+        }
+
+        if (windows)
+        {
+            // The host matches a Windows path in its POSIX form, C:\Users becoming /c/Users, so the rule is written
+            // that way: two slashes for "from the root", the drive letter lower-cased whichever way the path spells
+            // it. A path that does not start at a drive — a share, a device path, a relative one — has no form known.
+            var drive = path.Length > 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/';
+            return drive ? $"Read(//{char.ToLowerInvariant(path[0])}/{path[3..].Replace('\\', '/')})" : null;
+        }
+
+        return path.StartsWith('/') && !path.Contains('\\', StringComparison.Ordinal)
+            ? $"Read(//{path.TrimStart('/')})"
+            : null;
     }
 }

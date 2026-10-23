@@ -45,6 +45,15 @@ public static class WorkDirectory
     /// <summary>The file a skill introduces itself in; a directory without one teaches a host nothing.</summary>
     public const string SkillFile = RoleSkillRules.SkillFile;
 
+    /// <summary>The host's pattern for every <c>CLAUDE.md</c>, wherever it is.</summary>
+    private const string EveryClaudeMd = "**/CLAUDE.md";
+
+    /// <summary>The host's pattern for every file under a <c>.claude/rules</c> folder, wherever it is.</summary>
+    private const string EveryRulesFile = "**/.claude/rules/**";
+
+    /// <summary>The host's pattern for every <c>AGENTS.md</c>, wherever it is.</summary>
+    private const string EveryAgentsMd = "**/AGENTS.md";
+
     private static readonly JsonSerializerOptions Settings = new() { WriteIndented = true };
 
     /// <summary>
@@ -75,6 +84,19 @@ public static class WorkDirectory
             {
                 ["deny"] = new JsonArray([.. deny.Select(rule => JsonValue.Create(rule))]),
             },
+
+            // No CLAUDE.md reaches a launched role. The operator's own user-level file is written for their own
+            // sessions, and it arrived in every launched one even with the settings confined to this directory; a
+            // pattern matched against each file's absolute path stops it, and every other CLAUDE.md with it. Honoured
+            // here although the directory is untrusted, as measured against Claude Code 2.1.309 on Windows. The files
+            // of a .claude/rules folder — the operator's own and each one above this directory — load beside it through
+            // the same list, so they are named too. And where it finds no CLAUDE.md the host loads every AGENTS.md above
+            // this directory in its place, as one in the operator's home would be: the role reads the memory files its
+            // envelope names through its read rules, never through this list, so it loses nothing by naming them.
+            ["claudeMdExcludes"] = new JsonArray(
+                JsonValue.Create(EveryClaudeMd),
+                JsonValue.Create(EveryRulesFile),
+                JsonValue.Create(EveryAgentsMd)),
         };
         File.WriteAllText(Path.Combine(host, "settings.json"), settings.ToJsonString(Settings));
 

@@ -83,8 +83,8 @@ public static class AttemptHandler
         await using var scope = scopes.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<JasonDbContext>();
-        // The campaign's project with it: a role is told the project its notes are kept under, and where the folders
-        // recorded for the two are, as they stand when the attempt starts.
+        // The campaign's project with it: a role is told the project its notes are kept under. Where the person's memory
+        // files are is not read again here: the claim decided it with the command that may read them.
         var item = await db.WorkItems.WithNavigation().Include(w => w.Attempts)
             .Include(w => w.Campaign!).ThenInclude(c => c.Project)
             .FirstOrDefaultAsync(w => w.Id == work.WorkItemId)
@@ -122,7 +122,7 @@ public static class AttemptHandler
 
         AttemptStarted(logger, work.AttemptPublicId, work.WorkItemPublicId, null);
         var limits = EffectiveLimits.For(item, services.GetRequiredService<LiveSettings<DispatcherOptions>>().Current);
-        return (Context(item, attempt, limits, work.Plan, work.Agent), Pick(services, item.Kind));
+        return (Context(item, attempt, limits, work), Pick(services, item.Kind));
     }
 
     /// <summary>
@@ -343,7 +343,7 @@ public static class AttemptHandler
     private static ICommand? Pick(IServiceProvider services, WorkItemKind kind) =>
         services.GetServices<ICommand>().LastOrDefault(command => command.Kind == kind);
 
-    private static CommandContext Context(WorkItem item, Attempt attempt, EffectiveLimits limits, ProviderOpPlan? plan, AgentLaunch? agent) => new(
+    private static CommandContext Context(WorkItem item, Attempt attempt, EffectiveLimits limits, ClaimedWork work) => new(
         item.PublicId,
         attempt.PublicId,
         attempt.Number,
@@ -360,10 +360,9 @@ public static class AttemptHandler
         attempt.Launch?.WorkDir ?? string.Empty,
         CancellationToken.None,
         item.Operation,
-        plan,
-        agent?.Deny,
-        agent?.CliCommand,
+        work.Plan,
+        work.Agent?.Deny,
+        work.Agent?.CliCommand,
         item.Campaign.Project?.PublicId,
-        item.Campaign.Project?.FolderPath,
-        item.Campaign.FolderPath);
+        work.MemoryFiles);
 }

@@ -367,15 +367,20 @@ and `workitem.complete`.
 The launcher puts two things in that directory before the child starts:
 
 - `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt
-  and nothing else. It never carries an allow list: a directory the runtime created is not a workspace
-  the host trusts, and an allow entry there is ignored without being reported, so what the agent *may*
-  do travels on the command line instead. That directory is also the **only** place the session's
-  settings come from: the composed command reads no user-scope settings and loads no MCP server, so a
-  launched role inherits neither the operator's plugins and hooks nor their providers
-  ([docs/execution-profiles.md](execution-profiles.md) §7 says what a session is and is not given,
-  including the two things that surprise people: every built-in tool is listed, and of the ones a role
-  reached for the mode refused everything but reading, so what the allow rule grants is a floor and not
-  a ceiling; and the role has no file-writing tool at all).
+  and three exclusions, `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]`,
+  and nothing else: **a launched role loads no `CLAUDE.md`, no rules file and no `AGENTS.md` of the
+  host's own accord** — not the operator's own user-level ones, which reach a session whatever its
+  setting sources say, and none above the work directory ([execution-profiles.md](execution-profiles.md)
+  §7 says which of that was measured). It never carries an allow list: a directory the runtime created
+  is not a workspace the host trusts, and an allow entry there is ignored without being
+  reported, so what the agent *may* do travels on the command line instead. That directory is also the
+  **only** place the session's settings come from: the composed command reads no user-scope settings and
+  loads no MCP server, so a launched role inherits neither the operator's plugins and hooks nor their
+  providers ([docs/execution-profiles.md](execution-profiles.md) §7 says what a session is and is not
+  given, including the two things that surprise people: every built-in tool is listed, and of the ones a
+  role reached for the mode refused everything but reading in the work directory, the files the rules
+  name and what the host counts as read-only, so what the allow rules grant is a floor and not a ceiling;
+  and the role has no file-writing tool at all).
 - `.claude/skills/<role>/`, a copy of `~/.jason/skills/roles/<role>/` when the role has one. Files
   only; a link is neither copied nor followed. A skill that cannot be given to the role fails the
   attempt with `role_skill_invalid` before the child starts — because its `SKILL.md` is a link, cannot
@@ -447,13 +452,24 @@ lives in the runtime's store at all — is in the role-notes section of
 `memory_files` are the paths of the person's three memory files — the `AGENTS.md` of the client at the
 harness root, of the campaign's project and of the campaign ([projects.md](projects.md) says where they
 are kept) — and never their words, for the reason `role_memory` is an address. The host reads them by
-path; the runtime never reads one. Which paths are given follows one rule: a path is given when Jason
+path; the runtime never reads one. **The rules let a launched role read exactly the files `memory_files`
+names, and nothing else outside its work directory**: a profile on the `claude_code` host is composed with
+one read rule per path that is not null, naming that file and never its folder
+([execution-profiles.md](execution-profiles.md) §7 gives the form, and the paths that get no rule because the
+host would read them as a pattern or split them at a parenthesis; the envelope still names such a path, and the
+role's read of it is refused). Which paths are given follows one rule: a path is given when Jason
 knows the folder is its own — the recorded `folder_path` for a project and a campaign, the root marker
 for the root, which no record holds; no existence check on a recorded path, a stale one is the host's to
 find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
 reading order is the skill's, never the runtime's. A level whose folder Jason does not know is null: a
-project or a campaign with no folder recorded, a root that is not there or carries no root marker when
-the attempt is launched. Each path is absolute, as the platform writes it.
+project or a campaign with no folder recorded, a root that is not there or carries no root marker at
+the claim. Each path is absolute, as the platform writes it. The paths are decided **once, at the claim**,
+where the command that may read them is composed and the attempt's provenance is written, and the envelope
+names them as the claim decided them — for a profile launch and for a role's own entry command alike. So
+the files a role is told of are the files the claim decided and its rules were composed from: a file that got
+no rule, and every file of a role run by its own entry command, which is composed no rules at all, is named all
+the same, with no rule to read it by — under a profile its read is refused — and the envelope never knows better
+than what the provenance recorded.
 
 Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
 version 3, and `memory_files`, with `role_memory`'s `project_id`, to version 4 — so a host written

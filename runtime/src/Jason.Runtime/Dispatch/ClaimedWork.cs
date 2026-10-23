@@ -1,3 +1,4 @@
+using Jason.Contracts.Execution;
 using Jason.Runtime.Routing;
 
 namespace Jason.Runtime.Dispatch;
@@ -29,7 +30,16 @@ public sealed record ClaimedWork(
     /// writes into the per-attempt work directory. Null for provider work and for a role run by its own entry
     /// command, neither of which has a profile to say it.
     /// </summary>
-    AgentLaunch? Agent = null);
+    AgentLaunch? Agent = null,
+
+    /// <summary>
+    /// The person's memory files as the claim found them, for every role launch — profile or entry command — and the
+    /// envelope's to name as they are: decided once, where the command that may read them was composed and recorded,
+    /// so the files the envelope names are the files the rules were composed from. A file that got no rule, and every
+    /// file of an entry-command launch, which is composed none, is named all the same. Null for provider work, which
+    /// has no envelope.
+    /// </summary>
+    MemoryFileLocations? MemoryFiles = null);
 
 /// <summary>The per-item half of an agent launch, as the claim resolved it.</summary>
 public sealed record AgentLaunch(IReadOnlyList<string> Deny, string CliCommand);

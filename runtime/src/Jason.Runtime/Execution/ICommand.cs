@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
@@ -27,8 +28,9 @@ namespace Jason.Runtime.Execution;
 /// name, which is the one the launcher puts within the child's reach.
 /// </param>
 /// <param name="ProjectId">The campaign's project, by its public id, as the runtime records it when the attempt starts.</param>
-/// <param name="ProjectFolderPath">The folder recorded for the campaign's project when the attempt starts; null where none is.</param>
-/// <param name="CampaignFolderPath">The folder recorded for the campaign when the attempt starts; null where none is.</param>
+/// <param name="MemoryFiles">
+/// The person's memory files as the claim decided them, which the envelope names as they are; null for provider work.
+/// </param>
 public sealed record CommandContext(
     string WorkItemId,
     string AttemptId,
@@ -50,8 +52,7 @@ public sealed record CommandContext(
     IReadOnlyList<string>? Deny = null,
     string? CliCommand = null,
     string? ProjectId = null,
-    string? ProjectFolderPath = null,
-    string? CampaignFolderPath = null);
+    MemoryFileLocations? MemoryFiles = null);
 
 /// <summary>How the run ended, as the command saw it. What it means for the work item is decided elsewhere.</summary>
 public abstract record CommandOutcome

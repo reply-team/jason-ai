@@ -72,7 +72,7 @@ public sealed record RoleMemoryLocation(string CampaignId, string Role, string? 
 /// the order its role's skill gives; the runtime never reads one.
 /// </para>
 /// </summary>
-/// <param name="Client">The root's <c>AGENTS.md</c>, where the root carries its marker at launch; null otherwise.</param>
+/// <param name="Client">The root's <c>AGENTS.md</c>, where the root carries its marker at the claim; null otherwise.</param>
 /// <param name="Project">The <c>AGENTS.md</c> in the folder recorded for the campaign's project; null where none is recorded.</param>
 /// <param name="Campaign">The <c>AGENTS.md</c> in the folder recorded for the campaign; null where none is recorded.</param>
 public sealed record MemoryFileLocations(string? Client, string? Project, string? Campaign);

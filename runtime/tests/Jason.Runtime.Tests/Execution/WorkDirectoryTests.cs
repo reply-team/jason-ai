@@ -44,6 +44,31 @@ public class WorkDirectoryTests : IDisposable
         Assert.DoesNotContain("hasTrustDialogAccepted", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A launched role loads no <c>CLAUDE.md</c> at all, no rules file and no <c>AGENTS.md</c>. The operator's own
+    /// user-level file is written for their own sessions — in their language, about their work — and reached every
+    /// launched role even with the settings confined to the work directory; a pattern that matches every
+    /// <c>CLAUDE.md</c> by its absolute path, in the work directory's own settings, stops it, as measured against Claude
+    /// Code 2.1.309 on Windows. The host loads the files under a <c>.claude/rules</c> folder — the operator's own, and
+    /// each one above the work directory — beside it, through the same list, so a second pattern names them; a rules
+    /// file above the work directory was measured not to arrive with it. And where it finds no <c>CLAUDE.md</c> the host
+    /// loads every <c>AGENTS.md</c> above the work directory instead — measured, the files in a folder standing for the
+    /// home directory reached the role — so a third pattern names those, and with it they were measured not to. The
+    /// role reads the memory files its envelope names through its read rules, never through this list, so it loses
+    /// nothing by them. Nothing else is in the file: the deny rules and these.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S6, "the exclusions that keep the operator's instruction files out of a launched role")]
+    public void A_launched_role_loads_no_claude_md_file()
+    {
+        WorkDirectory.Prepare(WorkDir, ["WebFetch"], role: null, SkillsRoot, 1024);
+
+        var settings = JsonNode.Parse(File.ReadAllText(Path.Combine(WorkDir, ".claude", "settings.json")))!.AsObject();
+        Assert.Equal(["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"], settings["claudeMdExcludes"]!.AsArray().Select(pattern => (string?)pattern));
+        Assert.Equal(["permissions", "claudeMdExcludes"], settings.Select(entry => entry.Key));
+        Assert.Equal(["deny"], settings["permissions"]!.AsObject().Select(entry => entry.Key));
+    }
+
     [Fact]
     public void A_profile_with_nothing_to_deny_still_says_so()
     {

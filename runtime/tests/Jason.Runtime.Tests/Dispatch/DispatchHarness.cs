@@ -107,6 +107,10 @@ internal sealed class DispatchHarness : IDisposable
         services.AddScoped<ISuppressionCheck>(provider => provider.GetRequiredService<SuppressionService>());
         // The accounts' events are read through pages the test hands over rather than through a child.
         services.AddSingleton<IEventsInvoker>(Events);
+
+        // Where the claim finds the person's memory files: a root under this test's own home, which no test here marks,
+        // so every root a role is told of is one a test made on purpose.
+        services.AddSingleton(Harness.TestHarness.Folders(_dir.Home));
         services.AddDispatcherModule();
         foreach (var command in commands)
         {

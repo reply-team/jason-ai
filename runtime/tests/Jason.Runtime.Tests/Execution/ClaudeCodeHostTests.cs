@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Persistence;
 
@@ -14,7 +15,7 @@ public class ClaudeCodeHostTests
     [Fact]
     public void The_command_carries_neither_restricted_nor_tools()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision(), ["/opt/claude/claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["/opt/claude/claude"], NoFiles);
 
         // --restricted makes the per-attempt work directory inert: under it the host reads no project settings
         // file and loads no project skill, so the directory could neither deny anything nor teach the role its
@@ -29,7 +30,7 @@ public class ClaudeCodeHostTests
     [Fact]
     public void The_session_is_headless_streams_what_it_does_and_may_call_home()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles);
 
         string[] expected =
             [
@@ -41,6 +42,7 @@ public class ClaudeCodeHostTests
                 "--verbose",
                 "--allowed-tools",
                 $"Bash({ProgramResolver.DefaultCliCommand} *)",
+                $"PowerShell({ProgramResolver.DefaultCliCommand} *)",
                 "--permission-mode",
                 "dontAsk",
                 "--session-id",
@@ -59,7 +61,7 @@ public class ClaudeCodeHostTests
     [Fact]
     public void The_command_says_what_this_version_of_the_host_needs_and_what_it_must_not_inherit()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles);
 
         // A print-mode session that reports as it goes is refused outright without this: the host answers
         // "--output-format=stream-json requires --verbose" and exits before a session exists.
@@ -76,26 +78,217 @@ public class ClaudeCodeHostTests
     }
 
     /// <summary>
-    /// The allow list is one rule, and it is the callback. A rule for the file-editing tools was tried against
-    /// 2.1.275 and granted neither writing nor editing, so it is not composed here: an unproven rule on the
-    /// command line reads afterwards as a permission the role had.
+    /// Where a launch names no memory file, the allow list is the callback and nothing else — through either shell
+    /// tool the host offers, since on Windows a role may reach for PowerShell rather than Bash and a callback refused
+    /// there fails the attempt. A rule for the file-editing tools was tried against 2.1.275 and granted neither
+    /// writing nor editing, so it is not composed here: an unproven rule on the command line reads afterwards as a
+    /// permission the role had.
     /// </summary>
     [Fact]
     [Critical(Family.S6, "the launched session's allow list")]
-    public void The_allow_list_is_the_callback_and_nothing_else()
+    public void The_allow_list_is_the_callback_through_either_shell_and_nothing_else()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles);
 
-        var allow = launch.Command.ToList().IndexOf("--allowed-tools");
-        Assert.True(allow >= 0, "the command grants nothing");
-        Assert.Equal($"Bash({ProgramResolver.DefaultCliCommand} *)", launch.Command[allow + 1]);
-        Assert.StartsWith("--", launch.Command[allow + 2], StringComparison.Ordinal);
+        string[] expected = [$"Bash({ProgramResolver.DefaultCliCommand} *)", $"PowerShell({ProgramResolver.DefaultCliCommand} *)"];
+        Assert.Equal(expected, AllowList(launch));
+    }
+
+    /// <summary>
+    /// Each memory file the launch names is readable by one rule of its own, in the host's form for "this file, by its
+    /// absolute path": the drive letter lower-cased and every separator a forward slash, as measured against Claude
+    /// Code 2.1.309 on Windows, where the role read the file by the path the envelope gave it, drive letter upper-cased.
+    /// A rule names a file and never a folder, so the file beside it and another campaign's file of the same name stay
+    /// refused.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S6, "the read rules, exactly: a rule for a folder or a pattern beside the files' own turns this red")]
+    public void Each_memory_file_the_launch_names_is_readable_by_a_rule_of_its_own()
+    {
+        var files = new MemoryFileLocations(
+            @"C:\Users\Marta\Jason\AGENTS.md",
+            @"C:\Users\Marta\Jason\projects\acme-corp\AGENTS.md",
+            @"C:\Users\Marta\Jason\projects\acme-corp\campaigns\q3-marketing-leads\AGENTS.md");
+
+        var launch = new ClaudeCodeHost(windows: true).Compose(Revision(), ["claude"], files);
+
+        string[] expected =
+            [
+                $"Bash({ProgramResolver.DefaultCliCommand} *)",
+                $"PowerShell({ProgramResolver.DefaultCliCommand} *)",
+                "Read(//c/Users/Marta/Jason/AGENTS.md)",
+                "Read(//c/Users/Marta/Jason/projects/acme-corp/AGENTS.md)",
+                "Read(//c/Users/Marta/Jason/projects/acme-corp/campaigns/q3-marketing-leads/AGENTS.md)",
+            ];
+        Assert.Equal(expected, AllowList(launch));
+    }
+
+    /// <summary>
+    /// Off Windows the form is the host's documented one for an absolute path, two slashes and then the path below the
+    /// root. Measured on Windows only: on Linux and macOS this is the host's documentation, not a run.
+    /// </summary>
+    [Fact]
+    public void Off_windows_a_memory_file_is_named_from_the_root_of_the_filesystem()
+    {
+        var files = new MemoryFileLocations("/home/marta/Jason/AGENTS.md", null, "/home/marta/Jason/projects/acme-corp/campaigns/q3/AGENTS.md");
+
+        var launch = new ClaudeCodeHost(windows: false).Compose(Revision(), ["claude"], files);
+
+        string[] expected = ["Read(//home/marta/Jason/AGENTS.md)", "Read(//home/marta/Jason/projects/acme-corp/campaigns/q3/AGENTS.md)"];
+        Assert.Equal(expected, AllowList(launch).Skip(2));
+    }
+
+    /// <summary>
+    /// A level the launch does not know is null, and a null level is no rule at all — never a rule for a folder, a
+    /// pattern or the root's own file standing in for it.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    public void A_level_the_launch_does_not_know_gets_no_rule(bool client, bool project, bool campaign)
+    {
+        var files = new MemoryFileLocations(
+            client ? @"C:\Users\Marta\Jason\AGENTS.md" : null,
+            project ? @"C:\Users\Marta\Jason\projects\acme-corp\AGENTS.md" : null,
+            campaign ? @"C:\Users\Marta\Jason\projects\acme-corp\campaigns\q3\AGENTS.md" : null);
+
+        var reads = AllowList(new ClaudeCodeHost(windows: true).Compose(Revision(), ["claude"], files)).Skip(2).ToList();
+
+        var named = new[] { client, project, campaign }.Count(known => known);
+        Assert.True(reads.Count == named, $"{named} known levels gave the rules [{string.Join(", ", reads)}].");
+        Assert.All(reads, rule => Assert.EndsWith("/AGENTS.md)", rule, StringComparison.Ordinal));
+        Assert.DoesNotContain(reads, rule => rule.Contains('*', StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A space or a comma in a path is part of the one value it travels in, inside the rule's parentheses — the host reads
+    /// its allow list as "comma or space-separated", and measured against 2.1.309 on Windows it splits neither inside a
+    /// rule — so such a path gets its rule like any other.
+    /// </summary>
+    [Theory]
+    [InlineData(true, @"C:\Users\Marta Lee\Jason\AGENTS.md", "Read(//c/Users/Marta Lee/Jason/AGENTS.md)")]
+    [InlineData(true, @"C:\Users\Marta\Acme, Inc\Jason\AGENTS.md", "Read(//c/Users/Marta/Acme, Inc/Jason/AGENTS.md)")]
+    [InlineData(false, "/home/marta lee/Jason/AGENTS.md", "Read(//home/marta lee/Jason/AGENTS.md)")]
+    [InlineData(false, "/home/marta/acme, inc/Jason/AGENTS.md", "Read(//home/marta/acme, inc/Jason/AGENTS.md)")]
+    public void A_path_with_a_space_or_a_comma_is_one_rule(bool windows, string path, string rule)
+    {
+        var launch = new ClaudeCodeHost(windows).Compose(Revision(), ["claude"], new MemoryFileLocations(path, null, null));
+
+        Assert.Equal([rule], AllowList(launch).Skip(2));
+    }
+
+    /// <summary>
+    /// The drive letter is lower-cased whichever way the path spells it, so a root recorded as <c>c:\</c> and one
+    /// recorded as <c>C:\</c> are one rule — the form the host's documentation writes and the one measured.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\Marta\Jason\AGENTS.md")]
+    [InlineData(@"c:\Users\Marta\Jason\AGENTS.md")]
+    [InlineData("C:/Users/Marta/Jason/AGENTS.md")]
+    public void The_drive_letter_is_lower_cased_and_every_separator_is_a_forward_slash(string path)
+    {
+        var launch = new ClaudeCodeHost(windows: true).Compose(Revision(), ["claude"], new MemoryFileLocations(path, null, null));
+
+        Assert.Equal(["Read(//c/Users/Marta/Jason/AGENTS.md)"], AllowList(launch).Skip(2));
+    }
+
+    /// <summary>
+    /// The host does not escape a rule written by hand, so a path holding a character its patterns read — a star, a
+    /// question mark, a bracket, and off Windows the backslash that escapes them — would be a pattern rather than one
+    /// file, and an escaped guess could grant more than the file. A parenthesis is the other kind: the host splits its
+    /// allow list at a space or a comma that follows a closing one, so a folder named <c>Acme (EU) Ltd</c> would be read
+    /// as a rule for part of its name and a word that names no tool. Such a path gets no rule: the envelope still names
+    /// it, the role's read is refused, and the role reports the refusal. So does a path the host's form does not
+    /// cover: on Windows one that does not start at a drive letter, anywhere one that is not absolute.
+    /// </summary>
+    [Theory]
+    [InlineData(true, @"C:\Users\Marta\[Work]\Jason\AGENTS.md")]
+    [InlineData(true, @"C:\Users\Marta\Work]\Jason\AGENTS.md")]
+    [InlineData(true, @"C:\Users\Marta\Wo*rk\Jason\AGENTS.md")]
+    [InlineData(true, @"C:\Users\Marta\Wo?rk\Jason\AGENTS.md")]
+    [InlineData(true, @"C:\Clients\Acme (EU) Ltd\AGENTS.md")]
+    [InlineData(true, @"C:\Clients\Smith (2025), archive\AGENTS.md")]
+    [InlineData(true, @"C:\Users\Marta Lee (Work)\Jason\AGENTS.md")]
+    [InlineData(true, @"C:\Users\Marta\Documents\) notes\AGENTS.md")]
+    [InlineData(true, @"C:\Users\Marta\Documents\(notes\AGENTS.md")]
+    [InlineData(true, @"\\fileserver\share\Jason\AGENTS.md")]
+    [InlineData(true, @"\\?\C:\Users\Marta\Jason\AGENTS.md")]
+    [InlineData(true, @"Jason\AGENTS.md")]
+    [InlineData(true, @"C:Jason\AGENTS.md")]
+    [InlineData(false, "/home/marta/[work]/Jason/AGENTS.md")]
+    [InlineData(false, "/home/marta/wo*rk/Jason/AGENTS.md")]
+    [InlineData(false, "/home/marta/wo?rk/Jason/AGENTS.md")]
+    [InlineData(false, @"/home/marta/wo\rk/Jason/AGENTS.md")]
+    [InlineData(false, "/home/marta/acme (eu) ltd/Jason/AGENTS.md")]
+    [InlineData(false, "/home/marta/) notes/Jason/AGENTS.md")]
+    [InlineData(false, "home/marta/Jason/AGENTS.md")]
+    public void A_path_the_host_would_read_as_a_pattern_or_cannot_name_gets_no_rule(bool windows, string path)
+    {
+        var plain = windows ? @"C:\Users\Marta\Jason\projects\acme-corp\AGENTS.md" : "/home/marta/Jason/projects/acme-corp/AGENTS.md";
+
+        var launch = new ClaudeCodeHost(windows).Compose(Revision(), ["claude"], new MemoryFileLocations(path, plain, null));
+
+        var reads = AllowList(launch).Skip(2).ToList();
+        Assert.True(reads.Count == 1, $"'{path}' and '{plain}' gave the rules [{string.Join(", ", reads)}].");
+        Assert.EndsWith("/projects/acme-corp/AGENTS.md)", reads[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder whose name starts with a closing parenthesis and a space is where the host's splitting would have done
+    /// harm rather than nothing: <c>Read(//c/Users/Marta/Documents/) notes/AGENTS.md)</c> is read by the host as a rule
+    /// for the whole of <c>Documents</c>, the folder above, which always exists. So nothing is composed for it — no rule,
+    /// and no piece of its path anywhere on the command line — and the level is reported as one the role cannot read.
+    /// </summary>
+    [Fact]
+    public void A_folder_that_opens_with_a_closing_parenthesis_composes_nothing()
+    {
+        var files = new MemoryFileLocations(@"C:\Users\Marta\Documents\) notes\AGENTS.md", null, null);
+
+        var launch = new ClaudeCodeHost(windows: true).Compose(Revision(), ["claude"], files);
+
+        string[] callbacks = [$"Bash({ProgramResolver.DefaultCliCommand} *)", $"PowerShell({ProgramResolver.DefaultCliCommand} *)"];
+        Assert.Equal(callbacks, AllowList(launch));
+        Assert.DoesNotContain(launch.Command, token => token.Contains("Documents", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(["client"], launch.Unreadable);
+    }
+
+    /// <summary>
+    /// A file the launch named and the host could not write as a rule is reported by its level, so the claim can say
+    /// which of the person's files the role will not be able to read without saying where it is. A level that was null
+    /// named nothing and is not reported; a file that got its rule is not either.
+    /// </summary>
+    [Fact]
+    public void A_named_file_that_gets_no_rule_is_reported_by_its_level()
+    {
+        var files = new MemoryFileLocations(
+            @"C:\Users\Marta\[Work]\Jason\AGENTS.md",
+            null,
+            @"C:\Users\Marta\[Work]\Jason\projects\acme-corp\campaigns\q3\AGENTS.md");
+
+        var launch = new ClaudeCodeHost(windows: true).Compose(Revision(), ["claude"], files);
+
+        Assert.Equal(["client", "campaign"], launch.Unreadable);
+        Assert.Empty(new ClaudeCodeHost().Compose(Revision(), ["claude"], SomeFiles).Unreadable);
+        Assert.Empty(new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles).Unreadable);
+    }
+
+    /// <summary>The same file named at two levels is read by one rule: a rule per file, not per level.</summary>
+    [Fact]
+    public void One_file_named_twice_is_one_rule()
+    {
+        const string path = @"C:\Users\Marta\Jason\AGENTS.md";
+
+        var launch = new ClaudeCodeHost(windows: true).Compose(Revision(), ["claude"], new MemoryFileLocations(path, path, null));
+
+        Assert.Equal(["Read(//c/Users/Marta/Jason/AGENTS.md)"], AllowList(launch).Skip(2));
     }
 
     [Fact]
     public void The_profiles_own_arguments_come_last_and_nothing_follows_them()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision("--model", "opus"), ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision("--model", "opus"), ["claude"], SomeFiles);
 
         string[] last = ["--model", "opus"];
         Assert.Equal(last, launch.Command.TakeLast(2));
@@ -105,7 +298,7 @@ public class ClaudeCodeHostTests
     [Fact]
     public void The_allow_rule_names_the_word_the_runtime_puts_within_the_childs_reach()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles);
 
         // A test runs under whatever host started it, so the name itself is never the claim. The rule is: the
         // word is a bare command word — no directory in it — and it is the word the allow rule is built from.
@@ -114,6 +307,7 @@ public class ClaudeCodeHostTests
         Assert.False(word.Contains(Path.AltDirectorySeparatorChar), $"'{word}' carries a directory separator.");
         Assert.False(Path.IsPathRooted(word), $"'{word}' is a path rather than a command word.");
         Assert.Contains($"Bash({word} *)", launch.Command);
+        Assert.Contains($"PowerShell({word} *)", launch.Command);
     }
 
     [Fact]
@@ -122,10 +316,12 @@ public class ClaudeCodeHostTests
         var revision = Revision();
         revision.CliCommand = "jason-dev";
 
-        var launch = new ClaudeCodeHost().Compose(revision, ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(revision, ["claude"], NoFiles);
 
         Assert.Contains("Bash(jason-dev *)", launch.Command);
+        Assert.Contains("PowerShell(jason-dev *)", launch.Command);
         Assert.DoesNotContain($"Bash({ProgramResolver.DefaultCliCommand} *)", launch.Command);
+        Assert.DoesNotContain($"PowerShell({ProgramResolver.DefaultCliCommand} *)", launch.Command);
     }
 
     [Fact]
@@ -134,8 +330,8 @@ public class ClaudeCodeHostTests
         var host = new ClaudeCodeHost();
         var revision = Revision();
 
-        var first = host.Compose(revision, ["claude"]);
-        var second = host.Compose(revision, ["claude"]);
+        var first = host.Compose(revision, ["claude"], NoFiles);
+        var second = host.Compose(revision, ["claude"], NoFiles);
 
         Assert.NotEqual(first.SessionId, second.SessionId);
         Assert.True(Guid.TryParseExact(first.SessionId, "D", out _), $"'{first.SessionId}' is not a UUID.");
@@ -147,7 +343,7 @@ public class ClaudeCodeHostTests
     [Fact]
     public void The_session_it_reports_is_the_session_it_told_the_host_to_use()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles);
 
         var flag = launch.Command.ToList().IndexOf("--session-id");
         Assert.True(flag >= 0, "the command names no session");
@@ -168,7 +364,7 @@ public class ClaudeCodeHostTests
     [Fact]
     public void The_session_the_attempt_records_is_the_session_on_the_command_line()
     {
-        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles);
 
         var index = launch.Command.ToList().IndexOf("--session-id");
         Assert.True(index >= 0 && index + 1 < launch.Command.Count, "the command names no session");
@@ -185,7 +381,7 @@ public class ClaudeCodeHostTests
     public void Every_flag_the_runtime_composes_is_one_a_profile_may_not_set()
     {
         var host = new ClaudeCodeHost();
-        var launch = host.Compose(Revision(), ["claude"]);
+        var launch = host.Compose(Revision(), ["claude"], SomeFiles);
 
         var composed = launch.Command
             .Skip(1)
@@ -216,6 +412,41 @@ public class ClaudeCodeHostTests
     public void A_profile_may_not_widen_what_a_launched_session_can_reach(string flag)
     {
         Assert.Contains(flag, new ClaudeCodeHost().ReservedFlags);
+    }
+
+    /// <summary>
+    /// A session served for attaching reads its launch folder's settings without <c>claudeMdExcludes</c> — Claude Code
+    /// 2.1.309 drops that key, among others, from a launch folder's settings in that mode — so a profile that added the
+    /// flag would bring every <c>CLAUDE.md</c> back into a launched role without a word. It is refused like the others.
+    /// </summary>
+    [Fact]
+    public void A_profile_may_not_serve_the_session_for_attaching()
+    {
+        Assert.Contains("--attach-serve", new ClaudeCodeHost().ReservedFlags);
+    }
+
+    /// <summary>A launch that names no memory file: no root, and a campaign with no folder recorded.</summary>
+    private static MemoryFileLocations NoFiles { get; } = new(null, null, null);
+
+    /// <summary>A launch that names all three, written as this platform writes an absolute path.</summary>
+    private static MemoryFileLocations SomeFiles { get; } = OperatingSystem.IsWindows()
+        ? new(@"C:\Users\Marta\Jason\AGENTS.md", @"C:\Users\Marta\Jason\projects\acme-corp\AGENTS.md", @"C:\Users\Marta\Jason\projects\acme-corp\campaigns\q3\AGENTS.md")
+        : new("/home/marta/Jason/AGENTS.md", "/home/marta/Jason/projects/acme-corp/AGENTS.md", "/home/marta/Jason/projects/acme-corp/campaigns/q3/AGENTS.md");
+
+    /// <summary>
+    /// The values the one <c>--allowed-tools</c> takes: everything after it up to the next flag. The host reads the
+    /// flag as a list, so the next flag is what ends it — which is why it never comes last.
+    /// </summary>
+    private static List<string> AllowList(HostLaunch launch)
+    {
+        var flag = launch.Command.ToList().IndexOf("--allowed-tools");
+        Assert.True(flag >= 0, "the command grants nothing");
+        Assert.True(
+            launch.Command.Count(token => token is "--allowed-tools" or "--allowedTools") == 1,
+            $"the command names the allow list more than once: {string.Join(' ', launch.Command)}");
+        var values = launch.Command.Skip(flag + 1).TakeWhile(token => !token.StartsWith("--", StringComparison.Ordinal)).ToList();
+        Assert.True(flag + 1 + values.Count < launch.Command.Count, "the allow list is the last thing on the command line, so nothing ends it");
+        return values;
     }
 
     private static ExecutionProfileRevision Revision(params string[] args) => new()

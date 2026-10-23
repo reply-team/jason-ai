@@ -1240,7 +1240,8 @@ public class ClaimerTests
                 new AgentLaunchPlanner(
                     new AgentPreflight(),
                     new ProgramResolver(new ThisMachineHasNothing()),
-                    [new ClaudeCodeHost()]),
+                    [new ClaudeCodeHost()],
+                    global::Jason.Runtime.Tests.Harness.TestHarness.Folders(_dir.Home)),
                 TestOptions.RoleSettings(roles),
                 plugins,
                 routing,
