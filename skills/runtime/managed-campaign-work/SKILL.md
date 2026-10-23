@@ -40,8 +40,10 @@ jason plugin list
 ```
 
 If `plugins` is empty, or the operation you need is not in a plugin's `operations`, stop and say so: installing a
-package and writing a route is an operator's explicit act, not something to work around. To see where one
-operation would go for one campaign:
+package and writing a route is an operator's explicit act, not something to work around. That stop is for work that
+reaches a provider: a project, a campaign and the people it is about need none, so they are made with no plugin
+loaded, and the stop comes at the first work item that would reach one. To see where one operation would go for one
+campaign:
 
 ```
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll
@@ -85,14 +87,28 @@ role's note outranks them.
 
 ## The work itself
 
-A campaign, the people it is about, and then one work item per thing to be done.
+A project for what is sold, a campaign under it, the people the campaign is about, and then one work item per thing
+to be done.
 
 ```
-jason campaign create --name "Q3 LatAm founders" --context '{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia","their_words":"Our best customers came through their accountants. We sell to founders, never to HR."}' --idempotency-key q3-latam
+jason project list --query payroll
+jason project create --name "Payroll for Latin America"
+jason campaign create --name "Q3 LatAm founders" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia","their_words":"Our best customers came through their accountants. We sell to founders, never to HR."}' --idempotency-key q3-latam
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+**What is sold is the project.** A project gathers the campaigns of one product, so it is named from what the person
+sells, in their words, and looked for before it is made: `jason project list --query` with a word of that name answers
+whether this product has one already. Make it only when there is none. A create refused with `project_exists` names, in
+its details, the project that already has the slug: read it with `jason project get`, and where its name is this
+product's, it is the one to use, since the first create's answer was lost; where it is another product's, the two
+names make the same slug, so give the new project one of its own with `--slug`. The campaign then goes under it, named
+with `--project` and the project's id: `Default` holds the campaigns made without one and is never the home of a named
+product's first campaign, unless the person renamed it to that product's name, which makes it that product's project
+and the one `jason project list --query` finds. The project a command could take from the folder it runs in is no
+answer for that first create.
 
 **The brief becomes the campaign.** What the person told you about the campaign — the product, the audience, how it
 sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any

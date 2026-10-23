@@ -39,10 +39,13 @@ public sealed partial class CampaignPlanningSkillTests
 
         Assert.Contains("Take it as they give it: in their own words, typed, as a link, a file or a voice note.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "With Jason, that brief becomes the context of Jason's own campaign when the campaign is created (`jason campaign create`, not the provider operation `campaign.create`), before any contact is added and before anything is sent, so the plan and the roles that read the campaign start from the same brief.",
+            "With Jason, that brief becomes the context of Jason's own campaign when the campaign is created (`jason campaign create`, not the provider operation `campaign.create`), under a project named from what is sold, before any contact is added and before anything is sent, so the plan and the roles that read the campaign start from the same brief.",
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("every role that works it", skill, StringComparison.Ordinal);
+
+        // The changelog says when the project came into the prerequisite, so a reader of an older copy knows what changed.
+        Assert.Contains("- 2.4.0 (2026-10-23): with Jason, the campaign the brief becomes goes under a project named from what is sold, one project per product.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>

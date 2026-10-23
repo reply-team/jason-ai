@@ -306,6 +306,26 @@ public partial class InteractiveSkillTests
         Assert.Contains("A launched planner that was given such a rule raises it as a decision that names its file; once the person says yes, you write it there the same way.", skill, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The brief becomes a project with its first campaign: the project named from what is sold, never the default for a
+    /// named product, and how is the managed path's to print. And the wiring check is no step of the opening: a person who
+    /// skipped it plans the same way, so a session that waited on it would hold the real work behind a walk they declined.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_commits_a_first_campaign_under_the_project_of_what_is_sold()
+    {
+        var skill = Flattened("planner-in-session");
+        Assert.Contains("The first campaign of what they sell goes under a project named from it, never under `Default`, and the campaign is made with the brief as its context before anyone is added to it", skill, StringComparison.Ordinal);
+        Assert.Contains("The wiring check is no step of this opening.", skill, StringComparison.Ordinal);
+        Assert.Contains("a person who skipped it plans exactly as one who took it", skill, StringComparison.Ordinal);
+        Assert.Contains("Offered once and skipped, it stays skipped", skill, StringComparison.Ordinal);
+        Assert.Contains("a provider is connected when the work first reaches for one, as `operating-the-installation` says", skill, StringComparison.Ordinal);
+
+        // A second campaign of a product that has its project: that project's file is the person's guidance for it, and it
+        // can be read only once the project is found, which comes after the reading order the session starts with.
+        Assert.Contains("Where what they sell already has its project, read that project's memory file as soon as the project is found, before you plan.", skill, StringComparison.Ordinal);
+    }
+
     /// <summary>The sentence the planner opens with, as the install says it.</summary>
     private const string OpeningSentence =
         "Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and "

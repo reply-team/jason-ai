@@ -120,10 +120,15 @@ list they bring or from a search and by which principle, the channels, and what 
 is usually there already. Ask for what is missing a question at a time, in your own words, at the step that needs it,
 rather than handing over a form. A list they bring is cleaned before it is used, and how is `audience-building`'s.
 
+The wiring check is no step of this opening. Offered once and skipped, it stays skipped: a person who skipped it
+plans exactly as one who took it, and a provider is connected when the work first reaches for one, as
+`operating-the-installation` says.
+
 Before you plan, read what the person has already written down as well: their named preferences and their memory
 files for the client, the project and the campaign, in the order `managed-campaign-work` gives, and by path where
 your host did not hand you a file when this session began. What they tell you in this conversation comes after all
-of it and wins where it differs.
+of it and wins where it differs. Where what they sell already has its project, read that project's memory file as
+soon as the project is found, before you plan.
 
 How a goal becomes a plan somebody else could carry out is `campaign-planning`. Read it; this file does not repeat
 it.
@@ -148,8 +153,10 @@ Their agreement is to the direction, not to sending: what a plan's approval does
 ## Commit it
 
 Once the direction is agreed, it becomes campaign work through `managed-campaign-work`, which is how a campaign, its
-people and its work are created, with the keys they carry; this file does not repeat it. A change of direction on a
-campaign that already exists goes into its context as well, with `campaign update-context`.
+people and its work are created, with the keys they carry; this file does not repeat it. The first campaign of what
+they sell goes under a project named from it, never under `Default`, and the campaign is made with the brief as its
+context before anyone is added to it. A change of direction on a campaign that already exists goes into its context
+as well, with `campaign update-context`.
 
 ## The first message, before anything is sent
 

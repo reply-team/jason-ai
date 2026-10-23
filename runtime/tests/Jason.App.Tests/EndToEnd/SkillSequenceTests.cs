@@ -32,7 +32,71 @@ public class SkillSequenceTests
     private const string Address = "marta@example.test";
     private const string FirstName = "Marta";
 
+    // The managed path's first lines, as it prints them: the project of what is sold, the campaign under it with the
+    // brief as its context, and its people.
+    private const string Brief = "{\"offer\":\"payroll for startups hiring in Latin America\","
+        + "\"audience\":\"founders of seed-stage startups in Mexico and Colombia\","
+        + "\"their_words\":\"Our best customers came through their accountants. We sell to founders, never to HR.\"}";
+    private const string FindProject = "jason project list --query payroll";
+    private const string MakeProject = "jason project create --name \"Payroll for Latin America\"";
+    private const string Create = $"jason campaign create --name \"Q3 LatAm founders\" --project prj_{Placeholder} --context '" + Brief + "' --idempotency-key q3-latam";
+    private const string Add = $"jason campaign add-contacts cmp_{Placeholder} --file contacts.json --match-by email";
+    private const string List = $"jason campaign list-contacts cmp_{Placeholder}";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// The first run of a person who skipped the wiring check: no plugin is installed, and the project, the campaign under
+    /// it and its people are still made by the lines the managed path prints. The skill's stop at an empty plugin list is
+    /// for work that reaches a provider; a reading of it that stopped here would end the first run before it began.
+    /// </summary>
+    [Fact]
+    public async Task The_managed_path_makes_a_project_a_campaign_and_its_people_with_no_plugin_installed()
+    {
+        using var it = GoldenPath.Create("skill-unplugged");
+        await GoldenPath.WriteSettingsAsync(it, new SettingsShape());
+        await GoldenPath.StartAsync(it);
+
+        var printed = Prints("managed-campaign-work");
+        foreach (var line in new[] { FindProject, MakeProject, Create, Add, List })
+        {
+            Assert.Contains(line, printed);
+        }
+
+        var plugins = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "plugin", "list")));
+        Assert.True(plugins["plugins"]?.AsArray().Count == 0, $"This installation was to have no plugin, and it lists {plugins.ToJsonString()}.");
+
+        var nothing = new Dictionary<string, string>(StringComparer.Ordinal);
+        var project = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(MakeProject, nothing)])))["id"]!;
+        var inProject = new Dictionary<string, string>(StringComparer.Ordinal) { ["prj_"] = project };
+        var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Create, inProject)])))["id"]!;
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal) { ["cmp_"] = campaign };
+
+        var contacts = await WriteContactsAsync(it);
+        var added = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it, [.. Substituted(Add, ids, ("contacts.json", contacts))])));
+        Assert.Equal(1, (int)added["summary"]!["added"]!);
+        var people = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(List, ids)])));
+        Assert.Single(people["items"]!.AsArray());
+    }
+
+    /// <summary>
+    /// The person's own file. The skill prints a relative name because that is what a person types; the child this
+    /// harness starts does not inherit this installation's directory as its own, so what is typed is the absolute one.
+    /// </summary>
+    private static async Task<string> WriteContactsAsync(Installation it)
+    {
+        var contacts = Path.Combine(it.Root, "contacts.json");
+        await File.WriteAllTextAsync(
+            contacts,
+            new JsonArray(new JsonObject
+            {
+                ["first_name"] = FirstName,
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address }),
+            }).ToJsonString(JasonJson.Options),
+            Ct);
+        return contacts;
+    }
 
     /// <summary>
     /// A campaign, the people it is about, and a unit of work, by the lines the managed path prints. The
@@ -55,12 +119,6 @@ public class SkillSequenceTests
         await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
 
         var printed = Prints("managed-campaign-work");
-        const string Brief = "{\"offer\":\"payroll for startups hiring in Latin America\","
-            + "\"audience\":\"founders of seed-stage startups in Mexico and Colombia\","
-            + "\"their_words\":\"Our best customers came through their accountants. We sell to founders, never to HR.\"}";
-        const string Create = "jason campaign create --name \"Q3 LatAm founders\" --context '" + Brief + "' --idempotency-key q3-latam";
-        const string Add = $"jason campaign add-contacts cmp_{Placeholder} --file contacts.json --match-by email";
-        const string List = $"jason campaign list-contacts cmp_{Placeholder}";
         const string Work = $"jason workitem create cmp_{Placeholder} --kind provider_op --operation "
             + $"campaign.enroll --contact cnt_{Placeholder} --input \"{{\\\"campaign\\\":{{\\\"external_id\\\":"
             + "\\\"7\\\"},\\\"channel\\\":\\\"email\\\",\\\"collision\\\":\\\"skip\\\",\\\"start\\\":"
@@ -74,37 +132,36 @@ public class SkillSequenceTests
         const string Widened = "founders of seed-stage startups in Mexico, Colombia and Chile";
         const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason \"the person widened the audience\"";
 
-        foreach (var line in new[] { Create, Add, List, Work, Start, Follow, Planned, HowMany, History, Moved, Change })
+        foreach (var line in new[] { FindProject, MakeProject, Create, Add, List, Work, Start, Follow, Planned, HowMany, History, Moved, Change })
         {
             Assert.Contains(line, printed);
         }
 
-        // The person's own file. The skill prints a relative name because that is what a person types; the
-        // child this harness starts does not inherit this installation's directory as its own, so what is
-        // typed here is the absolute one.
-        var contacts = Path.Combine(it.Root, "contacts.json");
-        await File.WriteAllTextAsync(
-            contacts,
-            new JsonArray(new JsonObject
-            {
-                ["first_name"] = FirstName,
-                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address }),
-            }).ToJsonString(JasonJson.Options),
-            Ct);
+        var contacts = await WriteContactsAsync(it);
 
+        // What is sold is the project: looked for first, which on a fresh installation finds none, then made, and the
+        // campaign goes under it by the id the create answered with.
         var nothing = new Dictionary<string, string>(StringComparer.Ordinal);
+        var found = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(FindProject, nothing)])));
+        Assert.True(found["items"]?.AsArray().Count == 0, $"A fresh installation already has a project for payroll: {found.ToJsonString()}");
+        var project = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(MakeProject, nothing)])))["id"]!;
+        var inProject = new Dictionary<string, string>(StringComparer.Ordinal) { ["prj_"] = project };
+
         var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, [.. Substituted(Create, nothing)])))["id"]!;
+            GoldenPath.JasonAsync(it, [.. Substituted(Create, inProject)])))["id"]!;
         var ids = new Dictionary<string, string>(StringComparer.Ordinal) { ["cmp_"] = campaign };
 
         // What the skill teaches about a lost answer: the same line again, key and all, answers with what the first
         // one made rather than making it twice.
-        Assert.Equal(campaign, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Create, nothing)])))["id"]);
+        Assert.Equal(campaign, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Create, inProject)])))["id"]);
 
         // The brief becomes the campaign: read back from the runtime, the campaign's context is the object the printed
         // line carried, key for key, the person's own words under the key the skill printed them under — and the
         // campaign holds nobody yet, because the brief is given before any contact is added.
         var made = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "get", campaign)));
+        Assert.True(
+            (string?)made["project_id"] == project,
+            $"The campaign is in the project {made["project_id"]}, and the printed line named {project}, the one made for what is sold.");
         Assert.True(
             JsonNode.DeepEquals(JsonNode.Parse(Brief), made["context"]),
             $"The campaign's context reads {made["context"]?.ToJsonString()}, and the printed line carried {Brief}.");

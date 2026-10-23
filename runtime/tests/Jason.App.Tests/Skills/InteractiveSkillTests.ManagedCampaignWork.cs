@@ -60,6 +60,71 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// The first campaign of a product goes under that product's project, named from what is sold and found before it is
+    /// made, and the create names it. A campaign left to the default, or to whatever project the folder a command runs in
+    /// would supply, files a product's first campaign under nobody's product; a project made twice is refused, and the
+    /// refusal names the one the first create made. Held whole, and in the printed order: the project read, the project
+    /// made, then the campaign under it.
+    /// </summary>
+    [Fact]
+    public void The_first_campaign_goes_under_the_project_of_what_is_sold()
+    {
+        const string Opening = "**What is sold is the project.**";
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var start = text.IndexOf(Opening, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"managed-campaign-work no longer says '{Opening}'.");
+        var end = text.IndexOf("\n\n", start, StringComparison.Ordinal);
+
+        Assert.Equal(
+            Opening + " A project gathers the campaigns of one product, so it is named from what the person sells, in their "
+            + "words, and looked for before it is made: `jason project list --query` with a word of that name answers whether "
+            + "this product has one already. Make it only when there is none. A create refused with `project_exists` names, "
+            + "in its details, the project that already has the slug: read it with `jason project get`, and where its name is "
+            + "this product's, it is the one to use, since the first create's answer was lost; where it is another product's, "
+            + "the two names make the same slug, so give the new project one of its own with `--slug`. The campaign then goes "
+            + "under it, named with `--project` and the project's id: `Default` holds the campaigns made without one and is "
+            + "never the home of a named product's first campaign, unless the person renamed it to that product's name, which "
+            + "makes it that product's project and the one `jason project list --query` finds. The project a command could "
+            + "take from the folder it runs in is no answer for that first create.",
+            Whitespace().Replace(text[start..(end > start ? end : text.Length)], " ").Trim());
+
+        var from = text.IndexOf("\n## The work itself\n", StringComparison.Ordinal);
+        var to = text.IndexOf("\n## ", from + 1, StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, "managed-campaign-work no longer has \"## The work itself\" followed by another section.");
+        var printed = SkillPack.PrintedCommands(text[from..to].Split('\n')).ToList();
+        var list = printed.FindIndex(line => line.StartsWith("jason project list --query ", StringComparison.Ordinal));
+        var make = printed.FindIndex(line => line.StartsWith("jason project create --name ", StringComparison.Ordinal));
+        var create = printed.FindIndex(line => line.StartsWith("jason campaign create ", StringComparison.Ordinal));
+        Assert.True(
+            list >= 0 && make > list && create > make,
+            $"Under \"The work itself\" the project is read at {list}, made at {make} and the campaign created at {create} of: "
+            + $"{string.Join(" | ", printed)}. The project is looked for, then made, then the campaign goes under it.");
+        Assert.True(
+            printed[create].Contains(" --project prj_", StringComparison.Ordinal),
+            $"The first campaign create under \"The work itself\" names no project: {printed[create]}");
+
+        // The section's lead-in says the same order in words, so a reader who skims to the commands meets it first.
+        Assert.Contains(
+            "A project for what is sold, a campaign under it, the people the campaign is about, and then one work item per thing to be done.",
+            Flattened("managed-campaign-work"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The check that stops at no plugin stops only the work that reaches a provider. A person who skipped the wiring check
+    /// has no plugin, and the planner tells them they plan as anybody does; a session that read the check as covering the
+    /// project, the campaign and its people would stop the first run before anything was made.
+    /// </summary>
+    [Fact]
+    public void The_no_plugin_stop_is_for_work_that_reaches_a_provider()
+    {
+        Assert.Contains(
+            "That stop is for work that reaches a provider: a project, a campaign and the people it is about need none, so they are made with no plugin loaded, and the stop comes at the first work item that would reach one.",
+            Flattened("managed-campaign-work"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// What the person told about their campaign becomes its context when Jason's campaign is created, before any contact
     /// exists and before anything is sent, so every role works from the brief rather than from whatever reached it later.
     /// The context is shared knowledge a role that reads the campaign reads whole, so no key is reserved and none is anybody's
