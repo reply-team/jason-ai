@@ -8,6 +8,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests;
@@ -42,11 +43,13 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
     /// </param>
     /// <param name="clock">The runtime's clock, so a test can move time.</param>
     /// <param name="configureServices">Registered last while composing, so a test's service wins over the runtime's own.</param>
+    /// <param name="configurationBuilt">Handed the runtime's configuration as soon as it is built, before the runtime reads it.</param>
     public static async Task<RuntimeApiFixture> StartAsync(
         CancellationToken cancellationToken,
         Action<JasonPaths>? prepare = null,
         TimeProvider? clock = null,
-        Action<IServiceCollection>? configureServices = null)
+        Action<IServiceCollection>? configureServices = null,
+        Action<IConfigurationRoot>? configurationBuilt = null)
     {
         var fixture = new RuntimeApiFixture();
         Directory.CreateDirectory(fixture._dir.Paths.ConfigDirectory);
@@ -62,6 +65,7 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
         var options = TestRuntimeOptions.Quiet with
         {
             Clock = clock,
+            ConfigurationBuilt = configurationBuilt,
             ConfigureServices = services =>
             {
                 // Whatever settings the test wrote, a fixture's runtime never asks the release feed and never

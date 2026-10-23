@@ -6,6 +6,7 @@ using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -53,6 +54,7 @@ public class ReloadOrderingTests
             routes,
             new RouteActivator(db, new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()), routes, TimeProvider.System),
             new ReloadGate(),
+            new SettingsFile(new ConfigurationBuilder().Build()),
             NullLogger<PluginService>.Instance);
 
         await Assert.ThrowsAsync<RefusedSaveException>(() => service.ReloadAsync(new PluginReloadRequest(null, null), Ct));

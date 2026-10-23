@@ -38,6 +38,14 @@ public sealed class PluginLoader(
         new EventId(5, nameof(SectionRefused)),
         "Plugin load refused: the Plugins section of the settings file has {Problems} problem(s); the previous snapshot stays active");
 
+    private static readonly Action<ILogger, Exception?> SettingsFileRefused = LoggerMessage.Define(
+        LogLevel.Error,
+        new EventId(6, nameof(SettingsFileRefused)),
+        "Plugin load refused: the settings file could not be read; the previous snapshot stays active");
+
+    /// <summary>The settings file as a refusal names it: by its own name, never by the path to it, which holds the account's.</summary>
+    public const string SettingsFileField = "settings.json";
+
     private static readonly Action<ILogger, string, string, Exception?> CandidateRejected = LoggerMessage.Define<string, string>(
         LogLevel.Warning,
         new EventId(2, nameof(CandidateRejected)),
@@ -142,6 +150,24 @@ public sealed class PluginLoader(
 
         SectionRefused(logger, problems.Count, null);
         return new LoadResult(null, new ReloadReport(clock.GetUtcNow().UtcDateTime, source, Activated: false, [], [], problems));
+    }
+
+    /// <summary>
+    /// A reload that never looked at a package, because the settings file it resolves the grants and the global routes
+    /// from is there and could not be read: it is not valid JSON, or another handle holds it. It is refused as a
+    /// <c>Plugins</c> section the validator will not hand over is, and for the same reason — activating a set built from
+    /// settings the file no longer holds is exactly what the operator did not ask for — with one detail that names the
+    /// file and the failure by its type, and for JSON by its line and byte, never by anything the file holds.
+    /// </summary>
+    public LoadResult Unreadable(SnapshotSource source, SettingsFileFailure failure)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+        var problem = new ErrorDetail(
+            SettingsFileField,
+            ProblemCodes.SettingsFileUnreadable,
+            $"the settings file could not be read ({failure.Describe()}), so nothing it grants or routes can be resolved; fix it, or close what holds it open, and reload again.");
+        SettingsFileRefused(logger, null);
+        return new LoadResult(null, new ReloadReport(clock.GetUtcNow().UtcDateTime, source, Activated: false, [], [], [problem]));
     }
 
     /// <summary>

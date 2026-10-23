@@ -7,6 +7,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Tests.Dispatch;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -295,6 +296,66 @@ public class PluginServiceTests
         Assert.Empty(plugin.Capabilities.Http!.Granted);
     }
 
+    /// <summary>
+    /// A grant written into the settings file and a reload sent straight after it: that reload holds the grant. The
+    /// file's watch tells a running runtime of an edit only after a delay of its own, and the reload used to resolve the
+    /// grants from the settings as they stood before the edit — the first reload after granting showed nothing granted,
+    /// and a second one, sent later, showed the grant. The watch is stopped here, so nothing but the reload's own read of
+    /// the file can bring the edit in, and nothing waits.
+    /// </summary>
+    [Fact]
+    [Critical(Family.C1, "a reload holds the edit made just before it")]
+    public async Task A_grant_written_just_before_a_reload_is_held_by_that_reload()
+    {
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        await using var api = await StartWithTheWatchStoppedAsync(new TestSearchPath { Path = programs.Root }, paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+        });
+        var started = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+        Assert.Empty(Assert.Single(started.Plugins).Capabilities.Exec!.Granted);
+
+        TestPlugins.Grant(api.Paths, TestPlugins.FakeProviderId, exec: ["*"]);
+        var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, null, Ct);
+
+        var exec = Assert.Single(reloaded.Plugins).Capabilities.Exec!;
+        Assert.Equal(FakeProviderCli.ExecutableName, Assert.Single(exec.Requested).Name);
+        Assert.Equal([FakeProviderCli.ExecutableName], exec.Granted);
+    }
+
+    /// <summary>
+    /// The same edit beside a section the validator refuses — text where the dispatcher's tick wants a number. That is
+    /// the dispatcher's seam's to say, which keeps the tick it had; the reload reads the plugins and the routes, which
+    /// still validate, so it holds the grant as it would without the refusal beside it, and the text is nowhere in the log.
+    /// </summary>
+    [Fact]
+    public async Task A_grant_written_beside_a_refused_section_is_held_by_the_next_reload()
+    {
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        var api = await StartWithTheWatchStoppedAsync(new TestSearchPath { Path = programs.Root }, paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+        });
+        await using (api)
+        {
+            File.WriteAllText(api.Paths.UserSettingsFile, WrongTypedTickWithGrant);
+            var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, null, Ct);
+
+            Assert.Equal([FakeProviderCli.ExecutableName], Assert.Single(reloaded.Plugins).Capabilities.Exec!.Granted);
+            var dispatcher = api.Resolve<LiveSettings<DispatcherOptions>>();
+            Assert.False(dispatcher.Current.Enabled);
+            Assert.True(dispatcher.Refusals > 0, $"the dispatcher's seam refused {dispatcher.Refusals} reads after the edit");
+
+            await api.Runtime.StopAsync();
+            var logs = string.Concat(Directory.GetFiles(api.Paths.LogsDirectory).Select(File.ReadAllText));
+            Assert.DoesNotContain(WrongTypedTickSentinel, logs, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task A_reason_longer_than_the_limit_names_the_field()
     {
@@ -453,6 +514,12 @@ public class PluginServiceTests
 
     private const string WrongTypedPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"TimeoutMs":"SENTINEL_P_TIMEOUT"}}}""";
 
+    /// <summary>Text where the dispatcher's tick wants a number, standing in for anything a person might type.</summary>
+    private const string WrongTypedTickSentinel = "SENTINEL_D_TICK";
+
+    private const string WrongTypedTickWithGrant =
+        """{"Dispatcher":{"Enabled":false,"TickSeconds":"SENTINEL_D_TICK"},"Plugins":{"Grants":{"fake-provider":{"Exec":["*"]}}}}""";
+
     /// <summary>
     /// Whether the running runtime has stopped handing the section over, for any reason: the wait for an edit to
     /// land, which must not itself depend on how the refusal is raised.
@@ -489,4 +556,23 @@ public class PluginServiceTests
             Ct,
             prepare: prepare,
             configureServices: services => services.AddSingleton<ISearchPath>(search));
+
+    /// <summary>
+    /// The same runtime with its settings file's watch stopped as soon as the configuration is built, so that an edit
+    /// reaches it only by a read the runtime makes itself, however long the test takes. The file is still read through
+    /// the provider it was read through at start; nothing is told when it changes. Disposing what the watch runs on is
+    /// what stops it: a longer delay before the watch reads would hold the runtime's stop until the delay had passed.
+    /// </summary>
+    internal static Task<RuntimeApiFixture> StartWithTheWatchStoppedAsync(ISearchPath search, Action<JasonPaths> prepare) =>
+        RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: prepare,
+            configureServices: services => services.AddSingleton<ISearchPath>(search),
+            configurationBuilt: configuration =>
+            {
+                foreach (var file in configuration.Providers.OfType<FileConfigurationProvider>())
+                {
+                    (file.Source.FileProvider as IDisposable)?.Dispose();
+                }
+            });
 }

@@ -108,6 +108,32 @@ public class PluginCliAgainstRuntimeTests
         Assert.Contains("fake-provider/plugin.yaml#kind: kind_invalid — ", afterRefusal, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A settings file that does not parse, met by a reload sent from the command line: the reload is refused, so the
+    /// command exits 1 with the runtime's refusal printed as it came, naming the file and where the parser stopped. A
+    /// refused reload is an API error, printed the same way under <c>--human</c>, so the position is on the screen of
+    /// whoever sent it.
+    /// </summary>
+    [Fact]
+    public async Task A_reload_over_a_settings_file_that_does_not_parse_exits_1_and_says_where_the_parser_stopped()
+    {
+        await using var fixture = await StartAsync();
+        await File.WriteAllTextAsync(fixture.Paths.UserSettingsFile, "{\"Plugins\":{\"Grants\":{},\n  unparsed", Ct);
+
+        var refused = await ErrorAsync(fixture, "plugin", "reload");
+        Assert.Equal("plugin_reload_rejected", (string?)refused["error"]!["code"]);
+        var detail = Assert.Single(refused["error"]!["details"]!.AsArray())!;
+        Assert.Equal("settings.json", (string?)detail["field"]);
+        Assert.Equal("settings_file_unreadable", (string?)detail["code"]);
+
+        var (exit, output, error) = await RunAsync(fixture, ["plugin", "reload", "--human"]);
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(string.Empty, error);
+        Assert.Contains("settings_file_unreadable", output, StringComparison.Ordinal);
+        Assert.Contains("JsonException at line 2, byte 3", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("unparsed", output, StringComparison.Ordinal);
+    }
+
     private static Task<RuntimeApiFixture> StartAsync() =>
         RuntimeApiFixture.StartAsync(
             Ct,

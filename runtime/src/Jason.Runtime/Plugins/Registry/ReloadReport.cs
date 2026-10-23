@@ -13,8 +13,9 @@ public sealed record CandidateReport(string Directory, string? Id, CandidateStat
 /// <para>
 /// <see cref="Routes"/> carries what the candidate route set was refused for, each detail's <c>Field</c> naming
 /// the route. It is a field of its own rather than a candidate called "routes", because a candidate is a package
-/// and a route is not one. <see cref="Settings"/> is the same again for the section a load reads its own
-/// ceilings from: a file edited into something the validator refuses is neither a package's fault nor a route's.
+/// and a route is not one. <see cref="Settings"/> is the same again for the settings: the section a load reads its
+/// own ceilings from, edited into something the validator refuses, or a settings file a reload could not read at all.
+/// Neither is a package's fault nor a route's.
 /// </para>
 /// </summary>
 public sealed record ReloadReport(

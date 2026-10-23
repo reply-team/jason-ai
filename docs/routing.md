@@ -252,7 +252,11 @@ declared.
 A reload builds the whole candidate route set — the global half from `settings.json`, the campaign half
 from the rows of every campaign that is not archived — and checks every route in it against the plugin
 set that load produced and against the operation catalog. Only if nothing objected are the two
-registries swapped, plugins first and routes immediately after.
+registries swapped, plugins first and routes immediately after. The reload reads `settings.json`
+itself before it builds anything, so a global route written straight before it is frozen by that
+reload; a file that is there and cannot be read rejects the reload with `settings_file_unreadable`,
+and one that is not there leaves the global routes in force, as it leaves the grants
+([docs/plugins.md](plugins.md) §9).
 
 **A single bad route rejects the whole reload.** The answer is 409 `plugin_reload_rejected` with
 `retryable: false`, both snapshots stay exactly as they were, and each detail names the route the way

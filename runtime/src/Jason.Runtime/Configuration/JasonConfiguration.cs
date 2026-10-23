@@ -136,6 +136,7 @@ public static class JasonConfiguration
 
         builder.Add<SettingsFileSource>(source =>
         {
+            source.FullPath = paths.UserSettingsFile;
             source.Path = paths.UserSettingsFile;
             source.Optional = true;
             source.ReloadOnChange = true;
@@ -160,6 +161,56 @@ public static class JasonConfiguration
         return configuration;
     }
 
+    /// <summary>
+    /// Reads the user's settings file now, rather than when its watch next fires, and tells every section read from it, as
+    /// the watch does: once this returns, the next read of a section binds what the file says. For an act that has to
+    /// work from the file as it stands — the watch says an edit only after a delay of its own, and a request sent
+    /// straight after the edit would otherwise work from the file as it was.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A file this read cannot use — one that is not there, one another handle holds, one that is not valid JSON — leaves
+    /// the keys the configuration holds from the file as they were and tells no section, so the settings in force are
+    /// kept; the failure is said through the handler <see cref="Build"/> was given, by its type and, for JSON, its
+    /// position. A file that is not there is stricter here than at the watch, which reads it as every setting on its
+    /// default: a save that removes the file and then renames a new one into place would otherwise be met in between.
+    /// Where the configuration holds no keys from the file — a fresh installation, which has never had one — a file that
+    /// is not there is nothing to keep, and nothing is said. Of the three, only a file that is there is handed back to
+    /// the caller to refuse: one that is not there has nothing in it that could not be read.
+    /// </para>
+    /// <para>
+    /// Those keys are the ones the configuration holds when this reads, which are not always the ones the file last held:
+    /// once the watch has itself read a file that does not parse, it has dropped them, and this read does not bring them
+    /// back. The sections bound before keep their values either way, since neither read tells them of a change.
+    /// </para>
+    /// <para>
+    /// A section that no longer validates is that section's to say, when it is next read. None of this is thrown at the
+    /// caller, which asked for the file to be read and not for its settings to be judged. A configuration with no
+    /// settings file of its own is left as it is.
+    /// </para>
+    /// </remarks>
+    /// <returns>
+    /// The failure of a file that is there and could not be used — not valid JSON, or held by another handle — for the
+    /// caller to refuse what it was asked to do from the file; null when the file was read, and when it is not there,
+    /// which refuses nothing.
+    /// </returns>
+    public static SettingsFileFailure? ReadSettingsFile(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (configuration is not IConfigurationRoot root)
+        {
+            return null;
+        }
+
+        SettingsFileFailure? refused = null;
+        foreach (var provider in root.Providers.OfType<SettingsFileProvider>())
+        {
+            refused ??= provider.Read();
+        }
+
+        return refused;
+    }
+
     /// <summary>A failure that has been reported, and the state of the file it was reported for.</summary>
     private sealed record ReportedFailure(SettingsFileFailure Failure, DateTime WrittenAt, long Length);
 
@@ -170,6 +221,12 @@ public static class JasonConfiguration
     /// </summary>
     private sealed class SettingsFileSource : JsonConfigurationSource
     {
+        /// <summary>
+        /// The file's own path, which <see cref="SettingsFileProvider.Read"/> opens. <c>Path</c> is relative to the file
+        /// provider's root once that is resolved, and the provider can say where a file is only while it is there.
+        /// </summary>
+        public string FullPath { get; set; } = string.Empty;
+
         public override IConfigurationProvider Build(IConfigurationBuilder builder)
         {
             EnsureDefaults(builder);
@@ -179,6 +236,70 @@ public static class JasonConfiguration
 
     private sealed class SettingsFileProvider(SettingsFileSource source) : JsonConfigurationProvider(source)
     {
+        /// <summary>
+        /// The read <see cref="ReadSettingsFile"/> asks for. It opens and parses the file itself rather than through the
+        /// loader, which reads a file that is not there as one with no keys and tells every section so; every failure
+        /// is said where an edit's is.
+        /// </summary>
+        /// <returns>The failure of a file that is there and could not be used; null when it was read or is not there.</returns>
+        public SettingsFileFailure? Read()
+        {
+            FileStream stream;
+            try
+            {
+                // Opened as the loader opens it: shared with a writer that has it open, and read synchronously.
+                stream = new FileStream(((SettingsFileSource)Source).FullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 1, FileOptions.SequentialScan);
+            }
+            catch (Exception unopened) when (unopened is IOException or UnauthorizedAccessException)
+            {
+                // A file that is not there refuses nothing. The keys held from it are kept, and that is said; with none
+                // held there is nothing to keep, and nothing to say.
+                if (unopened is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    if (Data.Count > 0)
+                    {
+                        Refuse(unopened);
+                    }
+
+                    return null;
+                }
+
+                return Refuse(unopened);
+            }
+
+            using (stream)
+            {
+                try
+                {
+                    Load(stream);
+                }
+                catch (Exception unparsed) when (unparsed is FormatException or IOException)
+                {
+                    // The keys are replaced only once the whole file has parsed, so the ones held stay where they were.
+                    return Refuse(unparsed);
+                }
+            }
+
+            try
+            {
+                OnReload();
+            }
+            catch (AggregateException refused) when (refused.Flatten().InnerExceptions.All(inner => inner is OptionsValidationException))
+            {
+                // The file was read, and a section of it no longer validates: the options system binds every section it
+                // holds as it is told of the change, and raises the refusal here once every section has been told.
+            }
+
+            return null;
+        }
+
+        /// <summary>A file this read cannot use, put through the handling the loader gives an edit it cannot read.</summary>
+        private SettingsFileFailure Refuse(Exception failure)
+        {
+            Source.OnLoadException?.Invoke(new FileLoadExceptionContext { Provider = this, Exception = failure });
+            return SettingsFileFailure.Of(failure);
+        }
+
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
@@ -309,6 +430,7 @@ public static class JasonConfiguration
         services.AddSingleton<IConfigureOptions<RoutesOptions>>(new ConfigureOptions<RoutesOptions>(options => RoutesOptions.Fill(routes, options)));
         services.AddOptions<RoutesOptions>().ValidateOnStart();
 
+        services.AddSingleton(new SettingsFile(configuration));
         return services;
     }
 

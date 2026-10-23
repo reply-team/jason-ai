@@ -572,6 +572,31 @@ public class RouteActivationTests
         Assert.Equal(TestPlugins.OtherProviderId, reread.Snapshot!.Global.Default!.PluginId);
     }
 
+    /// <summary>
+    /// The other side of the same rule: a reload is what reads the file, and a global route written into it straight
+    /// before a reload is frozen by that reload, not by one sent after the file's watch has caught up. The watch is
+    /// stopped here, so nothing but the reload's own read of the file can bring the edit in, and nothing waits.
+    /// </summary>
+    [Fact]
+    public async Task A_global_route_written_just_before_a_reload_is_frozen_by_that_reload()
+    {
+        await using var api = await PluginServiceTests.StartWithTheWatchStoppedAsync(TestPlugins.SearchPath, paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            TestPlugins.InstallFakeProvider(paths);
+            TestPlugins.InstallOtherProvider(paths);
+            TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, Workspace()));
+        });
+        Assert.Equal(TestPlugins.FakeProviderId, api.Resolve<RouteRegistry>().Snapshot.Global.Default!.PluginId);
+
+        TestRoutes.WriteGlobal(api.Paths, TestRoutes.GlobalDefault(TestPlugins.OtherProviderId));
+        var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+
+        var routes = api.Resolve<RouteRegistry>().Snapshot;
+        Assert.Equal(reloaded.RoutingSnapshotId, routes.Id);
+        Assert.Equal(TestPlugins.OtherProviderId, routes.Global.Default!.PluginId);
+    }
+
     /// <summary>The binding fake-provider's manifest requires: a route to it without one carries nothing it asked for.</summary>
     internal static JsonObject Workspace(string name = "west") => new() { ["workspace"] = name };
 

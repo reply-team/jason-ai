@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -24,6 +25,7 @@ public sealed class PluginService(
     RouteRegistry routes,
     RouteActivator activator,
     ReloadGate gate,
+    SettingsFile settingsFile,
     ILogger<PluginService> logger)
 {
     public const int MaxReasonLength = 2000;
@@ -60,7 +62,14 @@ public sealed class PluginService(
         await gate.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var load = await loader.LoadAsync(SnapshotSource.Reload, cancellationToken).ConfigureAwait(false);
+            // The grants and the global routes are resolved from the settings file as it stands. Its watch tells the
+            // runtime of an edit only after a delay of its own, and a reload sent straight after an edit used to resolve
+            // what the file held before it. A file that is there and cannot be read rejects the reload, as a refused
+            // Plugins section does; one that is not there refuses nothing, and the settings in force are resolved.
+            var unreadable = settingsFile.Read();
+            var load = unreadable is null
+                ? await loader.LoadAsync(SnapshotSource.Reload, cancellationToken).ConfigureAwait(false)
+                : loader.Unreadable(SnapshotSource.Reload, unreadable);
             if (load.Snapshot is null)
             {
                 // The previous snapshot stays: a partly working registry would hide the problem, and the fix is

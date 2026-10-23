@@ -69,6 +69,13 @@ public static class ProblemCodes
     /// </summary>
     public const string PluginsSettingsInvalid = "plugins_settings_invalid";
 
+    /// <summary>
+    /// Not a package's problem either: the settings file a reload resolves the grants and the global routes from is there
+    /// and could not be read — it is not valid JSON, or another handle holds it — so nothing it says can be made true. A
+    /// file that is not there is never this: it refuses nothing, and the settings in force stay.
+    /// </summary>
+    public const string SettingsFileUnreadable = "settings_file_unreadable";
+
     /// <summary>A warning: the settings grant something the manifest never asked for, so nothing was granted.</summary>
     public const string GrantUnrequested = "grant_unrequested";
 

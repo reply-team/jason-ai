@@ -109,8 +109,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   contract.
 - Plugins: a package is `~/.jason/plugins/<id>/` with `plugin.yaml`, `main.js` and optional modules; the
   directory name is the id. The manifest is validated against one fixed vocabulary of problem codes —
-  package problems reject the whole reload and keep the previous snapshot, the four `executable_*` ones
-  and, at a start only, `probe_timed_out` are environmental and only make that plugin `unavailable`.
+  package problems reject the whole reload and keep the previous snapshot, and so does a settings file the
+  reload cannot read (`settings_file_unreadable`; one that is not there rejects nothing); the four `executable_*`
+  ones and, at a start only, `probe_timed_out` are environmental and only make that plugin `unavailable`.
   Every package has a `sha256:` content digest that the child recomputes before it runs anything. The
   invocation goes to the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON
   Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3
