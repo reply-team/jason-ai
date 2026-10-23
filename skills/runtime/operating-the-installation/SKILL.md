@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.304. It covers what this build does and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -348,8 +349,7 @@ under the person's own account — `~/.local/bin` on macOS and Linux, `%LOCALAPP
 and puts that directory on the `PATH` unless `--no-modify-path` is passed. Nothing needs administrator rights.
 
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
-stands, and that there is nothing to build instead — the runtime's source is not published. Do not paste a line
-again in the hope of a different answer.
+stands, and that there is nothing to build instead. Do not paste a line again in the hope of a different answer.
 
 When `jason status` says `ready`, ask the person once what comes next: the wiring check, `docs/golden-path.md`, in the
 same session, or their real work at once. Name the wiring check for what it is: a synthetic walk to meet the system,

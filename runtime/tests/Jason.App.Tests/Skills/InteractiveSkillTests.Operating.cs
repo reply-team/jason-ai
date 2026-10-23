@@ -398,12 +398,12 @@ public partial class InteractiveSkillTests
 
         // The install one-liners go through the product's address and resolve to the latest release. The public
         // repository has one, so a 404 from them is a fault on the way to it, said as it stands - not a
-        // repository with nothing released, and never a reason to build: the runtime's source is not published.
+        // repository with nothing released, and never a reason to build.
         // The sentence this replaces sent a session to build from source, which no reader can do.
         Assert.Contains("curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh", skill, StringComparison.Ordinal);
         Assert.Contains("irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex", skill, StringComparison.Ordinal);
         Assert.Contains("If either answers 404, the release could not be reached", skill, StringComparison.Ordinal);
-        Assert.Contains("there is nothing to build instead — the runtime's source is not published", skill, StringComparison.Ordinal);
+        Assert.Contains("there is nothing to build instead.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("has no published release", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("the way in is to build from source", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("no release has been published yet", skill, StringComparison.Ordinal);

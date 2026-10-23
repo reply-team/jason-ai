@@ -598,7 +598,7 @@ public partial class PageClaimsTests
         Assert.Equal(AgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Agent()))));
 
     /// <summary>
-    /// The runtime's source is not published, so nothing sends an agent to build it: the prompt says nothing of a build,
+    /// The install path is a release, so nothing sends an agent to build anything: the prompt says nothing of a build,
     /// and the install page's section for an agent says to build nothing and to report a 404 from a one-liner as it is.
     /// </summary>
     [Fact]
@@ -1829,7 +1829,7 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// An agent performs §2, then §4 to §6. §3 is for a person who has the runtime's source, and §7 takes the
+    /// An agent performs §2, then §4 to §6. §3 is for a build from the runtime's repository, and §7 takes the
     /// installation off again. And a package manager's own change to the PATH is part of what it was asked to do, as the
     /// one-liner's is when the person types it; only a PATH edit of its own is the person's to allow.
     /// </summary>
@@ -1839,7 +1839,7 @@ public partial class PageClaimsTests
         var agent = Flat(Agent());
 
         Assert.Contains("Do §2, then §4 to §6, in order, and stop there.", agent, StringComparison.Ordinal);
-        Assert.Contains("§3 is for a person who has the runtime's source, which is not published here, and §7 takes the installation off again.", agent, StringComparison.Ordinal);
+        Assert.Contains("§3 is for a build from the runtime's repository, and §7 takes the installation off again.", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("§2 to §6", agent, StringComparison.Ordinal);
         Assert.Contains(
             "A package manager's own PATH change is part of the install you were asked for, and so is the one-liner's when the person types it; a PATH edit of your own, by hand (§2) or by the repair (§5), is marked **Ask first.**",
@@ -1921,7 +1921,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:177e63a43f8718c03aa20301d3c8fb7ca3c515b902fe71cbf232080256012720";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:e3773f1c7a43d649deda4a83daa62de5a4b36f5ecdd8c1ceb520e3f46a915f38";
+    private const string AgentSectionDigest = "sha256:b14dec83d891e16bcffaae1ad16e1b059ea1400ff92eec259c1d27a4b6f8a058";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:c75395eeb75839aeeee9b296b13bae58a0f038c14646e18d28d5b967bc15d9e3";

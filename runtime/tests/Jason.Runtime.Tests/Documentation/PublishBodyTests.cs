@@ -54,7 +54,7 @@ public sealed class PublishBodyTests
             """
             Jason 0.6.0: this pull request brings this repository to the version the runtime released as `v0.6.0` — its skills, plugins, operation contracts, install scripts and documentation. It was opened by the release process. Merging it tags `v0.6.0` here and publishes the draft release that holds the runtime's executables.
 
-            The runtime was built and tested at its own tag `v0.6.0`, from source that is not published.
+            The runtime was built and tested at this version.
 
             ## Contract documents changed
 

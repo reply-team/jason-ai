@@ -5,8 +5,7 @@ install scripts and the documentation a user, an operator or a plugin author nee
 the runtime.
 
 It is written by Jason's release process, not by hand: each release opens one pull request here that brings this tree
-to the version it describes, a maintainer reviews it, and merging it publishes the release. The runtime's source is
-not published.
+to the version it describes, a maintainer reviews it, and merging it publishes the release.
 
 While Jason is in alpha this repository takes no pull requests or issues from outside. If something does not work, or
 you would like something changed, write to the address in the README's [Getting help](README.md#getting-help); a

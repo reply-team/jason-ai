@@ -25,8 +25,8 @@ yes. With nobody to ask, leave it undone and say so. A question tool that comes 
 ask.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
-- Do §2, then §4 to §6, in order, and stop there. §3 is for a person who has the runtime's source, which is not
-  published here, and §7 takes the installation off again.
+- Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
+  §7 takes the installation off again.
 - Install by the first route that fits. Where §2 names a package for this platform and its package manager is
   already on this machine, use it (*With a package manager*). Where it is not, where it fails, or where it or your
   harness refuses it, say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release,
@@ -44,7 +44,7 @@ ask.
 - With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
   `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
   name the step that remains.
-- Install nothing else and build nothing: the runtime's source is not here (§3). A 404 from a download is §2's:
+- Install nothing else and build nothing (§3). A 404 from a download is §2's:
   stop and report exactly that. Leave no long-running process behind except the runtime that
   `jason runtime start` starts.
 - A refusal — by your harness, or by a package manager — is reported once, as it stands, and never worked around.

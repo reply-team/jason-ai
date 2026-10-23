@@ -93,7 +93,7 @@ function Add-Line([string] $line = '') { [void] $text.Append($line).Append("`n")
 
 Add-Line "Jason ${Version}: this pull request brings this repository to the version the runtime released as ``v$Version`` — its skills, plugins, operation contracts, install scripts and documentation. It was opened by the release process. Merging it tags ``v$Version`` here and publishes the draft release that holds the runtime's executables."
 Add-Line
-Add-Line "The runtime was built and tested at its own tag ``v$Version``, from source that is not published."
+Add-Line "The runtime was built and tested at this version."
 Add-Line
 Add-Line '## Contract documents changed'
 Add-Line

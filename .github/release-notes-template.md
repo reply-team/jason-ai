@@ -8,7 +8,7 @@ deleted after inspection, unless it is meant as the release.
 -->
 
 Jason {{version}}: the runtime, the CLI and the plugin host, one self-contained executable per platform, built
-from the runtime's source at `v{{version}}` — which is not published — by the tests that passed there.
+at this version and released only after its tests passed.
 
 ## Assets
 
