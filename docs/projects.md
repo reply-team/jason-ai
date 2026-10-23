@@ -248,9 +248,14 @@ with its value from the answer it already has.
 
 What a person tells Jason about their business in their own words is kept in plain files they can read and edit: a
 memory file, `AGENTS.md`, for the client, for each project and for each campaign, each in a folder of its own, nested in
-that order under the harness root. Claude Code, started in a campaign's folder, reads the three by itself through each
-level's `CLAUDE.md`, the client's first and the campaign's last. A memory file is the person's guidance, never a fact the
-runtime holds: the runtime never reads one, and where one disagrees with what the runtime records, the record wins.
+that order under the harness root. Each level's `CLAUDE.md` imports the `AGENTS.md` beside it, and Claude Code loads
+the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in print mode it drops, without
+asking, an import of a file outside the folder it started in, so a session started in a campaign's folder is given the
+campaign's file and neither the project's nor the client's (measured with Claude Code 2.1.309; its documentation says
+an interactive session asks once whether to allow such imports). The session skills therefore read the root's and the project's files by path,
+and a role the runtime launches reads all three by the paths its launch envelope gives. A memory file is the person's
+guidance, never a fact the runtime holds: the runtime never reads one, and where one disagrees with what the runtime
+records, the record wins.
 
 ```text
 ~/Jason/                                  the root: the client's level, Harness:Root

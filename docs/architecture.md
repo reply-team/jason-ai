@@ -758,12 +758,14 @@ Runtime API and remain subject to validation, approvals, and deterministic guard
 
 ### 9.3 Logical manager context per campaign
 
-Each business campaign has a dedicated logical manager context and isolated manager memory.
+Each business campaign has a dedicated logical manager context and a manager memory of its
+own at the campaign's level; the manager's notes at the client's and the project's level are
+its own craft, shared across the campaigns they cover (DEC-ROLE-003).
 This does not imply an immortal process or a permanently open chat session. Runtime may
 start a fresh agent session for each invocation and hydrate it with current authoritative
-campaign projections, relevant work/events/results/artifacts, campaign-scoped manager
-memory, the explicit review intent, and allowed operations plus escalation context. Identity
-and continuity persist even when compute sessions are ephemeral.
+campaign projections, relevant work/events/results/artifacts, the manager's memory at the
+three levels, the campaign's its own, the explicit review intent, and allowed operations plus
+escalation context. Identity and continuity persist even when compute sessions are ephemeral.
 
 ### 9.4 User-owned AI environment
 
@@ -1648,7 +1650,8 @@ event.
 1. Dispatcher creates or releases scoped manager work.
 2. Runtime resolves campaign/role policy, inherited lineage where applicable, or the global
    execution default.
-3. A fresh manager session receives current campaign projections and isolated memory.
+3. A fresh manager session receives current campaign projections and the manager's memory at
+   the three levels, the campaign's its own.
 4. It searches for stale work, blockers, changing evidence, invalid assumptions, or missing
    progress.
 5. It proposes reprioritization, new work, replanning, escalation, or no change.
@@ -1692,7 +1695,7 @@ original chat session.
 | DEC-SKILL-001 | Skills own SDR knowledge, role reasoning, tool guidance, and guardrails — not queues, schedules, retries, or state authority. |
 | DEC-ROLE-001 | Runtime supports a coordinated/versioned role set operationally; role semantics live in skills. |
 | DEC-ROLE-002 | Arbitrary new runtime-visible roles and a public role plug-in contract are deferred. |
-| DEC-ROLE-003 | A role's memory is kept at three levels, the client's (its general craft), a project's and a campaign's, one note per role at each, through one verb family that names exactly one level per call; a reader composes them client, then project, then campaign, the lower winning where two differ; a note never outranks current state or the person's words (INV-MEM-001); the runtime composes nothing and reads none. `docs/execution-profiles.md` §8 is the contract. |
+| DEC-ROLE-003 | A role's memory is kept at three levels, the client's (its general craft), a project's and a campaign's, one note per role at each, through one verb family that names exactly one level per call; a reader composes them client, then project, then campaign, the lower winning where two differ; a note never carries what belongs to a level below it, so a person or one campaign's state is kept at the campaign's level alone; a note never outranks current state or the person's words (INV-MEM-001); the runtime composes nothing and reads none. `docs/execution-profiles.md` §8 is the contract. |
 | DEC-DISP-001 | Dispatcher is deterministic Runtime code, not an AI role. |
 | DEC-MGR-001 | Campaign manager is an AI role with isolated logical context and non-authoritative memory, kept per campaign and, above it, per project and for the client (DEC-ROLE-003). |
 | DEC-MGR-002 | Management combines reactive triggers with scheduled proactive reconciliation. |

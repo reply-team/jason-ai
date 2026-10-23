@@ -22,8 +22,9 @@ One per moment somebody asks for something, because a host chooses a skill by it
 description that promises everything matches nothing.
 
 - [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
-  Turning an objective into durable campaign work and following it: the provider check, the campaign, the people
-  it is about, provider operations and AI role work, and what the runtime does with them afterwards.
+  Turning an objective into durable campaign work and following it: the provider check, what the person has
+  already written down, the campaign, the people it is about, provider operations and AI role work, and what the
+  runtime does with them afterwards.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
@@ -69,13 +70,14 @@ anything else is loaded by nobody and reported by nobody.
 
 `roles/<role>/` holds one skill per role, named after its directory because that is how a host looks one up.
 All **nine roles this runtime seeds** are taught here, and every one of them carries the same launch contract
-— what it may type, what its note is worth, what shape its answer takes — held identical by a test. What
+— what it may type, what it reads first and in which order, what its notes are worth, what shape its answer
+takes — held identical by a test. What
 differs between them is one paragraph of purpose and one of what this build can and cannot give that role — and,
 for a role that sits with a person, the judgement it shares with its session file (below).
 
 - [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** The brief a role is given when the runtime
-  launches it: how to call home in the one command form that is permitted, how to read and keep its campaign
-  note, and how to answer in the shape the work item asked for.
+  launches it: how to call home in the one command form that is permitted, how to read and keep its notes, and
+  how to answer in the shape the work item asked for.
 - [`roles/manager`](roles/manager/SKILL.md) — **draft**, because it was re-authored onto the shared launch
   contract after the run that last read it, and no host has read the text that ships. The review a manager
   is launched for: why it was
@@ -146,9 +148,11 @@ its own status outside it. An edit to the block changes the text of both files, 
 host has read each of them.
 
 **The block is judgement, never a record of results.** What happened on a campaign is in Jason, where every role
-can read it. What worked on one campaign, carried to the next, would be learned practice, which this version does
-not keep, in a skill or anywhere else: a block that began to collect it would teach every campaign what one
-campaign happened to find.
+can read it. What a role learns of its craft on one campaign and carries to the next is its own note at the
+client's level, or at a project's for that project's campaigns: its working memory, written by the role for itself
+in its own words. Learned practice, which this version does not have, would be the installation's own knowledge,
+distilled from what happened across campaigns and written by no role for itself. A block that began to collect
+either would teach every campaign what one campaign happened to find.
 
 ## What `verified` means
 

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Jason.App.Tests.EndToEnd;
 using Jason.Runtime.Tests;
 
@@ -9,7 +10,7 @@ namespace Jason.App.Tests.Skills;
 /// anything from, so the rules it is held to have to be in the file it reads — and hand-maintained copies of a
 /// rule are chances for a correction to land in some of them and not the rest.
 /// </summary>
-public class LaunchContractTests
+public partial class LaunchContractTests
 {
     [Fact]
     [Critical(Family.D2, "one launch contract")]
@@ -86,6 +87,82 @@ public class LaunchContractTests
     }
 
     /// <summary>
+    /// What a launched role reads before it acts, in the one order every role is held to: the client's preferences, the
+    /// person's memory files of the client, the project and the campaign by the paths the envelope gives, then the brief,
+    /// the later winning; and its own notes at the three levels beside them, never over them. Said once, in the block the
+    /// guard above holds identical in every role, because a role told only part of the order would read a campaign's
+    /// words as overruled by a client's, or a preference as overruled by a file.
+    /// </summary>
+    [Fact]
+    public void The_launch_contract_reads_the_persons_words_in_one_order_and_by_path()
+    {
+        var contract = Flattened(LaunchContract.Extract(SkillPack.All().First(skill => skill.IsRole).File) ?? string.Empty);
+
+        var order = new[] { "`jason preference list`", "`memory_files.client`", "`memory_files.project`", "`memory_files.campaign`", "the brief in `context`" };
+        var at = order.Select(step => contract.IndexOf(step, StringComparison.Ordinal)).ToList();
+        Assert.True(
+            at.All(index => index >= 0) && at.Zip(at.Skip(1)).All(pair => pair.First < pair.Second),
+            $"The launch contract names the reading order's steps at [{string.Join(", ", at)}] for [{string.Join(", ", order)}]: "
+            + "each must be there, in that order.");
+
+        Assert.Contains("where the two disagree, the preference wins", contract, StringComparison.Ordinal);
+        Assert.Contains("by the absolute path the envelope gives", contract, StringComparison.Ordinal);
+        Assert.Contains("a path that is null means that level has none", contract, StringComparison.Ordinal);
+        Assert.Contains("never above them", contract, StringComparison.Ordinal);
+
+        // The direction, not only the order: a flipped one teaches the opposite precedence and every step above still stands.
+        Assert.Contains("where two say different things, the later one wins", contract, StringComparison.Ordinal);
+        Assert.Contains("in that order, the lower winning where two differ", contract, StringComparison.Ordinal);
+        Assert.Contains("are read beside them and never above them", contract, StringComparison.Ordinal);
+
+        // A read that is refused is said, as any refused tool is, and the file is not reached another way; a level with no file says nothing.
+        Assert.Contains("a file that is empty or not there says nothing", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            "If a read is refused, say so in your answer as you would any refused tool, and do not reach that file another way",
+            contract,
+            StringComparison.Ordinal);
+
+        // Where the disagreement is said: where the answer's shape has room, never inside text written for somebody else.
+        Assert.Contains(
+            "say that they disagree where the shape you were asked for has room, never inside text written for somebody else",
+            contract,
+            StringComparison.Ordinal);
+
+        // The client's and a project's note are shared with this role's runs on other campaigns, and a note is written whole.
+        Assert.Contains(
+            "shared with your runs on other campaigns: read one again immediately before you write it",
+            contract,
+            StringComparison.Ordinal);
+
+        // The note's address is three ids now, read at three levels, and what each level holds is the role's to keep apart.
+        Assert.Contains("`role_memory` names three ids", contract, StringComparison.Ordinal);
+        Assert.Contains("`jason rolenote get --role`", contract, StringComparison.Ordinal);
+        Assert.Contains("`role_memory.project_id`", contract, StringComparison.Ordinal);
+        Assert.Contains("`role_memory.campaign_id`", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            "Guesses about people and this campaign's state go in the campaign's note; the craft of this project, in the project's; "
+            + "your craft in general, in the client's. A note never carries what belongs to a level below it",
+            contract,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The envelope's <c>role_memory</c> names a campaign, the campaign's project and a role since version 4. A skill that
+    /// still said it names a campaign and a role would send a role to one level of three.
+    /// </summary>
+    [Fact]
+    public void No_skill_says_role_memory_names_a_campaign_and_a_role()
+    {
+        foreach (var skill in SkillPack.All())
+        {
+            var text = Flattened(File.ReadAllText(skill.File));
+            Assert.False(
+                text.Contains("names a campaign and a role", StringComparison.Ordinal),
+                $"'{skill.File}' says role_memory names a campaign and a role; it names three ids, one level each.");
+        }
+    }
+
+    /// <summary>
     /// And one block per file. Two blocks in one file would leave the second unread by every guard here, which
     /// is the quiet way a correction lands in a file and changes nothing.
     /// </summary>
@@ -105,4 +182,9 @@ public class LaunchContractTests
             }
         }
     }
+
+    private static string Flattened(string text) => Whitespace().Replace(text, " ");
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 }

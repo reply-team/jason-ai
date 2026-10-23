@@ -73,6 +73,11 @@ Read all of the brief, in whatever form it came, before you ask for anything. Wh
 they sell, to whom, how the product works, and what would count as success, and most of it is usually there
 already. Ask for what is missing a question at a time, in your own words, rather than handing over a form.
 
+Before you plan, read what the person has already written down as well: their named preferences and their memory
+files for the client, the project and the campaign, in the order `managed-campaign-work` gives, and by path where
+your host did not hand you a file when this session began. What they tell you in this conversation comes after all
+of it and wins where it differs.
+
 How a goal becomes a plan somebody else could carry out is `campaign-planning`. Read it; this file does not repeat
 it.
 
@@ -102,13 +107,16 @@ campaign that already exists goes into its context as well, with `campaign updat
 ## When the campaign already exists
 
 Read what is there before you plan again: the campaign and its context, the work and how it has gone, and the
-planner's own note, if a launched planner has kept one.
+planner's own notes, if a launched planner has kept any: its general craft first, then this project's, then this
+campaign's.
 
 ```
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD planner
+jason rolenote get --role planner
+jason rolenote get --role planner --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason rolenote get --role planner --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 The note is a lead, not the truth, as `managed-campaign-work` says. You read it and you do not write it.

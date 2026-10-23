@@ -428,8 +428,9 @@ public partial class CraftBlockTests
     /// <summary>
     /// The catalog's section on a role that sits with a person says, in its own paragraph, that the shared block is the
     /// role's judgement and never a record of results. It is the one place a reader — and anybody editing the block —
-    /// is told that "what worked last time" is learned practice and belongs in no skill, so the paragraph is held whole,
-    /// in that section.
+    /// is told where "what worked last time" goes instead: a role's own craft into its note at the client's or a
+    /// project's level, which is its working memory, and learned practice, the installation's own knowledge, nowhere in
+    /// this version. So the paragraph is held whole, in that section.
     /// </summary>
     [Fact]
     public void The_catalog_says_the_block_is_judgement_never_a_record_of_results()
@@ -446,9 +447,11 @@ public partial class CraftBlockTests
 
         Assert.Equal(
             "**The block is judgement, never a record of results.** What happened on a campaign is in Jason, where every role "
-            + "can read it. What worked on one campaign, carried to the next, would be learned practice, which this version does "
-            + "not keep, in a skill or anywhere else: a block that began to collect it would teach every campaign what one "
-            + "campaign happened to find.",
+            + "can read it. What a role learns of its craft on one campaign and carries to the next is its own note at the "
+            + "client's level, or at a project's for that project's campaigns: its working memory, written by the role for "
+            + "itself in its own words. Learned practice, which this version does not have, would be the installation's own "
+            + "knowledge, distilled from what happened across campaigns and written by no role for itself. A block that began "
+            + "to collect either would teach every campaign what one campaign happened to find.",
             Whitespace().Replace(end < 0 ? section[start..] : section[start..end], " ").Trim());
     }
 

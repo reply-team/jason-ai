@@ -45,6 +45,32 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// Before the planner plans with a person, it has read what they have already written down, which a session's host
+    /// may not have given it; how and in which order is the managed path's to say, once. And on a campaign that exists it
+    /// reads the launched planner's notes at the three levels they are kept at, the client's first.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_reads_what_was_written_down_before_it_plans()
+    {
+        var skill = Flattened("planner-in-session");
+        Assert.Contains("what the person has already written down", skill, StringComparison.Ordinal);
+        Assert.Contains("in the order `managed-campaign-work` gives", skill, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("planner-in-session").File);
+        var levels = new[]
+        {
+            "jason rolenote get --role planner",
+            "jason rolenote get --role planner --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            "jason rolenote get --role planner --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        };
+        var at = levels.Select(line => printed.ToList().IndexOf(line)).ToList();
+        Assert.True(
+            at.All(index => index >= 0) && at.Zip(at.Skip(1)).All(pair => pair.First < pair.Second),
+            $"planner-in-session prints the planner's notes at [{string.Join(", ", at)}] for [{string.Join(", ", levels)}]: each "
+            + "level must be read, the client's first and the campaign's last.");
+    }
+
+    /// <summary>
     /// The seat's one section about agreement and approval, held whole. A campaign created from a first paragraph
     /// commits a guess, so the direction is agreed first; and agreeing a direction is not approving a send, which a
     /// session that took the one for the other would do for people nobody approved. The section says so in the seat's

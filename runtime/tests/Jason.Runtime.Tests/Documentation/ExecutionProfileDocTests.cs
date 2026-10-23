@@ -172,6 +172,70 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// The manager's memory is at the three levels like every role's, and the campaign's is its own: the architecture's
+    /// section on the manager's context, the hydration it describes and the scheduled review all say so. One that still
+    /// hydrated a manager with "campaign-scoped manager memory" would leave its craft at the client's and the project's
+    /// level unread; and the rule of what a note holds at which level is the contract's, for every role.
+    /// </summary>
+    [Fact]
+    public void The_manager_s_memory_is_at_three_levels_the_campaign_s_its_own_and_a_note_holds_its_own_level()
+    {
+        var architecture = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "architecture.md")));
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains(
+            "Each business campaign has a dedicated logical manager context and a manager memory of its own at the campaign's "
+            + "level; the manager's notes at the client's and the project's level are its own craft, shared across the "
+            + "campaigns they cover (DEC-ROLE-003).",
+            architecture,
+            StringComparison.Ordinal);
+        Assert.Contains("the manager's memory at the three levels, the campaign's its own", architecture, StringComparison.Ordinal);
+        foreach (var gone in new[] { "isolated manager memory", "campaign-scoped manager memory", "campaign projections and isolated memory" })
+        {
+            Assert.DoesNotContain(gone, architecture, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("a note never carries what belongs to a level below it", contract, StringComparison.Ordinal);
+        Assert.Contains("a note never carries what belongs to a level below it", architecture, StringComparison.Ordinal);
+
+        foreach (var page in new[] { architecture, contract })
+        {
+            Assert.DoesNotContain("first shape of learned practice", page, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("by the runtime's own process", page, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Two phrases say what the runtime does not do, and no public text may say them: the skills, the contracts and the rest of
+    /// the open set are read by outsiders, so the refusal runs over every Markdown file the open set lists and over
+    /// <c>docs/</c>, not over the two design pages alone.
+    /// </summary>
+    [Fact]
+    public void No_Markdown_file_the_open_set_lists_or_docs_holds_the_two_refused_phrases()
+    {
+        var root = Publication.RepositoryRoot();
+        var entries = OpenSet.Lines(root).Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#'));
+        var files = entries.Concat(["docs/"])
+            .SelectMany(entry => entry.EndsWith('/') ? OpenSet.Files(root, entry) : [entry])
+            .Where(file => file.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .Where(file => File.Exists(Path.Combine(root, file)))
+            .ToList();
+        Assert.NotEmpty(files);
+
+        foreach (var file in files)
+        {
+            var text = Flattened(File.ReadAllText(Path.Combine(root, file)));
+            foreach (var phrase in new[] { "first shape of learned practice", "by the runtime's own process" })
+            {
+                Assert.False(
+                    text.Contains(phrase, StringComparison.OrdinalIgnoreCase),
+                    $"'{file}' says \"{phrase}\". No public text says it; the open set's Markdown files and docs/ are all refused it ({files.Count} files read).");
+            }
+        }
+    }
+
+    /// <summary>
     /// The one sentence a reader has to be able to trust: a profile holds no credential. It is true because the
     /// revision has nowhere to put one, and the document says so — if the entity ever grows a field that could
     /// hold a secret, the sentence becomes a lie and this is where it is noticed.

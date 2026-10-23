@@ -142,6 +142,69 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// What the person has already written down is read before work is created, in the order every launched role reads
+    /// it: the client's preferences, the memory files of the client, the project and the campaign, then what the person
+    /// says now. A session's host composes some of those files and not others — Claude Code in print mode drops an import
+    /// from outside the folder it started in, Codex, by its documentation, outside a repository reads its own folder's file alone — so the
+    /// session reads by path the ones it was not given, from where the runtime records them. A session that trusted its
+    /// host to have read all three would plan a campaign against the campaign's words alone.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_reads_what_the_person_wrote_down_in_order_and_by_path()
+    {
+        var skill = Flattened("managed-campaign-work");
+
+        var order = new[] { "the client's named preferences", "the person's memory file for the client", "then the project's", "then the campaign's", "what they tell you now" };
+        var at = order.Select(step => skill.IndexOf(step, StringComparison.Ordinal)).ToList();
+        Assert.True(
+            at.All(index => index >= 0) && at.Zip(at.Skip(1)).All(pair => pair.First < pair.Second),
+            $"managed-campaign-work names the reading order's steps at [{string.Join(", ", at)}] for [{string.Join(", ", order)}]: "
+            + "each must be there, in that order.");
+        Assert.Contains("where the two disagree, the preference wins", skill, StringComparison.Ordinal);
+        Assert.Contains("the later winning where two say different things", skill, StringComparison.Ordinal);
+
+        // Where each file is: from what the runtime records, and the root as the runtime reports it, never from a setting
+        // the session has no tool to read.
+        Assert.Contains("`folder_path`", skill, StringComparison.Ordinal);
+        Assert.Contains("`jason runtime status` reports as the root in force", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("`Harness:Root`", skill, StringComparison.Ordinal);
+        Assert.Contains("only where it carries its marker", skill, StringComparison.Ordinal);
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File);
+        foreach (var line in new[] { "jason preference list", "jason project get prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD" })
+        {
+            Assert.Contains(line, printed);
+        }
+
+        // And why a session reads them itself: what was measured of Claude Code, and what Codex's documentation says,
+        // said as what a session can act on.
+        Assert.Contains("Claude Code in print mode", skill, StringComparison.Ordinal);
+        Assert.Contains("Codex, by its documentation and not by a measurement", skill, StringComparison.Ordinal);
+        Assert.Contains("read by path every one of the three you were not given", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A role's notes are kept at three levels, and a session that reads one reads the three, the client's first and the
+    /// campaign's last. One that still said a role keeps one note per campaign would read a role's craft as missing.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_reads_a_role_s_notes_at_three_levels()
+    {
+        var skill = Flattened("managed-campaign-work");
+        Assert.DoesNotContain("one note per campaign", skill, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File);
+        foreach (var line in new[]
+        {
+            "jason rolenote get --role researcher",
+            "jason rolenote get --role researcher --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            "jason rolenote get --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        })
+        {
+            Assert.Contains(line, printed);
+        }
+    }
+
+    /// <summary>
     /// A host loads a skill by its description. A description that named only turning an objective into work left a
     /// person's first question about the work — what do we do first — loading no skill of Jason's, and the session
     /// answered from whatever it already had. The description names that question too, beside the one it always named.

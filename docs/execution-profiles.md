@@ -318,6 +318,13 @@ where two say different things **the lower wins**: the project's over the client
 both. The runtime composes nothing: it answers each level on its own, and a level nobody wrote at reads
 empty.
 
+What a role keeps at which level follows one rule, for every role, the campaign manager included: guesses about
+people and a campaign's state go in the campaign's note, the craft of a project in the project's, and general
+craft in the client's, and **a note never carries what belongs to a level below it**. A project's note is read on
+every campaign of that project and the client's on every campaign there is, so the rule is what keeps one
+campaign's people out of another's. The launch contract in every role's skill teaches it, beside the order in
+which a launched role reads the person's preferences, their memory files and the brief.
+
 ```sh
 jason rolenote get --role researcher
 jason rolenote get --role researcher --project <project-id>

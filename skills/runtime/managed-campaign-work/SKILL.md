@@ -55,6 +55,34 @@ them once is `operating-the-installation`'s. The real work begins with the perso
 their first campaign, in their own words — and a campaign planned with the business pack's `campaign-planning` skill,
 and this skill is how the brief and that plan become work the runtime and Jason's roles perform.
 
+## What the person has already written down
+
+Some of what the person wants was written down before this conversation, and you read it before any work is
+created, in one order, the later winning where two say different things: the client's named preferences, who
+messages are written as and how the company sounds; then the person's memory file for the client, then the
+project's, then the campaign's; and last what they tell you now. The client's file never overrides a preference on
+the preference's own subject: where the two disagree, the preference wins, and you tell the person so they can make
+the two agree.
+
+A memory file is the `AGENTS.md` in a level's folder. The campaign's folder is the `folder_path` that
+`jason campaign get` answers with, the project's is the one `jason project get` answers with, and the client's is
+the harness root, which `jason runtime status` reports as the root in force; where it names none, `Jason` in the home
+directory. The root's `AGENTS.md` is the client's only where it carries its marker, the `.jason/marker.json` that says
+the folder is the root: a folder without one is not Jason's, and its file is not read.
+
+```
+jason preference list
+jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason project get prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+Your host may have given you some of those files when this session started, and only some. Claude Code in print
+mode, started in a campaign's folder, keeps that folder's file and drops, without asking, the ones that lie outside
+it, the project's and the client's; Codex, by its documentation and not by a measurement, outside a git repository
+reads only its own folder's file of these. So read by path every one of the three you were not given. They are the
+person's standing guidance, not facts: where one disagrees with what the runtime records, the record is right, and no
+role's note outranks them.
+
 ## The work itself
 
 A campaign, the people it is about, and then one work item per thing to be done.
@@ -177,23 +205,27 @@ completion that does not satisfy it is refused, however well it reads.
 
 ### A role's notes are its memory, not the truth
 
-A role can keep one note per campaign — what it looked at, what it ruled out, what is still open — and
-read it again on its next run. The launch envelope names where it is; the note itself is read when it
-is wanted:
+A role keeps a note at each of three levels — its craft for all of this installation's work, a project's, and a
+campaign's, where it keeps what it looked at, what it ruled out and what is still open — and reads them again on
+its next run, the client's first and the campaign's last, the lower winning where two differ. The launch envelope
+names where they are; a note itself is read when it is wanted:
 
 ```
-jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six"}'
+jason rolenote get --role researcher
+jason rolenote get --role researcher --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason rolenote get --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason rolenote set --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"gatekeeper":"the switchboard hangs up after six"}'
 ```
 
 A note is written **whole** — there is no patch, so read it, add to it and write all of it back — and
-it is at most 64 KiB of JSON object. A campaign nobody has written about yet answers with an empty
-note rather than an error.
+it is at most 64 KiB of JSON object. A level nobody has written at yet answers with an empty note rather
+than an error.
 
 **It is not authoritative.** It is one role's own account, in its own words, from whenever it was
-written. Where a note disagrees with what the runtime says now, the runtime is right. Read a note for
-where to look first; check what it claims before you repeat it. Campaign context is the campaign's
-shared knowledge and a different thing — do not write one into the other.
+written. Where a note disagrees with what the runtime says now, the runtime is right, and no note outranks
+what the person has written down or tells you. Read a note for where to look first; check what it claims
+before you repeat it. Campaign context is the campaign's shared knowledge and a different thing — do not
+write one into the other.
 
 ## Three things that will happen to work you created
 
