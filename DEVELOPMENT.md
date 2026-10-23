@@ -120,9 +120,11 @@ push runs the Linux set: the version check, the linux-x64 build and the critical
 install script on Ubuntu and the UI's checks; it keeps no record of the tree it tested. Marking a pull request into a
 release branch ready runs the whole suite on Linux, once.
 The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
-and that run is the release's gate; a pull request into `main` from any other branch — the version after a release, a
-document — runs the Linux set and reports the rest as skipped by rule. A push to `main` whose tree the merging pull
-request's last full run tested runs the version check alone. Nothing runs nightly. The critical tier is the `Critical`
+and that run is the release's gate; a pull request into `main` from any other branch — a document, a change to the
+pipeline — runs the Linux set and reports the rest as skipped by rule. The version pull request into `main` runs the
+critical tier alone, on linux-x64 and under the `linux-x64` name a ruleset requires, since for it the tier is the ready
+run, and a push to `main` whose tree a pull request's ready run tested runs the version check alone. Nothing runs
+nightly. The critical tier is the `Critical`
 trait, run with `--filter-trait "Category=Critical"`, and one table pins it: how many critical cases each family has in
 each test assembly (`CriticalTier.cs`). Each test assembly discovers itself and holds its column to the table, so a row
 that leaves the tier, which a run of the tier cannot notice, turns that guard red; every family keeps a critical case;
@@ -130,9 +132,9 @@ the tier stays at or under 15 % of the suite's methods and of its discovered cas
 its reason, the attribute's own or a `// Critical:` comment above a marked row or above the member that marks rows.
 The guard also holds each assembly to at least the test methods the table measured, and to nine tenths of its cases,
 since the ceiling is measured on them; so a commit that marks or unmarks a test, adds or removes a row of a critical
-theory, or removes test methods rewrites the table in the same commit, from the numbers the guard prints. The leg that
-tests the tier alone is named `linux-x64 (critical tier)`, so only a run of the whole suite reports the `linux-x64`
-that a ruleset requires. `CiRunsTests` holds the rule the workflow carries.
+theory, or removes test methods rewrites the table in the same commit, from the numbers the guard prints. A draft's
+leg that tests the tier alone is named `linux-x64 (critical tier)`, so only a ready run reports the `linux-x64` that a
+ruleset requires. `CiRunsTests` holds the rule the workflow carries.
 
 **Draft while you build, ready when you are done.** Open the pull request as a draft with the first push and keep
 pushing to it; a draft is cheap. Mark it ready once, after the two readings below and the fixes they asked for, so
@@ -168,7 +170,9 @@ release branch after it takes `main`, never merged by hand.
 
 **The version.** A release branch sets its version when its release pull request opens — the number after the last
 tag — and the branch that merges second sets its own again then. The pull request into `main` is marked ready with the
-bare version, so the suite that gates the release runs under the version the tag will carry.
+bare version, so the suite that gates the release runs under the version the tag will carry. After a release, the pull
+request that moves `main` to the next version carries the version prefix and every pin the version guards hold to it,
+and nothing else, and is squash-merged.
 
 **The squash commit is the pull request.** A release branch takes one squash commit per pull request, and that
 commit's message is the pull request's title and body; the messages of the branch's own commits never reach it. Commit

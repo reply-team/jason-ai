@@ -11,13 +11,16 @@ namespace Jason.Runtime.Tests.Documentation;
 /// draft pull request's pushes run the Linux set, and so does a pull request into a release branch once it is ready, which
 /// is all a release branch's ruleset requires. The release's pull request, from a release branch into <c>main</c>, runs
 /// every check, macOS included, once it is ready; a push to it that changes nothing but documentation since the tree its
-/// last run of every check tested runs the Linux set. Any other pull request into <c>main</c> runs the Linux set. Both
-/// report every other check <c>main</c>'s ruleset requires as skipped by rule, under its own name. A push to <c>main</c> or
+/// last run of every check tested runs the Linux set. The version pull request — one into <c>main</c>, not from a release
+/// branch, that changes the version prefix's line and the pins the version guards hold to it and nothing else — runs
+/// linux-x64 alone, testing the critical tier under the leg's own name. Any other pull request into <c>main</c> runs the
+/// Linux set. All three report every other check <c>main</c>'s ruleset requires as skipped by rule, under its own name.
+/// Every ready pull request's run keeps a record of the tree it tested and of the set it ran, and a push to <c>main</c> or
 /// to a release branch whose tree the merged pull request's last ready run tested runs the version alone; any other push to
 /// <c>main</c> runs every check, and any other push to a release branch the Linux set. A run started by hand runs every
-/// check, and nothing runs nightly. A draft's push tests the critical tier alone; every other run tests the whole suite,
-/// and only a run of the whole suite keeps a record of the tree it tested. Read out of ci.yml, and the steps that decide
-/// are run rather than read, so what these facts hold is what a runner does.
+/// check, and nothing runs nightly. A draft's push and the version pull request test the critical tier alone; every other
+/// run tests the whole suite. Read out of ci.yml, and the steps that decide are run rather than read, so what these facts
+/// hold is what a runner does.
 /// </summary>
 public class CiRunsTests
 {
@@ -28,7 +31,10 @@ public class CiRunsTests
     /// <summary>The condition a job carries when only a run of every check needs it.</summary>
     private const string Full = "needs.version.outputs.full == 'true'";
 
-    /// <summary>The condition a job carries when the Linux set needs it, as every set that builds anything does.</summary>
+    /// <summary>The condition the platform legs carry: every set that builds anything needs them.</summary>
+    private const string Build = "needs.version.outputs.build == 'true'";
+
+    /// <summary>The condition a job carries when the Linux set needs it, as every set that builds anything but the version pull request's does.</summary>
     private const string Linux = "needs.version.outputs.linux == 'true'";
 
     /// <summary>The condition a step carries when it needs the macOS archive, which only a run that builds macOS has.</summary>
@@ -43,8 +49,11 @@ public class CiRunsTests
     /// <summary>What a test step adds to the whole suite's command to test the critical tier alone.</summary>
     private const string TierFilter = "-- --filter-trait \"Category=Critical\"";
 
-    /// <summary>What the linux-x64 leg is called when it tests the critical tier alone: not a name any ruleset requires.</summary>
+    /// <summary>What the linux-x64 leg is called when a draft's push tests the critical tier alone: not a name any ruleset requires.</summary>
     private const string TierLeg = "linux-x64 (critical tier)";
+
+    /// <summary>The set the version pull request runs once it is ready.</summary>
+    private const string VersionOnly = "version-only";
 
     /// <summary>The eleven checks the main branch's ruleset requires before a merge.</summary>
     private static readonly string[] Required =
@@ -95,13 +104,54 @@ public class CiRunsTests
         "100755 blob 4444444444444444444444444444444444444444\tinstall/install.sh",
     ];
 
+    /// <summary>The file that carries the version prefix, the first of the version pull request's paths.</summary>
+    private const string VersionProps = "runtime/Directory.Build.props";
+
+    /// <summary>The four files whose pins of the version the version guards hold to the prefix.</summary>
+    private static readonly string[] Pins = ["skills/runtime/README.md", "docs/INSTALL.md", "install/install.sh", "install/install.ps1"];
+
+    /// <summary>
+    /// The tree a version pull request's base holds, as <c>git ls-tree -r</c> lists it, but for the props file, whose entry
+    /// names the object a test writes for it. Made up.
+    /// </summary>
+    private static readonly string[] AtTheBase =
+    [
+        .. Tested,
+        "100644 blob 6666666666666666666666666666666666666666\tinstall/install.ps1",
+        "100644 blob 7777777777777777777777777777777777777777\tdocs/INSTALL.md",
+        "100644 blob 8888888888888888888888888888888888888888\tskills/runtime/README.md",
+    ];
+
+    /// <summary>The props file as the base holds it, a line a list. Made up.</summary>
+    private static readonly string[] PropsLines =
+    [
+        "<Project>",
+        "  <PropertyGroup>",
+        "    <Deterministic>true</Deterministic>",
+        "    <VersionPrefix>0.15.0</VersionPrefix>",
+        "    <VersionSuffix Condition=\"'$(VersionSuffix)' == ''\">dev</VersionSuffix>",
+        "  </PropertyGroup>",
+        "</Project>",
+    ];
+
+    /// <summary>The props file as the base holds it, and as the version pull request leaves it: its prefix moved, and nothing else.</summary>
+    private static readonly string PropsAtTheBase = Props();
+
+    private static readonly string PropsMoved = Props(("0.15.0", "0.16.0"));
+
     /// <summary>
     /// A run as the deciding step is told about it: the event, what the step before it found — the tree an earlier ready run
-    /// tested (none when nothing was found) — this run's own listing, the branch the change lands on and, for a pull request,
-    /// the branch it comes from.
+    /// tested (none when nothing was found) and the set that run named in its record (none when the record names none, as one
+    /// kept before records named their set does) — this run's own listing, the branch the change lands on and, for a pull
+    /// request, the branch it comes from, the listing of its base and the props file's text on both sides.
     /// </summary>
     private sealed record Run(
-        string Event, string Action = "", string Draft = "", string? TestedTree = null, string[]? Listing = null, string Target = "main", string Branch = FeatureBranch);
+        string Event, string Action = "", string Draft = "", string? TestedTree = null, string[]? Listing = null, string Target = "main", string Branch = FeatureBranch,
+        string? TestedSet = null, string[]? Base = null, (string Before, string After)? Props = null);
+
+    /// <summary>A ready pull request into <c>main</c> that moves the version: its base, the four pins moved, and the props file's prefix line alone.</summary>
+    private static Run TheVersionPullRequest(string action = "ready_for_review", string draft = "false") =>
+        new("pull_request", action, draft, Listing: PinsMoved(), Base: AtTheBase, Props: (PropsAtTheBase, PropsMoved));
 
     /// <summary>Every kind of run, and the set it takes.</summary>
     private static readonly Dictionary<string, (Run Run, string Set)> Kinds = new(StringComparer.Ordinal)
@@ -121,8 +171,13 @@ public class CiRunsTests
         ["a push to the release's pull request with no record found"] = (new Run("pull_request", "synchronize", "false", Branch: ReleaseBranch), "everything"),
         ["marking another pull request into main ready"] = (new Run("pull_request", "ready_for_review", "false"), "not-the-release"),
         ["a push after ready to another pull request into main"] = (new Run("pull_request", "synchronize", "false", AnotherTree, Changed("runtime/src/Jason.App/Program.cs")), "not-the-release"),
+        ["marking the version pull request ready"] = (TheVersionPullRequest(), VersionOnly),
+        ["a push after ready to the version pull request"] = (TheVersionPullRequest("synchronize"), VersionOnly),
+        ["a push to the version pull request while it is a draft"] = (TheVersionPullRequest("synchronize", "true"), "linux"),
         ["a push to main"] = (new Run("push", TestedTree: AnotherTree), "everything"),
         ["a push to main of the tree its pull request's last ready run tested"] = (new Run("push", TestedTree: Tree), "tested"),
+        ["a push to main of the tree another pull request into main tested when it was ready"] = (new Run("push", TestedTree: Tree, TestedSet: "not-the-release"), "tested"),
+        ["a push to main of a tree other than the one another pull request into main tested"] = (new Run("push", TestedTree: AnotherTree, TestedSet: "not-the-release"), "everything"),
         ["a push to main with no record found"] = (new Run("push"), "everything"),
         ["a push to a release branch"] = (new Run("push", TestedTree: AnotherTree, Target: ReleaseBranch), "linux"),
         ["a push to a release branch of the tree its pull request's last ready run tested"] = (new Run("push", TestedTree: Tree, Target: ReleaseBranch), "none"),
@@ -136,6 +191,7 @@ public class CiRunsTests
         ["linux"] = (TheLinuxSet, []),
         ["documentation"] = (TheLinuxSet, ["win-x64", "osx-arm64", "an update on win-x64"]),
         ["not-the-release"] = (TheLinuxSet, ["win-x64", "osx-arm64", "an update on win-x64"]),
+        [VersionOnly] = (["The version this tree carries", "linux-x64"], ["win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
         ["tested"] = (["The version this tree carries"], ["linux-x64", "win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
         ["everything"] = (Required, []),
         ["none"] = (["The version this tree carries"], []),
@@ -190,7 +246,7 @@ public class CiRunsTests
         var version = Mapping(Jobs(), "version");
 
         var outputs = Mapping(version, "outputs");
-        foreach (var output in new[] { "full", "linux", "macos", "tier", "platforms", "updates", "rids", "skipping", "skipped" })
+        foreach (var output in new[] { "full", "build", "linux", "macos", "tier", "platforms", "updates", "rids", "skipping", "skipped" })
         {
             Assert.Equal($"${{{{ steps.legs.outputs.{output} }}}}", Scalar(outputs, output));
         }
@@ -206,6 +262,9 @@ public class CiRunsTests
     [Fact]
     public void The_steps_that_decide_are_told_the_event_and_what_was_found()
     {
+        var listing = Assert.Single(Variables(Mapping(Step("tree"), "env")));
+        Assert.Equal(("EVENT", "${{ github.event_name }}"), (listing.Key, listing.Value));
+
         var looking = Mapping(Step("earlier"), "env");
         var said = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -233,6 +292,7 @@ public class CiRunsTests
             ["TARGET"] = "${{ github.base_ref || github.ref_name }}",
             ["TREE"] = "${{ steps.tree.outputs.tree }}",
             ["LISTING"] = "${{ steps.tree.outputs.listing }}",
+            ["BASE"] = "${{ steps.tree.outputs.base }}",
             ["RECORD"] = "${{ steps.earlier.outputs.record }}",
             ["FOUND"] = "${{ steps.earlier.outputs.found }}",
         };
@@ -281,6 +341,63 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// For a pull request the tree step lists its base as well: the first parent of the merge the checkout is, which is the
+    /// base branch's head, so a change is read against what it merges into. The checkout is two commits deep, which holds
+    /// both parents of the merge. A push lists no base. Run in a repository of this test's own, on a merge made there.
+    /// </summary>
+    [Theory]
+    [InlineData("pull_request", true)]
+    [InlineData("push", false)]
+    public void The_tree_step_lists_a_pull_request_s_base_as_its_merge_s_first_parent(string @event, bool listsBase)
+    {
+        var checkout = Assert.Single(Steps(Mapping(Jobs(), "version")), step => Scalar(step, "uses")?.StartsWith("actions/checkout@", StringComparison.Ordinal) == true);
+        Assert.Equal("2", Scalar(Mapping(checkout, "with"), "fetch-depth"));
+
+        using var tree = new TempTree();
+        var repository = Path.Combine(tree.Root, "repository");
+        Directory.CreateDirectory(Path.Combine(repository, "docs"));
+        Git(repository, "init", "--quiet");
+        File.WriteAllText(Path.Combine(repository, "README.md"), "# Jason\n");
+        Git(repository, "add", "-A");
+        Git(repository, "commit", "--quiet", "-m", "The base");
+        Git(repository, "checkout", "--quiet", "-b", "feature/the-change");
+        File.WriteAllText(Path.Combine(repository, "docs", "plugins.md"), "# Plugins\n");
+        Git(repository, "add", "-A");
+        Git(repository, "commit", "--quiet", "-m", "The change");
+        Git(repository, "checkout", "--quiet", "main");
+        Directory.CreateDirectory(Path.Combine(repository, "docs"));
+        File.WriteAllText(Path.Combine(repository, "docs", "INSTALL.md"), "# Install\n");
+        Git(repository, "add", "-A");
+        Git(repository, "commit", "--quiet", "-m", "The base moves on");
+        Git(repository, "merge", "--quiet", "--no-ff", "-m", "The merge a pull request's checkout is", "feature/the-change");
+
+        var step = Step("tree");
+        var script = Path.Combine(tree.Root, "tree.ps1");
+        File.WriteAllText(script, Scalar(step, "run"));
+        var output = Path.Combine(tree.Root, "output");
+        File.WriteAllText(output, string.Empty);
+        var ran = Pwsh(
+            new Dictionary<string, string> { ["EVENT"] = @event, ["GITHUB_OUTPUT"] = output, ["RUNNER_TEMP"] = tree.Root, ["GIT_CONFIG_NOSYSTEM"] = "1" },
+            "-Command",
+            $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{repository}'; & '{script}'");
+        Assert.True(ran.Exit == 0, ran.Stderr);
+
+        var said = Outputs(output);
+        if (listsBase)
+        {
+            Assert.Equal(
+                Git(repository, "ls-tree", "-r", "--full-tree", "HEAD^1").Split('\n', StringSplitOptions.RemoveEmptyEntries),
+                File.ReadAllLines(said["base"]));
+            Assert.Contains(File.ReadAllLines(said["base"]), line => line.EndsWith("\tdocs/INSTALL.md", StringComparison.Ordinal));
+            Assert.DoesNotContain(File.ReadAllLines(said["base"]), line => line.EndsWith("\tdocs/plugins.md", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.Equal(string.Empty, said["base"]);
+        }
+    }
+
+    /// <summary>
     /// Each kind of run takes its set: what its jobs run, and what the job standing in reports as skipped by rule. On every
     /// run a merge into <c>main</c> or <c>main</c> itself relies on — all but a draft's push and a run into or on a release
     /// branch, whose ruleset requires the Linux set alone — every check <c>main</c>'s ruleset requires reports: by running, by a condition that skips it, which reports success, or by the stand-in. A
@@ -321,9 +438,10 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// The deciding step's words for each set — the jobs only a run of every check needs, the Linux set's jobs, and the steps
-    /// that need the macOS archive — and the legs each matrix runs: every platform when every check runs, Linux alone on the
-    /// Linux set, none where the tree was tested already. And it says which case it took and why, in the run's summary.
+    /// The deciding step's words for each set — the jobs only a run of every check needs, the platform legs, the Linux set's
+    /// other jobs, and the steps that need the macOS archive — and the legs each matrix runs: every platform when every check
+    /// runs, Linux alone on the Linux set and on the version pull request, which runs no update, none where the tree was
+    /// tested already. And it says which case it took and why, in the run's summary.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
@@ -334,18 +452,19 @@ public class CiRunsTests
         var said = decided.Outputs;
 
         Assert.Equal(set is "everything" ? "true" : "false", said["full"]);
-        Assert.Equal(set is "tested" or "none" ? "false" : "true", said["linux"]);
+        Assert.Equal(set is "tested" or "none" ? "false" : "true", said["build"]);
+        Assert.Equal(set is "tested" or "none" or VersionOnly ? "false" : "true", said["linux"]);
         Assert.Equal(set is "everything" ? "true" : "false", said["macos"]);
         Assert.Equal(Sets[set].SkippedByRule.Length > 0 ? "true" : "false", said["skipping"]);
 
         string[] platforms = set switch
         {
             "everything" => ["linux-x64", "win-x64", "osx-arm64"],
-            "linux" or "documentation" or "not-the-release" => ["linux-x64"],
+            "linux" or "documentation" or "not-the-release" or VersionOnly => ["linux-x64"],
             _ => [],
         };
         Assert.Equal(platforms, Legs(said["platforms"]).Select(leg => leg["rid"]));
-        Assert.Equal(platforms.Where(rid => rid != "osx-arm64"), Legs(said["updates"]).Select(leg => leg["rid"]));
+        Assert.Equal(platforms.Where(rid => rid != "osx-arm64" && set != VersionOnly), Legs(said["updates"]).Select(leg => leg["rid"]));
         Assert.Equal(string.Join(',', platforms), said["rids"]);
 
         // Each leg keeps the runner it is built on.
@@ -432,28 +551,153 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// A ready pull request's run keeps a record of the tree it tested, for the runs after it: the release's run of every
-    /// check, for a push to it that changes documentation only and for the push to <c>main</c> its merge makes, and a run of
-    /// the Linux set into a release branch, for the push to the release branch its merge makes. No other run keeps one, so
-    /// a record always means the checks its target branch requires ran on that tree. The record is trusted only from a run
+    /// The version pull request once it is ready — one into <c>main</c>, not from a release branch, whose changes against its
+    /// base are the props file's VersionPrefix line and the four pins the version guards hold to it, and nothing else — runs
+    /// the version and linux-x64, which tests the critical tier under the name the ruleset requires: for this pull request
+    /// the tier is the ready run, by rule. Every other check reports as skipped by rule. It keeps a record of the tree it
+    /// tested, naming its set, and its summary names the paths it saw.
+    /// </summary>
+    [Theory]
+    [InlineData("ready_for_review")]
+    [InlineData("opened")]
+    [InlineData("reopened")]
+    [InlineData("synchronize")]
+    public void The_version_pull_request_tests_the_critical_tier_on_linux_x64_under_the_required_name_and_keeps_a_record(string action)
+    {
+        var decided = Decide(TheVersionPullRequest(action));
+
+        Assert.True(decided.Outputs["set"] == VersionOnly, $"the version pull request ({action}) took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Equal("true", decided.Outputs["tier"]);
+        Assert.Equal(["linux-x64"], Legs(decided.Outputs["platforms"]).Select(leg => leg["name"]));
+
+        var (ran, byRule, _) = Report(decided.Outputs);
+        Assert.Equal(["The version this tree carries", "linux-x64"], ran.Order(StringComparer.Ordinal));
+        Assert.Equal(["an update on linux-x64", "an update on win-x64", "osx-arm64", "win-x64"], byRule.Order(StringComparer.Ordinal));
+
+        Assert.Equal(VersionOnly, (string?)decided.Record?["checks"]);
+        foreach (var path in Pins.Prepend(VersionProps))
+        {
+            Assert.Contains(path, decided.Summary, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A ready pull request into <c>main</c> is the version pull request only when it changes exactly the version pull
+    /// request's paths and, in the props file, the VersionPrefix line alone. One more path, a pin left behind, a second line
+    /// of the props file, a line added there, a mode changed, or a base that could not be listed: each runs the Linux set as
+    /// any other pull request into <c>main</c> does, keeps its record under that set, and says why it is not the version
+    /// pull request. A pin left behind is the case the guards that hold the pins catch, and they are in the whole suite.
+    /// </summary>
+    [Theory]
+    [InlineData("one more path", "it changes docs/a-new-page.md as well")]
+    [InlineData("a pin left behind", "it leaves docs/INSTALL.md as it was")]
+    [InlineData("the props file left as it was", "it leaves runtime/Directory.Build.props as it was")]
+    [InlineData("a second line of the props file", "is not the VersionPrefix line alone")]
+    [InlineData("another line of the props file instead", "is not the VersionPrefix line alone")]
+    [InlineData("a line added to the props file", "adds or removes a line")]
+    [InlineData("the props file made executable", "is not a plain file on both sides")]
+    [InlineData("a base that could not be listed", "could not be read")]
+    public void A_pull_request_into_main_is_the_version_pull_request_only_when_it_moves_the_prefix_line_and_its_pins_alone(string change, string because)
+    {
+        var version = TheVersionPullRequest();
+        var deterministic = ("<Deterministic>true<", "<Deterministic>false<");
+        var run = change switch
+        {
+            "one more path" => version with { Listing = PinsMoved(null, "docs/a-new-page.md") },
+            "a pin left behind" => version with { Listing = PinsMoved([.. Pins.Where(pin => pin != "docs/INSTALL.md")]) },
+            "the props file left as it was" => version with { Props = (PropsAtTheBase, PropsAtTheBase) },
+            "a second line of the props file" => version with { Props = (PropsAtTheBase, Props(("0.15.0", "0.16.0"), deterministic)) },
+            "another line of the props file instead" => version with { Props = (PropsAtTheBase, Props(deterministic)) },
+            "a line added to the props file" => version with { Props = (PropsAtTheBase, Props(("0.15.0", "0.16.0"), ("  </PropertyGroup>", "    <Product>Jason</Product>\n  </PropertyGroup>"))) },
+            "the props file made executable" => version with
+            {
+                Listing = [.. PinsMoved(), $"100755 blob aaaa000000000000000000000000000000000001\t{VersionProps}"],
+                Base = [.. AtTheBase, $"100644 blob aaaa000000000000000000000000000000000001\t{VersionProps}"],
+                Props = null,
+            },
+            "a base that could not be listed" => version with { Base = null, Props = null },
+            _ => throw new ArgumentOutOfRangeException(nameof(change), change, "no such change"),
+        };
+
+        var decided = Decide(run);
+
+        Assert.True(decided.Outputs["set"] == "not-the-release", $"a pull request with {change} took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains(because, decided.Summary, StringComparison.Ordinal);
+        Assert.Equal("false", decided.Outputs["tier"]);
+        Assert.Equal("not-the-release", (string?)decided.Record?["checks"]);
+    }
+
+    /// <summary>
+    /// A draft of the version pull request is a draft first: its push runs the Linux set, its leg tests the critical tier
+    /// under the draft's name, which no ruleset requires, and it keeps no record of its tree.
+    /// </summary>
+    [Fact]
+    public void A_draft_of_the_version_pull_request_tests_the_tier_under_the_draft_s_name_and_keeps_no_record()
+    {
+        var decided = Decide(TheVersionPullRequest("synchronize", "true"));
+
+        Assert.True(decided.Outputs["set"] == "linux", $"a draft of the version pull request took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Equal("true", decided.Outputs["tier"]);
+        Assert.Equal([TierLeg], Legs(decided.Outputs["platforms"]).Select(leg => leg["name"]));
+        Assert.Null(decided.Record);
+    }
+
+    /// <summary>
+    /// A push to <c>main</c> whose tree a ready run of the pull request it merged tested runs the version alone, whichever set
+    /// that run ran — another pull request's into <c>main</c>, the version pull request's, the release's — and its reason says
+    /// which set the record came from; a record kept before records named their set says that instead.
+    /// </summary>
+    [Theory]
+    [InlineData("not-the-release")]
+    [InlineData(VersionOnly)]
+    [InlineData("everything")]
+    [InlineData(null)]
+    public void A_push_to_main_of_the_tree_a_ready_run_tested_runs_the_version_alone_and_says_which_set_tested_it(string? checks)
+    {
+        var decided = Decide(new Run("push", TestedTree: Tree, TestedSet: checks));
+
+        Assert.True(decided.Outputs["set"] == "tested", $"a push to main of a tree the set '{checks}' tested took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains(checks is null ? "that run ran a set its record does not name" : $"that run ran the set {checks}", decided.Summary, StringComparison.Ordinal);
+        var (ran, _, _) = Report(decided.Outputs);
+        Assert.Equal(["The version this tree carries"], ran);
+    }
+
+    /// <summary>A push to <c>main</c> whose tree is not the one a ready run of another pull request into <c>main</c> tested runs every check.</summary>
+    [Fact]
+    public void A_push_to_main_of_another_tree_than_a_ready_run_tested_runs_every_check()
+    {
+        var decided = Decide(new Run("push", TestedTree: AnotherTree, TestedSet: "not-the-release"));
+
+        Assert.True(decided.Outputs["set"] == "everything", $"a push to main of a tree no ready run tested took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains($"this commit's tree is {Tree}", decided.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every ready pull request's run keeps a record of the tree it tested and of the set it ran, for the runs after it: the
+    /// release's run of every check, for a push to it that changes documentation only and for the push to <c>main</c> its
+    /// merge makes; a run of the Linux set into a release branch, for the push to the release branch its merge makes; and the
+    /// run of any other pull request into <c>main</c>, the version pull request's among them, for the push to <c>main</c> its
+    /// squash makes. A draft's run keeps none, and neither does a push to the release's pull request that changes
+    /// documentation only, whose next push compares with its last run of every check. The record is trusted only from a run
     /// that passed, which the step that looks asks for.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
-    public void Only_a_ready_pull_request_s_run_of_what_its_branch_requires_keeps_a_record(string kind)
+    public void Every_ready_pull_request_s_run_keeps_a_record_of_its_tree_and_its_set(string kind)
     {
         var (run, set) = Kinds[kind];
         var decided = Decide(run);
 
         var keeps = run.Event == "pull_request" && run.Draft == "false" &&
-            (set == "everything" || (set == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)));
+            (set is "everything" or "not-the-release" or VersionOnly || (set == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)));
         Assert.True(keeps == decided.Record is not null, $"{kind} {(keeps ? "kept no record" : $"kept a record: {decided.Record}")}");
         if (decided.Record is { } record)
         {
             Assert.Equal(Tree, (string?)record["tree"]);
             Assert.Equal(Sha, (string?)record["commit"]);
             Assert.Equal(PullRequestNumber, (int)record["pull_request"]!);
-            Assert.Equal(run.Listing ?? Tested, record["listing"]!.AsArray().Select(line => (string)line!));
+            Assert.Equal(set, (string?)record["checks"]);
+            Assert.Equal(decided.Listing, record["listing"]!.AsArray().Select(line => (string)line!));
         }
     }
 
@@ -462,36 +706,38 @@ public class CiRunsTests
         CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["a draft's push"] or ["marking a pull request into a release branch ready"]);
 
     /// <summary>
-    /// A draft's push tests the critical tier alone, on linux-x64, the one platform its Linux set builds; every other run
-    /// tests the whole suite. Of the linux-x64 job's two test steps exactly one runs, by the word the version job hands on,
-    /// and only the one a draft's push runs filters the suite.
+    /// A draft's push tests the critical tier alone, on linux-x64, the one platform its Linux set builds, and so does the
+    /// version pull request once it is ready, for which the tier is the ready run by rule; every other run tests the whole
+    /// suite. Of the linux-x64 job's two test steps exactly one runs, by the word the version job hands on, and only the one
+    /// those two run filters the suite.
     /// </summary>
     [Theory]
     [MemberData(nameof(CriticalKindsOfRunForTheTests))]
-    public void A_draft_s_push_tests_the_critical_tier_and_every_other_run_the_whole_suite(string kind)
+    public void A_draft_s_push_and_the_version_pull_request_test_the_critical_tier_and_every_other_run_the_whole_suite(string kind)
     {
         var (run, set) = Kinds[kind];
-        var draft = run.Event == "pull_request" && run.Draft == "true";
+        var tier = (run.Event == "pull_request" && run.Draft == "true") || set == VersionOnly;
 
         var decided = Decide(run);
 
-        Assert.True(decided.Outputs["tier"] == (draft ? "true" : "false"), $"{kind} handed on tier '{decided.Outputs["tier"]}': {decided.Summary}");
+        Assert.True(decided.Outputs["tier"] == (tier ? "true" : "false"), $"{kind} handed on tier '{decided.Outputs["tier"]}': {decided.Summary}");
         var testing = Assert.Single(TestSteps(Mapping(Jobs(), "build-test-publish")), step => StepRuns(step, decided.Outputs));
         var command = Scalar(testing, "run")!;
         Assert.True(
-            command.Contains(TierFilter, StringComparison.Ordinal) == draft,
-            $"{kind} runs '{command}', and {(draft ? "a draft's push tests the critical tier alone" : "only a draft's push tests less than the whole suite")}");
-        Assert.Contains(draft ? "tests -> the critical tier" : set is "tested" or "none" ? "tests -> none" : "tests -> the whole suite", decided.Stdout, StringComparison.Ordinal);
+            command.Contains(TierFilter, StringComparison.Ordinal) == tier,
+            $"{kind} runs '{command}', and {(tier ? "it tests the critical tier alone" : "only a draft's push and the version pull request test less than the whole suite")}");
+        Assert.Contains(tier ? "tests -> the critical tier" : set is "tested" or "none" ? "tests -> none" : "tests -> the whole suite", decided.Stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A leg that tests the critical tier alone never reports under a name a ruleset requires: between a pull request being
-    /// marked ready and its ready run creating its checks, a required <c>linux-x64</c> from a draft's push would read green
-    /// for a tree only the tier tested. Every other run's leg is exactly <c>linux-x64</c>.
+    /// A draft's leg, which tests the critical tier alone, never reports under a name a ruleset requires: between a pull
+    /// request being marked ready and its ready run creating its checks, a required <c>linux-x64</c> from a draft's push
+    /// would read green for a tree only the tier tested. Every ready run's leg is exactly <c>linux-x64</c>, the version pull
+    /// request's included, whose tier is its ready run by rule.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
-    public void Only_a_run_of_the_whole_suite_reports_the_leg_the_rulesets_require(string kind)
+    public void Only_a_ready_run_reports_the_leg_the_rulesets_require(string kind)
     {
         var (run, set) = Kinds[kind];
         var draft = run.Event == "pull_request" && run.Draft == "true";
@@ -509,7 +755,7 @@ public class CiRunsTests
         }
         else if (set is not ("tested" or "none"))
         {
-            Assert.True(ran.Contains("linux-x64") && !ran.Contains(TierLeg), $"{kind} reports {string.Join(", ", ran)}, and its whole suite is the leg 'linux-x64'");
+            Assert.True(ran.Contains("linux-x64") && !ran.Contains(TierLeg), $"{kind} reports {string.Join(", ", ran)}, and its ready run is the leg 'linux-x64'");
             Assert.All(Legs(decided.Outputs["platforms"]), leg => Assert.Equal(leg["rid"], leg["name"]));
         }
     }
@@ -519,30 +765,32 @@ public class CiRunsTests
         CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["marking a pull request into a release branch ready"]);
 
     /// <summary>
-    /// A run that keeps a record of the tree it tested ran the whole suite on it: a later push skips its checks on that
-    /// record, so a tree only the critical tier ran on is never recorded. A draft's push keeps none.
+    /// A run that keeps a record of the tree it tested ran the whole suite on it, but for the version pull request, whose
+    /// ready run the critical tier is by rule: a later push skips its checks on that record, so a tree a draft's tier ran on
+    /// is never recorded. A draft's push keeps none.
     /// </summary>
     [Theory]
     [MemberData(nameof(CriticalKindsOfRunForTheRecord))]
-    public void A_run_that_keeps_a_record_of_its_tree_tested_the_whole_suite(string kind)
+    public void A_run_that_keeps_a_record_of_its_tree_tested_the_whole_suite_or_is_the_version_pull_request(string kind)
     {
         var (run, _) = Kinds[kind];
 
         var decided = Decide(run);
 
         Assert.True(
-            decided.Record is null || decided.Outputs["tier"] == "false",
+            decided.Record is null || decided.Outputs["tier"] == "false" || decided.Outputs["set"] == VersionOnly,
             $"{kind} keeps a record of tree {decided.Record?["tree"]} and tested the critical tier alone on it");
     }
 
     /// <summary>
-    /// Only one step of the workflows filters the suite: the linux-x64 job's step a draft's push runs, which is the job's
-    /// whole-suite step with the tier's filter after it, so both test the same build. Every other test step — the job's
-    /// whole-suite step, the suite under a release's version, and the release's own — runs the whole suite.
+    /// Only one step of the workflows filters the suite: the linux-x64 job's step a draft's push and the version pull request
+    /// run, which is the job's whole-suite step with the tier's filter after it, so both test the same build. Every other
+    /// test step — the job's whole-suite step, the suite under a release's version, and the release's own — runs the whole
+    /// suite.
     /// </summary>
     [Fact]
-    [Critical(Family.B7, "the one filtered test step is a draft's, and the release tests the whole suite")]
-    public void Only_the_step_a_draft_s_push_runs_filters_the_suite()
+    [Critical(Family.B7, "the one filtered test step is the tier's, and the release tests the whole suite")]
+    public void Only_the_step_that_tests_the_critical_tier_filters_the_suite()
     {
         var jobs = Jobs();
         var steps = TestSteps(Mapping(jobs, "build-test-publish"));
@@ -717,8 +965,8 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// Every job but the version job's runs on one of its words: the Linux set's jobs on <c>linux</c>, the jobs only a run
-    /// of every check needs on <c>full</c>, and the stand-in on <c>skipping</c>.
+    /// Every job but the version job's runs on one of its words: the platform legs on <c>build</c>, the Linux set's other
+    /// jobs on <c>linux</c>, the jobs only a run of every check needs on <c>full</c>, and the stand-in on <c>skipping</c>.
     /// </summary>
     [Fact]
     public void Every_job_runs_on_one_of_the_version_job_s_words()
@@ -729,7 +977,7 @@ public class CiRunsTests
         {
             ["version"] = null,
             ["release-stamp"] = Full,
-            ["build-test-publish"] = Linux,
+            ["build-test-publish"] = Build,
             ["older-windows"] = Full,
             ["update-end-to-end"] = Linux,
             ["install-sh"] = Linux,
@@ -789,13 +1037,18 @@ public class CiRunsTests
 
     // --- what a run decides and reports --------------------------------------------------------------------------
 
-    /// <summary>What the deciding step wrote: its outputs by name, the run's summary, what it printed, and the record it kept.</summary>
-    private sealed record Decided(Dictionary<string, string> Outputs, string Summary, string Stdout, JsonNode? Record);
+    /// <summary>
+    /// What the deciding step wrote: its outputs by name, the run's summary, what it printed, and the record it kept; and the
+    /// listing of this run's tree it was given.
+    /// </summary>
+    private sealed record Decided(Dictionary<string, string> Outputs, string Summary, string Stdout, JsonNode? Record, string[] Listing);
 
     /// <summary>
     /// The deciding step's script, run as a runner runs a <c>pwsh</c> step, told about <paramref name="run"/> by the names the
     /// workflow tells it, with the legs the workflow gives it. A run whose earlier ready run is named gets that run's record —
-    /// <see cref="Tested"/> under its tree — unless <paramref name="record"/> says what the record holds instead.
+    /// <see cref="Tested"/> under its tree, and the set it names — unless <paramref name="record"/> says what the record holds
+    /// instead. A pull request whose props file is given on both sides runs in a repository of its own that holds the two
+    /// texts as objects, and both listings name them, as a checkout holds the merge and its base.
     /// </summary>
     private static Decided Decide(Run run, string? record = null, bool recordIsThere = true)
     {
@@ -809,8 +1062,27 @@ public class CiRunsTests
         File.WriteAllText(output, string.Empty);
         var summary = Path.Combine(tree.Root, "summary");
         File.WriteAllText(summary, string.Empty);
+
+        string[] lines = run.Listing ?? Tested;
+        var baseLines = run.Base;
+        var checkout = string.Empty;
+        if (run.Props is var (before, after))
+        {
+            checkout = Path.Combine(tree.Root, "checkout");
+            Directory.CreateDirectory(checkout);
+            Git(checkout, "init", "--quiet");
+            lines = [.. lines, PropsEntry(checkout, after)];
+            baseLines = [.. baseLines ?? [], PropsEntry(checkout, before)];
+        }
+
         var listing = Path.Combine(tree.Root, "listing.txt");
-        File.WriteAllLines(listing, run.Listing ?? Tested);
+        File.WriteAllLines(listing, lines);
+        var listed = string.Empty;
+        if (baseLines is not null)
+        {
+            listed = Path.Combine(tree.Root, "base.txt");
+            File.WriteAllLines(listed, baseLines);
+        }
 
         var recorded = string.Empty;
         if (record is not null || run.TestedTree is not null)
@@ -819,7 +1091,7 @@ public class CiRunsTests
             Directory.CreateDirectory(Path.GetDirectoryName(recorded)!);
             if (recordIsThere)
             {
-                File.WriteAllText(recorded, record ?? RecordFor(PullRequestNumber, run.TestedTree!));
+                File.WriteAllText(recorded, record ?? RecordFor(PullRequestNumber, run.TestedTree!, run.TestedSet));
             }
         }
 
@@ -834,6 +1106,7 @@ public class CiRunsTests
             ["TARGET"] = run.Target,
             ["TREE"] = Tree,
             ["LISTING"] = listing,
+            ["BASE"] = listed,
             ["RECORD"] = recorded,
             ["FOUND"] = recorded.Length > 0 ? "run 301 of pull request #7 tested tree " + run.TestedTree : "nothing was found",
             ["PLATFORMS"] = Scalar(env, "PLATFORMS")!,
@@ -841,8 +1114,10 @@ public class CiRunsTests
             ["GITHUB_OUTPUT"] = output,
             ["GITHUB_STEP_SUMMARY"] = summary,
             ["RUNNER_TEMP"] = tree.Root,
+            ["GIT_CONFIG_NOSYSTEM"] = "1",
         };
-        var ran = Pwsh(environment, "-Command", $"$ErrorActionPreference = 'Stop'; & '{script}'");
+        var into = checkout.Length > 0 ? $"Set-Location -LiteralPath '{checkout}'; " : string.Empty;
+        var ran = Pwsh(environment, "-Command", $"$ErrorActionPreference = 'Stop'; {into}& '{script}'");
         Assert.True(ran.Exit == 0, ran.Stderr);
 
         var said = Outputs(output);
@@ -852,7 +1127,32 @@ public class CiRunsTests
             kept = JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "record.json")));
         }
 
-        return new Decided(said, File.ReadAllText(summary), ran.Stdout, kept);
+        return new Decided(said, File.ReadAllText(summary), ran.Stdout, kept, lines);
+    }
+
+    /// <summary>The props file's entry in a listing: <paramref name="text"/> written as an object of the repository at <paramref name="checkout"/>.</summary>
+    private static string PropsEntry(string checkout, string text)
+    {
+        var file = Path.Combine(checkout, $"props-{Guid.NewGuid():N}");
+        File.WriteAllText(file, text);
+        return $"100644 blob {Git(checkout, "hash-object", "-w", file).Trim()}\t{VersionProps}";
+    }
+
+    /// <summary>The props file as the base holds it, with each change's text replaced, line by line.</summary>
+    private static string Props(params (string From, string To)[] changes) =>
+        string.Join('\n', PropsLines.Select(line => changes.Aggregate(line, (text, change) => text.Replace(change.From, change.To, StringComparison.Ordinal)))) + "\n";
+
+    /// <summary>
+    /// The listing of a pull request's tree against <see cref="AtTheBase"/>: the given pins moved — all four unless named —
+    /// and each further path added, but for the props file, whose entry <see cref="Decide"/> adds.
+    /// </summary>
+    private static string[] PinsMoved(string[]? pins = null, params string[] added)
+    {
+        var moving = pins ?? Pins;
+        var moved = AtTheBase.Select(line => moving.Contains(line[(line.IndexOf('\t') + 1)..], StringComparer.Ordinal)
+            ? Regex.Replace(line, " blob [0-9a-f]{40}\t", " blob 9999999999999999999999999999999999999999\t")
+            : line);
+        return [.. moved, .. added.Select(path => $"100644 blob 5555555555555555555555555555555555555555\t{path}")];
     }
 
     /// <summary>
@@ -870,10 +1170,11 @@ public class CiRunsTests
             var job = (YamlMappingNode)value;
             var name = Scalar(job, "name") ?? key.ToString();
             var condition = Scalar(job, "if");
-            Assert.True(condition is null or Full or Linux or Skipping, $"The '{key}' job runs on '{condition}', which is none of the version job's words.");
+            Assert.True(condition is null or Full or Build or Linux or Skipping, $"The '{key}' job runs on '{condition}', which is none of the version job's words.");
             var on = condition switch
             {
                 Full => decided["full"] == "true",
+                Build => decided["build"] == "true",
                 Linux => decided["linux"] == "true",
                 Skipping => decided["skipping"] == "true",
                 _ => true,
@@ -929,14 +1230,23 @@ public class CiRunsTests
     private static string ArtifactsAnswer(bool kept = false, bool expired = false) =>
         kept ? $"{{\"artifacts\":[{{\"name\":\"tested-tree\",\"expired\":{(expired ? "true" : "false")}}}]}}" : "{\"artifacts\":[]}";
 
-    private static string RecordFor(int pullRequest, string tree) =>
-        new JsonObject
+    /// <summary>A record as a ready run keeps it, naming the set it ran; one kept before records named their set names none.</summary>
+    private static string RecordFor(int pullRequest, string tree, string? checks = null)
+    {
+        var record = new JsonObject
         {
             ["tree"] = tree,
             ["commit"] = AnotherSha,
             ["pull_request"] = pullRequest,
-            ["listing"] = JsonSerializer.SerializeToNode(Tested),
-        }.ToJsonString();
+        };
+        if (checks is not null)
+        {
+            record["checks"] = checks;
+        }
+
+        record["listing"] = JsonSerializer.SerializeToNode(Tested);
+        return record.ToJsonString();
+    }
 
     /// <summary>
     /// The step that looks for what an earlier run tested, run as a runner runs it, with a stand-in for <c>gh</c> defined
