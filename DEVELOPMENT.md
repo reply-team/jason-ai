@@ -99,7 +99,10 @@ urgency or by kind, never a polish. Several release branches run at once. Each i
 person, who scopes it with the architecture session; the branches share nothing until a release. There is no cadence:
 the goal reached closes the release. A feature branch is cut from its release branch and its pull request targets that
 release branch. When a release merges, every other release branch takes `main` then, and conflicts are resolved there
-and nowhere else.
+and nowhere else. A release branch takes `main` by a fast-forward, or by a rebase pushed straight to the branch by its
+owner, never through a pull request into the branch, because the release's rebase into `main` must find `main`'s own
+commits in the branch. The ruleset on the release branches lets a repository admin push to them for this act alone, and
+the push's run is the Linux set and gates nothing.
 
 **One pull request per increment.** A branch carries one change: a feature, a fix, a document, a skill's text. Two
 independent things are two pull requests, even when they were written in one sitting. When the second builds on the
@@ -110,7 +113,8 @@ has grown two things is split before it is marked ready, not after a review has 
 
 **The branch is named after the story it implements**, `REPLY-<key>-<slug>`, the key first. That name is the one
 place a tracker key is allowed: it is how the tracker links the pull request, and it never reaches a release branch or
-`main`.
+`main`. A pull request with no story of its own — the version after a release, a change to the pipeline, a
+document — is named after the standing story kept for such changes.
 
 **Tests by stage.** A commit runs the critical tier locally before it is pushed — the tests that carry the `Critical`
 trait, about two minutes on a workstation — and never the whole suite, which takes seventeen minutes there and hours
@@ -136,13 +140,16 @@ theory, or removes test methods rewrites the table in the same commit, from the 
 leg that tests the tier alone is named `linux-x64 (critical tier)`, so only a ready run reports the `linux-x64` that a
 ruleset requires. `CiRunsTests` holds the rule the workflow carries.
 
-**Draft while you build, ready when you are done.** Open the pull request as a draft with the first push and keep
-pushing to it; a draft is cheap. Mark it ready once, after the two readings below and the fixes they asked for, so
-that the full run is paid once: a push after ready that changes nothing but documentation since the tree the last
-full run tested — Markdown outside `runtime/`, `.github/` and `plugins/` that no build compiles and no test runs as
-code — runs the Linux set and reports the rest as skipped; any other push after ready runs the full run again. The
-ruleset on a release branch lets a pull request merge only when the Linux set reports green at the head that merges;
-the ruleset on `main` waits for every check.
+**Build on a branch, open the pull request as a draft when the work is done.** A branch is pushed as the work goes, and
+no pull request is opened while it is built: the critical tier runs locally for each commit before it is pushed, and a
+pushed branch without a pull request runs nothing on CI, where an open draft would run the Linux set on every push.
+When the work is done the pull request opens as a draft, and opening it runs the Linux set once, whose test leg is the
+critical tier on linux-x64. Then come the two readings below and the fixes they asked for, as commits on the draft.
+Mark it ready once, after that, and the whole suite runs on Linux, so that the full run is paid once: a push after
+ready that changes nothing but documentation since the tree the last full run tested — Markdown outside `runtime/`,
+`.github/` and `plugins/` that no build compiles and no test runs as code — runs the Linux set and reports the rest as
+skipped; any other push after ready runs the full run again. The ruleset on a release branch lets a pull request
+merge only when the Linux set reports green at the head that merges; the ruleset on `main` waits for every check.
 
 **Two readers at ready.** Before a pull request into a release branch is marked ready it is read twice: by the session
 that leads the release, which knows the scope and what the release's other pull requests do, and by a reviewer with no
@@ -172,7 +179,9 @@ release branch after it takes `main`, never merged by hand.
 tag — and the branch that merges second sets its own again then. The pull request into `main` is marked ready with the
 bare version, so the suite that gates the release runs under the version the tag will carry. After a release, the pull
 request that moves `main` to the next version carries the version prefix and every pin the version guards hold to it,
-and nothing else, and is squash-merged.
+and nothing else, and is squash-merged. The release's own flow opens it right after the tag, as the release's last
+act on `main`, so that `main` holds the next version between releases and every release branch inherits it when it
+takes `main`. It has one reading and no second reader, since it changes no behaviour.
 
 **The squash commit is the pull request.** A release branch takes one squash commit per pull request, and that
 commit's message is the pull request's title and body; the messages of the branch's own commits never reach it. Commit
