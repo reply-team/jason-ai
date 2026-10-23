@@ -242,6 +242,7 @@ public class ClaudeCodeHostTests
     /// and no piece of its path anywhere on the command line — and the level is reported as one the role cannot read.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "a folder that cannot be a rule's path composes nothing")]
     public void A_folder_that_opens_with_a_closing_parenthesis_composes_nothing()
     {
         var files = new MemoryFileLocations(@"C:\Users\Marta\Documents\) notes\AGENTS.md", null, null);

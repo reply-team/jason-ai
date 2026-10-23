@@ -75,6 +75,11 @@ To stop and remove it all: `jason runtime stop`, run as above, then delete the f
 - Test everything: `dotnet test --solution runtime/Jason.slnx`
 - Test one project: `dotnet test --project runtime/tests/Jason.Runtime.Tests`
 - Test one method or class: append `-- --filter-method "*MethodName"` or `-- --filter-class "Namespace.ClassName"`
+- Start a long pass (the whole suite, the install-script classes) from a terminal you keep open, or as a background task
+  of that terminal, never through a hidden window or a detached launcher: started that way, whole passes have failed the
+  install-script tests whose PowerShell 7 children hang for their full two-minute bound and print nothing, and the same
+  tests pass attached. A one-test run under a hidden launcher passes, so the cause is not pinned down; the product starts
+  its own children with no window and no shell, and a child so made ran under hidden and detached drivers without a hang.
 - Run without publishing (with `JASON_DATA_DIR` set as above): `dotnet run --project runtime/src/Jason.App -- --version`
   · `-- runtime run` · `-- runtime status` · `-- runtime start` (background; nothing is registered until you ask)
   · `-- runtime stop` · `-- runtime autostart enable | disable | status` · `-- campaign list` · `-- workitem list`

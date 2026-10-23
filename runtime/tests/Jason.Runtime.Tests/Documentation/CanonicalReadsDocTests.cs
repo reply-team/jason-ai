@@ -21,6 +21,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("**Two namespaces, the same words.**")]
     [InlineData("and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used`")]
     [InlineData("what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence")]
+    [InlineData("a required input field made optional")]
     public void The_contracts_readme_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/contracts/README.md")), StringComparison.Ordinal);
 
@@ -308,6 +309,19 @@ public sealed partial class CanonicalReadsDocTests
         Assert.NotEmpty(exempt);
         Assert.All(exempt, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The routing page names the reads on request once: which operations they are, what they skip of a claim, and how
+    /// the account is chosen — the operations read from the code that serves them.
+    /// </summary>
+    [Theory]
+    [InlineData("### A read on request")]
+    [InlineData("`contact.threads`")]
+    [InlineData("`contact.thread`")]
+    [InlineData("It skips the claim's other half, and with it the attempt, provenance, the journal, pins, approval and retry")]
+    [InlineData("whose binding has the identity recorded in the provenance of the attempt that learned the pin")]
+    public void The_routing_page_names_the_read_on_request(string sentence) =>
+        Assert.Contains(sentence, Flat(Source("docs/routing.md")), StringComparison.Ordinal);
 
     /// <summary>
     /// What "ambiguous" costs is told per repeat rule, and the operations that say `never` are named there — read from

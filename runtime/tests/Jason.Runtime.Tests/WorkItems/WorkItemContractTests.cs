@@ -249,6 +249,7 @@ public class WorkItemContractTests
     /// the sender that is wrong.
     /// </summary>
     [Fact]
+    [Critical(Family.R3, "a shared definition at create, refusing inside")]
     public async Task A_sender_its_shared_definition_refuses_is_reported_inside_the_sender()
     {
         using var database = new TestDatabase();

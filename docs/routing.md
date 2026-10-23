@@ -526,6 +526,19 @@ fake-provider  contact  p_1001  -         -
 reconciliation — matching a person again, against two providers' answers — and this version has none
 (DEF-RECON-001). A human sees both values and decides.
 
+### A read on request
+
+Two operations are read when a person asks, outside any work item: `contact.threads` (the provider's
+`conversation.list` for one person) and `contact.thread` (its `conversation.get` for one thread). Such a read takes
+only the route's half of the claim's decision: the plugin is loaded and available, it performs the operation, and the
+route's binding passes its checks. It skips the claim's other half, and with it the attempt, provenance, the journal,
+pins, approval and retry: nothing is recorded about the read, no identifier is pinned from what comes back, and a
+failure is the request's answer rather than a state to repeat. The account is the one the person's identifier was
+learned in: the route used is a current route to the pin's plugin whose binding has the identity recorded in the
+provenance of the attempt that learned the pin, so one account's identifier is never sent to another. A person with no
+such route is refused with `no_route`; a person whose matching route fails a plugin check is refused with that check's
+own code, as a conflict (409).
+
 ## 12. Known limitations of this version
 
 - **No operation-family wildcards.** A route names one operation or is the default; there is no

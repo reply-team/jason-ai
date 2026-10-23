@@ -13,6 +13,7 @@ using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -155,8 +156,10 @@ public class OptionsHotReloadTests
     [Critical(Family.C1, "a bad live edit keeps the last good settings")]
     public async Task A_settings_file_that_is_not_valid_JSON_is_reported_by_position_while_the_runtime_keeps_what_it_had()
     {
+        IConfigurationRoot? configuration = null;
         await using var fixture = await RuntimeApiFixture.StartAsync(
             Ct,
+            configurationBuilt: built => configuration = built,
             prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false,"TickSeconds":7}}"""));
 
         var monitor = fixture.Runtime.Services.GetRequiredService<IOptionsMonitor<DispatcherOptions>>();
@@ -178,6 +181,11 @@ public class OptionsHotReloadTests
         // What the runtime works from is what it had.
         Assert.Equal(7, monitor.CurrentValue.TickSeconds);
         Assert.False(monitor.CurrentValue.Enabled);
+
+        // And the raw key reads null: the options in force are the last good ones, not what the configuration now holds.
+        Assert.True(
+            configuration!["Dispatcher:TickSeconds"] is null,
+            $"The raw key reads '{configuration["Dispatcher:TickSeconds"]}' after the failed load.");
         await AssertStillAnswersAsync(fixture);
     }
 

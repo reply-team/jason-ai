@@ -398,8 +398,8 @@ Every operation is at `version: 1`. A plugin's manifest declares the operation-c
 `contracts.operations`, and a plugin that declares family version N implements version N of every operation it
 lists.
 
-- **Additive** — a new optional input field, a new optional output field, a new failure code, a new external-id
-  kind — keeps the version.
+- **Additive** — a new optional input field, a required input field made optional, a new optional output field, a new
+  failure code, a new external-id kind — keeps the version.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,

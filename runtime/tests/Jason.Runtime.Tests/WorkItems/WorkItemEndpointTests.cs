@@ -41,6 +41,7 @@ public class WorkItemEndpointTests
     [InlineData("message.send", """{"channel":"email","sender":{"external_id":"s_12","address":"sales@example.com"},"message":{"format":"email","subject":"The Lisbon meetup","body":"Hi Marta, thanks for the chat at the meetup."}}""")]
     [InlineData("social_invitation.send", """{"channel":"linkedin","sender":{"external_id":"s_35","address":null},"note":"Hi Marta, we met at the Lisbon meetup."}""")]
     [InlineData("contact.update", """{"channel":"email","fields":{"title":"Head of Growth","company":"Example Analytics"}}""")]
+    [Critical(Family.R3, "a shared definition at create, over HTTP")]
     public async Task Arguments_that_name_a_shared_definition_are_accepted_when_the_item_is_written(string operation, string arguments)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);

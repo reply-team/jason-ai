@@ -983,7 +983,9 @@ public class CiRunsTests
         Assert.Contains(looked.Calls, call => call.StartsWith($"run download 301 --repo acme/jason --name tested-tree-{Tree} --dir ", StringComparison.Ordinal));
         Assert.Contains("api repos/acme/jason/actions/runs/302", looked.Calls);
         Assert.DoesNotContain(looked.Calls, call => call.StartsWith("run download 302", StringComparison.Ordinal));
-        Assert.DoesNotContain(looked.Calls, call => call.Contains("303", StringComparison.Ordinal));
+        // The run is named by its number in the two forms a call takes; the number alone would also match a temporary
+        // directory's random name, which a call carries after --dir.
+        Assert.DoesNotContain(looked.Calls, call => call.Contains("actions/runs/303", StringComparison.Ordinal) || call.StartsWith("run download 303", StringComparison.Ordinal));
 
         var decided = Decide(new Run("push", Target: target), looked.Record, found: looked.Outputs["found"]);
 

@@ -542,6 +542,7 @@ public sealed class ProjectLinkTests
     [InlineData("inside-a-campaign")]
     [InlineData("holding-a-project")]
     [InlineData("inside-its-own-campaign")]
+    [InlineData("holding-its-own-campaign")]
     [InlineData("below-a-project-marker")]
     [InlineData("below-a-campaign-marker")]
     public async Task A_path_inside_or_holding_another_level_s_folder_is_taken_naming_that_folder(string where)
@@ -551,7 +552,7 @@ public sealed class ProjectLinkTests
         var spring = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring push", project_id = acme.Id }, Ct);
         var beta = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Beta" }, Ct);
         var leads = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads", project_id = beta.Id }, Ct);
-        if (where == "inside-its-own-campaign")
+        if (where is "inside-its-own-campaign" or "holding-its-own-campaign")
         {
             // Acme's folder stays where it is recorded, without its marker, so the link is not refused as a second folder.
             File.Delete(HarnessMarker.PathIn(acme.FolderPath!));
@@ -575,6 +576,7 @@ public sealed class ProjectLinkTests
             "inside-a-campaign" => (Path.Combine(leads.FolderPath!, "notes"), leads.FolderPath!),
             "holding-a-project" => (work, Path.Combine(work, "beta")),
             "inside-its-own-campaign" => (Path.Combine(spring.FolderPath!, "notes"), spring.FolderPath!),
+            "holding-its-own-campaign" => (Path.GetDirectoryName(spring.FolderPath!)!, spring.FolderPath!),
             "below-a-project-marker" => (Path.Combine(Outside(api), "beta-copy", "notes"), Path.Combine(Outside(api), "beta-copy")),
             _ => (Path.Combine(Outside(api), "leads-copy", "notes"), Path.Combine(Outside(api), "leads-copy")),
         };
