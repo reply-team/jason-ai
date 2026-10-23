@@ -295,9 +295,10 @@ public class DataDirectoryBeltTests
             {
                 Directory.Delete(work, recursive: true);
             }
-            catch (UnauthorizedAccessException)
+            catch (Exception refused) when (refused is UnauthorizedAccessException or IOException)
             {
-                // The junction refused, as itself: nothing behind it was reached.
+                // The junction refused, as itself: an ordinary account may not unmount it, and an elevated one is
+                // told it is no volume's mount point. Nothing behind it was reached.
             }
 
             Assert.True(

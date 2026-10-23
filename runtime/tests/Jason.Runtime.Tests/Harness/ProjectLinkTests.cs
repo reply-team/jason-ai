@@ -584,6 +584,10 @@ public sealed class ProjectLinkTests
         {
             // A copy carries the marker of what it was copied from, and the runtime records no copy.
             CopyFolder(where == "below-a-project-marker" ? beta.FolderPath! : leads.FolderPath!, other);
+
+            // A marker above is found by a walk up the real folders, so the one named is spelled as its links resolve: on
+            // macOS the temporary folder lies under /var, which is a link to /private/var.
+            other = FolderPaths.Real(other);
         }
 
         Directory.CreateDirectory(path);
