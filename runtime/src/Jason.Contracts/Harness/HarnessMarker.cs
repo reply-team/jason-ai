@@ -46,17 +46,25 @@ public sealed record HarnessMarker(string? Kind, string? Id)
         string.Equals(Kind, kind, StringComparison.Ordinal) && string.Equals(Id, id, StringComparison.Ordinal);
 
     /// <summary>
+    /// Whether <paramref name="folder"/> holds a marker, by its being there: never opened, so one another program holds open,
+    /// one this account may not read and an offline placeholder are markers as any other is, and this never throws. What
+    /// needs only to know that a folder is somebody's level, not which, asks this.
+    /// </summary>
+    public static bool IsIn(string folder) => File.Exists(PathIn(folder));
+
+    /// <summary>
     /// The marker in <paramref name="folder"/>; null when it has none. One that is there and cannot be read as a marker —
     /// not JSON, another shape, a version this runtime does not know — is read as naming nothing this runtime knows, so it
     /// is never taken for one of its own.
     /// </summary>
     public static HarnessMarker? In(string folder)
     {
-        var path = PathIn(folder);
-        if (!File.Exists(path))
+        if (!IsIn(folder))
         {
             return null;
         }
+
+        var path = PathIn(folder);
 
         try
         {

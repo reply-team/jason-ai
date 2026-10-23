@@ -65,4 +65,34 @@ public sealed partial class FoldersDocTests
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\s+")]
     private static partial System.Text.RegularExpressions.Regex Whitespace();
+
+    /// <summary>
+    /// The root is the person's against the CLI as well as the runtime: the invariant, the projects contract and the
+    /// release page's account of an uninstall each say that an uninstall removes nothing under it, the purge included,
+    /// and the first two that a diagnostic bundle lists and opens nothing in it; and the release page that the purge
+    /// refuses a data directory that is a folder of the root.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_an_uninstall_and_a_bundle_leave_the_root_alone()
+    {
+        static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+        const string Cli = "`jason uninstall` removes nothing under";
+
+        Assert.Contains(
+            $"Nor does the CLI touch it: {Cli} the root, `--purge-data` included, and `jason doctor` lists and opens nothing in it.",
+            Page("docs", "architecture.md"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"Nor does the CLI touch the root: {Cli} it, `--purge-data` included, since the purge empties the data directory and never the root; and `jason doctor` lists and opens nothing in it, so no memory file's name or word reaches a bundle.",
+            Flat(Page("docs", "projects.md")),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "and the harness root with every folder and file in it, the person's memory files and every project's and campaign's folder ([projects](projects.md) §8), `--purge-data` included.",
+            Flat(Page("docs", "release-and-update.md")),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "is refused before anything is removed, and so is a folder of the harness root or one inside it, and one holding such a folder directly in it or anywhere in a folder the purge would delete, each known by its `.jason/marker.json`, or holding a folder there that cannot be looked into.",
+            Flat(Page("docs", "release-and-update.md")),
+            StringComparison.Ordinal);
+    }
 }

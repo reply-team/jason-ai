@@ -334,7 +334,13 @@ public static partial class DoctorComposer
         ExecutionEnvironment.WorkItemIdVariable,
     };
 
-    /// <summary>What no bundle carries — the fixed list a bundle writes into itself and the verb prints.</summary>
+    /// <summary>
+    /// What no bundle carries — the fixed list a bundle writes into itself and the verb prints. The harness root is the
+    /// person's: it reaches a bundle as the runtime reports it in <c>system.info</c>, its path and its state, and nothing
+    /// here reads under it. A folder under it travels only as the journal recorded it: a <c>project_linked</c> entry holds
+    /// a project's folder and its campaigns', before and after, and those are journal values, carried with
+    /// <c>--include-journal</c> alone.
+    /// </summary>
     public static IReadOnlyList<string> NeverCarried { get; } =
     [
         "the capability token",
@@ -345,6 +351,7 @@ public static partial class DoctorComposer
         "work/",
         "plugin packages",
         "a route's account and its identity",
+        "anything read from the harness root: no folder or file under it is listed or opened, so no memory file's name or word, and the folders a project link recorded travel only with --include-journal",
         "any setting or JASON_* value off the list",
         "journal values unless --include-journal: " + JournalCarries,
     ];

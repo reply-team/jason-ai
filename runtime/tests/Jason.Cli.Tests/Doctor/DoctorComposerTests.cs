@@ -1693,6 +1693,96 @@ public sealed class DoctorComposerTests
         Assert.DoesNotContain("Frame60", capped, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The harness root reaches a bundle as the runtime reports it, and only so: its path, the home written as the bundle
+    /// writes the home, and its state, in the runtime's report and in the readiness check composed from it. The bundle has
+    /// no line of its own about the root and withholds neither field.
+    /// </summary>
+    [Fact]
+    public async Task The_harness_root_travels_as_the_runtime_reports_it_with_the_home_rewritten()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with { Harness = new HarnessInfo(@"C:\Users\Quillon\Jason", HarnessRootState.Marked) };
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var harness = Section(bundle, "runtime")["system_info"]!["harness"]!;
+        Assert.Equal(@"~\Jason", Text(harness["root"]));
+        Assert.Equal("marked", Text(harness["root_state"]));
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(item => Text(item!["name"]) == "harness_root")!;
+        Assert.Contains(@"~\Jason", Text(check["fact"]), StringComparison.Ordinal);
+        Assert.DoesNotContain(DoctorComposer.SystemInfoWithheld, field => field.Path.StartsWith("harness", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// And nothing read from under the root does: the bundle lists and opens no folder or file of it, so a word of a memory
+    /// file and a memory file's name never reach it, the journal's entries asked for or not, and it says so among what it
+    /// never carries. A folder under the root travels only as the journal recorded it: a project link's entry holds the
+    /// project's folder and its campaign's, before and after, and with <c>--include-journal</c> those travel in the
+    /// journal's entries and nowhere else; without it, nowhere.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Nothing_under_the_harness_root_reaches_a_bundle(bool includeJournal)
+    {
+        using var dir = new TempPaths();
+        var home = Path.Combine(Path.GetTempPath(), "jason-cli-tests", Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(home, "Jason");
+        var campaign = Path.Combine(root, "projects", "sentinel-project-folder", "campaigns", "sentinel-campaign-folder");
+        foreach (var (folder, words) in new[] { (root, "SENTINEL_ROOT_MEMORY"), (Path.GetDirectoryName(Path.GetDirectoryName(campaign))!, "SENTINEL_PROJECT_MEMORY"), (campaign, "SENTINEL_CAMPAIGN_MEMORY") })
+        {
+            Directory.CreateDirectory(Path.Combine(folder, ".jason"));
+            File.WriteAllText(Path.Combine(folder, ".jason", "marker.json"), """{"marker_version":1,"kind":"root"}""");
+            File.WriteAllText(Path.Combine(folder, "AGENTS.md"), words + "\n");
+            File.WriteAllText(Path.Combine(folder, "CLAUDE.md"), "@AGENTS.md SENTINEL_CLAUDE_WORD\n");
+        }
+
+        try
+        {
+            var runtime = Running(dir);
+            runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with { Harness = new HarnessInfo(root, HarnessRootState.Marked) };
+            var project = Path.Combine(root, "projects", "sentinel-project-folder");
+            var linked = runtime.Entry(0);
+            linked["kind"] = "project_linked";
+            linked["key"] = "prj_01JB0000000000000000000000";
+            linked["old"] = new JsonObject { ["folder_path"] = project, ["campaigns"] = new JsonObject { ["cmp_01JB0000000000000000000000"] = campaign } };
+            linked["new"] = new JsonObject { ["folder_path"] = Path.Combine(home, "elsewhere", "acme"), ["campaigns"] = new JsonObject() };
+            runtime.Fails = (operation, _) => operation == Operations.JournalList
+                ? Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(linked), ["next_cursor"] = null }.ToJsonString())
+                : null;
+
+            var bundle = await ComposeAsync(dir, runtime, includeJournal);
+
+            var file = bundle.Serialize();
+            Assert.Equal(root, Text(Section(bundle, "runtime")["system_info"]!["harness"]!["root"]));
+            foreach (var word in (string[])["SENTINEL_ROOT_MEMORY", "SENTINEL_PROJECT_MEMORY", "SENTINEL_CAMPAIGN_MEMORY", "SENTINEL_CLAUDE_WORD", "AGENTS.md", "CLAUDE.md", "marker.json"])
+            {
+                Assert.DoesNotContain(word, file, StringComparison.Ordinal);
+            }
+
+            var outsideTheJournal = bundle.Document.DeepClone().AsObject();
+            outsideTheJournal.Remove("journal_entries");
+            foreach (var folder in (string[])["sentinel-project-folder", "sentinel-campaign-folder"])
+            {
+                Assert.DoesNotContain(folder, outsideTheJournal.ToJsonString(), StringComparison.Ordinal);
+                Assert.True(
+                    file.Contains(folder, StringComparison.Ordinal) == includeJournal,
+                    $"'{folder}', which a project link recorded, is {(includeJournal ? "not " : string.Empty)}in a bundle composed {(includeJournal ? "with" : "without")} the journal's entries.");
+            }
+
+            var item = Assert.Single(DoctorComposer.NeverCarried, entry => entry.StartsWith("anything read from the harness root", StringComparison.Ordinal));
+            Assert.Contains("no folder or file under it is listed or opened", item, StringComparison.Ordinal);
+            Assert.Contains("the folders a project link recorded travel only with --include-journal", item, StringComparison.Ordinal);
+            Assert.Contains("the folders a project link recorded", DoctorComposer.JournalCarries, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
     /// <summary>A data directory outside home is a name of its own, and it is written as its mark wherever it stands.</summary>
     [Fact]
     public async Task A_data_directory_outside_home_is_written_as_its_mark_everywhere()

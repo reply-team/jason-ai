@@ -357,6 +357,24 @@ public partial class InstallScriptTests
         Assert.Contains("install.ps1", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <c>install.sh</c> says the two lines on where the files will be with <c>printf</c>, each text in single quotes so
+    /// that its backticks are text rather than a command to substitute, the folder being <c>Jason</c> in the home as the
+    /// runtime makes it. Read here because no Windows runs the script; Linux and macOS run what it prints, in
+    /// <see cref="InstallNoticesTests"/>.
+    /// </summary>
+    [Fact]
+    public void Install_sh_prints_where_the_files_will_be_as_text()
+    {
+        var code = Code("install.sh");
+
+        Assert.Contains($"printf '{HarnessRootLines.Where("%s")}\\n' \"$ROOT_HOME/Jason\"", code, StringComparison.Ordinal);
+
+        // The home loses every separator at its end, not one: `/home/marta//` is the runtime's `/home/marta` too.
+        Assert.Contains("ROOT_HOME=\"$HOME\"\nwhile [ \"${ROOT_HOME%/}\" != \"$ROOT_HOME\" ]; do\n    ROOT_HOME=\"${ROOT_HOME%/}\"\ndone\n", code, StringComparison.Ordinal);
+        Assert.Contains($"printf '%s\\n' '{HarnessRootLines.DefaultProject}'", code, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Install_sh_sets_the_execute_bit() =>
         Assert.Contains("chmod", Script("install.sh"), StringComparison.Ordinal);
@@ -621,7 +639,7 @@ public partial class InstallScriptTests
         try { Invoke-Expression (Get-Content -LiteralPath '@SCRIPT@' -Raw) } catch { }
 
         "ErrorActionPreference=$ErrorActionPreference"
-        foreach ($name in 'rid', 'asset', 'base', 'releasesUrl', 'licenceBase', 'core', 'fromWeb', 'tmp', 'latest', 'target', 'installed', 'archive', 'expected', 'actual', 'unpacked', 'started', 'previous', 'directory', 'userPath', 'entries') {
+        foreach ($name in 'rid', 'asset', 'base', 'releasesUrl', 'licenceBase', 'core', 'fromWeb', 'tmp', 'latest', 'target', 'installed', 'archive', 'expected', 'actual', 'unpacked', 'started', 'previous', 'directory', 'userPath', 'entries', 'harnessRoot') {
             if (Test-Path "Variable:$name") { "left behind: $name" }
         }
         if (Test-Path Function:Install-Jason) { "left behind: Install-Jason" }

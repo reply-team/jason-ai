@@ -104,6 +104,52 @@ public class RoundTripTests
     }
 
     /// <summary>
+    /// The harness root is the person's, and an uninstall leaves it as it found it, the purge included: the root a real
+    /// runtime made at its first creates — its marker, a project's folder and a campaign's with theirs, the memory files —
+    /// and the words the person wrote there and a file of their own beside them are the same afterwards, folder for folder
+    /// and byte for byte.
+    /// </summary>
+    /// <remarks>
+    /// The runtime makes the root in the home its test environment gives it, beside the data directory and inside this
+    /// tree, so the remover's belt covers it and the tree's disposal removes it.
+    /// </remarks>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_harness_root_and_everything_in_it_stay_byte_for_byte(bool purgeData)
+    {
+        using var tree = new ScratchTree();
+        await tree.InstallSkillsAsync();
+
+        var installation = tree.Installation;
+        await GoldenPath.StartAsync(installation);
+        var project = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(installation, "project", "create", "--name", "Acme Widgets")));
+        var campaign = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(installation, "campaign", "create", "--name", "Autumn outreach")));
+
+        var root = tree.HarnessRoot;
+        var projectFolder = (string)project["folder_path"]!;
+        var campaignFolder = (string)campaign["folder_path"]!;
+        foreach (var folder in (string[])[projectFolder, campaignFolder])
+        {
+            Assert.True(folder.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase), $"The runtime made '{folder}' outside the root this test gave it, '{root}'.");
+        }
+
+        File.WriteAllText(Path.Combine(root, "AGENTS.md"), "We sell widgets to teams at example.com.\n");
+        File.WriteAllText(Path.Combine(projectFolder, "AGENTS.md"), "Write as Marta, plainly.\n");
+        tree.Canary(Path.Combine(root, "notes", "pricing.txt"), "a file of the person's own in the root");
+        var before = Entries(root);
+        Assert.Contains(Path.Combine(root, ".jason", "marker.json"), before.Keys);
+        Assert.Contains(Path.Combine(projectFolder, ".jason", "marker.json"), before.Keys);
+        Assert.Contains(Path.Combine(campaignFolder, ".jason", "marker.json"), before.Keys);
+
+        var report = await tree.UninstallAsync(purgeData);
+
+        Assert.True(report.Completed, $"{string.Join(" ", report.Problems)} {report.Refusal}");
+        Assert.False(GoldenPath.IsRunning(installation.Pid!.Value), "The runtime was still alive after uninstall reported success.");
+        Assert.Equal(before, Entries(root));
+    }
+
+    /// <summary>
     /// A second uninstall removes nothing and says so, rather than failing because there is nothing left.
     /// </summary>
     /// <remarks>
@@ -146,6 +192,17 @@ public class RoundTripTests
         }
 
         return snapshot;
+    }
+
+    /// <summary>Every folder and file under a directory, a folder as itself and a file by its digest: an empty folder that went is a change too.</summary>
+    private static Dictionary<string, string> Entries(string directory) =>
+        Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => path, path => Directory.Exists(path) ? "<folder>" : Digest(path), StringComparer.Ordinal);
+
+    private static string Digest(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexStringLower(SHA256.HashData(stream));
     }
 
     /// <summary>Every file outside the data directory, which is the half an uninstall must account for exactly.</summary>
@@ -196,6 +253,9 @@ public class RoundTripTests
         public string Executable => Path.Combine(InstallDirectory, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
 
         public string DataCanary => Path.Combine(Installation.Root, "notes-of-my-own.txt");
+
+        /// <summary>Where a runtime of this installation makes the harness root: in the home its test environment gives it.</summary>
+        public string HarnessRoot => Path.Combine(Jason.Runtime.Tests.TempDataDir.HomeOf(Installation.Root), Jason.Runtime.Configuration.HarnessOptions.DefaultFolder);
 
         /// <summary>The notice files an install keeps beside the executable.</summary>
         public IReadOnlyList<string> Notices => [.. ReleaseAssets.Notices.Select(notice => ReleaseAssets.NoticeBeside(Executable, notice))];
@@ -248,12 +308,6 @@ public class RoundTripTests
         {
             Installation.Dispose();
             GoldenPath.Delete(_root);
-        }
-
-        private static string Digest(string path)
-        {
-            using var stream = File.OpenRead(path);
-            return Convert.ToHexStringLower(SHA256.HashData(stream));
         }
 
         private static string RepositoryRoot()

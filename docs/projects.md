@@ -380,6 +380,10 @@ and an empty `AGENTS.md`. Then it leaves them to the person.
 - It writes nothing outside the three levels: `projects/` and `campaigns/` are plain directories, with no marker and no
   files of their own.
 
+Nor does the CLI touch the root: `jason uninstall` removes nothing under it, `--purge-data` included, since the purge
+empties the data directory and never the root; and `jason doctor` lists and opens nothing in it, so no memory file's
+name or word reaches a bundle.
+
 ### A campaign changing project
 
 `campaign.update` with `project_id` moves the campaign's folder into the new project's `campaigns/` by one rename, in the

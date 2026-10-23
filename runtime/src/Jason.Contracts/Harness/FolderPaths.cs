@@ -23,6 +23,21 @@ public static class FolderPaths
     /// <summary>Whether two paths, already where they lead, are one, as the platform compares them.</summary>
     public static bool Same(string left, string right) => string.Equals(left, right, Comparison);
 
+    /// <summary>
+    /// The folder a path names and every folder above it, nearest first, to the top of the file system: the one walk up
+    /// that every look for a level around a path takes — the runtime refusing a project's folder inside another level's,
+    /// the CLI finding the project of the folder a shell stands in, and the purge refusing a data directory inside a
+    /// level. Bounded by the path's own depth; nothing below it and nothing beside it is read.
+    /// </summary>
+    public static IEnumerable<string> AndAbove(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        for (var folder = Normal(path); folder is not null; folder = Path.GetDirectoryName(folder))
+        {
+            yield return folder;
+        }
+    }
+
     /// <summary>Below the folder, by whole names: <c>.jason-old</c> begins with <c>.jason</c> and is beside it, not inside.</summary>
     public static bool Inside(string path, string folder)
     {

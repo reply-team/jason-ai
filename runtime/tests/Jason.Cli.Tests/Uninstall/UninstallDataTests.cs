@@ -4,6 +4,7 @@ using Jason.Cli;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Uninstall;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Tests;
@@ -334,6 +335,153 @@ public class UninstallDataTests
         Assert.Empty(remover.Calls);
         Assert.Empty(remover.Reads);
         Assert.True(File.Exists(dir.Paths.UserSettingsFile));
+    }
+
+    /// <summary>
+    /// And a data directory that is a folder of the harness root — <c>JASON_DATA_DIR</c> pointed at the root, a campaign
+    /// in it called "Logs" — is refused before anything is read, saying why and that nothing was removed: the root and its
+    /// folders are the person's, and the purge empties a data directory, never the root.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_of_a_folder_of_the_harness_root_is_refused_before_anything_is_removed()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var campaign = Path.Combine(dir.Paths.Root, "logs");
+        foreach (var (folder, marker) in new[] { (dir.Paths.Root, new HarnessMarker(HarnessMarker.Root, null)), (campaign, new HarnessMarker(HarnessMarker.Campaign, "cmp_01JB0000000000000000000000")) })
+        {
+            Directory.CreateDirectory(Path.Combine(folder, HarnessMarker.Directory));
+            File.WriteAllBytes(HarnessMarker.PathIn(folder), marker.Bytes());
+        }
+
+        File.WriteAllText(Path.Combine(campaign, "AGENTS.md"), "Write to them plainly.\n");
+        var before = Snapshot(dir.Paths.Root, except: "\0");
+        var output = new StringWriter();
+        var remover = new RecordingRemover { ReallyRemoves = true };
+
+        var exit = await UninstallCommand.RunAsync(
+            Machine(dir, output, remover),
+            new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+            Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.UninstallRefused, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("nothing has been removed", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("harness root", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+        Assert.Empty(remover.Reads);
+        Assert.Equal(before, Snapshot(dir.Paths.Root, except: "\0"));
+    }
+
+    /// <summary>
+    /// Wherever the root stands from the data directory, the purge takes nothing under it: a data directory that is a
+    /// folder of the person's own inside a campaign's, one with the root two folders down in a folder the purge removes
+    /// whole, and one whose project folders' markers another program holds open. Each purge exited 0, said it completed,
+    /// and removed the person's files; each is refused, says so, and leaves every file under the root as it was.
+    /// </summary>
+    [Theory]
+    [InlineData("inside a campaign's folder")]
+    [InlineData("the root two folders down")]
+    [InlineData("a marker held open")]
+    public async Task A_purge_never_reaches_under_the_harness_root_wherever_it_stands(string arrangement)
+    {
+        using var dir = new TempPaths();
+        var top = Path.Combine(dir.Paths.Root, "top");
+        string data;
+        string held;
+        switch (arrangement)
+        {
+            case "inside a campaign's folder":
+                var campaign = Path.Combine(top, "Jason", "projects", "acme", "campaigns", "q4");
+                Mark(Path.Combine(top, "Jason"), new HarnessMarker(HarnessMarker.Root, null));
+                Mark(Path.Combine(top, "Jason", "projects", "acme"), new HarnessMarker(HarnessMarker.Project, "prj_01JB0000000000000000000000"));
+                Mark(campaign, new HarnessMarker(HarnessMarker.Campaign, "cmp_01JB0000000000000000000000"));
+                data = Path.Combine(campaign, "research");
+                Write(Path.Combine(data, "logs", "call-notes.txt"), "Called Marta at example.com on Tuesday.\n");
+                held = string.Empty;
+                break;
+            case "the root two folders down":
+                data = Path.Combine(top, "Sales");
+                Mark(Path.Combine(data, "work", "Jason"), new HarnessMarker(HarnessMarker.Root, null));
+                Write(Path.Combine(data, "work", "Jason", "AGENTS.md"), "We sell widgets.\n");
+                held = string.Empty;
+                break;
+            default:
+                data = Path.Combine(top, "Jason", "projects");
+                held = Path.Combine(data, "a-first");
+                Mark(held, new HarnessMarker(HarnessMarker.Project, "prj_01JB0000000000000000000001"));
+                Mark(Path.Combine(data, "logs"), new HarnessMarker(HarnessMarker.Project, "prj_01JB0000000000000000000002"));
+                Write(Path.Combine(data, "logs", "AGENTS.md"), "The Logs project's words.\n");
+                break;
+        }
+
+        var before = Snapshot(top, except: "\0");
+        var output = new StringWriter();
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        var env = Machine(dir, output, remover) with { Paths = new Contracts.Discovery.JasonPaths(data) };
+
+        int exit;
+        using (held.Length > 0 ? new FileStream(HarnessMarker.PathIn(held), FileMode.Open, FileAccess.Read, FileShare.None) : null)
+        {
+            exit = await UninstallCommand.RunAsync(
+                env,
+                new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+                Ct);
+        }
+
+        Assert.True(exit == ExitCodes.ApiError, $"{arrangement}: the purge of '{data}' exited {exit}: {output}");
+        Assert.Contains(CliErrors.UninstallRefused, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("nothing has been removed", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("harness root", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+        Assert.Equal(before, Snapshot(top, except: "\0"));
+    }
+
+    /// <summary>
+    /// A purge that cannot see all of what it would remove does not begin: a folder in <c>work/</c> closed to this account's
+    /// listing refuses it, and nothing at all is removed — the logs beside it included, which the purge could have taken.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_with_a_folder_it_cannot_enter_is_refused_and_removes_nothing()
+    {
+        Assert.SkipWhen(!OperatingSystem.IsWindows() && Environment.IsPrivilegedProcess, "a privileged account lists any folder, so none can be closed to it.");
+
+        using var dir = new TempPaths();
+        Plant(dir);
+        var logged = Path.Combine(dir.Paths.LogsDirectory, "runtime-20261023.jsonl");
+        Write(logged, "{}\n");
+        var closed = Path.Combine(dir.Paths.Root, "work", "wi_01JB0000000000000000000000");
+        Directory.CreateDirectory(Path.Combine(closed, "inside"));
+        var output = new StringWriter();
+        var remover = new RecordingRemover { ReallyRemoves = true };
+
+        int exit;
+        using (DataDirectoryBeltTests.Unlistable(closed))
+        {
+            exit = await UninstallCommand.RunAsync(
+                Machine(dir, output, remover),
+                new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+                Ct);
+        }
+
+        Assert.True(exit == ExitCodes.ApiError, $"the purge with '{closed}' closed to it exited {exit}: {output}");
+        Assert.Contains(CliErrors.UninstallRefused, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("nothing has been removed", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("could not be looked through", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+        Assert.True(File.Exists(logged) && File.Exists(dir.Paths.UserSettingsFile), $"the refused purge removed '{logged}' or the settings.");
+    }
+
+    private static void Mark(string folder, HarnessMarker marker)
+    {
+        Directory.CreateDirectory(Path.Combine(folder, HarnessMarker.Directory));
+        File.WriteAllBytes(HarnessMarker.PathIn(folder), marker.Bytes());
+    }
+
+    private static void Write(string path, string text)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, text);
     }
 
     /// <summary>

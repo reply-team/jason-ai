@@ -255,6 +255,16 @@ public sealed partial class InstallNoticesTests : IDisposable
 
         public string Home { get; }
 
+        /// <summary>What <c>install.sh</c> is told its home is: <see cref="Home"/>, unless a row spells it another way.</summary>
+        public string HomeVariable { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The harness root's default as the runtime makes it, <c>Jason</c> in the home: the test's own home for
+        /// <c>install.sh</c>, and for <c>install.ps1</c> the account's, which Windows reads from the account's profile rather
+        /// than from a variable a test could hand the script.
+        /// </summary>
+        public string DefaultRoot => Path.Combine(Windows ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : Home, "Jason");
+
         public bool Windows => Script == Ps1;
 
         public string ExecutableName => Windows ? "jason.exe" : "jason";
@@ -369,8 +379,29 @@ public sealed partial class InstallNoticesTests : IDisposable
             string[] path = modifyPath ? [] : ["--no-modify-path"];
             return RunToEnd(
                 "/bin/sh",
-                new Dictionary<string, string> { ["HOME"] = Home },
+                new Dictionary<string, string> { ["HOME"] = HomeVariable.Length > 0 ? HomeVariable : Home },
                 [script, "--feed", feed, "--install-dir", InstallDir, .. path, .. arguments]);
+        }
+
+        /// <summary>
+        /// <c>install.ps1</c>, run as <see cref="Run(string, string[])"/> runs it but by the Windows PowerShell 5.1 every
+        /// Windows carries, which is what a fresh Windows has and what the one-liner is typed into.
+        /// </summary>
+        public (int Exit, string Stdout, string Stderr) RunUnderWindowsPowerShell(string feed)
+        {
+            Assert.True(Windows, "Windows PowerShell runs install.ps1 only.");
+
+            // A test run from PowerShell 7, as CI's is, hands its children PowerShell 7's module path, and Windows PowerShell
+            // started under it finds no Expand-Archive of its own. One started from Windows has the machine's.
+            return RunToEnd(
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+                new Dictionary<string, string>
+                {
+                    ["LOCALAPPDATA"] = _tree.Root,
+                    ["POWERSHELL_TELEMETRY_OPTOUT"] = "1",
+                    ["PSModulePath"] = Environment.GetEnvironmentVariable("PSModulePath", EnvironmentVariableTarget.Machine) ?? string.Empty,
+                },
+                ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(RepositoryRoot(), "install", Script), "-InstallDir", InstallDir, "-NoModifyPath", "-Feed", feed]);
         }
 
         /// <summary>The executable a release of <paramref name="version"/> would hold, as far as the scripts can tell.</summary>

@@ -711,6 +711,9 @@ public sealed class DoctorCommandTests
         Assert.Contains("Inbound:LookbackSeconds (a 32-bit integer)", help, StringComparison.Ordinal);
         Assert.All(DoctorComposer.NeverCarried, item => Assert.Contains(item, help, StringComparison.Ordinal));
 
+        // What the root is in a bundle: the runtime's report of it, and nothing under it.
+        Assert.Contains("the harness root's path and state among it, as the runtime reports them, and nothing under the root", Flat(help), StringComparison.Ordinal);
+
         // The rewrites: the names, the unknown key, the exception text, the projected report.
         foreach (var mark in (string[])["~", "<data>", "<runtime_data>", "<user>", "<machine>", "<domain>", "<sid>", SettingKey.Hidden])
         {

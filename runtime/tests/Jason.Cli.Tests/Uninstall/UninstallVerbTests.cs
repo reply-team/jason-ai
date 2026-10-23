@@ -103,6 +103,33 @@ public class UninstallVerbTests
         Assert.Contains(published, System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " "), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The harness root is the person's — their memory files and every project's and campaign's folder — so the help page
+    /// names it among what is never touched, and says that the purge is no exception. Read with the line breaks made
+    /// spaces, since the sentence wraps.
+    /// </summary>
+    [Fact]
+    public async Task The_help_page_says_the_harness_root_is_never_touched_the_purge_included()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        var help = System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " ");
+        var never = help.IndexOf("Never touched:", StringComparison.Ordinal);
+        var root = help.IndexOf(
+            "And the harness root (Harness:Root, ~/Jason by default) with every folder and file in it, --purge-data included: the purge empties the data directory, never the root.",
+            StringComparison.Ordinal);
+        Assert.True(never >= 0 && root > never, $"The help page does not name the harness root among what is never touched:{Environment.NewLine}{output}");
+
+        // And a data directory that is one of its folders is refused, as the purge's belt refuses it.
+        Assert.Contains(
+            "is refused, and so is a folder of the harness root or one inside it, and one holding such a folder directly in it or anywhere in a folder the purge would delete, each known by its .jason/marker.json, or holding a folder there that cannot be looked into.",
+            help,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The wait the help page publishes is the remover's own, not a number written down beside it.</summary>
     [Fact]
     public async Task The_wait_the_help_page_publishes_is_the_removers_rule()

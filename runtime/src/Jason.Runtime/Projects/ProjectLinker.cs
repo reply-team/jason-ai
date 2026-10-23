@@ -313,7 +313,7 @@ public sealed class ProjectLinker(JasonDbContext db, JournalWriter journal, Harn
         }
 
         // Up from the path to the top of the file system, a marker per folder: bounded by the path's own depth.
-        for (var above = Path.GetDirectoryName(at); above is not null; above = Path.GetDirectoryName(above))
+        foreach (var above in FolderPaths.AndAbove(at).Skip(1))
         {
             if (MarkerAbove(above) is { Kind: HarnessMarker.Project or HarnessMarker.Campaign, Id: { } id } found)
             {

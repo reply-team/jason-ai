@@ -40,7 +40,7 @@ public static class WorkingFolder
     public static (string Folder, HarnessMarker Marker)? Nearest(string start)
     {
         ArgumentNullException.ThrowIfNull(start);
-        for (var folder = FolderPaths.Normal(start); folder is not null; folder = Path.GetDirectoryName(folder))
+        foreach (var folder in FolderPaths.AndAbove(start))
         {
             if (Read(folder) is { } marker)
             {

@@ -691,8 +691,9 @@ public static class DoctorCommand
                                its own listing: contents, values_carried, never_carried, projected and warnings.
               versions         the CLI, the runtime and its API, the operating system and .NET.
               status           the report 'jason status' composes, without --provider-cli, so no program is run.
-              runtime          what the runtime says about itself — system.info, projected as below — each plugin by
-                               its id, version, digest, status and problem codes, at most {DoctorComposer.MaxProblemCodes} codes a plugin
+              runtime          what the runtime says about itself — system.info, projected as below, the harness
+                               root's path and state among it, as the runtime reports them, and nothing under the
+                               root — each plugin by its id, version, digest, status and problem codes, at most {DoctorComposer.MaxProblemCodes} codes a plugin
                                (problem_codes_truncated where there were more) and an id, version or digest longer than
                                {DoctorComposer.MaxPluginText} characters written as {DoctorComposer.TooLong}, the list at most {Size(DoctorComposer.PluginsBytes)} in the
                                bundle, its first plugins kept and plugins_truncated past that; and data_dir_agrees, whether its data

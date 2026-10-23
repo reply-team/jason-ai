@@ -763,12 +763,15 @@ stopped first, and the plan an agent reads carries the same as `left_to`.
 **Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
 skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write; another
 account's logon registration; the notifications already in the notification center, which hold counts only and
-are the person's to dismiss.
+are the person's to dismiss; and the harness root with every folder and file in it, the person's memory files and
+every project's and campaign's folder ([projects](projects.md) §8), `--purge-data` included.
 **The data directory is kept** — §10 below says what is in it — unless `--purge-data` says otherwise, and in
 the machine shape that word has to be said in advance with `--yes`, because there is nobody there to be asked
 and a verb that blocked on an invisible question would hang for ever. With it, what Jason keeps in the data
 directory goes and anything else stays; a data directory that holds a file system's root, the profile, the
-temporary directory or the installation is refused before anything is removed.
+temporary directory or the installation is refused before anything is removed, and so is a folder of the harness
+root or one inside it, and one holding such a folder directly in it or anywhere in a folder the purge would delete,
+each known by its `.jason/marker.json`, or holding a folder there that cannot be looked into.
 
 It exits 0 when everything it set out to remove is gone, and 1 when it did not get there — it refused,
 something is still there, or it stopped part-way — and every step that did happen is listed either way.

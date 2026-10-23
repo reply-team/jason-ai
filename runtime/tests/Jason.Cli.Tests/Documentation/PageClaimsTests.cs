@@ -235,7 +235,10 @@ public partial class PageClaimsTests
             "which plugin performs which operation, here and per campaign, by plugin id and operation name — never which account a route binds",
             readme,
             StringComparison.Ordinal);
-        Assert.Contains("the database, plugin packages, or a route's account and its identity", readme, StringComparison.Ordinal);
+        Assert.Contains(
+            "the database, plugin packages, a route's account and its identity, or anything read from the folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only `--include-journal` adds",
+            readme,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -807,8 +810,8 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// A ready installation is not the end of what the person came for: the agent says it can work and asks once what
-    /// comes next — the wiring check, named for what it is, a synthetic walk that is not the real work, or the real work at
+    /// A ready installation is not the end of what the person came for: the agent says it can work, and where it will keep
+    /// the person's files, as the scripts say it to a person who ran them alone, and asks once what comes next — the wiring check, named for what it is, a synthetic walk that is not the real work, or the real work at
     /// once. A skip is the person's answer and is not asked again, and the real work begins with an invitation to tell
     /// about the first campaign in their own words. An agent that took the walk for the job, or offered it at every turn,
     /// would keep the person from the work they came for.
@@ -819,7 +822,7 @@ public partial class PageClaimsTests
         var agent = Flat(Agent());
 
         Assert.Contains(
-            "When `ready` is true, tell the person Jason is installed and can work, and ask them once what comes next: [the wiring check](golden-path.md) first, in this session, or their real work at once.",
+            "When `ready` is true, tell the person Jason is installed and can work and where it will keep their files — the two lines §2 shows, with the folder the `harness_root` check of `jason status` names, which is the one in force — and ask them once what comes next: [the wiring check](golden-path.md) first, in this session, or their real work at once.",
             agent,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1917,11 +1920,73 @@ public partial class PageClaimsTests
         Assert.Contains("`winget uninstall Reply.Jason`", section, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Where the install page says what the scripts do, it shows the two lines they print about where Jason will keep what
+    /// it learns, word for word as the scripts' runs are held to them, for a made-up account's home on Windows.
+    /// </summary>
+    [Fact]
+    public void The_install_page_shows_the_lines_the_scripts_print_about_the_files()
+    {
+        var install = Section(Page("docs", "INSTALL.md"), "## 2. ");
+        var does = install.IndexOf("Each script works out your platform", StringComparison.Ordinal);
+        var lines = install.IndexOf(
+            "```text\n" + HarnessRootLines.Where(@"C:\Users\Marta\Jason") + "\n" + HarnessRootLines.DefaultProject + "\n```\n",
+            StringComparison.Ordinal);
+        var held = install.IndexOf("On Windows, `install.ps1` waits", StringComparison.Ordinal);
+
+        Assert.True(does >= 0 && lines > does && held > lines, $"§2 does not show, after what each script does and before what install.ps1 waits for, the two lines the scripts print (at {does}, {lines}, {held}).");
+    }
+
+    /// <summary>
+    /// And it says what the lines leave unsaid: where the folder is elsewhere and which one is in force, that the install
+    /// makes none, what each level gets — the marker, the memory file and the file Claude Code reads beside it — how a
+    /// folder already there is taken and when it is not, that the setting before the first create is all it takes and a
+    /// folder moved later is recorded again, and that <c>git</c> in it is the person's act, never Jason's.
+    /// </summary>
+    [Theory]
+    [InlineData("That folder, the harness root, is `Jason` in your home directory — `/home/marta/Jason` on Linux, `/Users/marta/Jason` on macOS — unless `Harness:Root` in `~/.jason/config/settings.json` names another;")]
+    [InlineData("a script cannot know what the runtime makes of its settings, so it says \"by default\", and `jason status` names the root in force.")]
+    [InlineData("The install makes no folder there. The runtime makes the root the first time a project or a campaign is created,")]
+    [InlineData("each with the marker that makes it Jason's, `.jason/marker.json`, an empty `AGENTS.md` for your own words, and one line, `@AGENTS.md`, in the file Claude Code reads (`~/Jason/CLAUDE.md` at the root), so that it reads them too;")]
+    [InlineData("a `Jason` folder already there is taken as the root then, its marker written and nothing it holds changed, unless it is marked as something else, which `jason status` reports.")]
+    [InlineData("`Harness:Root` set before that first create is all it takes. A folder you move later is recorded again with `jason project link`, the root's once `Harness:Root` names where it is now.")]
+    [InlineData("Jason never writes a word of those memory files, never runs `git` there and never writes a `.gitignore`.")]
+    [InlineData("`git init` in the root is yours to run: it gives the folder a history, and lets Codex — which reads the `AGENTS.md` files from the top of a repository down to the folder it starts in — read the root's and the project's with a campaign's.")]
+    public void The_install_page_says_where_the_root_is_that_install_makes_none_and_that_git_is_the_person_s(string sentence) =>
+        Assert.Contains(sentence, Flat(Section(Page("docs", "INSTALL.md"), "## 2. ")), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The install page's section on taking Jason off names the harness root among what is never touched, the purge
+    /// included, and among the data directories the purge refuses.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_an_uninstall_never_touches_the_harness_root()
+    {
+        var section = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
+
+        Assert.Contains(
+            "and none of the notifications already in the notification center. Nor is anything under the harness root (§2) — your memory files and every project's and campaign's folder — whatever `--purge-data` says.",
+            section,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "or a folder of the harness root, one inside it, or one holding such a folder directly in it or anywhere in a folder the purge would delete, known by its `.jason/marker.json`, or holding a folder there that cannot be looked into, which a stray `JASON_DATA_DIR` can name — is refused before anything is removed.",
+            section,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>And so does the README's account of taking it off.</summary>
+    [Fact]
+    public void The_readme_says_an_uninstall_never_touches_the_folder_of_the_person_s_files() =>
+        Assert.Contains(
+            "The folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — is never touched, `--purge-data` included: it is yours.",
+            Flat(Page("README.md")),
+            StringComparison.Ordinal);
+
     /// <summary>The digest of the README's prompt.</summary>
     private const string PromptDigest = "sha256:177e63a43f8718c03aa20301d3c8fb7ca3c515b902fe71cbf232080256012720";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:b14dec83d891e16bcffaae1ad16e1b059ea1400ff92eec259c1d27a4b6f8a058";
+    private const string AgentSectionDigest = "sha256:3e2b21971398ee3fa53a79a7d2c8599bb61fe2be8258c7f94afeec930b1e6edf";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:c75395eeb75839aeeee9b296b13bae58a0f038c14646e18d28d5b967bc15d9e3";
