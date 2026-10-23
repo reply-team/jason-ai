@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Json;
 using Jason.Runtime.Notes;
+using Jason.Runtime.Tests.Json;
 
 namespace Jason.Runtime.Tests.Notes;
 
@@ -18,7 +20,8 @@ public class RoleNoteHostileInputTests
     /// <summary>
     /// The cap is measured on the canonical form, so the two sides of it are computable and the test computes
     /// them: one byte under is a note, one byte over is refused. Measured rather than approximated, because a
-    /// role that is told "too large" has to be able to make its note smaller and know when it has.
+    /// role that is told "too large" has to be able to make its note smaller and know when it has — and the
+    /// refusal says by how much, naming the note's size beside the cap.
     /// </summary>
     [Fact]
     public async Task A_note_is_taken_up_to_the_cap_and_refused_one_byte_past_it()
@@ -26,11 +29,12 @@ public class RoleNoteHostileInputTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var campaign = await RoleNoteTests.NewCampaignAsync(api);
 
-        // {"filler":"…"} — two braces, the quoted key, the colon and two quotes around the value.
-        const int Overhead = 13;
         var exact = await api.PostOkAsync<RoleNoteDto>(
             Operations.RoleNoteSet, Body(campaign, "researcher", Filler(RoleNoteService.MaxNoteBytes - Overhead)), Ct);
         Assert.Equal(RoleNoteService.MaxNoteBytes, exact.NoteBytes);
+
+        // In plain ASCII nothing is escaped, so the size is the number the escaped form gave before.
+        Assert.Equal(CanonicalJson.Measure(Filler(RoleNoteService.MaxNoteBytes - Overhead))!.Value.Bytes, exact.NoteBytes);
 
         var error = await api.PostErrorAsync(
             Operations.RoleNoteSet,
@@ -41,6 +45,7 @@ public class RoleNoteHostileInputTests
         Assert.Equal("role_note_too_large", error.Code);
         Assert.False(error.Retryable);
         Assert.Contains(RoleNoteService.MaxNoteBytes.ToString(CultureInfo.InvariantCulture), error.Message, StringComparison.Ordinal);
+        Assert.Contains((RoleNoteService.MaxNoteBytes + 1).ToString(CultureInfo.InvariantCulture), error.Message, StringComparison.Ordinal);
 
         // The refusal wrote nothing: the note that was there is the note that is there.
         var held = await RoleNoteTests.GetAsync(api, campaign, "researcher");
@@ -48,33 +53,74 @@ public class RoleNoteHostileInputTests
     }
 
     /// <summary>
-    /// The cap counts the canonical form's bytes, and that form escapes everything outside ASCII — six bytes
-    /// for a character that UTF-8 spells in two. A role writing in Cyrillic, Greek or Japanese therefore gets
-    /// roughly a third of the characters the figure suggests, and is refused while its note is a quarter of
-    /// 64 KiB as a file. That is a fact about the one canonical form this runtime names everything by — a
-    /// report's assertion and a route's binding are hashed in the same one — so it is documented rather than
-    /// special-cased here, and pinned here so the documentation cannot quietly become false.
+    /// The cap counts the canonical form in UTF-8, so a character costs what UTF-8 spells it in — two bytes for a
+    /// letter of Cyrillic, Greek or Hebrew — rather than the six of its escape: a role writing in another script
+    /// gets the characters the figure suggests for that script, up to the last byte, and the refusal past it
+    /// names the note's size.
     /// </summary>
     [Fact]
-    public async Task A_note_outside_ascii_is_measured_on_its_escaped_form()
+    [Critical(Family.X1, "a cap counts UTF-8, not escapes")]
+    public async Task A_note_outside_ascii_is_measured_in_utf8_up_to_the_cap()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var campaign = await RoleNoteTests.NewCampaignAsync(api);
-        const int Overhead = 13;
         const char Cyrillic = 'д';
 
-        // 10,000 characters: 20,000 bytes as UTF-8, 60,000 as the escaped form the cap is measured on.
+        // 12,000 characters: 24,000 bytes of UTF-8, where the escaped form counted 72,000 and refused them.
         var written = await api.PostOkAsync<RoleNoteDto>(
-            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(10_000, Cyrillic)), Ct);
-        Assert.Equal((6 * 10_000) + Overhead, written.NoteBytes);
+            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(12_000, Cyrillic)), Ct);
+        Assert.Equal((2 * 12_000) + Overhead, written.NoteBytes);
 
-        // And so 12,000 of them — 24 KiB of text by any file manager's count — is past a 64 KiB cap.
+        // Up to the cap exactly: 32,761 letters of two bytes and one of one.
+        var letters = (RoleNoteService.MaxNoteBytes - Overhead) / 2;
+        var exact = await api.PostOkAsync<RoleNoteDto>(
+            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(new string(Cyrillic, letters) + "x")), Ct);
+        Assert.Equal(RoleNoteService.MaxNoteBytes, exact.NoteBytes);
+
+        // And one letter more is a byte past it, said as such.
         var error = await api.PostErrorAsync(
-            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(12_000, Cyrillic)), HttpStatusCode.BadRequest, Ct);
+            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(letters + 1, Cyrillic)), HttpStatusCode.BadRequest, Ct);
         Assert.Equal("role_note_too_large", error.Code);
+        Assert.Contains((RoleNoteService.MaxNoteBytes + 1).ToString(CultureInfo.InvariantCulture), error.Message, StringComparison.Ordinal);
+        Assert.Equal(exact.NoteHash, (await RoleNoteTests.GetAsync(api, campaign, "researcher")).NoteHash);
+    }
 
-        // The receipt is what a role has to steer by: the number it reports is the number the cap compares.
-        Assert.True(written.NoteBytes < RoleNoteService.MaxNoteBytes);
+    /// <summary>
+    /// A character outside the Basic Multilingual Plane costs four bytes rather than the twelve of its escape: a note of
+    /// them alone holds a quarter of the cap's bytes in characters, to the last byte.
+    /// </summary>
+    [Fact]
+    public async Task A_note_outside_the_basic_multilingual_plane_is_four_bytes_a_character()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await RoleNoteTests.NewCampaignAsync(api);
+        const string Clef = "\U0001D11E";
+        var characters = (RoleNoteService.MaxNoteBytes - Overhead) / 4;
+        var rest = new string('x', (RoleNoteService.MaxNoteBytes - Overhead) % 4);
+
+        var exact = await api.PostOkAsync<RoleNoteDto>(
+            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(string.Concat(Enumerable.Repeat(Clef, characters)) + rest)), Ct);
+        Assert.Equal((4 * characters) + rest.Length + Overhead, exact.NoteBytes);
+        Assert.Equal(RoleNoteService.MaxNoteBytes, exact.NoteBytes);
+
+        var error = await api.PostErrorAsync(
+            Operations.RoleNoteSet,
+            Body(campaign, "researcher", Filler(string.Concat(Enumerable.Repeat(Clef, characters)) + rest + "x")),
+            HttpStatusCode.BadRequest,
+            Ct);
+        Assert.Equal("role_note_too_large", error.Code);
+    }
+
+    /// <summary>The name of a note outside ASCII is the hash of its escaped form, as it was before sizes were counted in UTF-8.</summary>
+    [Fact]
+    public async Task A_note_outside_ascii_keeps_the_hash_of_its_escaped_form()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await RoleNoteTests.NewCampaignAsync(api);
+
+        var written = await api.PostOkAsync<RoleNoteDto>(Operations.RoleNoteSet, Body(campaign, "researcher", CanonicalJsonTests.Pinned()), Ct);
+
+        Assert.Equal((CanonicalJsonTests.PinnedHash, CanonicalJsonTests.PinnedUtf8Bytes), (written.NoteHash, written.NoteBytes));
     }
 
     /// <summary>A note past the cap several times over is the same refusal, and the runtime still answers.</summary>
@@ -248,7 +294,12 @@ public class RoleNoteHostileInputTests
         Assert.Equal("validation_failed", error.Code);
     }
 
-    private static JsonObject Filler(int length, char character = 'x') => new() { ["filler"] = new string(character, length) };
+    /// <summary><c>{"filler":"…"}</c> — two braces, the quoted key, the colon and two quotes around the value.</summary>
+    private const int Overhead = 13;
+
+    private static JsonObject Filler(int length, char character = 'x') => Filler(new string(character, length));
+
+    private static JsonObject Filler(string text) => new() { ["filler"] = text };
 
     private static JsonObject Body(string campaign, string role, JsonObject note) => new()
     {

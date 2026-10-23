@@ -88,10 +88,10 @@ public static class DomainErrors
 
     /// <summary>
     /// A note past the cap. Its own code rather than the campaign context's: a role reading the refusal has to
-    /// know which of the two documents it was writing is too big.
+    /// know which of the two documents it was writing is too big, and how much of it to take out.
     /// </summary>
-    public static InvalidRequestException RoleNoteTooLarge(int limitBytes) =>
-        new("role_note_too_large", string.Create(CultureInfo.InvariantCulture, $"A role note must serialize to at most {limitBytes} bytes."));
+    public static InvalidRequestException RoleNoteTooLarge(long sizeBytes, int limitBytes) =>
+        new("role_note_too_large", string.Create(CultureInfo.InvariantCulture, $"A role note is {sizeBytes} bytes of UTF-8 in its canonical form, and must be at most {limitBytes}."));
 
     public static ConflictException ProfileExists(string name) => new("profile_exists", $"An execution profile named '{name}' already exists.");
 

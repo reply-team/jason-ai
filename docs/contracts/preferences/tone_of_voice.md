@@ -33,11 +33,11 @@ from a message they like and then confirmed by them. It is kept once, so that a 
 - `examples` are up to three messages the person likes, with the recipient's details taken out before they are kept.
 
 A standing rule about what every message says — "always include one proof point" — is an instruction for the work
-rather than how the company sounds, and has no field here. A value is at most 64 KiB in its canonical form, which is its
-compact JSON with the keys sorted, in which every character outside ASCII is escaped at six bytes, and so are DEL and
-each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, while a character outside the Basic Multilingual Plane takes
-twelve; the `value_bytes` a preference reports is the number the cap compares. Two or three UTF-8 bytes become six:
-about ten thousand characters outside ASCII in all. A value its schema accepts can still be refused as too large.
+rather than how the company sounds, and has no field here. A value is at most 64 KiB of UTF-8 in its canonical form,
+which is its compact JSON with the keys sorted, counted with nothing escaped: a character costs what UTF-8 spells it
+in, one byte in ASCII, two in Cyrillic, three in most other scripts and four outside the Basic Multilingual Plane; the
+`value_bytes` a preference reports is the number the cap compares, once the value has been changed by this version. Every field at its longest comes to about 14.5 KB in
+English and at most about 29 KB in Cyrillic.
 
 ## Setting it
 
@@ -71,6 +71,10 @@ when, with the value's size and a hash of it — never the value itself.
 | `examples` | no | a list of at most 3; each text of 1 to 4000 characters |
 
 <!-- END GENERATED properties -->
+
+The whole value is also bounded by the store's cap of 64 KiB, measured in UTF-8 as above, and a value past it is
+refused as `too_large` with its size named; at the maxima above no value reaches it, since even four bytes for every
+character come to about 58 KB.
 
 The fixtures under [`../fixtures/preferences/tone_of_voice/`](../fixtures/preferences/tone_of_voice/) are run by the
 repository's tests against this document, so an example on this page and the schema cannot drift apart.

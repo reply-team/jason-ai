@@ -94,10 +94,10 @@ public partial class ExecutionProfileDocTests
             contract,
             StringComparison.Ordinal);
 
-        // And what that number counts. The canonical form escapes everything outside ASCII, so the figure alone
-        // is misleading by a factor of three to anybody writing in another script — and the page that gives the
-        // figure is where they will look after a refusal.
-        Assert.Contains("outside ASCII are escaped", contract, StringComparison.Ordinal);
+        // And what that number counts: UTF-8, not the escaped form the note is named by, which counted three times
+        // as much for anybody writing in another script — and the page that gives the figure is where they will
+        // look after a refusal.
+        Assert.Contains("UTF-8 bytes of the canonical form", contract, StringComparison.Ordinal);
         Assert.Contains("note_bytes", contract, StringComparison.Ordinal);
     }
 

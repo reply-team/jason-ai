@@ -75,13 +75,13 @@ public sealed class RoleNoteService(JasonDbContext db, JournalWriter journal, Ti
 
         var role = await RoleAsync(request.Role!, cancellationToken).ConfigureAwait(false);
 
-        // Measured and named in one pass over the canonical form, so the size the cap refuses is the size the
-        // chronicle reports and the hash two readers compute is the same hash.
+        // Measured in UTF-8 and named in one pass over the canonical form, so the size the cap refuses is the size
+        // the chronicle reports and the hash two readers compute is the same hash.
         var document = (JsonObject)request.Note!.DeepClone();
-        var measured = CanonicalJson.Measure(document)!.Value;
+        var measured = CanonicalJson.MeasureInUtf8(document)!.Value;
         if (measured.Bytes > MaxNoteBytes)
         {
-            throw DomainErrors.RoleNoteTooLarge(MaxNoteBytes);
+            throw DomainErrors.RoleNoteTooLarge(measured.Bytes, MaxNoteBytes);
         }
 
         var now = clock.GetUtcNow().UtcDateTime;

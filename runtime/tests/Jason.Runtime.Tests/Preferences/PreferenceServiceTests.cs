@@ -1,10 +1,14 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Preferences;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Json;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Preferences;
+using Jason.Runtime.Tests.Documentation;
+using Jason.Runtime.Tests.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Preferences;
@@ -28,7 +32,7 @@ public class PreferenceServiceTests
         using var database = new TestDatabase();
         using var db = database.Open();
         var value = Sender("Marta Quillfeather");
-        var measured = CanonicalJson.Measure(value)!.Value;
+        var measured = CanonicalJson.MeasureInUtf8(value)!.Value;
 
         var set = await NewService(db).SetAsync(new PreferenceSetRequest("sender.identity", value, Marta, "  the person's answer  "), Ct);
 
@@ -141,44 +145,52 @@ public class PreferenceServiceTests
         await NothingWrittenAsync(db);
     }
 
-    /// <summary>The cap is the role note's, over the same canonical form: a value the schema accepts can still be too large.</summary>
+    /// <summary>
+    /// The cap is the role note's, over the same measure: a value the schema accepts can still be too large, and the refusal
+    /// says how large it is in UTF-8 and what the cap is, so the person can see how much to take out.
+    /// </summary>
     [Fact]
-    public async Task A_value_past_64_KiB_in_its_canonical_form_is_refused()
+    public async Task A_value_past_64_KiB_of_utf8_is_refused_naming_its_size()
     {
         using var database = new TestDatabase();
         using var db = database.Open();
         var senders = new JsonArray();
         for (var index = 0; index < 20; index++)
         {
-            senders.Add(new JsonObject { ["name"] = "Marta", ["gender_forms"] = "feminine", ["details"] = new string('é', 2000) });
+            senders.Add(new JsonObject { ["name"] = "Marta", ["gender_forms"] = "feminine", ["details"] = new string('д', 2000) });
         }
 
         var value = new JsonObject { ["senders"] = senders };
-        Assert.True(CanonicalJson.Measure(value)!.Value.Bytes > 64 * 1024, "The value meant to be too large is not.");
+        var size = CanonicalJsonTests.Utf8SizeOf(value);
+        Assert.True(size > 64 * 1024, $"The value meant to be too large is {size} bytes.");
 
         var refused = await Assert.ThrowsAsync<ValidationException>(() =>
             NewService(db).SetAsync(new PreferenceSetRequest("sender.identity", value, Marta, null), Ct));
 
-        Assert.Equal(["value/too_large"], refused.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
+        var detail = Assert.Single(refused.Details!);
+        Assert.Equal(("value", "too_large"), (detail.Field, detail.Code));
+        Assert.Contains(size.ToString(CultureInfo.InvariantCulture), detail.Message, StringComparison.Ordinal);
+        Assert.Contains("65536", detail.Message, StringComparison.Ordinal);
         await NothingWrittenAsync(db);
     }
 
-    /// <summary>The cap is inclusive: exactly 64 KiB of canonical form is kept, one byte more is refused and nothing is written.</summary>
+    /// <summary>The cap is inclusive: exactly 64 KiB of UTF-8 is kept, one byte more is refused and nothing is written.</summary>
     [Theory]
     [InlineData(0, true)]
     [InlineData(1, false)]
-    public async Task The_cap_is_exactly_64_KiB_of_canonical_form(int bytesOver, bool kept)
+    public async Task The_cap_is_exactly_64_KiB_of_utf8(int bytesOver, bool kept)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
         var target = (64 * 1024) + bytesOver;
-        var value = SenderValueOfCanonicalBytes(target);
-        var measured = CanonicalJson.Measure(value)!.Value.Bytes;
+        var value = SenderValueOfUtf8Bytes(target);
+        var measured = CanonicalJsonTests.Utf8SizeOf(value);
         Assert.True(measured == target, $"The value meant to be {target} bytes is {measured}.");
 
         if (kept)
         {
-            await NewService(db).SetAsync(new PreferenceSetRequest("sender.identity", value, Marta, null), Ct);
+            var set = await NewService(db).SetAsync(new PreferenceSetRequest("sender.identity", value, Marta, null), Ct);
+            Assert.Equal(target, set.ValueBytes);
             Assert.Single(await db.Preferences.AsNoTracking().ToListAsync(Ct));
             return;
         }
@@ -190,13 +202,13 @@ public class PreferenceServiceTests
         await NothingWrittenAsync(db);
     }
 
-    /// <summary>A sender value whose canonical form is exactly <paramref name="target"/> bytes: escaped letters (six bytes each) and plain ones (one) make up the last sender's details.</summary>
-    private static JsonObject SenderValueOfCanonicalBytes(int target)
+    /// <summary>A sender value of exactly <paramref name="target"/> bytes of UTF-8: letters of two bytes and of one make up the last sender's details.</summary>
+    private static JsonObject SenderValueOfUtf8Bytes(int target)
     {
         static JsonObject Value(string lastDetails)
         {
             var senders = new JsonArray();
-            for (var index = 0; index < 5; index++)
+            for (var index = 0; index < 16; index++)
             {
                 senders.Add(new JsonObject { ["name"] = "Marta", ["gender_forms"] = "feminine", ["details"] = new string('é', 2000) });
             }
@@ -205,9 +217,96 @@ public class PreferenceServiceTests
             return new JsonObject { ["senders"] = senders };
         }
 
-        var missing = (int)(target - CanonicalJson.Measure(Value(string.Empty))!.Value.Bytes);
-        return Value(new string('é', missing / 6) + new string('a', missing % 6));
+        var missing = (int)(target - CanonicalJsonTests.Utf8SizeOf(Value(string.Empty)));
+        return Value(new string('é', missing / 2) + new string('a', missing % 2));
     }
+
+    /// <summary>
+    /// The published value of every field at its longest, in Cyrillic, is kept: its escaped form is past the cap, and its
+    /// UTF-8 is well under it, so the same words are not refused in Russian where their English twin passes. The size the
+    /// value answers with, and the chronicle says, is that UTF-8.
+    /// </summary>
+    [Fact]
+    [Critical(Family.X1, "a cap counts UTF-8, not escapes")]
+    public async Task The_longest_tone_of_voice_in_cyrillic_is_kept_and_measured_in_utf8()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(Path.Combine(
+            Publication.RepositoryRoot(), "docs", "contracts", "fixtures", "preferences", "tone_of_voice", "value-every-field-at-its-longest-in-cyrillic.json")))!;
+        var value = (JsonObject)fixture["value"]!;
+        Assert.Equal(
+            (2000, 200, 200, "4000 4000 4000"),
+            (Characters(value["summary"]), Characters(value["greeting"]), Characters(value["sign_off"]), string.Join(' ', value["examples"]!.AsArray().Select(Characters))));
+        var escaped = CanonicalJson.Measure(value)!.Value.Bytes;
+        Assert.True(escaped > PreferenceContract.MaxValueBytes, $"The escaped form of the longest Cyrillic tone is only {escaped} bytes.");
+
+        var set = await NewService(db).SetAsync(new PreferenceSetRequest("tone_of_voice", value, Marta, null), Ct);
+
+        var size = CanonicalJsonTests.Utf8SizeOf(value);
+        Assert.Equal(size, set.ValueBytes);
+        Assert.True(size < PreferenceContract.MaxValueBytes / 2, $"The longest Cyrillic tone is {size} bytes of UTF-8.");
+        var line = Assert.Single(await db.Journal.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal($$"""{"bytes":{{size}},"hash":"{{set.ValueHash}}"}""", line.New!.ToJsonString());
+    }
+
+    /// <summary>In plain ASCII nothing is escaped, so a value's size is the number the escaped form gave before.</summary>
+    [Fact]
+    public async Task A_value_in_plain_ascii_measures_what_its_escaped_form_did()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var value = LongestTone("x");
+
+        var set = await NewService(db).SetAsync(new PreferenceSetRequest("tone_of_voice", value, Marta, null), Ct);
+
+        Assert.Equal(CanonicalJson.Measure(value)!.Value.Bytes, set.ValueBytes);
+    }
+
+    /// <summary>
+    /// A character outside the Basic Multilingual Plane costs four bytes, three more than an ASCII letter in the same place,
+    /// rather than the twelve of its escape — the most UTF-8 spends on one — so every field at its longest in such
+    /// characters is the largest value the schema accepts, and it is still under the cap.
+    /// </summary>
+    [Fact]
+    public async Task The_longest_tone_of_voice_outside_the_basic_multilingual_plane_is_four_bytes_a_character()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        const int Letters = 2000 + 200 + 200 + (3 * 4000);
+        var value = LongestTone("\U0001D11E");
+
+        var set = await NewService(db).SetAsync(new PreferenceSetRequest("tone_of_voice", value, Marta, null), Ct);
+
+        Assert.Equal(CanonicalJson.Measure(LongestTone("x"))!.Value.Bytes + (3 * Letters), set.ValueBytes);
+    }
+
+    /// <summary>The name of a value outside ASCII is the hash of its escaped form, as it was before sizes were counted in UTF-8.</summary>
+    [Fact]
+    public async Task A_value_outside_ascii_keeps_the_hash_of_its_escaped_form()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+
+        var set = await NewService(db).SetAsync(new PreferenceSetRequest("tone_of_voice", CanonicalJsonTests.Pinned(), Marta, null), Ct);
+
+        Assert.Equal((CanonicalJsonTests.PinnedHash, CanonicalJsonTests.PinnedUtf8Bytes), (set.ValueHash, set.ValueBytes!.Value));
+        var row = await db.Preferences.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((CanonicalJsonTests.PinnedHash, CanonicalJsonTests.PinnedUtf8Bytes), (row.ValueHash, row.ValueBytes));
+    }
+
+    /// <summary>A tone of voice with every field at its longest, each written in <paramref name="letter"/>.</summary>
+    private static JsonObject LongestTone(string letter) => new()
+    {
+        ["summary"] = string.Concat(Enumerable.Repeat(letter, 2000)),
+        ["formality"] = "informal",
+        ["greeting"] = string.Concat(Enumerable.Repeat(letter, 200)),
+        ["sign_off"] = string.Concat(Enumerable.Repeat(letter, 200)),
+        ["examples"] = new JsonArray([.. Enumerable.Range(0, 3).Select(_ => (JsonNode?)string.Concat(Enumerable.Repeat(letter, 4000)))]),
+    };
+
+    /// <summary>How many characters a string holds, as the schema counts them.</summary>
+    private static int Characters(JsonNode? text) => ((string)text!).EnumerateRunes().Count();
 
     [Theory]
     [InlineData(ActorType.Role, "copywriter")]

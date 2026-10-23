@@ -10,7 +10,7 @@ namespace Jason.Contracts.Api;
 /// <param name="Note">The document as it was last written, or an empty object where nothing has been.</param>
 /// <param name="NoteHash">Its canonical <c>sha256:</c>, so a reader can tell a note that changed from one that
 /// did not without carrying it around. Null until something has been written.</param>
-/// <param name="NoteBytes">The size of its canonical form, which is what the cap is measured against.</param>
+/// <param name="NoteBytes">The UTF-8 size of its canonical form, which is what the cap is measured against.</param>
 /// <param name="UpdatedBy">Who wrote it last, as they claimed to be. Null until something has been written.</param>
 public sealed record RoleNoteDto(
     string CampaignId,

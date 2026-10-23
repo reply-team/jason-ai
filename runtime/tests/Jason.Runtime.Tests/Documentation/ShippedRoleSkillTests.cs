@@ -118,9 +118,9 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("scratch file", skill, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("goes away with it", skill, StringComparison.OrdinalIgnoreCase);
 
-        // And what the cap really counts, which a role writing in another script would otherwise meet as a
-        // refusal naming a number three times what it thought it had written.
-        Assert.Contains("outside ASCII are escaped", skill, StringComparison.Ordinal);
+        // And what the cap really counts — UTF-8, as the file would — so a role writing in another script knows
+        // the figure is not its count of characters.
+        Assert.Contains("UTF-8 bytes of the canonical form", skill, StringComparison.Ordinal);
         Assert.Contains("note_bytes", skill, StringComparison.Ordinal);
     }
 

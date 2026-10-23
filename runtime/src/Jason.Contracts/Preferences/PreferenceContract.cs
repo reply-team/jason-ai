@@ -23,9 +23,9 @@ public sealed record PreferenceContract(string Key, int Version, string Summary,
     public const int MaxKeyLength = 64;
 
     /// <summary>
-    /// What one value may carry, measured over its canonical form as a role's note is: characters outside ASCII are
-    /// escaped there at six bytes, and so are DEL and each of <c>&lt;</c>, <c>&gt;</c>, <c>&amp;</c>, <c>'</c>, <c>"</c>, <c>+</c>
-    /// and the backtick, while a character outside the Basic Multilingual Plane takes twelve.
+    /// What one value may carry, measured as a role's note is: the UTF-8 bytes of its canonical form, with nothing escaped,
+    /// so a character costs what UTF-8 spells it in — one byte in ASCII, two or three in most scripts, four outside the
+    /// Basic Multilingual Plane. The schema bounds each field; this bounds the whole.
     /// </summary>
     public const int MaxValueBytes = 64 * 1024;
 

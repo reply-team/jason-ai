@@ -145,12 +145,15 @@ schema.
   value. A project or a campaign that needs another sender or another voice says so in its own words, never as a
   second value here.
 - **A key and its value.** A key is lower-case words of letters, digits and underscores, each starting with a letter,
-  joined by dots, at most 64 characters. A value is a JSON object the key's schema accepts, of at most 64 KiB in its
-  canonical form — measured as a role's note is, with every character outside ASCII escaped at six bytes, and so are DEL
-  and each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, while a character outside the Basic Multilingual Plane
-  takes twelve, so the size the cap refuses is the size the chronicle reports. A key's schema changes only by gaining an
-  optional field, which raises the document's version, so a skill reading the document knows which fields may be
-  present; anything else is a new key.
+  joined by dots, at most 64 characters. A value is a JSON object the key's schema accepts, of at most 64 KiB of UTF-8
+  — measured as a role's note is, as the UTF-8 bytes of its canonical form with nothing escaped, so a character costs
+  what UTF-8 spells it in, one byte in ASCII, two or three in most scripts and four outside the Basic Multilingual
+  Plane, and the size the cap refuses is the size the chronicle reports. A size written by an earlier version — in the
+  chronicle, or in the `value_bytes` of a value not changed since — counted the escaped form, in which every character
+  outside ASCII takes six bytes and one outside the Basic Multilingual Plane twelve; a chronicle line written now can so
+  carry an `old` size in that measure beside a `new` one in UTF-8. A key's schema changes only by
+  gaining an optional field, which raises the document's version, so a skill reading the document knows which fields
+  may be present; anything else is a new key.
 - **A person's word.** Only a person sets or unsets a preference, and the request names them, as a decision on an
   approval does: an actor that is not a person is refused as `preference_not_human`, and one that names nobody as
   `actor_required`. In the planner's session, on the person's answer, the session skill runs
@@ -159,11 +162,14 @@ schema.
 
 | Operation | Request | Answer and refusals |
 |---|---|---|
-| `preference.set` | `key`, `value`, `actor`, `reason?` | The preference. `validation_failed` on `key` when the catalog does not know it, naming the keys it does; on `value` when it is missing or not an object, at `value/<pointer>` for each problem the key's schema finds, and as `too_large` past the cap; `preference_not_human`; `actor_required`. The value a key already has — in whatever order its members were written — writes nothing. |
+| `preference.set` | `key`, `value`, `actor`, `reason?` | The preference. `validation_failed` on `key` when the catalog does not know it, naming the keys it does; on `value` when it is missing or not an object, at `value/<pointer>` for each problem the key's schema finds, and as `too_large` past the cap, naming the value's size and the cap; `preference_not_human`; `actor_required`. The value a key already has — in whatever order its members were written — writes nothing. |
 | `preference.unset` | `key`, `actor`, `reason?` | The same answer with `value` null and nothing said about it: the row is deleted, so the value is gone. A key that is not set writes nothing. The same refusals for the key and the actor. |
 | `preference.list` | `limit?`, `cursor?` | Every key the catalog knows, in key order, set or not, so a reader learns what is missing in the same call as what is there. |
 
-A preference answers as `key`, `value`, `value_hash` (the `sha256:` of the value's canonical form), `value_bytes`,
+A preference answers as `key`, `value`, `value_hash` (the `sha256:` of the value's canonical form as it is written, escaped as System.Text.Json's default
+encoder writes it: everything outside ASCII, DEL, the control characters and `<`, `>`, `&`, `'`, `"`, `+` and the backtick,
+each as `\u00XX`, twelve bytes for a character outside the Basic Multilingual Plane), `value_bytes` (its size in UTF-8,
+the number the cap compares once the value has been changed by this version),
 `created_at`, `updated_at` and `updated_by`; for a key that is not set, every field but the key is null. `unset` goes
 beyond setting and listing on purpose: the sender's identity is personal data, and a person must be able to take it
 back.

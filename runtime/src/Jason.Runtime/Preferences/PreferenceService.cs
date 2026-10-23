@@ -204,8 +204,8 @@ public sealed class PreferenceService(JasonDbContext db, JournalWriter journal, 
 
     /// <summary>
     /// A value is a JSON object the key's schema accepts, every problem said at its own pointer under <c>value</c>, and at
-    /// most <see cref="PreferenceContract.MaxValueBytes"/> in its canonical form — measured and named in one pass, so the
-    /// size the cap refuses is the size the chronicle reports.
+    /// most <see cref="PreferenceContract.MaxValueBytes"/> of UTF-8 in its canonical form — measured and named in one pass,
+    /// so the size the cap refuses is the size the chronicle reports, under the hash of the escaped form.
     /// </summary>
     private Checked? Value(PreferenceContract? contract, JsonNode? value, ValidationErrors errors)
     {
@@ -245,13 +245,13 @@ public sealed class PreferenceService(JasonDbContext db, JournalWriter journal, 
             return null;
         }
 
-        var measured = CanonicalJson.Measure(document)!.Value;
+        var measured = CanonicalJson.MeasureInUtf8(document)!.Value;
         if (measured.Bytes > PreferenceContract.MaxValueBytes)
         {
             errors.Add(
                 "value",
                 "too_large",
-                string.Create(CultureInfo.InvariantCulture, $"value must serialize to at most {PreferenceContract.MaxValueBytes} bytes."));
+                string.Create(CultureInfo.InvariantCulture, $"value is {measured.Bytes} bytes of UTF-8 in its canonical form, and must be at most {PreferenceContract.MaxValueBytes}."));
             return null;
         }
 

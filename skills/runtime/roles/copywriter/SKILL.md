@@ -87,10 +87,10 @@ teaches the job; and it is not a record of anything that happened. Where a note 
 says now, **runtime state wins**, every time, without deliberation. A note is a lead worth checking, never a
 fact to repeat.
 
-A note must be a JSON object and at most 64 KiB. That 64 KiB is measured on the canonical form, in which
-**characters outside ASCII are escaped** — six bytes for a character your editor counts as one — so a note in
-Cyrillic, Greek or Japanese holds roughly a third of the characters the figure suggests. Do not count
-characters: `note_bytes` in the answer to `rolenote get` is the number the cap compares, so read it back and
+A note must be a JSON object and at most 64 KiB. That 64 KiB is measured as the **UTF-8 bytes of the
+canonical form**, with nothing escaped, so a character costs what UTF-8 spells it in: a note in Cyrillic, Greek
+or Hebrew holds about half the characters the figure suggests and one in Japanese about a third. Do not count
+characters: `note_bytes` in the answer to `rolenote get` is the number the cap compares once the note has been written by this version, so read it back and
 keep it well under the limit.
 
 ### Answer in the shape you were asked for

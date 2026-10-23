@@ -49,11 +49,10 @@ should be written by somebody else names that sender by `name` or by one of thei
 - `details` is anything else a writer has to know to write as them.
 
 Which mailbox or account a message goes out from is not part of this value: that is the provider's account, chosen
-where the send is. A value is at most 64 KiB in its canonical form, which is its compact JSON with the keys sorted, in
-which every character outside ASCII is escaped at six bytes, and so are DEL and each of `<`, `>`, `&`, `'`, `"`, `+` and
-the backtick, while a character outside the Basic Multilingual Plane takes twelve; the `value_bytes` a preference
-reports is the number the cap compares. Two or three UTF-8 bytes become six: about ten thousand characters outside ASCII
-in all.
+where the send is. A value is at most 64 KiB of UTF-8 in its canonical form, which is its compact JSON with the keys
+sorted, counted with nothing escaped: a character costs what UTF-8 spells it in, one byte in ASCII, two in Cyrillic,
+three in most other scripts and four outside the Basic Multilingual Plane; the `value_bytes` a preference reports is
+the number the cap compares, once the value has been changed by this version.
 
 ## Setting it
 
@@ -92,6 +91,9 @@ take back.
 | `senders[].details` | no | text of at most 2000 characters |
 
 <!-- END GENERATED properties -->
+
+The whole value is also bounded by the store's cap of 64 KiB, measured in UTF-8 as above, and a value past it is
+refused as `too_large` with its size named: twenty senders with every field at its longest are past it even in ASCII.
 
 The fixtures under [`../fixtures/preferences/sender.identity/`](../fixtures/preferences/sender.identity/) are run by
 the repository's tests against this document, so an example on this page and the schema cannot drift apart.

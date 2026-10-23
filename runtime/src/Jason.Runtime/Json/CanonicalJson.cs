@@ -28,7 +28,17 @@ public static class CanonicalJson
     private static readonly JsonWriterOptions Canonical = new() { Indented = false, MaxDepth = MaxDepth };
 
     /// <summary>The canonical form of one document, and the two facts anybody needs about it.</summary>
-    public static CanonicalMeasure? Measure(JsonObject? document)
+    public static CanonicalMeasure? Measure(JsonObject? document) => Measure(document, inUtf8: false);
+
+    /// <summary>
+    /// The same form, named the same, and measured as the text it holds: its bytes in UTF-8 with nothing escaped, so a
+    /// character costs what UTF-8 spells it in — one byte in ASCII, two or three in most scripts, four outside the Basic
+    /// Multilingual Plane — rather than the six or twelve of its escape. The size a store's cap is compared with, so the
+    /// same words in Cyrillic are not refused where their English twin passes; never more than <see cref="Measure(JsonObject?)"/>.
+    /// </summary>
+    public static CanonicalMeasure? MeasureInUtf8(JsonObject? document) => Measure(document, inUtf8: true);
+
+    private static CanonicalMeasure? Measure(JsonObject? document, bool inUtf8)
     {
         if (document is null)
         {
@@ -41,9 +51,9 @@ public static class CanonicalJson
             Write(writer, document);
         }
 
-        var bytes = buffer.Length;
-        buffer.Position = 0;
-        return new CanonicalMeasure(bytes, $"{PackageDigest.Algorithm}:{Convert.ToHexStringLower(SHA256.HashData(buffer))}");
+        var form = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
+        var bytes = inUtf8 ? Utf8Length(form) : form.Length;
+        return new CanonicalMeasure(bytes, $"{PackageDigest.Algorithm}:{Convert.ToHexStringLower(SHA256.HashData(form))}");
     }
 
     /// <summary>What this document is called: the hash alone, for a caller that does not care how long it is.</summary>
@@ -51,6 +61,57 @@ public static class CanonicalJson
     {
         ArgumentNullException.ThrowIfNull(document);
         return Measure(document)!.Value.Hash;
+    }
+
+    /// <summary>
+    /// How long the escaped form is once every escape is counted as the UTF-8 of what it spells. Outside a string JSON
+    /// has no backslash, so each one starts an escape: <c>\uXXXX</c> for one UTF-16 unit, two of them for a character
+    /// outside the Basic Multilingual Plane, or a backslash and one letter. Every other byte is counted as itself. Half of
+    /// a surrogate pair, which only code can build, counts the three bytes UTF-8 writes in its place.
+    /// </summary>
+    private static long Utf8Length(ReadOnlySpan<byte> form)
+    {
+        long length = 0;
+        var at = 0;
+        while (at < form.Length)
+        {
+            if (form[at] != (byte)'\\' || at + 1 >= form.Length)
+            {
+                length++;
+                at++;
+            }
+            else if (!Unit(form, at, out var unit))
+            {
+                length++;
+                at += 2;
+            }
+            else if (char.IsHighSurrogate(unit) && Unit(form, at + 6, out var low) && char.IsLowSurrogate(low))
+            {
+                length += 4;
+                at += 12;
+            }
+            else
+            {
+                length += unit < 0x80 ? 1 : unit < 0x800 ? 2 : 3;
+                at += 6;
+            }
+        }
+
+        return length;
+    }
+
+    /// <summary>Whether a <c>\uXXXX</c> escape starts at <paramref name="at"/>, and the UTF-16 unit it spells.</summary>
+    private static bool Unit(ReadOnlySpan<byte> form, int at, out char unit)
+    {
+        unit = default;
+        if (at + 6 > form.Length || form[at] != (byte)'\\' || form[at + 1] != (byte)'u'
+            || !ushort.TryParse(form.Slice(at + 2, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value))
+        {
+            return false;
+        }
+
+        unit = (char)value;
+        return true;
     }
 
     /// <summary>
@@ -141,5 +202,8 @@ public static class CanonicalJson
     }
 }
 
-/// <summary>The canonical form of one document, measured and named in the same pass.</summary>
+/// <summary>
+/// The canonical form of one document, measured and named in the same pass: <see cref="Bytes"/> as the function that
+/// measured it counts them, escaped or in UTF-8, and <see cref="Hash"/> over the escaped form either way.
+/// </summary>
 public readonly record struct CanonicalMeasure(long Bytes, string Hash);

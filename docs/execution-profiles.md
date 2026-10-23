@@ -262,13 +262,17 @@ jason rolenote list <campaign-id> --human
   about what an earlier session of itself meant by a key, and the rule that needs no reasoning is that
   the last writer owns the document. Clearing a note is writing `{}`.
 - **A JSON object, at most 64 KiB** of its canonical form. A role that needs more than that is keeping
-  a record rather than a note. The measurement is the canonical form, in which **characters outside
-  ASCII are escaped** — six bytes for a character UTF-8 spells in two — so a note in Cyrillic, Greek
-  or Japanese holds roughly a third of the characters the figure suggests, and is refused while it is
-  still a quarter of 64 KiB as a file. The receipt's `note_bytes` is the number to steer by: it is the
-  number the cap compares. That form is the one this runtime names everything by — a report's
-  assertion and a route's binding are hashed in the same one — so it is a fact to know rather than a
-  rule of notes.
+  a record rather than a note. The measurement is the **UTF-8 bytes of the canonical form**, with
+  nothing escaped, so a character costs what UTF-8 spells it in: a note in Cyrillic, Greek or Hebrew
+  holds about half the characters the figure suggests and one in Japanese about a third, as it would
+  as a file. The receipt's `note_bytes` is the number to steer by: it is the number the cap compares,
+  and a refusal names the note's size beside the cap, once the note has been written by this version. A size
+  written by an earlier version — in the chronicle, or in the `note_bytes` of a note not written since — counted the
+  escaped form, in which every character outside ASCII, DEL, the controls and seven ASCII marks takes six bytes and one
+  outside the Basic Multilingual Plane twelve; a chronicle line written now can so carry an `old` size in that measure
+  beside a `new` one in UTF-8. The note's hash is still taken over the escaped form,
+  the one this runtime names everything by — a report's assertion and a route's binding are hashed in
+  the same one.
 - **A role that has never written reads an empty note**, with `updated_at: null`, rather than a 404.
   Reading its memory is the first thing a launched role does, and every role would otherwise carry the
   code that tells "nothing yet" from "something went wrong".
