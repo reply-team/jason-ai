@@ -8,6 +8,7 @@
         "contact_id": "cnt_1"
       }
     ],
+    "reason": "Back in scope.",
     "actor": {
       "type": "human",
       "id": "ada"

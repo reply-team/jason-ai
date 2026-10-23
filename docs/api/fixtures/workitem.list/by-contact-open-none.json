@@ -1,0 +1,20 @@
+{
+  "operation": "workitem.list",
+  "case": "by-contact-open-none",
+  "request": {
+    "contact_id": "cnt_2",
+    "status": [
+      "created",
+      "awaiting_approval",
+      "scheduled",
+      "processing"
+    ],
+    "order": "due",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

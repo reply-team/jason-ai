@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useApi } from '../../api/context';
+import { FiltersBar } from '../../layout/filters-bar';
+import { PeriodSwitch } from '../../layout/period-switch';
+import { Segmented } from '../../layout/segmented';
+import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
 import { ApprovalPanel } from '../attention/approval-panel';
 import { QuestionPanel } from '../attention/question-panel';
@@ -17,13 +21,14 @@ import {
 } from '../../router';
 import { AddPeopleDialog } from './add-dialog';
 import { Details } from './details';
-import { periods, views } from './labels';
+import { views } from './labels';
 import { CampaignPanel } from './panel';
 import { TransitionDialog } from './pause-dialog';
 import { CampaignPeople } from './people';
 import { CampaignTimeline } from './timeline';
 import * as store from './store';
 import { CampaignTable } from './table';
+import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -141,38 +146,27 @@ export function CampaignsScreen() {
     return (
         <div class={`main campaigns${selected ? '' : ' single'}`}>
             <div class="list">
-                <div class="toolbar">
-                    <h1>Campaigns</h1>
-                    <div class="segmented" role="group" aria-label="Show">
-                        {(['summary', 'activity'] as const).map((view) => (
-                            <button
-                                key={view}
-                                type="button"
-                                class={at.view === view ? 'on' : ''}
-                                aria-pressed={at.view === view}
-                                onClick={() => {
-                                    if (at.view !== view) reshape({ view });
-                                }}
-                            >
-                                {views[view]}
-                            </button>
-                        ))}
-                    </div>
-                    <span class="spacer" />
-                    <button
-                        class={`iconbtn${store.refreshing.value ? ' spin' : ''}`}
-                        type="button"
-                        title="Refresh"
-                        disabled={store.refreshing.value}
-                        onClick={() => {
+                <Toolbar
+                    title="Campaigns"
+                    refresh={{
+                        busy: store.refreshing.value,
+                        onRefresh: () => {
                             void store.refresh(api, table, new Date(), zone);
                             rereadPanel();
-                        }}
-                    >
-                        <span class="glyph">⟳</span>
-                    </button>
-                </div>
-                <div class="filters">
+                        },
+                    }}
+                >
+                    <Segmented
+                        label="Show"
+                        options={(['summary', 'activity'] as const).map((view) => ({
+                            value: view,
+                            label: views[view],
+                        }))}
+                        value={at.view}
+                        onChange={(view) => reshape({ view })}
+                    />
+                </Toolbar>
+                <FiltersBar>
                     <Search
                         value={at.filters.q ?? ''}
                         label="Find a campaign"
@@ -180,21 +174,7 @@ export function CampaignsScreen() {
                         onSearch={(q) => reshape({ filters: withValue(at.filters, 'q', q) })}
                     />
                     {at.view === 'activity' && (
-                        <div class="segmented" role="group" aria-label="Period">
-                            {(['today', '7d', '30d'] as const).map((period) => (
-                                <button
-                                    key={period}
-                                    type="button"
-                                    class={at.period === period ? 'on' : ''}
-                                    aria-pressed={at.period === period}
-                                    onClick={() => {
-                                        if (at.period !== period) reshape({ period });
-                                    }}
-                                >
-                                    {periods[period]}
-                                </button>
-                            ))}
-                        </div>
+                        <PeriodSwitch value={at.period} onChange={(period) => reshape({ period })} />
                     )}
                     <label class="check">
                         <input
@@ -212,22 +192,10 @@ export function CampaignsScreen() {
                         />
                         Archived
                     </label>
-                </div>
-                {store.notice.value && (
-                    <div class="notice" role="status">
-                        {store.notice.value}
-                    </div>
-                )}
-                {store.failure.value && (
-                    <div class="notice danger" role="alert">
-                        {store.failure.value}
-                    </div>
-                )}
-                {store.actionFailure.value && (
-                    <div class="notice danger" role="alert">
-                        {store.actionFailure.value}
-                    </div>
-                )}
+                </FiltersBar>
+                {store.notice.value && <Notice status>{store.notice.value}</Notice>}
+                {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
+                {store.actionFailure.value && <Notice danger>{store.actionFailure.value}</Notice>}
                 {ready && campaigns.length === 0 ? (
                     <div class="empty">{filtered ? 'No campaign matches.' : 'No campaigns yet.'}</div>
                 ) : (
@@ -289,11 +257,7 @@ export function CampaignsScreen() {
             )}
             {selected && !waiting && (
                 <div class="panel">
-                    {store.panelFailure.value && (
-                        <div class="notice danger" role="alert">
-                            {store.panelFailure.value}
-                        </div>
-                    )}
+                    {store.panelFailure.value && <Notice danger>{store.panelFailure.value}</Notice>}
                     {campaign && campaign.id === selected && (
                         <>
                             <CampaignPanel

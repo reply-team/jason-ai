@@ -1,9 +1,11 @@
 import { useEffect } from 'preact/hooks';
 import { useApi } from '../../api/context';
+import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
 import type { UiToken } from '../../api/types';
 import { clock, relative } from '../../time/format';
 import * as store from './store';
+import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -19,20 +21,13 @@ export function SystemScreen() {
     return (
         <div class="main single">
             <div class="list" style="border-right:0">
-                <div class="toolbar">
-                    <h1>System</h1>
-                    <span class="spacer" />
-                    <button class="iconbtn" type="button" title="Refresh" onClick={() => void store.load(api)}>
-                        ⟳
-                    </button>
-                </div>
-                {store.failure.value && (
-                    <div class="notice danger" role="alert">
-                        {store.failure.value}
-                    </div>
-                )}
+                <Toolbar
+                    title="System"
+                    refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api) }}
+                />
+                {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {info?.update?.available && (
-                    <div class="notice">
+                    <Notice>
                         Jason {info.update.version} is available. Update from a terminal with{' '}
                         <code>jason update apply</code>, or ask your agent.
                         {info.update.release_notes_url && (
@@ -43,7 +38,7 @@ export function SystemScreen() {
                                 </a>
                             </>
                         )}
-                    </div>
+                    </Notice>
                 )}
                 {info && (
                     <div class="sys">

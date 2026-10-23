@@ -1,0 +1,62 @@
+{
+  "operation": "contact.get",
+  "case": "unrouted",
+  "request": {
+    "contact_id": "cnt_3"
+  },
+  "status": 200,
+  "response": {
+    "id": "cnt_3",
+    "first_name": "Paula",
+    "last_name": "Mendes",
+    "company": "Vela",
+    "title": "Head of Ops",
+    "time_zone": "America/Sao_Paulo",
+    "channels": [
+      {
+        "channel": "email",
+        "value": "paula@vela.example",
+        "label": null,
+        "primary": true,
+        "data": null
+      }
+    ],
+    "custom": {},
+    "external_ids": [
+      {
+        "plugin_id": "reply",
+        "kind": "contact",
+        "value": "20441",
+        "recorded_at": "2026-10-06T00:00:00.000Z",
+        "recorded_by_attempt_id": "att_3"
+      }
+    ],
+    "created_at": "2026-10-01T00:00:00.000Z",
+    "updated_at": "2026-10-01T00:00:00.000Z",
+    "archived_at": null,
+    "campaigns": [],
+    "last_activity": {
+      "id": "jrn_3",
+      "ts": "2026-10-06T01:00:00.000Z",
+      "actor": {
+        "type": "system",
+        "id": "dispatcher"
+      },
+      "kind": "workitem_processing",
+      "campaign_id": "cmp_1",
+      "work_item_id": "wi_2",
+      "attempt_id": null,
+      "key": "attempt",
+      "old": null,
+      "new": 1,
+      "reason": null,
+      "contact_id": "cnt_3",
+      "campaign_name": "Re-engage Q2 no-replies",
+      "contact_name": "Paula Mendes",
+      "work_item_kind": "ai_role",
+      "work_item_role": "researcher",
+      "work_item_operation": null,
+      "actor_role": null
+    }
+  }
+}

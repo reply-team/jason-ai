@@ -1,0 +1,18 @@
+{
+  "operation": "workitem.list",
+  "case": "failed-on-17",
+  "request": {
+    "since": "2026-10-17T00:00:00.000Z",
+    "until": "2026-10-18T00:00:00.000Z",
+    "status": [
+      "failed"
+    ],
+    "order": "finished",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

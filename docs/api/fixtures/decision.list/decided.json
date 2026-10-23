@@ -1,0 +1,30 @@
+{
+  "operation": "decision.list",
+  "case": "decided",
+  "request": {
+    "statuses": [
+      "answered"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "dec_1",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "status": "answered",
+        "question": "Pause outreach to Vireo Labs until their funding news?",
+        "raised_at": "2026-10-15T12:00:00.000Z",
+        "answered_at": "2026-10-16T09:00:00.000Z",
+        "answered_by": {
+          "type": "human",
+          "id": "ada"
+        },
+        "campaign_name": "Autumn outreach",
+        "contact_name": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

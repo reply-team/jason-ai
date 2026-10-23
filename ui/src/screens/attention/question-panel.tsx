@@ -1,6 +1,8 @@
 import { useState } from 'preact/hooks';
 import type { Decision } from '../../api/types';
 import { relative } from '../../time/format';
+import { ActionsRow } from '../../layout/actions-row';
+import { PanelHeader } from '../../layout/panel-header';
 
 type Props = {
     decision: Decision;
@@ -31,17 +33,15 @@ export function QuestionPanel({
     const canAnswer = pending && !busy && (option !== null || text.trim().length > 0);
     return (
         <div class="panel">
-            <div class="panel-header">
-                <div class="heading">
-                    <h2>{decision.question}</h2>
-                    <div class="sub">
+            <PanelHeader
+                title={decision.question}
+                sub={
+                    <>
                         {decision.campaign_name} · asked {relative(new Date(decision.raised_at), now)}
-                    </div>
-                </div>
-                <button class="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
-                    ×
-                </button>
-            </div>
+                    </>
+                }
+                onClose={onClose}
+            />
             <div class="panel-body">
                 {decision.options && decision.options.length > 0 && (
                     <div class="section">
@@ -110,8 +110,8 @@ export function QuestionPanel({
                         />
                     </div>
                 )}
-                {pending && (
-                    <div class="panel-actions">
+                <ActionsRow>
+                    {pending && (
                         <button
                             class="btn primary"
                             type="button"
@@ -122,8 +122,8 @@ export function QuestionPanel({
                         >
                             Answer
                         </button>
-                    </div>
-                )}
+                    )}
+                </ActionsRow>
                 {decision.references && decision.references.length > 0 && (
                     <div class="section">
                         <h3>Read before deciding</h3>

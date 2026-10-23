@@ -1,0 +1,17 @@
+{
+  "operation": "workitem.count",
+  "case": "ada-now",
+  "request": {
+    "contact_id": "cnt_1",
+    "status": [
+      "processing",
+      "scheduled",
+      "awaiting_approval"
+    ],
+    "order": "created"
+  },
+  "status": 200,
+  "response": {
+    "total": 2
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "operation": "contact.thread",
+  "case": "next",
+  "request": {
+    "contact_id": "cnt_1",
+    "plugin_id": "reply",
+    "thread_id": "t_501",
+    "limit": 20,
+    "offset": 3
+  },
+  "status": 200,
+  "response": {
+    "plugin_id": "reply",
+    "thread": {
+      "external_id": "t_501",
+      "channel": "email",
+      "subject": "Re: Soluna's next quarter",
+      "contact": {
+        "external_id": "16786993",
+        "name": "Mateo Ruiz"
+      },
+      "campaign_external_id": "c_7714",
+      "unread": true,
+      "vendor": {
+        "category": null,
+        "has_ai_draft": false
+      }
+    },
+    "messages": [
+      {
+        "external_id": "<m4@mail.example.com>",
+        "direction": "inbound",
+        "sent_at": "2026-10-16T08:58:00.000Z",
+        "from": "mateo@soluna.example",
+        "to": [
+          "sdr@vendor.example"
+        ],
+        "cc": null,
+        "bcc": null,
+        "subject": "Re: Soluna's next quarter",
+        "body": "<p>Ten works. See you Thursday.</p>",
+        "truncated": false,
+        "vendor": {
+          "state": "ok",
+          "status_code": null,
+          "ai_sent_type": null
+        }
+      }
+    ],
+    "has_more": false
+  }
+}

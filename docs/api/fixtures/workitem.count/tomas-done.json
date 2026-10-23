@@ -1,0 +1,18 @@
+{
+  "operation": "workitem.count",
+  "case": "tomas-done",
+  "request": {
+    "contact_id": "cnt_3",
+    "status": [
+      "succeeded",
+      "failed",
+      "cancelled",
+      "expired"
+    ],
+    "order": "finished"
+  },
+  "status": 200,
+  "response": {
+    "total": 1
+  }
+}

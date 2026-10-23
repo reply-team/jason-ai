@@ -5,6 +5,8 @@ import { replace, type Route } from '../../router';
 import { when } from '../../time/format';
 import { displayName, entryLabel } from '../people/labels';
 import { activityColumns, atTheProvider, everyone, summaryColumns } from './labels';
+import { Notice } from '../../layout/notice';
+import { Chips } from '../../layout/chips';
 
 type At = Extract<Route, { screen: 'campaigns' }>;
 
@@ -23,8 +25,6 @@ type Props = {
     onSearch: (q: string) => void;
     onWaiting: (person: MembershipItem) => void;
 };
-
-const number = new Intl.NumberFormat('en-US');
 
 /** Why a person is in the count they were listed under, in the few words a row has room for. */
 function why(person: MembershipItem, filter: string | undefined, me: string, now: Date, zone: string): string | null {
@@ -97,38 +97,22 @@ export function CampaignPeople({
                 placeholder="Search people on this campaign"
                 onSearch={onSearch}
             />
-            <div class="pfilters">
-                <button
-                    type="button"
-                    title={everyone[at.view]}
-                    class={`chip${chosen === '' ? ' on' : ''}`}
-                    aria-pressed={chosen === ''}
-                    onClick={() => go({})}
-                >
-                    All{all !== null && <span class="n"> {number.format(all)}</span>}
-                </button>
-                {columns.map((column) => {
-                    const value = typeof row?.[column.key] === 'number' ? (row[column.key] as number) : null;
-                    return (
-                        <button
-                            key={column.key}
-                            type="button"
-                            title={column.hint}
-                            class={`chip${chosen === column.key ? ' on' : ''}`}
-                            aria-pressed={chosen === column.key}
-                            onClick={() => go({ filter: column.key })}
-                        >
-                            {column.label}
-                            {value !== null && <span class="n"> {number.format(value)}</span>}
-                        </button>
-                    );
-                })}
-            </div>
-            {failure && (
-                <div class="notice danger" role="alert">
-                    {failure}
-                </div>
-            )}
+            <Chips
+                label="Show"
+                row="filters"
+                chips={[
+                    { key: '', label: 'All', title: everyone[at.view], count: all },
+                    ...columns.map((column) => ({
+                        key: column.key,
+                        label: column.label,
+                        title: column.hint,
+                        count: typeof row?.[column.key] === 'number' ? (row[column.key] as number) : null,
+                    })),
+                ]}
+                on={chosen}
+                onChoose={(key) => go(key ? { filter: key } : {})}
+            />
+            {failure && <Notice danger>{failure}</Notice>}
             {people !== null && people.length === 0 && <div class="empty">Nobody here.</div>}
             <div class="rows">
                 {(people ?? []).map((person) => {

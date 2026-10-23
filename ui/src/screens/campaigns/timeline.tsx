@@ -10,6 +10,8 @@ import { entryLabel } from '../people/labels';
 import * as timeline from '../people/store';
 import { plannedNote, what } from '../workitems/labels';
 import * as store from './store';
+import { Notice } from '../../layout/notice';
+import { Chips } from '../../layout/chips';
 
 type Props = {
     campaign: Campaign;
@@ -95,24 +97,14 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
 
     return (
         <div class="timeline">
-            <div class="chips" role="group" aria-label="Show">
-                {chips.map(({ chip: each, label }) => (
-                    <button
-                        key={each}
-                        type="button"
-                        class={`chip${chip === each ? ' on' : ''}`}
-                        aria-pressed={chip === each}
-                        onClick={() => void timeline.loadTimeline(api, subject, each, false)}
-                    >
-                        {label}
-                    </button>
-                ))}
-            </div>
-            {timeline.timelineFailure.value && (
-                <div class="notice danger" role="alert">
-                    {timeline.timelineFailure.value}
-                </div>
-            )}
+            <Chips
+                label="Show"
+                row="timeline"
+                chips={chips.map(({ chip: each, label }) => ({ key: each, label }))}
+                on={chip}
+                onChoose={(each) => void timeline.loadTimeline(api, subject, each, false)}
+            />
+            {timeline.timelineFailure.value && <Notice danger>{timeline.timelineFailure.value}</Notice>}
             <div class="rows">
                 {planned.length > 0 && (
                     <div>

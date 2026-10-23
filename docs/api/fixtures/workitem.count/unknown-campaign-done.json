@@ -1,0 +1,23 @@
+{
+  "operation": "workitem.count",
+  "case": "unknown-campaign-done",
+  "request": {
+    "campaign_id": "cmp_3",
+    "contact_id": "cnt_1",
+    "status": [
+      "succeeded",
+      "failed",
+      "cancelled",
+      "expired"
+    ],
+    "order": "finished"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "campaign_not_found",
+      "message": "No campaign with id 'cmp_3'.",
+      "retryable": false
+    }
+  }
+}

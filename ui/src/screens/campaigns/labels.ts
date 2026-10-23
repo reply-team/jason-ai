@@ -1,4 +1,4 @@
-import type { CampaignView, Period } from '../../router';
+import type { CampaignView } from '../../router';
 
 /**
  * A count: the runtime's name for it, its one-word name, and its definition for the hover. One the table has no column
@@ -65,8 +65,6 @@ export const atTheProvider: readonly string[] = ['sequence', 'out'];
 export const unlinked = 'No sequence linked yet';
 
 export const views: Record<CampaignView, string> = { summary: 'Summary', activity: 'Activity' };
-
-export const periods: Record<Period, string> = { today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days' };
 
 /** The colour a non-zero count is shown in: what waits on the person, what failed, and who answered. */
 export const tone: Record<string, string> = { waiting: 'warn', failed: 'bad', replied: 'hot' };

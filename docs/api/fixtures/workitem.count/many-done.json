@@ -1,0 +1,17 @@
+{
+  "operation": "workitem.count",
+  "case": "many-done",
+  "request": {
+    "status": [
+      "succeeded",
+      "failed",
+      "cancelled",
+      "expired"
+    ],
+    "order": "finished"
+  },
+  "status": 200,
+  "response": {
+    "total": 0
+  }
+}

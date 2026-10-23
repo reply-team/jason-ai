@@ -144,7 +144,12 @@ describe('Campaigns', () => {
     it('a number opens the campaign’s people under that count, a zero opens nothing, and the rest of the row opens the campaign', async () => {
         const api = new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all');
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/summer')
+            .answer('campaign.get', 'campaign.get/summer')
+            .answer('workitem.list', 'workitem.list/summer-planned', 'workitem.list/summer-running')
+            .answer('approval.list', 'approval.list/summer-pending')
+            .answer('decision.list', 'decision.list/summer-pending')
+            .answer('journal.list', 'journal.list/summer');
         open(api);
         const spring = (await screen.findByText('Spring')).closest('tr')!;
 
@@ -162,6 +167,7 @@ describe('Campaigns', () => {
         fireEvent.click(within(summer).getAllByText('0')[0]!);
 
         expect(location.hash).toBe(within(summer).getByRole('link', { name: 'Summer referrals' }).getAttribute('href'));
+        await screen.findByRole('heading', { level: 2, name: 'Summer referrals' });
     });
 
     it('past a hundred campaigns, the table lists a hundred at a time and counts each page with it', async () => {

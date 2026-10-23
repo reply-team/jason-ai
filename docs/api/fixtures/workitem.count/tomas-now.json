@@ -1,0 +1,17 @@
+{
+  "operation": "workitem.count",
+  "case": "tomas-now",
+  "request": {
+    "contact_id": "cnt_3",
+    "status": [
+      "processing",
+      "scheduled",
+      "awaiting_approval"
+    ],
+    "order": "created"
+  },
+  "status": 200,
+  "response": {
+    "total": 0
+  }
+}

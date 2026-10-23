@@ -1,0 +1,18 @@
+{
+  "operation": "workitem.count",
+  "case": "ada-done",
+  "request": {
+    "contact_id": "cnt_1",
+    "status": [
+      "succeeded",
+      "failed",
+      "cancelled",
+      "expired"
+    ],
+    "order": "finished"
+  },
+  "status": 200,
+  "response": {
+    "total": 1
+  }
+}

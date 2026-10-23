@@ -9,6 +9,8 @@ import { plannedNote, what } from '../workitems/labels';
 import { displayName, entryLabel } from './labels';
 import { ThreadMessages } from './threads';
 import * as store from './store';
+import { Notice } from '../../layout/notice';
+import { Chips } from '../../layout/chips';
 
 type Props = { person: Contact; me: string; now: Date; zone: string };
 
@@ -124,24 +126,14 @@ export function Timeline({ person, me, now, zone }: Props) {
 
     return (
         <div class="timeline">
-            <div class="chips" role="group" aria-label="Show">
-                {chips.map(({ chip: each, label }) => (
-                    <button
-                        key={each}
-                        type="button"
-                        class={`chip${chip === each ? ' on' : ''}`}
-                        aria-pressed={chip === each}
-                        onClick={() => void store.loadTimeline(api, { contact_id: person.id }, each)}
-                    >
-                        {label}
-                    </button>
-                ))}
-            </div>
-            {store.timelineFailure.value && (
-                <div class="notice danger" role="alert">
-                    {store.timelineFailure.value}
-                </div>
-            )}
+            <Chips
+                label="Show"
+                row="timeline"
+                chips={chips.map(({ chip: each, label }) => ({ key: each, label }))}
+                on={chip}
+                onChoose={(each) => void store.loadTimeline(api, { contact_id: person.id }, each)}
+            />
+            {store.timelineFailure.value && <Notice danger>{store.timelineFailure.value}</Notice>}
             <div class="rows">
                 {work.length > 0 && <div class="group first">Planned</div>}
                 {work.map((item) => (

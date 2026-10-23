@@ -1,0 +1,52 @@
+{
+  "operation": "workitem.list",
+  "case": "failed-on-16",
+  "request": {
+    "since": "2026-10-16T00:00:00.000Z",
+    "until": "2026-10-17T00:00:00.000Z",
+    "status": [
+      "failed"
+    ],
+    "order": "finished",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "wi_11",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_3",
+        "kind": "provider_op",
+        "role": null,
+        "operation": "campaign.enroll",
+        "execution_profile": null,
+        "status": "failed",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 2,
+        "current_attempt_id": null,
+        "last_error": {
+          "code": "reply.refused",
+          "message": "Invalid data: first name is required",
+          "retriable": false,
+          "class": "permanent"
+        },
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": "2026-10-16T07:58:00.000Z",
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Tomás Aguilar",
+        "running_since": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

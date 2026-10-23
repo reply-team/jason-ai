@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { ApiError, Unpaired } from '../../api/client';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
 import type { Contact } from '../../api/types';
-import { SearchPicker } from '../../pickers/pickers';
+import { CampaignPicker } from '../../pickers/campaign-picker';
 import * as store from './store';
+import { Dialog } from '../../layout/dialog';
+import { Notice } from '../../layout/notice';
 
 type Props = { person: Contact; onClose: () => void };
 
@@ -19,8 +21,6 @@ export function AddDialog({ person, onClose }: Props) {
     const [busy, setBusy] = useState(false);
     const [refused, setRefused] = useState<string | null>(null);
     const [said, setSaid] = useState<string | null>(null);
-    const box = useRef<HTMLDivElement>(null);
-    useEffect(() => box.current?.querySelector<HTMLButtonElement>('.select')?.focus(), []);
     const excluded =
         campaign !== null &&
         (person.campaigns ?? []).some((c) => c.campaign_id === campaign.id && c.state === 'excluded');
@@ -45,56 +45,43 @@ export function AddDialog({ person, onClose }: Props) {
     };
 
     return (
-        <div
-            class="overlay"
-            onKeyDown={(e) => {
-                if (e.key === 'Escape') onClose();
-            }}
-        >
-            <div class="dialog" role="dialog" aria-label="Add to campaign" ref={box}>
-                <h2>Add to campaign</h2>
-                <div class="field">
-                    <SearchPicker
-                        label={campaign?.name ?? 'Choose a campaign'}
-                        clearLabel="Choose a campaign"
-                        placeholder="Find a campaign"
-                        search={async (query) =>
-                            (await store.searchCampaigns(api, query)).map((c) => ({ value: c.id, label: c.name }))
-                        }
-                        onPick={(picked) => setCampaign(picked ? { id: picked.value, name: picked.label } : null)}
-                    />
-                    {excluded && <div class="hint">They were excluded from this campaign; adding re-enrols them.</div>}
-                </div>
-                <div class="field">
-                    <label for="add-reason">Reason (optional, kept in the journal)</label>
-                    <textarea
-                        id="add-reason"
-                        class="textarea"
-                        aria-label="Reason"
-                        maxLength={2000}
-                        value={reason}
-                        onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
-                    />
-                </div>
-                {said && (
-                    <p class="hint" role="status">
-                        {said}
-                    </p>
-                )}
-                {refused && (
-                    <div class="notice danger" role="alert">
-                        {refused}
-                    </div>
-                )}
-                <div class="btn-row">
-                    <button class="btn ghost" type="button" onClick={onClose}>
-                        Cancel
-                    </button>
+        <Dialog
+            title={'Add to campaign'}
+            label="Add to campaign"
+            onClose={onClose}
+            buttons={
+                <>
                     <button class="btn primary" type="button" disabled={!campaign || busy} onClick={() => void add()}>
                         Add
                     </button>
-                </div>
+                </>
+            }
+        >
+            <div class="field">
+                <CampaignPicker
+                    label={campaign?.name ?? 'Choose a campaign'}
+                    none="Choose a campaign"
+                    onPick={setCampaign}
+                />
+                {excluded && <div class="hint">They were excluded from this campaign; adding re-enrols them.</div>}
             </div>
-        </div>
+            <div class="field">
+                <label for="add-reason">Reason (optional, kept in the journal)</label>
+                <textarea
+                    id="add-reason"
+                    class="textarea"
+                    aria-label="Reason"
+                    maxLength={2000}
+                    value={reason}
+                    onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+                />
+            </div>
+            {said && (
+                <p class="hint" role="status">
+                    {said}
+                </p>
+            )}
+            {refused && <Notice danger>{refused}</Notice>}
+        </Dialog>
     );
 }

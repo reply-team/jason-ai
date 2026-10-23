@@ -17,6 +17,8 @@ export const campaign = signal<{ id: string; name: string } | null>(null);
 const pageSize = 50;
 let generation = 0;
 let loadingMore = false;
+/** The request whose rows are on show: a failed read of that same list leaves them where they are. */
+let shown: string | null = null;
 
 export function listBody(filters: PeopleFilters): Record<string, unknown> {
     const body: Record<string, unknown> = { order: 'activity', limit: pageSize };
@@ -37,16 +39,29 @@ export function fail(error: unknown, into = failure): void {
 /** The first page for these filters; an answer to filters the person has already left is dropped. */
 export async function load(api: Api, filters: PeopleFilters): Promise<void> {
     const mine = ++generation;
+    const body = listBody(filters);
+    const asked = JSON.stringify(body);
+    const before = cursor.value;
     failure.value = null;
     cursor.value = null;
     try {
-        const page = await api.call<Page<Contact>>('contact.list', listBody(filters));
+        const page = await api.call<Page<Contact>>('contact.list', body);
         if (mine !== generation) return;
         people.value = page.items;
         cursor.value = page.next_cursor;
         loaded.value = true;
+        shown = asked;
     } catch (error) {
-        if (mine === generation) fail(error);
+        if (mine !== generation) return;
+        if (asked === shown) {
+            cursor.value = before;
+        } else {
+            // The rows on show belong to filters the person has left: the failure stands alone.
+            people.value = [];
+            loaded.value = false;
+            shown = null;
+        }
+        fail(error);
     }
 }
 
@@ -73,12 +88,6 @@ export async function refresh(api: Api, filters: PeopleFilters): Promise<void> {
     const floor = new Promise((resolve) => setTimeout(resolve, 500));
     await Promise.all([load(api, filters), floor]);
     refreshing.value = false;
-}
-
-/** The campaigns the picker offers: the first few, or the ones whose name holds what was typed. Archived ones are not offered. */
-export async function searchCampaigns(api: Api, query: string): Promise<CampaignSummary[]> {
-    const page = await api.call<Page<CampaignSummary>>('campaign.list', query ? { query, limit: 10 } : { limit: 10 });
-    return page.items;
 }
 
 /** The name of the campaign an address names; false when the runtime no longer knows it. */

@@ -3,6 +3,8 @@ import type { Approval } from '../../api/types';
 import { clock, relative } from '../../time/format';
 import { DecideDialog } from './decide-dialog';
 import { reasonLabel, title } from './labels';
+import { ActionsRow } from '../../layout/actions-row';
+import { PanelHeader } from '../../layout/panel-header';
 
 type Props = {
     approval: Approval;
@@ -38,28 +40,28 @@ export function ApprovalPanel({
     const heading = title(approval.operation, approval.contact_name);
     return (
         <div class="panel">
-            <div class="panel-header">
-                <div class="heading">
-                    <h2>{heading}</h2>
-                    <div class="sub">
+            <PanelHeader
+                title={heading}
+                sub={
+                    <>
                         in {approval.campaign_name} · requested {relative(new Date(approval.requested_at), now)} by the{' '}
                         {approval.plugin_id} plugin
-                    </div>
-                </div>
-                <button class="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
-                    ×
-                </button>
-            </div>
-            {pending && (
-                <div class="panel-actions">
-                    <button class="btn primary" type="button" disabled={busy} onClick={() => onApprove()}>
-                        Approve
-                    </button>
-                    <button class="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
-                        Reject
-                    </button>
-                </div>
-            )}
+                    </>
+                }
+                onClose={onClose}
+            />
+            <ActionsRow>
+                {pending && (
+                    <>
+                        <button class="btn primary" type="button" disabled={busy} onClick={() => onApprove()}>
+                            Approve
+                        </button>
+                        <button class="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
+                            Reject
+                        </button>
+                    </>
+                )}
+            </ActionsRow>
             <div class="panel-body">
                 {intent && (
                     <div class="section">

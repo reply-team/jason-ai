@@ -1,0 +1,74 @@
+{
+  "operation": "workitem.list",
+  "case": "smb-planned",
+  "request": {
+    "campaign_id": "cmp_2",
+    "status": [
+      "created"
+    ],
+    "order": "due",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "wi_5",
+        "campaign_id": "cmp_2",
+        "contact_id": null,
+        "kind": "ai_role",
+        "role": "personalizer",
+        "operation": null,
+        "execution_profile": null,
+        "status": "created",
+        "eligible": true,
+        "priority": 0,
+        "not_before": null,
+        "due_at": "2026-10-16T10:00:00.000Z",
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "SMB test",
+        "contact_name": null,
+        "running_since": null
+      },
+      {
+        "id": "wi_7",
+        "campaign_id": "cmp_2",
+        "contact_id": "cnt_3",
+        "kind": "ai_role",
+        "role": "researcher",
+        "operation": null,
+        "execution_profile": null,
+        "status": "created",
+        "eligible": false,
+        "priority": 0,
+        "not_before": "2026-10-16T16:30:00.000Z",
+        "due_at": "2026-10-17T09:00:00.000Z",
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "SMB test",
+        "contact_name": "Tomás Aguilar",
+        "running_since": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

@@ -1,8 +1,11 @@
 import type { Contact } from '../../api/types';
-import { href, navigate, type PeopleFilters, type PersonTab } from '../../router';
+import type { PeopleFilters, PersonTab } from '../../router';
 import { place, shortDate } from '../../time/format';
 import { displayName } from './labels';
 import { linked } from './threads';
+import { ActionsRow } from '../../layout/actions-row';
+import { PanelHeader } from '../../layout/panel-header';
+import { Tabs } from '../../layout/tabs';
 
 type Props = {
     person: Contact;
@@ -43,61 +46,44 @@ export function PersonCard({ person, tab, filters, now, zone, onAdd, onClose }: 
     );
     return (
         <>
-            <div class="panel-header">
-                <div class="heading person-head">
+            <PanelHeader
+                lead={
                     <span class="avatar" aria-hidden="true">
                         {initials(person)}
                     </span>
-                    <div>
-                        <h2>
-                            {name}
-                            {noFirstName && <span class="muted"> · no first name</span>}
-                        </h2>
-                        <div class="sub">{sub(person, now)}</div>
-                        <div class="onc">
-                            {person.archived_at && <span class="badge warning">archived</span>}
-                            {campaigns.map((campaign) =>
-                                campaign.state === 'excluded' ? (
-                                    <span key={campaign.campaign_id} class="badge outline">
-                                        {campaign.campaign_name} · excluded{' '}
-                                        {shortDate(new Date(campaign.updated_at), zone, now)}
-                                    </span>
-                                ) : (
-                                    <span key={campaign.campaign_id} class="badge accent">
-                                        {campaign.campaign_name} · since{' '}
-                                        {shortDate(new Date(campaign.added_at), zone, now)}
-                                    </span>
-                                ),
-                            )}
-                        </div>
+                }
+                title={
+                    <>
+                        {name}
+                        {noFirstName && <span class="muted"> · no first name</span>}
+                    </>
+                }
+                sub={sub(person, now)}
+                under={
+                    <div class="onc">
+                        {person.archived_at && <span class="badge warning">archived</span>}
+                        {campaigns.map((campaign) =>
+                            campaign.state === 'excluded' ? (
+                                <span key={campaign.campaign_id} class="badge outline">
+                                    {campaign.campaign_name} · excluded{' '}
+                                    {shortDate(new Date(campaign.updated_at), zone, now)}
+                                </span>
+                            ) : (
+                                <span key={campaign.campaign_id} class="badge accent">
+                                    {campaign.campaign_name} · since {shortDate(new Date(campaign.added_at), zone, now)}
+                                </span>
+                            ),
+                        )}
                     </div>
-                </div>
-                <button class="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
-                    ×
-                </button>
-            </div>
-            <div class="panel-actions">
+                }
+                onClose={onClose}
+            />
+            <ActionsRow>
                 <button class="btn" type="button" onClick={onAdd}>
                     Add to campaign
                 </button>
-            </div>
-            <div class="tabs" role="tablist">
-                {tabs.map((each) => (
-                    <a
-                        key={each}
-                        role="tab"
-                        aria-selected={tab === each}
-                        class={tab === each ? 'active' : ''}
-                        href={href(to(each))}
-                        onClick={(event) => {
-                            event.preventDefault();
-                            navigate(to(each));
-                        }}
-                    >
-                        {tabNames[each]}
-                    </a>
-                ))}
-            </div>
+            </ActionsRow>
+            <Tabs tabs={tabs.map((each) => ({ key: each, label: tabNames[each] }))} active={tab} to={to} />
         </>
     );
 }

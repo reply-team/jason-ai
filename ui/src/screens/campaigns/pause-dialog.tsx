@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { ApiError, Unpaired } from '../../api/client';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
 import type { Campaign } from '../../api/types';
 import * as store from './store';
+import { Dialog } from '../../layout/dialog';
+import { Notice } from '../../layout/notice';
 
 type Props = { campaign: Campaign; kind: 'pause' | 'start'; onDone: () => void; onClose: () => void };
 
@@ -28,8 +30,6 @@ export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
     const [busy, setBusy] = useState(false);
     const [refused, setRefused] = useState<string | null>(null);
     const verb = kind === 'pause' ? 'Pause' : 'Start';
-    const field = useRef<HTMLTextAreaElement>(null);
-    useEffect(() => field.current?.focus(), []);
 
     const act = async () => {
         setBusy(true);
@@ -51,43 +51,35 @@ export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
     };
 
     return (
-        <div
-            class="overlay"
-            onKeyDown={(e) => {
-                if (e.key === 'Escape') onClose();
-            }}
-        >
-            <div class="dialog" role="dialog" aria-label={`${verb} ${campaign.name}`}>
-                <h2>
+        <Dialog
+            title={
+                <>
                     {verb} {campaign.name}
-                </h2>
-                <p>{says(campaign, kind)}</p>
-                <div class="field">
-                    <label for="transition-reason">Reason (optional, kept in the journal)</label>
-                    <textarea
-                        ref={field}
-                        id="transition-reason"
-                        class="textarea"
-                        aria-label="Reason"
-                        maxLength={2000}
-                        value={reason}
-                        onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
-                    />
-                </div>
-                {refused && (
-                    <div class="notice danger" role="alert">
-                        {refused}
-                    </div>
-                )}
-                <div class="btn-row">
-                    <button class="btn ghost" type="button" onClick={onClose}>
-                        Cancel
-                    </button>
+                </>
+            }
+            label={`${verb} ${campaign.name}`}
+            onClose={onClose}
+            buttons={
+                <>
                     <button class="btn primary" type="button" disabled={busy} onClick={() => void act()}>
                         {verb}
                     </button>
-                </div>
+                </>
+            }
+        >
+            <p>{says(campaign, kind)}</p>
+            <div class="field">
+                <label for="transition-reason">Reason (optional, kept in the journal)</label>
+                <textarea
+                    id="transition-reason"
+                    class="textarea"
+                    aria-label="Reason"
+                    maxLength={2000}
+                    value={reason}
+                    onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+                />
             </div>
-        </div>
+            {refused && <Notice danger>{refused}</Notice>}
+        </Dialog>
     );
 }

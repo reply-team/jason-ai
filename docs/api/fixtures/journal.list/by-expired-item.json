@@ -1,0 +1,12 @@
+{
+  "operation": "journal.list",
+  "case": "by-expired-item",
+  "request": {
+    "work_item_id": "wi_12"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

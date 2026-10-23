@@ -1,6 +1,10 @@
 import type { Campaign, CampaignActivityRow, CampaignSummaryRow } from '../../api/types';
-import { href, navigate, type CampaignTab, type Route } from '../../router';
-import { activityColumns, periods, summaryColumns } from './labels';
+import { href, type CampaignTab, type Route } from '../../router';
+import { periodLabels } from '../../time/periods';
+import { activityColumns, summaryColumns } from './labels';
+import { ActionsRow } from '../../layout/actions-row';
+import { PanelHeader } from '../../layout/panel-header';
+import { Tabs } from '../../layout/tabs';
 
 type At = Extract<Route, { screen: 'campaigns' }>;
 
@@ -42,21 +46,19 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
     const linked = at.view === 'activity' || (row?.['sequence_linked'] ?? true) !== false;
     return (
         <>
-            <div class="panel-header">
-                <div class="heading">
-                    <h2>{campaign.name}</h2>
-                    <div class="sub">
+            <PanelHeader
+                title={campaign.name}
+                sub={
+                    <>
                         <span class={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}>
                             {campaign.status}
                         </span>{' '}
                         {sub(campaign, people)}
-                    </div>
-                </div>
-                <button class="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
-                    ×
-                </button>
-            </div>
-            <div class="panel-actions">
+                    </>
+                }
+                onClose={onClose}
+            />
+            <ActionsRow>
                 {/* A draft is taken live by the planner or the command line; an archived campaign is over. */}
                 {campaign.status === 'active' && (
                     <button class="btn" type="button" onClick={() => onAct('pause')}>
@@ -71,10 +73,10 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 <button class="btn" type="button" onClick={() => onAct('add')}>
                     Add people
                 </button>
-            </div>
+            </ActionsRow>
             {row && (
                 <div class="stats">
-                    {at.view === 'activity' && <span class="label">{periods[at.period]}</span>}
+                    {at.view === 'activity' && <span class="label">{periodLabels[at.period]}</span>}
                     {columns
                         .filter((c) => linked || (c.key !== 'sequence' && c.key !== 'out'))
                         .map((c) => {
@@ -92,23 +94,14 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                         })}
                 </div>
             )}
-            <div class="tabs" role="tablist">
-                {(['timeline', 'people', 'details'] as const).map((each) => (
-                    <a
-                        key={each}
-                        role="tab"
-                        aria-selected={at.tab === each}
-                        class={at.tab === each ? 'active' : ''}
-                        href={href(to(each))}
-                        onClick={(event) => {
-                            event.preventDefault();
-                            navigate(to(each));
-                        }}
-                    >
-                        {each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each]}
-                    </a>
-                ))}
-            </div>
+            <Tabs
+                tabs={(['timeline', 'people', 'details'] as const).map((each) => ({
+                    key: each,
+                    label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
+                }))}
+                active={at.tab}
+                to={to}
+            />
         </>
     );
 }

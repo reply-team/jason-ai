@@ -1,13 +1,15 @@
 import { useEffect } from 'preact/hooks';
 import { useApi } from '../../api/context';
+import { Segmented } from '../../layout/segmented';
+import { Toolbar } from '../../layout/toolbar';
 import { href, navigate, replace, route, type Tab } from '../../router';
 import { Filters } from './filters';
 import { WorkItemList } from './list';
 import { WorkItemPanel } from './panel';
 import * as store from './store';
+import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const number = new Intl.NumberFormat('en');
 const titles: Record<Tab, string> = { now: 'Now', planned: 'Planned', done: 'Done' };
 const empty: Record<Tab, string> = {
     now: 'Nothing is running or waiting.',
@@ -75,46 +77,24 @@ export function WorkItemsScreen() {
     return (
         <div class={`main${selected ? '' : ' single'}`}>
             <div class="list">
-                <div class="toolbar">
-                    <h1>Work items</h1>
-                    <div class="segmented" role="group" aria-label="Show">
-                        {store.tabs.map((tab) => {
-                            const count = store.counts.value[tab];
-                            return (
-                                <button
-                                    key={tab}
-                                    type="button"
-                                    class={view.tab === tab ? 'on' : ''}
-                                    aria-pressed={view.tab === tab}
-                                    onClick={() => {
-                                        if (view.tab !== tab)
-                                            navigate({ screen: 'workitems', tab, filters: view.filters });
-                                    }}
-                                >
-                                    {titles[tab]}
-                                    {count !== null && <span class="count"> {number.format(count)}</span>}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <span class="spacer" />
-                    <button
-                        class={`iconbtn${store.refreshing.value ? ' spin' : ''}`}
-                        type="button"
-                        title="Refresh"
-                        disabled={store.refreshing.value}
-                        onClick={() => void store.refresh(api, view)}
-                    >
-                        <span class="glyph">⟳</span>
-                    </button>
-                </div>
+                <Toolbar
+                    title="Work items"
+                    refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api, view) }}
+                >
+                    <Segmented
+                        label="Show"
+                        options={store.tabs.map((tab) => ({
+                            value: tab,
+                            label: titles[tab],
+                            count: store.counts.value[tab],
+                        }))}
+                        value={view.tab}
+                        onChange={(tab) => navigate({ screen: 'workitems', tab, filters: view.filters })}
+                    />
+                </Toolbar>
                 <Filters tab={view.tab} filters={view.filters} />
-                {store.notice.value && <div class="notice">{store.notice.value}</div>}
-                {store.failure.value && (
-                    <div class="notice danger" role="alert">
-                        {store.failure.value}
-                    </div>
-                )}
+                {store.notice.value && <Notice>{store.notice.value}</Notice>}
+                {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && items.length === 0 ? (
                     <div class="empty">{filtered ? 'Nothing matches these filters.' : empty[view.tab]}</div>
                 ) : (

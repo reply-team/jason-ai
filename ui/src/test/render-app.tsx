@@ -2,7 +2,7 @@ import { render } from '@testing-library/preact';
 import { App } from '../app';
 import { session } from '../api/session';
 import { route } from '../router';
-import { FakeApi } from './fake-api';
+import { FakeApi, watch } from './fake-api';
 
 type Options = { paired?: boolean; actorId?: string; tokenId?: string; apiVersion?: string };
 
@@ -11,6 +11,7 @@ export function renderApp(
     fake: FakeApi,
     { paired = true, actorId = 'ada', tokenId = 'uit_1', apiVersion = 'v1' }: Options = {},
 ) {
+    watch(fake);
     localStorage.clear();
     location.hash = '';
     route.value = { screen: 'attention' };

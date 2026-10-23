@@ -1,0 +1,15 @@
+{
+  "operation": "workitem.count",
+  "case": "ada-planned",
+  "request": {
+    "contact_id": "cnt_1",
+    "status": [
+      "created"
+    ],
+    "order": "due"
+  },
+  "status": 200,
+  "response": {
+    "total": 1
+  }
+}

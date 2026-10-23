@@ -22,6 +22,14 @@ A scratch runtime (`JASON_DATA_DIR` set to a scratch directory, never `~/.jason`
 change, and `jason ui open` once. The build writes the `manifest.json` the runtime asks of a directory before it serves
 it, so `dist/` is served as it stands. No hot reload, and no dev-only origin allowance in the runtime.
 
+## Screens and their pieces
+
+A screen lives in `src/screens/<name>/`: its view, its store, which makes every read and write and drops an answer the
+screen has moved past, and its tests. What every screen draws the same way is written once and used by all:
+`src/layout/` (toolbar, switches, filters bar, panel header, actions row, tabs, dialog, chips, notice), `src/pickers/`
+(the campaign and person pickers), `src/lists/` and `src/time/`. A screen gives them words, nodes and callbacks, never
+its data.
+
 ## Preact, not React
 
 The model is React's; the differences an agent should know: `class` not `className`; events are native DOM events;
@@ -53,7 +61,9 @@ fails `npm run check`.
 
 **What holds the rules.** The unit project runs in Node (a DOM use fails) and its tests may not import Preact or a
 test renderer; no `.json` lives under `ui/` but the three configuration files; `package.json`'s dependencies are an
-allowlist a test holds; the fixture catalog is one-to-one with the files on disk; only `tests/e2e/harness.ts` may
+allowlist a test holds; the fixture catalog is one-to-one with the files on disk; the fake client answers a request
+only with a recording whose request equals the one sent, and a request a test recorded no answer for fails the test,
+even when the screen caught the error; only `tests/e2e/harness.ts` may
 start a process; the CI job runs all of it on every push.
 
 **Running.** `npm test` (unit and screen), `npm run e2e` (needs `npm run build`, a runtime built from its source in Release, or `JASON_EXE` naming an installed `jason`, and `npx playwright install chromium` once).

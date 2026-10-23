@@ -1,8 +1,8 @@
 {
   "operation": "workitem.update",
-  "case": "terminal",
+  "case": "finished-meanwhile",
   "request": {
-    "work_item_id": "wi_9",
+    "work_item_id": "wi_4",
     "priority": 5,
     "actor": {
       "type": "human",
@@ -13,7 +13,7 @@
   "response": {
     "error": {
       "code": "workitem_terminal",
-      "message": "Work item 'wi_9' is succeeded; finished items are not changed.",
+      "message": "Work item 'wi_4' is cancelled; finished items are not changed.",
       "retryable": false
     }
   }

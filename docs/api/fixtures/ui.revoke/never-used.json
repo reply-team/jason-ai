@@ -1,0 +1,11 @@
+{
+  "operation": "ui.revoke",
+  "case": "never-used",
+  "request": {
+    "token_id": "uit_4"
+  },
+  "status": 200,
+  "response": {
+    "revoked": 1
+  }
+}

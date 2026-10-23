@@ -84,6 +84,7 @@ public class RecordedExchangesTests
         var again = await api.RecordErrorAsync(Operations.ApprovalApprove, "already-decided", new { approval_id = ApprovalA, actor = new { type = "human", id = "ada" } }, HttpStatusCode.Conflict, Ct);
         Assert.Equal("approval_not_pending", again.Code);
 
+        Assert.Equal(ApprovalStatus.Pending, (await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "other-pending", new { approval_id = ApprovalB }, Ct)).Status);
         var rejected = await api.RecordAsync<ApprovalDto>(Operations.ApprovalReject, "rejected", new { approval_id = ApprovalB, actor = new { type = "human", id = "ada" }, reason = "not this quarter" }, Ct);
         Assert.Equal(ApprovalStatus.Rejected, rejected.Status);
     }
@@ -114,6 +115,7 @@ public class RecordedExchangesTests
 
         var answered = await api.RecordAsync<DecisionDto>(Operations.DecisionAnswer, "answered", new { decision_id = DecisionA, answer = "Pause until the news", option = "Pause until the news", actor = new { type = "human", id = "ada" }, reason = "their CFO is leaving" }, Ct);
         Assert.Equal(DecisionStatus.Answered, answered.Status);
+        Assert.Equal([DecisionA], (await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "decided", new { statuses = new[] { "answered" } }, Ct)).Items.Select(d => d.Id));
     }
 
     [Fact]
@@ -155,8 +157,8 @@ public class RecordedExchangesTests
 
         // Browsers paired over weeks: the first used an hour ago, one paired two days ago and never used since, and one
         // last used forty days ago — the kind a person clears out.
-        await store.IssueAsync("ada", Ct);
-        await store.IssueAsync("ada", Ct);
+        var (_, third) = await store.IssueAsync("ada", Ct);
+        var (_, fourth) = await store.IssueAsync("ada", Ct);
         using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
@@ -169,6 +171,8 @@ public class RecordedExchangesTests
         }
 
         Assert.Equal(3, (await api.RecordAsync<UiTokensResponse>(Operations.UiTokens, "aged", null, Ct)).Items.Count);
+        Assert.Equal(1, (await api.RecordAsync<UiRevokeResponse>(Operations.UiRevoke, "stale", new { token_id = third.Id }, Ct)).Revoked);
+        Assert.Equal(1, (await api.RecordAsync<UiRevokeResponse>(Operations.UiRevoke, "never-used", new { token_id = fourth.Id }, Ct)).Revoked);
     }
 
     /// <summary>
@@ -184,10 +188,9 @@ public class RecordedExchangesTests
         string[] done = ["succeeded", "failed", "cancelled", "expired"];
 
         Assert.Equal(3, (await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "now", new { status = now, order = "created", limit = 50 }, Ct)).Items.Count);
-        var planned = await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "planned", new { status = new[] { "created" }, order = "due", limit = 3 }, Ct);
-        Assert.NotNull(planned.NextCursor);
-        var next = await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "planned-next", new { status = new[] { "created" }, order = "due", limit = 3, cursor = planned.NextCursor }, Ct);
-        Assert.Null(next.NextCursor);
+        var planned = await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "planned", new { status = new[] { "created" }, order = "due", limit = 50 }, Ct);
+        Assert.Equal(5, planned.Items.Count);
+        Assert.Null(planned.NextCursor);
         Assert.Equal(4, (await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "done", new { status = done, order = "finished", limit = 50 }, Ct)).Items.Count);
         Assert.Single((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "failed", new { status = new[] { "failed" }, order = "finished", limit = 50 }, Ct)).Items);
         Assert.Single((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-contact", new { contact_id = seed.Tomas, status = new[] { "created" }, order = "due", limit = 50 }, Ct)).Items);
@@ -206,7 +209,7 @@ public class RecordedExchangesTests
         Assert.Equal(2, (await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "failed", new { work_item_id = seed.Failed }, Ct)).Attempts!.Count);
         Assert.Equal(WorkItemStatus.Expired, (await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "expired", new { work_item_id = seed.Expired }, Ct)).Status);
         Assert.Equal(WorkItemStatus.Succeeded, (await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "succeeded", new { work_item_id = seed.Succeeded }, Ct)).Status);
-        Assert.Single((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "by-work-item", new { work_item_id = seed.Awaiting, statuses = new[] { "pending" } }, Ct)).Items);
+        var waitingFor = Assert.Single((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "by-work-item", new { work_item_id = seed.Awaiting, statuses = new[] { "pending" } }, Ct)).Items);
 
         Assert.Equal(2, (await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "first-page", new { limit = 10 }, Ct)).Items.Count);
         Assert.Single((await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "query", new { query = "smb", limit = 10 }, Ct)).Items);
@@ -216,11 +219,61 @@ public class RecordedExchangesTests
         Assert.NotEmpty((await api.RecordAsync<JsonObject>(Operations.RoleList, "all", null, Ct))["items"]!.AsArray());
         Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-email", new { query = "aguilar@", limit = 10 }, Ct)).Items);
         Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-phone", new { query = "+48 601 234 567", limit = 10 }, Ct)).Items);
-        Assert.Empty((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-none", new { query = "zz", limit = 10 }, Ct)).Items);
         Assert.Equal("Ada", (await api.RecordAsync<ContactDto>(Operations.ContactGet, "one", new { contact_id = seed.Ada }, Ct)).FirstName);
 
+        // What the tabs ask under their filters: one day on Done, a campaign, its role work, one role and its provider
+        // operations, a person, and an address naming a person with a campaign that no longer exists.
+        string[] created = ["created"];
+        string[] failedOnly = ["failed"];
+        async Task<int> ListedAsync(string @case, object body) =>
+            (await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, @case, body, Ct)).Items.Count;
+        async Task<int> CountedAsync(string @case, object body) =>
+            (await api.RecordAsync<WorkItemCountResponse>(Operations.WorkItemCount, @case, body, Ct)).Total;
+        const string Sixteenth = "2026-10-16T00:00:00.000Z";
+        const string Seventeenth = "2026-10-17T00:00:00.000Z";
+        const string Eighteenth = "2026-10-18T00:00:00.000Z";
+
+        Assert.Equal(1, await ListedAsync("failed-on-16", new { since = Sixteenth, until = Seventeenth, status = failedOnly, order = "finished", limit = 50 }));
+        Assert.Equal(3, await CountedAsync("planned-on-16", new { since = Sixteenth, until = Seventeenth, status = created, order = "due" }));
+        Assert.Equal(1, await CountedAsync("failed-on-16", new { since = Sixteenth, until = Seventeenth, status = failedOnly, order = "finished" }));
+        Assert.Equal(0, await ListedAsync("failed-on-17", new { since = Seventeenth, until = Eighteenth, status = failedOnly, order = "finished", limit = 50 }));
+        Assert.Equal(1, await CountedAsync("planned-on-17", new { since = Seventeenth, until = Eighteenth, status = created, order = "due" }));
+        Assert.Equal(0, await CountedAsync("failed-on-17", new { since = Seventeenth, until = Eighteenth, status = failedOnly, order = "finished" }));
+
+        var smb = seed.SmbTest;
+        Assert.Equal(2, await ListedAsync("smb-planned", new { campaign_id = smb, status = created, order = "due", limit = 50 }));
+        Assert.Equal(0, await ListedAsync("smb-now", new { campaign_id = smb, status = now, order = "created", limit = 50 }));
+        Assert.Equal(0, await CountedAsync("smb-now", new { campaign_id = smb, status = now, order = "created" }));
+        Assert.Equal(2, await CountedAsync("smb-planned", new { campaign_id = smb, status = created, order = "due" }));
+        Assert.Equal(1, await CountedAsync("smb-done", new { campaign_id = smb, status = done, order = "finished" }));
+        Assert.Equal(2, await ListedAsync("smb-roles-planned", new { campaign_id = smb, kind = "ai_role", status = created, order = "due", limit = 50 }));
+        Assert.Equal(0, await CountedAsync("smb-roles-now", new { campaign_id = smb, kind = "ai_role", status = now, order = "created" }));
+        Assert.Equal(2, await CountedAsync("smb-roles-planned", new { campaign_id = smb, kind = "ai_role", status = created, order = "due" }));
+        Assert.Equal(1, await CountedAsync("smb-roles-done", new { campaign_id = smb, kind = "ai_role", status = done, order = "finished" }));
+        Assert.Equal(0, await CountedAsync("smb-manager-now", new { campaign_id = smb, kind = "ai_role", role = "manager", status = now, order = "created" }));
+        Assert.Equal(0, await CountedAsync("smb-manager-done", new { campaign_id = smb, kind = "ai_role", role = "manager", status = done, order = "finished" }));
+        Assert.Equal(0, await ListedAsync("smb-operations-planned", new { campaign_id = smb, kind = "provider_op", status = created, order = "due", limit = 50 }));
+        Assert.Equal(0, await CountedAsync("smb-operations-now", new { campaign_id = smb, kind = "provider_op", status = now, order = "created" }));
+        Assert.Equal(0, await CountedAsync("smb-operations-planned", new { campaign_id = smb, kind = "provider_op", status = created, order = "due" }));
+        Assert.Equal(0, await CountedAsync("smb-operations-done", new { campaign_id = smb, kind = "provider_op", status = done, order = "finished" }));
+
+        Assert.Equal(0, await ListedAsync("tomas-now", new { contact_id = seed.Tomas, status = now, order = "created", limit = 50 }));
+        Assert.Equal(0, await CountedAsync("tomas-now", new { contact_id = seed.Tomas, status = now, order = "created" }));
+        Assert.Equal(1, await CountedAsync("tomas-planned", new { contact_id = seed.Tomas, status = created, order = "due" }));
+        Assert.Equal(1, await CountedAsync("tomas-done", new { contact_id = seed.Tomas, status = done, order = "finished" }));
+        Assert.Equal(2, await ListedAsync("ada-now", new { contact_id = seed.Ada, status = now, order = "created", limit = 50 }));
+        Assert.Equal(2, await CountedAsync("ada-now", new { contact_id = seed.Ada, status = now, order = "created" }));
+        Assert.Equal(1, await CountedAsync("ada-planned", new { contact_id = seed.Ada, status = created, order = "due" }));
+        Assert.Equal(1, await CountedAsync("ada-done", new { contact_id = seed.Ada, status = done, order = "finished" }));
+
+        const string Gone = "cmp_01K7QN00000000000000000099";
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.WorkItemList, "unknown-campaign", new { campaign_id = Gone, contact_id = seed.Ada, status = now, order = "created", limit = 50 }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.WorkItemCount, "unknown-campaign-now", new { campaign_id = Gone, contact_id = seed.Ada, status = now, order = "created" }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.WorkItemCount, "unknown-campaign-planned", new { campaign_id = Gone, contact_id = seed.Ada, status = created, order = "due" }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.WorkItemCount, "unknown-campaign-done", new { campaign_id = Gone, contact_id = seed.Ada, status = done, order = "finished" }, HttpStatusCode.NotFound, Ct)).Code);
+
         // Then what the panel writes, on the same runtime, so every file names the same item by the same scrubbed id:
-        // new dates, the refusal a finished item answers with, a cancellation with a reason, and the history that follows.
+        // new dates, a cancellation with a reason, and the history that follows.
         var ada = new { type = "human", id = "ada" };
 
         var moved = await api.RecordAsync<WorkItemDto>(
@@ -229,12 +282,21 @@ public class RecordedExchangesTests
             new { work_item_id = seed.Open, not_before = "2026-10-16T11:00:00.000Z", due_at = "2026-10-16T15:00:00.000Z", actor = ada },
             Ct);
         Assert.Equal(new DateTimeOffset(2026, 10, 16, 15, 0, 0, TimeSpan.Zero), moved.DueAt);
-        var refused = await api.RecordErrorAsync(Operations.WorkItemUpdate, "terminal", new { work_item_id = seed.Succeeded, priority = 5, actor = ada }, HttpStatusCode.Conflict, Ct);
-        Assert.Equal("workitem_terminal", refused.Code);
         var cancelled = await api.RecordAsync<WorkItemDto>(Operations.WorkItemCancel, "reason", new { work_item_id = seed.Open, reason = "Not this week.", actor = ada }, Ct);
         Assert.Equal(WorkItemStatus.Cancelled, cancelled.Status);
         var history = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-work-item", new { work_item_id = seed.Open }, Ct);
         Assert.Equal(["workitem_cancelled", "workitem_updated", "workitem_updated"], history.Items.Select(e => e.Kind));
+        // The open item, saved again after another hand finished it: the same refusal, for the item the panel shows.
+        Assert.Equal("workitem_terminal", (await api.RecordErrorAsync(Operations.WorkItemUpdate, "finished-meanwhile", new { work_item_id = seed.Open, priority = 5, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
+
+        // The history each other item's panel reads, then the waiting item's approval rejected from its panel.
+        async Task<int> HistoryAsync(string @case, string id) =>
+            (await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, @case, new { work_item_id = id }, Ct)).Items.Count;
+        await HistoryAsync("by-failed-item", seed.Failed);
+        await HistoryAsync("by-succeeded-item", seed.Succeeded);
+        await HistoryAsync("by-awaiting-item", seed.Awaiting);
+        await HistoryAsync("by-expired-item", seed.Expired);
+        Assert.Equal(ApprovalStatus.Rejected, (await api.RecordAsync<ApprovalDto>(Operations.ApprovalReject, "from-work-item", new { approval_id = waitingFor.Id, reason = "Not this person.", actor = ada }, Ct)).Status);
     }
 
     /// <summary>
@@ -258,10 +320,9 @@ public class RecordedExchangesTests
         string[] changes = ["contact_created", "contact_updated", "contact_archived"];
         string[] all = [.. replies, .. work, .. decisions, .. changes];
 
-        var first = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity", new { order = "activity", limit = 3 }, Ct);
-        Assert.Equal([seed.Mateo, seed.Aguilar, seed.Paula], first.Items.Select(c => c.Id));
-        var rest = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-next", new { order = "activity", limit = 3, cursor = first.NextCursor }, Ct);
-        Assert.Equal([seed.Grace], rest.Items.Select(c => c.Id));
+        var first = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity", new { order = "activity", limit = 50 }, Ct);
+        Assert.Equal([seed.Mateo, seed.Aguilar, seed.Paula, seed.Grace], first.Items.Select(c => c.Id));
+        Assert.Null(first.NextCursor);
         Assert.Equal([seed.Mateo, seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign", new { order = "activity", campaign_id = seed.LatAm, limit = 50 }, Ct)).Items.Select(c => c.Id));
         Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query", new { order = "activity", query = "mat", limit = 50 }, Ct)).Items.Select(c => c.Id));
         Assert.Contains(seed.Marcos, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "archived", new { order = "activity", include_archived = true, limit = 50 }, Ct)).Items.Select(c => c.Id));
@@ -280,34 +341,81 @@ public class RecordedExchangesTests
         Assert.Equal(2, (await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-failed", new { contact_id = seed.Aguilar, kinds = all, limit = 50 }, Ct)).Items.Count);
         Assert.Empty((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-empty", new { contact_id = seed.Grace, kinds = all, limit = 50 }, Ct)).Items);
 
+        // The list narrowed the way a person narrows it — a name, then a campaign, then the archived too, then a name nobody
+        // has — and the person found by another name; the other people's pages as they open.
+        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query", new { order = "activity", query = "mat", campaign_id = seed.LatAm, limit = 50 }, Ct)).Items.Select(c => c.Id));
+        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query-archived", new { order = "activity", query = "mat", campaign_id = seed.LatAm, include_archived = true, limit = 50 }, Ct)).Items.Select(c => c.Id));
+        Assert.Empty((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query-none", new { order = "activity", query = "zz", campaign_id = seed.LatAm, include_archived = true, limit = 50 }, Ct)).Items);
+        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.ContactList, "query-too-long", new { order = "activity", query = new string('a', 201), limit = 50 }, HttpStatusCode.BadRequest, Ct)).Code);
+        Assert.Equal([seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query-aguilar", new { order = "activity", query = "aguilar", limit = 50 }, Ct)).Items.Select(c => c.Id));
+        Assert.Empty((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-contact-open-none", new { contact_id = seed.Aguilar, status = new[] { "created", "awaiting_approval", "scheduled", "processing" }, order = "due", limit = 50 }, Ct)).Items);
+        Assert.Equal("Paula", (await api.RecordAsync<ContactDto>(Operations.ContactGet, "unrouted", new { contact_id = seed.Paula }, Ct)).FirstName);
+        Assert.Null((await api.RecordAsync<ContactDto>(Operations.ContactGet, "imported", new { contact_id = seed.Grace }, Ct)).TimeZone);
+        Assert.Empty((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-contact-open-imported", new { contact_id = seed.Grace, status = new[] { "created", "awaiting_approval", "scheduled", "processing" }, order = "due", limit = 50 }, Ct)).Items);
+        // A campaign an address names that is no longer there.
+        const string Gone = "cmp_01K7QN00000000000000000099";
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.CampaignGet, "gone", new { campaign_id = Gone }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.ContactList, "gone-campaign", new { order = "activity", campaign_id = Gone, limit = 50 }, HttpStatusCode.NotFound, Ct)).Code);
+
         reads.Answer(
             FakeProviderReads.Result(Seed.Threads(more: false)),
             FakeProviderReads.Result(Seed.Threads(more: true)),
             FakeProviderReads.Failure("rate_limited", FailureClass.Transient),
             FakeProviderReads.Result(Seed.Thread(owner: "16786993", more: false)),
             FakeProviderReads.Result(Seed.Thread(owner: "16786993", more: true)),
-            FakeProviderReads.Result(Seed.Thread(owner: "999", more: false)));
+            FakeProviderReads.Result(Seed.Thread(owner: "999", more: false)),
+            FakeProviderReads.Result(Seed.ThreadsNext()),
+            FakeProviderReads.Result(Seed.ThreadNext()));
         var threads = new { contact_id = seed.Mateo, plugin_id = "reply", limit = 100 };
         Assert.Equal(2, (await api.RecordAsync<ContactThreadsResponse>(Operations.ContactThreads, "two-threads", threads, Ct)).Items.Count);
         Assert.True((await api.RecordAsync<ContactThreadsResponse>(Operations.ContactThreads, "has-more", threads, Ct)).HasMore);
         Assert.Equal("rate_limited", (await api.RecordErrorAsync(Operations.ContactThreads, "provider-failed", threads, HttpStatusCode.BadGateway, Ct)).Code);
         Assert.Equal("contact_not_linked", (await api.RecordErrorAsync(Operations.ContactThreads, "not-linked", new { contact_id = seed.Grace, limit = 100 }, HttpStatusCode.NotFound, Ct)).Code);
-        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.ContactThreads, "no-route", new { contact_id = seed.Paula, limit = 100 }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.ContactThreads, "no-route", new { contact_id = seed.Paula, plugin_id = "reply", limit = 100 }, HttpStatusCode.NotFound, Ct)).Code);
         var thread = new { contact_id = seed.Mateo, plugin_id = "reply", thread_id = "t_501", limit = 20 };
         Assert.Equal(3, (await api.RecordAsync<ContactThreadResponse>(Operations.ContactThread, "messages", thread, Ct)).Messages.Count);
         Assert.True((await api.RecordAsync<ContactThreadResponse>(Operations.ContactThread, "has-more", thread, Ct)).HasMore);
         Assert.Equal("thread_not_this_contact", (await api.RecordErrorAsync(Operations.ContactThread, "not-this-contact", thread, HttpStatusCode.NotFound, Ct)).Code);
+        // The next pages, from where the first ones ended.
+        Assert.Equal(2, (await api.RecordAsync<ContactThreadsResponse>(Operations.ContactThreads, "next", new { threads.contact_id, threads.plugin_id, threads.limit, offset = 2 }, Ct)).Items.Count);
+        Assert.Single((await api.RecordAsync<ContactThreadResponse>(Operations.ContactThread, "next", new { thread.contact_id, thread.plugin_id, thread.thread_id, thread.limit, offset = 3 }, Ct)).Messages);
 
         Assert.Equal(2, (await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "for-picker", new { limit = 10 }, Ct)).Items.Count);
 
         var ada = new { type = "human", id = "ada" };
         var added = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "one-person", new { campaign_id = seed.LatAm, contacts = new[] { new { contact_id = seed.Grace } }, reason = "Fits the pilot.", actor = ada }, Ct);
         Assert.Equal(1, added.Summary.Added);
-        var reenrolled = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "re-enrol-excluded", new { campaign_id = seed.ReEngage, contacts = new[] { new { contact_id = seed.Mateo } }, actor = ada }, Ct);
+        var reenrolled = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "re-enrol-excluded", new { campaign_id = seed.ReEngage, contacts = new[] { new { contact_id = seed.Mateo } }, reason = "Back in scope.", actor = ada }, Ct);
         Assert.Equal(1, reenrolled.Summary.Added);
         var again = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "already-member", new { campaign_id = seed.LatAm, contacts = new[] { new { contact_id = seed.Mateo } }, actor = ada }, Ct);
         Assert.Equal(1, again.Summary.AlreadyMember);
-        Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "archived-campaign", new { campaign_id = seed.OldList, contacts = new[] { new { contact_id = seed.Grace } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
+        // The campaign archived elsewhere while the dialog was open: the same add is refused.
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = seed.LatAm, actor = ada }, Ct);
+        Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "archived-campaign", new { campaign_id = seed.LatAm, contacts = new[] { new { contact_id = seed.Mateo } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
+
+        // Mateo answers again on the same thread: his timeline then has two reply rows that open one thread.
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var person = await db.Contacts.SingleAsync(c => c.PublicId == seed.Mateo, Ct);
+            var pilot = await db.Campaigns.SingleAsync(c => c.PublicId == seed.LatAm, Ct);
+            db.Journal.Add(new JournalEntry
+            {
+                PublicId = "jrn_01K7QN00000000000000000199",
+                Ts = new DateTime(2026, 10, 16, 8, 55, 0, DateTimeKind.Utc),
+                ActorType = Actors.Dispatcher.Type,
+                ActorId = Actors.Dispatcher.Id,
+                Kind = JournalKinds.InboundReplyObserved,
+                CampaignId = pilot.Id,
+                ContactId = person.Id,
+                Key = "reply-t_501-0855",
+                New = new JsonObject { ["plugin"] = "reply", ["thread"] = "t_501", ["channel"] = "email", ["last_activity_at"] = "2026-10-16T08:55:00.000Z", ["unread"] = true, ["has_meeting_intent"] = null, ["contact_id"] = seed.Mateo },
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var twice = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-replied-twice", new { contact_id = seed.Mateo, kinds = all, limit = 50 }, Ct);
+        Assert.Equal(2, twice.Items.Count(e => e.Kind == JournalKinds.InboundReplyObserved));
     }
 
     /// <summary>
@@ -406,6 +514,17 @@ public class RecordedExchangesTests
         Assert.Equal(["Ben", "Pia"], await PeopleAsync("summary-waiting-after", new { campaign_id = seed.Spring, summary = "waiting", limit = 50 }));
         Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some-after", new { campaign_ids = new[] { seed.Spring } }, Ct)).Campaigns).Waiting);
         Assert.Equal(2, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all-after", new { campaign_ids = listed }, Ct)).Campaigns[0].Waiting);
+
+        // A quieter campaign's panel as a click on its row opens it, on the Timeline: the campaign, its numbers, what is
+        // planned and running, what waits for a person, and its journal.
+        var summer = seed.Summer;
+        Assert.Equal(CampaignStatus.Paused, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "summer", new { campaign_id = summer }, Ct)).Status);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "summer", new { campaign_ids = new[] { summer } }, Ct)).Campaigns);
+        await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "summer-planned", new { campaign_id = summer, status = new[] { "created" }, order = "due", limit = 50 }, Ct);
+        await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "summer-running", new { campaign_id = summer, status = new[] { "scheduled", "processing" }, order = "due", limit = 50 }, Ct);
+        await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "summer-pending", new { status = "pending", campaign_id = summer, limit = 50 }, Ct);
+        await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "summer-pending", new { status = "pending", campaign_id = summer, limit = 50 }, Ct);
+        await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "summer", new { campaign_id = summer, kinds = (string[])[.. replies, .. work, .. decisions, .. changes], limit = 50 }, Ct);
     }
 
     /// <summary>
@@ -457,6 +576,52 @@ public class RecordedExchangesTests
         Assert.Equal(50, page.Items.Count);
         var next = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many-next", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50, cursor = page.NextCursor }, Ct);
         Assert.Equal("Person 51", Assert.Single(next.Items).Contact.FirstName);
+
+        // The same fifty-one on the People screen, which lists fifty at a time and reads on from where a page ended.
+        var people = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "many", new { order = "activity", limit = 50 }, Ct);
+        Assert.Equal(50, people.Items.Count);
+        Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "many-next", new { order = "activity", limit = 50, cursor = people.NextCursor }, Ct)).Items);
+    }
+
+    /// <summary>
+    /// Fifty-one planned items, an hour apart from ten on 16 October: the Planned tab lists fifty at a time, by when each
+    /// is due, and reads on from where a page ended.
+    /// </summary>
+    [Fact]
+    public async Task Work_item_list_past_a_page()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var ten = new DateTime(2026, 10, 16, 10, 0, 0, DateTimeKind.Utc);
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var campaign = WorkItemFactory.NewCampaign("Autumn outreach", now: ten.AddDays(-1));
+            campaign.PublicId = "cmp_01K7QN00000000000000000701";
+            db.Campaigns.Add(campaign);
+            for (var n = 1; n <= 51; n++)
+            {
+                db.WorkItems.Add(WorkItemFactory.NewAiRole(campaign, "researcher", ten.AddDays(-1), w =>
+                {
+                    w.PublicId = $"wi_01K7QN{n + 700:D20}";
+                    w.Status = WorkItemStatus.Created;
+                    w.DueAt = ten.AddHours(n - 1);
+                }));
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var page = await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "planned-many", new { status = new[] { "created" }, order = "due", limit = 50 }, Ct);
+        Assert.Equal(50, page.Items.Count);
+        var next = await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "planned-many-next", new { status = new[] { "created" }, order = "due", limit = 50, cursor = page.NextCursor }, Ct);
+        Assert.Equal(ten.AddHours(50), Assert.Single(next.Items).DueAt!.Value.UtcDateTime);
+
+        // The three tabs' counts in the same installation, which the screen reads with the page.
+        string[] now = ["processing", "scheduled", "awaiting_approval"];
+        string[] done = ["succeeded", "failed", "cancelled", "expired"];
+        Assert.Equal(0, (await api.RecordAsync<WorkItemCountResponse>(Operations.WorkItemCount, "many-now", new { status = now, order = "created" }, Ct)).Total);
+        Assert.Equal(51, (await api.RecordAsync<WorkItemCountResponse>(Operations.WorkItemCount, "many-planned", new { status = new[] { "created" }, order = "due" }, Ct)).Total);
+        Assert.Equal(0, (await api.RecordAsync<WorkItemCountResponse>(Operations.WorkItemCount, "many-done", new { status = done, order = "finished" }, Ct)).Total);
     }
 
     /// <summary>Rows written the way the claim and a role write them, with the ids fixed and a preview a person can read.</summary>
@@ -468,7 +633,7 @@ public class RecordedExchangesTests
         /// Five people and three campaigns at fixed ids and moments. Mateo is on the LatAm pilot and was excluded from the
         /// paused re-engagement, has history under every chip and planned work, and is known to the provider in the routed
         /// account; Aguilar has no first name and a failed enrolment; Paula is known to the provider in an account no route
-        /// binds; Grace was imported and nothing has happened to her; Marcos is archived.
+        /// binds; Grace was imported, with no time zone, and nothing has happened to her; Marcos is archived.
         /// </summary>
         public static async Task<PeopleIds> PeopleAsync(RuntimeApiFixture api)
         {
@@ -505,7 +670,7 @@ public class RecordedExchangesTests
             var reEngage = Campaign(102, "Re-engage Q2 no-replies", CampaignStatus.Paused);
             var oldList = Campaign(103, "Old list", CampaignStatus.Archived);
 
-            Contact Person(int n, string? first, string last, string company, string title, string zone, params (string Channel, string Value)[] channels)
+            Contact Person(int n, string? first, string last, string company, string title, string? zone, params (string Channel, string Value)[] channels)
             {
                 var person = new Contact
                 {
@@ -531,7 +696,7 @@ public class RecordedExchangesTests
                 ("email", "mateo@soluna.example"), ("linkedin", "https://www.linkedin.com/in/mateo-ruiz-example"), ("phone", "+525512345678"));
             mateo.Custom = new JsonObject { ["segment"] = "fintech-mx", ["source"] = "q2-list", ["series"] = "A, raised 2026-06" };
             var aguilar = Person(102, null, "Aguilar", "Andina Tech", "Director of Sales", "America/Lima", ("email", "aguilar@andina.example"));
-            var grace = Person(103, "Grace", "Hopper", "Navy", "Rear Admiral", "America/New_York", ("email", "grace@navy.example"));
+            var grace = Person(103, "Grace", "Hopper", "Navy", "Rear Admiral", null, ("email", "grace@navy.example"));
             var paula = Person(104, "Paula", "Mendes", "Vela", "Head of Ops", "America/Sao_Paulo", ("email", "paula@vela.example"));
             var marcos = Person(105, "Marcos", "Vidal", "Puerto Digital", "CEO", "America/Santiago", ("email", "marcos@puerto.example"));
             marcos.ArchivedAt = day.AddDays(-2);
@@ -682,6 +847,54 @@ public class RecordedExchangesTests
                 }
               ],
               "has_more": {{(more ? "true" : "false")}},
+              "vendor": { "ordering": "oldest_first" }
+            }
+            """)!.AsObject();
+
+        /// <summary>
+        /// The page after the first: the LinkedIn thread again, which moved while the person read (a provider pages by
+        /// offset, so the edge can repeat), and an older email thread that is new to the page.
+        /// </summary>
+        public static JsonObject ThreadsNext() => JsonNode.Parse(
+            """
+            {
+              "items": [
+                {
+                  "external_id": "t_502", "channel": "linkedin", "subject": null, "preview": "Happy to connect.",
+                  "last_activity_at": "2026-10-03T18:02:44.000Z", "unread": false, "contact": { "external_id": "16786993", "name": "Mateo Ruiz" },
+                  "campaign_external_id": "c_7714", "has_meeting_intent": null,
+                  "vendor": { "is_last_message_planned": false, "state": "ok", "category": null }
+                },
+                {
+                  "external_id": "t_503", "channel": "email", "subject": "Pricing for the pilot", "preview": "Could you share the numbers?",
+                  "last_activity_at": "2026-09-28T14:10:00.000Z", "unread": false, "contact": { "external_id": "16786993", "name": "Mateo Ruiz" },
+                  "campaign_external_id": "c_7714", "has_meeting_intent": null,
+                  "vendor": { "is_last_message_planned": false, "state": "ok", "category": null }
+                }
+              ],
+              "has_more": false,
+              "vendor": { "ordering": "last_activity_desc" }
+            }
+            """)!.AsObject();
+
+        /// <summary>The email thread's messages after the first three: Mateo's answer to the time proposed.</summary>
+        public static JsonObject ThreadNext() => JsonNode.Parse(
+            """
+            {
+              "thread": {
+                "external_id": "t_501", "channel": "email", "subject": "Re: Soluna's next quarter",
+                "contact": { "external_id": "16786993", "name": "Mateo Ruiz" }, "campaign_external_id": "c_7714", "unread": true,
+                "vendor": { "category": null, "has_ai_draft": false }
+              },
+              "messages": [
+                {
+                  "external_id": "<m4@mail.example.com>", "direction": "inbound", "sent_at": "2026-10-16T08:58:00.000Z",
+                  "from": "mateo@soluna.example", "to": ["sdr@vendor.example"], "cc": null, "bcc": null, "subject": "Re: Soluna's next quarter",
+                  "body": "<p>Ten works. See you Thursday.</p>",
+                  "truncated": false, "vendor": { "state": "ok", "status_code": null, "ai_sent_type": null }
+                }
+              ],
+              "has_more": false,
               "vendor": { "ordering": "oldest_first" }
             }
             """)!.AsObject();
