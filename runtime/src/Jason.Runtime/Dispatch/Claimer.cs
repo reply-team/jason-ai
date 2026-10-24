@@ -125,13 +125,25 @@ public sealed class Claimer(
                 ? await agents.PlanAsync(db, item, globalDefault, ct).ConfigureAwait(false)
                 : null;
 
-            var released = verdict is { Parks: true }
-                ? await DecideAsync(db, item, verdict, now, ct).ConfigureAwait(false)
+            var asks = verdict is { Parks: true, Code: AttemptErrors.ApprovalRequired };
+            var released = asks
+                ? await DecideAsync(db, item, verdict!, now, ct).ConfigureAwait(false)
                 : null;
-            if (verdict is { Parks: true } && released is null)
+            if (asks && released is null)
             {
                 // Parked: nothing is handed out and no attempt exists to hand out. The save is the same guarded
                 // one the claim itself uses, so a caller who cancelled this item a moment ago still wins.
+                await SaveAsync(db, item, ct).ConfigureAwait(false);
+                continue;
+            }
+
+            // Held by a provider block, whether the fourteenth check said so or a person released work the block still
+            // holds: the item waits on the block, with no attempt, unless it is the block's trial.
+            if (verdict is { Block: { } block } && (released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
+                && !await TrialAsync(db, block, item, now, ct).ConfigureAwait(false))
+            {
+                outcomes.Park(db, item, attempt: null, block, ProviderBlocks.HeldError(item.Operation!, block), Actors.Dispatcher);
+                await ProviderBlocks.SayBlockedAsync(db, journal, item, block, attempt: null, ct).ConfigureAwait(false);
                 await SaveAsync(db, item, ct).ConfigureAwait(false);
                 continue;
             }
@@ -354,7 +366,8 @@ public sealed class Claimer(
             // that never ran still says what would have run it, which is the half of a refusal a manager can act on.
             // Where a person released this work, the attempt names the decision it runs under.
             attempt.Provenance = AttemptProvenance.AtClaim(item.Operation, verdict, packages, routing, attempt.PublicId, released?.PublicId);
-            if (verdict.Passed || released is not null)
+            // Work a block holds reaches here only as the block's trial: it runs, and what it answers decides the block.
+            if (verdict.Passed || released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
             {
                 return verdict.Plan;
             }
@@ -456,6 +469,33 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// Whether this item is the trial of the block that holds it: the one the block already names, or — where the
+    /// block's next trial is due and no trial of it is still under way, as the resume step reads it — this one, which the
+    /// block then names. One trial is in flight per block; every other item the block holds parks.
+    /// </summary>
+    private static async Task<bool> TrialAsync(JasonDbContext db, ProviderBlock block, WorkItem item, DateTime now, CancellationToken ct)
+    {
+        if (block.TrialWorkItemId == item.Id)
+        {
+            return true;
+        }
+
+        if (block.NextTrialAt > now)
+        {
+            return false;
+        }
+
+        if (block.TrialWorkItemId is { } other
+            && await db.Database.SqlQueryRaw<int>(Resumer.TrialUnderWaySql, other).AnyAsync(ct).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        block.TrialWorkItemId = item.Id;
+        return true;
+    }
+
+    /// <summary>
     /// The one write of this loop, guarded the way every claim is: another writer who changed this item first
     /// keeps their change, and this scan moves on to the next item rather than failing the whole transaction.
     /// </summary>
@@ -491,9 +531,14 @@ public sealed class Claimer(
 
         var pluginId = resolution.Route.PluginId;
         var campaignPins = await PinsAsync(db, campaign, pluginId, ct).ConfigureAwait(false);
+
+        // The open blocks of the route's plugin and binding, by their index, and only for work a block holds.
+        var blocks = OperationCatalog.HeldByProviderBlock.Contains(contract.Id)
+            ? await ProviderBlocks.OpenAsync(db, pluginId, ProviderBlocks.Identity(resolution.Route.BindingIdentity), ct).ConfigureAwait(false)
+            : null;
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false);
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks);
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -509,7 +554,8 @@ public sealed class Claimer(
             contact,
             await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false),
             campaignPins,
-            await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false));
+            await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false),
+            blocks);
     }
 
     /// <summary>

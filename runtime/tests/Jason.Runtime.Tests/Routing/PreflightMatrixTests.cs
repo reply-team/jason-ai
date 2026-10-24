@@ -22,11 +22,12 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Eleven of the thirteen are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// Eleven of the fourteen are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
 /// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
-/// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead. <c>approval_required</c> is
-/// not in this matrix at all, because it is the one answer that does not fail an item: work whose operation needs
-/// a person's approval is parked for one, which <c>ClaimerTests</c> is where to read about.
+/// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead. <c>approval_required</c> and
+/// <c>provider_blocked</c> are not in this matrix at all, because they are the two answers that do not fail an item: work
+/// whose operation needs a person's approval is parked for one, and work a provider block holds waits on the block, which
+/// <c>ClaimerTests</c> is where to read about.
 /// Routes are placed into the registry directly: which plugin an operation goes to is a decision this test takes
 /// rather than the subject of it.
 /// </remarks>
@@ -68,7 +69,7 @@ public class PreflightMatrixTests
                 scenario.Install(paths);
             },
             // The reference package names the stand-in vendor program itself, so without its directory on the
-            // search path the plugin loads as unavailable — which is one of the thirteen answers this matrix is
+            // search path the plugin loads as unavailable — which is one of the fourteen answers this matrix is
             // about, and would silently stand in for the others.
             configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
 

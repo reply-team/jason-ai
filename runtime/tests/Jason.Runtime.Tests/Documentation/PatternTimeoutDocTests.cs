@@ -80,7 +80,7 @@ public sealed partial class PatternTimeoutDocTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>Row 12 of the claim's thirteen says a pattern's timeout is not <c>input_invalid</c>, and row 7 not <c>binding_invalid</c>.</summary>
+    /// <summary>Row 12 of the claim's fourteen says a pattern's timeout is not <c>input_invalid</c>, and row 7 not <c>binding_invalid</c>.</summary>
     [Fact]
     public void The_claim_s_rows_say_a_pattern_s_timeout_is_not_the_refusal()
     {

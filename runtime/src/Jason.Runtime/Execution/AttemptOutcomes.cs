@@ -256,6 +256,143 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
         return wait;
     }
 
+    /// <summary>
+    /// Parks <paramref name="item"/> on a provider block: it waits on <paramref name="block"/> until the block clears, a
+    /// trial of it gets past, or its due date passes. Its two entries are the claim, which parks work a block already
+    /// holds before any attempt exists, and an attempt that answered <c>blocked</c>, which ends <c>blocked</c> keeping the
+    /// error and the block it met. Either way the item's last error is <paramref name="error"/> — the block, its link
+    /// included, is where a person reads it — with the trace left on the attempt, as a failure leaves it. Neither is
+    /// counted against the item's attempts: the provider refused for a reason outside the work, so the work has not been
+    /// tried.
+    /// </summary>
+    public WorkItemWait Park(JasonDbContext db, WorkItem item, Attempt? attempt, ProviderBlock block, AttemptErrorDto? error, ActorRef actor)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(block);
+        var now = clock.GetUtcNow().UtcDateTime;
+        if (attempt is not null)
+        {
+            attempt.Status = AttemptStatus.Blocked;
+            attempt.FinishedAt = now;
+            attempt.Error = error;
+        }
+
+        if (error is not null)
+        {
+            item.LastError = error with { Trace = null };
+        }
+
+        WorkItemTransitions.Apply(item, WorkItemStatus.Waiting, now);
+
+        // No mode, no moment and no deadline: a block is not a role's wait, and what bounds it is the item's own due date.
+        var wait = new WorkItemWait { WorkItem = item, Attempt = attempt, ProviderBlock = block, Status = WaitStatus.Open, OpenedAt = now };
+        db.WorkItemWaits.Add(wait);
+
+        journal.Append(
+            db,
+            actor,
+            JournalKinds.WorkItemWaiting,
+            campaign: null,
+            key: attempt?.PublicId,
+            updated: new JsonObject
+            {
+                ["on"] = new JsonArray(),
+                ["mode"] = null,
+                ["until"] = null,
+                ["deadline"] = null,
+                ["blocked_by"] = ProviderBlocks.BlockedBy(block),
+            },
+            workItem: item,
+            attempt: attempt);
+        return wait;
+    }
+
+    /// <summary>
+    /// What an attempt of an operation a provider block holds says about the blocks of its plugin and binding, after its
+    /// verdict. <see cref="BlockAnswer.GotPast"/> — it succeeded, or the provider judged the work itself — clears every
+    /// open block that covers it and every block it was the trial of. <see cref="BlockAnswer.Blocked"/> opens the block <paramref name="said"/> names or sees
+    /// it again, and parks the item on it: a trial of the account that met a sender's block has got past the account,
+    /// so the account clears and the item parks on the sender. <see cref="BlockAnswer.Undecided"/> says nothing, and a
+    /// trial it was puts the block's next trial a cadence off. Every block it cleared is said to have cleared.
+    /// </summary>
+    /// <param name="input">The input the claim composed: the one place a sender is read from.</param>
+    /// <param name="error">The error a blocked attempt keeps; only <see cref="BlockAnswer.Blocked"/> reads it.</param>
+    public async Task AnsweredAsync(
+        JasonDbContext db,
+        WorkItem item,
+        Attempt attempt,
+        string pluginId,
+        JsonObject? input,
+        BlockAnswer answer,
+        JsonObject? said,
+        AttemptErrorDto? error,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(attempt);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var trialSeconds = settings.Current.Blocks.TrialSeconds;
+        var identity = ProviderBlocks.Identity(attempt.Provenance?.BindingIdentity);
+        var open = await ProviderBlocks.OpenAsync(db, pluginId, identity, cancellationToken).ConfigureAwait(false);
+        var cleared = new List<ProviderBlock>();
+
+        switch (answer)
+        {
+            case BlockAnswer.GotPast:
+                var sender = ProviderBlocks.Sender(input);
+                foreach (var block in open.Where(block => block.Scope == ProviderBlockScope.Account
+                    || block.TrialWorkItemId == item.Id
+                    || (sender is not null && string.Equals(block.SenderExternalId, sender, StringComparison.Ordinal))))
+                {
+                    ProviderBlocks.Clear(block, attempt, now);
+                    cleared.Add(block);
+                }
+
+                Untried(open, item, now, trialSeconds);
+                break;
+
+            case BlockAnswer.Blocked:
+                ArgumentNullException.ThrowIfNull(said);
+                var met = ProviderBlocks.Meet(db, open, pluginId, identity, said, attempt, now, trialSeconds);
+                foreach (var trial in open.Where(block => block.TrialWorkItemId == item.Id && !ReferenceEquals(block, met)))
+                {
+                    if (trial.Scope == ProviderBlockScope.Account && met.Scope == ProviderBlockScope.Sender)
+                    {
+                        ProviderBlocks.Clear(trial, attempt, now);
+                        cleared.Add(trial);
+                    }
+                    else
+                    {
+                        trial.TrialWorkItemId = null;
+                    }
+                }
+
+                met.TrialWorkItemId = null;
+                Park(db, item, attempt, met, error, Actors.Dispatcher);
+                await ProviderBlocks.SayBlockedAsync(db, journal, item, met, attempt, cancellationToken).ConfigureAwait(false);
+                break;
+
+            default:
+                Untried(open, item, now, trialSeconds);
+                break;
+        }
+
+        foreach (var block in cleared)
+        {
+            await ProviderBlocks.SayClearedAsync(db, journal, block, attempt, cancellationToken).ConfigureAwait(false);
+        }
+
+        static void Untried(IEnumerable<ProviderBlock> open, WorkItem item, DateTime now, int trialSeconds)
+        {
+            foreach (var trial in open.Where(block => block.Status == ProviderBlockStatus.Open && block.TrialWorkItemId == item.Id))
+            {
+                ProviderBlocks.Undecided(trial, now, trialSeconds);
+            }
+        }
+    }
+
     /// <summary>Only the attempt: the caller transitions and journals the item, because it is the one being cancelled.</summary>
     public void CancelAttempt(Attempt attempt)
     {

@@ -19,13 +19,18 @@ namespace Jason.Runtime.Routing;
 /// The verdict, not the list: whether the value of the channel this operation consumes is on the do-not-contact
 /// register. A pre-flight that carried the list would have to query, and then it could not be a pure function.
 /// </param>
+/// <param name="Blocks">
+/// The open provider blocks of the routed plugin and binding, read only for an operation a block holds, and null for
+/// every other: a read or a control runs through a block and fails on its own.
+/// </param>
 public sealed record PreflightFacts(
     WorkItem Item,
     Campaign Campaign,
     Contact? Contact,
     IReadOnlyDictionary<string, string> ContactPins,
     IReadOnlyDictionary<string, string> CampaignPins,
-    bool Suppressed)
+    bool Suppressed,
+    IReadOnlyList<ProviderBlock>? Blocks = null)
 {
     /// <summary>What an entity no plugin has pinned yet has: nothing, stated once rather than allocated per claim.</summary>
     public static IReadOnlyDictionary<string, string> NoPins { get; } = new Dictionary<string, string>(StringComparer.Ordinal);

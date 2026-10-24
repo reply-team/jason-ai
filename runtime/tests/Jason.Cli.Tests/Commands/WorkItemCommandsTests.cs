@@ -692,6 +692,38 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    public async Task Human_mode_says_in_words_which_block_a_parked_item_waits_on()
+    {
+        var wait = new WaitDto(null, [], null, null, null, Moment, new WaitBlockedByDto("blk_A", ProviderBlockScope.Account, "billing"));
+        using var cli = new CliRun(Serialize(Item(null) with { Status = WorkItemStatus.Waiting, Wait = wait }));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(
+            "Waiting for:  the provider blocked its account (billing); it runs when the block clears or a trial succeeds",
+            cli.Text,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_lists_a_parked_item_with_the_block_it_waits_on()
+    {
+        var parked = new WorkItemSummaryDto(
+            "wi_A", "cmp_A", null, WorkItemKind.ProviderOp, null, "message.send", null, WorkItemStatus.Waiting, false, 5, null, null, null,
+            new ActorRef(ActorType.Human, null), 0, null, null, Moment, Moment, null, "Autumn outreach", null)
+        {
+            Wait = new WaitSummaryDto(null, null, null, null, Moment, OnCount: 0, EndedCount: 0, new WaitBlockedByDto("blk_A", ProviderBlockScope.Sender, "limit")),
+        };
+        using var cli = new CliRun(Serialize(new Page<WorkItemSummaryDto>([parked], null)));
+
+        var exit = await cli.RunAsync("workitem", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("waiting (the provider blocked its sending account, limit)", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Human_mode_prints_no_wait_lines_for_an_item_that_is_not_waiting()
     {
         using var cli = new CliRun(Serialize(Item(null)));

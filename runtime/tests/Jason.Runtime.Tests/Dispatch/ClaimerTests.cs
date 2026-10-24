@@ -1192,6 +1192,169 @@ public class ClaimerTests
     /// A person's decision, exactly as the API verb will make it: the row is decided and the work it was holding
     /// is let back into the queue. These tests are about what the claim does with that, not about the verb.
     /// </summary>
+    /// <summary>
+    /// The fourteenth check parks protective work an open block holds: no attempt, a wait on the block, and the campaign
+    /// told once — whichever of its items parks next, the line is not written again, and the block's link is never in it.
+    /// </summary>
+    [Fact]
+    public async Task Protective_work_an_open_block_holds_waits_on_it_with_no_attempt_and_the_campaign_is_told_once()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded(BlockRows.Plugin, ["campaign.pause"]),
+            route: new Route(BlockRows.Plugin, null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var block = OpenBlock(db, campaign, nextTrialAt: Noon.AddHours(1));
+        block.Link = "https://billing.example.com/pay";
+        var first = Pausing(db, campaign, Noon);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var second = Pausing(db, campaign, Noon.AddMinutes(1));
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var held = new[] { first.Id, second.Id };
+        var items = await fresh.WorkItems.AsNoTracking().Where(w => held.Contains(w.Id)).ToListAsync(Ct);
+        Assert.True(
+            items.All(w => w is { Status: WorkItemStatus.Waiting, AttemptCount: 0 }),
+            $"The held items are {string.Join(", ", items.Select(w => $"{w.Status}/{w.AttemptCount}"))}.");
+
+        // What a person reads of the block, its link included, is on each held item's last error.
+        Assert.True(
+            items.All(w => w.LastError is { Code: AttemptErrors.ProviderBlocked, Class: FailureClass.Blocked, Trace: null }
+                && (string?)w.LastError.Block?["link"] == "https://billing.example.com/pay" && (string?)w.LastError.Block?["reason"] == "billing"),
+            $"The held items' last errors are {string.Join(" / ", items.Select(w => $"{w.LastError?.Code} {w.LastError?.Block?.ToJsonString()}"))}.");
+        Assert.Empty(await fresh.Attempts.AsNoTracking().Where(a => held.Contains(a.WorkItemId)).ToListAsync(Ct));
+        var waits = await fresh.WorkItemWaits.AsNoTracking().Where(w => held.Contains(w.WorkItemId)).ToListAsync(Ct);
+        Assert.True(
+            waits.Count == 2 && waits.All(w => w.ProviderBlockId == block.Id && w.Status == WaitStatus.Open),
+            $"The waits are {string.Join(", ", waits.Select(w => $"{w.ProviderBlockId}/{w.Status}"))}.");
+
+        var said = Assert.Single(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ProviderBlocked).ToListAsync(Ct));
+        Assert.Equal((block.PublicId, campaign.Id), (said.Key, said.CampaignId));
+        Assert.Equal(first.PublicId, (string?)said.New!["work_item_id"]);
+        Assert.DoesNotContain("billing.example.com", said.New.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Work a person approved is still held by a block of its account: the approval releases it, the block parks it, and
+    /// the decision stays as the person made it, so the item runs the moment the block clears.
+    /// </summary>
+    [Fact]
+    public async Task Work_a_person_released_still_waits_on_the_block_that_holds_its_account()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded(BlockRows.Plugin, ["campaign.enroll"]),
+            route: new Route(BlockRows.Plugin, null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        await Decide(db, ApprovalStatus.Approved);
+        var block = OpenBlock(db, campaign, nextTrialAt: Noon.AddHours(1));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var parked = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct);
+        Assert.Equal((WorkItemStatus.Waiting, 0), (parked.Status, parked.AttemptCount));
+        Assert.Empty(await fresh.Attempts.AsNoTracking().Where(a => a.WorkItemId == item.Id).ToListAsync(Ct));
+        Assert.Equal(block.Id, (await fresh.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == item.Id, Ct)).ProviderBlockId);
+        Assert.Equal(ApprovalStatus.Approved, (await fresh.Approvals.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Equal(block.PublicId, Assert.Single(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ProviderBlocked).ToListAsync(Ct)).Key);
+    }
+
+    /// <summary>A read runs through an open block of its account, and the block is neither tried nor touched by it.</summary>
+    [Fact]
+    public async Task A_read_runs_through_an_open_block_and_leaves_it_as_it_was()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded(BlockRows.Plugin, ["campaign.get"]),
+            route: new Route(BlockRows.Plugin, null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var block = OpenBlock(db, campaign, nextTrialAt: Noon);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "c-7714" } },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(item.PublicId, work.WorkItemPublicId);
+        await using var fresh = database.Open();
+        var row = await fresh.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == block.Id, Ct);
+        Assert.Equal((ProviderBlockStatus.Open, Noon), (row.Status, row.NextTrialAt));
+        Assert.Null(row.TrialWorkItemId);
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ProviderBlocked).ToListAsync(Ct));
+    }
+
+    /// <summary>
+    /// With nothing parked, a block whose trial is due lets the next item it holds through at the claim as its trial, and
+    /// only that one: another item the block holds, in the same scan, parks while the trial is in flight.
+    /// </summary>
+    [Fact]
+    public async Task A_due_trial_runs_the_first_item_the_block_holds_and_parks_the_next_while_it_is_in_flight()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded(BlockRows.Plugin, ["campaign.pause"]),
+            route: new Route(BlockRows.Plugin, null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var west = WorkItemFactory.NewCampaign(now: Noon);
+        var east = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.AddRange(west, east);
+        var block = OpenBlock(db, west, nextTrialAt: Noon);
+        var trial = Pausing(db, west, Noon);
+        var next = Pausing(db, east, Noon.AddMinutes(1));
+        await db.SaveChangesAsync(Ct);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(trial.PublicId, work.WorkItemPublicId);
+        await using var fresh = database.Open();
+        Assert.Equal(trial.Id, (await fresh.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == block.Id, Ct)).TrialWorkItemId);
+        Assert.Equal(WorkItemStatus.Scheduled, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == trial.Id, Ct)).Status);
+        Assert.Equal(WorkItemStatus.Waiting, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == next.Id, Ct)).Status);
+        Assert.Equal(block.Id, (await fresh.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == next.Id, Ct)).ProviderBlockId);
+    }
+
+    /// <summary>An open account block of the stand-in plugin's routes that bind nothing, opened by a failed item of <paramref name="campaign"/>.</summary>
+    private static ProviderBlock OpenBlock(JasonDbContext db, Campaign campaign, DateTime nextTrialAt)
+    {
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        opener.Status = WorkItemStatus.Failed;
+        opener.FinishedAt = Noon;
+        db.WorkItems.Add(opener);
+        var block = BlockRows.Block(opener, Noon, nextTrialAt, binding: EventSource.NoBinding);
+        db.ProviderBlocks.Add(block);
+        return block;
+    }
+
+    /// <summary>A pause of <paramref name="campaign"/>'s provider campaign, which the planner names: protective work.</summary>
+    private static WorkItem Pausing(JasonDbContext db, Campaign campaign, DateTime createdAt)
+    {
+        var item = WorkItemFactory.NewProviderOp(campaign, "campaign.pause", createdAt);
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "sq-1129" } },
+        };
+        db.WorkItems.Add(item);
+        return item;
+    }
+
     private static async Task<Approval> Decide(JasonDbContext db, ApprovalStatus status)
     {
         var approval = await db.Approvals.Include(a => a.WorkItem).SingleAsync(a => a.Status == ApprovalStatus.Pending, Ct);

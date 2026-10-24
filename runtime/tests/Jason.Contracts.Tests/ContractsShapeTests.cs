@@ -491,9 +491,43 @@ public class ContractsShapeTests
         };
         Assert.Contains(
             "\"wait\":{\"attempt_id\":\"att_A\",\"on\":[{\"work_item_id\":\"wi_R\",\"status\":\"processing\"}],\"mode\":\"all\",\"until\":null,"
-            + "\"deadline\":\"1970-01-01T00:00:00.000Z\",\"opened_at\":\"1970-01-01T00:00:00.000Z\"}",
+            + "\"deadline\":\"1970-01-01T00:00:00.000Z\",\"opened_at\":\"1970-01-01T00:00:00.000Z\",\"blocked_by\":null}",
             JsonSerializer.Serialize(waiting, JasonJson.Options),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The wait of an item a provider block parked names the block, what it holds and why, singly and in a listing, with
+    /// no mode, moment or deadline; the block's link has no field to travel in.
+    /// </summary>
+    [Fact]
+    public void A_parked_item_s_wait_names_the_block_it_waits_on()
+    {
+        var blockedBy = new WaitBlockedByDto("blk_A", ProviderBlockScope.Sender, "limit");
+        var parked = NewWorkItemDto(null) with
+        {
+            Status = WorkItemStatus.Waiting,
+            Wait = new WaitDto(null, [], null, null, null, DateTimeOffset.UnixEpoch, blockedBy),
+        };
+        var row = new WorkItemSummaryDto(
+            "wi_A", "cmp_A", null, WorkItemKind.ProviderOp, null, "message.send", null, WorkItemStatus.Waiting, false, 5, null, null, null,
+            new ActorRef(ActorType.Human, null), 0, null, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null)
+        {
+            Wait = new WaitSummaryDto(null, null, null, null, DateTimeOffset.UnixEpoch, OnCount: 0, EndedCount: 0, blockedBy),
+        };
+
+        Assert.Contains(
+            "\"wait\":{\"attempt_id\":null,\"on\":[],\"mode\":null,\"until\":null,\"deadline\":null,\"opened_at\":\"1970-01-01T00:00:00.000Z\","
+            + "\"blocked_by\":{\"provider_block_id\":\"blk_A\",\"scope\":\"sender\",\"reason\":\"limit\"}}",
+            JsonSerializer.Serialize(parked, JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"on_count\":0,\"ended_count\":0,\"blocked_by\":{\"provider_block_id\":\"blk_A\",\"scope\":\"sender\",\"reason\":\"limit\"}}",
+            JsonSerializer.Serialize(row, JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.Equal(
+            ["provider_block_id", "scope", "reason"],
+            typeof(WaitBlockedByDto).GetProperties().Select(p => JasonJson.Options.PropertyNamingPolicy!.ConvertName(p.Name)));
     }
 
     [Fact]
@@ -510,7 +544,7 @@ public class ContractsShapeTests
 
         Assert.Contains(
             "\"wait\":{\"attempt_id\":\"att_A\",\"mode\":\"all\",\"until\":null,\"deadline\":\"1970-01-01T00:00:00.000Z\","
-            + "\"opened_at\":\"1970-01-01T00:00:00.000Z\",\"on_count\":3,\"ended_count\":1}",
+            + "\"opened_at\":\"1970-01-01T00:00:00.000Z\",\"on_count\":3,\"ended_count\":1,\"blocked_by\":null}",
             json,
             StringComparison.Ordinal);
         Assert.DoesNotContain("\"wait\"", JsonSerializer.Serialize(row with { Wait = null }, JasonJson.Options), StringComparison.Ordinal);

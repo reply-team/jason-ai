@@ -130,6 +130,8 @@ created ──► expired ──► created                        (by moving du
 
 processing ──► waiting ──► created                     (what it waited for happened, its deadline came, or somebody resumed it)
 
+created | processing ──► waiting ──► created           (a provider block held it: the block cleared, or let it through as its trial)
+
 created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
 created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
 ```
@@ -155,7 +157,10 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   its next run is a new attempt, told why in the envelope's `resumption`. Anyone named may end a wait
   before it is over with `workitem.resume` — the line is theirs and carries their reason, and an item
   that is not waiting is refused with `workitem_not_waiting`. Cancelling or expiring the item closes the wait with it, and nothing
-  resumes work that was stopped.
+  resumes work that was stopped. Work a provider block holds waits here too, with no run of its own behind the
+  wait: the claim parks it before any attempt exists, or the attempt that met the block ends `blocked`. Its wait
+  names the block rather than items or a moment, is bounded by the item's `due_at` alone, and is released with
+  `block_cleared` or `block_trial` (§Provider blocks).
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
 - **`expired`** — the due date passed before anyone claimed it, before anyone answered the
@@ -200,10 +205,11 @@ and sync runs before summon, so a reply it says wakes the manager in the same sc
 waiting work whose wait is over: every item it named has ended — `succeeded`, `failed`, `cancelled` or
 `expired`; an item retried and back in `created`, or itself waiting, has not — or any one has, or its
 deadline has come. It reads statuses and the clock, never an event, so items that ended before the wait
-was written, or a deadline that passed while the runtime was down, release it at the next scan. It runs
-after enforce, so an item whose last attempt was lost for good releases what waits on it in the same
-scan, and before the claim, so what it releases can be claimed in that scan. Notify comes last,
-after the dispatch ([docs/notifications.md](notifications.md) is the contract).
+was written, or a deadline that passed while the runtime was down, release it at the next scan. It
+releases at most 500 waits a scan: a cleared block's waits are released over as many scans as the bound
+needs, oldest first. It runs after enforce, so an item whose last attempt was lost for good releases
+what waits on it in the same scan, and before the claim, so what it releases can be claimed in that
+scan. Notify comes last, after the dispatch ([docs/notifications.md](notifications.md) is the contract).
 
 Claiming happens inside an immediate transaction, so two scans — or two runtimes — cannot both take
 the same item; the second waits, finds it taken and moves on. Within one scan the dispatcher takes:
@@ -216,7 +222,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the thirteen pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the fourteen pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -331,7 +337,8 @@ the next attempt would run the same code over the same answer. A cancellation st
 
 `attempt_count` counts **failed** attempts — the ones that count toward the limit. Work that succeeds
 first time shows `attempt_count: 0` with one entry in `attempts`. An attempt that was `interrupted` by
-a restart, an attempt that `yielded` to wait, and any attempt `cancelled` by a caller, never count.
+a restart, an attempt that `yielded` to wait, an attempt that ended `blocked` — the provider refused it for a block
+and did nothing — and any attempt `cancelled` by a caller, never count.
 
 There is no separate inbox entity: what needs a human or a manager role is
 `jason workitem list --status failed --status expired`. A listing takes an order and a window on the time it orders
@@ -424,7 +431,7 @@ Every one of these is decided **before a child process exists**, and the first t
 the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the thirteen provider checks follow.
+existed. It is the same rule the fourteen provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -583,8 +590,9 @@ ended with `workitem.wait`, and the item's latest wait was released rather than 
 claim** from the rows the wait left: `previous_attempt_id` is the attempt that waited, `resumption_number`
 counts the item's released waits up to this one, `waited_since` is when the wait opened, and
 `woke_because` is the reason the wait's release recorded, verbatim — `children_ended`, `moment_reached`,
-`wait_ceiling` or `resumed_by_actor`. `block_cleared` never occurs for a role's wait: a provider
-operation is the one told it is blocked, and its relaunch carries no `resumption`. `items` are the items
+`wait_ceiling` or `resumed_by_actor`. A role's wait is released for one of those four: neither `block_cleared`
+nor `block_trial` occurs for a role's wait, since a provider block holds provider operations, and their relaunch
+carries no `resumption`. `items` are the items
 the wait named, in the order it named them, each with its status and its result. The results travel
 within 1 MiB per wait: they are given in that order while the running size of their JSON fits, and from
 the first one that does not fit, every later result is left out and marked `result_omitted` — the id
@@ -657,7 +665,12 @@ A waiting item is read with its `wait` block: `attempt_id`, `on` — each named 
 `status`, in the order the wait named them — `mode`, `until`, `deadline` and `opened_at`. A listing
 carries the same block with `on_count` and `ended_count` — how many items the wait names, and how many
 of them have ended — in place of `on`, so a page stays small; `workitem.get` has the
-items. Any item that is not waiting has no block.
+items. Any item that is not waiting has no block. Both shapes carry `blocked_by`: null for a role's wait, and for
+an item parked on a provider block the block's `provider_block_id`, its `scope` — `account` or `sender` — and its
+`reason`, with `on` empty and `mode`, `until` and `deadline` null. The link where a person clears the block never
+travels there; it is on the item's `last_error.block`: the error of the attempt that met the block, its trace left on
+the attempt, or, for an item the claim parked, which no attempt met the block for, the block as the runtime keeps it,
+under the code `provider_blocked` and the class `blocked`.
 
 `set_result` replaces the whole result and works only while the item is `processing`, so an executor
 that is killed halfway leaves behind what it had rather than nothing. It is deliberately **not** held
@@ -710,7 +723,7 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| the thirteen pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the fourteen pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -725,21 +738,23 @@ campaign, the identifiers that plugin itself pinned, and the work item's own id 
 — and validates the whole composed document against the operation's input schema at the claim. A
 plugin never sees a work item's context.
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Thirteen checks,
+**Everything that can stop it is decided at the claim, before a child process exists.** Fourteen checks,
 in this order, and the first that answers is the one that decides:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
-contact_not_linked → input_invalid → approval_required
+contact_not_linked → input_invalid → approval_required → provider_blocked
 ```
 
 The first twelve are refusals and all of them are final: eleven are `permanent` and `input_invalid` is
 `validation`, because it is the one a planner can fix by editing the item. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
 nothing ever falls back to another plugin. The thirteenth is not a refusal: `approval_required` parks the
-item for a person (§Approvals above), and it is asked last so that nobody is asked to approve work that
-would have been refused anyway. [docs/routing.md](routing.md) says what each one means and what to
+item for a person (§Approvals above), and it is asked after every refusal so that nobody is asked to approve work
+that would have been refused anyway. The fourteenth, `provider_blocked`, is not a refusal either: it parks work an
+open provider block holds — `reach: act` work and the protective operations, nothing else — as `waiting`, with no
+attempt, until the block clears or a trial gets past it (§Provider blocks below). [docs/routing.md](routing.md) says what each one means and what to
 change.
 
 Two of those checks measure a document against a schema — the binding against the plugin's (7), the
@@ -751,7 +766,9 @@ may be right.
 
 **A failure's class decides the retry, not the code table.** A provider attempt ends with one of five
 classes: `transient` comes back, `permanent` and `validation` are final, `blocked` — the provider refused the
-account or a sender and did nothing — is final with its block kept on the item's `last_error`, and `ambiguous` — the
+account or a sender and did nothing — parks work a block holds on that block, with the attempt `blocked` and never
+counted, and is final with its block kept on the item's `last_error` for any other operation (§Provider blocks
+below), and `ambiguous` — the
 provider may already have acted — is repeated only where the operation's own contract says a repeat is
 `safe` or is answerable `after_recovery_read`. An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code
@@ -767,6 +784,74 @@ version and content digest, the operation and contract version, the plugin and r
 route scope, the binding's identity (a hash, never the value), the invocation id, what the run cost,
 the identifiers the plugin returned, and — after a `result_invalid` — the answer that was refused.
 Nothing rewrites it afterwards. `jason workitem get <id> --human` prints it as a block per attempt.
+
+## Provider blocks
+
+A `blocked` failure is the provider saying no to the account, or to one sending account under it, rather than to
+the work: its money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or
+paused. The provider did nothing, and nothing the item says would change its answer, so the runtime keeps the block —
+per plugin and binding identity, the account's or one sender's — and holds the work it concerns until it clears.
+
+**What a block holds.** A block holds `reach: act` work and the protective operations — the ones the catalogue runs
+in a paused campaign, today `campaign.pause` and `optout.record`, read from the catalogue's own property — and every
+other `control` operation and every read runs through it and fails on its own, if it fails at all: a block is about
+what the provider refuses to let reach a person or protect them, a control operation may still succeed, and a read
+tells the truth. An account's block covers every sending account under it. A sender's block holds the work whose
+composed input names that sender at `/args/sender/external_id`; an item that met a sender's block and names no
+sender parks alone, on that block.
+
+**Two ways in, one wait.** An attempt of held work that answers `blocked` ends `blocked` — over, and never counted
+toward `max_attempts` — and its item waits on the block the answer names, which that attempt opens where none of its
+grain is open and which is seen again where one is: counted, with the latest reason, link and `clears_at`. And the
+claim's fourteenth check parks held work an open block already holds, before an attempt exists
+([docs/routing.md](routing.md) §7). Either way the item moves to `waiting` on the same wait row a role's wait uses,
+naming the block with no `mode`, `until` or `deadline`; the item's `due_at` bounds it, an item past its due date
+expires, and cancelling the item closes the wait. A person's approval stays as they gave it: approved work the block
+holds parks after its approval and runs under that decision when it is let through — unless what it would run
+changed meanwhile, a pin the refused attempt learned among such changes, and then the person decides once more
+(§Approvals).
+
+**The trial.** A block is tried rather than waited out. Its next trial is due at the moment the provider said it
+clears by itself where that is ahead, a day at most — so a block that says it clears next month is still tried daily —
+and otherwise at the cadence, `Dispatcher:Blocks:TrialSeconds` after it was opened or last seen. When it is due, the
+scan's resume step lets one item the block holds back into the queue as its trial, releasing its wait with
+`block_trial`: protective work first, then the highest priority, then the oldest, and never a read, since a read is
+never held. One trial is in flight per block, from its release until it ends: while it is claimed, running or awaiting
+a decision, or in the queue where the claim could take it. A trial left in the queue of a campaign paused since, which
+the claim would not take, holds nothing, and the next trial due is another item the block holds; the claim reads the
+same rule. A trial that waits for a person's decision holds the block's one trial until they decide: approved, it runs
+as the trial; refused, it ends, leaves the live set, and the next trial due is another item the block holds. Approved
+work let through as a trial asks the person again where the attempt the block refused learned a pin, since a learned
+pin is a change to the input the person approved (§Approvals, what is approved is a subject). A block that is due but
+holds nothing that could run now lets the next held item the claim meets through as its trial instead. What the trial
+answers decides the block:
+
+- **it succeeded, or failed `permanent` or `validation`** — the provider judged the work, so the call got past the
+  block: the block is cleared by that attempt, and the next resume step releases every wait on it with
+  `block_cleared`. Any call of held work the provider judged on the work clears its open block, a trial or not, and
+  a trial clears the block that let it through whether or not its input names a sender;
+- **it answered `blocked` again** — the trial parks once more on the block, which is seen again and its next trial
+  put off; nobody is told twice;
+- **anything else** — `transient`, `ambiguous`, an answer outside the contract or the host's own ending — says nothing
+  about the block: it stays open, its next trial is due a cadence from now, and the item follows its own retry rule.
+
+While an account's block of a binding is open, the blocks of its senders hold no trial of their own and an item that
+names a blocked sender parks on the account's block: the account's trial answers first, and it is drawn from the items
+its senders' blocks hold as well as its own. Two things follow. When the account's block clears, a sender's block
+still open gets its own trial from then on. And an item released by that clear whose sender is still blocked parks
+again at its next claim, on the sender's block — with no new `provider_blocked` line where its campaign was already
+told about that block.
+
+**What is said.** The campaign is told once per block: `provider_blocked`, keyed by the block's id, written when the
+first of its items parks on that block — the block's id, scope, reason and `clears_at`, the item that parked, and for
+a sender's block the sender's identifier. It is a default manager trigger ([campaign manager](campaign-manager.md)):
+what reaches people has stopped, and whether to tell somebody or change course is the manager's. When the block
+clears, every campaign that was told is told so, once, `provider_block_cleared`, naming the attempt that got past it —
+the first, where two got past it at once; that line is not a trigger, since the work runs again by itself. Each parked
+item writes its own `workitem_waiting`, whose `blocked_by` names the block, and its release writes `workitem_resumed`
+with `block_cleared` or `block_trial`. The link where a person clears a block is kept on the block and on the
+`last_error.block` of every item it parks, where a person reads it, and nowhere else: never in a log, a journal line,
+a notification or a `wait` block.
 
 ## Roles
 
@@ -805,6 +890,7 @@ mistyped one.
 | `Dispatcher:RetryDelaySeconds` | `60` | 0..86400 | multiplied by the failure count to set `retry_after`; 0 retries at the next scan |
 | `Dispatcher:ExitGraceSeconds` | `30` | 0..600 | how long a process may linger after its attempt was completed through the API before the dispatcher stops it |
 | `Dispatcher:EventsCadenceSeconds` | `600` | 60..86400 | how long after one read of an account's events starts the next is due ([docs/events.md](events.md)) |
+| `Dispatcher:Blocks:TrialSeconds` | `900` | 60..86400 | how long after a provider block was opened or last seen, or after a trial that said nothing about it, its next trial is due (§Provider blocks) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |
 | `Dispatcher:AiRole:MaxAttempts` | `3` | 1..10 | how many failures an `ai_role` item is worth |

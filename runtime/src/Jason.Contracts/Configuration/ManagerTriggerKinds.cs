@@ -32,6 +32,7 @@ public static class ManagerTriggerKinds
         "notification_sent",
         "inbound_reply_observed", "provider_event_observed",
         "events_read", "events_gap_observed", "events_backfill_requested",
+        "provider_blocked", "provider_block_cleared",
         "project_created", "project_updated", "project_linked",
         "preference_set", "preference_unset",
     }.ToFrozenSet(StringComparer.Ordinal);

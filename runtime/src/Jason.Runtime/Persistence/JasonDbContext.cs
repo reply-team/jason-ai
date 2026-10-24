@@ -28,6 +28,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<WorkItemWaitItem> WorkItemWaitItems => Set<WorkItemWaitItem>();
 
+    public DbSet<ProviderBlock> ProviderBlocks => Set<ProviderBlock>();
+
     public DbSet<Role> Roles => Set<Role>();
 
     public DbSet<ExternalId> ExternalIds => Set<ExternalId>();
@@ -121,6 +123,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<RouteScope>().HaveConversion<SnakeCaseEnumConverter<RouteScope>>().HaveMaxLength(32);
         configurationBuilder.Properties<AgentHostKind>().HaveConversion<SnakeCaseEnumConverter<AgentHostKind>>().HaveMaxLength(32);
         configurationBuilder.Properties<LineageState>().HaveConversion<SnakeCaseEnumConverter<LineageState>>().HaveMaxLength(32);
+        configurationBuilder.Properties<ProviderBlockScope>().HaveConversion<SnakeCaseEnumConverter<ProviderBlockScope>>().HaveMaxLength(32);
+        configurationBuilder.Properties<ProviderBlockStatus>().HaveConversion<SnakeCaseEnumConverter<ProviderBlockStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<EventBackfillStatus>().HaveConversion<SnakeCaseEnumConverter<EventBackfillStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
         configurationBuilder.Properties<JsonArray>().HaveConversion<JsonArrayConverter, JsonArrayComparer>();
@@ -525,6 +529,45 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             wait.HasOne(w => w.Attempt).WithMany().HasForeignKey(w => w.AttemptId).OnDelete(DeleteBehavior.Restrict);
             wait.HasOne(w => w.ResumedByAttempt).WithMany().HasForeignKey(w => w.ResumedByAttemptId).OnDelete(DeleteBehavior.Restrict);
             wait.HasMany(w => w.Items).WithOne(i => i.Wait).HasForeignKey(i => i.WaitId).OnDelete(DeleteBehavior.Restrict);
+
+            // The waits a provider block holds, by how they stand: a trial picks one of a block's open waits here.
+            wait.HasOne(w => w.ProviderBlock).WithMany().HasForeignKey(w => w.ProviderBlockId).OnDelete(DeleteBehavior.Restrict);
+            wait.HasIndex(w => new { w.ProviderBlockId, w.Status });
+        });
+
+        modelBuilder.Entity<ProviderBlock>(block =>
+        {
+            block.HasKey(b => b.Id);
+            block.Property(b => b.PublicId).HasMaxLength(40);
+            block.HasIndex(b => b.PublicId).IsUnique();
+            block.Property(b => b.PluginId).HasMaxLength(64);
+            block.Property(b => b.BindingIdentity).HasMaxLength(71);
+            block.Property(b => b.SenderExternalId).HasMaxLength(256);
+            block.Property(b => b.Reason).HasMaxLength(32);
+            block.Property(b => b.Link).HasMaxLength(2048);
+
+            // The two halves of one rule, one open block per binding, scope and sender: SQLite holds nulls distinct, so
+            // an account block, which names no sender, is held unique by an index of its own.
+            block.HasIndex(b => new { b.PluginId, b.BindingIdentity })
+                .IsUnique()
+                .HasFilter("status = 'open' AND scope = 'account'")
+                .HasDatabaseName("ix_provider_blocks_one_open_per_account");
+            block.HasIndex(b => new { b.PluginId, b.BindingIdentity, b.SenderExternalId })
+                .IsUnique()
+                .HasFilter("status = 'open' AND scope = 'sender'")
+                .HasDatabaseName("ix_provider_blocks_one_open_per_sender");
+
+            // The blocks whose trial is due, by how they stand and when: the resume step's trial query reads them here.
+            block.HasIndex(b => new { b.Status, b.NextTrialAt });
+
+            // Two calls that get past one block at once must not both clear it, and the status is what a clear changes.
+            block.Property(b => b.Status).IsConcurrencyToken();
+            block.ToTable(t => t.HasCheckConstraint("ck_provider_blocks_sender", "(scope = 'sender') = (sender_external_id IS NOT NULL)"));
+
+            // Nothing a block refers to goes away under it.
+            block.HasOne(b => b.OpenedByAttempt).WithMany().HasForeignKey(b => b.OpenedByAttemptId).OnDelete(DeleteBehavior.Restrict);
+            block.HasOne(b => b.ClearedByAttempt).WithMany().HasForeignKey(b => b.ClearedByAttemptId).OnDelete(DeleteBehavior.Restrict);
+            block.HasOne(b => b.TrialWorkItem).WithMany().HasForeignKey(b => b.TrialWorkItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<WorkItemWaitItem>(named =>
@@ -632,6 +675,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.Kind, e.Key }, "ix_journal_kind_key_gaps")
                 .IsUnique()
                 .HasFilter("kind = 'events_gap_observed'");
+
+            // A provider block is said once per campaign whose work it holds, and the database is what says so. The key,
+            // the block's public id, leads, because the block's clear reads every campaign it was said in by it.
+            entry.HasIndex(e => new { e.Kind, e.Key, e.CampaignId }, "ix_journal_kind_key_campaign_blocks")
+                .IsUnique()
+                .HasFilter("kind = 'provider_blocked'");
             entry.Property(e => e.New).HasColumnName("new_json");
             entry.Property(e => e.Reason).HasMaxLength(2000);
 

@@ -13,7 +13,9 @@ public static class WorkItemTransitions
 {
     private static readonly Dictionary<WorkItemStatus, WorkItemStatus[]> Legal = new()
     {
-        [WorkItemStatus.Created] = [WorkItemStatus.Scheduled, WorkItemStatus.AwaitingApproval, WorkItemStatus.Cancelled, WorkItemStatus.Expired],
+        // The claim parks work on a provider block without running it, as it parks work for a person's approval: no
+        // attempt is made, because nothing has run.
+        [WorkItemStatus.Created] = [WorkItemStatus.Scheduled, WorkItemStatus.AwaitingApproval, WorkItemStatus.Cancelled, WorkItemStatus.Expired, WorkItemStatus.Waiting],
 
         // Parked work is unclaimed work: a person approves it back into the queue or rejects it, and meanwhile
         // it can be cancelled or reach its due date like anything else nobody has picked up. What it cannot do

@@ -21,6 +21,28 @@ public class OperationCatalogTests
         Assert.Equal(ids.OrderBy(id => id, StringComparer.Ordinal).ToList(), ids);
     }
 
+    /// <summary>
+    /// What a provider block holds is read from the documents and nowhere else: every operation of reach <c>act</c>, and
+    /// the protective ones, which run in a paused campaign. Every read and every other control runs through a block.
+    /// </summary>
+    [Fact]
+    public void A_provider_block_holds_every_act_and_the_protective_operations_and_nothing_else()
+    {
+        foreach (var contract in OperationCatalog.All)
+        {
+            var held = string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal) || OperationCatalog.RunsInPausedCampaign.Contains(contract.Id);
+            Assert.True(
+                held == OperationCatalog.HeldByProviderBlock.Contains(contract.Id),
+                $"'{contract.Id}' (reach {contract.Reach.Value}) is held by a block: {OperationCatalog.HeldByProviderBlock.Contains(contract.Id)}; expected {held}.");
+        }
+
+        Assert.Contains("message.send", OperationCatalog.HeldByProviderBlock);
+        Assert.Contains("campaign.pause", OperationCatalog.HeldByProviderBlock);
+        Assert.Contains("optout.record", OperationCatalog.HeldByProviderBlock);
+        Assert.DoesNotContain("conversation.list", OperationCatalog.HeldByProviderBlock);
+        Assert.Contains(OperationCatalog.All, contract => string.Equals(contract.Reach.Value, "control", StringComparison.Ordinal) && !OperationCatalog.HeldByProviderBlock.Contains(contract.Id));
+    }
+
     [Fact]
     public void Find_and_knows_give_the_same_answer_and_an_unpublished_operation_is_simply_unknown()
     {

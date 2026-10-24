@@ -18,7 +18,7 @@ public class WorkItemWaitsSchemaTests
 
     private const string OneOpen = "ix_work_item_waits_one_open_per_item";
 
-    /// <summary>An installation that upgrades keeps its work, waits for nothing, and has both tables, every column the wait needs and nothing a later change brings.</summary>
+    /// <summary>An installation that upgrades keeps its work, waits for nothing, and has both tables and every column the wait needs, the provider block it may be parked on among them.</summary>
     [Fact]
     public void An_upgraded_database_keeps_its_work_and_has_the_wait_tables_empty()
     {
@@ -46,10 +46,10 @@ public class WorkItemWaitsSchemaTests
 
         Assert.Equal(["wi_old|created"], Rows(dir.Paths.DatabaseFile, "SELECT public_id, status FROM work_items"));
         Assert.Equal(
-            ["id", "work_item_id", "attempt_id", "mode", "until", "deadline", "status", "opened_at", "released_at", "release_reason", "resumed_by_attempt_id"],
+            ["id", "work_item_id", "attempt_id", "mode", "until", "deadline", "status", "opened_at", "released_at", "release_reason", "resumed_by_attempt_id", "provider_block_id"],
             Rows(dir.Paths.DatabaseFile, "SELECT name FROM pragma_table_info('work_item_waits') ORDER BY cid"));
         Assert.Equal(
-            ["work_item_id|1", "attempt_id|0", "mode|0", "until|0", "deadline|0", "status|1", "opened_at|1", "released_at|0", "release_reason|0", "resumed_by_attempt_id|0"],
+            ["work_item_id|1", "attempt_id|0", "mode|0", "until|0", "deadline|0", "status|1", "opened_at|1", "released_at|0", "release_reason|0", "resumed_by_attempt_id|0", "provider_block_id|0"],
             Rows(dir.Paths.DatabaseFile, "SELECT name, \"notnull\" FROM pragma_table_info('work_item_waits') WHERE name <> 'id' ORDER BY cid"));
         Assert.Equal(
             ["wait_id|1|1", "child_work_item_id|2|1", "position|0|1"],
@@ -58,7 +58,7 @@ public class WorkItemWaitsSchemaTests
 
         // Nothing a wait refers to goes away under it.
         Assert.Equal(
-            ["attempts|attempt_id|RESTRICT", "attempts|resumed_by_attempt_id|RESTRICT", "work_items|work_item_id|RESTRICT"],
+            ["attempts|attempt_id|RESTRICT", "provider_blocks|provider_block_id|RESTRICT", "attempts|resumed_by_attempt_id|RESTRICT", "work_items|work_item_id|RESTRICT"],
             Rows(dir.Paths.DatabaseFile, "SELECT \"table\", \"from\", on_delete FROM pragma_foreign_key_list('work_item_waits') ORDER BY \"from\""));
         Assert.Equal(
             ["work_item_waits|wait_id|RESTRICT", "work_items|child_work_item_id|RESTRICT"],
@@ -67,9 +67,9 @@ public class WorkItemWaitsSchemaTests
 
     /// <summary>
     /// The indexes the resume step and the one-open rule stand on: one open wait per item, an item's waits by their
-    /// status (a released wait is found by its item there), and the named items by the item. No index by deadline: the
-    /// resume step reaches the open waits through their waiting items. The open check-in index keeps its four statuses: a
-    /// check-in never waits.
+    /// status (a released wait is found by its item there), a block's waits by their status, and the named items by the
+    /// item. No index by deadline: the resume step reaches the open waits through their waiting items. The open check-in
+    /// index keeps its four statuses: a check-in never waits.
     /// </summary>
     [Fact]
     public void The_wait_indexes_are_the_ones_the_resume_step_reads_and_the_check_in_index_is_unchanged()
@@ -79,6 +79,7 @@ public class WorkItemWaitsSchemaTests
             [
                 "ix_work_item_waits_attempt_id|0|attempt_id",
                 "ix_work_item_waits_one_open_per_item|1|work_item_id",
+                "ix_work_item_waits_provider_block_id_status|0|provider_block_id,status",
                 "ix_work_item_waits_resumed_by_attempt_id|0|resumed_by_attempt_id",
                 "ix_work_item_waits_work_item_id_status|0|work_item_id,status",
             ],

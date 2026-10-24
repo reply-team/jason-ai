@@ -36,6 +36,7 @@ public sealed class JournalKindInventoryTests
         [JournalKinds.ExternalIdDiverged] = "provider identifiers",
         [JournalKinds.InboundReplyObserved] = "provider identifiers",
         [JournalKinds.ProviderEventObserved] = "provider identifiers",
+        [JournalKinds.ProviderBlocked] = "provider identifiers",
         [JournalKinds.ExternalEffectReported] = "the effect, tool and operation a report names",
         [JournalKinds.NotificationSent] = "the failure text and receipts notification channels reported",
     };
@@ -90,6 +91,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.EventsRead,
         JournalKinds.EventsGapObserved,
         JournalKinds.EventsBackfillRequested,
+        JournalKinds.ProviderBlockCleared,
         JournalKinds.PreferenceSet,
         JournalKinds.PreferenceUnset,
     };

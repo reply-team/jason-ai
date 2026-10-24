@@ -79,8 +79,15 @@ breaks either half is not an outcome, and ends as `plugin_malformed_outcome`.
 
 ## What the runtime does with it today
 
-A blocked failure is final: the attempt ends, no retry is spent on it, and the block is kept beside the error the
-work item shows (`last_error.block`). A block that does not satisfy the schema is recorded `permanent`, with what is
+A blocked failure spends no retry: the attempt ends `blocked`, never counted, and the block is kept beside the error
+the work item shows (`last_error.block`). The runtime keeps the block itself too, per plugin and binding identity —
+the account's, or one sender's under it — and holds the work it concerns: `reach: act` work and the protective
+operations wait on the block, as `waiting` with a `wait.blocked_by` naming it, until a call gets past it — one of
+them let through as the block's trial at the moment the provider said it clears by itself where that is ahead, a day
+at most; otherwise at the cadence. Every other operation's item ends final, and reads run through an open block. The
+`link` stays on the block and the error, where a person reads it: never in a log, a journal line, a notification or a
+`wait` block.
+A block that does not satisfy the schema is recorded `permanent`, with what is
 wrong with it named beside the error, so a malformed block never stands for a real one. A read made on request outside
 any work item, such as `contact.threads`, answers a blocked failure as an API error carrying the plugin's code with
 `retryable` false; the block itself does not travel in an API error.

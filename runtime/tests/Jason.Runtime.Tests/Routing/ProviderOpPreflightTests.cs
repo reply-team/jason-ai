@@ -26,6 +26,8 @@ public class ProviderOpPreflightTests
     private const string Optout = "optout.record";
     private const string Stop = "enrollment.stop";
     private const string Delete = "contact.delete";
+    private const string Pause = "campaign.pause";
+    private const string Send = "message.send";
 
     /// <summary>
     /// The order, proven by repairing one thing at a time: everything is wrong at the start, and each repair
@@ -33,7 +35,7 @@ public class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the thirteen checks' order")]
+    [Critical(Family.W3, "the fourteen checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -83,9 +85,9 @@ public class ProviderOpPreflightTests
         met.Add(Refused(scenario, FailureClass.Validation));
         Assert.Equal("/args/contact", Assert.Single(scenario.Check().Details!).Field);
 
-        // Last of the thirteen, and the only one that is not a refusal: an operation a person has to confirm is
-        // parked rather than failed, and it is asked here — after the input it would be approved for has been
-        // composed and held to its own schema — rather than before any of that was known.
+        // Thirteenth, and the first that is not a refusal: an operation a person has to confirm is parked rather than
+        // failed, and it is asked here — after the input it would be approved for has been composed and held to its own
+        // schema — rather than before any of that was known.
         scenario.Operation = Enroll;
         scenario.Arguments = Scenario.CompleteEnrollment;
         var parked = scenario.Check();
@@ -95,11 +97,28 @@ public class ProviderOpPreflightTests
         Assert.Null(parked.Class);
         met.Add(parked.Code!);
 
+        // Fourteenth, and last: work nobody has to confirm, which a block the provider holds on this account still
+        // parks. It is asked after the approval because it says nothing about the work, so the block travels on the
+        // approval's park as well, and work a person releases still waits for it.
+        var block = Scenario.Block(binding: "sha256:west");
+        scenario.Blocks = [block];
+        Assert.Same(block, scenario.Check().Block);
+        scenario.Operation = Pause;
+        scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, Pause], binding: Scenario.BindingSchema);
+        scenario.Arguments = null;
+        scenario.CampaignPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["campaign"] = "cmp-provider-7" };
+        var held = scenario.Check();
+        Assert.True(held.Parks);
+        Assert.False(held.Refused);
+        Assert.NotNull(held.Plan);
+        Assert.Null(held.Class);
+        Assert.Same(block, held.Block);
+        met.Add(held.Code!);
+
         // Every check in the published order, met one at a time, and then an item with nothing left wrong.
         Assert.Equal(ProviderOpPreflight.Codes, met);
 
-        scenario.Operation = Add;
-        scenario.Arguments = Scenario.CompleteArguments;
+        scenario.Blocks = null;
         var verdict = scenario.Check();
         Assert.True(verdict.Passed);
         Assert.Null(verdict.Code);
@@ -150,7 +169,7 @@ public class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the thirteen is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the fourteen is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -161,12 +180,12 @@ public class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
-    /// The one answer two of the checks give that is not a refusal is named beside the thirteen rather than among them:
+    /// The one answer two of the checks give that is not a refusal is named beside the fourteen rather than among them:
     /// the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What both checks answer when their pattern does not finish is that named outcome, and nothing else.
     /// </summary>
     [Fact]
-    public void The_claim_s_transient_outcome_is_what_checks_7_and_12_answer_and_is_not_among_the_thirteen()
+    public void The_claim_s_transient_outcome_is_what_checks_7_and_12_answer_and_is_not_among_the_fourteen()
     {
         var schema = Scenario.BindingSchema;
         schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
@@ -186,6 +205,69 @@ public class ProviderOpPreflightTests
 
         Assert.Equal([ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.TransientOutcome], [atTheBinding.Code, atTheInput.Code]);
         Assert.DoesNotContain(ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.Codes);
+    }
+
+    /// <summary>
+    /// A block holds only work that reaches a person or protects one. A read runs through it and tells the truth, and
+    /// a control operation the protective set does not name runs too and succeeds or fails on its own.
+    /// </summary>
+    [Fact]
+    public void A_read_and_a_control_operation_a_block_does_not_hold_run_through_it()
+    {
+        var read = new Scenario
+        {
+            Operation = Get,
+            Route = Scenario.ToTheInstalledPackage,
+            CampaignPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["campaign"] = "cmp-provider-7" },
+            Blocks = [Scenario.Block()],
+        }.Check();
+        var control = new Scenario
+        {
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+            Blocks = [Scenario.Block()],
+        }.Check();
+
+        Assert.True(read.Passed, $"The read answered {read.Code}.");
+        Assert.True(control.Passed, $"The control operation answered {control.Code}.");
+        Assert.Equal([null, null], [read.Block, control.Block]);
+    }
+
+    /// <summary>
+    /// The account's block covers every sending account under it; a sender's block holds only the work whose input names
+    /// that sender, and work that names none is held by no sender's block at all.
+    /// </summary>
+    [Fact]
+    public void An_account_block_holds_every_sender_and_a_sender_block_only_work_naming_its_own()
+    {
+        var marta = Scenario.Block(ProviderBlockScope.Sender, sender: "snd-1");
+        var account = Scenario.Block();
+
+        Assert.Same(marta, Scenario.Sending("snd-1", marta).Check().Block);
+        Assert.Null(Scenario.Sending("snd-2", marta).Check().Block);
+        Assert.Same(account, Scenario.Sending("snd-2", marta, account).Check().Block);
+
+        var enrolment = new Scenario
+        {
+            Operation = Enroll,
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteEnrollment,
+            Blocks = [marta],
+        }.Check();
+        Assert.Equal((AttemptErrors.ApprovalRequired, null), (enrolment.Code, enrolment.Block));
+    }
+
+    /// <summary>A block is the provider's word about one plugin and one binding, and holds no other plugin's or binding's work.</summary>
+    [Theory]
+    [InlineData("other-provider", "none")]
+    [InlineData(Scenario.PluginId, "sha256:east")]
+    public void A_block_of_another_plugin_or_binding_holds_nothing_here(string plugin, string binding)
+    {
+        var verdict = Scenario.Sending("snd-1", Scenario.Block(plugin: plugin, binding: binding)).Check();
+
+        Assert.Equal((AttemptErrors.ApprovalRequired, null), (verdict.Code, verdict.Block));
     }
 
     /// <summary>
@@ -607,6 +689,44 @@ public class ProviderOpPreflightTests
             ["first_touch"] = "authored_delay",
         };
 
+        /// <summary>
+        /// An email to Ada from the sending account <paramref name="sender"/>, through the installed package, with the
+        /// provider's open <paramref name="blocks"/>: nothing is wrong with it, so only a person — and a block — stops it.
+        /// </summary>
+        public static Scenario Sending(string sender, params ProviderBlock[] blocks) => new()
+        {
+            Operation = Send,
+            Route = ToTheInstalledPackage,
+            Plugin = Package(operations: [Send]),
+            Contact = Person(("email", "ada@example.test")),
+            Arguments = new JsonObject
+            {
+                ["channel"] = "email",
+                ["sender"] = new JsonObject { ["external_id"] = sender, ["address"] = "marta@example.com" },
+                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
+            },
+            Blocks = blocks,
+        };
+
+        /// <summary>An open block the provider said it holds, on the account as a whole or on one sending account under it.</summary>
+        public static ProviderBlock Block(
+            ProviderBlockScope scope = ProviderBlockScope.Account,
+            string? sender = null,
+            string plugin = PluginId,
+            string binding = "none") => new()
+        {
+            PublicId = PublicId.New("blk"),
+            PluginId = plugin,
+            BindingIdentity = binding,
+            Scope = scope,
+            SenderExternalId = sender,
+            Reason = "billing",
+            OpenedAt = DateTime.UnixEpoch,
+            LastSeenAt = DateTime.UnixEpoch,
+            NextTrialAt = DateTime.UnixEpoch.AddHours(1),
+            SeenCount = 1,
+        };
+
         /// <summary>A routed read of a linked campaign with a well-formed page, and nobody named yet.</summary>
         public static Scenario Reading(string operation) => new()
         {
@@ -644,6 +764,9 @@ public class ProviderOpPreflightTests
 
         public PatternTiming Timing { get; set; } = PatternTiming.Default;
 
+        /// <summary>The open blocks of the routed plugin the claim would have read, and null where it read none.</summary>
+        public IReadOnlyList<ProviderBlock>? Blocks { get; set; }
+
         public static LoadedPlugin Package(
             string id = PluginId,
             PluginKind kind = PluginKind.Provider,
@@ -674,7 +797,7 @@ public class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);

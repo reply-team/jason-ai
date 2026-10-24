@@ -33,6 +33,22 @@ public sealed class AiRoleDefaults : KindDefaults
     public int MaxWaits { get; set; } = 20;
 }
 
+/// <summary>How work a provider block holds is tried again: one item at a time, at a cadence, until a call gets past it.</summary>
+public sealed class BlockDefaults
+{
+    /// <summary>The shortest cadence: a minute, the shortest anything the dispatcher waits for is counted in.</summary>
+    public const int MinimumTrialSeconds = 60;
+
+    /// <summary>The longest cadence: a day, the same as the furthest a provider's own word that it clears puts a trial off.</summary>
+    public const int MaximumTrialSeconds = 86_400;
+
+    /// <summary>
+    /// 60..86400; how long after a block was met, or a trial of it said nothing, the next trial is due, where the provider
+    /// did not say when the block clears by itself. Fifteen minutes unless set.
+    /// </summary>
+    public int TrialSeconds { get; set; } = 900;
+}
+
 /// <summary>
 /// The dispatcher's own dials. Everything here is read through <c>IOptionsMonitor</c> at each tick, so a hand
 /// edit of the user's settings file applies without a restart — except <see cref="MaxParallel"/>, which sizes
@@ -80,4 +96,6 @@ public sealed class DispatcherOptions
     /// and <see cref="MaxParallel"/> bounds both kinds of work.
     /// </summary>
     public KindDefaults ProviderOp { get; set; } = new() { TimeoutSeconds = 600, HeartbeatSeconds = 0, MaxAttempts = 3 };
+
+    public BlockDefaults Blocks { get; set; } = new();
 }

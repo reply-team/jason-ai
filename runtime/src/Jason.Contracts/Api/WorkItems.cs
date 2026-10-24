@@ -382,13 +382,15 @@ public sealed record WorkItemResumeRequest(string? WorkItemId, ActorRef? Actor, 
 /// <param name="Until">The moment the wait named; null where it named none.</param>
 /// <param name="Deadline">When the wait ends whatever happens: the moment it named, or the ceiling; every wait a role makes has one.</param>
 /// <param name="OpenedAt">When the item began to wait.</param>
+/// <param name="BlockedBy">The provider block a parked item waits on; null for a role's wait.</param>
 public sealed record WaitDto(
     string? AttemptId,
     IReadOnlyList<WaitItemDto> On,
     WaitMode? Mode,
     DateTimeOffset? Until,
     DateTimeOffset? Deadline,
-    DateTimeOffset OpenedAt);
+    DateTimeOffset OpenedAt,
+    WaitBlockedByDto? BlockedBy = null);
 
 /// <summary>
 /// The open wait of a waiting item as a listing carries it: how many items it names and how many of them have ended, not
@@ -401,6 +403,7 @@ public sealed record WaitDto(
 /// <param name="OpenedAt">When the item began to wait.</param>
 /// <param name="OnCount">How many work items the wait names; 0 for a wait on a moment alone.</param>
 /// <param name="EndedCount">How many of them have ended — succeeded, failed, cancelled or expired.</param>
+/// <param name="BlockedBy">The provider block a parked item waits on; null for a role's wait.</param>
 public sealed record WaitSummaryDto(
     string? AttemptId,
     WaitMode? Mode,
@@ -408,7 +411,17 @@ public sealed record WaitSummaryDto(
     DateTimeOffset? Deadline,
     DateTimeOffset OpenedAt,
     int OnCount,
-    int EndedCount);
+    int EndedCount,
+    WaitBlockedByDto? BlockedBy = null);
+
+/// <summary>
+/// The provider block a parked item waits on: which block, what it holds and why, in the contract's words. Never where
+/// a person goes to clear it — the block's link stays with the block.
+/// </summary>
+/// <param name="ProviderBlockId">The block's public id.</param>
+/// <param name="Scope">What it holds: every operation it holds through the binding, or those from one sending account.</param>
+/// <param name="Reason">Why, in the contract's words: <c>billing</c>, <c>limit</c>, <c>credential</c>, <c>channel</c> or <c>other</c>.</param>
+public sealed record WaitBlockedByDto(string ProviderBlockId, ProviderBlockScope Scope, string Reason);
 
 /// <summary>One work item a wait names, and where it stands.</summary>
 public sealed record WaitItemDto(string WorkItemId, WorkItemStatus Status);

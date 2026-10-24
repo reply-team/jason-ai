@@ -217,7 +217,9 @@ public enum ApprovalStatus
 /// <summary>
 /// One run of one work item. <c>Interrupted</c> is a leftover of a runtime restart and is never counted. <c>Yielded</c>
 /// is a run that ended waiting: it is over, it is not counted against the item's attempts, and the item's next run is
-/// a new attempt.
+/// a new attempt. <c>Blocked</c> is a run the provider refused for a reason outside the work — money, a reached limit, a
+/// revoked credential, a broken channel — and did nothing for: it is over, it keeps the error and the block it met, it
+/// is not counted either, and the item waits on that block for its next run.
 /// </summary>
 public enum AttemptStatus
 {
@@ -228,6 +230,7 @@ public enum AttemptStatus
     Interrupted,
     Cancelled,
     Yielded,
+    Blocked,
 }
 
 /// <summary>
@@ -255,7 +258,8 @@ public enum WaitStatus
 
 /// <summary>
 /// Why a wait was released: the work items it named have ended, the moment it named has come, the ceiling on how long
-/// any wait may last has come, the provider block it waited on has cleared, or somebody resumed it by hand.
+/// any wait may last has come, the provider block it waited on has cleared, somebody resumed it by hand, or the item is
+/// the trial of the provider block it waited on, let through to find out whether the block still holds.
 /// </summary>
 public enum WaitReleaseReason
 {
@@ -264,6 +268,27 @@ public enum WaitReleaseReason
     WaitCeiling,
     BlockCleared,
     ResumedByActor,
+    BlockTrial,
+}
+
+/// <summary>
+/// What a provider block holds: <c>account</c>, every operation it holds through one binding; <c>sender</c>, those that go
+/// from one sending account under it. The contract's own words (<c>docs/contracts/block/provider_block.json</c>).
+/// </summary>
+public enum ProviderBlockScope
+{
+    Account,
+    Sender,
+}
+
+/// <summary>
+/// Where a provider block stands: <c>open</c> while it holds work, <c>cleared</c> once a call through it got past the
+/// provider. A cleared block is kept, with when and by which attempt it cleared.
+/// </summary>
+public enum ProviderBlockStatus
+{
+    Open,
+    Cleared,
 }
 
 /// <summary>How an executor says its attempt ended.</summary>

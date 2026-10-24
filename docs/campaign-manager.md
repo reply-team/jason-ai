@@ -47,10 +47,12 @@ line. These kinds summon a review:
 | `decision_answered` | A person answered a question a role could not answer for itself. The role that asked has already ended, so this is what releases the work that follows. |
 | `inbound_reply_observed` | A thread in one of the campaign's conversations moved since the last read: somebody may have replied. The runtime's own read says so and interprets nothing; what the reply means, and what to do about it, is the manager's ([inbound sync](inbound-sync.md)). |
 | `provider_event_observed` | A provider said something happened that concerns the campaign — a reply it detected, an invitation accepted, a message that bounced — and the runtime found it by an identifier the campaign's own operations pinned, or by the person a member is. What it calls for is the manager's ([events](events.md)). |
+| `provider_blocked` | A provider block holds the campaign's work: the account, or one sending account under it, is refused for its money, plan, allowance, credential or channel, and what reaches people has stopped until it clears. Said once per campaign and block. Whether to tell somebody, or change course, is the manager's; the block's clearing is not a trigger, because the work runs again by itself ([work execution](work-execution.md) §Provider blocks). |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
 go well. `workitem_expired` and `workitem_cancelled` are out: the cadence catches them soon enough.
+`provider_block_cleared` is out: what the block held runs again by itself, and the manager was told when it began.
 Everything about profiles, plugins, routes and roles is operator maintenance, not campaign meaning.
 
 **The rules are settings, never a skill.** `Manager:Triggers` is a list of chronicle kinds, and every
@@ -316,7 +318,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -337,7 +339,7 @@ defaults; a list written with no kind in it — an empty array, `null`, an empty
 kinds." It used to read as the defaults, the opposite of what whoever wrote it meant, without a word.
 The key is read without regard to case, as every setting is. A list narrowed before
 `inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
-the kind is added; the same holds for `provider_event_observed`.
+the kind is added; the same holds for `provider_event_observed` and `provider_blocked`.
 
 **A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
 woken for; dropping this one breaks something, because a question a person has answered is what

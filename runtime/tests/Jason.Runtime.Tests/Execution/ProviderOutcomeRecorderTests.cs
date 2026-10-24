@@ -9,6 +9,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Plugins;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,6 +33,8 @@ public class ProviderOutcomeRecorderTests
     /// else about the scene stays the add's, and only the repeat rule differs.
     /// </summary>
     private static OperationContract Never => Add with { RepeatAfterAmbiguous = RepeatAfterAmbiguous.Never };
+
+    private static OperationContract Pause => OperationCatalog.Find("campaign.pause")!;
 
     private static JsonNode Added(string contact) => new JsonObject
     {
@@ -512,6 +515,77 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// The same answer to work a block holds — here protective work — is not a failure: the work has not been tried, so
+    /// the attempt ends blocked, the item waits on the block the answer names, and the block is opened by this attempt
+    /// with the link the provider gave, which the campaign's line never carries.
+    /// </summary>
+    [Fact]
+    public async Task Held_work_that_meets_a_block_waits_on_the_block_its_attempt_opened()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Pause.Id);
+        var block = new JsonObject { ["scope"] = "account", ["reason"] = "billing", ["link"] = "https://billing.example.com/pay" };
+
+        await scene.RecordAsync(db, Pause, Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "the plan has lapsed", null, null, block)));
+
+        Assert.Equal((WorkItemStatus.Waiting, AttemptStatus.Blocked), (scene.Item.Status, scene.Attempt.Status));
+        Assert.Equal(("provider_blocked", (FailureClass?)FailureClass.Blocked), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class));
+        var opened = await db.ProviderBlocks.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(
+            (ProviderBlockStatus.Open, ProviderBlockScope.Account, "billing", "https://billing.example.com/pay"),
+            (opened.Status, opened.Scope, opened.Reason, opened.Link));
+        Assert.Equal((TestPlugins.FakeProviderId, "sha256:1", scene.Attempt.Id), (opened.PluginId, opened.BindingIdentity, opened.OpenedByAttemptId));
+        Assert.Equal(opened.Id, (await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == scene.Item.Id, Ct)).ProviderBlockId);
+        var said = Assert.Single(await db.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ProviderBlocked).ToListAsync(Ct));
+        Assert.DoesNotContain("billing.example.com", said.New!.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string, bool> WhatAnAnswerSaysOfAnOpenBlock() => new()
+    {
+        { "succeeded", true },
+        { "campaign_not_found", true },
+        { HostOutcomeCodes.PluginException, false },
+        { "rate_limited", false },
+        { "provider_answer_lost", false },
+    };
+
+    /// <summary>
+    /// A call to held work that the provider judged on the work — it succeeded, or failed permanent or validation — got
+    /// past the block, which clears; a transient or ambiguous failure, or the host's own ending, says nothing about it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(WhatAnAnswerSaysOfAnOpenBlock))]
+    public async Task Held_work_the_provider_judged_on_the_work_clears_the_open_block_and_nothing_else_does(string answer, bool clears)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Pause.Id);
+        var opener = WorkItemFactory.NewProviderOp(scene.Campaign, Pause.Id, Noon);
+        opener.Status = WorkItemStatus.Failed;
+        db.WorkItems.Add(opener);
+        var block = BlockRows.Block(opener, Noon, Noon, binding: "sha256:1");
+        block.PluginId = TestPlugins.FakeProviderId;
+        db.ProviderBlocks.Add(block);
+        await db.SaveChangesAsync(Ct);
+
+        var result = answer switch
+        {
+            "succeeded" => Succeeded(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["campaign_external_id"] = "sq-1129", ["status"] = "paused" }) }, null),
+            HostOutcomeCodes.PluginException => Failed(new OutcomeError(FailureClass.Permanent, answer, "the host stopped the plugin", null, null)),
+            _ => Failed(new OutcomeError(OperationCatalog.Find(Pause.Id)!.FailureCodes.Single(c => c.Code == answer).Class, answer, "the provider said so", null, null)),
+        };
+        await scene.RecordAsync(db, Pause, result);
+
+        var row = await db.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == block.Id, Ct);
+        Assert.True(
+            (row.Status == ProviderBlockStatus.Cleared) == clears,
+            $"After '{answer}' the block is {row.Status}, cleared by attempt {row.ClearedByAttemptId}.");
+        Assert.Equal(clears ? (int?)scene.Attempt.Id : null, row.ClearedByAttemptId);
+        Assert.NotEqual(WorkItemStatus.Waiting, scene.Item.Status);
+    }
+
+    /// <summary>
     /// A block outside its contract is refused the way an undeclared identifier is: the plugin's failure stands, recorded
     /// permanent, with what is wrong with the block named beside it, and the block itself is not kept.
     /// </summary>
@@ -671,18 +745,23 @@ public class ProviderOutcomeRecorderTests
     /// A scene is one provider item mid-flight. Passing a previous scene reuses its campaign, contact and item
     /// and adds the next attempt to them, which is what a second answer about the same person needs.
     /// </summary>
-    private static async Task<Scene> SeedAsync(JasonDbContext db, int? invokerOutcomeBytes = null, Scene? after = null, PatternTiming? timing = null)
+    private static async Task<Scene> SeedAsync(
+        JasonDbContext db,
+        int? invokerOutcomeBytes = null,
+        Scene? after = null,
+        PatternTiming? timing = null,
+        string operation = "list_membership.add")
     {
         var clock = new FixedClock(new DateTimeOffset(Noon));
         var campaign = after?.Campaign ?? WorkItemFactory.NewCampaign(now: Noon);
         var contact = after?.Contact ?? new Contact { PublicId = PublicId.New("cnt"), CreatedAt = Noon, UpdatedAt = Noon };
-        var item = after?.Item ?? WorkItemFactory.NewProviderOp(campaign, "list_membership.add", Noon);
+        var item = after?.Item ?? WorkItemFactory.NewProviderOp(campaign, operation, Noon);
         item.Contact = contact;
         item.Status = WorkItemStatus.Processing;
         var attempt = WorkItemFactory.NewAttempt(item, (after?.Attempt.Number ?? 0) + 1, AttemptStatus.Running, Noon);
         attempt.Provenance = new AttemptProvenanceDto(
             TestPlugins.FakeProviderId, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
-            "list_membership.add", 1, Provenance.SnapshotId, RouteSnapshotId, RouteScope.GlobalDefault, "sha256:1",
+            operation, 1, Provenance.SnapshotId, RouteSnapshotId, RouteScope.GlobalDefault, "sha256:1",
             CorrelationId: attempt.PublicId);
 
         if (after is null)

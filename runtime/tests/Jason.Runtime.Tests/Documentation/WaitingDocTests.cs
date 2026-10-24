@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
@@ -35,6 +36,17 @@ public partial class WaitingDocTests
         var ended = string.Join(", ", WorkItemTransitions.Terminal.Order().Select(s => $"`{SnakeCaseEnumConverter<WorkItemStatus>.Format(s)}`"));
 
         Assert.Contains($"every item it named has ended — {ended.Replace(", `expired`", " or `expired`", StringComparison.Ordinal)};", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_resume_step_names_the_bound_it_releases_a_scan()
+    {
+        var page = Flattened(Read("work-execution.md"));
+
+        Assert.Contains(
+            $"It releases at most {Resumer.ReleasesPerScan} waits a scan: a cleared block's waits are released over as many scans as the bound needs, oldest first.",
+            page,
+            StringComparison.Ordinal);
     }
 
     [Fact]

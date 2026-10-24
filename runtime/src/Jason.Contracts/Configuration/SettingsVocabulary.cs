@@ -31,6 +31,9 @@ public static class SettingsVocabulary
         // How an AI role waits: MaxWaits here, and its ceiling MaxWaitSeconds, a name Notifications shares, below.
         "MaxWaits",
 
+        // How work a provider block holds is tried again.
+        "Blocks", "TrialSeconds",
+
         // Manager.
         "Triggers", "ReviewSeconds", "Priority", "MaxEntriesPerScan",
 

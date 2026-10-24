@@ -79,6 +79,14 @@ public static class AttemptErrors
     /// <summary>The operation is one a person has to approve, and nothing here can stand in for that.</summary>
     public const string ApprovalRequired = "approval_required";
 
+    /// <summary>
+    /// The provider refused a call for a reason outside the work — money, a reached limit, a revoked credential, a broken
+    /// channel — and did nothing for it. Not a refusal of the work: at the claim, work a provider block holds is parked on
+    /// it, and an attempt that answers it ends <c>blocked</c> and parks its item the same way. The code every operation
+    /// declares for the class, as its documents publish it.
+    /// </summary>
+    public const string ProviderBlocked = "provider_blocked";
+
     /// <summary>The operation acts on somebody and the work item names nobody.</summary>
     public const string ContactRequired = "contact_required";
 

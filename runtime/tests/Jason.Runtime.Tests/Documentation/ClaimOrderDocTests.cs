@@ -43,7 +43,7 @@ public sealed partial class ClaimOrderDocTests
 
     /// <summary>
     /// Every sentence that counts the claim's checks says the number the code asks: all of them, the refusals before the
-    /// gate, the permanent ones among those, the questions after the route's, or the row a check sits at. The number is
+    /// approval, the permanent ones among those, the questions after the route's, or the row a check sits at. The number is
     /// read as a number, so a check added or removed fails here until every count in prose follows the table.
     /// </summary>
     [Theory]
@@ -51,14 +51,16 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/routing.md", "The last (?<n>\\w+) are questions about a work item", "after binding_invalid")]
     [InlineData("docs/routing.md", "### At the claim — the (?<n>\\w+), in the order they are checked", "all")]
     [InlineData("docs/routing.md", "rows 7 and (?<n>\\w+) below", "row of input_invalid")]
-    [InlineData("docs/routing.md", "The (?<n>\\w+) is not a refusal at all", "all")]
+    [InlineData("docs/routing.md", "The (?<n>\\w+) is not a refusal at all", "row of approval_required")]
+    [InlineData("docs/routing.md", "The (?<n>\\w+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
     [InlineData("docs/work-execution.md", "whichever of the (?<n>\\w+) pre-flight reasons applies", "all")]
     [InlineData("docs/work-execution.md", "the same rule the (?<n>\\w+) provider checks follow", "all")]
     [InlineData("docs/work-execution.md", "\\| the (?<n>\\w+) pre-flight codes \\|", "all")]
     [InlineData("docs/work-execution.md", "(?<n>\\w+) checks, in this order", "all")]
     [InlineData("docs/work-execution.md", "The first (?<n>\\w+) are refusals", "refusals")]
     [InlineData("docs/work-execution.md", "all of them are final: (?<n>\\w+) are `permanent`", "permanent")]
-    [InlineData("docs/work-execution.md", "The (?<n>\\w+) is not a refusal: `approval_required`", "all")]
+    [InlineData("docs/work-execution.md", "The (?<n>\\w+) is not a refusal: `approval_required`", "row of approval_required")]
+    [InlineData("docs/work-execution.md", "The (?<n>\\w+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
     [InlineData("CLAUDE.md", "The claim is fail-closed: (?<n>\\w+) checks in one published order", "all")]
     public void Each_count_of_the_claim_s_checks_is_the_number_the_code_asks(string relative, string sentence, string counted)
     {
@@ -66,10 +68,12 @@ public sealed partial class ClaimOrderDocTests
         var expected = counted switch
         {
             "all" => codes.Count,
-            "refusals" => codes.Count - 1,
-            "permanent" => codes.Count - 2,
+            "refusals" => IndexOf(codes, "approval_required"),
+            "permanent" => IndexOf(codes, "approval_required") - 1,
             "after binding_invalid" => codes.Count - (IndexOf(codes, "binding_invalid") + 1),
             "row of input_invalid" => IndexOf(codes, "input_invalid") + 1,
+            "row of approval_required" => IndexOf(codes, "approval_required") + 1,
+            "row of provider_blocked" => IndexOf(codes, "provider_blocked") + 1,
             _ => throw new ArgumentOutOfRangeException(nameof(counted), counted, "No such count."),
         };
         var matches = Regex.Matches(Whitespace().Replace(Source(relative), " "), sentence);

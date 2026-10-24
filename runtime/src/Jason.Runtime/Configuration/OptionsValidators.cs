@@ -123,6 +123,10 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
             OptionRules.Range(failures, "Dispatcher:AiRole:MaxWaits", role.MaxWaits, 1, AiRoleDefaults.MaximumWaits);
         }
         ValidateKind(failures, "Dispatcher:ProviderOp", options.ProviderOp);
+        if (options.Blocks is { } blocks)
+        {
+            OptionRules.Range(failures, "Dispatcher:Blocks:TrialSeconds", blocks.TrialSeconds, BlockDefaults.MinimumTrialSeconds, BlockDefaults.MaximumTrialSeconds);
+        }
 
         return OptionRules.Result(failures);
     }

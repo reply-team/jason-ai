@@ -154,14 +154,14 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the thirteen answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the fourteen answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last six are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last seven are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
 value is suppressed, whether the routed plugin has pinned the person an operation that works by the pin
-alone acts on, whether the composed input satisfies the schema, and whether the operation needs a
-person's approval. So `route resolve --operation campaign.enroll` answers `usable: true` against a
+alone acts on, whether the composed input satisfies the schema, whether the operation needs a
+person's approval, and whether an open provider block holds it — which turns on the sending account the input names. So `route resolve --operation campaign.enroll` answers `usable: true` against a
 plugin that implements it, and every item of that operation is still parked for a person at the
 claim.
 
@@ -305,7 +305,7 @@ Nothing falls back. An operation the routed plugin cannot perform ends the work 
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the thirteen, in the order they are checked
+### At the claim — the fourteen, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
@@ -315,10 +315,19 @@ rows 7 and 12 below.
 
 The thirteenth is not a refusal at all: it is the gate the runtime owes a person, and an item that reaches
 it is **parked** rather than failed — no attempt, nothing spent, and `approval.list` is where it waits.
-It is asked last on purpose. What a person is asked to approve is the composed input, so it has to be
+It is asked after every refusal on purpose. What a person is asked to approve is the composed input, so it has to be
 composed and to satisfy the operation's own schema before anybody can be shown it; and nobody is ever
 asked to approve reaching somebody the suppression register already protects, or acting on somebody the
 routed plugin does not know.
+
+The fourteenth, `provider_blocked`, is not a refusal either, and it is the one answer that says nothing about the
+work: the routed plugin's provider has said it refuses such work on this account, or on one sending account under
+it, for now. It holds the work that reaches a person or protects one — an operation of `reach: act`, and the
+protective operations, the ones whose contract says they run in a paused campaign, today `campaign.pause` and
+`optout.record` — and every other `control` operation and every read runs through it and succeeds or fails on its
+own, because a control operation may still succeed and a read tells the truth. An item it holds **waits** on the
+block, with no attempt, until the block clears or a trial gets past it. It is asked after the approval, so a person
+is asked about work while the provider refuses it, and work a person releases still waits for the block.
 
 | # | Code | Class | What it means, and what to change |
 |---|---|---|---|
@@ -335,6 +344,7 @@ routed plugin does not know.
 | 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item |
 | 12 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each. A pattern of that schema that did not finish matching, twice, is not `input_invalid`: nothing was found wrong and nothing has run, so the attempt ends `validation_timed_out`, `transient`, and comes back under the ordinary retry rule |
 | 13 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
+| 14 | `provider_blocked` | — | **not a failure**: an open block of the routed plugin and binding holds the work — the account's, which covers every sending account under it, or the block of the sending account the input names at `/args/sender/external_id`. Only `reach: act` work and the protective operations are held. The item waits as `waiting`, its `wait.blocked_by` naming the block, with no attempt; one item at a time is the block's trial and runs, and what it answers decides the block. Nothing is to change on the item: what clears a block is on the provider's side. `docs/work-execution.md` §Provider blocks |
 
 Two of these are worth a second sentence. `input_invalid` is the only one classed `validation` — it is
 the one a planner can fix by editing the item; everything else is structural. And an argument that

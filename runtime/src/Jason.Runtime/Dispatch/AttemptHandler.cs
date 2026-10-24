@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -168,9 +169,10 @@ public static class AttemptHandler
 
     /// <summary>
     /// What the run meant for the attempt — unless the executor already said so itself through the API, in
-    /// which case its own word stands and the handler only records how the process was run.
+    /// which case its own word stands and the handler only records how the process was run. <paramref name="again"/>
+    /// is the one second decision a provider block another attempt opened first asks for.
     /// </summary>
-    private static async Task RecordAsync(IServiceScopeFactory scopes, ClaimedWork work, CommandOutcome outcome, ILogger logger)
+    private static async Task RecordAsync(IServiceScopeFactory scopes, ClaimedWork work, CommandOutcome outcome, ILogger logger, bool again = false)
     {
         await using var scope = scopes.CreateAsyncScope();
         var services = scope.ServiceProvider;
@@ -178,8 +180,9 @@ public static class AttemptHandler
 
         // What only the invocation could know, added to the record the claim already wrote. It happens before
         // anything else here, so it lands whether or not this handler still owns the verdict; a record that was
-        // never written is an answer about the record, not a failure of the work.
-        if (outcome is CommandOutcome.Provider provider)
+        // never written is an answer about the record, not a failure of the work. It saved on its own the first time;
+        // the recorder's own step of the same kind runs again on a second decision, and writes the values it wrote.
+        if (!again && outcome is CommandOutcome.Provider provider)
         {
             _ = await AttemptProvenance.CompleteAsync(db, work.AttemptPublicId, Learned(provider.Result), CancellationToken.None)
                 .ConfigureAwait(false);
@@ -206,6 +209,16 @@ public static class AttemptHandler
         try
         {
             await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+        catch (DbUpdateException failure) when (!again
+            && (ProviderBlocks.OpenedFirstElsewhere(failure) || ProviderBlocks.ClearedFirstElsewhere(failure)))
+        {
+            // Another attempt on the same account changed its blocks between this one's read of them and its save: it
+            // opened first the block this one met, or cleared first a block this one got past or met again. One block
+            // is kept open per account and per sender and a block's status guards it, so this save was refused whole.
+            // What the provider answered is still true, and it is decided once more against the blocks as they now
+            // stand: a block opened first is met again instead of opened, and one cleared first is not cleared twice.
+            await RecordAsync(scopes, work, outcome, logger, again: true).ConfigureAwait(false);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -257,7 +270,7 @@ public static class AttemptHandler
                 var plan = work.Plan ?? throw new InvalidOperationException(
                     $"Attempt {attempt.PublicId} answered as a provider operation without the plan its claim built.");
                 await services.GetRequiredService<ProviderOutcomeRecorder>()
-                    .RecordAsync(db, item, attempt, plan.Contract, plan.Plugin.Manifest.Id, provider.Result, CancellationToken.None)
+                    .RecordAsync(db, item, attempt, plan.Contract, plan.Plugin.Manifest.Id, provider.Result, CancellationToken.None, plan.Input)
                     .ConfigureAwait(false);
                 break;
             case CommandOutcome.Exited exited:
@@ -280,6 +293,17 @@ public static class AttemptHandler
             default:
                 // Completed: the executor reported through the API and the attempt is already finished there.
                 break;
+        }
+
+        // A provider operation that never answered says nothing about the provider's blocks; where it was a trial, the
+        // block's next trial is a cadence off rather than never.
+        if (outcome is CommandOutcome.LaunchFailed or CommandOutcome.Killed
+            && work.Plan is { } unanswered
+            && OperationCatalog.HeldByProviderBlock.Contains(unanswered.Contract.Id))
+        {
+            await outcomes.AnsweredAsync(
+                    db, item, attempt, unanswered.Plugin.Manifest.Id, unanswered.Input, BlockAnswer.Undecided, said: null, error: null, CancellationToken.None)
+                .ConfigureAwait(false);
         }
     }
 

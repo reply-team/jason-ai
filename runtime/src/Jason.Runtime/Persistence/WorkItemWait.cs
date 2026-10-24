@@ -16,7 +16,10 @@ public sealed class WorkItemWait
 
     public WorkItem? WorkItem { get; set; }
 
-    /// <summary>The attempt that ended waiting, which is <c>yielded</c>. Null only for a wait no attempt asked for.</summary>
+    /// <summary>
+    /// The attempt that ended waiting: <c>yielded</c> for a role's wait, <c>blocked</c> for an attempt a provider block
+    /// stopped. Null only for a wait no attempt asked for, which is an item the claim parked on a block.
+    /// </summary>
     public int? AttemptId { get; set; }
 
     public Attempt? Attempt { get; set; }
@@ -47,6 +50,15 @@ public sealed class WorkItemWait
     public int? ResumedByAttemptId { get; set; }
 
     public Attempt? ResumedByAttempt { get; set; }
+
+    /// <summary>
+    /// The provider block the item is parked on. Such a wait names no items, no mode, no moment and no deadline: it is
+    /// bounded by the item's own due date alone, and released when the block clears or when the item is the block's
+    /// trial. Null for every other wait.
+    /// </summary>
+    public int? ProviderBlockId { get; set; }
+
+    public ProviderBlock? ProviderBlock { get; set; }
 
     /// <summary>The items the wait named, each with its place in the order they were named in.</summary>
     public List<WorkItemWaitItem> Items { get; set; } = [];

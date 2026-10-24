@@ -185,6 +185,43 @@ public class WorkItemResumeTests
         Assert.Equal((1, 1), (ended.OnCount, ended.EndedCount));
     }
 
+    /// <summary>
+    /// An item a provider block parked is read with the block it waits on, singly and in a listing, and with nothing a
+    /// role's wait has: no attempt, no items, no mode, moment or deadline. The block's link is in neither.
+    /// </summary>
+    [Fact]
+    public async Task A_parked_item_is_read_with_the_block_it_waits_on_singly_and_in_a_listing()
+    {
+        using var database = new TestDatabase();
+        string itemId, blockId;
+        await using (var db = database.Open())
+        {
+            var campaign = WorkItemFactory.NewCampaign(now: Noon);
+            var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+            opener.Status = WorkItemStatus.Failed;
+            db.WorkItems.Add(opener);
+            var block = Jason.Runtime.Tests.Dispatch.BlockRows.Block(opener, Noon, Noon.AddMinutes(15), ProviderBlockScope.Sender, sender: "mbx_1042", reason: "limit");
+            block.Link = "https://mail.example.com/mailboxes/1042";
+            db.ProviderBlocks.Add(block);
+            var parked = Jason.Runtime.Tests.Dispatch.BlockRows.Parked(db, campaign, block, Noon);
+            await db.SaveChangesAsync(Ct);
+            (itemId, blockId) = (parked.PublicId, block.PublicId);
+        }
+
+        await using var ctx = database.Open();
+        var service = NewService(ctx, Noon);
+        var got = (await service.GetAsync(new WorkItemGetRequest(itemId, null), Ct)).Wait!;
+        var listed = Assert.Single((await service.ListAsync(new WorkItemListRequest(null, null, null, null, null, null, null, null), Ct)).Items, i => i.Id == itemId).Wait!;
+
+        var expected = new WaitBlockedByDto(blockId, ProviderBlockScope.Sender, "limit");
+        Assert.Equal(expected, got.BlockedBy);
+        Assert.Equal(expected, listed.BlockedBy);
+        Assert.True(
+            got is { AttemptId: null, On.Count: 0, Mode: null, Until: null, Deadline: null },
+            $"The parked item's wait is attempt {got.AttemptId}, {got.On.Count} item(s), mode {got.Mode}, until {got.Until}, deadline {got.Deadline}.");
+        Assert.Equal((0, 0), (listed.OnCount, listed.EndedCount));
+    }
+
     private static WorkItemService NewService(JasonDbContext db, DateTime now)
     {
         var clock = new FixedClock(now);

@@ -167,6 +167,20 @@ public static partial class JournalKinds
     public const string EventsBackfillRequested = "events_backfill_requested";
 
     /// <summary>
+    /// A provider block holds work of the campaign: keyed by the block's public id, with the plugin, the scope, the
+    /// sending account's identifier where the block is a sender's, the reason, the moment the provider said it clears by
+    /// itself where it said one, and the work item that met it first in this campaign. Said once per campaign and block,
+    /// which the database holds; never the block's link. A default manager trigger.
+    /// </summary>
+    public const string ProviderBlocked = "provider_blocked";
+
+    /// <summary>
+    /// A provider block that held work of the campaign has cleared: keyed by the block's public id, in every campaign it
+    /// was said in. Not a trigger by default: the work it held runs again by itself.
+    /// </summary>
+    public const string ProviderBlockCleared = "provider_block_cleared";
+
+    /// <summary>
     /// A project was made: keyed by its id, with the name and slug it was made with. It names no campaign. The default
     /// project, made by the migration that brought projects in, was made by nobody and has no line.
     /// </summary>
@@ -247,6 +261,8 @@ public static partial class JournalKinds
         EventsRead,
         EventsGapObserved,
         EventsBackfillRequested,
+        ProviderBlocked,
+        ProviderBlockCleared,
         ProjectCreated,
         ProjectUpdated,
         ProjectLinked,

@@ -1277,6 +1277,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_journal_kind_key_gaps")
                         .HasFilter("kind = 'events_gap_observed'");
 
+                    b.HasIndex(new[] { "Kind", "Key", "CampaignId" }, "ix_journal_kind_key_campaign_blocks")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_kind_key_campaign_blocks")
+                        .HasFilter("kind = 'provider_blocked'");
+
                     b.HasIndex(new[] { "Ts" }, "ix_journal_suppression_added_ts")
                         .HasDatabaseName("ix_journal_suppression_added_ts")
                         .HasFilter("kind = 'suppression_added'");
@@ -1408,6 +1413,131 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_projects_slug");
 
                     b.ToTable("projects");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ProviderBlock", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BindingIdentity")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("binding_identity");
+
+                    b.Property<DateTime?>("ClearedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cleared_at");
+
+                    b.Property<int?>("ClearedByAttemptId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("cleared_by_attempt_id");
+
+                    b.Property<DateTime?>("ClearsAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("clears_at");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("Link")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("link");
+
+                    b.Property<DateTime>("NextTrialAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("next_trial_at");
+
+                    b.Property<DateTime>("OpenedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("opened_at");
+
+                    b.Property<int>("OpenedByAttemptId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("opened_by_attempt_id");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scope");
+
+                    b.Property<int>("SeenCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("seen_count");
+
+                    b.Property<string>("SenderExternalId")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("sender_external_id");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<int?>("TrialWorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("trial_work_item_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_blocks");
+
+                    b.HasIndex("ClearedByAttemptId")
+                        .HasDatabaseName("ix_provider_blocks_cleared_by_attempt_id");
+
+                    b.HasIndex("OpenedByAttemptId")
+                        .HasDatabaseName("ix_provider_blocks_opened_by_attempt_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_blocks_public_id");
+
+                    b.HasIndex("TrialWorkItemId")
+                        .HasDatabaseName("ix_provider_blocks_trial_work_item_id");
+
+                    b.HasIndex("PluginId", "BindingIdentity")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_blocks_one_open_per_account")
+                        .HasFilter("status = 'open' AND scope = 'account'");
+
+                    b.HasIndex("Status", "NextTrialAt")
+                        .HasDatabaseName("ix_provider_blocks_status_next_trial_at");
+
+                    b.HasIndex("PluginId", "BindingIdentity", "SenderExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_blocks_one_open_per_sender")
+                        .HasFilter("status = 'open' AND scope = 'sender'");
+
+                    b.ToTable("provider_blocks", t =>
+                        {
+                            t.HasCheckConstraint("ck_provider_blocks_sender", "(scope = 'sender') = (sender_external_id IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.ProviderEvent", b =>
@@ -2116,6 +2246,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("opened_at");
 
+                    b.Property<int?>("ProviderBlockId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("provider_block_id");
+
                     b.Property<string>("ReleaseReason")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT")
@@ -2157,6 +2291,9 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_work_item_waits_one_open_per_item")
                         .HasFilter("status = 'open'");
+
+                    b.HasIndex("ProviderBlockId", "Status")
+                        .HasDatabaseName("ix_work_item_waits_provider_block_id_status");
 
                     b.HasIndex("WorkItemId", "Status")
                         .HasDatabaseName("ix_work_item_waits_work_item_id_status");
@@ -2387,6 +2524,34 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Contact");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.ProviderBlock", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Attempt", "ClearedByAttempt")
+                        .WithMany()
+                        .HasForeignKey("ClearedByAttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_provider_blocks_attempts_cleared_by_attempt_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.Attempt", "OpenedByAttempt")
+                        .WithMany()
+                        .HasForeignKey("OpenedByAttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_provider_blocks_attempts_opened_by_attempt_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "TrialWorkItem")
+                        .WithMany()
+                        .HasForeignKey("TrialWorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_provider_blocks_work_items_trial_work_item_id");
+
+                    b.Navigation("ClearedByAttempt");
+
+                    b.Navigation("OpenedByAttempt");
+
+                    b.Navigation("TrialWorkItem");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.ProviderEvent", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
@@ -2481,6 +2646,12 @@ namespace Jason.Runtime.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_work_item_waits_attempts_attempt_id");
 
+                    b.HasOne("Jason.Runtime.Persistence.ProviderBlock", "ProviderBlock")
+                        .WithMany()
+                        .HasForeignKey("ProviderBlockId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_work_item_waits_provider_blocks_provider_block_id");
+
                     b.HasOne("Jason.Runtime.Persistence.Attempt", "ResumedByAttempt")
                         .WithMany()
                         .HasForeignKey("ResumedByAttemptId")
@@ -2495,6 +2666,8 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasConstraintName("fk_work_item_waits_work_items_work_item_id");
 
                     b.Navigation("Attempt");
+
+                    b.Navigation("ProviderBlock");
 
                     b.Navigation("ResumedByAttempt");
 

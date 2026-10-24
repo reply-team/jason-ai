@@ -50,6 +50,10 @@ public sealed class ProviderOutcomeRecorder(
     /// </summary>
     /// <param name="contract">The operation's published contract, as the claim resolved it.</param>
     /// <param name="pluginId">Which plugin answered — the package the claim pinned, never a name from elsewhere.</param>
+    /// <param name="input">
+    /// The input the claim composed, where a provider block holds the operation: the sending account it names is what
+    /// a sender's block is matched by.
+    /// </param>
     public async Task RecordAsync(
         JasonDbContext db,
         WorkItem item,
@@ -57,7 +61,8 @@ public sealed class ProviderOutcomeRecorder(
         OperationContract contract,
         string pluginId,
         PluginInvocationResult result,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        JsonObject? input = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
@@ -68,6 +73,11 @@ public sealed class ProviderOutcomeRecorder(
 
         var returned = Returned(result.Outcome);
         JsonNode? rejected = null;
+
+        // What this answer says about the provider's blocks, where one holds the operation at all: nothing is known
+        // unless a branch below learns otherwise.
+        var held = OperationCatalog.HeldByProviderBlock.Contains(contract.Id);
+        var answer = BlockAnswer.Undecided;
 
         // Measured once: an answer is held to its contract a single time, and every branch below reads that verdict.
         var problems = result.Outcome is InvocationOutcome.Succeeded answered ? Problems(contract, answered, _timing) : [];
@@ -117,6 +127,7 @@ public sealed class ProviderOutcomeRecorder(
             case InvocationOutcome.Succeeded succeeded:
                 await PinAsync(db, contract, pluginId, item, attempt, succeeded.ExternalIds, cancellationToken).ConfigureAwait(false);
                 outcomes.Succeed(db, item, attempt, succeeded.Result, Actors.Dispatcher);
+                answer = BlockAnswer.GotPast;
                 break;
 
             case InvocationOutcome.Failed failed when OutcomeContract.CheckFailure(contract, failed.Error) is { } outside:
@@ -152,6 +163,33 @@ public sealed class ProviderOutcomeRecorder(
                 // plugin reported stands, recorded permanent, with what is wrong with the block named beside it, and
                 // the block itself is not kept, so nothing that later reads a block reads one the contract refuses.
                 var recorded = OutcomeContract.Recorded(failed.Error, out var blockProblems);
+                if (held && recorded == FailureClass.Blocked)
+                {
+                    // The provider refused for a reason outside the work and did nothing: the work has not been tried,
+                    // so the attempt ends blocked, uncounted, and the item waits on the block the answer names.
+                    var blocked = new AttemptErrorDto(
+                        failed.Error.Code,
+                        failed.Error.Message,
+                        OutcomeContract.Retriable(recorded, contract),
+                        failed.Error.Details?.ToJsonString(),
+                        Refused(contract, failed.Error.ExternalIds, blockProblems),
+                        recorded,
+                        failed.Error.Block?.DeepClone().AsObject());
+                    await outcomes.AnsweredAsync(db, item, attempt, pluginId, input, BlockAnswer.Blocked, failed.Error.Block, blocked, cancellationToken)
+                        .ConfigureAwait(false);
+                    held = false;
+                    break;
+                }
+
+                // A permanent or validation failure is the provider's judgement of the work itself, so the call got
+                // past whatever block was open; a class the contract changed on the way is not the plugin's word, and a
+                // host's own ending says what became of the plugin, not what the provider answered.
+                if (recorded == failed.Error.Class && recorded is FailureClass.Permanent or FailureClass.Validation
+                    && !HostOutcomeCodes.All.Contains(failed.Error.Code))
+                {
+                    answer = BlockAnswer.GotPast;
+                }
+
                 outcomes.Fail(
                     db,
                     item,
@@ -183,6 +221,11 @@ public sealed class ProviderOutcomeRecorder(
 
             default:
                 throw new InvalidOperationException($"An invocation ended as {result.Outcome.GetType().Name}, which nothing here knows how to record.");
+        }
+
+        if (held)
+        {
+            await outcomes.AnsweredAsync(db, item, attempt, pluginId, input, answer, said: null, error: null, cancellationToken).ConfigureAwait(false);
         }
 
         // The half of the record only the answer could write. It is additive, so it meets whatever the handler

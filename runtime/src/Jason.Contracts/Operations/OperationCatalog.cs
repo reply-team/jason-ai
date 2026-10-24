@@ -19,6 +19,9 @@ public static class OperationCatalog
     private const string ResourcePrefix = "Jason.Contracts.Operations.";
     private const string ResourceSuffix = ".json";
 
+    /// <summary>The reach of an operation that does something to or for a person: its document's own word.</summary>
+    private const string ActReach = "act";
+
     private static readonly Dictionary<string, OperationContract> ByIdentifier = Read();
 
     /// <summary>The published operations, ordered by id so that anything rendered from them is stable.</summary>
@@ -39,6 +42,18 @@ public static class OperationCatalog
     /// </summary>
     public static IReadOnlyList<string> RunsInPausedCampaign { get; } =
         [.. All.Where(contract => contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs).Select(contract => contract.Id)];
+
+    /// <summary>
+    /// The operations whose work a provider block holds: every one whose <c>reach</c> is <c>act</c>, and the protective
+    /// ones — those that run in a paused campaign (<see cref="RunsInPausedCampaign"/>) — from the documents, as both are
+    /// published. A block is about what the provider refuses to let reach a person or protect them; every other
+    /// operation, a read or a control, runs through it and fails on its own, because a read tells the truth and a
+    /// control may still succeed.
+    /// </summary>
+    public static IReadOnlySet<string> HeldByProviderBlock { get; } =
+        new HashSet<string>(
+            All.Where(contract => string.Equals(contract.Reach.Value, ActReach, StringComparison.Ordinal) || contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs).Select(contract => contract.Id),
+            StringComparer.Ordinal);
 
     /// <summary>The contract for one operation, or null when nothing of that name is published.</summary>
     public static OperationContract? Find(string operation)

@@ -5,9 +5,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.WorkItems;
 
 /// <summary>
-/// The <c>wait</c> block a waiting item is read with: what it waits for, how each named item stands now, and until when.
-/// Identifiers, statuses and moments only, read from rows, so a reader learns where the wait is without being told what
-/// any of the work is about.
+/// The <c>wait</c> block a waiting item is read with: what it waits for, how each named item stands now, and until when —
+/// or, for an item a provider block parked, which block, what it holds and why. Identifiers, statuses and moments only,
+/// read from rows, so a reader learns where the wait is without being told what any of the work is about, and never the
+/// block's link.
 /// </summary>
 public static class WaitBlocks
 {
@@ -52,6 +53,7 @@ public static class WaitBlocks
                 w.Until,
                 w.Deadline,
                 w.OpenedAt,
+                Block = w.ProviderBlock == null ? null : new { w.ProviderBlock.PublicId, w.ProviderBlock.Scope, w.ProviderBlock.Reason },
                 OnCount = w.Items.Count,
                 EndedCount = w.Items.Count(i => Ended.Contains(i.ChildWorkItem!.Status)),
             })
@@ -67,7 +69,8 @@ public static class WaitBlocks
                 WorkItemMapper.Utc(row.Deadline),
                 WorkItemMapper.Utc(row.OpenedAt),
                 row.OnCount,
-                row.EndedCount));
+                row.EndedCount,
+                row.Block == null ? null : new WaitBlockedByDto(row.Block.PublicId, row.Block.Scope, row.Block.Reason)));
     }
 
     /// <summary>
@@ -94,6 +97,7 @@ public static class WaitBlocks
                 w.Until,
                 w.Deadline,
                 w.OpenedAt,
+                Block = w.ProviderBlock == null ? null : new { w.ProviderBlock.PublicId, w.ProviderBlock.Scope, w.ProviderBlock.Reason },
                 Named = w.Items
                     .OrderBy(i => i.Position)
                     .Select(i => new { i.ChildWorkItem!.PublicId, i.ChildWorkItem.Status })
@@ -110,6 +114,7 @@ public static class WaitBlocks
                 row.Mode,
                 WorkItemMapper.Utc(row.Until),
                 WorkItemMapper.Utc(row.Deadline),
-                WorkItemMapper.Utc(row.OpenedAt)));
+                WorkItemMapper.Utc(row.OpenedAt),
+                row.Block == null ? null : new WaitBlockedByDto(row.Block.PublicId, row.Block.Scope, row.Block.Reason)));
     }
 }

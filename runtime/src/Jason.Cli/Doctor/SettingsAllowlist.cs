@@ -105,6 +105,7 @@ public sealed class SettingsAllowlist
         new("Dispatcher:AiRole:MaxAttempts", Kind.Integer32),
         new("Dispatcher:AiRole:MaxWaitSeconds", Kind.Integer32),
         new("Dispatcher:AiRole:MaxWaits", Kind.Integer32),
+        new("Dispatcher:Blocks:TrialSeconds", Kind.Integer32),
         new("Dispatcher:ProviderOp:TimeoutSeconds", Kind.Integer32),
         new("Dispatcher:ProviderOp:HeartbeatSeconds", Kind.Integer32),
         new("Dispatcher:ProviderOp:MaxAttempts", Kind.Integer32),

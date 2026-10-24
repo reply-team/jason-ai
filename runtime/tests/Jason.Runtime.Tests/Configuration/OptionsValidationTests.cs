@@ -190,6 +190,25 @@ public class OptionsValidationTests
         Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { EventsCadenceSeconds = 86_400 }).Succeeded);
     }
 
+    /// <summary>A block is tried again every fifteen minutes unless set, and a cadence is a minute to a day; nothing outside is clamped.</summary>
+    [Theory]
+    [InlineData(59)]
+    [InlineData(86_401)]
+    public void A_block_is_tried_again_every_minute_to_every_day(int seconds)
+    {
+        Assert.Equal(900, new DispatcherOptions().Blocks.TrialSeconds);
+
+        var result = new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { Blocks = new BlockDefaults { TrialSeconds = seconds } });
+
+        Assert.True(result.Failed, $"A trial cadence of {seconds} s was accepted.");
+        Assert.Contains($"Dispatcher:Blocks:TrialSeconds must be between 60 and 86400; got {seconds}.", result.Failures!);
+        foreach (var edge in new[] { 60, 86_400 })
+        {
+            var accepted = new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { Blocks = new BlockDefaults { TrialSeconds = edge } });
+            Assert.True(accepted.Succeeded, $"A trial cadence of {edge} s was refused: {accepted.FailureMessage}");
+        }
+    }
+
     /// <summary>A wait's ceiling is a minute to thirty days, and an item waits once to a hundred times; nothing outside is clamped.</summary>
     [Theory]
     [InlineData(59, 20, "Dispatcher:AiRole:MaxWaitSeconds must be between 60 and 2592000; got 59.")]

@@ -14,6 +14,7 @@ public class WorkItemTransitionsTests
         (WorkItemStatus.Created, WorkItemStatus.AwaitingApproval),
         (WorkItemStatus.Created, WorkItemStatus.Cancelled),
         (WorkItemStatus.Created, WorkItemStatus.Expired),
+        (WorkItemStatus.Created, WorkItemStatus.Waiting),
         (WorkItemStatus.AwaitingApproval, WorkItemStatus.Created),
         (WorkItemStatus.AwaitingApproval, WorkItemStatus.Failed),
         (WorkItemStatus.AwaitingApproval, WorkItemStatus.Cancelled),
@@ -71,9 +72,10 @@ public class WorkItemTransitionsTests
         Assert.Equal(legal, WorkItemTransitions.IsLegal(from, to));
 
     /// <summary>
-    /// Waiting work is entered only from a running attempt, which is the attempt ending waiting, and left in three ways:
-    /// the dispatcher releases it into the queue, somebody cancels it, or its due date passes. Like parked work, it never
-    /// goes to a dispatcher straight from here, and it is never finished by waiting.
+    /// Waiting work is entered from a running attempt, which is the attempt ending waiting, or from the queue, which is the
+    /// claim parking work on a provider block before any attempt exists; and it is left in three ways: the dispatcher
+    /// releases it into the queue, somebody cancels it, or its due date passes. Like parked work, it never goes to a
+    /// dispatcher straight from here, and it is never finished by waiting.
     /// </summary>
     [Theory]
     [InlineData(WorkItemStatus.Processing, WorkItemStatus.Waiting, true)]
@@ -85,11 +87,11 @@ public class WorkItemTransitionsTests
     [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Succeeded, false)]
     [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Failed, false)]
     [InlineData(WorkItemStatus.Waiting, WorkItemStatus.AwaitingApproval, false)]
-    [InlineData(WorkItemStatus.Created, WorkItemStatus.Waiting, false)]
+    [InlineData(WorkItemStatus.Created, WorkItemStatus.Waiting, true)]
     [InlineData(WorkItemStatus.Scheduled, WorkItemStatus.Waiting, false)]
     [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Waiting, false)]
     [InlineData(WorkItemStatus.Expired, WorkItemStatus.Waiting, false)]
-    public void Waiting_work_is_entered_from_a_run_and_left_only_where_the_dispatcher_or_the_clock_sends_it(
+    public void Waiting_work_is_entered_from_a_run_or_the_claim_and_left_only_where_the_dispatcher_or_the_clock_sends_it(
         WorkItemStatus from, WorkItemStatus to, bool legal) =>
         Assert.True(legal == WorkItemTransitions.IsLegal(from, to), $"{from} to {to} is legal: {WorkItemTransitions.IsLegal(from, to)}; expected {legal}.");
 

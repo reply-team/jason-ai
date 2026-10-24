@@ -349,7 +349,8 @@ public class ResumerTests
     /// <summary>
     /// A thousand open waits over a hundred items each, a hundred thousand named items in all, in every shape the step
     /// decides between: all ended, one not; any ended, none; a moment come, a ceiling come, neither. The step releases
-    /// exactly the waits that are over, each for its own reason, and its plan at that size is still the pinned one. What
+    /// exactly the waits that are over, each for its own reason, its bound in the first scan and the rest in the next, and
+    /// its plan at that size is still the pinned one. What
     /// is asserted is what was released; how long it took is not.
     /// </summary>
     [Fact]
@@ -368,6 +369,12 @@ public class ResumerTests
 
         harness.Commands.Clear();
         var resumed = await harness.ResumeAsync(Ct);
+        var sent = Assert.Single(harness.Commands.Texts, text => text.Contains("work_item_wait_items", StringComparison.Ordinal));
+
+        // The step releases at most its bound a scan, and the next scan releases the rest.
+        Assert.Equal(Resumer.ReleasesPerScan, resumed);
+        resumed += await harness.ResumeAsync(Ct);
+        Assert.Equal(0, await harness.ResumeAsync(Ct));
 
         // Wait n (1..1000): n % 4 == 0 all ended, n % 4 == 2 any ended (one cancelled), n % 8 == 5 a moment that came
         // over items not all ended, n % 8 == 7 a ceiling that came over items none of which ended; n % 8 == 1 and
@@ -395,7 +402,7 @@ public class ResumerTests
             Assert.Equal(750, await db.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.WorkItemResumed, Ct));
         }
 
-        AssertReadByKeys(PlanOf(harness, Assert.Single(harness.Commands.Texts, text => text.Contains("work_item_wait_items", StringComparison.Ordinal))));
+        AssertReadByKeys(PlanOf(harness, sent));
     }
 
     /// <summary>
@@ -487,8 +494,8 @@ public class ResumerTests
 
     /// <summary>
     /// The plan the ready query must keep: the waiting items by the status index, each one's open wait by the index of the
-    /// waits by item and status, each wait's items by the key of the named-items table, and each named item by its own
-    /// key. Nothing scanned.
+    /// waits by item and status, each wait's items by the key of the named-items table, each named item by its own key,
+    /// and the provider block a parked wait is on by its key. Nothing scanned.
     /// </summary>
     internal static void AssertReadByKeys(IReadOnlyList<string> plan)
     {
@@ -497,6 +504,7 @@ public class ResumerTests
         Assert.True(
             plan.Where(step => step.StartsWith("SEARCH", StringComparison.Ordinal)).Distinct().Order(StringComparer.Ordinal).SequenceEqual(
             [
+                "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
                 "SEARCH c USING INTEGER PRIMARY KEY (rowid=?)",
                 "SEARCH i USING COVERING INDEX sqlite_autoindex_work_item_wait_items_1 (wait_id=?)",
                 "SEARCH w USING COVERING INDEX ix_work_items_status_finished_at (status=?)",

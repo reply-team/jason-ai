@@ -29,9 +29,13 @@ namespace Jason.Runtime.Routing;
 /// second time would make two places that can disagree about one decision.
 /// </param>
 /// <param name="Parks">
-/// True where nothing is wrong with the work and it still may not run: its operation needs a person's approval.
-/// A park carries both a code and a plan — the code is what the item says about itself while it waits, and the
-/// plan is what the subject of that decision is built from.
+/// True where nothing is wrong with the work and it still may not run: its operation needs a person's approval, or
+/// a provider block holds it. A park carries both a code and a plan — the code is what the item says about itself
+/// while it waits, and the plan is what the subject of that decision is built from.
+/// </param>
+/// <param name="Block">
+/// The open provider block that holds this work, where one does: on the fourteenth check's own park, and beside an
+/// approval's, since the work a person releases is still held by the block until it clears or a trial gets past it.
 /// </param>
 public sealed record PreflightVerdict(
     string? Code,
@@ -40,7 +44,8 @@ public sealed record PreflightVerdict(
     IReadOnlyList<ErrorDetail>? Details,
     ProviderOpPlan? Plan,
     Resolution? Resolution,
-    bool Parks = false)
+    bool Parks = false,
+    ProviderBlock? Block = null)
 {
     /// <summary>Nothing objected: the item may be claimed and run now.</summary>
     public bool Passed => Code is null;
@@ -50,10 +55,11 @@ public sealed record PreflightVerdict(
 }
 
 /// <summary>
-/// Everything that can stop a provider work item, decided before a child process exists. Thirteen checks in one
-/// order: what the runtime cannot do at all, then what the planner got wrong, and last the gate it owes a
-/// person — so a manager meets the reasons an item can never run before the reasons that need their attention,
-/// and nobody is asked to approve work that would have been refused anyway.
+/// Everything that can stop a provider work item, decided before a child process exists. Fourteen checks in one
+/// order: what the runtime cannot do at all, then what the planner got wrong, then the approval it owes a person, and
+/// last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
+/// before the reasons that need their attention, nobody is asked to approve work that would have been refused
+/// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -76,7 +82,7 @@ public static class ProviderOpPreflight
     /// <summary>The kind of the pin by which a provider knows a person.</summary>
     private const string ContactPin = "contact";
 
-    /// <summary>The thirteen, in the order they are checked. The first that fails is the one the attempt records.</summary>
+    /// <summary>The fourteen, in the order they are checked. The first that fails is the one the attempt records.</summary>
     /// <remarks>
     /// Checks 7 and 12 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
     /// one of the reasons an item cannot run: it is what either check answers when a pattern of the schema it measures
@@ -97,6 +103,7 @@ public static class ProviderOpPreflight
         AttemptErrors.ContactNotLinked,
         AttemptErrors.InputInvalid,
         AttemptErrors.ApprovalRequired,
+        AttemptErrors.ProviderBlocked,
     ];
 
     /// <summary>
@@ -225,6 +232,16 @@ public static class ProviderOpPreflight
             contract,
             input);
 
+        // The block that holds this work, if one does: only an act or a protective operation is held, only by a block
+        // of the plugin and binding it is routed to, and a sender's block only where the input names that sender.
+        var identity = ProviderBlocks.Identity(route.BindingIdentity);
+        var block = OperationCatalog.HeldByProviderBlock.Contains(contract.Id) && facts.Blocks is { Count: > 0 } open
+            ? ProviderBlocks.Covering(
+                open.Where(candidate => string.Equals(candidate.PluginId, route.PluginId, StringComparison.Ordinal)
+                    && string.Equals(candidate.BindingIdentity, identity, StringComparison.Ordinal)),
+                input)
+            : null;
+
         // Asked last, and last on purpose. What a person is asked to approve is the composed input, so it has to
         // be composed and to satisfy the operation's own schema before anybody can be shown it — and nobody is
         // ever asked to approve reaching somebody the suppression register already protects.
@@ -244,7 +261,24 @@ public static class ProviderOpPreflight
                 Details: null,
                 plan,
                 resolution,
-                Parks: true);
+                Parks: true,
+                block);
+        }
+
+        // Fourteenth, after the approval: a block says nothing about the work, so a person is asked about it while the
+        // provider refuses such work, and the work they release still waits for the block. Nothing has run, so no
+        // attempt is made for it unless it is the block's trial, which the claim decides.
+        if (block is not null)
+        {
+            return new PreflightVerdict(
+                AttemptErrors.ProviderBlocked,
+                ProviderBlocks.HeldMessage(operation, block),
+                Class: null,
+                Details: null,
+                plan,
+                resolution,
+                Parks: true,
+                block);
         }
 
         return new PreflightVerdict(null, null, null, null, plan, resolution);

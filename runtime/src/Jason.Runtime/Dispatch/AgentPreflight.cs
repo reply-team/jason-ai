@@ -42,7 +42,7 @@ public abstract record AgentVerdict
 
 /// <summary>
 /// Which execution profile runs one agent work item, decided at the claim and before any child process exists —
-/// the same rule the thirteen provider checks follow, for the same reason: an item that cannot run should say so
+/// the same rule the fourteen provider checks follow, for the same reason: an item that cannot run should say so
 /// with an attempt and a code somebody can act on, rather than be skipped and look claimable for ever.
 /// <para>
 /// The order itself lives in <see cref="ProfileResolution"/>, which is pure. What this adds is the part that

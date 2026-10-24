@@ -486,8 +486,9 @@ the published one is refused the way an undeclared identifier on a failure is: t
 any other class states no `block`.
 
 Retriability in an outcome fixture is stated per the operation's own rule, so that a plugin author reading the
-fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent`, `validation` and
-`blocked` are final; `ambiguous` is repeated only where the operation says `safe` or `after_recovery_read`; and `result_invalid`
+fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent` and `validation` are
+final; `blocked` is never repeated as a retry — work a block holds waits on the block, and anything else ends there;
+`ambiguous` is repeated only where the operation says `safe` or `after_recovery_read`; and `result_invalid`
 is always final, because a shape error, or a failure outside the declared codes, is deterministic and the next attempt
 would run the same code over the same answer.
 

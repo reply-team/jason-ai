@@ -97,6 +97,7 @@ internal sealed class DispatchHarness : IDisposable
         services.AddSingleton(NotificationStatus);
         services.AddScoped<JournalWriter>();
         services.AddScoped<AttemptOutcomes>();
+        services.AddScoped<ProviderOutcomeRecorder>();
 
         // What the claim reads before it hands out provider work. The registries are empty here — these tests
         // are about agent work — and an empty route snapshot is exactly what "nothing is routed" looks like.

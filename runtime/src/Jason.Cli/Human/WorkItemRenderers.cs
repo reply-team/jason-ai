@@ -144,6 +144,11 @@ public static class WorkItemRenderers
     /// </summary>
     private static string WaitingFor(WaitDto wait)
     {
+        if (wait.BlockedBy is { } block)
+        {
+            return $"the provider blocked {Grain(block)} ({block.Reason}); it runs when the block clears or a trial succeeds";
+        }
+
         var parts = new List<string>();
         if (wait.On is { Count: > 0 } on)
         {
@@ -166,6 +171,11 @@ public static class WorkItemRenderers
     /// </summary>
     private static string WaitingFor(WaitSummaryDto wait)
     {
+        if (wait.BlockedBy is { } block)
+        {
+            return $"the provider blocked {Grain(block)}, {block.Reason}";
+        }
+
         var parts = new List<string>();
         if (wait.OnCount > 0)
         {
@@ -180,6 +190,10 @@ public static class WorkItemRenderers
 
         return string.Join("; ", parts);
     }
+
+    /// <summary>What a provider block holds, in a person's words: the work's account, or the one sending account it goes from.</summary>
+    private static string Grain(WaitBlockedByDto block) =>
+        block.Scope == ProviderBlockScope.Sender ? "its sending account" : "its account";
 
     /// <summary>A count, for a person: the number alone.</summary>
     public static string? WorkItemCount(string json) =>

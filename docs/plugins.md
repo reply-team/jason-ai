@@ -865,7 +865,7 @@ Every failure carries one of five classes: the class is what the runtime acts on
 | `permanent` | it would fail the same way again: a bad request, a missing resource, a bug | final |
 | `validation` | the input was wrong | final |
 | `ambiguous` | **it may already have happened** at the provider | the operation decides |
-| `blocked` | the provider refused it for a reason outside the work item, and **did nothing** for it | final, with the block kept |
+| `blocked` | the provider refused it for a reason outside the work item, and **did nothing** for it | work a block holds waits on the block; anything else is final, with the block kept |
 
 `ambiguous` is never repeated blindly: a blind repeat could send the same message twice, and that is
 the user's reputation rather than a retry budget.
@@ -877,9 +877,12 @@ it under one code, `provider_blocked`, and the failure carries a `block` the
 [provider block](contracts/block/provider_block.md) page publishes. Where the provider refused for a block and did
 nothing, say `provider_blocked` with the block even where the operation also declares an older code for the condition
 (`sender_limit_reached`, `insufficient_credits`, `sender_unavailable`, `unauthorized`); those codes stand for an answer
-you cannot read as a block. Today the item ends there, final, and the block is
-kept on the attempt and on the item's `last_error`, where a person reads what to clear; a block outside that page is
-recorded `permanent`, with what is wrong with it named beside the failure. The events and delivery families declare no
+you cannot read as a block. The block is kept on the attempt and on the item's `last_error`, where a person reads what
+to clear. Where the operation is one a block holds — `reach: act` work and the protective operations — the attempt
+ends `blocked`, never counted, and the item waits on the block until it clears or a trial gets past it; any other
+operation ends there, final. So report `blocked` only for a refusal that concerns the account or the sender rather
+than the call: work waits on it. A block outside that page is recorded `permanent`, with what is wrong with it named
+beside the failure. The events and delivery families declare no
 block, so a `blocked` answer there is an answer outside the contract, `result_invalid`.
 
 What may be done about an ambiguous end is a property of the operation, and every published contract
