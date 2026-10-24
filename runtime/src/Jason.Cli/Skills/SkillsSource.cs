@@ -269,7 +269,8 @@ public static class SkillsSource
 
     /// <summary>
     /// Whether a fetch is still being made into that directory: its claim is held. A claim not there yet is a fetch that
-    /// has made its directory and not yet its claim, and counts as held too.
+    /// has made its directory and not yet its claim, and counts as held too. A process that dies in that window leaves a
+    /// directory no later fetch removes; only the uninstall's purge does.
     /// </summary>
     private static bool Claimed(string partial)
     {
@@ -288,6 +289,10 @@ public static class SkillsSource
     {
         try
         {
+            // The tree first, the claim and the directory after it. A tree that cannot be removed yet (a pack file held
+            // on Windows) then leaves the claim in place and unheld, so the next fetch of this ref takes it; the claim
+            // removed first would leave a directory that reads as a fetch just begun, and nobody would ever remove it.
+            DirectoryTrees.Delete(Path.Combine(partial, "tree"));
             DirectoryTrees.Delete(partial);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

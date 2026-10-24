@@ -1,8 +1,8 @@
 namespace Jason.Cli.Files;
 
 /// <summary>
-/// The one way the CLI deletes a directory tree of its own: the uninstall's purge, and a skills fetch that was staged and
-/// not finished.
+/// The tree delete for a tree that may hold git's read-only files or a link: the uninstall's purge, and a skills fetch that
+/// was staged and not finished.
 /// </summary>
 internal static class DirectoryTrees
 {

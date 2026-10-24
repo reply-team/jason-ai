@@ -326,6 +326,51 @@ public class SkillsSourceTests
     }
 
     /// <summary>
+    /// A leftover whose tree cannot be removed yet, because a file in it is held, keeps its claim file: the tree goes before
+    /// the claim, so the next fetch finds the claim free and takes the leftover once the hold is gone.
+    /// </summary>
+    [Fact]
+    public async Task A_leftover_whose_tree_could_not_be_removed_keeps_its_claim_and_is_removed_by_a_later_fetch()
+    {
+        using var dir = new TempPaths();
+        var leftover = Partial(dir, "v0.1.0");
+        var claim = Path.Combine(leftover, "claim");
+        await File.WriteAllTextAsync(claim, string.Empty, Ct);
+        var held = Path.Combine(leftover, "tree", "held.txt");
+        await File.WriteAllTextAsync(held, "a file something else has open", Ct);
+        var empty = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                Directory.CreateDirectory(Path.Combine(request.Arguments[^1], ".git"));
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+                () => SkillsSource.StageAsync(Machine(dir, empty), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct));
+
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.True(Directory.Exists(leftover), $"'{leftover}' was removed while a file in its tree was held.");
+            }
+
+            if (Directory.Exists(leftover))
+            {
+                Assert.True(File.Exists(claim), $"'{leftover}' was left without its claim file, so no later fetch can tell it is nobody's.");
+            }
+        }
+
+        await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, empty), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct));
+
+        Assert.False(Directory.Exists(leftover), $"'{leftover}', whose hold was gone, was left in staging.");
+    }
+
+    /// <summary>
     /// And a fetch of the same ref that another run is still making is left alone: deleting it under that run is how one
     /// command broke another's install.
     /// </summary>
