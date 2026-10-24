@@ -154,12 +154,13 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the twelve answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the thirteen answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last five are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last six are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
-value is suppressed, whether the composed input satisfies the schema, and whether the operation needs a
+value is suppressed, whether the routed plugin has pinned the person an operation that works by the pin
+alone acts on, whether the composed input satisfies the schema, and whether the operation needs a
 person's approval. So `route resolve --operation campaign.enroll` answers `usable: true` against a
 plugin that implements it, and every item of that operation is still parked for a person at the
 claim.
@@ -304,19 +305,20 @@ Nothing falls back. An operation the routed plugin cannot perform ends the work 
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the twelve, in the order they are checked
+### At the claim — the thirteen, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
 as far as the decision got, so a manager can see what would have run. None of them is retried. One answer two of
 them can give does come back, because it refuses nothing: a schema pattern that did not finish matching, twice —
-rows 7 and 11 below.
+rows 7 and 12 below.
 
-The twelfth is not a refusal at all: it is the gate the runtime owes a person, and an item that reaches
+The thirteenth is not a refusal at all: it is the gate the runtime owes a person, and an item that reaches
 it is **parked** rather than failed — no attempt, nothing spent, and `approval.list` is where it waits.
 It is asked last on purpose. What a person is asked to approve is the composed input, so it has to be
 composed and to satisfy the operation's own schema before anybody can be shown it; and nobody is ever
-asked to approve reaching somebody the suppression register already protects.
+asked to approve reaching somebody the suppression register already protects, or acting on somebody the
+routed plugin does not know.
 
 | # | Code | Class | What it means, and what to change |
 |---|---|---|---|
@@ -330,8 +332,9 @@ asked to approve reaching somebody the suppression register already protects.
 | 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
 | 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out declares `preflight.suppression: not_applicable` — today `optout.record` and `enrollment.stop` — and meets neither the check nor the read: a suppressed person is exactly who it is for |
-| 11 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each. A pattern of that schema that did not finish matching, twice, is not `input_invalid`: nothing was found wrong and nothing has run, so the attempt ends `validation_timed_out`, `transient`, and comes back under the ordinary retry rule |
-| 12 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
+| 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item |
+| 12 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each. A pattern of that schema that did not finish matching, twice, is not `input_invalid`: nothing was found wrong and nothing has run, so the attempt ends `validation_timed_out`, `transient`, and comes back under the ordinary retry rule |
+| 13 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
 
 Two of these are worth a second sentence. `input_invalid` is the only one classed `validation` — it is
 the one a planner can fix by editing the item; everything else is structural. And an argument that
@@ -568,6 +571,8 @@ own code, as a conflict (409).
   implied anywhere (DEF-OPS-002).
 - **One installed version per plugin id**, because the id is the directory name. Two plugins may implement
   the same operation, and routing is how you choose between them.
+- **A read on request has no bound of its own.** It runs outside the handler pool, one child each;
+  `Dispatcher:MaxParallel` bounds work items only.
 - **Routes are not exported or imported.** The global half is a settings file you can copy; the campaign
   half is database rows, readable through `route list` and writable only one route at a time.
 

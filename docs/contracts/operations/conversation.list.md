@@ -38,7 +38,9 @@ It reads one of two scopes:
 - `contacts` is there only when the work item names a person, and then it carries the person's identifier and pins
   and nothing else — no name, no address, no channel. A read about a person works by the pin —
   `preflight.provider_contact` is `pinned_only` — so a person with no pin fails `contact_not_linked` before anything is
-  called: a read creates nobody.
+  called: a read creates nobody. The runtime decides this first, at the claim and before a child exists: a read about
+  somebody the routed plugin has pinned nobody for fails `contact_not_linked` there. A plugin handed such an input
+  anyway still refuses it the same way.
 - Without a person, the campaign is named as in `campaign.get`: by `args.campaign.external_id` the first time, or by
   `campaign.external_ids.campaign` once it is pinned. An input naming neither a person nor a campaign is refused
   before your code runs.

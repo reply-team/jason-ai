@@ -194,7 +194,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twelve pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the thirteen pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -336,7 +336,7 @@ Every one of these is decided **before a child process exists**, and the first t
 the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twelve provider checks follow.
+existed. It is the same rule the thirteen provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -555,7 +555,7 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| the twelve pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the thirteen pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -570,25 +570,25 @@ campaign, the identifiers that plugin itself pinned, and the work item's own id 
 — and validates the whole composed document against the operation's input schema at the claim. A
 plugin never sees a work item's context.
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twelve checks,
+**Everything that can stop it is decided at the claim, before a child process exists.** Thirteen checks,
 in this order, and the first that answers is the one that decides:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
-input_invalid → approval_required
+contact_not_linked → input_invalid → approval_required
 ```
 
-The first eleven are refusals and all of them are final: ten are `permanent` and `input_invalid` is
+The first twelve are refusals and all of them are final: eleven are `permanent` and `input_invalid` is
 `validation`, because it is the one a planner can fix by editing the item. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
-nothing ever falls back to another plugin. The twelfth is not a refusal: `approval_required` parks the
+nothing ever falls back to another plugin. The thirteenth is not a refusal: `approval_required` parks the
 item for a person (§Approvals above), and it is asked last so that nobody is asked to approve work that
 would have been refused anyway. [docs/routing.md](routing.md) says what each one means and what to
 change.
 
 Two of those checks measure a document against a schema — the binding against the plugin's (7), the
-composed input against the operation's (11) — and one answer they can give is not a refusal. Where a
+composed input against the operation's (12) — and one answer they can give is not a refusal. Where a
 pattern of that schema did not finish matching, twice, nothing was found wrong and nothing has run, so
 the attempt ends `validation_timed_out`, `transient`, and the dispatcher retries it under the ordinary
 retry rule — never `input_invalid` or `binding_invalid`, which would send a planner to edit an item that

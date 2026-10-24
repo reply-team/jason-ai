@@ -25,6 +25,7 @@ public class ProviderOpPreflightTests
     private const string Threads = "conversation.list";
     private const string Optout = "optout.record";
     private const string Stop = "enrollment.stop";
+    private const string Delete = "contact.delete";
 
     /// <summary>
     /// The order, proven by repairing one thing at a time: everything is wrong at the start, and each repair
@@ -32,7 +33,7 @@ public class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the twelve checks' order")]
+    [Critical(Family.W3, "the thirteen checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -61,7 +62,11 @@ public class ProviderOpPreflightTests
 
         scenario.Route = new Route(Scenario.PluginId, new JsonObject { ["workspace"] = "west" }, "sha256:west");
 
-        scenario.Arguments = new JsonObject { ["channel"] = "email" };
+        // From here the work is a delete, which works by the pin alone, and its arguments also name the contact to
+        // destroy, which its schema refuses: the person's checks come first, the person's pin among them, and only
+        // then the document.
+        scenario.Operation = Delete;
+        scenario.Arguments = new JsonObject { ["channel"] = "email", ["contact"] = new JsonObject { ["external_id"] = "48211" } };
         met.Add(Refused(scenario, FailureClass.Permanent));
 
         scenario.Contact = Scenario.Person(("phone", "+15555550100"));
@@ -72,10 +77,13 @@ public class ProviderOpPreflightTests
         met.Add(Refused(scenario, FailureClass.Permanent));
 
         scenario.Suppressed = false;
-        met.Add(Refused(scenario, FailureClass.Validation));
-        Assert.Equal("/args/list", Assert.Single(scenario.Check().Details!).Field);
+        met.Add(Refused(scenario, FailureClass.Permanent));
 
-        // Last of the twelve, and the only one that is not a refusal: an operation a person has to confirm is
+        scenario.ContactPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "48211" };
+        met.Add(Refused(scenario, FailureClass.Validation));
+        Assert.Equal("/args/contact", Assert.Single(scenario.Check().Details!).Field);
+
+        // Last of the thirteen, and the only one that is not a refusal: an operation a person has to confirm is
         // parked rather than failed, and it is asked here — after the input it would be approved for has been
         // composed and held to its own schema — rather than before any of that was known.
         scenario.Operation = Enroll;
@@ -142,7 +150,7 @@ public class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the twelve is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the thirteen is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -153,12 +161,12 @@ public class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
-    /// The one answer two of the checks give that is not a refusal is named beside the twelve rather than among them:
+    /// The one answer two of the checks give that is not a refusal is named beside the thirteen rather than among them:
     /// the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What both checks answer when their pattern does not finish is that named outcome, and nothing else.
     /// </summary>
     [Fact]
-    public void The_claim_s_transient_outcome_is_what_checks_7_and_11_answer_and_is_not_among_the_twelve()
+    public void The_claim_s_transient_outcome_is_what_checks_7_and_12_answer_and_is_not_among_the_thirteen()
     {
         var schema = Scenario.BindingSchema;
         schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
@@ -303,20 +311,54 @@ public class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// A person the provider was never told about is still a well-formed input. The plugin answers
-    /// <c>contact_not_linked</c> without calling anything, because a read creates nobody; the claim has nothing to
-    /// refuse and no reason to guess at the person's address instead.
+    /// A read about a person works by the routed plugin's pin alone, and a person that plugin never pinned is somebody
+    /// nobody at the provider is known to be. The claim says so itself, with the code the plugin would answer, rather
+    /// than starting a child to be told it: the item ends where it was decided, and keeps where it was routed.
     /// </summary>
     [Fact]
-    public void A_person_with_no_pin_is_handed_on_for_the_plugin_to_answer_for()
+    public void A_read_about_a_person_the_routed_plugin_never_pinned_ends_at_the_claim()
     {
         var scenario = Scenario.Reading(Threads);
         scenario.Contact = Scenario.Person(("email", "ada@example.test"));
 
         var verdict = scenario.Check();
 
-        Assert.True(verdict.Passed);
-        Assert.Empty(verdict.Plan!.Input["contacts"]![0]!["external_ids"]!.AsObject());
+        Assert.True(verdict.Refused, verdict.Code);
+        Assert.Equal(AttemptErrors.ContactNotLinked, verdict.Code);
+        Assert.Equal(FailureClass.Permanent, verdict.Class);
+        Assert.Null(verdict.Plan);
+        Assert.Equal(Scenario.PluginId, verdict.Resolution!.Route.PluginId);
+    }
+
+    /// <summary>
+    /// A delete works by the pin alone, and somebody nobody pinned is refused before anybody is asked to approve it: a
+    /// person would otherwise approve a delete that can never run. The same delete for a pinned person is parked for
+    /// that person's decision, as before.
+    /// </summary>
+    [Fact]
+    public void A_delete_for_somebody_nobody_pinned_is_refused_before_anybody_is_asked_to_approve_it()
+    {
+        var scenario = new Scenario
+        {
+            Operation = Delete,
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = new JsonObject { ["channel"] = "email" },
+        };
+
+        var refused = scenario.Check();
+        Assert.True(refused.Refused, refused.Code);
+        Assert.False(refused.Parks);
+        Assert.Equal(AttemptErrors.ContactNotLinked, refused.Code);
+        Assert.Equal(FailureClass.Permanent, refused.Class);
+        Assert.NotNull(refused.Resolution);
+
+        // The routed plugin's own pin is all it takes, and it is what the person approving is shown.
+        scenario.ContactPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "48211" };
+        var parked = scenario.Check();
+        Assert.True(parked.Parks, parked.Code);
+        Assert.Equal(AttemptErrors.ApprovalRequired, parked.Code);
+        Assert.Equal("48211", (string?)parked.Plan!.Input["contacts"]![0]!["external_ids"]!["contact"]);
     }
 
     /// <summary>
@@ -609,7 +651,7 @@ public class ProviderOpPreflightTests
             IReadOnlyList<int>? contractVersions = null,
             JsonObject? binding = null,
             PluginStatus status = PluginStatus.Valid) =>
-            TestPlugins.Loaded(id, operations ?? [Add, Enroll, Get], kind, contractVersions, binding, status);
+            TestPlugins.Loaded(id, operations ?? [Add, Enroll, Get, Delete], kind, contractVersions, binding, status);
 
         public static Contact Person(params (string Channel, string Value)[] channels)
         {

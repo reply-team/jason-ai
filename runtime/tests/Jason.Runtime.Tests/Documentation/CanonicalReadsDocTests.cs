@@ -296,7 +296,7 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
-    /// The table of the claim's twelve answers says, at row 10, which operations the suppression register does not
+    /// The table of the claim's thirteen answers says, at row 10, which operations the suppression register does not
     /// refuse — every one the catalog marks `not_applicable`, and the field that marks it.
     /// </summary>
     [Fact]
@@ -308,6 +308,21 @@ public sealed partial class CanonicalReadsDocTests
         Assert.Contains("`preflight.suppression: not_applicable`", row, StringComparison.Ordinal);
         Assert.NotEmpty(exempt);
         Assert.All(exempt, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Row 11 of the same table says which operations work by the routed plugin's pin alone — every one the catalog
+    /// marks `pinned_only`, and the field that marks it.
+    /// </summary>
+    [Fact]
+    public void Routing_row_11_names_every_operation_that_works_by_the_pin_alone()
+    {
+        var row = Source("docs/routing.md").Split('\n').Single(line => line.StartsWith("| 11 | `contact_not_linked` |", StringComparison.Ordinal));
+        var pinnedOnly = OperationCatalog.All.Where(contract => contract.Preflight.ProviderContact == ProviderContact.PinnedOnly).ToList();
+
+        Assert.Contains("`preflight.provider_contact: pinned_only`", row, StringComparison.Ordinal);
+        Assert.NotEmpty(pinnedOnly);
+        Assert.All(pinnedOnly, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
     }
 
     /// <summary>

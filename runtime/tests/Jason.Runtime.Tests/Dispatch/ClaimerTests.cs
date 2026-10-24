@@ -619,6 +619,30 @@ public class ClaimerTests
         RecordedByAttemptId = PublicId.New("att"),
     };
 
+    private static ExternalId ContactPin(string pluginId, string value) => new()
+    {
+        PluginId = pluginId,
+        Kind = "contact",
+        Value = value,
+        RecordedAt = Noon,
+        RecordedByAttemptId = PublicId.New("att"),
+    };
+
+    /// <summary>A delete with nothing wrong with its input, about a person carrying the one pin given.</summary>
+    private static WorkItem Deletion(JasonDbContext db, Campaign campaign, ExternalId pin)
+    {
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        contact.ExternalIds.Add(pin);
+        db.Contacts.Add(contact);
+
+        var item = WorkItemFactory.NewProviderOp(campaign, "contact.delete", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject { [WorkItemService.InputKey] = new JsonObject { ["channel"] = "email" } };
+        db.WorkItems.Add(item);
+        return item;
+    }
+
     private static async Task GiveRoleAsync(JasonDbContext db, string name, params string[] entryCommand)
     {
         var role = await db.Roles.SingleAsync(r => r.Name == name, Ct);
@@ -822,6 +846,109 @@ public class ClaimerTests
         var attempt = Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
         Assert.Equal(approval.PublicId, attempt.Provenance!.ApprovalId);
         Assert.Equal(ApprovalStatus.Approved, (await fresh.Approvals.AsNoTracking().SingleAsync(Ct)).Status);
+    }
+
+    /// <summary>
+    /// A delete works by the routed plugin's pin alone, so a person with none is refused at the claim, before the gate,
+    /// and that holds for an item a person has already approved: a decision about a delete nobody can be found for does
+    /// not make it one that can run. The item ends with its attempt kept, nothing is handed out, and the decision stays
+    /// as the person made it.
+    /// </summary>
+    [Fact]
+    public async Task An_approved_delete_for_a_person_with_no_pin_ends_at_the_claim_and_keeps_its_attempt()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["contact.delete"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Deletion(db, campaign, ContactPin("stand-in-provider", "48211"));
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var approval = await Decide(db, ApprovalStatus.Approved);
+
+        // The pin the decision was made about is gone by the time the item is claimed again, which is the state of
+        // an item a person approved before the claim asked about the pin at all.
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM external_ids", Ct);
+        db.ChangeTracker.Clear();
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var attempt = Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(item.Id, attempt.WorkItemId);
+        Assert.Equal(AttemptStatus.Failed, attempt.Status);
+        Assert.Equal(AttemptErrors.ContactNotLinked, attempt.Error!.Code);
+        Assert.Equal(FailureClass.Permanent, attempt.Error.Class);
+        Assert.Equal("stand-in-provider", attempt.Provenance!.PluginId);
+
+        // The refusal comes before the gate, so no decision releases this attempt and its provenance names none: the
+        // person's decision stays on the approval, and nothing ran under it.
+        Assert.Null(attempt.Provenance.ApprovalId);
+        Assert.Equal("email", (string?)attempt.ContextSnapshot[WorkItemService.InputKey]!["channel"]);
+        Assert.Null(attempt.Launch);
+        var failed = await fresh.WorkItems.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(WorkItemStatus.Failed, failed.Status);
+        var decided = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((approval.PublicId, ApprovalStatus.Approved), (decided.PublicId, decided.Status));
+    }
+
+    /// <summary>
+    /// What another plugin calls the person is not the routed plugin's pin, so a person pinned only there is refused
+    /// the same way, at the first claim: no approval is asked for, and the attempt says why.
+    /// </summary>
+    [Fact]
+    public async Task A_delete_for_a_person_pinned_only_at_another_plugin_is_refused_and_never_parked()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["contact.delete"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        Deletion(db, campaign, ContactPin("other-provider", "OTHER-1"));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        var attempt = Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(AttemptErrors.ContactNotLinked, attempt.Error!.Code);
+        Assert.Equal(WorkItemStatus.Failed, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+    }
+
+    /// <summary>
+    /// A pin a later answer disputed is still the pin: the original value stands, and it is what the person approving
+    /// is shown. The delete is parked for that decision, exactly as for a pin nobody disputed.
+    /// </summary>
+    [Fact]
+    public async Task A_delete_for_a_person_whose_pin_diverged_is_parked_for_a_decision_about_the_pin()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["contact.delete"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var pin = ContactPin("stand-in-provider", "48211");
+        pin.DivergedValue = "59322";
+        pin.DivergedAt = Noon;
+        pin.DivergedByAttemptId = PublicId.New("att");
+        Deletion(db, campaign, pin);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal("48211", (string?)approval.Subject["input"]!["contacts"]![0]!["external_ids"]!["contact"]);
     }
 
     /// <summary>

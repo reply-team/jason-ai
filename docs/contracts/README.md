@@ -399,7 +399,9 @@ Every operation is at `version: 1`. A plugin's manifest declares the operation-c
 lists.
 
 - **Additive** — a new optional input field, a required input field made optional, a new optional output field, a new
-  failure code, a new external-id kind — keeps the version.
+  failure code, a new external-id kind — keeps the version. A required input field made optional is additive only where
+  the runtime supplies the field's former value to the plugin's input, or the operation's document says the plugin must
+  take its absence; otherwise it is a breaking change of the operation's version.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,

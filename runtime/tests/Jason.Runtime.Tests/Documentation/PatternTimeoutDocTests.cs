@@ -80,16 +80,16 @@ public sealed partial class PatternTimeoutDocTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>Row 11 of the claim's twelve says a pattern's timeout is not <c>input_invalid</c>, and row 7 not <c>binding_invalid</c>.</summary>
+    /// <summary>Row 12 of the claim's thirteen says a pattern's timeout is not <c>input_invalid</c>, and row 7 not <c>binding_invalid</c>.</summary>
     [Fact]
     public void The_claim_s_rows_say_a_pattern_s_timeout_is_not_the_refusal()
     {
         var lines = Source("docs/routing.md").Split('\n');
-        var row11 = lines.Single(line => line.StartsWith("| 11 | `input_invalid` |", StringComparison.Ordinal));
+        var row12 = lines.Single(line => line.StartsWith("| 12 | `input_invalid` |", StringComparison.Ordinal));
         var row7 = lines.Single(line => line.StartsWith("| 7 | `binding_invalid` |", StringComparison.Ordinal));
 
-        Assert.Contains("is not `input_invalid`", row11, StringComparison.Ordinal);
-        Assert.Contains("`validation_timed_out`, `transient`", row11, StringComparison.Ordinal);
+        Assert.Contains("is not `input_invalid`", row12, StringComparison.Ordinal);
+        Assert.Contains("`validation_timed_out`, `transient`", row12, StringComparison.Ordinal);
         Assert.Contains("is not `binding_invalid`", row7, StringComparison.Ordinal);
         Assert.Contains("`validation_timed_out`, `transient`", row7, StringComparison.Ordinal);
     }

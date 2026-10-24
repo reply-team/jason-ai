@@ -1,7 +1,7 @@
 {
   "operation": "contact.delete",
   "version": 1,
-  "case": "nobody pinned: the identifier renders as a dash, which is what a person approving reads, and the plugin then refuses the delete as contact_not_linked",
+  "case": "nobody pinned: the identifier renders as a dash; the claim refuses such a delete as contact_not_linked before it is parked, so nobody is asked to approve it",
   "input": {
     "args": { "channel": "email" },
     "contacts": [

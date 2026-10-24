@@ -88,6 +88,12 @@ public static class AttemptErrors
     /// <summary>That channel and value are on the do-not-contact register.</summary>
     public const string Suppressed = "suppressed";
 
+    /// <summary>
+    /// The operation works by the routed plugin's pin alone, and that plugin has pinned nothing for the person: nobody at
+    /// the provider is known to be them, so there is nothing to act on and nobody is looked up to find out.
+    /// </summary>
+    public const string ContactNotLinked = "contact_not_linked";
+
     /// <summary>The composed input does not satisfy the operation's own schema.</summary>
     public const string InputInvalid = "input_invalid";
 

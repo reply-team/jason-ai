@@ -50,7 +50,7 @@ public sealed record PreflightVerdict(
 }
 
 /// <summary>
-/// Everything that can stop a provider work item, decided before a child process exists. Twelve checks in one
+/// Everything that can stop a provider work item, decided before a child process exists. Thirteen checks in one
 /// order: what the runtime cannot do at all, then what the planner got wrong, and last the gate it owes a
 /// person — so a manager meets the reasons an item can never run before the reasons that need their attention,
 /// and nobody is asked to approve work that would have been refused anyway.
@@ -73,9 +73,12 @@ public static class ProviderOpPreflight
     /// <summary>The one approval a runtime may give itself: everything else is a person's to give.</summary>
     private const string Automatic = "auto";
 
-    /// <summary>The twelve, in the order they are checked. The first that fails is the one the attempt records.</summary>
+    /// <summary>The kind of the pin by which a provider knows a person.</summary>
+    private const string ContactPin = "contact";
+
+    /// <summary>The thirteen, in the order they are checked. The first that fails is the one the attempt records.</summary>
     /// <remarks>
-    /// Checks 7 and 11 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
+    /// Checks 7 and 12 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
     /// one of the reasons an item cannot run: it is what either check answers when a pattern of the schema it measures
     /// against could not finish, twice — nothing found wrong, nothing run, and the item back in the queue.
     /// </remarks>
@@ -91,12 +94,13 @@ public static class ProviderOpPreflight
         AttemptErrors.ContactRequired,
         AttemptErrors.NoChannelValue,
         AttemptErrors.Suppressed,
+        AttemptErrors.ContactNotLinked,
         AttemptErrors.InputInvalid,
         AttemptErrors.ApprovalRequired,
     ];
 
     /// <summary>
-    /// What checks 7 and 11 answer when a pattern of the schema they measure against — the plugin's binding schema, the
+    /// What checks 7 and 12 answer when a pattern of the schema they measure against — the plugin's binding schema, the
     /// operation's input schema — did not finish matching, twice: transient, and the only answer here the claim puts
     /// back in the queue.
     /// </summary>
@@ -164,6 +168,19 @@ public static class ProviderOpPreflight
                     AttemptErrors.Suppressed,
                     $"The contact's '{channel}' value is on the suppression list, so this campaign does not reach them there.");
             }
+        }
+
+        // An operation that works by the routed plugin's pin alone has nobody to act on when that plugin has pinned
+        // nobody for the person, and it looks nobody up. A pin the plugin holds at another value still names a
+        // person there, so a divergence is no reason here; a pin held only by another plugin names nobody here.
+        if (contract.Preflight.ProviderContact == ProviderContact.PinnedOnly
+            && facts.Contact is not null
+            && !facts.ContactPins.ContainsKey(ContactPin))
+        {
+            return Refused(
+                resolution,
+                AttemptErrors.ContactNotLinked,
+                $"Operation '{operation}' acts only on the person '{route.PluginId}' has pinned, and '{route.PluginId}' has pinned nobody for this contact.");
         }
 
         var input = CanonicalInput.Compose(contract, facts);

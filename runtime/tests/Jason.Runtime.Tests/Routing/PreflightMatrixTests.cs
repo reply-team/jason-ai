@@ -22,7 +22,7 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Ten of the twelve are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// Eleven of the thirteen are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
 /// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
 /// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead. <c>approval_required</c> is
 /// not in this matrix at all, because it is the one answer that does not fail an item: work whose operation needs
@@ -38,14 +38,20 @@ public class PreflightMatrixTests
     private const string Narrow = "narrow-provider";
     private const string HeldBack = "held-back-provider";
     private const string Ghost = "ghost-provider";
+    private const string Deleting = "deleting-provider";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     public static TheoryData<string> EveryWayAProviderItemCannotRun() => [.. Cases.Keys];
 
-    // Critical: no_route, suppressed, input_invalid.
+    // contact_not_linked is among them because without it a person is asked to approve a delete that can never run: the
+    // refusal has to come before the gate, through the real claim.
+    // Critical: no_route, suppressed, contact_not_linked, input_invalid.
     public static TheoryData<string> CriticalWaysAProviderItemCannotRun() =>
-        CriticalRows.Mark(EveryWayAProviderItemCannotRun(), Family.W3, data => data is ["no_route"] or ["suppressed"] or ["input_invalid"]);
+        CriticalRows.Mark(
+            EveryWayAProviderItemCannotRun(),
+            Family.W3,
+            data => data is ["no_route"] or ["suppressed"] or ["contact_not_linked"] or ["input_invalid"]);
 
     [Theory]
     [MemberData(nameof(CriticalWaysAProviderItemCannotRun))]
@@ -62,8 +68,8 @@ public class PreflightMatrixTests
                 scenario.Install(paths);
             },
             // The reference package names the stand-in vendor program itself, so without its directory on the
-            // search path the plugin loads as unavailable — which is one of the twelve answers this matrix is
-            // about, and would silently stand in for the other eleven.
+            // search path the plugin loads as unavailable — which is one of the thirteen answers this matrix is
+            // about, and would silently stand in for the others.
             configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
 
         // The loop scans the moment it starts; everything this test seeds comes after that, so the only scan
@@ -182,6 +188,23 @@ public class PreflightMatrixTests
                 return await ItemAsync(api, campaign, "list_membership.add", ToAList(), ct, contact);
             },
             AttemptErrors.Suppressed,
+            FailureClass.Permanent),
+
+        // A delete works by the routed plugin's pin alone, and this person was never pinned by anybody: refused at the
+        // claim, where a person would otherwise have been asked to approve it.
+        [AttemptErrors.ContactNotLinked] = new(
+            paths => TestPlugins.Write(
+                paths,
+                Deleting,
+                TestPlugins.Manifest(Deleting, "[contact.delete]"),
+                "export function invoke() { return { result: {} }; }"),
+            _ => new Route(Deleting, null, null),
+            async (api, campaign, ct) =>
+            {
+                var contact = await ContactAsync(api, campaign, "email", "ada@example.test", ct);
+                return await ItemAsync(api, campaign, "contact.delete", new JsonObject { ["channel"] = "email" }, ct, contact);
+            },
+            AttemptErrors.ContactNotLinked,
             FailureClass.Permanent),
 
         // Creation checks the caller's own arguments; that the campaign is named at all — by an argument or by a

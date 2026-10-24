@@ -490,6 +490,19 @@ public class ContractDocumentTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A plugin built against a field being required may still read it unchecked, so making the field optional keeps the
+    /// version only when that plugin cannot be handed its absence.
+    /// </summary>
+    [Fact]
+    public void Versioning_says_when_a_required_field_made_optional_stays_additive()
+    {
+        Assert.Contains(
+            "A required input field made optional is additive only where the runtime supplies the field's former value to the plugin's input, or the operation's document says the plugin must take its absence; otherwise it is a breaking change of the operation's version.",
+            Section(Path.Combine(ContractFiles.Package, "README.md"), "## Versioning"),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>A page's section under a heading, up to the next heading of its level, with its whitespace run together.</summary>
     private static string Section(string page, string heading)
     {
