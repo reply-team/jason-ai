@@ -1,4 +1,5 @@
 using System.Globalization;
+using Jason.Contracts.Plugins;
 using Jason.PluginHost.Scripting;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
@@ -46,7 +47,7 @@ public sealed class PackageModuleLoaderTests
 
         var refused = Assert.Throws<HostRuleException>(() => Create(package.Root).Modules.Import("./main.js"));
 
-        Assert.Equal(OutcomeCodes.ModuleNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.ModuleNotAllowed, refused.Code);
         Assert.Contains(specifier, refused.Message, StringComparison.Ordinal);
         Assert.NotEmpty(why);
     }
@@ -61,7 +62,7 @@ public sealed class PackageModuleLoaderTests
 
         var refused = Assert.Throws<HostRuleException>(() => Create(package.Root).Modules.Import("./main.js"));
 
-        Assert.Equal(OutcomeCodes.ModuleNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.ModuleNotAllowed, refused.Code);
     }
 
     [Fact]
@@ -80,6 +81,6 @@ public sealed class PackageModuleLoaderTests
 
         var refused = Assert.Throws<HostRuleException>(() => Create(package.Root).Modules.Import("./main.js"));
 
-        Assert.Equal(OutcomeCodes.ModuleNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.ModuleNotAllowed, refused.Code);
     }
 }

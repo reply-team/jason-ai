@@ -25,6 +25,13 @@ public sealed record ProviderBlockContract(string Id, int Version, string Summar
     /// </summary>
     public const int MaxBytes = 8 * 1024;
 
+    /// <summary>
+    /// Where an operation's input names the sending account it goes from, as a pointer from the input's root: the one
+    /// place a block of scope <c>sender</c> is matched against an item. Every operation that takes a sender takes it
+    /// through the same definition, at this pointer, and the tests hold that over the operation documents.
+    /// </summary>
+    public const string SenderPointer = "/args/sender/external_id";
+
     private const string ResourceName = "Jason.Contracts.Blocks.provider_block.json";
     private const string Contract = "the provider block";
 

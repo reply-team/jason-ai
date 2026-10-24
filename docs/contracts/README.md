@@ -445,7 +445,8 @@ An **input fixture** is `{operation, version, case, input, expect}`, where `expe
 or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case, outcome, expect}`, where `outcome`
 is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?, pinned?, block?}`.
 `status` is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the
-output schema, or which pins an identifier of a kind the operation never declared. `pinned` is what the runtime
+output schema, which pins an identifier of a kind the operation never declared, or whose failure carries a code the
+operation does not declare under that class. `pinned` is what the runtime
 writes into its record of provider identifiers from that answer, as `{kind: value}`. A **preview fixture** is
 `{operation, version, case, input, expect}`, where `input` is a composed input the operation's schema accepts and
 `expect` is `{summary, highlights}`: the line the template renders and the values it highlights, both compared
@@ -464,6 +465,10 @@ passing while it no longer demonstrates what the case is named for.
 A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
 document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
 operation accepts, nor the same code under a class that would have the runtime repeat what the document calls final.
+The runtime holds every failed answer to the same list: a code the document does not declare, or a declared code under
+another class, is `result_invalid`, with the detail at `/error/code` or `/error/class` — except the plugin host's own
+codes, which belong to no operation and pass under the class the host writes them with
+([the plugin guide, section 8](../plugins.md#8-failure-classes)); the events family alone refuses those as well.
 
 **A failure may still pin.** A failed outcome carries its identifiers on the error — `error.external_ids`, which is
 where `host.fail` puts them and the only place the runtime reads them — and a declared kind there is written down by
@@ -483,8 +488,8 @@ any other class states no `block`.
 Retriability in an outcome fixture is stated per the operation's own rule, so that a plugin author reading the
 fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent`, `validation` and
 `blocked` are final; `ambiguous` is repeated only where the operation says `safe` or `after_recovery_read`; and `result_invalid`
-is always final, because a shape error is deterministic and the next attempt would run the same code over the same
-answer.
+is always final, because a shape error, or a failure outside the declared codes, is deterministic and the next attempt
+would run the same code over the same answer.
 
 ## Where these come from
 

@@ -312,6 +312,8 @@ export function invoke(operation, input, context) {
     }
 
     default:
+      // Unreachable by construction, not a pattern: the runtime invokes only the operations the manifest lists,
+      // and each has its case above. A code no operation declares is refused as result_invalid (section 8).
       throw host.fail({ class: "validation", code: "unknown_operation", message: "unknown operation " + operation });
   }
 }
@@ -820,8 +822,9 @@ every operation's plugin is held to, and the runtime enforces each of them:
    a word**: the host writes null there for a failure, so the identifier you meant to record is lost
    exactly where it matters most — after a lost answer, where the pin is the only trace that anything
    happened.
-3. **Answer in the operation's own vocabulary**, so that a result satisfies its output schema. An
-   answer that does not is `result_invalid`, is never repeated, and is kept on the attempt.
+3. **Answer in the operation's own vocabulary**, so that a result satisfies its output schema and a
+   failure carries a code the operation declares, under the class it declares it with. An answer that
+   does not is `result_invalid`, is never repeated, and is kept on the attempt.
 4. **Find the person as the contact proxy rule says**: work by a pin when you are given one, and otherwise find or
    create exactly as the document's `preflight.provider_contact` says.
 5. **Carry the provider's own refusal back, in the runtime's vocabulary.** A provider may know something
@@ -854,7 +857,7 @@ complete one, though it implements the delivery contract (§14) rather than an o
 
 ## 8. Failure classes
 
-Every failure carries one of five classes, and the class — not the code — is what the runtime reads.
+Every failure carries one of five classes: the class is what the runtime acts on; the code is held to the operation's list.
 
 | Class | Meaning | What the runtime does |
 |---|---|---|
@@ -892,9 +895,17 @@ the operation's output schema is `result_invalid`, which is ambiguous and never 
 document allows, because the next attempt would run the same code over the same answer.
 
 A contract also names the **codes** an operation may report and the class each carries, so that two
-plugins for two providers answer the same situation with the same word. Nothing checks a code against
-that list — the class is what the runtime reads — but a code outside it is a code no planner was
-written for.
+plugins for two providers answer the same situation with the same word. The runtime holds a failure to
+that list: a code the operation does not declare, or a declared code under a class the operation does
+not give it, is an answer outside the contract — `result_invalid`, ambiguous and never repeated, with the
+failure's detail pointing at `/error/code` or `/error/class`. The class is what everything after the
+attempt reads, and a code outside the list is a code no planner was written for. Such a failure keeps
+no block and pins nothing; what you reported — code, class, message and details — is kept on the
+attempt's trace. A read made on a person's request outside any work item is held to the list by the same
+check, and answered `result_invalid` the same way. The host's own codes below belong to no operation, and
+pass beside every one under the class the host writes them with; the same code under another class is
+yours, and is refused like any other code the operation does not declare. The events family is the one
+exception: its reads refuse every code the events contract does not declare, the host's included (§15).
 
 **Protocol failures** mean the runtime never got an answer at all. They are classified by how much
 may already have run.
@@ -934,7 +945,8 @@ are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missin
 `plugin_syntax_error`, `plugin_memory_exceeded`, `plugin_statement_limit`, `plugin_recursion_limit`,
 `capability_not_granted`, `executable_not_allowed`, `exec_limit`, `http_host_not_allowed`,
 `http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit` and
-`module_not_allowed`. All of them are `permanent`.
+`module_not_allowed`. All of them are `permanent`, and every operation's check passes them but the events
+family's (§15).
 
 ## 9. Capabilities and grants
 
@@ -1317,7 +1329,7 @@ answer what a provider holds when it holds less.
 
 **Failures,** thrown with `host.fail`: `events_unreachable` (transient), `events_unauthorized`, `events_unsupported`
 and `events_cursor_unknown` (permanent) — the last for a cursor your plugin can no longer read, after which the runtime
-reads by date.
+reads by date. Any other failure, the host's own codes of §8 included, is answered `result_invalid`.
 
 **How the runtime reads.** Every account a route binds at a provider that declares the contract is read on the
 installation's cadence, `Dispatcher:EventsCadenceSeconds` — ten minutes unless set otherwise — and at once when the

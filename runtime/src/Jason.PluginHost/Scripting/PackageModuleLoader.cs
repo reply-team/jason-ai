@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jint;
 using Jint.Runtime.Modules;
@@ -61,5 +62,5 @@ public sealed class PackageModuleLoader : IModuleLoader
     }
 
     private static HostRuleException Refuse(string specifier, string why) =>
-        new(OutcomeCodes.ModuleNotAllowed, $"'{specifier}' cannot be imported: {why}.", new JsonObject { ["specifier"] = specifier });
+        new(HostOutcomeCodes.ModuleNotAllowed, $"'{specifier}' cannot be imported: {why}.", new JsonObject { ["specifier"] = specifier });
 }

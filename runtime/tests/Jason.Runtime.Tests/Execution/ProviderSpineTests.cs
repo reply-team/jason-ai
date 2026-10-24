@@ -165,6 +165,32 @@ public class ProviderSpineTests
     }
 
     /// <summary>
+    /// A refusal the plugin has no word for is reported under a code the operation declares — a failed call, final —
+    /// with the account's own word kept beside it, rather than passed on as a code no contract publishes.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_the_plugin_has_no_word_for_is_a_failed_call_with_the_provider_s_word_kept()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WithList(ProviderList, "Q3 prospects");
+        await using var api = await StartAsync(workspace);
+        var campaign = await CampaignAsync(api);
+        var contact = await ContactAsync(api, campaign, Marta);
+        var item = await ItemAsync(api, campaign, "list_membership.add", ToTheList(), contact);
+        workspace.RefuseOnce(item, "quota_exceeded");
+
+        await ScanAsync(api);
+
+        var read = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.Failed, read.Status);
+        var attempt = Assert.Single(InOrder(read));
+        Assert.Equal(("provider_call_failed", (FailureClass?)FailureClass.Permanent, false), (attempt.Error!.Code, attempt.Error.Class, attempt.Error.Retriable));
+        Assert.True(
+            attempt.Error.Trace is { } trace && trace.Contains("\"provider_code\":\"quota_exceeded\"", StringComparison.Ordinal),
+            $"the attempt's trace does not keep the account's own word: {attempt.Error.Trace}");
+    }
+
+    /// <summary>
     /// PA3d. A2 through a real child process: the provider answers something the operation's output schema
     /// refuses, and the attempt is final whatever the operation's repeat rule allows. The pointers say where,
     /// and the answer itself is kept on the attempt so its author can see what was actually sent.

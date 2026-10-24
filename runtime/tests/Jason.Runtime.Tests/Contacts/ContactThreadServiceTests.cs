@@ -149,6 +149,27 @@ public class ContactThreadServiceTests
         Assert.Equal((502, code, retryable), (failed.StatusCode, failed.Code, failed.Retryable));
     }
 
+    /// <summary>
+    /// A read on request is held to its operation's declared codes by the same check a work item's failure is, so the
+    /// host's own endings — a plugin that threw, a timeout after a call left the process — stand as the host's codes
+    /// rather than reading as a code the operation never declared; under a class the host never gives them they do not.
+    /// </summary>
+    [Theory]
+    [InlineData(HostOutcomeCodes.PluginException, FailureClass.Permanent, HostOutcomeCodes.PluginException)]
+    [InlineData(HostOutcomeCodes.PluginTimeout, FailureClass.Ambiguous, HostOutcomeCodes.PluginTimeout)]
+    [InlineData(HostOutcomeCodes.PluginException, FailureClass.Transient, "result_invalid")]
+    public async Task A_host_ending_on_a_thread_read_stands_as_the_host_s_code(string reported, FailureClass failureClass, string code)
+    {
+        using var world = await World.CreateAsync();
+        world.Reads.Answer(FakeProviderReads.Failure(reported, failureClass));
+
+        var failed = await Assert.ThrowsAnyAsync<DomainException>(
+            () => world.Service.ThreadAsync(new ContactThreadRequest(world.Ada.PublicId, null, "t_1", null, null), Ct));
+
+        Assert.Equal("conversation.get", Assert.Single(world.Reads.Requests).Operation);
+        Assert.Equal((502, code, false), (failed.StatusCode, failed.Code, failed.Retryable));
+    }
+
     private static JsonObject Binding(string workspace) => new() { ["workspace"] = workspace };
 
     private static JsonObject Threads() => JsonNode.Parse(

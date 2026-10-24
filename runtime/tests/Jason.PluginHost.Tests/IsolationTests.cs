@@ -79,7 +79,7 @@ public sealed class IsolationTests : IDisposable
         var outcome = await WrittenAsync(import + "\nexport function invoke() { return { result: 1 }; }");
 
         Assert.Equal(OutcomeStatus.Failed, outcome.Status);
-        Assert.Equal(OutcomeCodes.ModuleNotAllowed, outcome.Error!.Code);
+        Assert.Equal(HostOutcomeCodes.ModuleNotAllowed, outcome.Error!.Code);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class IsolationTests : IDisposable
                 null));
 
         Assert.Equal(OutcomeStatus.Failed, outcome.Status);
-        Assert.Equal(OutcomeCodes.ExecutableNotAllowed, outcome.Error!.Code);
+        Assert.Equal(HostOutcomeCodes.ExecutableNotAllowed, outcome.Error!.Code);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
@@ -119,5 +120,75 @@ public class OutcomeContractTests
     {
         Assert.Empty(OutcomeContract.CheckExternalIds(Add, null));
         Assert.Empty(OutcomeContract.CheckExternalIds(Add, new JsonObject()));
+    }
+
+    private static OutcomeError Failure(FailureClass failureClass, string code) => new(failureClass, code, "the provider said no", null, null);
+
+    /// <summary>
+    /// A failure is read by its class, so the class has to be the one its operation gives the code: every code the add
+    /// declares passes under its own class, which is the whole of what the check asks.
+    /// </summary>
+    [Fact]
+    public void Every_code_an_operation_declares_passes_under_the_class_it_declares()
+    {
+        Assert.All(Add.FailureCodes, declared => Assert.Null(OutcomeContract.CheckFailure(Add, Failure(declared.Class, declared.Code))));
+    }
+
+    [Fact]
+    public void A_code_the_operation_does_not_declare_is_refused_at_the_code()
+    {
+        var problem = OutcomeContract.CheckFailure(Add, Failure(FailureClass.Permanent, "quota_exceeded"));
+
+        Assert.Equal(("/error/code", "enum"), (problem?.Pointer, problem?.Reason));
+        Assert.Contains("quota_exceeded", problem!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_declared_code_under_another_class_is_refused_at_the_class_naming_both()
+    {
+        var problem = OutcomeContract.CheckFailure(Add, Failure(FailureClass.Permanent, "rate_limited"));
+
+        Assert.Equal(("/error/class", "enum"), (problem?.Pointer, problem?.Reason));
+        Assert.Contains("`transient`", problem!.Message, StringComparison.Ordinal);
+        Assert.Contains("`permanent`", problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The host's own endings belong to no operation, so they pass beside any of them — under the class the host gives
+    /// each, and only there.
+    /// </summary>
+    [Theory]
+    [InlineData(HostOutcomeCodes.PluginException, FailureClass.Permanent, null)]
+    [InlineData(HostOutcomeCodes.PluginTimeout, FailureClass.Ambiguous, null)]
+    [InlineData(HostOutcomeCodes.PluginTimeout, FailureClass.Permanent, null)]
+    [InlineData(HostOutcomeCodes.PluginException, FailureClass.Transient, "/error/code")]
+    [InlineData(HostOutcomeCodes.HttpLimit, FailureClass.Blocked, "/error/code")]
+    public void A_host_ending_passes_only_under_the_class_the_host_gives_it(string code, FailureClass failureClass, string? pointer)
+    {
+        Assert.Equal(pointer, OutcomeContract.CheckFailure(Get, Failure(failureClass, code))?.Pointer);
+    }
+
+    public static TheoryData<string, string> EveryHostCodeBesideEveryOperation()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var contract in OperationCatalog.All)
+        {
+            foreach (var code in HostOutcomeCodes.All.Order(StringComparer.Ordinal))
+            {
+                data.Add(contract.Id, code);
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>Every code the host writes passes under <c>permanent</c>, the class it writes them all with, beside every operation.</summary>
+    [Theory]
+    [MemberData(nameof(EveryHostCodeBesideEveryOperation))]
+    public void Every_host_code_passes_under_permanent_beside_every_operation(string operation, string code)
+    {
+        var problem = OutcomeContract.CheckFailure(OperationCatalog.Find(operation)!, Failure(FailureClass.Permanent, code));
+
+        Assert.True(problem is null, $"'{code}' under permanent was refused beside '{operation}': {problem?.Pointer} {problem?.Message}");
     }
 }

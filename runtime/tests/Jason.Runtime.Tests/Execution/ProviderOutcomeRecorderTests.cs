@@ -260,11 +260,12 @@ public class ProviderOutcomeRecorderTests
     /// repeat decided by the contract rather than by the code table, which knows nothing of operations.
     /// </summary>
     [Theory]
-    [InlineData(FailureClass.Transient, true, WorkItemStatus.Created)]
-    [InlineData(FailureClass.Permanent, false, WorkItemStatus.Failed)]
-    [InlineData(FailureClass.Validation, false, WorkItemStatus.Failed)]
-    [InlineData(FailureClass.Ambiguous, true, WorkItemStatus.Created)]
+    [InlineData("rate_limited", FailureClass.Transient, true, WorkItemStatus.Created)]
+    [InlineData("provider_call_failed", FailureClass.Permanent, false, WorkItemStatus.Failed)]
+    [InlineData("invalid_channel_value", FailureClass.Validation, false, WorkItemStatus.Failed)]
+    [InlineData("provider_answer_lost", FailureClass.Ambiguous, true, WorkItemStatus.Created)]
     public async Task A_declared_failure_carries_its_class_and_the_operation_decides_the_repeat(
+        string code,
         FailureClass failureClass,
         bool retriable,
         WorkItemStatus expected)
@@ -273,13 +274,152 @@ public class ProviderOutcomeRecorderTests
         await using var db = database.Open();
         var scene = await SeedAsync(db);
 
-        await scene.RecordAsync(db, Add, Failed(new OutcomeError(failureClass, "provider_answer_lost", "no answer", null, null)));
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(failureClass, code, "no answer", null, null)));
 
         Assert.Equal(AttemptStatus.Failed, scene.Attempt.Status);
         Assert.Equal(expected, scene.Item.Status);
-        Assert.Equal("provider_answer_lost", scene.Attempt.Error!.Code);
+        Assert.Equal(code, scene.Attempt.Error!.Code);
         Assert.Equal(failureClass, scene.Attempt.Error.Class);
         Assert.Equal(retriable, scene.Attempt.Error.Retriable);
+    }
+
+    /// <summary>
+    /// A code the operation does not declare is an answer outside the contract, whatever class it came with: no planner
+    /// was written for it, so the class it carries cannot be trusted to decide anything. The attempt ends
+    /// <c>result_invalid</c>, ambiguous, and is never repeated, because the next attempt would run the same code over
+    /// the same answer; the pointer says it is the code that is wrong.
+    /// </summary>
+    [Theory]
+    [InlineData(FailureClass.Permanent)]
+    [InlineData(FailureClass.Transient)]
+    [InlineData(FailureClass.Ambiguous)]
+    public async Task A_code_the_operation_does_not_declare_ends_the_attempt_outside_the_contract(FailureClass failureClass)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(failureClass, "quota_exceeded", "the account is out of quota", null, null)));
+
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+        Assert.Equal((AttemptErrors.ResultInvalid, (FailureClass?)FailureClass.Ambiguous, false), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class, scene.Attempt.Error.Retriable));
+        var detail = Assert.Single(scene.Attempt.Error.Details!);
+        Assert.Equal(("/error/code", "enum"), (detail.Field, detail.Code));
+        Assert.Contains("quota_exceeded", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A declared code under a class its operation does not give it is outside the contract the same way. A rate limit
+    /// called permanent strands work that would pass, a lost answer called transient repeats a write blind, and a code
+    /// called blocked would hold back every item of an account on a word the operation never meant that way — so the
+    /// block it carries is not kept either. The pointer says it is the class that is wrong.
+    /// </summary>
+    [Theory]
+    [InlineData("rate_limited", FailureClass.Permanent)]
+    [InlineData("provider_answer_lost", FailureClass.Transient)]
+    [InlineData("provider_call_failed", FailureClass.Blocked)]
+    public async Task A_declared_code_under_another_class_ends_the_attempt_outside_the_contract(string code, FailureClass failureClass)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+        var block = failureClass == FailureClass.Blocked ? new JsonObject { ["scope"] = "account", ["reason"] = "billing" } : null;
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(failureClass, code, "the provider said no", null, null, block)));
+
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+        Assert.Equal((AttemptErrors.ResultInvalid, (FailureClass?)FailureClass.Ambiguous, false), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class, scene.Attempt.Error.Retriable));
+        Assert.Null(scene.Attempt.Error.Block);
+        Assert.Null(scene.Item.LastError!.Block);
+        var detail = Assert.Single(scene.Attempt.Error.Details!);
+        Assert.Equal(("/error/class", "enum"), (detail.Field, detail.Code));
+        Assert.Contains(code, detail.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "The plugin reported a failure outside what 'list_membership.add' declares, so nothing can read its class; what it said is on this attempt's trace.",
+            scene.Attempt.Error.Message);
+    }
+
+    /// <summary>
+    /// What the plugin said is not lost by being refused: its code, class, message and details are kept on the attempt's
+    /// trace, where its author reads what was actually sent. An identifier beside it is not pinned — an answer outside
+    /// the contract is written down nowhere — but the attempt's record still says the plugin returned it.
+    /// </summary>
+    [Fact]
+    public async Task A_failure_outside_the_contract_keeps_what_the_plugin_said_and_pins_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+        var externalIds = new JsonObject { ["contact"] = "p_1001" };
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(FailureClass.Permanent, "quota_exceeded", "the account is out of quota", new JsonObject { ["quota"] = "daily" }, externalIds)));
+
+        var trace = JsonNode.Parse(scene.Attempt.Error!.Trace!)!;
+        Assert.Equal("quota_exceeded", (string?)trace["code"]);
+        Assert.Equal("permanent", (string?)trace["class"]);
+        Assert.Equal("the account is out of quota", (string?)trace["message"]);
+        Assert.Equal("daily", (string?)trace["details"]!["quota"]);
+
+        Assert.Empty(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "p_1001" },
+            (await scene.ProvenanceAsync(db)).ExternalIdsReturned);
+    }
+
+    /// <summary>
+    /// The host's own endings are declared by no operation: they say what became of the plugin, not what the provider
+    /// answered. Under the class the host writes each with they stand as the plugin host reported them.
+    /// </summary>
+    [Theory]
+    [InlineData(HostOutcomeCodes.PluginException, FailureClass.Permanent)]
+    [InlineData(HostOutcomeCodes.CapabilityNotGranted, FailureClass.Permanent)]
+    [InlineData(HostOutcomeCodes.PluginTimeout, FailureClass.Ambiguous)]
+    public async Task A_host_ending_under_the_class_the_host_gives_it_stands(string code, FailureClass failureClass)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(failureClass, code, "the host stopped the plugin", null, null)));
+
+        Assert.Equal((code, (FailureClass?)failureClass), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class));
+        Assert.Null(scene.Attempt.Error.Details);
+    }
+
+    public static TheoryData<string> EveryHostCode() => new(HostOutcomeCodes.All.Order(StringComparer.Ordinal));
+
+    /// <summary>Every code the host writes stands under <c>permanent</c>, the class it writes them all with.</summary>
+    [Theory]
+    [MemberData(nameof(EveryHostCode))]
+    public async Task Every_host_code_under_permanent_stands(string code)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(FailureClass.Permanent, code, "the host stopped the plugin", null, null)));
+
+        Assert.Equal((code, (FailureClass?)FailureClass.Permanent), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class));
+        Assert.Null(scene.Attempt.Error.Details);
+    }
+
+    /// <summary>
+    /// A plugin can write a host code itself, under any class. Under a class the host never gives it, it is the plugin's
+    /// word and no operation declares it, so it is outside the contract like any other undeclared code.
+    /// </summary>
+    [Fact]
+    public async Task A_host_code_under_a_class_the_host_never_gives_it_ends_the_attempt_outside_the_contract()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+        var block = new JsonObject { ["scope"] = "account", ["reason"] = "billing" };
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(FailureClass.Blocked, HostOutcomeCodes.PluginException, "blocked, it says", null, null, block)));
+
+        Assert.Equal((AttemptErrors.ResultInvalid, (FailureClass?)FailureClass.Ambiguous, false), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class, scene.Attempt.Error.Retriable));
+        Assert.Null(scene.Attempt.Error.Block);
+        Assert.Equal("/error/code", Assert.Single(scene.Attempt.Error.Details!).Field);
     }
 
     /// <summary>

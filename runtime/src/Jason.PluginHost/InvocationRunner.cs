@@ -73,7 +73,7 @@ public sealed class InvocationRunner : IInvocationRunner
             {
                 return end.Failed(
                     FailureClass.Permanent,
-                    OutcomeCodes.EntryFunctionMissing,
+                    HostOutcomeCodes.EntryFunctionMissing,
                     $"The package does not export a function named '{invocation.Plugin.Entry.Function}'.");
             }
 
@@ -95,19 +95,19 @@ public sealed class InvocationRunner : IInvocationRunner
         }
         catch (JavaScriptException ex) when (IsSyntaxError(ex))
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.PluginSyntaxError, ex.Message);
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.PluginSyntaxError, ex.Message);
         }
         catch (JavaScriptException ex)
         {
             return end.Failed(
                 FailureClass.Permanent,
-                OutcomeCodes.PluginException,
+                HostOutcomeCodes.PluginException,
                 ex.Message,
                 new JsonObject { ["stack"] = ex.JavaScriptStackTrace ?? string.Empty });
         }
         catch (PromiseRejectedException ex)
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.PluginException, Describe(engine, ex.RejectedValue));
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.PluginException, Describe(engine, ex.RejectedValue));
         }
         catch (HostRuleException ex)
         {
@@ -115,23 +115,23 @@ public sealed class InvocationRunner : IInvocationRunner
         }
         catch (ModuleResolutionException ex)
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.ModuleNotAllowed, ex.Message);
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.ModuleNotAllowed, ex.Message);
         }
         catch (ScriptPreparationException ex)
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.PluginSyntaxError, ex.Message);
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.PluginSyntaxError, ex.Message);
         }
         catch (MemoryLimitExceededException ex)
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.PluginMemoryExceeded, ex.Message);
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.PluginMemoryExceeded, ex.Message);
         }
         catch (StatementsCountOverflowException ex)
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.PluginStatementLimit, ex.Message);
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.PluginStatementLimit, ex.Message);
         }
         catch (RecursionDepthOverflowException ex)
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.PluginRecursionLimit, ex.Message);
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.PluginRecursionLimit, ex.Message);
         }
         catch (Exception ex) when (ex is TimeoutException or ExecutionCanceledException or OperationCanceledException)
         {
@@ -139,7 +139,7 @@ public sealed class InvocationRunner : IInvocationRunner
             // the host knows whether it did. The plugin never has to reason about it.
             return end.Failed(
                 budget.ExternalCallsStarted > 0 ? FailureClass.Ambiguous : FailureClass.Permanent,
-                OutcomeCodes.PluginTimeout,
+                HostOutcomeCodes.PluginTimeout,
                 string.Create(CultureInfo.InvariantCulture, $"The plugin did not finish within {limits.TimeoutMs} ms."));
         }
     }
@@ -150,7 +150,7 @@ public sealed class InvocationRunner : IInvocationRunner
 
         if (returned is not ObjectInstance answer || returned.IsArray() || returned.IsCallable() || !answer.HasOwnProperty(ResultProperty))
         {
-            return end.Failed(FailureClass.Permanent, OutcomeCodes.BadReturn, Contract + ".");
+            return end.Failed(FailureClass.Permanent, HostOutcomeCodes.BadReturn, Contract + ".");
         }
 
         var result = JsJson.ToJson(engine, answer.Get(ResultProperty));
@@ -158,7 +158,7 @@ public sealed class InvocationRunner : IInvocationRunner
         {
             return end.Failed(
                 FailureClass.Permanent,
-                OutcomeCodes.ResultTooLarge,
+                HostOutcomeCodes.ResultTooLarge,
                 string.Create(CultureInfo.InvariantCulture, $"A result is at most {PluginProtocol.MaxResultBytes} bytes."));
         }
 
@@ -166,7 +166,7 @@ public sealed class InvocationRunner : IInvocationRunner
         {
             return end.Failed(
                 FailureClass.Permanent,
-                OutcomeCodes.BadReturn,
+                HostOutcomeCodes.BadReturn,
                 Contract + ", where external_ids is an object of short strings.");
         }
 

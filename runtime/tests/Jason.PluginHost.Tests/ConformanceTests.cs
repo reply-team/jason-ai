@@ -224,7 +224,7 @@ public sealed class ConformanceTests : IDisposable
             "hang.forever",
             configure: builder => builder.Limits = builder.Limits with { TimeoutMs = 500, MaxStatements = 1_000_000_000 });
 
-        Assert.Equal(OutcomeCodes.PluginTimeout, outcome.Error!.Code);
+        Assert.Equal(HostOutcomeCodes.PluginTimeout, outcome.Error!.Code);
         Assert.Equal(FailureClass.Permanent, outcome.Error!.Class);
     }
 
@@ -257,7 +257,7 @@ public sealed class ConformanceTests : IDisposable
 
         Assert.Equal(HostExitCodes.Completed, exit);
         var outcome = ModeRun.Outcome(stdout);
-        Assert.Equal(OutcomeCodes.PluginTimeout, outcome.Error!.Code);
+        Assert.Equal(HostOutcomeCodes.PluginTimeout, outcome.Error!.Code);
         Assert.Equal(FailureClass.Ambiguous, outcome.Error!.Class);
         Assert.Equal(1, outcome.Diagnostics.ExecCalls);
     }
@@ -267,7 +267,7 @@ public sealed class ConformanceTests : IDisposable
     {
         var outcome = await OutcomeAsync("spew.bytes", new JsonObject { ["bytes"] = 2_000_000 });
 
-        Assert.Equal(OutcomeCodes.ResultTooLarge, outcome.Error!.Code);
+        Assert.Equal(HostOutcomeCodes.ResultTooLarge, outcome.Error!.Code);
     }
 
     [Fact]
@@ -275,7 +275,7 @@ public sealed class ConformanceTests : IDisposable
     {
         var outcome = await OutcomeAsync("throw.plain");
 
-        Assert.Equal(OutcomeCodes.PluginException, outcome.Error!.Code);
+        Assert.Equal(HostOutcomeCodes.PluginException, outcome.Error!.Code);
         Assert.Contains("boom", outcome.Error!.Message, StringComparison.Ordinal);
     }
 
@@ -284,7 +284,7 @@ public sealed class ConformanceTests : IDisposable
     {
         var outcome = await OutcomeAsync("return.bare");
 
-        Assert.Equal(OutcomeCodes.BadReturn, outcome.Error!.Code);
+        Assert.Equal(HostOutcomeCodes.BadReturn, outcome.Error!.Code);
     }
 
     [Fact]

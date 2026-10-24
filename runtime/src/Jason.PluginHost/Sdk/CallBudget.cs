@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Plugins;
 
 namespace Jason.PluginHost.Sdk;
 
@@ -22,7 +23,7 @@ public sealed class CallBudget(int maxExec, int maxHttp)
         if (ExecCalls >= maxExec)
         {
             throw new HostRuleException(
-                OutcomeCodes.ExecLimit,
+                HostOutcomeCodes.ExecLimit,
                 string.Create(CultureInfo.InvariantCulture, $"An invocation may start at most {maxExec} programs."),
                 new JsonObject { ["limit"] = "exec.max_calls", ["max"] = maxExec });
         }
@@ -35,7 +36,7 @@ public sealed class CallBudget(int maxExec, int maxHttp)
         if (HttpCalls >= maxHttp)
         {
             throw new HostRuleException(
-                OutcomeCodes.HttpLimit,
+                HostOutcomeCodes.HttpLimit,
                 string.Create(CultureInfo.InvariantCulture, $"An invocation may make at most {maxHttp} HTTP requests."),
                 new JsonObject { ["limit"] = "http.max_calls", ["max"] = maxHttp });
         }

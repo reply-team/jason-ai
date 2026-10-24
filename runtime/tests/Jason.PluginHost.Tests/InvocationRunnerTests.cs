@@ -71,7 +71,7 @@ public sealed class InvocationRunnerTests
         var outcome = Run("export function somethingElse() { return { result: 1 }; }");
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.EntryFunctionMissing, error.Code);
+        Assert.Equal(HostOutcomeCodes.EntryFunctionMissing, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
     }
 
@@ -85,7 +85,7 @@ public sealed class InvocationRunnerTests
         var outcome = Run("export function invoke() { " + body + " }");
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.BadReturn, error.Code);
+        Assert.Equal(HostOutcomeCodes.BadReturn, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
     }
 
@@ -103,7 +103,7 @@ public sealed class InvocationRunnerTests
     {
         var outcome = Run("export function invoke() { return { result: 1, external_ids: { contact: 1 } }; }");
 
-        Assert.Equal(OutcomeCodes.BadReturn, Error(outcome).Code);
+        Assert.Equal(HostOutcomeCodes.BadReturn, Error(outcome).Code);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class InvocationRunnerTests
         var outcome = Run("export function invoke() { throw new Error(\"boom\"); }");
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.PluginException, error.Code);
+        Assert.Equal(HostOutcomeCodes.PluginException, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
         Assert.Contains("boom", error.Message, StringComparison.Ordinal);
         Assert.False(string.IsNullOrWhiteSpace(error.Details!["stack"]!.GetValue<string>()));
@@ -257,7 +257,7 @@ public sealed class InvocationRunnerTests
             """);
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.PluginException, error.Code);
+        Assert.Equal(HostOutcomeCodes.PluginException, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
         Assert.Null(error.Block);
     }
@@ -291,7 +291,7 @@ public sealed class InvocationRunnerTests
             configure: builder => builder.Limits = builder.Limits with { TimeoutMs = 300, MaxStatements = 1_000_000_000 });
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.PluginTimeout, error.Code);
+        Assert.Equal(HostOutcomeCodes.PluginTimeout, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
         Assert.True(outcome.Diagnostics.DurationMs >= 300, "the invocation ran for at least its budget");
     }
@@ -303,7 +303,7 @@ public sealed class InvocationRunnerTests
             "export function invoke() { function f(n) { return f(n + 1); } return f(0); }",
             configure: builder => builder.Limits = builder.Limits with { MaxRecursion = 16 });
 
-        Assert.Equal(OutcomeCodes.PluginRecursionLimit, Error(outcome).Code);
+        Assert.Equal(HostOutcomeCodes.PluginRecursionLimit, Error(outcome).Code);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public sealed class InvocationRunnerTests
         var outcome = Run("export function invoke() { return { result: \"x\".repeat(2000000) }; }");
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.ResultTooLarge, error.Code);
+        Assert.Equal(HostOutcomeCodes.ResultTooLarge, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
     }
 
@@ -333,7 +333,7 @@ public sealed class InvocationRunnerTests
         var outcome = Run("import fs from \"fs\"; export function invoke() { return { result: 1 }; }");
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.ModuleNotAllowed, error.Code);
+        Assert.Equal(HostOutcomeCodes.ModuleNotAllowed, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
     }
 
@@ -343,7 +343,7 @@ public sealed class InvocationRunnerTests
         var outcome = Run("export function invoke( { return { result: 1 }; }");
 
         var error = Error(outcome);
-        Assert.Equal(OutcomeCodes.PluginSyntaxError, error.Code);
+        Assert.Equal(HostOutcomeCodes.PluginSyntaxError, error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
     }
 

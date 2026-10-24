@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 
@@ -11,7 +12,7 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// class the document does not give it is worse — a permanent failure called transient is retried into the same
 /// wall, and an ambiguous one called permanent strands work the provider may already have done.
 /// </summary>
-public class ReplyErrorTableTests
+public partial class ReplyErrorTableTests
 {
     private static readonly string[] Classes = ["transient", "permanent", "validation", "ambiguous", "blocked"];
 
@@ -335,6 +336,40 @@ public class ReplyErrorTableTests
         Assert.Contains("| `provider_blocked` | blocked |", readme, StringComparison.Ordinal);
         Assert.Contains("`account_or_sender_blocked`", readme, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The rows are not the only place the package fails. A row a module names and the table does not hold falls back to
+    /// a failed call, and an operation the manifest does not list ends <c>unknown_operation</c>. The fallback is
+    /// reachable from every operation, so every one declares it under the class it is written with; the other is
+    /// reachable from none, since no work item can name an operation the manifest does not list. Every other failure the
+    /// package writes goes through a row, so the rows and these two are everything it can report.
+    /// </summary>
+    [Fact]
+    public void A_failure_written_outside_the_rows_is_one_every_operation_declares_or_one_none_can_reach()
+    {
+        var sources = Directory.EnumerateFiles(Path.Combine(ReplyPlugins.PackageSource, "modules"), "*.js")
+            .Append(Path.Combine(ReplyPlugins.PackageSource, "main.js"))
+            .Select(File.ReadAllText)
+            .ToList();
+
+        var literal = sources.SelectMany(source => LiteralFailure().Matches(source))
+            .Select(match => (Class: match.Groups["class"].Value, Code: match.Groups["code"].Value))
+            .Order()
+            .ToList();
+        Assert.Equal([("permanent", "provider_call_failed"), ("validation", "unknown_operation")], literal);
+
+        var written = sources.Sum(source => source.Split("host.fail(").Length - 1);
+        Assert.True(written == literal.Count + 1, $"the package calls host.fail {written} times: the two above and the one through a row are all it may.");
+
+        foreach (var operation in ReplyErrorTable.Performed())
+        {
+            var declared = OperationCatalog.Find(operation)!.FailureCodes.SingleOrDefault(failure => failure.Code == "provider_call_failed");
+            Assert.True(declared?.Class == FailureClass.Permanent, $"{operation} does not declare provider_call_failed as permanent, and a row the package lacks ends that way.");
+        }
+    }
+
+    [GeneratedRegex(@"host\.fail\(\{\s*class: ""(?<class>[a-z]+)"",\s*code: ""(?<code>[a-z_]+)""")]
+    private static partial Regex LiteralFailure();
 
     private static string Text(JsonObject row, string member) => row[member]?.GetValue<string>() ?? string.Empty;
 }

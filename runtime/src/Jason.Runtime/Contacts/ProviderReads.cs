@@ -195,11 +195,11 @@ public sealed class ContactThreadService(JasonDbContext db, PluginRegistry plugi
                 throw Failed(AttemptErrors.ResultInvalid, $"The provider's answer to '{target.Contract.Id}' does not satisfy the schema that operation publishes.", FailureClass.Ambiguous);
             case InvocationOutcome.Failed { Error: var error }:
                 // A blocked read is final, as a permanent one is, under the code the plugin gave. The block itself does
-                // not travel: an API error carries a code, a message and whether to retry, and nothing else.
-                var declared = target.Contract.FailureCodes.FirstOrDefault(code => string.Equals(code.Code, error.Code, StringComparison.Ordinal));
-                throw declared is not null && declared.Class == error.Class
+                // not travel: an API error carries a code, a message and whether to retry, and nothing else. The code is
+                // held to the operation's list by the one check a work item's failure meets, host endings included.
+                throw OutcomeContract.CheckFailure(target.Contract, error) is null
                     ? Failed(error.Code, error.Message, OutcomeContract.Recorded(error, out _))
-                    : Failed(AttemptErrors.ResultInvalid, $"The provider failed '{target.Contract.Id}' with a code that operation does not declare.", FailureClass.Ambiguous);
+                    : Failed(AttemptErrors.ResultInvalid, $"The provider failed '{target.Contract.Id}' outside what that operation declares.", FailureClass.Ambiguous);
             case InvocationOutcome.ProtocolFailure protocol:
                 throw Failed("provider_read_failed", protocol.Message, OutcomeClassification.ClassOf(protocol.Code));
             default:

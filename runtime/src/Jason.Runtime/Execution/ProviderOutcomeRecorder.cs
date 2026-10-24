@@ -119,6 +119,27 @@ public sealed class ProviderOutcomeRecorder(
                 outcomes.Succeed(db, item, attempt, succeeded.Result, Actors.Dispatcher);
                 break;
 
+            case InvocationOutcome.Failed failed when OutcomeContract.CheckFailure(contract, failed.Error) is { } outside:
+
+                // A failure is read by its class, and a code the operation does not declare — or a declared code
+                // under a class it never gives it — is a class no planner was written for. It is a defect in the
+                // plugin, as a shape error is: the next attempt would run the same code over the same answer, so it
+                // ends here and is never repeated, whatever the class it came with would have said. Nothing in it is
+                // written down — no pin and no block, since an answer outside the contract stores nothing — but what
+                // the plugin said is kept on the trace, where its author reads what was actually sent.
+                outcomes.Fail(
+                    db,
+                    item,
+                    attempt,
+                    AttemptErrors.ResultInvalid,
+                    $"The plugin reported a failure outside what '{contract.Id}' declares, so nothing can read its class; what it said is on this attempt's trace.",
+                    Said(failed.Error),
+                    ErrorDetail.From([outside]),
+                    Actors.Dispatcher,
+                    failureClass: FailureClass.Ambiguous,
+                    retriable: false);
+                break;
+
             case InvocationOutcome.Failed failed:
 
                 // N13. A failed answer may still carry an identifier, and the answer-lost case is where it matters
@@ -228,6 +249,19 @@ public sealed class ProviderOutcomeRecorder(
 
         return said.Count == 0 ? null : said;
     }
+
+    /// <summary>
+    /// What a plugin said in a failure the contract refuses, in the words of its own outcome. It arrived inside an
+    /// outcome the invoker already bounded, so it needs no bound of its own; its identifiers are not repeated here,
+    /// because the attempt's record already says what was returned.
+    /// </summary>
+    private static string Said(OutcomeError error) => new JsonObject
+    {
+        ["code"] = error.Code,
+        ["class"] = error.Class.ToString().ToLowerInvariant(),
+        ["message"] = error.Message,
+        ["details"] = error.Details?.DeepClone(),
+    }.ToJsonString();
 
     /// <summary>
     /// The answer a shape error rejected, kept so its author can see what was actually sent. It is bounded by the

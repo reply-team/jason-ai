@@ -77,7 +77,7 @@ public sealed class HttpService(HostServices services) : IDisposable
         if (granted is null)
         {
             throw new HostRuleException(
-                OutcomeCodes.CapabilityNotGranted,
+                HostOutcomeCodes.CapabilityNotGranted,
                 "This plugin was not granted the http capability.",
                 new JsonObject { ["capability"] = "http", ["requested"] = HostKey(url) });
         }
@@ -85,7 +85,7 @@ public sealed class HttpService(HostServices services) : IDisposable
         if (!Methods.Contains(method))
         {
             throw new HostRuleException(
-                OutcomeCodes.HttpMethodNotAllowed,
+                HostOutcomeCodes.HttpMethodNotAllowed,
                 $"'{method}' is not a method a plugin may use; only GET and POST are.",
                 new JsonObject { ["method"] = method });
         }
@@ -94,7 +94,7 @@ public sealed class HttpService(HostServices services) : IDisposable
             && !(string.Equals(url.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal) && IsLoopback(url)))
         {
             throw new HostRuleException(
-                OutcomeCodes.HttpSchemeNotAllowed,
+                HostOutcomeCodes.HttpSchemeNotAllowed,
                 "A request must use https, or http to a loopback address.",
                 new JsonObject { ["scheme"] = url.Scheme, ["host"] = HostKey(url) });
         }
@@ -102,7 +102,7 @@ public sealed class HttpService(HostServices services) : IDisposable
         if (!IsAllowed(url, granted.Hosts))
         {
             throw new HostRuleException(
-                OutcomeCodes.HttpHostNotAllowed,
+                HostOutcomeCodes.HttpHostNotAllowed,
                 $"'{HostKey(url)}' is not one of the hosts this plugin was granted.",
                 new JsonObject { ["host"] = HostKey(url) });
         }
@@ -125,7 +125,7 @@ public sealed class HttpService(HostServices services) : IDisposable
             if (ForbiddenHeaders.Contains(name))
             {
                 throw new HostRuleException(
-                    OutcomeCodes.HttpHeaderNotAllowed,
+                    HostOutcomeCodes.HttpHeaderNotAllowed,
                     $"'{name}' belongs to the connection and cannot be set by a plugin.",
                     new JsonObject { ["header"] = name });
             }
@@ -140,7 +140,7 @@ public sealed class HttpService(HostServices services) : IDisposable
         if (body is not null && Encoding.UTF8.GetByteCount(body) > services.Limits.Http.RequestBytes)
         {
             throw new HostRuleException(
-                OutcomeCodes.HttpLimit,
+                HostOutcomeCodes.HttpLimit,
                 string.Create(CultureInfo.InvariantCulture, $"A request body is at most {services.Limits.Http.RequestBytes} bytes."),
                 new JsonObject { ["limit"] = "request_bytes", ["max"] = services.Limits.Http.RequestBytes });
         }

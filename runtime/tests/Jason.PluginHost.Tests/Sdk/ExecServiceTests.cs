@@ -345,7 +345,7 @@ public sealed class ExecServiceTests : IDisposable
 
         var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate($"host.exec({{ executable: \"{executable}\" }})"));
 
-        Assert.Equal(OutcomeCodes.ExecutableNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.ExecutableNotAllowed, refused.Code);
     }
 
     [Fact]
@@ -356,7 +356,7 @@ public sealed class ExecServiceTests : IDisposable
 
         var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate($"host.exec({{ executable: \"{Cli}\" }})"));
 
-        Assert.Equal(OutcomeCodes.CapabilityNotGranted, refused.Code);
+        Assert.Equal(HostOutcomeCodes.CapabilityNotGranted, refused.Code);
         Assert.Equal("exec", refused.Details!["capability"]!.GetValue<string>());
         Assert.Equal(Cli, refused.Details!["requested"]!.GetValue<string>());
     }
@@ -370,7 +370,7 @@ public sealed class ExecServiceTests : IDisposable
         Exec(harness, $"{{ executable: \"{Cli}\", args: [\"echo-args\", \"two\"] }}");
         var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"] }})"));
 
-        Assert.Equal(OutcomeCodes.ExecLimit, refused.Code);
+        Assert.Equal(HostOutcomeCodes.ExecLimit, refused.Code);
         Assert.Equal(2, harness.Budget.ExecCalls);
     }
 

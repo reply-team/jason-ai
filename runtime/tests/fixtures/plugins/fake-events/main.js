@@ -7,12 +7,16 @@ const PROVIDER_CLI = "Jason.FakeProviderCli";
 // The provider's own words for a campaign's state, in the contract's vocabulary.
 const CAMPAIGN_STATUS = { Draft: "draft", Active: "live", Paused: "paused", Archived: "archived" };
 
-function cli(context, subcommand, request) {
+// Each contract names its own failures: an events read speaks the events contract's codes, campaign.get its operation's.
+const EVENTS_CODES = { "unauthorized": "events_unauthorized", "unreachable": "events_unreachable" };
+const CAMPAIGN_GET_CODES = { "unauthorized": "unauthorized", "unreachable": "provider_unavailable" };
+
+function cli(context, subcommand, request, codes) {
   const workspace = context.binding && context.binding.workspace;
   if (!workspace) {
     throw host.fail({
       class: "permanent",
-      code: "events_unauthorized",
+      code: codes.unauthorized,
       message: "This plugin needs a binding naming the account it should read.",
     });
   }
@@ -23,9 +27,10 @@ function cli(context, subcommand, request) {
     stdin: JSON.stringify(request),
   });
   if (answer.exit_code !== 0) {
-    throw host.fail({ class: "transient", code: "events_unreachable", message: "The provider did not answer." });
+    throw host.fail({ class: "transient", code: codes.unreachable, message: "The provider did not answer." });
   }
 
+  // The provider's own refusals are already in the contracts' words: campaign_not_found, events_cursor_unknown.
   const parsed = JSON.parse(answer.stdout);
   if (parsed.error) {
     throw host.fail({ class: "permanent", code: parsed.error.code, message: parsed.error.message });
@@ -35,7 +40,7 @@ function cli(context, subcommand, request) {
 }
 
 function campaignGet(input, context) {
-  const answer = cli(context, ["campaign", "get"], { external_id: input.args.campaign.external_id });
+  const answer = cli(context, ["campaign", "get"], { external_id: input.args.campaign.external_id }, CAMPAIGN_GET_CODES);
   return {
     result: {
       campaign: { external_id: answer.id, name: answer.name, status: CAMPAIGN_STATUS[answer.status] || "other", counts: answer.counts },
@@ -56,7 +61,7 @@ function fromFeed(input, context) {
     after = after.slice(bar + 1);
   }
 
-  const page = cli(context, ["events", "feed"], { after: after, since: input.since, until: until, limit: input.limit });
+  const page = cli(context, ["events", "feed"], { after: after, since: input.since, until: until, limit: input.limit }, EVENTS_CODES);
   if (until) {
     page.cursor = "r|" + until + "|" + page.cursor;
   }
@@ -83,7 +88,7 @@ function byOffset(input, context) {
     until = parts[4];
   }
 
-  const page = cli(context, ["events", "list"], { top: input.limit, skip: skip });
+  const page = cli(context, ["events", "list"], { top: input.limit, skip: skip }, EVENTS_CODES);
   const lowAt = Date.parse(low);
   let newestAt = Date.parse(high);
   let newest = high;

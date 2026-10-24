@@ -432,6 +432,10 @@ schema is a defect in the plugin: the next attempt would run the same code over 
 only spend budget while somebody waits. It is recorded as ambiguous — the call did reach the provider —
 with `retriable: false`, whatever the operation's repeat rule says. The failing pointers are on the error,
 and the answer that was refused is kept on the attempt's provenance so its author can see what was sent.
+A failure is held to the operation's declared codes the same way: a code the contract does not declare, or a declared
+code under another class, is `result_invalid` with the pointer at `/error/code` or `/error/class`, its block is not
+kept and nothing it carries is pinned, and what the plugin said is kept on the attempt's trace. The plugin host's own
+codes pass under the class the host writes them with, everywhere but on an events read.
 An answer a pattern of that schema could not finish measuring, twice, is not `result_invalid`: nothing is known to
 be wrong with it, so it is a lost answer — `validation_timed_out`, ambiguous — and the operation's own rule above
 decides whether it is repeated. The unmeasured answer is kept on the attempt's trace.

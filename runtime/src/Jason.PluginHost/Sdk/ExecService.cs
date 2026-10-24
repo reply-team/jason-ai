@@ -75,7 +75,7 @@ public sealed partial class ExecService(HostServices services)
         if (granted is null)
         {
             throw new HostRuleException(
-                OutcomeCodes.CapabilityNotGranted,
+                HostOutcomeCodes.CapabilityNotGranted,
                 "This plugin was not granted the exec capability.",
                 new JsonObject { ["capability"] = "exec", ["requested"] = name });
         }
@@ -89,7 +89,7 @@ public sealed partial class ExecService(HostServices services)
         if (executable is null)
         {
             throw new HostRuleException(
-                OutcomeCodes.ExecutableNotAllowed,
+                HostOutcomeCodes.ExecutableNotAllowed,
                 $"'{name}' is not one of the executables this plugin was granted.",
                 new JsonObject { ["executable"] = name });
         }

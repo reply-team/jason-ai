@@ -26,6 +26,12 @@ public static class OutcomeContract
     /// </summary>
     public const string OnTheError = "/error";
 
+    /// <summary>Where a failure outside its operation's declared codes is wrong when the code itself is not declared.</summary>
+    private const string OnTheCode = OnTheError + "/code";
+
+    /// <summary>Where it is wrong when the code is declared, under another class.</summary>
+    private const string OnTheClass = OnTheError + "/class";
+
     /// <summary>
     /// Whether a failed attempt of <paramref name="contract"/> is worth another one. Four of the five classes
     /// mean the same thing whatever was being attempted — a transient failure may pass, a permanent or a
@@ -67,6 +73,43 @@ public static class OutcomeContract
         blockProblems = error.Class == FailureClass.Blocked ? ProviderBlockContract.Published.Check(error.Block) : [];
         return blockProblems.Count == 0 ? error.Class : FailureClass.Permanent;
     }
+
+    /// <summary>
+    /// Whether a failure is one <paramref name="contract"/> declares, under the class it declares it with; null when it
+    /// is. The class is what everything after the attempt reads — whether it is repeated, whether a person is asked,
+    /// whether an account is held back — so a code no planner was written for, or a declared code under a class the
+    /// operation never gives it, is an answer outside the contract and is reported at the half of it that is wrong.
+    /// </summary>
+    /// <remarks>
+    /// The host's own endings (<see cref="HostOutcomeCodes"/>) belong to no operation and pass beside every one of
+    /// them, but only under the class the host itself writes: a plugin can say any code, and a host code under
+    /// another class is the plugin's word, not the host's.
+    /// </remarks>
+    public static SchemaProblem? CheckFailure(OperationContract contract, OutcomeError error)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(error);
+
+        var declared = contract.FailureCodes.FirstOrDefault(code => string.Equals(code.Code, error.Code, StringComparison.Ordinal));
+        if (declared is not null)
+        {
+            return declared.Class == error.Class
+                ? null
+                : new SchemaProblem(
+                    OnTheClass,
+                    "enum",
+                    $"`{contract.Id}` declares `{error.Code}` as `{Word(declared.Class)}`, and the plugin reported it `{Word(error.Class)}`.");
+        }
+
+        return HostOutcomeCodes.Writes(error.Class, error.Code)
+            ? null
+            : new SchemaProblem(
+                OnTheCode,
+                "enum",
+                $"`{contract.Id}` declares no failure code `{error.Code}`; a plugin reports a failure under a code its operation declares.");
+    }
+
+    private static string Word(FailureClass failureClass) => failureClass.ToString().ToLowerInvariant();
 
     /// <summary>Validates a succeeded result against the operation's output schema.</summary>
     public static IReadOnlyList<SchemaProblem> CheckResult(OperationContract contract, JsonNode? result) =>

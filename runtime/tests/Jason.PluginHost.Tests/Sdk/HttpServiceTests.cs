@@ -86,7 +86,7 @@ public sealed class HttpServiceTests : IDisposable
         var refused = Assert.Throws<HostRuleException>(() =>
             harness.Evaluate($"host.http({{ method: \"PUT\", url: {Quote(_server.Url("/ok"))} }})"));
 
-        Assert.Equal(OutcomeCodes.HttpMethodNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.HttpMethodNotAllowed, refused.Code);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class HttpServiceTests : IDisposable
 
         var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate("host.http({ method: \"GET\", url: \"http://example.test/\" })"));
 
-        Assert.Equal(OutcomeCodes.HttpSchemeNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.HttpSchemeNotAllowed, refused.Code);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class HttpServiceTests : IDisposable
 
         var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate("host.http({ method: \"GET\", url: \"https://not-granted.test/x\" })"));
 
-        Assert.Equal(OutcomeCodes.HttpHostNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.HttpHostNotAllowed, refused.Code);
         Assert.Equal("not-granted.test", refused.Details!["host"]!.GetValue<string>());
     }
 
@@ -119,7 +119,7 @@ public sealed class HttpServiceTests : IDisposable
         var refused = Assert.Throws<HostRuleException>(() =>
             harness.Evaluate($"host.http({{ method: \"GET\", url: {Quote(_server.Url("/ok"))} }})"));
 
-        Assert.Equal(OutcomeCodes.CapabilityNotGranted, refused.Code);
+        Assert.Equal(HostOutcomeCodes.CapabilityNotGranted, refused.Code);
         Assert.Equal("http", refused.Details!["capability"]!.GetValue<string>());
     }
 
@@ -131,7 +131,7 @@ public sealed class HttpServiceTests : IDisposable
         var refused = Assert.Throws<HostRuleException>(() =>
             harness.Evaluate($"host.http({{ method: \"GET\", url: {Quote(_server.Url("/ok"))}, headers: {{ Host: \"elsewhere.test\" }} }})"));
 
-        Assert.Equal(OutcomeCodes.HttpHeaderNotAllowed, refused.Code);
+        Assert.Equal(HostOutcomeCodes.HttpHeaderNotAllowed, refused.Code);
         Assert.Equal("Host", refused.Details!["header"]!.GetValue<string>());
     }
 
@@ -143,7 +143,7 @@ public sealed class HttpServiceTests : IDisposable
         var refused = Assert.Throws<HostRuleException>(() =>
             harness.Evaluate($"host.http({{ method: \"POST\", url: {Quote(_server.Url("/echo"))}, body: \"x\".repeat(1025) }})"));
 
-        Assert.Equal(OutcomeCodes.HttpLimit, refused.Code);
+        Assert.Equal(HostOutcomeCodes.HttpLimit, refused.Code);
         Assert.Equal("request_bytes", refused.Details!["limit"]!.GetValue<string>());
     }
 
@@ -193,7 +193,7 @@ public sealed class HttpServiceTests : IDisposable
         var refused = Assert.Throws<HostRuleException>(() =>
             harness.Evaluate($"host.http({{ method: \"GET\", url: {Quote(_server.Url("/ok"))} }})"));
 
-        Assert.Equal(OutcomeCodes.HttpLimit, refused.Code);
+        Assert.Equal(HostOutcomeCodes.HttpLimit, refused.Code);
         Assert.Equal(2, harness.Budget.HttpCalls);
     }
 

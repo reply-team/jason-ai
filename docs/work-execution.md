@@ -323,9 +323,9 @@ way such an attempt can end with nobody answering for it — the invoker's timeo
 `heartbeat_missed`, a command that could not be started (`executor_launch_failed`) and one that was
 stopped (`executor_exited`) — is `ambiguous`, because a missing answer says nothing about whether the
 provider acted. An attempt a restart finds still `scheduled` is not one of them: it never started, so nobody
-was asked anything. A shape error in an answer that did arrive
-(`result_invalid`) is `ambiguous` and never repeated: the next attempt would run the same code over
-the same answer. A cancellation stays a cancellation in both kinds.
+was asked anything. A shape error in an answer that did arrive, or a failure whose code
+the operation does not declare under that class (`result_invalid`), is `ambiguous` and never repeated:
+the next attempt would run the same code over the same answer. A cancellation stays a cancellation in both kinds.
 
 `attempt_count` counts **failed** attempts — the ones that count toward the limit. Work that succeeds
 first time shows `attempt_count: 0` with one entry in `attempts`. An attempt that was `interrupted` by
@@ -685,7 +685,8 @@ classes: `transient` comes back, `permanent` and `validation` are final, `blocke
 account or a sender and did nothing — is final with its block kept on the item's `last_error`, and `ambiguous` — the
 provider may already have acted — is repeated only where the operation's own contract says a repeat is
 `safe` or is answerable `after_recovery_read`. An answer that arrived and does not satisfy the
-operation's output schema is `result_invalid`: ambiguous, and never repeated. An answer a pattern of
+operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code
+the operation does not declare, or declares under another class. An answer a pattern of
 that schema could not finish measuring, twice, is a lost answer instead: `validation_timed_out`,
 ambiguous, and the operation's own repeat rule decides, because the plugin has run and its effect may
 have landed — calling it transient would run a completed write again blind. The unmeasured answer is

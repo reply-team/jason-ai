@@ -104,6 +104,19 @@ public class ContractDocumentTests
         Assert.Contains("did nothing for it", blocked[0].When, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The host's own codes pass beside every operation's list under the class the host writes them with, so a document
+    /// that declared one would file a word of the host's under a class of its own and leave two meanings for one code.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void No_operation_declares_a_code_the_plugin_host_writes_itself(string id)
+    {
+        var taken = Contract(id).FailureCodes.Select(code => code.Code).Where(Jason.Contracts.Plugins.HostOutcomeCodes.All.Contains).ToList();
+
+        Assert.True(taken.Count == 0, $"'{id}' declares the host's own code(s): {string.Join(", ", taken)}.");
+    }
+
     [Theory]
     [MemberData(nameof(CriticalPublishedForEveryField))]
     public void Every_document_states_every_field_and_nothing_else(string id)
