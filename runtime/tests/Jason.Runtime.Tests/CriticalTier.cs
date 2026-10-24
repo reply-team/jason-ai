@@ -73,7 +73,7 @@ internal static partial class CriticalTier
         [Family.I4] =  [  0,   9,   0,   0,   0],
         [Family.E1] =  [  0,   0,   0,   0,   1],
         [Family.E2] =  [  1,   0,   0,   0,   0],
-        [Family.F1] =  [  0,   0,   8,   1,  14],
+        [Family.F1] =  [  0,   0,   9,   1,  14],
         [Family.F2] =  [  0,   0,   0,   0,   4],
         [Family.F3] =  [  1,   4,   2,   1,   6],
         [Family.F4] =  [  0,   1,   4,   4,  11],

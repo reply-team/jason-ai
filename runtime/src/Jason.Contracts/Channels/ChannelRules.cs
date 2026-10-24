@@ -171,8 +171,12 @@ public static partial class ChannelRules
     /// linkedin.com's, a user name, the scheme's own port, every trailing or doubled slash, a path after the name, a query
     /// and a fragment never count. A spelling that a browser or .NET's <c>System.Uri</c> would read as a profile other
     /// than the one this rule keys is refused, never followed: a step to <c>.</c> or <c>..</c> in the path, written plainly
-    /// or as escapes, which both follow; a backslash anywhere in the path, which both read as a slash; and a tab, a line
-    /// feed or a carriage return anywhere in the value once its edges are trimmed, which a browser drops. Null for those,
+    /// or as escapes, which both follow; a backslash anywhere in the value, which a scheme never holds and a browser reads
+    /// as a slash before the host's end and in the path, so that a user name holding one would hide the host the link
+    /// opens — in a query or a fragment one is harmless in itself, and is refused there too so that one check covers the
+    /// whole value; and a tab, a line feed or a carriage return anywhere in the value once its edges are trimmed, which a
+    /// browser drops. A backslash written as an escape, <c>%5C</c>, is none of these: neither reads it as a slash, so in
+    /// a user name or a query it counts no more than they do, and in the name it is outside the alphabet. Null for those,
     /// and for anything else that is not a link to a profile on linkedin.com: another host, or one that only ends in its
     /// letters; another port or scheme; a path that is not <c>/in/</c> and a name; a name that, once
     /// its escapes are decoded and it is composed, is not 1 to 100 letters, decimal digits, combining marks, hyphens or
@@ -183,7 +187,7 @@ public static partial class ChannelRules
     private static string? LinkedInKey(string value)
     {
         var text = TrimmedOfSpaceAndMarks(value);
-        if (text.Length == 0 || text.AsSpan().IndexOfAny('\t', '\n', '\r') >= 0)
+        if (text.Length == 0 || text.AsSpan().IndexOfAny("\t\n\r\\") >= 0)
         {
             return null;
         }
@@ -220,7 +224,7 @@ public static partial class ChannelRules
         var end = tail.AsSpan().IndexOfAny('?', '#');
         var path = SlashRuns().Replace(end < 0 ? tail : tail[..end], "/");
         if (path.Length < 4 || path[0] != '/' || (path[1] | 0x20) != 'i' || (path[2] | 0x20) != 'n' || path[3] != '/'
-            || path.Contains('\\', StringComparison.Ordinal) || path.Split('/').Any(IsDotStep))
+            || path.Split('/').Any(IsDotStep))
         {
             return null;
         }

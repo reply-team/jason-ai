@@ -113,14 +113,15 @@ public class ChannelRulesTests
     // The LinkedIn key
     // -------------------------------------------------------------------------------------------------------
 
-    // Critical: one LinkedIn key: canonical, case+fragment, percent-encoded, dot-segment, look-alike host.
+    // Critical: one LinkedIn key: canonical, case+fragment, percent-encoded, dot-segment, look-alike host, backslash.
     public static TheoryData<string, string?> CriticalLinkedInVectors() =>
         CriticalRows.Mark(LinkedInKeyVectors.Theory(), Family.F1, data => data is
             ["https://www.linkedin.com/in/marta-example", _]
             or ["HTTPS://WWW.LinkedIn.com/in/Marta-Example/#about", _]
             or ["https://www.linkedin.com/in/j%C3%B6rn-example", _]
             or ["https://www.linkedin.com/in/x/../marta-example", _]
-            or ["https://linkedin.com.example.org/in/marta-example", _]);
+            or ["https://linkedin.com.example.org/in/marta-example", _]
+            or ["https://example.com\\@www.linkedin.com/in/x", _]);
 
     /// <summary>
     /// Every row of the one table: a profile link is keyed by its slug, decoded once, composed and lowercased, under the

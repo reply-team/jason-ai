@@ -108,13 +108,29 @@ public static class LinkedInKeyVectors
 
         // A spelling that a browser or .NET's Uri would read as a profile other than the one the rule keys is refused,
         // never followed: a step to the same place or back, written plainly or as escapes, which both follow; a backslash
-        // anywhere in the path, which both read as a slash; a tab, a line feed or a carriage return anywhere in the value
-        // once its edges are trimmed, which a browser drops.
+        // anywhere in the value, which a browser reads as a slash before the host's end and in the path, so that a user
+        // name holding one hides the host it opens — in a query or a fragment one is harmless in itself, and is refused
+        // there too so that one check covers the whole value; a tab, a line feed or a carriage return anywhere in the
+        // value once its edges are trimmed, which a browser drops.
         ("https://www.linkedin.com/in/x/../marta-example", null),
         ("https://www.linkedin.com/in/x/%2E%2e/marta-example", null),
         ("https://www.linkedin.com/in/marta-example/.", null),
         ("https://www.linkedin.com/in/x/..\\marta-example", null),
         ("https://www.linkedin.com/in/x/.\t./marta-example", null),
+        ("https://example.com\\@www.linkedin.com/in/x", null),
+        ("example.com\\@www.linkedin.com/in/marta-example", null),
+        ("https://www.linkedin.com/in/marta-example/\\x", null),
+        ("https://www.linkedin.com/in/marta\\example", null),
+        ("https://www.linkedin.com/in/marta-example?ref=a\\b", null),
+        ("https://www.linkedin.com/in/marta-example#a\\b", null),
+
+        // A backslash written as an escape is no slash to a browser or to .NET's Uri: in a user name it stays the user
+        // name's, and the host is the one after the '@'; after the host it is the host's, which no host may hold; in a
+        // query it is the query's; in the name it is a letter outside the alphabet.
+        ("https://example.com%5C@www.linkedin.com/in/marta-example", Key + "marta-example"),
+        ("https://www.linkedin.com%5C/in/marta-example", null),
+        ("https://www.linkedin.com/in/marta-example?ref=a%5Cb", Key + "marta-example"),
+        ("https://www.linkedin.com/in/marta-example%5C", null),
 
         // Not LinkedIn: another host, one that only ends in its letters, a wrapper around a link, a port, a scheme.
         ("https://example.com/in/marta-example", null),
@@ -137,7 +153,6 @@ public static class LinkedInKeyVectors
         ("https://www.linkedin.com\\in\\marta-example", null),
 
         // A slug outside the alphabet, after its one decoding.
-        ("https://www.linkedin.com/in/marta\\example", null),
         ("https://www.linkedin.com/in/marta example", null),
         ("https://www.linkedin.com/in/marta%20example", null),
         ("https://www.linkedin.com/in/marta+example", null),
