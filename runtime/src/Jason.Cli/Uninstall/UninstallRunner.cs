@@ -262,6 +262,15 @@ public static class UninstallRunner
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
             {
+                // An error that came once nothing was left is no failure to remove something still there: .NET removes a
+                // junction it could not unmount and then throws. Gone is what the purge set out for, and the error is said beside it.
+                // A refusal is said before anything is removed, so it never stands beside an entry that went.
+                if (exception is not RemovalRefused && Gone(entry))
+                {
+                    done.Add(GoneAnyway(env, entry, exception));
+                    continue;
+                }
+
                 problems.Add(NotRemoved(env, entry, exception));
                 failed = true;
             }
@@ -304,6 +313,52 @@ public static class UninstallRunner
         exception is HeldOpen held
             ? held.Said(IdentityFacts.HomeFor(env.Identity))
             : $"'{path}' could not be removed: {exception.Message}";
+
+    /// <summary>
+    /// The line for an entry that is gone although its removal ended in an error, the error said as <see cref="NotRemoved"/>
+    /// says it: a file held open from the home directory, the entry's path with it, and without the operating system's message.
+    /// </summary>
+    private static string GoneAnyway(CliEnvironment env, string entry, Exception exception)
+    {
+        const string Ended = "is gone; removing it ended in an error once nothing was left there:";
+        if (exception is HeldOpen held)
+        {
+            var home = IdentityFacts.HomeFor(env.Identity);
+            return $"'{IdentityRewriter.FromHome(entry, home)}' {Ended} {held.Said(home)}";
+        }
+
+        return $"'{entry}' {Ended} {exception.Message}";
+    }
+
+    /// <summary>
+    /// Whether nothing is left at <paramref name="entry"/>. A look at the path answers no for an entry this account may not
+    /// read as well as for one that is not there, so the directory it is in is listed for its name too; a directory that
+    /// cannot be listed leaves the answer open, and an open answer is not gone.
+    /// </summary>
+    private static bool Gone(string entry)
+    {
+        if (Path.Exists(entry))
+        {
+            return false;
+        }
+
+        try
+        {
+            return !Directory.EnumerateFileSystemEntries(
+                    Path.GetDirectoryName(entry)!,
+                    Path.GetFileName(entry),
+                    new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = false, RecurseSubdirectories = false })
+                .Any();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// The data directory's entries, split into what this product keeps there — <see cref="Contracts.Discovery.JasonPaths.OwnEntries"/>

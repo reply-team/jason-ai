@@ -500,7 +500,8 @@ is refused before anything is removed.
 Nothing else is touched: no skill without a receipt, no other skill in an agent harness, no provider CLI, no
 model credential, no PATH entry the installer did not write, no other account's logon registration, and none of
 the notifications already in the notification center. Nor is anything under the harness root (§2) — your memory
-files and every project's and campaign's folder — whatever `--purge-data` says. It exits 0
+files and every project's and campaign's folder — whatever `--purge-data` says. A link in the data directory, a
+symbolic link or a junction, is removed as itself, and what it points to is never touched. It exits 0
 when everything it set out to remove is gone, and 1 when it did not get there — it refused (a runtime that would
 not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
 read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did

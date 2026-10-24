@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Jason.Cli;
+using Jason.Cli.Doctor;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Uninstall;
@@ -312,6 +313,153 @@ public class UninstallDataTests
     }
 
     /// <summary>
+    /// A removal that ended in an error once nothing was left there is not a failure to remove something still there: the
+    /// entry is gone, the report says so and gives the error beside it, and the purge goes on to remove the directory.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_whose_removal_failed_once_nothing_was_left_says_the_entry_is_gone()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        remover.FailsOnceGone[dir.Paths.ConfigDirectory] = new IOException(RecordingRemover.Said(dir.Paths.ConfigDirectory, "is no volume's mount point"));
+        var output = new StringWriter();
+
+        var exit = await UninstallCommand.RunAsync(
+            Machine(dir, output, remover),
+            new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+            Ct);
+
+        var report = JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options)!;
+        Assert.True(exit == ExitCodes.Success, $"the purge exited {exit}: {string.Join(" ", report.Problems)}");
+        Assert.DoesNotContain(report.Problems, line => line.Contains(dir.Paths.ConfigDirectory, StringComparison.OrdinalIgnoreCase));
+        var said = RecordingRemover.Said(dir.Paths.ConfigDirectory, "is no volume's mount point");
+        Assert.True(
+            report.Done.Any(line => line.StartsWith($"'{dir.Paths.ConfigDirectory}' is gone", StringComparison.Ordinal) && line.EndsWith(said, StringComparison.Ordinal)),
+            $"no line says '{dir.Paths.ConfigDirectory}' is gone with the error beside it: {string.Join(" | ", report.Done)}");
+        Assert.False(Directory.Exists(dir.Paths.Root), $"the data directory at '{dir.Paths.Root}' is still there.");
+    }
+
+    /// <summary>
+    /// A file held open that made the removal fail once nothing was left there is said as the problems say one: from the
+    /// home directory, without the operating system's message, which repeats the absolute path.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_whose_removal_was_held_once_nothing_was_left_says_the_entry_is_gone_from_home()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        var config = dir.Paths.ConfigDirectory;
+        remover.FailsOnceGone[config] = new HeldOpen(config, isDirectory: true, InstallationRemovers.HeldFiles, new IOException(RecordingRemover.Said(config, "is in use")));
+        var output = new StringWriter();
+
+        var exit = await UninstallCommand.RunAsync(
+            Machine(dir, output, remover, home: dir.Paths.Root),
+            new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+            Ct);
+
+        var report = JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options)!;
+        Assert.True(exit == ExitCodes.Success, $"the purge exited {exit}: {string.Join(" ", report.Problems)}");
+        var fromHome = $"'~{Path.DirectorySeparatorChar}{Path.GetFileName(config)}'";
+        Assert.True(
+            report.Done.Any(line => line.StartsWith($"{fromHome} is gone", StringComparison.Ordinal)
+                && line.EndsWith($"{fromHome} or a file in it is held open by another program; it was tried for {InstallationRemovers.HeldFiles.WaitInWords}.", StringComparison.Ordinal)),
+            $"no line says {fromHome} is gone with the held file beside it: {string.Join(" | ", report.Done)}");
+        Assert.True(
+            !report.Done.Any(line => line.Contains(config, StringComparison.OrdinalIgnoreCase) || line.Contains("is in use", StringComparison.Ordinal)),
+            $"a line of what was done names '{config}' or the system's message: {string.Join(" | ", report.Done)}");
+    }
+
+    /// <summary>
+    /// A refusal is said before anything is removed, so one that comes where nothing is left is no removal that ended in
+    /// an error: it is named among the problems, as every refusal is.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_whose_removal_was_refused_once_nothing_was_left_names_the_refusal_among_the_problems()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        var config = dir.Paths.ConfigDirectory;
+        remover.FailsOnceGone[config] = new RemovalRefused(CliErrors.UninstallRefused, $"'{config}' could not be removed.");
+        var output = new StringWriter();
+
+        var exit = await UninstallCommand.RunAsync(
+            Machine(dir, output, remover),
+            new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+            Ct);
+
+        var report = JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options)!;
+        Assert.True(exit == ExitCodes.ApiError, $"the purge exited {exit}: {string.Join(" | ", report.Done)}");
+        Assert.True(
+            report.Problems.Any(line => line.Contains($"'{config}' could not be removed.", StringComparison.Ordinal)),
+            $"the refusal of '{config}' is not among the problems: {string.Join(" | ", report.Problems)}");
+        Assert.True(
+            !report.Done.Any(line => line.Contains(config, StringComparison.OrdinalIgnoreCase)),
+            $"a line of what was done names '{config}': {string.Join(" | ", report.Done)}");
+    }
+
+    /// <summary>
+    /// An entry still there is never said to be gone because a look at its path could not see it: a look answers no for
+    /// an entry this account may not read as well as for one that is not there, so the directory it is in is asked too,
+    /// and a directory that will not say leaves the entry among the problems.
+    /// </summary>
+    /// <remarks>
+    /// The entry is closed to a look as its removal begins, after the purge read the data directory: on Windows by rules
+    /// denying this account the entry's attributes and the data directory's listing, elsewhere by taking the data
+    /// directory's search permission, which a listing does not need.
+    /// </remarks>
+    [Fact]
+    public async Task A_purge_whose_entry_cannot_be_seen_after_its_removal_failed_names_it_among_the_problems()
+    {
+        Assert.SkipWhen(!OperatingSystem.IsWindows() && Environment.IsPrivilegedProcess, "a privileged account looks at any path, so none can be closed to it.");
+        using var dir = new TempPaths();
+        Plant(dir);
+        var config = dir.Paths.ConfigDirectory;
+        IDisposable? closed = null;
+        var seen = true;
+        var remover = new RecordingRemover
+        {
+            ReallyRemoves = true,
+            AsATreeGoes = path =>
+            {
+                if (path == config)
+                {
+                    closed = ClosedToALook(config);
+                    seen = Path.Exists(config);
+                }
+            },
+        };
+        remover.Denied.Add(config);
+        var output = new StringWriter();
+
+        int exit;
+        try
+        {
+            exit = await UninstallCommand.RunAsync(
+                Machine(dir, output, remover),
+                new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+                Ct);
+        }
+        finally
+        {
+            closed?.Dispose();
+        }
+
+        var report = JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options)!;
+        Assert.False(seen, $"'{config}' was not closed to a look at its path.");
+        Assert.True(Directory.Exists(config), $"'{config}' is gone, which this row needs it not to be.");
+        Assert.True(exit == ExitCodes.ApiError, $"the purge exited {exit}: {string.Join(" | ", report.Done)}");
+        Assert.True(
+            report.Problems.Any(line => line.StartsWith($"'{config}' could not be removed", StringComparison.Ordinal)),
+            $"'{config}' is not among the problems: {string.Join(" | ", report.Problems)}");
+        Assert.True(
+            !report.Done.Any(line => line.Contains(config, StringComparison.OrdinalIgnoreCase)),
+            $"a line of what was done names '{config}': {string.Join(" | ", report.Done)}");
+    }
+
+    /// <summary>
     /// A directory that is not a data directory is refused before anything is read, let alone removed: here, one
     /// holding the installation. The rest of the belt's cases are <c>DataDirectoryBeltTests</c>.
     /// </summary>
@@ -552,7 +700,7 @@ public class UninstallDataTests
     /// The installation beside the data directory rather than in it: a data directory holding the installation
     /// is one the purge refuses outright, which is a test of its own above.
     /// </remarks>
-    private static CliEnvironment Machine(TempPaths dir, TextWriter output, RecordingRemover remover) =>
+    private static CliEnvironment Machine(TempPaths dir, TextWriter output, RecordingRemover remover, string? home = null) =>
         new(
             output,
             new StringWriter(),
@@ -560,7 +708,73 @@ public class UninstallDataTests
             Autostart: new RecordingRegistrar(),
             Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "harness")),
             InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"),
-            Removes: remover);
+            Removes: remover,
+            Identity: home is null ? null : new IdentityFacts(home, "someone", "a-machine", null, null));
+
+    /// <summary>
+    /// Closes the directory <paramref name="entry"/> to a look at its path, leaving it where it is, until disposed: on
+    /// Windows a rule denying this account its attributes and one denying it the listing of the directory it is in;
+    /// elsewhere the directory it is in without its search permission.
+    /// </summary>
+    private static IDisposable ClosedToALook(string entry)
+    {
+        var parent = Path.GetDirectoryName(entry)!;
+        if (OperatingSystem.IsWindows())
+        {
+            return new DeniedALook(entry, parent);
+        }
+
+        return new NotSearchable(parent);
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private sealed class DeniedALook : IDisposable
+    {
+        private readonly (DirectoryInfo Folder, System.Security.AccessControl.FileSystemAccessRule Rule)[] _denied;
+
+        public DeniedALook(string entry, string parent)
+        {
+            var account = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
+            _denied =
+            [
+                (new DirectoryInfo(entry), new System.Security.AccessControl.FileSystemAccessRule(account, System.Security.AccessControl.FileSystemRights.ReadAttributes, System.Security.AccessControl.AccessControlType.Deny)),
+                (new DirectoryInfo(parent), new System.Security.AccessControl.FileSystemAccessRule(account, System.Security.AccessControl.FileSystemRights.ListDirectory, System.Security.AccessControl.AccessControlType.Deny)),
+            ];
+            foreach (var (folder, rule) in _denied)
+            {
+                var security = folder.GetAccessControl();
+                security.AddAccessRule(rule);
+                folder.SetAccessControl(security);
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var (folder, rule) in _denied.Reverse())
+            {
+                var security = folder.GetAccessControl();
+                security.RemoveAccessRule(rule);
+                folder.SetAccessControl(security);
+            }
+        }
+    }
+
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private sealed class NotSearchable : IDisposable
+    {
+        private readonly string _folder;
+
+        private readonly UnixFileMode _mode;
+
+        public NotSearchable(string folder)
+        {
+            _folder = folder;
+            _mode = File.GetUnixFileMode(folder);
+            File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        public void Dispose() => File.SetUnixFileMode(_folder, _mode);
+    }
 
     private static async Task<(int Exit, UninstallReport Report)> RunAsync(TempPaths dir, bool purgeData, bool yes = false)
     {

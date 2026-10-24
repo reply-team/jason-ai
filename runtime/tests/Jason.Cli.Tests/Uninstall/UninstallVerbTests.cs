@@ -130,6 +130,24 @@ public class UninstallVerbTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A link in the data directory goes as the link it is, the purge included, and what it points to is never touched:
+    /// the help page says so among what is never touched. Read with the line breaks made spaces, since the sentence wraps.
+    /// </summary>
+    [Fact]
+    public async Task The_help_page_says_a_link_in_the_data_directory_goes_as_itself()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        var help = System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " ");
+        var never = help.IndexOf("Never touched:", StringComparison.Ordinal);
+        var link = help.IndexOf("A link in the data directory is removed as itself: what it points to is never touched.", StringComparison.Ordinal);
+        Assert.True(never >= 0 && link > never, $"The help page does not say a link in the data directory goes as itself among what is never touched:{Environment.NewLine}{output}");
+    }
+
     /// <summary>The wait the help page publishes is the remover's own, not a number written down beside it.</summary>
     [Fact]
     public async Task The_wait_the_help_page_publishes_is_the_removers_rule()

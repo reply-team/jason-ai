@@ -80,16 +80,28 @@ public class RoundTripTests
     /// the canary somebody put there included.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This used to assert that the canary went: the data directory "and everything in it" was the one place
     /// the purge was allowed to take somebody's own file. The data directory is whatever <c>JASON_DATA_DIR</c>
     /// names, so the purge now removes what Jason keeps there and names the rest; the directory stays, holding
     /// exactly the file that was put there, byte for byte.
+    /// </para>
+    /// <para>
+    /// The skill packs in the data directory are git clones, and git marks its pack files read-only, which a delete on
+    /// Windows refuses; so a pack file sits deep in this data directory, marked so, in a <c>.git</c> marked hidden as Git
+    /// for Windows marks it, and goes with the rest.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task And_purge_data_removes_what_jason_keeps_and_nothing_else()
     {
         using var tree = new ScratchTree();
         var before = tree.Snapshot();
+        var git = Path.Combine(tree.Installation.Root, "skills", "staged", "a-pack", ".git");
+        var pack = Path.Combine(git, "objects", "pack", "pack-0123abcd.pack");
+        tree.Canary(pack, "a pack file, as git writes one");
+        File.SetAttributes(pack, FileAttributes.ReadOnly);
+        new DirectoryInfo(git).Attributes |= FileAttributes.Hidden;
 
         await tree.InstallSkillsAsync();
         var report = await tree.UninstallAsync(purgeData: true);

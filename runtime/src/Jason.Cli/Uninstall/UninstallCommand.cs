@@ -68,7 +68,8 @@ public static class UninstallCommand
                                    already in the notification center, which are the person's to dismiss.
                                    And the harness root (Harness:Root, ~/Jason by default) with every
                                    folder and file in it, --purge-data included: the purge empties the
-                                   data directory, never the root.
+                                   data directory, never the root. A link in the data directory is
+                                   removed as itself: what it points to is never touched.
         Installed by a package manager (Homebrew, winget): steps 5 and 6 are the manager's. The executable, its
         directory and the PATH entry that reaches it are left to it, and the plan names the command that takes
         them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.

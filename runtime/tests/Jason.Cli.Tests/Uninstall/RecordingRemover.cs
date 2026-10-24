@@ -107,12 +107,31 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         return true;
     }
 
+    /// <summary>
+    /// Trees this remover removes and then fails on, each with the failure it is given, as .NET's recursive delete fails on
+    /// a junction an elevated Windows account cannot unmount: the link is gone by the time the error comes, and here
+    /// nothing at all is left.
+    /// </summary>
+    public Dictionary<string, Exception> FailsOnceGone { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What happens on the machine as a tree's removal begins, before anything else this remover does: a test that needs
+    /// the machine changed at that moment, after the entries were read, says what.
+    /// </summary>
+    public Action<string>? AsATreeGoes { get; init; }
+
     public void RemoveTree(string path)
     {
+        AsATreeGoes?.Invoke(path);
         Record("tree.remove", path);
         if (ReallyRemoves && Directory.Exists(path))
         {
             Directory.Delete(path, recursive: true);
+        }
+
+        if (FailsOnceGone.TryGetValue(path, out var failure))
+        {
+            throw failure;
         }
     }
 

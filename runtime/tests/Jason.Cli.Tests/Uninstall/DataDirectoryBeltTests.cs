@@ -382,7 +382,7 @@ public class DataDirectoryBeltTests
     }
 
     /// <summary>A link at <paramref name="link"/> to the directory <paramref name="target"/>, of the kind this account may make.</summary>
-    private static void Link(string link, string target)
+    internal static void Link(string link, string target)
     {
         if (!OperatingSystem.IsWindows())
         {

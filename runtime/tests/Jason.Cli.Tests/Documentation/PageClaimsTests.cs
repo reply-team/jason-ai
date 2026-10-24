@@ -1974,6 +1974,17 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The install page's section on taking Jason off says that a link in the data directory goes as itself and that what
+    /// it points to is never touched, as the verb's help says it.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_a_link_in_the_data_directory_goes_as_itself() =>
+        Assert.Contains(
+            "A link in the data directory, a symbolic link or a junction, is removed as itself, and what it points to is never touched.",
+            Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again")),
+            StringComparison.Ordinal);
+
     /// <summary>And so does the README's account of taking it off.</summary>
     [Fact]
     public void The_readme_says_an_uninstall_never_touches_the_folder_of_the_person_s_files() =>
