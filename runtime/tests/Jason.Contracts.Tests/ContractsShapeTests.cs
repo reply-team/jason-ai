@@ -112,6 +112,8 @@ public class ContractsShapeTests
         Assert.Equal("workitem.heartbeat", Operations.WorkItemHeartbeat);
         Assert.Equal("workitem.set_result", Operations.WorkItemSetResult);
         Assert.Equal("workitem.complete", Operations.WorkItemComplete);
+        Assert.Equal("workitem.wait", Operations.WorkItemWait);
+        Assert.Equal("workitem.resume", Operations.WorkItemResume);
         Assert.Equal("role.list", Operations.RoleList);
         Assert.Equal("role.add", Operations.RoleAdd);
         Assert.Equal("/v1/workitem.set_result", Operations.Route(Operations.WorkItemSetResult));
@@ -385,11 +387,20 @@ public class ContractsShapeTests
             "/work/wi_A/att_A",
             new RuntimeLocation("/run/runtime.json", "v1", "jason"),
             new RoleMemoryLocation("cmp_A", "researcher", "prj_A"),
-            new MemoryFileLocations("/home/marta/Jason/AGENTS.md", "/home/marta/Jason/projects/acme-corp/AGENTS.md", null));
+            new MemoryFileLocations("/home/marta/Jason/AGENTS.md", "/home/marta/Jason/projects/acme-corp/AGENTS.md", null),
+            new Resumption(
+                "att_P",
+                1,
+                DateTimeOffset.UnixEpoch,
+                WaitReleaseReason.ChildrenEnded,
+                [
+                    new ResumedItem("wi_R", WorkItemKind.AiRole, "researcher", null, WorkItemStatus.Succeeded, DateTimeOffset.UnixEpoch, null, new JsonObject { ["found"] = 3 }, false),
+                    new ResumedItem("wi_S", WorkItemKind.ProviderOp, null, "message.send", WorkItemStatus.Failed, DateTimeOffset.UnixEpoch, "provider_unavailable", null, true),
+                ]));
 
         var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
 
-        Assert.Contains("\"envelope_version\":4", json, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":5", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_id\":\"att_A\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":\"/work/wi_A/att_A\"", json, StringComparison.Ordinal);
@@ -408,6 +419,18 @@ public class ContractsShapeTests
             json,
             StringComparison.Ordinal);
 
+        // What the wait before this run ended with: the attempt that waited, why it was released, and each item it named
+        // in the order it named them — a result inline while it fit, and a flag in its place once it did not.
+        Assert.Contains(
+            "\"resumption\":{\"previous_attempt_id\":\"att_P\",\"resumption_number\":1,\"waited_since\":\"1970-01-01T00:00:00.000Z\","
+            + "\"woke_because\":\"children_ended\",\"items\":["
+            + "{\"work_item_id\":\"wi_R\",\"kind\":\"ai_role\",\"role\":\"researcher\",\"operation\":null,\"status\":\"succeeded\","
+            + "\"finished_at\":\"1970-01-01T00:00:00.000Z\",\"last_error_code\":null,\"result\":{\"found\":3},\"result_omitted\":false},"
+            + "{\"work_item_id\":\"wi_S\",\"kind\":\"provider_op\",\"role\":null,\"operation\":\"message.send\",\"status\":\"failed\","
+            + "\"finished_at\":\"1970-01-01T00:00:00.000Z\",\"last_error_code\":\"provider_unavailable\",\"result\":null,\"result_omitted\":true}]}",
+            json,
+            StringComparison.Ordinal);
+
         var back = JsonSerializer.Deserialize<LaunchEnvelope>(json, JasonJson.Options)!;
         Assert.Equal(LaunchEnvelope.CurrentVersion, back.EnvelopeVersion);
         Assert.Equal("att_A", back.AttemptId);
@@ -418,6 +441,79 @@ public class ContractsShapeTests
         Assert.Equal(envelope.RoleMemory, back.RoleMemory);
         Assert.Equal(envelope.MemoryFiles, back.MemoryFiles);
         Assert.Equal(DateTimeOffset.UnixEpoch, back.LockUntil);
+        Assert.Equal(WaitReleaseReason.ChildrenEnded, back.Resumption!.WokeBecause);
+        Assert.Equal(["wi_R", "wi_S"], back.Resumption.Items.Select(i => i.WorkItemId));
+        Assert.Equal(3, (int?)back.Resumption.Items[0].Result!["found"]);
+    }
+
+    [Fact]
+    public void A_run_that_follows_no_wait_is_told_no_resumption()
+    {
+        var envelope = new LaunchEnvelope(
+            LaunchEnvelope.CurrentVersion, "att_A", 1, "wi_A", "cmp_A", null, WorkItemKind.AiRole, "researcher", null, [], null, 3600, 120,
+            DateTimeOffset.UnixEpoch, "/work/wi_A/att_A", new RuntimeLocation("/run/runtime.json", "v1", "jason"));
+
+        var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
+
+        Assert.Contains("\"resumption\":null", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_envelope_written_before_resumption_existed_still_reads()
+    {
+        // Version 4, as this runtime wrote it before a run could follow a wait.
+        const string version4 = """
+            {"envelope_version":4,"attempt_id":"att_A","attempt_number":1,"work_item_id":"wi_A","campaign_id":"cmp_A",
+             "contact_id":null,"kind":"ai_role","role":"researcher","execution_profile":null,"context":{},
+             "result_format":null,"timeout_seconds":3600,"heartbeat_seconds":120,"lock_until":"1970-01-01T00:00:00.000Z",
+             "work_dir":"/work/wi_A/att_A","runtime":{"descriptor_file":"/run/runtime.json","api_version":"v1","cli_command":"jason"},
+             "role_memory":{"campaign_id":"cmp_A","role":"researcher","project_id":"prj_A"},
+             "memory_files":{"client":null,"project":null,"campaign":null}}
+            """;
+
+        var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(version4, JasonJson.Options)!;
+
+        Assert.Equal(4, envelope.EnvelopeVersion);
+        Assert.Equal(new RoleMemoryLocation("cmp_A", "researcher", "prj_A"), envelope.RoleMemory);
+        Assert.Null(envelope.Resumption);
+    }
+
+    [Fact]
+    public void A_wait_names_at_most_one_hundred_items_and_its_block_is_absent_where_there_is_no_wait()
+    {
+        Assert.Equal(100, WorkItemWaitRequest.MaxWaitItems);
+        Assert.DoesNotContain("\"wait\"", JsonSerializer.Serialize(NewWorkItemDto(null), JasonJson.Options), StringComparison.Ordinal);
+
+        var waiting = NewWorkItemDto(null) with
+        {
+            Status = WorkItemStatus.Waiting,
+            Wait = new WaitDto("att_A", [new WaitItemDto("wi_R", WorkItemStatus.Processing)], WaitMode.All, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch),
+        };
+        Assert.Contains(
+            "\"wait\":{\"attempt_id\":\"att_A\",\"on\":[{\"work_item_id\":\"wi_R\",\"status\":\"processing\"}],\"mode\":\"all\",\"until\":null,"
+            + "\"deadline\":\"1970-01-01T00:00:00.000Z\",\"opened_at\":\"1970-01-01T00:00:00.000Z\"}",
+            JsonSerializer.Serialize(waiting, JasonJson.Options),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_listing_counts_what_a_wait_names_rather_than_naming_it()
+    {
+        var row = new WorkItemSummaryDto(
+            "wi_A", "cmp_A", null, WorkItemKind.AiRole, "planner", null, null, WorkItemStatus.Waiting, false, 5, null, null, null,
+            new ActorRef(ActorType.Human, null), 1, null, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null)
+        {
+            Wait = new WaitSummaryDto("att_A", WaitMode.All, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, OnCount: 3, EndedCount: 1),
+        };
+
+        var json = JsonSerializer.Serialize(row, JasonJson.Options);
+
+        Assert.Contains(
+            "\"wait\":{\"attempt_id\":\"att_A\",\"mode\":\"all\",\"until\":null,\"deadline\":\"1970-01-01T00:00:00.000Z\","
+            + "\"opened_at\":\"1970-01-01T00:00:00.000Z\",\"on_count\":3,\"ended_count\":1}",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("\"wait\"", JsonSerializer.Serialize(row with { Wait = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>

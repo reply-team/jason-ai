@@ -541,6 +541,29 @@ public class SettingsRefusalTests
     }
 
     /// <summary>
+    /// A wait is bounded by the settings, so with none ever read it is refused the same way, after everything that did not
+    /// depend on them; the run is still the item's, and may finish instead.
+    /// </summary>
+    [Fact]
+    public async Task A_wait_with_nothing_to_fall_back_to_is_refused_with_a_code_and_not_a_crash()
+    {
+        using var database = new TestDatabase();
+        var seeded = await SeedAsync(database);
+        await using var ctx = database.Open();
+        var request = new WorkItemWaitRequest(seeded.ItemId, seeded.AttemptId, On: null, Mode: null, Until: Noon.AddDays(1), Reason: null);
+
+        var error = await Assert.ThrowsAsync<DomainException>(() => NothingValidatedService(ctx).WaitAsync(request, Ct));
+
+        Assert.Equal("settings_unreadable", error.Code);
+        Assert.Equal(503, error.StatusCode);
+        Assert.True(error.Retryable);
+        await using var check = database.Open();
+        var item = await check.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == seeded.ItemId, Ct);
+        Assert.Equal(WorkItemStatus.Processing, item.Status);
+        Assert.Empty(await check.WorkItemWaits.AsNoTracking().ToListAsync(Ct));
+    }
+
+    /// <summary>
     /// And a child that succeeded is never held up by a file it has nothing to do with: a successful completion
     /// reads no settings, so the same runtime that refuses the failure above takes this one.
     /// </summary>

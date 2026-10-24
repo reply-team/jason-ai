@@ -18,9 +18,6 @@ namespace Jason.Runtime.Execution;
 /// </summary>
 public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, LiveSettings<DispatcherOptions> settings)
 {
-    /// <summary>The most work items one wait may name.</summary>
-    public const int MaxWaitItems = 100;
-
     /// <summary>The attempt and its item both succeed; a result, when given, replaces whatever the item carried.</summary>
     public void Succeed(JasonDbContext db, WorkItem item, Attempt attempt, JsonNode? result, ActorRef actor, string? reason = null)
     {
@@ -164,7 +161,7 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     /// moment, or for whichever of the two comes first. The attempt is <c>yielded</c>: finished, no longer live, and not
     /// counted against the item's attempts, because nothing failed. The wait is bounded whatever it names: by its moment,
     /// or else by the ceiling counted from now. The bounds are held here, and refused rather than bent: a moment beyond the
-    /// ceiling (<c>wait_too_long</c>), more than <see cref="MaxWaitItems"/> items (<c>wait_target_invalid</c>), and an item
+    /// ceiling (<c>wait_too_long</c>), more than <see cref="WorkItemWaitRequest.MaxWaitItems"/> items (<c>wait_target_invalid</c>), and an item
     /// that has already waited as often as it may (<c>wait_limit_reached</c>), counted by its yielded attempts, so the
     /// item's attempts must be loaded. A refused wait changes nothing. Which items a wait may name at all is the caller's
     /// to decide; this only writes it.
@@ -206,7 +203,7 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
         var now = clock.GetUtcNow().UtcDateTime;
         var limits = settings.Current.AiRole;
         var ceiling = now.AddSeconds(limits.MaxWaitSeconds);
-        if (children.Count > MaxWaitItems)
+        if (children.Count > WorkItemWaitRequest.MaxWaitItems)
         {
             throw DomainErrors.WaitTargetInvalid(children.Count);
         }

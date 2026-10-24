@@ -7,10 +7,10 @@ using Jason.Contracts.Api;
 namespace Jason.Cli.Commands;
 
 /// <summary>
-/// The <c>workitem</c> verb group: the five verbs a planner uses to put work on the queue and read it back,
-/// and the three an executor uses to report on the attempt it was launched for. The work-item id is
-/// positional, the request body may come from a file or standard input, and the scalar options are laid
-/// over it.
+/// The <c>workitem</c> verb group: the six verbs a planner or a person uses to put work on the queue, read it
+/// back and release it from a wait, and the four an executor uses to report on the attempt it was launched for.
+/// The work-item id is positional, the request body may come from a file or standard input, and the scalar
+/// options are laid over it.
 /// </summary>
 public static class WorkItemCommands
 {
@@ -36,9 +36,11 @@ public static class WorkItemCommands
         workItem.Subcommands.Add(Count(env, actor));
         workItem.Subcommands.Add(Update(env, actor));
         workItem.Subcommands.Add(Cancel(env, actor));
+        workItem.Subcommands.Add(Resume(env, actor));
         workItem.Subcommands.Add(Heartbeat(env, actor));
         workItem.Subcommands.Add(SetResult(env, actor));
         workItem.Subcommands.Add(Complete(env, actor));
+        workItem.Subcommands.Add(Wait(env, actor));
         return workItem;
     }
 
@@ -319,6 +321,41 @@ public static class WorkItemCommands
         return command;
     }
 
+    private static Command Resume(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "resume",
+            "Release a waiting work item before what it waits for has happened. It goes back to the queue, and its next "
+            + "attempt is told it was resumed by the actor named rather than woken by its work. --actor is required: a "
+            + "wait is ended on somebody's word. Only a waiting item can be resumed.");
+        var id = WorkItemId();
+        var file = VerbOptions.File("The object holds the request fields (reason).");
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(file);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
+            body.Set("work_item_id", parseResult.GetValue(id))
+                .Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+            if (body["actor"] is null)
+            {
+                throw new UsageException($"workitem resume needs {ActorOption.Name}: a wait is ended on somebody's word, and the line says whose.");
+            }
+
+            return await OperationRunner
+                .RunAsync(env, Operations.WorkItemResume, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken)
+                .ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
     private static Command Heartbeat(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("heartbeat", "Prove the attempt you were launched for is still alive.");
@@ -415,6 +452,64 @@ public static class WorkItemCommands
         });
 
         return command;
+    }
+
+    private static Command Wait(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "wait",
+            "End the attempt you were launched for by waiting: for work items it raised to end, for a moment, or for "
+            + "both. The item is released when they have ended — all of them, or any one with --any — or when the moment "
+            + "comes, whichever is first, and its next attempt is told why. A role's work only; a check-in never waits.");
+        var id = WorkItemId();
+        var attempt = AttemptOption();
+        var on = VerbOptions.Repeatable(
+            "--on",
+            "A work item this attempt raised, as wi_…, to wait for. Repeat the option for each one, at most 100; leave it "
+            + "out to wait for --until alone.");
+        var all = new Option<bool>("--all") { Description = "Release when every item named with --on has ended. The default when items are named." };
+        var any = new Option<bool>("--any") { Description = "Release when any one item named with --on has ended." };
+        var until = new Option<string?>("--until")
+        {
+            Description = "Release at this moment at the latest, as ISO-8601 UTC — for example 2026-09-14T10:00:00Z. Required when no item is named.",
+        };
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(attempt);
+        command.Options.Add(on);
+        command.Options.Add(all);
+        command.Options.Add(any);
+        command.Options.Add(until);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            var body = RequestBody.Empty()
+                .Set("work_item_id", parseResult.GetValue(id))
+                .Set("attempt_id", parseResult.GetValue(attempt))
+                .Set("on", VerbOptions.Strings(parseResult.GetValue(on)))
+                .Set("mode", Mode(parseResult.GetValue(all), parseResult.GetValue(any)))
+                .Set("until", parseResult.GetValue(until))
+                .Set("reason", parseResult.GetValue(reason));
+
+            return OperationRunner.RunAsync(env, Operations.WorkItemWait, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken);
+        });
+
+        return command;
+    }
+
+    /// <summary>Both flags at once asks for two releases, and the CLI can tell without the runtime; neither leaves the runtime's default.</summary>
+    private static string? Mode(bool all, bool any)
+    {
+        if (all && any)
+        {
+            throw new UsageException("--all and --any ask for opposite releases; give at most one.");
+        }
+
+        return all ? "all" : any ? "any" : null;
     }
 
     /// <summary>

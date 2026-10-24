@@ -66,7 +66,11 @@ public static partial class JournalKinds
     /// </summary>
     public const string WorkItemWaiting = "workitem_waiting";
 
-    /// <summary>A waiting item went back to <c>created</c>, with why it was released. Identifiers only, and not a default manager trigger.</summary>
+    /// <summary>
+    /// A waiting item went back to <c>created</c>, with why it was released. Identifiers only — when a person released
+    /// it through <c>workitem.resume</c>, the line is theirs and carries the reason they gave — and not a default manager
+    /// trigger.
+    /// </summary>
     public const string WorkItemResumed = "workitem_resumed";
     public const string RoleAdded = "role_added";
 

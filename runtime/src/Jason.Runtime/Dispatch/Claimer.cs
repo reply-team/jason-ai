@@ -156,6 +156,12 @@ public sealed class Claimer(
                 attempt: attempt);
             var plan = FailClosed(db, item, attempt, verdict, agent, packages, routing, released);
 
+            // A role's run that follows a wait is told what the wait ended with, and the wait is told which run it
+            // resumed, in the same save as the claim, so neither is written for a claim that did not happen.
+            var resumption = item.Status == WorkItemStatus.Scheduled
+                ? await Resumptions.ForClaimAsync(db, item, attempt, ct).ConfigureAwait(false)
+                : null;
+
             if (!await SaveAsync(db, item, ct).ConfigureAwait(false))
             {
                 continue;
@@ -191,7 +197,8 @@ public sealed class Claimer(
                         AgentLaunchDecision.Ready launched => launched.Plan.ProjectPublicId,
                         AgentLaunchDecision.Legacy legacy => legacy.ProjectPublicId,
                         _ => null,
-                    }));
+                    },
+                    resumption));
 
                 if (agent is AgentLaunchDecision.Ready { Plan.Unreadable: { Count: > 0 } levels })
                 {

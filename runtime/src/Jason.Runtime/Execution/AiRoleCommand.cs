@@ -229,7 +229,11 @@ public sealed class AiRoleCommand(
             // campaign's project, of the levels above it — so it never has to work the address out; what the notes
             // say it reads through the API, at the moment it wants them.
             context.Role is { Length: > 0 } role ? new RoleMemoryLocation(context.CampaignId, role, context.ProjectId) : null,
-            memoryFiles);
+            memoryFiles,
+
+            // What the wait before this run ended with, where there was one: read from the same object as everything
+            // else here, so a host that hands the role its envelope hands it the resumption too.
+            context.Resumption);
 
         try
         {

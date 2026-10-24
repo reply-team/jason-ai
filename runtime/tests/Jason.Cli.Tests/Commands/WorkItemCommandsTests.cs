@@ -589,6 +589,120 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    [Critical(Family.W2, "a wait carries the fence and what it waits for")]
+    public async Task Wait_sends_the_fence_the_items_the_release_and_the_moment()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "wait", "wi_A", "--attempt", "att_A", "--on", "wi_B", "--on", "wi_C", "--any", "--until", "2026-09-17T10:00:00Z", "--reason", "the research first");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemWait,
+            "{\"work_item_id\":\"wi_A\",\"attempt_id\":\"att_A\",\"on\":[\"wi_B\",\"wi_C\"],\"mode\":\"any\",\"until\":\"2026-09-17T10:00:00Z\",\"reason\":\"the research first\"}");
+    }
+
+    [Fact]
+    public async Task Wait_for_a_moment_alone_names_no_items_and_leaves_the_release_to_the_runtime()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "wait", "wi_A", "--attempt", "att_A", "--until", "2026-09-17T10:00:00Z");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.WorkItemWait, "{\"work_item_id\":\"wi_A\",\"attempt_id\":\"att_A\",\"until\":\"2026-09-17T10:00:00Z\"}");
+    }
+
+    [Fact]
+    public async Task Wait_says_all_when_told_to()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "wait", "wi_A", "--attempt", "att_A", "--on", "wi_B", "--all");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.WorkItemWait, "{\"work_item_id\":\"wi_A\",\"attempt_id\":\"att_A\",\"on\":[\"wi_B\"],\"mode\":\"all\"}");
+    }
+
+    [Fact]
+    public async Task Wait_for_all_and_any_at_once_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "wait", "wi_A", "--attempt", "att_A", "--on", "wi_B", "--all", "--any");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--all and --any", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Wait_without_an_attempt_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "wait", "wi_A", "--on", "wi_B");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--attempt", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Resume_sends_the_id_the_reason_and_who_resumed_it()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("--actor", "human:marta@example.com", "workitem", "resume", "wi_A", "--reason", "go on without the last one");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemResume,
+            "{\"work_item_id\":\"wi_A\",\"reason\":\"go on without the last one\",\"actor\":{\"type\":\"human\",\"id\":\"marta@example.com\"}}");
+    }
+
+    [Fact]
+    public async Task Resume_without_an_actor_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "resume", "wi_A", "--reason", "go on");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--actor", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_what_a_waiting_item_waits_for_and_until_when()
+    {
+        var wait = new WaitDto("att_A", [new WaitItemDto("wi_B", WorkItemStatus.Succeeded), new WaitItemDto("wi_C", WorkItemStatus.Processing)], WaitMode.All, Moment.AddDays(3), Moment.AddDays(3), Moment);
+        using var cli = new CliRun(Serialize(Item(null) with { Status = WorkItemStatus.Waiting, Wait = wait }));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(
+            """
+            Last error:   executor_exited — the process exited with code 1
+            Waiting for:  1 of 2 ended, all; until 2026-09-17 10:00:00 UTC
+            Wait opened:  2026-09-14 10:00:00 UTC
+            Wait ends by: 2026-09-17 10:00:00 UTC
+            """.ReplaceLineEndings(),
+            cli.Text,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_prints_no_wait_lines_for_an_item_that_is_not_waiting()
+    {
+        using var cli = new CliRun(Serialize(Item(null)));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain("Wait", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_api_error_is_printed_verbatim_and_exits_1()
     {
         const string envelope = "{\"error\":{\"code\":\"stale_attempt\",\"message\":\"That attempt is no longer current.\",\"retryable\":false}}";
@@ -882,6 +996,23 @@ public class WorkItemCommandsTests
         Assert.Contains("wi_A  Autumn outreach  Ada Lovelace  ai_role  researcher  created  yes       5     0         2026-09-14 10:00:00 UTC", cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: d2lfQQ", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_lists_a_waiting_item_with_what_it_waits_for()
+    {
+        var waiting = new WorkItemSummaryDto(
+            "wi_A", "cmp_A", null, WorkItemKind.AiRole, "planner", null, null, WorkItemStatus.Waiting, false, 5, null, null, null,
+            new ActorRef(ActorType.Human, null), 1, null, null, Moment, Moment, null, "Autumn outreach", null)
+        {
+            Wait = new WaitSummaryDto("att_A", WaitMode.Any, null, Moment.AddDays(14), Moment, OnCount: 1, EndedCount: 1),
+        };
+        using var cli = new CliRun(Serialize(new Page<WorkItemSummaryDto>([waiting], null)));
+
+        var exit = await cli.RunAsync("workitem", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("waiting (1 of 1 ended, any)", cli.Text, StringComparison.Ordinal);
     }
 
     [Fact]

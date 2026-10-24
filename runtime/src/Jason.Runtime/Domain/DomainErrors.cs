@@ -113,7 +113,30 @@ public static class DomainErrors
 
     /// <summary>A wait names more work items than one wait may.</summary>
     public static InvalidRequestException WaitTargetInvalid(int named) =>
-        new("wait_target_invalid", string.Create(CultureInfo.InvariantCulture, $"A wait names at most {AttemptOutcomes.MaxWaitItems} work items; this one named {named}."));
+        new("wait_target_invalid", string.Create(CultureInfo.InvariantCulture, $"A wait names at most {WorkItemWaitRequest.MaxWaitItems} work items; this one named {named}."));
+
+    /// <summary>
+    /// A named item a wait may not name, the first of them in the order named, with why: it does not exist, it is in
+    /// another campaign, or no attempt of the waiting item raised it. Waiting only on work its own runs raised is what
+    /// keeps a wait from naming its own ancestor.
+    /// </summary>
+    public static InvalidRequestException WaitTargetNotRaised(string target, string id, string why) =>
+        new("wait_target_invalid", $"'{target}' cannot be waited for by '{id}': {why}; a wait names only work its own runs raised in its campaign.");
+
+    /// <summary>A decision named as what to wait for. Its answer already wakes the campaign's manager, by design.</summary>
+    public static InvalidRequestException WaitTargetDecision(string target) =>
+        new("wait_target_invalid", $"'{target}' is a decision, and a wait names work items; an answer wakes the campaign's manager instead.");
+
+    /// <summary>
+    /// Work that may not end by waiting. A manager's check-in waits by its cadence; a provider operation's attempt ends
+    /// through its plugin's outcome.
+    /// </summary>
+    public static InvalidRequestException WaitNotAllowed(string id, string why) =>
+        new("wait_not_allowed", $"Work item '{id}' cannot wait: {why}");
+
+    /// <summary>A resume of an item that holds no wait to end.</summary>
+    public static ConflictException WorkItemNotWaiting(string id, WorkItemStatus status) =>
+        new("workitem_not_waiting", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; only a waiting item can be resumed.");
 
     /// <summary>
     /// The item has waited as often as it may. The attempt that asked still holds the item, so it is told to finish or

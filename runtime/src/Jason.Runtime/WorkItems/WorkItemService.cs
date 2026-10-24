@@ -249,12 +249,19 @@ public sealed class WorkItemService(
             .ConfigureAwait(false)
             ?? throw DomainErrors.WorkItemNotFound(id);
 
-        return WorkItemMapper.ToDto(
+        var dto = WorkItemMapper.ToDto(
             item,
             clock.GetUtcNow().UtcDateTime,
             item.Attempts,
             request.IncludeSnapshots == true,
             await ExternalReportsAsync(item.Id, cancellationToken).ConfigureAwait(false));
+        if (item.Status != WorkItemStatus.Waiting)
+        {
+            return dto;
+        }
+
+        var waits = await WaitBlocks.ForAsync(db, [item.Id], cancellationToken).ConfigureAwait(false);
+        return dto with { Wait = waits.GetValueOrDefault(item.Id) };
     }
 
     /// <summary>
@@ -306,7 +313,17 @@ public sealed class WorkItemService(
             .Take(limit + 1)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        return Paging.ToPage(fetched, limit, w => WorkItemListing.CursorKey(filter.Order, w), w => WorkItemMapper.ToSummary(w, now));
+
+        // What a waiting row waits for is read for the whole page at once, one query, and without the items it names.
+        var waits = await WaitBlocks.SummariesForAsync(
+            db,
+            [.. fetched.Where(w => w.Status == WorkItemStatus.Waiting).Select(w => w.Id)],
+            cancellationToken).ConfigureAwait(false);
+        return Paging.ToPage(
+            fetched,
+            limit,
+            w => WorkItemListing.CursorKey(filter.Order, w),
+            w => WorkItemMapper.ToSummary(w, now) with { Wait = waits.GetValueOrDefault(w.Id) });
     }
 
     /// <summary>
@@ -502,6 +519,57 @@ public sealed class WorkItemService(
             await OpenWaits.OfAsync(db, item.Id, cancellationToken).ConfigureAwait(false));
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         canceller.StopCancelled();
+        return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
+    }
+
+    /// <summary>
+    /// Ends a wait before what it waited for has happened, on somebody's word: the open wait is released as
+    /// <c>resumed_by_actor</c> and the item goes back to <c>created</c> through the scan's own routine, so the next
+    /// attempt is told it was resumed by the actor named rather than woken by its work. The actor is required — a wait
+    /// is ended on somebody's word, and the line says whose — and the reason they give is journaled with it. Only a
+    /// waiting item can be resumed; anything else is refused with its status, including an item the scan released a
+    /// moment earlier.
+    /// </summary>
+    public async Task<WorkItemDto> ResumeAsync(WorkItemResumeRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var actor = Actors.Resolve(request.Actor);
+
+        var errors = new ValidationErrors();
+        if (request.Actor is null)
+        {
+            errors.Add("actor", "required", "actor is required: a wait is ended on somebody's word, and the line says whose.");
+        }
+
+        WorkItemValidation.ValidateReason(request.Reason, errors);
+        errors.ThrowIfAny();
+        await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
+
+        var item = await LoadAsync(db, request.WorkItemId, cancellationToken).ConfigureAwait(false);
+        var wait = item.Status == WorkItemStatus.Waiting
+            ? await OpenWaits.OfAsync(db, item.Id, cancellationToken).ConfigureAwait(false)
+            : null;
+        if (wait is null)
+        {
+            throw DomainErrors.WorkItemNotWaiting(item.PublicId, item.Status);
+        }
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        OpenWaits.Release(db, journal, wait, item, WaitReleaseReason.ResumedByActor, actor, NormalizeReason(request.Reason), now);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The scan released, or somebody cancelled, the item between the read and this write; that stands, and the
+            // caller is told where the item is now.
+            db.ChangeTracker.Clear();
+            var current = await LoadAsync(db, item.PublicId, cancellationToken).ConfigureAwait(false);
+            throw DomainErrors.WorkItemNotWaiting(current.PublicId, current.Status);
+        }
+
         return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
     }
 

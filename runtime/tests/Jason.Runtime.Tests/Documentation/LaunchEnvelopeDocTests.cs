@@ -22,11 +22,15 @@ public sealed partial class LaunchEnvelopeDocTests
 
         Assert.Equal(LaunchEnvelope.CurrentVersion, (int?)shown["envelope_version"]);
         Assert.Equal(Members(written), Members(shown));
-        foreach (var member in (string[])["runtime", "role_memory", "memory_files"])
+        foreach (var member in (string[])["runtime", "role_memory", "memory_files", "resumption"])
         {
             Assert.True(shown[member] is JsonObject, $"The example's '{member}' is {shown[member]?.ToJsonString() ?? "null"}, not an object.");
             Assert.Equal(Members(written[member]!.AsObject()), Members(shown[member]!.AsObject()));
         }
+
+        var item = shown["resumption"]!["items"] is JsonArray { Count: > 0 } items ? items[0] : null;
+        Assert.True(item is JsonObject, $"The example's resumption names no item: {shown["resumption"]!.ToJsonString()}.");
+        Assert.Equal(Members(written["resumption"]!["items"]![0]!.AsObject()), Members(item!.AsObject()));
     }
 
     [Fact]
@@ -62,7 +66,13 @@ public sealed partial class LaunchEnvelopeDocTests
         "/work",
         new RuntimeLocation("/run/runtime.json", "v1", "jason"),
         new RoleMemoryLocation("cmp_A", "researcher", "prj_A"),
-        new MemoryFileLocations("/a/AGENTS.md", "/b/AGENTS.md", "/c/AGENTS.md"));
+        new MemoryFileLocations("/a/AGENTS.md", "/b/AGENTS.md", "/c/AGENTS.md"),
+        new Resumption(
+            "att_P",
+            1,
+            DateTimeOffset.UnixEpoch,
+            WaitReleaseReason.ChildrenEnded,
+            [new ResumedItem("wi_R", WorkItemKind.AiRole, "researcher", null, WorkItemStatus.Succeeded, null, null, new JsonObject(), false)]));
 
     private static List<string> Members(JsonObject node) => [.. node.Select(pair => pair.Key).Order(StringComparer.Ordinal)];
 

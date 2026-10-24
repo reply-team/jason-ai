@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -46,19 +45,7 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
             }
 
             var because = SnakeCaseEnumConverter<WaitReleaseReason>.Parse(row.Reason);
-            wait.Status = WaitStatus.Released;
-            wait.ReleasedAt = now;
-            wait.ReleaseReason = because;
-            WorkItemTransitions.Apply(item, WorkItemStatus.Created, now);
-            journal.Append(
-                db,
-                Actors.Dispatcher,
-                JournalKinds.WorkItemResumed,
-                campaign: null,
-                key: wait.Attempt?.PublicId,
-                updated: new JsonObject { ["because"] = row.Reason },
-                workItem: item,
-                attempt: wait.Attempt);
+            OpenWaits.Release(db, journal, wait, item, because, Actors.Dispatcher, reason: null, now);
 
             try
             {

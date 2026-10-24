@@ -62,7 +62,7 @@ internal static class Behaviours
     /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
     public static bool Known(string behaviour) =>
         behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope"
-            or "abandon" or "flood" or "researcher" or "manager" or "say";
+            or "abandon" or "flood" or "researcher" or "manager" or "say" or ChainPlanner.Name;
 
     /// <summary>
     /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
@@ -112,6 +112,8 @@ internal static class Behaviours
                 return await EchoEnvelopeAsync(rawEnvelope).ConfigureAwait(false);
             case "say":
                 return await SayAsync(options).ConfigureAwait(false);
+            case ChainPlanner.Name:
+                return await ChainPlanner.RunAsync(envelope, rawEnvelope, api).ConfigureAwait(false);
             default:
                 await Diagnostics.WriteAsync($"unknown behaviour '{behaviour}'").ConfigureAwait(false);
                 return UnknownBehaviour;

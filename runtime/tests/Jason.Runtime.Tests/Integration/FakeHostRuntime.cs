@@ -5,6 +5,7 @@ using Jason.Contracts.Discovery;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Tests.Dispatch;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Integration;
 
@@ -53,13 +54,24 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
 
     public JasonPaths Paths => Fixture.Paths;
 
-    public static async Task<FakeHostRuntime> StartAsync(CancellationToken ct, string settings = Settings)
+    /// <param name="prepare">What else the data directory holds before the runtime starts, written after the settings: a plugin, a route.</param>
+    /// <param name="configureServices">Registrations of the test's own, after the fixture's.</param>
+    public static async Task<FakeHostRuntime> StartAsync(
+        CancellationToken ct,
+        string settings = Settings,
+        Action<JasonPaths>? prepare = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         var clock = new FixedClock(Noon);
         var fixture = await RuntimeApiFixture.StartAsync(
             ct,
-            prepare: paths => File.WriteAllText(paths.UserSettingsFile, settings),
-            clock: clock);
+            prepare: paths =>
+            {
+                File.WriteAllText(paths.UserSettingsFile, settings);
+                prepare?.Invoke(paths);
+            },
+            clock: clock,
+            configureServices: configureServices);
 
         // The loop scans once the moment it starts; work seeded after that is the test's own to hand out.
         Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), ct));

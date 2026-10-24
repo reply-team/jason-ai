@@ -54,7 +54,7 @@ public partial class WaitingDocTests
         Assert.Contains($"`{DomainErrors.WaitTooLong(defaults.MaxWaitSeconds).Code}`", Row(text, "Dispatcher:AiRole:MaxWaitSeconds"), StringComparison.Ordinal);
         Assert.Contains($"`{DomainErrors.WaitLimitReached("wi_x", defaults.MaxWaits).Code}`", Row(text, "Dispatcher:AiRole:MaxWaits"), StringComparison.Ordinal);
         Assert.Contains(
-            $"a wait on more than {AttemptOutcomes.MaxWaitItems} items with `{DomainErrors.WaitTargetInvalid(AttemptOutcomes.MaxWaitItems + 1).Code}`",
+            $"a wait on more than {WorkItemWaitRequest.MaxWaitItems} items with `{DomainErrors.WaitTargetInvalid(WorkItemWaitRequest.MaxWaitItems + 1).Code}`",
             page,
             StringComparison.Ordinal);
     }

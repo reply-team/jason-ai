@@ -128,7 +128,7 @@ created ──► awaiting_approval ──► created              (a person app
 
 created ──► expired ──► created                        (by moving due_at into the future)
 
-processing ──► waiting ──► created                     (what it waited for happened, or its deadline came)
+processing ──► waiting ──► created                     (what it waited for happened, its deadline came, or somebody resumed it)
 
 created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
 created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
@@ -152,7 +152,9 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   `wait_limit_reached`; a refused wait changes nothing, and the run still holds its item. A waiting
   item holds no lease and keeps its campaign free, so the items it waits for can run. The scan's
   **resume** step returns it to `created` once the wait is over, writing `workitem_resumed` with why;
-  its next run is a new attempt. Cancelling or expiring the item closes the wait with it, and nothing
+  its next run is a new attempt, told why in the envelope's `resumption`. Anyone named may end a wait
+  before it is over with `workitem.resume` — the line is theirs and carries their reason, and an item
+  that is not waiting is refused with `workitem_not_waiting`. Cancelling or expiring the item closes the wait with it, and nothing
   resumes work that was stopped.
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
@@ -496,7 +498,7 @@ One JSON object is written to the child's standard input, which is then closed:
 
 ```json
 {
-  "envelope_version": 4,
+  "envelope_version": 5,
   "attempt_id": "att_…",
   "attempt_number": 1,
   "work_item_id": "wi_…",
@@ -517,6 +519,25 @@ One JSON object is written to the child's standard input, which is then closed:
     "client": "…/Jason/AGENTS.md",
     "project": "…/Jason/projects/acme-corp/AGENTS.md",
     "campaign": "…/Jason/projects/acme-corp/campaigns/q3-marketing-leads/AGENTS.md"
+  },
+  "resumption": {
+    "previous_attempt_id": "att_…",
+    "resumption_number": 1,
+    "waited_since": "2026-09-11T10:00:00.000Z",
+    "woke_because": "children_ended",
+    "items": [
+      {
+        "work_item_id": "wi_…",
+        "kind": "ai_role",
+        "role": "researcher",
+        "operation": null,
+        "status": "succeeded",
+        "finished_at": "2026-09-12T09:30:00.000Z",
+        "last_error_code": null,
+        "result": { "…": "the item's result, while the results fit" },
+        "result_omitted": false
+      }
+    ]
   }
 }
 ```
@@ -557,9 +578,30 @@ no rule, and every file of a role run by its own entry command, which is compose
 the same, with no rule to read it by — under a profile its read is refused — and the envelope never knows better
 than what the provenance recorded.
 
+`resumption` is null on every run that does not follow a wait. A run that does — the item's last run
+ended with `workitem.wait`, and the item's latest wait was released rather than closed some other way — is told about that wait here, composed **at the
+claim** from the rows the wait left: `previous_attempt_id` is the attempt that waited, `resumption_number`
+counts the item's released waits up to this one, `waited_since` is when the wait opened, and
+`woke_because` is the reason the wait's release recorded, verbatim — `children_ended`, `moment_reached`,
+`wait_ceiling` or `resumed_by_actor`. `block_cleared` never occurs for a role's wait: a provider
+operation is the one told it is blocked, and its relaunch carries no `resumption`. `items` are the items
+the wait named, in the order it named them, each with its status and its result. The results travel
+within 1 MiB per wait: they are given in that order while the running size of their JSON fits, and from
+the first one that does not fit, every later result is left out and marked `result_omitted` — the id
+and the status are always there, and `workitem.get` reads a result left out. The first attempt the claim
+hands out after a release is recorded on the wait as the one it resumed; an attempt that retries after
+it is told the same, because the wait it follows is still the last one.
+
+A role reads `resumption` the way it reads the rest of the envelope, because it is part of it: no new
+channel, no second message. The command that runs `ai_role` work writes the whole envelope to the
+child's standard input and composes no prompt from its parts; on the `claude_code` host, which runs in
+print mode, that standard input is the prompt, so the role's first input says whether it was woken and
+why. A host that composes a prompt from the envelope's parts composes `resumption` with them.
+
 Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
-version 3, and `memory_files`, with `role_memory`'s `project_id`, to version 4 — so a host written
-against an earlier version keeps working: it reads the fields it knows and ignores the rest.
+version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, and `resumption` to
+version 5 — so a host written against an earlier version keeps working: it reads the fields it knows
+and ignores the rest.
 
 ### Finding the API
 
@@ -571,9 +613,9 @@ gets this for free, because that is what the CLI does.
 
 ## Reporting back
 
-Three operations, all fenced by the attempt id. An attempt id that is unknown, belongs to another item,
+Four operations, all fenced by the attempt id. An attempt id that is unknown, belongs to another item,
 or is no longer the item's running attempt is answered with `409 stale_attempt`, `retryable: false` —
-one code, because the remedy is always the same: stop working on it. All three record that the executor
+one code, because the remedy is always the same: stop working on it. All four record that the executor
 is alive.
 
 | Operation | Request | Answers |
@@ -581,6 +623,7 @@ is alive.
 | `workitem.heartbeat` | `work_item_id`, `attempt_id` | `{work_item_id, attempt_id, lock_until, heartbeat_due_by}` — `heartbeat_due_by` is null when the item has no heartbeat |
 | `workitem.set_result` | `work_item_id`, `attempt_id`, `result` (any JSON) | the work item |
 | `workitem.complete` | `work_item_id`, `attempt_id`, `status: succeeded\|failed`, `result?`, `error?: {code, message, details?}` | the work item |
+| `workitem.wait` | `work_item_id`, `attempt_id`, `on?: [wi_…]` (at most 100), `mode?: all\|any` (`all` when items are named), `until?`, `reason?` | the work item, `waiting`, with its `wait` block |
 
 **An answer is held to the shape that was asked for.** Where the item declares a `result_format`, a
 completion whose result does not satisfy it is refused with `result_invalid` (400, not retryable) and
@@ -594,6 +637,27 @@ a failure has an error to report and no result to measure.
 
 `result_format` was an opaque value in earlier versions and is now a schema, validated when the item
 is written. A shape nothing can check is a request an executor may answer with persuasion.
+
+**A wait ends the attempt without finishing the item.** It names the items to wait for, a moment, or
+both, and the item is `waiting` until the first of them comes (see Lifecycle). It is refused in one
+order, and a refused wait changes nothing: first the fence, `stale_attempt`; then a manager check-in,
+which ends by finishing, and work that is not a role, with `wait_not_allowed`; then the items it names —
+no more than 100, each raised by this item's own attempts, in the same campaign, and none of them a
+decision, or `wait_target_invalid`, whose message names the first item refused and why; then a moment already past, refused as the caller's mistake with
+`validation_failed` on `until`; and last the settings and the bounds they set — `wait_too_long`, then
+`wait_limit_reached`. A wait of the wrong shape — neither
+items nor a moment, a mode with no items, a blank id, or an item named twice — is `validation_failed`
+before any of these. Ending a wait is
+`workitem.resume`, which is not an executor's operation: any named actor may call it — `actor` is
+required, and a request without one is `validation_failed` — with a reason that the `workitem_resumed`
+line keeps. It releases the wait and returns the item to `created` in one
+write, through the same routine as the scan's resume step.
+
+A waiting item is read with its `wait` block: `attempt_id`, `on` — each named item's `work_item_id` and
+`status`, in the order the wait named them — `mode`, `until`, `deadline` and `opened_at`. A listing
+carries the same block with `on_count` and `ended_count` — how many items the wait names, and how many
+of them have ended — in place of `on`, so a page stays small; `workitem.get` has the
+items. Any item that is not waiting has no block.
 
 `set_result` replaces the whole result and works only while the item is `processing`, so an executor
 that is killed halfway leaves behind what it had rather than nothing. It is deliberately **not** held
@@ -613,10 +677,10 @@ have passed since its attempt finished: the attempt is over, so nothing it does 
 **A settings file that does not validate is not the executor's problem.** `settings.json` can be edited
 while the runtime runs, and an edit the validator refuses costs the edit and not the runtime: the last
 settings that did validate stay in force, and every part of the runtime that reads them — the scan, the
-lease sweep, the claim, the handler, and these three operations — reads them the same way, so a child
+lease sweep, the claim, the handler, and these four operations — reads them the same way, so a child
 goes on heartbeating and reporting while a person repairs the file. Only a runtime that has never read
-settings the validator accepted has nothing to work from; `workitem.heartbeat` and a **failed**
-`workitem.complete` then answer `503 settings_unreadable`, `retryable: true`, and the whole remedy is
+settings the validator accepted has nothing to work from; `workitem.heartbeat`, `workitem.wait` and a
+**failed** `workitem.complete` then answer `503 settings_unreadable`, `retryable: true`, and the whole remedy is
 to repair the file and call again. A successful `workitem.complete` and `workitem.cancel` read no
 settings at all and are never refused for this reason.
 
@@ -633,6 +697,11 @@ settings at all and are never refused for this reason.
 | `result_too_large` | 400 | the result exceeds 1 MiB |
 | `result_invalid` | 400 | the result does not satisfy the `result_format` the item declared |
 | `role_exists` | 409 | a role of that name already exists |
+| `wait_not_allowed` | 400 | this item may not wait: a manager check-in ends by finishing, and only a role's work waits |
+| `wait_target_invalid` | 400 | an item named is not one this item's own attempts raised in its campaign, is a decision, or the wait names more than 100 |
+| `wait_too_long` | 400 | the moment is later than `Dispatcher:AiRole:MaxWaitSeconds` from now |
+| `wait_limit_reached` | 409 | the item has already waited `Dispatcher:AiRole:MaxWaits` times; finish instead |
+| `workitem_not_waiting` | 409 | only a waiting item can be resumed; the message says where the item is |
 | `settings_unreadable` | 503 | the settings are invalid and none have validated since the runtime started; repair the file and call again |
 | `internal_error` | 500 | the runtime failed to perform the operation, and `retryable: true` — except where what failed is a value stored in the database that this runtime cannot read, written by another version of Jason or changed outside it: then the message names its column, never its value, and `retryable: false`, since every read of it fails the same way until it is restored or repaired |
 | `validation_timed_out` | 503, and attempt | a pattern a value is measured against did not finish matching in time, twice, so nothing was decided and nothing changed: send the request again. At the claim the attempt ends `transient`; over a plugin's answer, `ambiguous` |

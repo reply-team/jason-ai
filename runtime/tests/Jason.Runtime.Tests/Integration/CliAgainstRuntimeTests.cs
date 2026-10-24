@@ -217,6 +217,47 @@ public class CliAgainstRuntimeTests
         Assert.Contains("succeeded", rendered, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A role's run ends by waiting, from the shell the way a host would end it, and a person ends the wait before its
+    /// moment: a wait the runtime refuses changes nothing, a waiting item reads with what it waits for, and resuming what
+    /// is no longer waiting is refused with where the item is.
+    /// </summary>
+    [Fact]
+    public async Task A_run_waits_and_a_person_resumes_it_from_the_command_line()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var fixture = host.Fixture;
+        await host.RoleAsync("fake", Ct, "hang");
+        var campaign = await host.CampaignAsync(Ct);
+        var item = (await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake" }, Ct)).Id;
+        var stranger = (await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake", not_before = FakeHostRuntime.Noon.AddDays(30) }, Ct)).Id;
+        await host.ScanAsync(Ct);
+        var attempt = (await host.WaitForStatusAsync(item, WorkItemStatus.Processing, Ct)).CurrentAttemptId!;
+
+        // An item this run did not raise is nothing it may wait for, and the refusal leaves the run where it was.
+        var refused = await ErrorAsync(fixture, "workitem", "wait", item, "--attempt", attempt, "--on", stranger);
+        Assert.Equal("wait_target_invalid", (string?)refused["error"]!["code"]);
+        Assert.Equal("processing", (string?)(await OkAsync(fixture, "workitem", "get", item))["status"]);
+
+        var waiting = await OkAsync(fixture, "workitem", "wait", item, "--attempt", attempt, "--until", "2026-09-15T12:00:00Z", "--reason", "the replies first");
+        Assert.Equal("waiting", (string?)waiting["status"]);
+        Assert.Equal(attempt, (string?)waiting["wait"]!["attempt_id"]);
+        Assert.Empty(waiting["wait"]!["on"]!.AsArray());
+
+        var (_, rendered, _) = await RunAsync(fixture, ["workitem", "get", item, "--human"]);
+        Assert.Contains("Waiting for:  until 2026-09-15 12:00:00 UTC", rendered, StringComparison.Ordinal);
+
+        var resumed = await OkAsync(fixture, "--actor", "human:marta@example.com", "workitem", "resume", item, "--reason", "go on now");
+        Assert.Equal("created", (string?)resumed["status"]);
+        Assert.Null(resumed["wait"]);
+        var line = Single((await OkAsync(fixture, "journal", "list", "--work-item", item))["items"]!.AsArray(), "workitem_resumed");
+        Assert.Equal(("human", "marta@example.com", "go on now"), ((string?)line["actor"]!["type"], (string?)line["actor"]!["id"], (string?)line["reason"]));
+        Assert.Equal("resumed_by_actor", (string?)line["new"]!["because"]);
+
+        var again = await ErrorAsync(fixture, "--actor", "human:marta@example.com", "workitem", "resume", item);
+        Assert.Equal("workitem_not_waiting", (string?)again["error"]!["code"]);
+    }
+
     private static JsonObject Single(JsonArray entries, string kind) =>
         Assert.Single(entries, entry => (string?)entry!["kind"] == kind)!.AsObject();
 

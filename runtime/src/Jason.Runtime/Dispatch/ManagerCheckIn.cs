@@ -18,6 +18,13 @@ public static class ManagerCheckIn
 {
     public const string Role = "manager";
 
+    /// <summary>Whether an item is a check-in: the manager's work the runtime itself created, rather than work a role raised for it.</summary>
+    public static bool Is(WorkItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return item.Role == Role && item.CreatedByType == ActorType.System;
+    }
+
     /// <summary>
     /// What a review's answer has to look like. A check-in that reported prose would be a review nobody could
     /// count, and the three outcomes are the three things a review can honestly have done.

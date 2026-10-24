@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +27,40 @@ public static class OpenWaits
         return db.WorkItemWaits
             .Where(w => workItemIds.Contains(w.WorkItemId) && w.Status == WaitStatus.Open)
             .ToDictionaryAsync(w => w.WorkItemId, ct);
+    }
+
+    /// <summary>
+    /// Releases a wait and sends its item back to <c>created</c> in one change, journaled as <c>workitem_resumed</c> with
+    /// why — the one routine for the scan's resume step and for a person's <c>workitem.resume</c>, so a wait is never
+    /// released with its item left waiting, where no scan would find it again. The scan passes the dispatcher and no
+    /// reason; a person's resume passes them and the reason they gave.
+    /// </summary>
+    public static void Release(
+        JasonDbContext db,
+        JournalWriter journal,
+        WorkItemWait wait,
+        WorkItem item,
+        WaitReleaseReason because,
+        ActorRef actor,
+        string? reason,
+        DateTime now)
+    {
+        ArgumentNullException.ThrowIfNull(wait);
+        ArgumentNullException.ThrowIfNull(journal);
+        wait.Status = WaitStatus.Released;
+        wait.ReleasedAt = now;
+        wait.ReleaseReason = because;
+        WorkItemTransitions.Apply(item, WorkItemStatus.Created, now);
+        journal.Append(
+            db,
+            actor,
+            JournalKinds.WorkItemResumed,
+            campaign: null,
+            key: wait.Attempt?.PublicId,
+            updated: new JsonObject { ["because"] = SnakeCaseEnumConverter<WaitReleaseReason>.Format(because) },
+            reason: reason,
+            workItem: item,
+            attempt: wait.Attempt);
     }
 
     /// <summary>Closes a wait with its item: <c>cancelled</c> or <c>expired</c>, at the moment the item stopped.</summary>

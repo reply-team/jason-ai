@@ -26,16 +26,59 @@ public sealed record LaunchEnvelope(
     string WorkDir,
     RuntimeLocation Runtime,
     RoleMemoryLocation? RoleMemory = null,
-    MemoryFileLocations? MemoryFiles = null)
+    MemoryFileLocations? MemoryFiles = null,
+    Resumption? Resumption = null)
 {
     /// <summary>
-    /// 4 since <see cref="MemoryFiles"/> was added and <see cref="RoleMemory"/> named the campaign's project, 3 since
-    /// <see cref="RoleMemory"/> was added, and 2 since <see cref="RuntimeLocation.CliCommand"/> was. Every change here
-    /// is additive, so a host written against version 1 keeps working: it reads the fields it knows and ignores the
-    /// rest.
+    /// 5 since <see cref="Resumption"/> was added, 4 since <see cref="MemoryFiles"/> was added and
+    /// <see cref="RoleMemory"/> named the campaign's project, 3 since <see cref="RoleMemory"/> was added, and 2 since
+    /// <see cref="RuntimeLocation.CliCommand"/> was. Every change here is additive, so a host written against version 1
+    /// keeps working: it reads the fields it knows and ignores the rest.
     /// </summary>
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 }
+
+/// <summary>
+/// What a run that follows a wait is told about it: which attempt waited, since when, why the wait ended, and how
+/// each work item it named stands now. Null on every other run. It is composed at the claim, from rows, as the
+/// context is; nothing in it is anybody's reading of what happened.
+/// </summary>
+/// <param name="PreviousAttemptId">The attempt that ended by waiting.</param>
+/// <param name="ResumptionNumber">Which of this item's waits this is the end of: 1 after its first.</param>
+/// <param name="WaitedSince">When the item began to wait.</param>
+/// <param name="WokeBecause">Why the wait ended, in the wait's own vocabulary.</param>
+/// <param name="Items">The work items the wait named, in the order it named them; empty for a wait on a moment alone.</param>
+public sealed record Resumption(
+    string PreviousAttemptId,
+    int ResumptionNumber,
+    DateTimeOffset WaitedSince,
+    WaitReleaseReason WokeBecause,
+    IReadOnlyList<ResumedItem> Items)
+{
+    /// <summary>
+    /// How much of the named items' results one resumption carries, counted over the whole wait as serialized JSON.
+    /// Results go in in the order the items were named while they fit; from the first that does not, each item says
+    /// <see cref="ResumedItem.ResultOmitted"/> instead, and the run reads it with <c>workitem.get</c>.
+    /// </summary>
+    public const int MaxResultBytes = 1024 * 1024;
+}
+
+/// <summary>One work item a wait named, as it stood when the next run was claimed.</summary>
+/// <param name="Role">The role, for agent work; null for a provider operation.</param>
+/// <param name="Operation">The canonical operation, for provider work; null for agent work.</param>
+/// <param name="LastErrorCode">The code its last attempt failed with, where it has one.</param>
+/// <param name="Result">Its result, unless <paramref name="ResultOmitted"/>; null where it has none.</param>
+/// <param name="ResultOmitted">True where the result did not fit in <see cref="Resumption.MaxResultBytes"/>.</param>
+public sealed record ResumedItem(
+    string WorkItemId,
+    WorkItemKind Kind,
+    string? Role,
+    string? Operation,
+    WorkItemStatus Status,
+    DateTimeOffset? FinishedAt,
+    string? LastErrorCode,
+    JsonNode? Result,
+    bool ResultOmitted);
 
 /// <summary>Where the runtime is, as a file to read rather than a secret to carry.</summary>
 /// <param name="CliCommand">

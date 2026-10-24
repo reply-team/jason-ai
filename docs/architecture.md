@@ -664,8 +664,10 @@ research result accepted
 
 Unnecessary AI arbitration would add cost and nondeterminism without improving the decision.
 
-In the current runtime, sequencing between work items is expressed with `not_before` and left to
-the planning roles, which create the next items as facts arrive; a predetermined-continuation
+In the current runtime, sequencing between work items is expressed with `not_before` and with
+waits — a role's run that ends with `workitem.wait` on the items it raised, a moment, or both, and is
+run again, told why, once the wait is over — and left to the planning roles, which create the next
+items as facts arrive; a predetermined-continuation
 mechanism inside the runtime — one item releasing another on completion — is deferred and not
 implemented. This section describes the accepted target, not a shipped capability.
 

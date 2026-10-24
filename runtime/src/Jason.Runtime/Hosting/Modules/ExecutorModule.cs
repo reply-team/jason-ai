@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Hosting.Modules;
 
-/// <summary>The three operations a running executor calls, fenced by its attempt id.</summary>
+/// <summary>The four operations a running executor calls, fenced by its attempt id.</summary>
 public static class ExecutorModule
 {
     public static IServiceCollection AddExecutorModule(this IServiceCollection services)
@@ -25,5 +25,7 @@ public static class ExecutorModule
             Operations.WorkItemSetResult, (service, request, cancellationToken) => service.SetResultAsync(request, cancellationToken));
         app.MapOperation<ExecutorService, WorkItemCompleteRequest, WorkItemDto>(
             Operations.WorkItemComplete, (service, request, cancellationToken) => service.CompleteAsync(request, cancellationToken));
+        app.MapOperation<ExecutorService, WorkItemWaitRequest, WorkItemDto>(
+            Operations.WorkItemWait, (service, request, cancellationToken) => service.WaitAsync(request, cancellationToken));
     }
 }

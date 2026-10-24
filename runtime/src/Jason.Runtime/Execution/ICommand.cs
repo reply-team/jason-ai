@@ -31,6 +31,7 @@ namespace Jason.Runtime.Execution;
 /// <param name="MemoryFiles">
 /// The person's memory files as the claim decided them, which the envelope names as they are; null for provider work.
 /// </param>
+/// <param name="Resumption">What the wait before this run ended with, as the claim composed it; null for a run that follows no wait.</param>
 public sealed record CommandContext(
     string WorkItemId,
     string AttemptId,
@@ -52,7 +53,8 @@ public sealed record CommandContext(
     IReadOnlyList<string>? Deny = null,
     string? CliCommand = null,
     string? ProjectId = null,
-    MemoryFileLocations? MemoryFiles = null);
+    MemoryFileLocations? MemoryFiles = null,
+    Resumption? Resumption = null);
 
 /// <summary>How the run ended, as the command saw it. What it means for the work item is decided elsewhere.</summary>
 public abstract record CommandOutcome

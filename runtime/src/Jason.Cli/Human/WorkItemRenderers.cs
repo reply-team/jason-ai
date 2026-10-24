@@ -40,6 +40,14 @@ public static class WorkItemRenderers
             Line("Last error:", Error(item.LastError)),
         };
 
+        // Only while it waits: what for, how far along, and until when, which no other line says.
+        if (item.Wait is { } wait)
+        {
+            lines.Add(Line("Waiting for:", WaitingFor(wait)));
+            lines.Add(Line("Wait opened:", RenderText.Moment(wait.OpenedAt)));
+            lines.Add(Line("Wait ends by:", RenderText.Moment(wait.Deadline)));
+        }
+
         // Only under a provider block: what a person clears at the provider, which no other line says.
         if (Blocked(item.LastError?.Block) is { } blocked)
         {
@@ -120,7 +128,7 @@ public static class WorkItemRenderers
                 item.ContactName ?? item.ContactId,
                 RenderText.Snake(item.Kind),
                 item.Role ?? item.Operation,
-                RenderText.Snake(item.Status),
+                item.Wait is { } wait ? $"{RenderText.Snake(item.Status)} ({WaitingFor(wait)})" : RenderText.Snake(item.Status),
                 item.Eligible ? "yes" : "no",
                 item.Priority.ToString(CultureInfo.InvariantCulture),
                 item.AttemptCount.ToString(CultureInfo.InvariantCulture),
@@ -128,6 +136,49 @@ public static class WorkItemRenderers
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);
+    }
+
+    /// <summary>
+    /// What a wait waits for, in a few words: how many of the items it named have ended and whether it needs all or one
+    /// of them, and the moment it names — for example "2 of 3 ended, all; until 2026-09-14 10:00:00Z".
+    /// </summary>
+    private static string WaitingFor(WaitDto wait)
+    {
+        var parts = new List<string>();
+        if (wait.On is { Count: > 0 } on)
+        {
+            var ended = on.Count(child => child.Status is WorkItemStatus.Succeeded or WorkItemStatus.Failed or WorkItemStatus.Cancelled or WorkItemStatus.Expired);
+            var mode = wait.Mode is { } given ? RenderText.Snake(given) : "all";
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"{ended} of {on.Count} ended, {mode}"));
+        }
+
+        if (wait.Until is { } until)
+        {
+            parts.Add("until " + RenderText.Moment(until));
+        }
+
+        return string.Join("; ", parts);
+    }
+
+    /// <summary>
+    /// What a wait waits for as a listing has it, from the counts it carries rather than the items, in the same words as
+    /// a single item's: for example "2 of 3 ended, all; until 2026-09-14 10:00:00Z".
+    /// </summary>
+    private static string WaitingFor(WaitSummaryDto wait)
+    {
+        var parts = new List<string>();
+        if (wait.OnCount > 0)
+        {
+            var mode = wait.Mode is { } given ? RenderText.Snake(given) : "all";
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"{wait.EndedCount} of {wait.OnCount} ended, {mode}"));
+        }
+
+        if (wait.Until is { } until)
+        {
+            parts.Add("until " + RenderText.Moment(until));
+        }
+
+        return string.Join("; ", parts);
     }
 
     /// <summary>A count, for a person: the number alone.</summary>

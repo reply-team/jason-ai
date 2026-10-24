@@ -31,5 +31,7 @@ public static class WorkItemModule
             Operations.WorkItemUpdate, (service, request, cancellationToken) => service.UpdateAsync(request, cancellationToken));
         app.MapOperation<WorkItemService, WorkItemCancelRequest, WorkItemDto>(
             Operations.WorkItemCancel, (service, request, cancellationToken) => service.CancelAsync(request, cancellationToken));
+        app.MapOperation<WorkItemService, WorkItemResumeRequest, WorkItemDto>(
+            Operations.WorkItemResume, (service, request, cancellationToken) => service.ResumeAsync(request, cancellationToken));
     }
 }

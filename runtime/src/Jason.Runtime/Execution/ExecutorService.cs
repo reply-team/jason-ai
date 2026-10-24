@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
@@ -14,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Execution;
 
 /// <summary>
-/// The three operations a running executor calls. Each one is fenced by the attempt id: the runtime asks the
+/// The four operations a running executor calls. Each one is fenced by the attempt id: the runtime asks the
 /// database, in a single guarded statement, whether this attempt still owns this work item, and an executor
 /// that lost its lease is told to stop rather than allowed to write over the run that replaced it.
 /// </summary>
@@ -35,6 +36,9 @@ public sealed partial class ExecutorService(
     public const int MaxErrorMessageLength = 2000;
 
     public const int MaxReasonLength = 2000;
+
+    /// <summary>The prefix of a decision's public id, which a wait names only to be refused.</summary>
+    private const string DecisionPrefix = "dec_";
 
     /// <summary>
     /// The fence as a query, so what the runtime guards on can be read rather than trusted: the attempt is the
@@ -156,6 +160,118 @@ public sealed partial class ExecutorService(
     }
 
     /// <summary>
+    /// The attempt ends by waiting, and its item waits until what it names has happened; the next run is a new attempt,
+    /// told in its envelope what it waited for. The refusals come in a fixed order, each one after the fence, so a caller
+    /// that lost its attempt is told only that: the fence; a check-in, or provider work, that may not wait
+    /// (<c>wait_not_allowed</c>); the named items, each raised by an attempt of this item in its campaign and none of them
+    /// a decision (<c>wait_target_invalid</c>); a moment already past; and last the bounds, which
+    /// <see cref="AttemptOutcomes.Wait"/> holds where the wait is written.
+    /// </summary>
+    public async Task<WorkItemDto> WaitAsync(WorkItemWaitRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        IReadOnlyList<string> on = [];
+        var (workItemId, attemptId) = RequireIds(request.WorkItemId, request.AttemptId, errors =>
+        {
+            on = ValidateWait(request, errors);
+            ValidateReason(request.Reason, errors);
+        });
+
+        // Items named and no mode is the common wait, on everything this run raised, so it is the default; a mode
+        // without items was refused above.
+        var mode = on.Count == 0 ? (WaitMode?)null : request.Mode ?? WaitMode.All;
+        var until = request.Until?.UtcDateTime;
+        var now = clock.GetUtcNow().UtcDateTime;
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await FenceAsync(workItemId, attemptId, now, cancellationToken).ConfigureAwait(false);
+
+        var item = await LoadAsync(workItemId, cancellationToken).ConfigureAwait(false);
+        if (ManagerCheckIn.Is(item))
+        {
+            throw DomainErrors.WaitNotAllowed(item.PublicId, "a check-in waits for its cadence; finish it, and the next review comes round.");
+        }
+
+        if (item.Kind != WorkItemKind.AiRole)
+        {
+            throw DomainErrors.WaitNotAllowed(item.PublicId, "only a role's work waits; a provider operation ends through its plugin.");
+        }
+
+        var children = await TargetsAsync(item, on, cancellationToken).ConfigureAwait(false);
+        if (until <= now)
+        {
+            var errors = new ValidationErrors();
+            errors.Add("until", "in_the_past", "until must be later than now; a moment already past is nothing to wait for.");
+            errors.ThrowIfAny();
+        }
+
+        // The bounds are read from the settings, so they are asked last: a wait refused for what it named never
+        // depended on them.
+        if (!settings.TryCurrent(out _))
+        {
+            throw DomainErrors.SettingsUnreadable(DispatcherOptions.Section);
+        }
+
+        var attempt = WorkItemQueries.LiveAttempt(item)!;
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
+        var wait = outcomes.Wait(db, item, attempt, children, mode, until, Actors.ForAttempt(attempt), reason);
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false) with
+        {
+            Wait = WaitBlocks.Of(wait, attempt.PublicId, children),
+        };
+    }
+
+    /// <summary>
+    /// The named items, in the order they were named, each one checked in that order, so a refusal names the first one
+    /// refused: not a decision, raised by an attempt of this item and in its campaign. Because only the item's own runs raise what it may wait for, no wait can name an ancestor, and no chain
+    /// of waits can close on itself.
+    /// </summary>
+    private async Task<List<WorkItem>> TargetsAsync(WorkItem item, IReadOnlyList<string> on, CancellationToken cancellationToken)
+    {
+        if (on.Count > WorkItemWaitRequest.MaxWaitItems)
+        {
+            throw DomainErrors.WaitTargetInvalid(on.Count);
+        }
+
+        var raisedBy = item.Attempts.Select(a => a.PublicId).ToHashSet(StringComparer.Ordinal);
+        var found = await db.WorkItems
+            .Where(w => on.Contains(w.PublicId))
+            .ToDictionaryAsync(w => w.PublicId, StringComparer.Ordinal, cancellationToken)
+            .ConfigureAwait(false);
+
+        var children = new List<WorkItem>(on.Count);
+        foreach (var id in on)
+        {
+            if (id.StartsWith(DecisionPrefix, StringComparison.Ordinal))
+            {
+                throw DomainErrors.WaitTargetDecision(id);
+            }
+
+            if (!found.TryGetValue(id, out var child))
+            {
+                throw DomainErrors.WaitTargetNotRaised(id, item.PublicId, "no such work item exists");
+            }
+
+            if (child.CampaignId != item.CampaignId)
+            {
+                throw DomainErrors.WaitTargetNotRaised(id, item.PublicId, "it is in another campaign");
+            }
+
+            if (child.CreatedByType != ActorType.Attempt || child.CreatedById is not { } by || !raisedBy.Contains(by))
+            {
+                throw DomainErrors.WaitTargetNotRaised(id, item.PublicId, "no attempt of this item raised it");
+            }
+
+            children.Add(child);
+        }
+
+        return children;
+    }
+
+    /// <summary>
     /// The fence as one statement, for every caller a launched role reaches through: the attempt is the named
     /// one, it is running, it owns the named item, and the item is processing. One UPDATE decides ownership —
     /// a read followed by a write would leave a window in which the lease could change hands, so the guard
@@ -182,7 +298,7 @@ public sealed partial class ExecutorService(
         }
     }
 
-    /// <summary>The fence, for this service's own three operations: one implementation, named twice.</summary>
+    /// <summary>The fence, for this service's own four operations: one implementation, named twice.</summary>
     private Task FenceAsync(string workItemId, string attemptId, DateTime now, CancellationToken cancellationToken) =>
         RequireAttemptAsync(db, workItemId, attemptId, now, cancellationToken);
 
@@ -265,6 +381,38 @@ public sealed partial class ExecutorService(
         {
             errors.Add("error.message", "too_long", string.Create(CultureInfo.InvariantCulture, $"error.message must be at most {MaxErrorMessageLength} characters."));
         }
+    }
+
+    /// <summary>
+    /// The shape of a wait, before anything is read: something to wait for, a mode only beside items, and each item named
+    /// once. Returns the named ids, trimmed, in the order given.
+    /// </summary>
+    private static IReadOnlyList<string> ValidateWait(WorkItemWaitRequest request, ValidationErrors errors)
+    {
+        var on = request.On ?? [];
+        if (on.Count == 0 && request.Until is null)
+        {
+            errors.Add("on", "required", "a wait names at least one work item in on, a moment in until, or both.");
+        }
+
+        if (on.Count == 0 && request.Mode is not null)
+        {
+            errors.Add("mode", "not_allowed", "mode says how a wait on work items ends; a wait on a moment alone has none.");
+        }
+
+        if (on.Any(string.IsNullOrWhiteSpace))
+        {
+            errors.Add("on", "invalid", "on holds work item ids, as wi_…, none of them blank.");
+            return [];
+        }
+
+        var trimmed = on.Select(id => id.Trim()).ToList();
+        if (trimmed.Distinct(StringComparer.Ordinal).Count() != trimmed.Count)
+        {
+            errors.Add("on", "duplicate", "on names each work item once.");
+        }
+
+        return trimmed;
     }
 
     private static void ValidateReason(string? reason, ValidationErrors errors)

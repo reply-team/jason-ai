@@ -46,7 +46,13 @@ public sealed record ClaimedWork(
     /// its notes are kept under, read where the memory files were decided, so a campaign moved between the claim and the
     /// start of the attempt gives the role one project's files and not another's notes. Null for provider work only.
     /// </summary>
-    string? ProjectPublicId = null);
+    string? ProjectPublicId = null,
+
+    /// <summary>
+    /// For a role's run that follows a wait, what the wait ended with, composed at the claim inside the claim's own
+    /// transaction; null for every other run, provider work included.
+    /// </summary>
+    Resumption? Resumption = null);
 
 /// <summary>The per-item half of an agent launch, as the claim resolved it.</summary>
 public sealed record AgentLaunch(IReadOnlyList<string> Deny, string CliCommand);

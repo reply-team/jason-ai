@@ -206,7 +206,10 @@ public sealed record WorkItemDto(
     string CampaignName = "",
 
     /// <summary>The person's name, or null where the item is about nobody or the person has no name.</summary>
-    string? ContactName = null);
+    string? ContactName = null,
+
+    /// <summary>What a waiting item waits for; absent unless the item is waiting.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WaitDto? Wait = null);
 
 /// <summary>A listing stays small: no context, no result, no attempts.</summary>
 public sealed record WorkItemSummaryDto(
@@ -234,7 +237,10 @@ public sealed record WorkItemSummaryDto(
     string? ContactName = null,
 
     /// <summary>When the live attempt started, while the item is processing; null otherwise.</summary>
-    DateTimeOffset? RunningSince = null);
+    DateTimeOffset? RunningSince = null,
+
+    /// <summary>What a waiting item waits for, without the items themselves; absent unless the item is waiting.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WaitSummaryDto? Wait = null);
 
 public sealed record WorkItemCreateRequest(
     string? CampaignId,
@@ -342,3 +348,67 @@ public sealed record WorkItemCompleteRequest(
     JsonNode? Result,
     CompletionErrorDto? Error,
     string? Reason);
+
+/// <summary>
+/// The attempt ends by waiting, and its item waits: for the work items named in <paramref name="On"/> to end — all of
+/// them, or any one — for the moment <paramref name="Until"/>, or for whichever of the two comes first. The next run of
+/// the item is a new attempt, told in its launch envelope what it waited for.
+/// </summary>
+/// <param name="On">The work items to wait for, in the order the next run is told about them; each one created by an attempt of this item.</param>
+/// <param name="Mode">Whether every named item must end, or any one; <c>all</c> when items are named and no mode is, and never given without items.</param>
+/// <param name="Until">The moment to wait for, or the latest one to wait until when items are named; later than now.</param>
+public sealed record WorkItemWaitRequest(
+    string? WorkItemId,
+    string? AttemptId,
+    IReadOnlyList<string>? On,
+    WaitMode? Mode,
+    DateTimeOffset? Until,
+    string? Reason)
+{
+    /// <summary>The most work items one wait may name.</summary>
+    public const int MaxWaitItems = 100;
+}
+
+/// <summary>A person, or any named actor, ends a wait by hand: the item goes back to the queue as if what it waited for had happened.</summary>
+public sealed record WorkItemResumeRequest(string? WorkItemId, ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// The open wait of a waiting item: what it waits for and until when. Identifiers, statuses and moments only, so it
+/// reads the same whatever the items are about.
+/// </summary>
+/// <param name="AttemptId">The attempt that ended by waiting; every wait a role makes has one.</param>
+/// <param name="On">The named work items in the order they were named, each with where it stands now.</param>
+/// <param name="Mode">Whether every named item must end, or any one; null for a wait on a moment alone.</param>
+/// <param name="Until">The moment the wait named; null where it named none.</param>
+/// <param name="Deadline">When the wait ends whatever happens: the moment it named, or the ceiling; every wait a role makes has one.</param>
+/// <param name="OpenedAt">When the item began to wait.</param>
+public sealed record WaitDto(
+    string? AttemptId,
+    IReadOnlyList<WaitItemDto> On,
+    WaitMode? Mode,
+    DateTimeOffset? Until,
+    DateTimeOffset? Deadline,
+    DateTimeOffset OpenedAt);
+
+/// <summary>
+/// The open wait of a waiting item as a listing carries it: how many items it names and how many of them have ended, not
+/// which or how each stands, so a page stays small; <c>workitem.get</c> has the items.
+/// </summary>
+/// <param name="AttemptId">The attempt that ended by waiting.</param>
+/// <param name="Mode">Whether every named item must end, or any one; null for a wait on a moment alone.</param>
+/// <param name="Until">The moment the wait named; null where it named none.</param>
+/// <param name="Deadline">When the wait ends whatever happens.</param>
+/// <param name="OpenedAt">When the item began to wait.</param>
+/// <param name="OnCount">How many work items the wait names; 0 for a wait on a moment alone.</param>
+/// <param name="EndedCount">How many of them have ended — succeeded, failed, cancelled or expired.</param>
+public sealed record WaitSummaryDto(
+    string? AttemptId,
+    WaitMode? Mode,
+    DateTimeOffset? Until,
+    DateTimeOffset? Deadline,
+    DateTimeOffset OpenedAt,
+    int OnCount,
+    int EndedCount);
+
+/// <summary>One work item a wait names, and where it stands.</summary>
+public sealed record WaitItemDto(string WorkItemId, WorkItemStatus Status);

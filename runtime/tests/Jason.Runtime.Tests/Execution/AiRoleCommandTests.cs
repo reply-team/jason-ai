@@ -157,7 +157,7 @@ public class AiRoleCommandTests
         await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), projectId: "prj_one");
 
         var echoed = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
-        Assert.Contains("\"envelope_version\":4", echoed, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":5", echoed, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":", echoed, StringComparison.Ordinal);
 
         var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(echoed, JasonJson.Options)!;
@@ -181,6 +181,32 @@ public class AiRoleCommandTests
 
         // Where the role's notes are at its three levels: the campaign's, its project's, and the client's, which names neither.
         Assert.Equal(new RoleMemoryLocation("cmp_one", "researcher", "prj_one"), envelope.RoleMemory);
+
+        // A run that follows no wait is told of none.
+        Assert.Null(envelope.Resumption);
+    }
+
+    /// <summary>
+    /// The resumption the claim composed reaches the child in the envelope it already reads, as it was handed over: the
+    /// role learns why it was woken from the same object that tells it everything else, and no other way.
+    /// </summary>
+    [Fact]
+    public async Task The_envelope_carries_the_resumption_the_claim_composed()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        var resumption = new Resumption(
+            "att_01J0000000000000000000000P",
+            1,
+            new DateTimeOffset(2026, 9, 11, 10, 0, 0, TimeSpan.Zero),
+            WaitReleaseReason.ChildrenEnded,
+            [new ResumedItem("wi_01J0000000000000000000000R", WorkItemKind.AiRole, "researcher", null, WorkItemStatus.Succeeded, null, null, new JsonObject { ["found"] = 3 }, false)]);
+
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), resumption: resumption);
+
+        var told = Envelope(workDir).Resumption!;
+        Assert.Equal((resumption.PreviousAttemptId, resumption.ResumptionNumber, resumption.WaitedSince, resumption.WokeBecause), (told.PreviousAttemptId, told.ResumptionNumber, told.WaitedSince, told.WokeBecause));
+        Assert.Equal(3, (int?)Assert.Single(told.Items).Result!["found"]);
     }
 
     /// <summary>
@@ -336,7 +362,8 @@ public class AiRoleCommandTests
         RolesOptions? roles = null,
         JsonObject? brief = null,
         string? projectId = null,
-        MemoryFileLocations? memoryFiles = null)
+        MemoryFileLocations? memoryFiles = null,
+        Resumption? resumption = null)
     {
         var command = new AiRoleCommand(
             paths,
@@ -361,7 +388,8 @@ public class AiRoleCommandTests
             kill?.Token ?? CancellationToken.None,
             Deny: deny,
             ProjectId: projectId,
-            MemoryFiles: memoryFiles);
+            MemoryFiles: memoryFiles,
+            Resumption: resumption);
 
         return command.RunAsync(context, Ct);
     }

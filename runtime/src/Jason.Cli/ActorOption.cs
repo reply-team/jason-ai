@@ -24,7 +24,8 @@ public static class ActorOption
     /// Turns the option text into the <c>actor</c> object of a request body. Absent text means no claim of the
     /// caller's own — but a CLI running inside a launched executor is that attempt whether or not it says so, and
     /// the launcher puts the attempt's id in the environment for exactly this reason. Traceability that depended
-    /// on an agent remembering a flag would be lost the first time one forgot.
+    /// on an agent remembering a flag would be lost the first time one forgot. A verb that requires an actor, such
+    /// as <c>workitem resume</c>, is satisfied by that attempt in the same way.
     /// </summary>
     public static JsonObject? Parse(string? text) =>
         Parse(text, Environment.GetEnvironmentVariable(ExecutionEnvironment.AttemptIdVariable));

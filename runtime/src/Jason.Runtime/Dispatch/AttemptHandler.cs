@@ -363,5 +363,6 @@ public static class AttemptHandler
         work.Agent?.Deny,
         work.Agent?.CliCommand,
         work.ProjectPublicId,
-        work.MemoryFiles);
+        work.MemoryFiles,
+        work.Resumption);
 }

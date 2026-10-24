@@ -379,7 +379,7 @@ public class AttemptOutcomesTests
         await using var db = database.Open();
         var (outcomes, _) = NewOutcomes();
         var (item, attempt) = await SeedAsync(db, AttemptStatus.Running, WorkItemStatus.Processing);
-        var children = await ChildrenAsync(db, item, AttemptOutcomes.MaxWaitItems + 1);
+        var children = await ChildrenAsync(db, item, WorkItemWaitRequest.MaxWaitItems + 1);
         var actor = Actors.ForAttempt(attempt);
 
         var error = Assert.Throws<InvalidRequestException>(() => outcomes.Wait(db, item, attempt, children, WaitMode.All, null, actor));
@@ -388,7 +388,7 @@ public class AttemptOutcomesTests
         Assert.Contains("101", error.Message, StringComparison.Ordinal);
         AssertNothingMoved(db, item, attempt);
 
-        var wait = outcomes.Wait(db, item, attempt, [.. children.Take(AttemptOutcomes.MaxWaitItems)], WaitMode.All, null, actor);
+        var wait = outcomes.Wait(db, item, attempt, [.. children.Take(WorkItemWaitRequest.MaxWaitItems)], WaitMode.All, null, actor);
         Assert.Equal(100, wait.Items.Count);
     }
 
