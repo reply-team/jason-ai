@@ -158,6 +158,8 @@ public class OptionsValidationTests
         Assert.Equal(3600, options.AiRole.TimeoutSeconds);
         Assert.Equal(120, options.AiRole.HeartbeatSeconds);
         Assert.Equal(3, options.AiRole.MaxAttempts);
+        Assert.Equal(1_209_600, options.AiRole.MaxWaitSeconds);
+        Assert.Equal(20, options.AiRole.MaxWaits);
         Assert.Equal(600, options.ProviderOp.TimeoutSeconds);
         Assert.Equal(0, options.ProviderOp.HeartbeatSeconds);
         Assert.Equal(3, options.ProviderOp.MaxAttempts);
@@ -188,14 +190,37 @@ public class OptionsValidationTests
         Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { EventsCadenceSeconds = 86_400 }).Succeeded);
     }
 
+    /// <summary>A wait's ceiling is a minute to thirty days, and an item waits once to a hundred times; nothing outside is clamped.</summary>
+    [Theory]
+    [InlineData(59, 20, "Dispatcher:AiRole:MaxWaitSeconds must be between 60 and 2592000; got 59.")]
+    [InlineData(2_592_001, 20, "Dispatcher:AiRole:MaxWaitSeconds must be between 60 and 2592000; got 2592001.")]
+    [InlineData(1_209_600, 0, "Dispatcher:AiRole:MaxWaits must be between 1 and 100; got 0.")]
+    [InlineData(1_209_600, 101, "Dispatcher:AiRole:MaxWaits must be between 1 and 100; got 101.")]
+    public void A_role_waits_at_most_thirty_days_at_a_time_and_a_hundred_times(int maxWaitSeconds, int maxWaits, string failure)
+    {
+        var result = new DispatcherOptionsValidator().Validate(
+            null,
+            new DispatcherOptions { AiRole = new AiRoleDefaults { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3, MaxWaitSeconds = maxWaitSeconds, MaxWaits = maxWaits } });
+
+        Assert.True(result.Failed, $"A ceiling of {maxWaitSeconds} s and {maxWaits} waits was accepted.");
+        Assert.Contains(failure, result.Failures!);
+        foreach (var (seconds, waits) in new[] { (60, 1), (2_592_000, 100) })
+        {
+            var edge = new DispatcherOptionsValidator().Validate(
+                null,
+                new DispatcherOptions { AiRole = new AiRoleDefaults { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3, MaxWaitSeconds = seconds, MaxWaits = waits } });
+            Assert.True(edge.Succeeded, $"A ceiling of {seconds} s and {waits} waits was refused: {edge.FailureMessage}");
+        }
+    }
+
     [Fact]
     public void A_heartbeat_interval_is_either_off_or_at_least_ten_seconds()
     {
-        var tooShort = new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { AiRole = new KindDefaults { TimeoutSeconds = 3600, HeartbeatSeconds = 5, MaxAttempts = 3 } });
+        var tooShort = new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { AiRole = new AiRoleDefaults { TimeoutSeconds = 3600, HeartbeatSeconds = 5, MaxAttempts = 3 } });
 
         Assert.True(tooShort.Failed);
         Assert.Contains("Dispatcher:AiRole:HeartbeatSeconds must be 0 or between 10 and 3600; got 5.", tooShort.Failures!);
-        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { AiRole = new KindDefaults { TimeoutSeconds = 3600, HeartbeatSeconds = 0, MaxAttempts = 3 } }).Succeeded);
+        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { AiRole = new AiRoleDefaults { TimeoutSeconds = 3600, HeartbeatSeconds = 0, MaxAttempts = 3 } }).Succeeded);
     }
 
     [Fact]

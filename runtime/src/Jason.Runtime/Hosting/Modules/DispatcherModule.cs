@@ -34,6 +34,7 @@ public static class DispatcherModule
             .AddScoped<EventStore>()
             .AddScoped<InboundSync>()
             .AddScoped<Summoner>()
+            .AddScoped<Resumer>()
             .AddScoped<Claimer>()
             .AddScoped<Notifier>()
             .AddScoped<StartupRecovery>();

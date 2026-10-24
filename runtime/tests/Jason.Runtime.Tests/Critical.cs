@@ -125,7 +125,10 @@ public enum Family
     /// <summary>The claim's checks, in their published order, fail closed before a child exists, with no fallback to another plugin or profile.</summary>
     W3,
 
-    /// <summary>Attempts end through <c>AttemptOutcomes</c>: retried below the limit, final at it, leases and restarts.</summary>
+    /// <summary>
+    /// Attempts end through <c>AttemptOutcomes</c>: retried below the limit, final at it, leases and restarts, and a run
+    /// that ends waiting, which costs no attempt and is released by the scan, never lost.
+    /// </summary>
     W4,
 
     /// <summary>Never repeated after an ambiguous end: a lost answer costs a recovery read or a person, never a second effect.</summary>

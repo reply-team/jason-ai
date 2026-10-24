@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -28,15 +29,29 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
     /// <summary>
     /// The caller has already established that the item may still be cancelled. A decision this item was waiting
     /// for — or one it had already been given — goes with it: a live approval about work that can never run is
-    /// the one row that would make <c>approval.list</c> untrue.
+    /// the one row that would make <c>approval.list</c> untrue. So does the wait of a waiting item, which the caller
+    /// reads with <see cref="OpenWaits"/>: a wait left open about work that was stopped would be released by the next scan.
+    /// A waiting item whose open wait the caller could not find was released between the caller's two reads, so the item
+    /// it holds is no longer the one in the database: that is answered as the concurrent change it is, and a retry reads
+    /// the released item and cancels it.
     /// </summary>
-    public void Cancel(JasonDbContext db, WorkItem item, ActorRef actor, string? reason, Approval? live = null)
+    public void Cancel(JasonDbContext db, WorkItem item, ActorRef actor, string? reason, Approval? live = null, WorkItemWait? wait = null)
     {
         ArgumentNullException.ThrowIfNull(item);
+        if (item.Status == WorkItemStatus.Waiting && wait is null)
+        {
+            throw DomainErrors.ConcurrentUpdate();
+        }
+
         var now = clock.GetUtcNow().UtcDateTime;
         if (live is not null)
         {
             ApprovalGate.Resolve(db, journal, item, live, ApprovalStatus.Cancelled, actor, reason, now);
+        }
+
+        if (wait is not null)
+        {
+            OpenWaits.Close(wait, WaitStatus.Cancelled, now);
         }
 
         var attempt = WorkItemQueries.LiveAttempt(item);
@@ -111,8 +126,8 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
     }
 
     /// <summary>
-    /// The live decisions of a whole batch, read in one query rather than one per item: archiving a campaign can
-    /// cancel a great deal of work, and a query per item is how that becomes slow without anybody noticing.
+    /// The live decisions and open waits of a whole batch, read in one query each rather than one per item: archiving a
+    /// campaign can cancel a great deal of work, and a query per item is how that becomes slow without anybody noticing.
     /// </summary>
     private async Task<int> CancelAllAsync(
         JasonDbContext db,
@@ -126,10 +141,11 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
             .Where(a => ids.Contains(a.WorkItemId) && (a.Status == ApprovalStatus.Pending || a.Status == ApprovalStatus.Approved))
             .ToDictionaryAsync(a => a.WorkItemId, cancellationToken)
             .ConfigureAwait(false);
+        var waits = await OpenWaits.OfAsync(db, ids, cancellationToken).ConfigureAwait(false);
 
         foreach (var item in items)
         {
-            Cancel(db, item, actor, reason, live.GetValueOrDefault(item.Id));
+            Cancel(db, item, actor, reason, live.GetValueOrDefault(item.Id), waits.GetValueOrDefault(item.Id));
         }
 
         return items.Count;

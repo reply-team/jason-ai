@@ -40,6 +40,40 @@ public class ExpirerTests
         Assert.Null(entry.AttemptId);
     }
 
+    /// <summary>
+    /// A waiting item holds no attempt, so it is unclaimed work: past its due date it expires like any other, and its
+    /// open wait closes with it — expired, never released, so the resume step has nothing left to hand back.
+    /// </summary>
+    [Fact]
+    public async Task A_waiting_item_past_its_due_date_expires_and_its_wait_closes_with_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var item = WorkItemFactory.NewAiRole(campaign, "planner", Noon, w =>
+        {
+            w.Status = WorkItemStatus.Waiting;
+            w.DueAt = Noon.AddMinutes(-1);
+        });
+        var yielded = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Yielded, Noon.AddHours(-1));
+        yielded.FinishedAt = Noon.AddHours(-1);
+        db.Campaigns.Add(campaign);
+        db.WorkItems.Add(item);
+        db.Attempts.Add(yielded);
+        db.WorkItemWaits.Add(new WorkItemWait { WorkItem = item, Attempt = yielded, Until = Noon.AddDays(1), Deadline = Noon.AddDays(1), OpenedAt = Noon.AddHours(-1) });
+        await db.SaveChangesAsync(Ct);
+        db.ChangeTracker.Clear();
+
+        Assert.Equal(1, await NewExpirer().ExpireAsync(db, Ct));
+
+        Assert.Equal(WorkItemStatus.Expired, (await db.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(Ct);
+        Assert.True(wait.Status == WaitStatus.Expired, $"The wait of an expired item is {wait.Status}.");
+        Assert.Equal(Noon, wait.ReleasedAt);
+        Assert.Null(wait.ReleaseReason);
+        Assert.Single(await db.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemExpired).ToListAsync(Ct));
+    }
+
     [Fact]
     public async Task An_item_whose_due_date_is_still_ahead_is_left_alone()
     {

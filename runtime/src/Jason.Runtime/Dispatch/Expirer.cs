@@ -16,7 +16,8 @@ namespace Jason.Runtime.Dispatch;
 /// that is nearly done to honour a deadline that is already missed.
 /// <para>
 /// Work waiting for a person is unclaimed work, so it expires too, and the decision it was waiting for is ended
-/// with it. A decision nobody made in time is not one anybody should still be offered.
+/// with it. A decision nobody made in time is not one anybody should still be offered. Waiting work holds no attempt
+/// either, so it expires the same way, and its open wait closes with it rather than being released later.
 /// </para>
 /// </summary>
 public sealed class Expirer(JournalWriter journal, TimeProvider clock)
@@ -28,7 +29,7 @@ public sealed class Expirer(JournalWriter journal, TimeProvider clock)
         // The ids first, the rows one at a time: a caller who cancelled one of them a moment ago must not cost
         // the rest of the backlog its expiry, and a whole batch that keeps failing would log an error a tick.
         var overdue = await db.WorkItems.AsNoTracking()
-            .Where(w => (w.Status == WorkItemStatus.Created || w.Status == WorkItemStatus.AwaitingApproval)
+            .Where(w => (w.Status == WorkItemStatus.Created || w.Status == WorkItemStatus.AwaitingApproval || w.Status == WorkItemStatus.Waiting)
                 && w.DueAt != null && w.DueAt < now)
             .Select(w => w.Id)
             .ToListAsync(ct)
@@ -39,7 +40,8 @@ public sealed class Expirer(JournalWriter journal, TimeProvider clock)
         {
             var item = await db.WorkItems
                 .FirstOrDefaultAsync(
-                    w => w.Id == id && (w.Status == WorkItemStatus.Created || w.Status == WorkItemStatus.AwaitingApproval),
+                    w => w.Id == id
+                        && (w.Status == WorkItemStatus.Created || w.Status == WorkItemStatus.AwaitingApproval || w.Status == WorkItemStatus.Waiting),
                     ct)
                 .ConfigureAwait(false);
             if (item is null)
@@ -50,6 +52,11 @@ public sealed class Expirer(JournalWriter journal, TimeProvider clock)
             if (await ApprovalGate.LiveAsync(db, item.Id, ct).ConfigureAwait(false) is { } live)
             {
                 ApprovalGate.Resolve(db, journal, item, live, ApprovalStatus.Cancelled, Actors.Dispatcher, reason: null, now);
+            }
+
+            if (await OpenWaits.OfAsync(db, item.Id, ct).ConfigureAwait(false) is { } wait)
+            {
+                OpenWaits.Close(wait, WaitStatus.Expired, now);
             }
 
             var dueAt = item.DueAt;

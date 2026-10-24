@@ -128,11 +128,13 @@ created ──► awaiting_approval ──► created              (a person app
 
 created ──► expired ──► created                        (by moving due_at into the future)
 
-created | awaiting_approval | scheduled | processing | expired ──► cancelled
-created | awaiting_approval ──► expired                (the due date passed before anyone answered)
+processing ──► waiting ──► created                     (what it waited for happened, or its deadline came)
+
+created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
+created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
 ```
 
-- **`created`** — waiting. The only state from which work is claimed.
+- **`created`** — on the queue. The only state from which work is claimed.
 - **`awaiting_approval`** — the operation this item names needs a person's approval, and the claim
   parked it for one rather than performing it. No attempt was made: an attempt is a run, and nothing
   has run. It leaves this state when a person answers, when the work is cancelled, or when its due
@@ -140,10 +142,22 @@ created | awaiting_approval ──► expired                (the due date passe
 - **`scheduled`** — claimed, with an attempt row and a lease, on its way to a handler. It lasts
   milliseconds.
 - **`processing`** — a handler is running the attempt.
+- **`waiting`** — a run ended by waiting rather than finishing: until other work items end, all of
+  them or any one, until a moment comes, or both, whichever happens first. Its attempt is `yielded` —
+  over, and not counted against `max_attempts` — and the wait is a row of its own with a deadline: the
+  moment it named, or `Dispatcher:AiRole:MaxWaitSeconds` after it opened when it named none. The
+  bounds are held where the wait is written, and refused rather than bent: a moment later than that
+  ceiling from now with `wait_too_long`, a wait on more than 100 items with `wait_target_invalid`, and
+  a wait of an item that has already waited `Dispatcher:AiRole:MaxWaits` times with
+  `wait_limit_reached`; a refused wait changes nothing, and the run still holds its item. A waiting
+  item holds no lease and keeps its campaign free, so the items it waits for can run. The scan's
+  **resume** step returns it to `created` once the wait is over, writing `workitem_resumed` with why;
+  its next run is a new attempt. Cancelling or expiring the item closes the wait with it, and nothing
+  resumes work that was stopped.
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
-- **`expired`** — the due date passed before anyone claimed it, or before anyone answered the
-  decision it was waiting for. Not final: moving `due_at` into the future through `workitem.update`
+- **`expired`** — the due date passed before anyone claimed it, before anyone answered the
+  decision it was waiting for, or while it waited on other work. Not final: moving `due_at` into the future through `workitem.update`
   returns it to `created` — where, if its operation still needs a person's approval, the next claim
   parks it again, because the decision it needed was never given.
 
@@ -172,15 +186,21 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in seven short steps: **expire**, **enforce**, **events**,
-**sync**, **summon**, **claim**, **notify**. Events hands one read of an account's events to a reader
+Each tick, the dispatcher runs one scan in eight short steps: **expire**, **enforce**, **events**,
+**sync**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a reader
 that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
 ([docs/inbound-sync.md](inbound-sync.md) is the contract). Summon is
 the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
 for long enough, gets a check-in put on the queue ([docs/campaign-manager.md](campaign-manager.md) is the
 contract). Both run before the claim, so a read or a check-in created this tick can be claimed this tick,
-and sync runs before summon, so a reply it says wakes the manager in the same scan. Notify comes last,
+and sync runs before summon, so a reply it says wakes the manager in the same scan. Resume releases the
+waiting work whose wait is over: every item it named has ended — `succeeded`, `failed`, `cancelled` or
+`expired`; an item retried and back in `created`, or itself waiting, has not — or any one has, or its
+deadline has come. It reads statuses and the clock, never an event, so items that ended before the wait
+was written, or a deadline that passed while the runtime was down, release it at the next scan. It runs
+after enforce, so an item whose last attempt was lost for good releases what waits on it in the same
+scan, and before the claim, so what it releases can be claimed in that scan. Notify comes last,
 after the dispatch ([docs/notifications.md](notifications.md) is the contract).
 
 Claiming happens inside an immediate transaction, so two scans — or two runtimes — cannot both take
@@ -189,7 +209,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - only eligible items;
 - **at most one item per campaign**, and none at all from a campaign that already has an item
   `scheduled` or `processing` — a campaign runs one thing at a time, so a busy campaign cannot starve
-  the others;
+  the others; an item `waiting` does not make its campaign busy;
 - the most important first: `priority` descending, then oldest first;
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
@@ -309,7 +329,7 @@ the same answer. A cancellation stays a cancellation in both kinds.
 
 `attempt_count` counts **failed** attempts — the ones that count toward the limit. Work that succeeds
 first time shows `attempt_count: 0` with one entry in `attempts`. An attempt that was `interrupted` by
-a restart, and any attempt `cancelled` by a caller, never count.
+a restart, an attempt that `yielded` to wait, and any attempt `cancelled` by a caller, never count.
 
 There is no separate inbox entity: what needs a human or a manager role is
 `jason workitem list --status failed --status expired`. A listing takes an order and a window on the time it orders
@@ -718,6 +738,8 @@ mistyped one.
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |
 | `Dispatcher:AiRole:MaxAttempts` | `3` | 1..10 | how many failures an `ai_role` item is worth |
+| `Dispatcher:AiRole:MaxWaitSeconds` | `1209600` | 60..2592000 | the deadline of a wait that names no moment, counted from when it opens (fourteen days), and the latest moment a wait may name: a later one is refused, `wait_too_long`, never moved to the ceiling |
+| `Dispatcher:AiRole:MaxWaits` | `20` | 1..100 | how many times one `ai_role` item may wait; the next wait is refused, `wait_limit_reached`, and the run has to finish or fail instead |
 | `Dispatcher:ProviderOp:TimeoutSeconds` | `600` | 30..86400 | the budget of one `provider_op` attempt; never below the slowest published operation's `timeout_ms` plus `Plugins:Invoker:KillGraceMs` |
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |

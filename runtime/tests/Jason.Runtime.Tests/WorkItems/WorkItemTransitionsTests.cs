@@ -26,8 +26,12 @@ public class WorkItemTransitionsTests
         (WorkItemStatus.Processing, WorkItemStatus.Failed),
         (WorkItemStatus.Processing, WorkItemStatus.Created),
         (WorkItemStatus.Processing, WorkItemStatus.Cancelled),
+        (WorkItemStatus.Processing, WorkItemStatus.Waiting),
         (WorkItemStatus.Expired, WorkItemStatus.Created),
         (WorkItemStatus.Expired, WorkItemStatus.Cancelled),
+        (WorkItemStatus.Waiting, WorkItemStatus.Created),
+        (WorkItemStatus.Waiting, WorkItemStatus.Cancelled),
+        (WorkItemStatus.Waiting, WorkItemStatus.Expired),
     ];
 
     [Fact]
@@ -65,6 +69,47 @@ public class WorkItemTransitionsTests
     public void Work_waiting_for_a_person_may_only_go_where_a_person_or_the_clock_sends_it(
         WorkItemStatus from, WorkItemStatus to, bool legal) =>
         Assert.Equal(legal, WorkItemTransitions.IsLegal(from, to));
+
+    /// <summary>
+    /// Waiting work is entered only from a running attempt, which is the attempt ending waiting, and left in three ways:
+    /// the dispatcher releases it into the queue, somebody cancels it, or its due date passes. Like parked work, it never
+    /// goes to a dispatcher straight from here, and it is never finished by waiting.
+    /// </summary>
+    [Theory]
+    [InlineData(WorkItemStatus.Processing, WorkItemStatus.Waiting, true)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Created, true)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Cancelled, true)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Expired, true)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Scheduled, false)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Processing, false)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Succeeded, false)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.Failed, false)]
+    [InlineData(WorkItemStatus.Waiting, WorkItemStatus.AwaitingApproval, false)]
+    [InlineData(WorkItemStatus.Created, WorkItemStatus.Waiting, false)]
+    [InlineData(WorkItemStatus.Scheduled, WorkItemStatus.Waiting, false)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Waiting, false)]
+    [InlineData(WorkItemStatus.Expired, WorkItemStatus.Waiting, false)]
+    public void Waiting_work_is_entered_from_a_run_and_left_only_where_the_dispatcher_or_the_clock_sends_it(
+        WorkItemStatus from, WorkItemStatus to, bool legal) =>
+        Assert.True(legal == WorkItemTransitions.IsLegal(from, to), $"{from} to {to} is legal: {WorkItemTransitions.IsLegal(from, to)}; expected {legal}.");
+
+    [Fact]
+    public void Waiting_is_neither_final_nor_finished_and_a_release_keeps_no_finish_time()
+    {
+        Assert.DoesNotContain(WorkItemStatus.Waiting, WorkItemTransitions.Final);
+        Assert.DoesNotContain(WorkItemStatus.Waiting, WorkItemTransitions.Terminal);
+
+        var item = WorkItemFactory.NewAiRole(WorkItemFactory.NewCampaign(), now: Noon);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Scheduled, Noon);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Processing, Noon);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Waiting, Noon.AddMinutes(1));
+        Assert.Null(item.FinishedAt);
+        Assert.Equal(Noon.AddMinutes(1), item.UpdatedAt);
+
+        WorkItemTransitions.Apply(item, WorkItemStatus.Created, Noon.AddHours(1));
+        Assert.Equal(WorkItemStatus.Created, item.Status);
+        Assert.Null(item.FinishedAt);
+    }
 
     [Fact]
     public void Final_and_terminal_say_what_can_still_change()
@@ -163,5 +208,9 @@ public class WorkItemTransitionsTests
         Assert.Equal(JournalKinds.WorkItemReleased, WorkItemTransitions.JournalKind(WorkItemStatus.Scheduled, WorkItemStatus.Created));
         Assert.Equal(JournalKinds.WorkItemReleased, WorkItemTransitions.JournalKind(WorkItemStatus.Processing, WorkItemStatus.Created));
         Assert.Equal(JournalKinds.WorkItemReopened, WorkItemTransitions.JournalKind(WorkItemStatus.Expired, WorkItemStatus.Created));
+        Assert.Equal(JournalKinds.WorkItemWaiting, WorkItemTransitions.JournalKind(WorkItemStatus.Processing, WorkItemStatus.Waiting));
+        Assert.Equal(JournalKinds.WorkItemResumed, WorkItemTransitions.JournalKind(WorkItemStatus.Waiting, WorkItemStatus.Created));
+        Assert.Equal(JournalKinds.WorkItemCancelled, WorkItemTransitions.JournalKind(WorkItemStatus.Waiting, WorkItemStatus.Cancelled));
+        Assert.Equal(JournalKinds.WorkItemExpired, WorkItemTransitions.JournalKind(WorkItemStatus.Waiting, WorkItemStatus.Expired));
     }
 }

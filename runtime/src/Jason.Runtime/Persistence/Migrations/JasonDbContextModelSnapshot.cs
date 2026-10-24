@@ -2092,6 +2092,101 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItemWait", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("AttemptId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("deadline");
+
+                    b.Property<string>("Mode")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("mode");
+
+                    b.Property<DateTime>("OpenedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("opened_at");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("release_reason");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("released_at");
+
+                    b.Property<int?>("ResumedByAttemptId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("resumed_by_attempt_id");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("Until")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("until");
+
+                    b.Property<int>("WorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("work_item_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_work_item_waits");
+
+                    b.HasIndex("AttemptId")
+                        .HasDatabaseName("ix_work_item_waits_attempt_id");
+
+                    b.HasIndex("ResumedByAttemptId")
+                        .HasDatabaseName("ix_work_item_waits_resumed_by_attempt_id");
+
+                    b.HasIndex("WorkItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_work_item_waits_one_open_per_item")
+                        .HasFilter("status = 'open'");
+
+                    b.HasIndex("WorkItemId", "Status")
+                        .HasDatabaseName("ix_work_item_waits_work_item_id_status");
+
+                    b.ToTable("work_item_waits");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItemWaitItem", b =>
+                {
+                    b.Property<int>("WaitId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("wait_id");
+
+                    b.Property<int>("ChildWorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("child_work_item_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("position");
+
+                    b.HasKey("WaitId", "ChildWorkItemId")
+                        .HasName("pk_work_item_wait_items");
+
+                    b.HasIndex("ChildWorkItemId")
+                        .HasDatabaseName("ix_work_item_wait_items_child_work_item_id");
+
+                    b.ToTable("work_item_wait_items");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Approval", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.WorkItem", "WorkItem")
@@ -2378,6 +2473,55 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Contact");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItemWait", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Attempt", "Attempt")
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_work_item_waits_attempts_attempt_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.Attempt", "ResumedByAttempt")
+                        .WithMany()
+                        .HasForeignKey("ResumedByAttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_work_item_waits_attempts_resumed_by_attempt_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "WorkItem")
+                        .WithMany()
+                        .HasForeignKey("WorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_work_item_waits_work_items_work_item_id");
+
+                    b.Navigation("Attempt");
+
+                    b.Navigation("ResumedByAttempt");
+
+                    b.Navigation("WorkItem");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItemWaitItem", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "ChildWorkItem")
+                        .WithMany()
+                        .HasForeignKey("ChildWorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_work_item_wait_items_work_items_child_work_item_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.WorkItemWait", "Wait")
+                        .WithMany("Items")
+                        .HasForeignKey("WaitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_work_item_wait_items_work_item_waits_wait_id");
+
+                    b.Navigation("ChildWorkItem");
+
+                    b.Navigation("Wait");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
                     b.Navigation("ExternalIds");
@@ -2400,6 +2544,11 @@ namespace Jason.Runtime.Persistence.Migrations
             modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>
                 {
                     b.Navigation("Attempts");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItemWait", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

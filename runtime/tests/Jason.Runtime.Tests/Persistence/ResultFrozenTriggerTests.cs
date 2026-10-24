@@ -37,6 +37,28 @@ public class ResultFrozenTriggerTests
         Assert.Equal("{\"x\":2}", Scalar(connection, "SELECT result_json FROM work_items WHERE id = 1"));
     }
 
+    /// <summary>
+    /// Waiting is not finished: a waiting item's result is still written, and it freezes only when the item ends — here
+    /// cancelled while it waited.
+    /// </summary>
+    [Fact]
+    public void A_waiting_item_still_writes_its_result_and_a_cancelled_one_does_not()
+    {
+        using var database = new TestDatabase();
+        using var connection = Open(database);
+        SeedCampaign(connection);
+        SeedWorkItem(connection, id: 1, publicId: "wi_W", status: "waiting");
+
+        Execute(connection, "UPDATE work_items SET result_json = '{\"x\":1}' WHERE id = 1");
+        Assert.Equal("{\"x\":1}", Scalar(connection, "SELECT result_json FROM work_items WHERE id = 1"));
+
+        Execute(connection, "UPDATE work_items SET status = 'cancelled' WHERE id = 1");
+        var frozen = Assert.Throws<SqliteException>(() => Execute(connection, "UPDATE work_items SET result_json = '{\"x\":2}' WHERE id = 1"));
+
+        Assert.Contains("frozen", frozen.Message, StringComparison.Ordinal);
+        Assert.Equal("{\"x\":1}", Scalar(connection, "SELECT result_json FROM work_items WHERE id = 1"));
+    }
+
     [Fact]
     [Critical(Family.P3, "every terminal path freezes")]
     public void Every_way_a_work_item_can_be_finished_freezes_its_result()

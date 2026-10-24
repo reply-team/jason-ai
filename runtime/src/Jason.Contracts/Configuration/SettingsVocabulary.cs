@@ -28,6 +28,9 @@ public static class SettingsVocabulary
         "Enabled", "TickSeconds", "MaxParallel", "DrainSeconds", "RetryDelaySeconds", "ExitGraceSeconds", "EventsCadenceSeconds", "AiRole", "ProviderOp",
         "TimeoutSeconds", "HeartbeatSeconds", "MaxAttempts",
 
+        // How an AI role waits: MaxWaits here, and its ceiling MaxWaitSeconds, a name Notifications shares, below.
+        "MaxWaits",
+
         // Manager.
         "Triggers", "ReviewSeconds", "Priority", "MaxEntriesPerScan",
 

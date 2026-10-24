@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,6 +56,107 @@ public class ScanRunnerTests
         Assert.Equal(WorkItemStatus.Processing, (await harness.ReadItemAsync(ready, Ct)).Status);
         gate.SetResult(new CommandOutcome.Completed(null));
         Assert.True(await harness.Pool.DrainAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    /// <summary>
+    /// The release sits between the lease enforcer and the claim: an item whose last attempt is lost for good in a scan
+    /// ends there, the item waiting on it is released by the same scan, and that scan claims it.
+    /// </summary>
+    [Fact]
+    public async Task A_wait_whose_item_is_lost_for_good_is_released_and_claimed_in_the_same_scan()
+    {
+        var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = new FakeCommand(WorkItemKind.AiRole, _ => gate.Task);
+        using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0, commands: command);
+        string planner;
+        string researcher;
+        await using (var db = harness.Open())
+        {
+            var campaign = WorkItemFactory.NewCampaign(now: Noon);
+            var waiting = WorkItemFactory.NewAiRole(campaign, "planner", Noon, w => w.Status = WorkItemStatus.Waiting);
+            var yielded = WorkItemFactory.NewAttempt(waiting, 1, AttemptStatus.Yielded, Noon.AddHours(-2));
+            yielded.FinishedAt = Noon.AddHours(-2);
+            var child = WorkItemFactory.NewAiRole(campaign, now: Noon, configure: w =>
+            {
+                w.Status = WorkItemStatus.Processing;
+                w.MaxAttempts = 1;
+            });
+            var lostAttempt = WorkItemFactory.NewAttempt(child, 1, AttemptStatus.Running, Noon.AddHours(-2), timeoutSeconds: 60);
+            db.Campaigns.Add(campaign);
+            db.WorkItems.AddRange(waiting, child);
+            db.Attempts.AddRange(yielded, lostAttempt);
+            db.WorkItemWaits.Add(new WorkItemWait
+            {
+                WorkItem = waiting,
+                Attempt = yielded,
+                Mode = WaitMode.All,
+                Deadline = Noon.AddDays(14),
+                OpenedAt = Noon.AddHours(-2),
+                Items = [new WorkItemWaitItem { ChildWorkItem = child }],
+            });
+            await db.SaveChangesAsync(Ct);
+            (planner, researcher) = (waiting.PublicId, child.PublicId);
+        }
+
+        var report = await harness.Runner.ScanOnceAsync(Ct);
+
+        Assert.True(report is { Lost: 1, Resumed: 1, Claimed: 1 }, $"The scan said {report}.");
+        Assert.Equal(WorkItemStatus.Failed, (await harness.ReadItemAsync(researcher, Ct)).Status);
+        Assert.True(await DispatchHarness.EventuallyAsync(() => command.Contexts.Count == 1, Ct));
+        Assert.Equal(WorkItemStatus.Processing, (await harness.ReadItemAsync(planner, Ct)).Status);
+        gate.SetResult(new CommandOutcome.Completed(null));
+        Assert.True(await harness.Pool.DrainAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    /// <summary>
+    /// Expiry comes before the release: an item whose due date passed while it waited, in a scan that also finds what it
+    /// waited for done, expires there and its wait closes as expired. Nothing resumes work that was stopped.
+    /// </summary>
+    [Fact]
+    public async Task A_wait_whose_item_is_overdue_expires_in_the_scan_that_finds_it_ready()
+    {
+        using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0);
+        string planner;
+        await using (var db = harness.Open())
+        {
+            var campaign = WorkItemFactory.NewCampaign(now: Noon);
+            var waiting = WorkItemFactory.NewAiRole(campaign, "planner", Noon, w =>
+            {
+                w.Status = WorkItemStatus.Waiting;
+                w.DueAt = Noon.AddMinutes(-1);
+            });
+            var yielded = WorkItemFactory.NewAttempt(waiting, 1, AttemptStatus.Yielded, Noon.AddHours(-2));
+            yielded.FinishedAt = Noon.AddHours(-2);
+            var child = WorkItemFactory.NewAiRole(campaign, now: Noon, configure: w =>
+            {
+                w.Status = WorkItemStatus.Succeeded;
+                w.FinishedAt = Noon.AddMinutes(-5);
+            });
+            db.Campaigns.Add(campaign);
+            db.WorkItems.AddRange(waiting, child);
+            db.Attempts.Add(yielded);
+            db.WorkItemWaits.Add(new WorkItemWait
+            {
+                WorkItem = waiting,
+                Attempt = yielded,
+                Mode = WaitMode.All,
+                Deadline = Noon.AddDays(14),
+                OpenedAt = Noon.AddHours(-2),
+                Items = [new WorkItemWaitItem { ChildWorkItem = child }],
+            });
+            await db.SaveChangesAsync(Ct);
+            planner = waiting.PublicId;
+        }
+
+        var report = await harness.Runner.ScanOnceAsync(Ct);
+
+        Assert.True(report is { Expired: 1, Resumed: 0, Claimed: 0 }, $"The scan said {report}.");
+        Assert.Equal(WorkItemStatus.Expired, (await harness.ReadItemAsync(planner, Ct)).Status);
+        await using var read = harness.Open();
+        var wait = await read.WorkItemWaits.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(WaitStatus.Expired, wait.Status);
+        Assert.Null(wait.ReleaseReason);
+        Assert.DoesNotContain(await read.Journal.AsNoTracking().ToListAsync(Ct), e => e.Kind == JournalKinds.WorkItemResumed);
     }
 
     /// <summary>

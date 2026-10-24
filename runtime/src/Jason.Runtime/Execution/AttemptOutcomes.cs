@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
@@ -17,6 +18,9 @@ namespace Jason.Runtime.Execution;
 /// </summary>
 public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, LiveSettings<DispatcherOptions> settings)
 {
+    /// <summary>The most work items one wait may name.</summary>
+    public const int MaxWaitItems = 100;
+
     /// <summary>The attempt and its item both succeed; a result, when given, replaces whatever the item carried.</summary>
     public void Succeed(JasonDbContext db, WorkItem item, Attempt attempt, JsonNode? result, ActorRef actor, string? reason = null)
     {
@@ -153,6 +157,106 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
             updated: new JsonObject { ["code"] = JsonValue.Create(AttemptErrors.Interrupted) },
             workItem: item,
             attempt: attempt);
+    }
+
+    /// <summary>
+    /// The attempt ends waiting, and its item waits: for the items it names to end — all of them, or any one — for a
+    /// moment, or for whichever of the two comes first. The attempt is <c>yielded</c>: finished, no longer live, and not
+    /// counted against the item's attempts, because nothing failed. The wait is bounded whatever it names: by its moment,
+    /// or else by the ceiling counted from now. The bounds are held here, and refused rather than bent: a moment beyond the
+    /// ceiling (<c>wait_too_long</c>), more than <see cref="MaxWaitItems"/> items (<c>wait_target_invalid</c>), and an item
+    /// that has already waited as often as it may (<c>wait_limit_reached</c>), counted by its yielded attempts, so the
+    /// item's attempts must be loaded. A refused wait changes nothing. Which items a wait may name at all is the caller's
+    /// to decide; this only writes it.
+    /// </summary>
+    public WorkItemWait Wait(
+        JasonDbContext db,
+        WorkItem item,
+        Attempt attempt,
+        IReadOnlyList<WorkItem> children,
+        WaitMode? mode,
+        DateTime? until,
+        ActorRef actor,
+        string? reason = null)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(attempt);
+        ArgumentNullException.ThrowIfNull(children);
+        if (children.Count == 0 && until is null)
+        {
+            throw new ArgumentException("A wait names at least one work item or a moment.", nameof(children));
+        }
+
+        if ((children.Count == 0) != (mode is null))
+        {
+            throw new ArgumentException($"A wait on {children.Count} work items cannot have the mode {mode?.ToString() ?? "none"}.", nameof(mode));
+        }
+
+        if (children.Select(child => child.Id).Distinct().Count() != children.Count)
+        {
+            throw new ArgumentException("A wait names each work item once.", nameof(children));
+        }
+
+        if (!item.Attempts.Contains(attempt))
+        {
+            throw new ArgumentException($"Attempt {attempt.PublicId} is not among the loaded attempts of work item {item.PublicId}.", nameof(item));
+        }
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        var limits = settings.Current.AiRole;
+        var ceiling = now.AddSeconds(limits.MaxWaitSeconds);
+        if (children.Count > MaxWaitItems)
+        {
+            throw DomainErrors.WaitTargetInvalid(children.Count);
+        }
+
+        if (until > ceiling)
+        {
+            throw DomainErrors.WaitTooLong(limits.MaxWaitSeconds);
+        }
+
+        if (item.Attempts.Count(a => a.Status == AttemptStatus.Yielded) >= limits.MaxWaits)
+        {
+            throw DomainErrors.WaitLimitReached(item.PublicId, limits.MaxWaits);
+        }
+
+        var deadline = until ?? ceiling;
+
+        attempt.Status = AttemptStatus.Yielded;
+        attempt.FinishedAt = now;
+        WorkItemTransitions.Apply(item, WorkItemStatus.Waiting, now);
+
+        var wait = new WorkItemWait
+        {
+            WorkItemId = item.Id,
+            AttemptId = attempt.Id,
+            Mode = mode,
+            Until = until,
+            Deadline = deadline,
+            Status = WaitStatus.Open,
+            OpenedAt = now,
+            Items = [.. children.Select((child, position) => new WorkItemWaitItem { ChildWorkItemId = child.Id, Position = position })],
+        };
+        db.WorkItemWaits.Add(wait);
+
+        journal.Append(
+            db,
+            actor,
+            JournalKinds.WorkItemWaiting,
+            campaign: null,
+            key: attempt.PublicId,
+            updated: new JsonObject
+            {
+                ["on"] = new JsonArray([.. children.Select(child => JsonValue.Create(child.PublicId))]),
+                ["mode"] = mode is { } named ? JsonValue.Create(SnakeCaseEnumConverter<WaitMode>.Format(named)) : null,
+                ["until"] = until is { } moment ? JsonSerializer.SerializeToNode(WorkItemMapper.Utc(moment), JasonJson.Options) : null,
+                ["deadline"] = JsonSerializer.SerializeToNode(WorkItemMapper.Utc(deadline), JasonJson.Options),
+            },
+            reason: reason,
+            workItem: item,
+            attempt: attempt);
+        return wait;
     }
 
     /// <summary>Only the attempt: the caller transitions and journals the item, because it is the one being cancelled.</summary>

@@ -491,6 +491,31 @@ public class WorkItemServiceTests
         Assert.Equal(copywriter.PublicId, Assert.Single(byRole.Items).Id);
     }
 
+    /// <summary>
+    /// <c>workitem list --status waiting</c>: the word a caller sends is read as the status, the listing finds the waiting
+    /// items and nothing else, and a waiting item is never eligible — the resume step, not the claim, is what moves it.
+    /// </summary>
+    [Fact]
+    public async Task A_listing_by_the_waiting_status_finds_the_waiting_items_and_none_of_them_is_eligible()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign();
+        var waiting = WorkItemFactory.NewAiRole(campaign, "planner", configure: w => w.Status = WorkItemStatus.Waiting);
+        db.WorkItems.AddRange(waiting, WorkItemFactory.NewAiRole(campaign));
+        await db.SaveChangesAsync(Ct);
+        var service = NewService(db, new FixedClock(Noon));
+        var request = System.Text.Json.JsonSerializer.Deserialize<WorkItemListRequest>("""{"status":["waiting"]}""", Jason.Contracts.Json.JasonJson.Options)!;
+
+        var page = await service.ListAsync(request, Ct);
+
+        var only = Assert.Single(page.Items);
+        Assert.Equal(waiting.PublicId, only.Id);
+        Assert.True(only.Status == WorkItemStatus.Waiting, $"The listing said {only.Status}.");
+        Assert.False(only.Eligible);
+        Assert.Empty((await service.ListAsync(request with { Eligible = true }, Ct)).Items);
+    }
+
     [Fact]
     public async Task The_eligible_filter_splits_the_queue_from_everything_that_cannot_run_yet()
     {

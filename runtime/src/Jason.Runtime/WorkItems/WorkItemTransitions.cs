@@ -20,8 +20,13 @@ public static class WorkItemTransitions
         // is go to a dispatcher, which is the whole reason it is parked.
         [WorkItemStatus.AwaitingApproval] = [WorkItemStatus.Created, WorkItemStatus.Failed, WorkItemStatus.Cancelled, WorkItemStatus.Expired],
         [WorkItemStatus.Scheduled] = [WorkItemStatus.Processing, WorkItemStatus.Created, WorkItemStatus.Cancelled, WorkItemStatus.Failed],
-        [WorkItemStatus.Processing] = [WorkItemStatus.Succeeded, WorkItemStatus.Failed, WorkItemStatus.Created, WorkItemStatus.Cancelled],
+        [WorkItemStatus.Processing] = [WorkItemStatus.Succeeded, WorkItemStatus.Failed, WorkItemStatus.Created, WorkItemStatus.Cancelled, WorkItemStatus.Waiting],
         [WorkItemStatus.Expired] = [WorkItemStatus.Created, WorkItemStatus.Cancelled],
+
+        // Waiting work is unclaimed work too: the dispatcher releases it into the queue when what it waits for has
+        // happened, and meanwhile it can be cancelled or reach its due date. Like parked work, it never goes to a
+        // dispatcher straight from here; the release makes it ordinary created work, claimed like any other.
+        [WorkItemStatus.Waiting] = [WorkItemStatus.Created, WorkItemStatus.Cancelled, WorkItemStatus.Expired],
     };
 
     /// <summary>Succeeded, failed and cancelled items are never left again.</summary>
@@ -78,7 +83,9 @@ public static class WorkItemTransitions
         WorkItemStatus.Cancelled => JournalKinds.WorkItemCancelled,
         WorkItemStatus.Expired => JournalKinds.WorkItemExpired,
         WorkItemStatus.AwaitingApproval => JournalKinds.WorkItemAwaitingApproval,
+        WorkItemStatus.Waiting => JournalKinds.WorkItemWaiting,
         WorkItemStatus.Created when from == WorkItemStatus.Expired => JournalKinds.WorkItemReopened,
+        WorkItemStatus.Created when from == WorkItemStatus.Waiting => JournalKinds.WorkItemResumed,
         WorkItemStatus.Created => JournalKinds.WorkItemReleased,
         _ => throw new InvalidOperationException($"No journal kind records {from} to {to}."),
     };

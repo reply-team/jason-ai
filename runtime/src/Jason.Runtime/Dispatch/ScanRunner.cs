@@ -12,21 +12,24 @@ namespace Jason.Runtime.Dispatch;
 /// <summary>
 /// What one scan did. Zeros are the normal answer: most ticks find nothing to do. <paramref name="Synced"/> counts the
 /// conversation reads the scan started, <paramref name="Observed"/> the threads it said had moved, and
-/// <paramref name="EventReads"/> the read of an account's events it handed to the reader, one at most.
+/// <paramref name="EventReads"/> the read of an account's events it handed to the reader, one at most, and
+/// <paramref name="Resumed"/> the waiting items it released into the queue.
 /// </summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0);
 
 /// <summary>
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, hand the reader the next read of an
-/// account's events, read the live campaigns' conversations, summon a manager where a campaign wants one, hand out what
-/// is ready, and, last, say once that something waits for a person: after the dispatch, so nothing the notifier does can
-/// strand work already claimed. In that order and in short transactions, so no step holds the writer while another
-/// thinks. The events step only hands a read over — the reader reads off the scan — and comes before the inbound read,
-/// which leaves a campaign to the events only while their source is healthy. The read comes before
-/// the summon so that a reply it says wakes the manager in the same scan, and before the claim so that a read it
-/// starts is claimed in the same scan. The summon comes before the claim because a check-in created now should be
-/// claimable now, and after the lease enforcer because a review of a lost attempt is summoned by the line that lost it. The scan hands
-/// claims to the pool and returns; waiting for a handler is what would turn a dispatcher into a queue of one.
+/// account's events, read the live campaigns' conversations, summon a manager where a campaign wants one, release the
+/// waiting work whose wait is over, hand out what is ready, and, last, say once that something waits for a person:
+/// after the dispatch, so nothing the notifier does can strand work already claimed. In that order and in short
+/// transactions, so no step holds the writer while another thinks. The events step only hands a read over — the
+/// reader reads off the scan — and comes before the inbound read, which leaves a campaign to the events only while
+/// their source is healthy. The read comes before the summon so that a reply it says wakes the manager in the same
+/// scan, and before the claim so that a read it starts is claimed in the same scan. The summon comes before the claim
+/// because a check-in created now should be claimable now, and after the lease enforcer because a review of a lost
+/// attempt is summoned by the line that lost it. The release comes after the lease enforcer, so an item whose last
+/// attempt was lost for good releases what waits on it in the same scan, and before the claim, so released work is
+/// claimable in that scan too. The scan hands claims to the pool and returns; waiting for a handler is what would turn a dispatcher into a queue of one.
 /// Scans run one at a time: the free slots are read before anything is handed out, so two scans in flight would
 /// each claim a full pool's worth and the second could not place what it had already taken.
 /// </summary>
@@ -63,6 +66,11 @@ public sealed class ScanRunner(
         LogLevel.Information,
         new EventId(6, nameof(Observed)),
         "Dispatcher observed {Count} conversation threads that moved");
+
+    private static readonly Action<ILogger, int, Exception?> Resumed = LoggerMessage.Define<int>(
+        LogLevel.Information,
+        new EventId(7, nameof(Resumed)),
+        "Dispatcher released {Count} waiting work items whose wait was over");
 
     private static readonly Action<ILogger, string, string, Exception?> Claimed = LoggerMessage.Define<string, string>(
         LogLevel.Information,
@@ -103,6 +111,7 @@ public sealed class ScanRunner(
         var events = await InScopeAsync<EventScan, int>((step, db) => step.ScanAsync(db, ct)).ConfigureAwait(false);
         var inbound = await InScopeAsync<InboundSync, InboundReport>((step, db) => step.SyncAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
+        var resumed = await InScopeAsync<Resumer, int>((step, db) => step.ResumeAsync(db, ct)).ConfigureAwait(false);
         var claimed = status.State == DispatcherState.Running
             ? await InScopeAsync<Claimer, IReadOnlyList<ClaimedWork>>((step, db) => step.ClaimAsync(db, pool.FreeSlots, ct)).ConfigureAwait(false)
             : [];
@@ -137,6 +146,11 @@ public sealed class ScanRunner(
             Lost(logger, lost, null);
         }
 
+        if (resumed > 0)
+        {
+            Resumed(logger, resumed, null);
+        }
+
         if (inbound.Synced > 0)
         {
             Synced(logger, inbound.Synced, null);
@@ -148,7 +162,7 @@ public sealed class ScanRunner(
         }
 
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

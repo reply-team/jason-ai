@@ -43,7 +43,7 @@ public class EffectiveLimitsTests
     public void A_settings_change_reaches_work_that_is_already_queued()
     {
         var item = WorkItemFactory.NewAiRole(WorkItemFactory.NewCampaign());
-        var options = new DispatcherOptions { AiRole = new KindDefaults { TimeoutSeconds = 60, HeartbeatSeconds = 10, MaxAttempts = 1 } };
+        var options = new DispatcherOptions { AiRole = new AiRoleDefaults { TimeoutSeconds = 60, HeartbeatSeconds = 10, MaxAttempts = 1 } };
 
         Assert.Equal(new EffectiveLimits(60, 10, 1), EffectiveLimits.For(item, options));
     }

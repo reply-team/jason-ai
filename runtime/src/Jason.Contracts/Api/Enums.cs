@@ -181,6 +181,11 @@ public enum RouteScope
 /// approving it returns it to created, rejecting it ends it as failed, and it can still be cancelled or expire
 /// there like any other unclaimed work.
 /// </para>
+/// <para>
+/// Work whose attempt ended waiting for other work items, or for a moment, is <c>waiting</c>: it holds no slot and no
+/// live attempt, and the dispatcher itself returns it to created when what it waits for has happened. It can be
+/// cancelled or expire there like any other unclaimed work.
+/// </para>
 /// </summary>
 public enum WorkItemStatus
 {
@@ -192,6 +197,7 @@ public enum WorkItemStatus
     Failed,
     Cancelled,
     Expired,
+    Waiting,
 }
 
 /// <summary>
@@ -208,7 +214,11 @@ public enum ApprovalStatus
     Cancelled,
 }
 
-/// <summary>One run of one work item. <c>Interrupted</c> is a leftover of a runtime restart and is never counted.</summary>
+/// <summary>
+/// One run of one work item. <c>Interrupted</c> is a leftover of a runtime restart and is never counted. <c>Yielded</c>
+/// is a run that ended waiting: it is over, it is not counted against the item's attempts, and the item's next run is
+/// a new attempt.
+/// </summary>
 public enum AttemptStatus
 {
     Scheduled,
@@ -217,6 +227,43 @@ public enum AttemptStatus
     Failed,
     Interrupted,
     Cancelled,
+    Yielded,
+}
+
+/// <summary>
+/// What a wait on work items asks for: <c>all</c> of them to have ended, or <c>any</c> one. A wait on a moment alone has
+/// no mode.
+/// </summary>
+public enum WaitMode
+{
+    All,
+    Any,
+}
+
+/// <summary>
+/// Where one wait of a work item stands. <c>Open</c> while it holds the item; <c>released</c> once the dispatcher has
+/// returned the item to the queue; <c>cancelled</c> and <c>expired</c> when the item itself was cancelled or reached its
+/// due date while it waited.
+/// </summary>
+public enum WaitStatus
+{
+    Open,
+    Released,
+    Cancelled,
+    Expired,
+}
+
+/// <summary>
+/// Why a wait was released: the work items it named have ended, the moment it named has come, the ceiling on how long
+/// any wait may last has come, the provider block it waited on has cleared, or somebody resumed it by hand.
+/// </summary>
+public enum WaitReleaseReason
+{
+    ChildrenEnded,
+    MomentReached,
+    WaitCeiling,
+    BlockCleared,
+    ResumedByActor,
 }
 
 /// <summary>How an executor says its attempt ended.</summary>

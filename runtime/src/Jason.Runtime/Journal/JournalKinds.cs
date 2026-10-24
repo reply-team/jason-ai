@@ -58,6 +58,16 @@ public static partial class JournalKinds
 
     /// <summary>An expired item was given a future due date and is work again.</summary>
     public const string WorkItemReopened = "workitem_reopened";
+
+    /// <summary>
+    /// An attempt ended waiting: keyed by the attempt, with the work items it waits on, whether all or any of them, the
+    /// moment it named and the deadline that bounds it. Identifiers and moments only, and not a default manager trigger: the
+    /// dispatcher, not a review, is what ends a wait.
+    /// </summary>
+    public const string WorkItemWaiting = "workitem_waiting";
+
+    /// <summary>A waiting item went back to <c>created</c>, with why it was released. Identifiers only, and not a default manager trigger.</summary>
+    public const string WorkItemResumed = "workitem_resumed";
     public const string RoleAdded = "role_added";
 
     /// <summary>A role's own settings changed — which execution profile its work uses, and nothing else yet.</summary>
@@ -210,6 +220,8 @@ public static partial class JournalKinds
         ApprovalSuperseded,
         ApprovalCancelled,
         WorkItemReopened,
+        WorkItemWaiting,
+        WorkItemResumed,
         RoleAdded,
         RoleUpdated,
         RoleNoteSet,

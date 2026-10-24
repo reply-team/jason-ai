@@ -104,6 +104,24 @@ public static class DomainErrors
     public static NotFoundException ProfileRevisionNotFound(string name, int revision) =>
         new("profile_revision_not_found", string.Create(CultureInfo.InvariantCulture, $"Execution profile '{name}' has no revision {revision}."));
 
+    /// <summary>
+    /// A wait names a moment later than the ceiling allows. Refused rather than moved to the ceiling: a deadline silently
+    /// changed is one the role still believes.
+    /// </summary>
+    public static InvalidRequestException WaitTooLong(int maxWaitSeconds) =>
+        new("wait_too_long", string.Create(CultureInfo.InvariantCulture, $"A wait may name a moment at most {maxWaitSeconds} seconds ahead (Dispatcher:AiRole:MaxWaitSeconds); name an earlier one."));
+
+    /// <summary>A wait names more work items than one wait may.</summary>
+    public static InvalidRequestException WaitTargetInvalid(int named) =>
+        new("wait_target_invalid", string.Create(CultureInfo.InvariantCulture, $"A wait names at most {AttemptOutcomes.MaxWaitItems} work items; this one named {named}."));
+
+    /// <summary>
+    /// The item has waited as often as it may. The attempt that asked still holds the item, so it is told to finish or
+    /// fail instead; another wait cannot be made to fit.
+    /// </summary>
+    public static ConflictException WaitLimitReached(string id, int maxWaits) =>
+        new("wait_limit_reached", string.Create(CultureInfo.InvariantCulture, $"Work item '{id}' has already waited {maxWaits} times (Dispatcher:AiRole:MaxWaits); finish or fail this attempt instead."));
+
     /// <summary>Two writers reached the same row; the loser is told to read again rather than given a merged result.</summary>
     public static DomainException ConcurrentUpdate() =>
         new(StatusCodes.Status409Conflict, "concurrent_update", "Another change reached the same row first; read it again and retry.", retryable: true);

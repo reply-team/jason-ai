@@ -32,6 +32,7 @@ public sealed class SettingsAllowlistTests
         "Dispatcher:TickSeconds", "Dispatcher:MaxParallel", "Dispatcher:DrainSeconds", "Dispatcher:RetryDelaySeconds", "Dispatcher:ExitGraceSeconds",
         "Dispatcher:EventsCadenceSeconds",
         "Dispatcher:AiRole:TimeoutSeconds", "Dispatcher:AiRole:HeartbeatSeconds", "Dispatcher:AiRole:MaxAttempts",
+        "Dispatcher:AiRole:MaxWaitSeconds", "Dispatcher:AiRole:MaxWaits",
         "Dispatcher:ProviderOp:TimeoutSeconds", "Dispatcher:ProviderOp:HeartbeatSeconds", "Dispatcher:ProviderOp:MaxAttempts",
         "Manager:ReviewSeconds", "Manager:TimeoutSeconds", "Manager:MaxAttempts", "Manager:Priority", "Manager:MaxEntriesPerScan",
         "Roles:MaxStdoutBytes", "Roles:MaxSkillBytes",

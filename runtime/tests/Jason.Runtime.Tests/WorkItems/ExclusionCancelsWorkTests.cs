@@ -111,6 +111,72 @@ public class ExclusionCancelsWorkTests
         });
     }
 
+    /// <summary>
+    /// Every way work stops on purpose closes the wait of an item that was waiting: the item is cancelled like any
+    /// unclaimed work, and its open wait is closed as cancelled — never released, so nothing resumes what was stopped.
+    /// </summary>
+    [Theory]
+    [InlineData("workitem.cancel")]
+    [InlineData("campaign.archive")]
+    [InlineData("contact.archive")]
+    [InlineData("campaign.remove_contacts")]
+    public async Task Every_way_work_stops_closes_the_wait_of_a_waiting_item(string how)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var clock = new FixedClock(Noon);
+        var campaign = WorkItemFactory.NewCampaign();
+        var marta = NewContact(db, campaign);
+        var waiting = WorkItemFactory.NewAiRole(campaign, "planner", Noon.UtcDateTime, w =>
+        {
+            w.Contact = marta;
+            w.Status = WorkItemStatus.Waiting;
+        });
+        var yielded = WorkItemFactory.NewAttempt(waiting, 1, AttemptStatus.Yielded, Noon.UtcDateTime.AddHours(-1));
+        yielded.FinishedAt = Noon.UtcDateTime.AddHours(-1);
+        var child = WorkItemFactory.NewAiRole(campaign, now: Noon.UtcDateTime, configure: w => w.Status = WorkItemStatus.Processing);
+        db.WorkItems.AddRange(waiting, child);
+        db.WorkItemWaits.Add(new WorkItemWait
+        {
+            WorkItem = waiting,
+            Attempt = yielded,
+            Mode = WaitMode.All,
+            Deadline = Noon.UtcDateTime.AddDays(14),
+            OpenedAt = Noon.UtcDateTime.AddHours(-1),
+            Items = [new WorkItemWaitItem { ChildWorkItem = child }],
+        });
+        await db.SaveChangesAsync(Ct);
+        db.ChangeTracker.Clear();
+
+        var canceller = NewCanceller(clock);
+        var journal = new JournalWriter(clock);
+        switch (how)
+        {
+            case "workitem.cancel":
+                await new WorkItemService(db, journal, clock, canceller, TestOptions.PluginSettings())
+                    .CancelAsync(new WorkItemCancelRequest(waiting.PublicId, null, "no longer needed"), Ct);
+                break;
+            case "campaign.archive":
+                await new CampaignService(db, journal, clock, canceller, TestHarness.FoldersFor(db))
+                    .ArchiveAsync(new CampaignTransitionRequest(campaign.PublicId, null, "finished"), Ct);
+                break;
+            case "contact.archive":
+                await new ContactService(db, journal, clock, canceller)
+                    .ArchiveAsync(new ContactArchiveRequest(marta.PublicId, null, "asked to be forgotten"), Ct);
+                break;
+            default:
+                await new MembershipService(db, journal, clock, canceller)
+                    .RemoveAsync(new RemoveContactsRequest(campaign.PublicId, [marta.PublicId], null, "taken out"), Ct);
+                break;
+        }
+
+        Assert.Equal(WorkItemStatus.Cancelled, await StatusOf(db, waiting, Ct));
+        var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(Ct);
+        Assert.True(wait.Status == WaitStatus.Cancelled, $"After {how} the wait is {wait.Status}.");
+        Assert.Equal(Noon.UtcDateTime, wait.ReleasedAt);
+        Assert.Null(wait.ReleaseReason);
+        Assert.DoesNotContain(await db.Journal.AsNoTracking().ToListAsync(Ct), e => e.Kind == JournalKinds.WorkItemResumed);
+    }
     private static WorkItemCanceller NewCanceller(TimeProvider clock) => TestCanceller.New(clock);
 
     private static async Task<WorkItemStatus> StatusOf(JasonDbContext db, WorkItem item, CancellationToken cancellationToken) =>

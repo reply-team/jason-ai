@@ -117,6 +117,11 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
         OptionRules.Range(failures, "Dispatcher:ExitGraceSeconds", options.ExitGraceSeconds, 0, 600);
         OptionRules.Range(failures, "Dispatcher:EventsCadenceSeconds", options.EventsCadenceSeconds, DispatcherOptions.MinimumEventsCadenceSeconds, DispatcherOptions.MaximumEventsCadenceSeconds);
         ValidateKind(failures, "Dispatcher:AiRole", options.AiRole);
+        if (options.AiRole is { } role)
+        {
+            OptionRules.Range(failures, "Dispatcher:AiRole:MaxWaitSeconds", role.MaxWaitSeconds, AiRoleDefaults.MinimumWaitSeconds, AiRoleDefaults.MaximumWaitSeconds);
+            OptionRules.Range(failures, "Dispatcher:AiRole:MaxWaits", role.MaxWaits, 1, AiRoleDefaults.MaximumWaits);
+        }
         ValidateKind(failures, "Dispatcher:ProviderOp", options.ProviderOp);
 
         return OptionRules.Result(failures);

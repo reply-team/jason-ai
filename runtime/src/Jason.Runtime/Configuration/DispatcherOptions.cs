@@ -1,7 +1,7 @@
 namespace Jason.Runtime.Configuration;
 
 /// <summary>What a work item of one kind gets when it names no override of its own.</summary>
-public sealed class KindDefaults
+public class KindDefaults
 {
     public int TimeoutSeconds { get; set; }
 
@@ -9,6 +9,28 @@ public sealed class KindDefaults
     public int HeartbeatSeconds { get; set; }
 
     public int MaxAttempts { get; set; }
+}
+
+/// <summary>An AI role's defaults, and the bounds on how it waits: a role's wait always ends, and so does its waiting.</summary>
+public sealed class AiRoleDefaults : KindDefaults
+{
+    /// <summary>The longest a ceiling may be: thirty days.</summary>
+    public const int MaximumWaitSeconds = 2_592_000;
+
+    /// <summary>The shortest a ceiling may be: a minute, the shortest anything the dispatcher waits for is counted in.</summary>
+    public const int MinimumWaitSeconds = 60;
+
+    /// <summary>The most times one item may be allowed to wait.</summary>
+    public const int MaximumWaits = 100;
+
+    /// <summary>
+    /// 60..2592000; the deadline of a wait that names no moment, counted from when it opens, and the latest moment a wait
+    /// may name. Fourteen days unless set.
+    /// </summary>
+    public int MaxWaitSeconds { get; set; } = 1_209_600;
+
+    /// <summary>1..100; how many times one item may wait before its run has to finish or fail instead.</summary>
+    public int MaxWaits { get; set; } = 20;
 }
 
 /// <summary>
@@ -49,7 +71,7 @@ public sealed class DispatcherOptions
     /// </summary>
     public int EventsCadenceSeconds { get; set; } = 600;
 
-    public KindDefaults AiRole { get; set; } = new() { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3 };
+    public AiRoleDefaults AiRole { get; set; } = new() { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3 };
 
     /// <summary>
     /// The lease covers the slowest operation this build publishes plus the grace a child is given to stop, with

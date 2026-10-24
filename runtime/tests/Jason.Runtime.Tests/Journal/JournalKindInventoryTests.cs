@@ -75,6 +75,8 @@ public sealed class JournalKindInventoryTests
         JournalKinds.ApprovalSuperseded,
         JournalKinds.ApprovalCancelled,
         JournalKinds.WorkItemReopened,
+        JournalKinds.WorkItemWaiting,
+        JournalKinds.WorkItemResumed,
         JournalKinds.RoleAdded,
         JournalKinds.RoleUpdated,
         JournalKinds.RoleNoteSet,

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Jason.Contracts.Api;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -5,6 +6,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Jason.Runtime.Tests.WorkItems;
 
@@ -134,6 +136,74 @@ public class WorkItemCancelTests
         Assert.Equal("work_item_not_found", error.Code);
     }
 
+    /// <summary>
+    /// A waiting item is cancelled only with its wait in hand: one whose open wait was not found has moved since it was
+    /// read, so the canceller refuses rather than cancel half of it, and says so as the concurrent change it is.
+    /// </summary>
+    [Fact]
+    public void A_waiting_item_is_never_cancelled_without_its_wait()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var item = Seed(db, w => w.Status = WorkItemStatus.Waiting);
+        var canceller = TestCanceller.New(new FixedClock(Noon));
+
+        var error = Assert.Throws<DomainException>(() => canceller.Cancel(db, item, Actors.Dispatcher, "no longer needed"));
+
+        Assert.Equal("concurrent_update", error.Code);
+        Assert.Equal(409, error.StatusCode);
+        Assert.True(error.Retryable, "A cancellation that lost a race to the resume step was answered as final.");
+        Assert.True(item.Status == WorkItemStatus.Waiting, $"A refused cancellation left the item {item.Status}.");
+        Assert.Empty(db.ChangeTracker.Entries<JournalEntry>());
+    }
+
+    /// <summary>
+    /// The resume step releases the wait after <c>workitem.cancel</c> read the item and before it read the wait: the
+    /// caller is told to read again (409, retryable), never answered 500, and nothing is cancelled. The retry cancels the
+    /// released item.
+    /// </summary>
+    [Fact]
+    public async Task A_cancel_whose_item_is_released_between_its_two_reads_is_told_to_read_again()
+    {
+        using var database = new TestDatabase();
+        var item = WorkItemFactory.NewAiRole(WorkItemFactory.NewCampaign(), "planner", Noon.UtcDateTime, w => w.Status = WorkItemStatus.Waiting);
+        var yielded = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Yielded, Noon.UtcDateTime.AddHours(-1));
+        yielded.FinishedAt = Noon.UtcDateTime.AddHours(-1);
+        using (var seed = database.Open())
+        {
+            seed.WorkItems.Add(item);
+            seed.WorkItemWaits.Add(new WorkItemWait { WorkItem = item, Attempt = yielded, Until = Noon.UtcDateTime.AddDays(1), Deadline = Noon.UtcDateTime.AddDays(1), OpenedAt = Noon.UtcDateTime.AddHours(-1) });
+            await seed.SaveChangesAsync(Ct);
+        }
+
+        var release = new ReleaseBeforeTheWaitIsRead(() =>
+        {
+            using var other = database.Open();
+            other.WorkItemWaits.Where(w => w.WorkItemId == item.Id)
+                .ExecuteUpdate(s => s.SetProperty(w => w.Status, WaitStatus.Released).SetProperty(w => w.ReleaseReason, WaitReleaseReason.MomentReached));
+            other.WorkItems.Where(w => w.Id == item.Id)
+                .ExecuteUpdate(s => s.SetProperty(w => w.Status, WorkItemStatus.Created));
+        });
+        using (var db = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(release).Options))
+        {
+            var error = await Assert.ThrowsAsync<DomainException>(() =>
+                NewService(db, new FixedClock(Noon), new RunningAttemptRegistry()).CancelAsync(new WorkItemCancelRequest(item.PublicId, null, "no longer needed"), Ct));
+
+            Assert.True(release.Fired, "The wait was never read, so the race was not run.");
+            Assert.Equal("concurrent_update", error.Code);
+            Assert.Equal(409, error.StatusCode);
+        }
+
+        using (var db = database.Open())
+        {
+            Assert.Equal(WorkItemStatus.Created, (await db.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+            Assert.DoesNotContain(await db.Journal.AsNoTracking().ToListAsync(Ct), e => e.Kind == JournalKinds.WorkItemCancelled);
+
+            var retried = await NewService(db, new FixedClock(Noon), new RunningAttemptRegistry()).CancelAsync(new WorkItemCancelRequest(item.PublicId, null, "no longer needed"), Ct);
+            Assert.Equal(WorkItemStatus.Cancelled, retried.Status);
+        }
+    }
+
     private static WorkItemService NewService(JasonDbContext db, TimeProvider clock, RunningAttemptRegistry registry) =>
         new(db, new JournalWriter(clock), clock, TestCanceller.New(clock, registry), TestOptions.PluginSettings());
 
@@ -143,5 +213,26 @@ public class WorkItemCancelTests
         db.WorkItems.Add(item);
         db.SaveChanges();
         return item;
+    }
+
+    /// <summary>Runs the interference once, on another connection, just before the first query that reads the waits is sent.</summary>
+    private sealed class ReleaseBeforeTheWaitIsRead(Action interfere) : DbCommandInterceptor
+    {
+        public bool Fired { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Fired && command.CommandText.Contains("FROM \"work_item_waits\"", StringComparison.Ordinal))
+            {
+                Fired = true;
+                interfere();
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 }

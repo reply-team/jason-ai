@@ -24,6 +24,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<Attempt> Attempts => Set<Attempt>();
 
+    public DbSet<WorkItemWait> WorkItemWaits => Set<WorkItemWait>();
+
+    public DbSet<WorkItemWaitItem> WorkItemWaitItems => Set<WorkItemWaitItem>();
+
     public DbSet<Role> Roles => Set<Role>();
 
     public DbSet<ExternalId> ExternalIds => Set<ExternalId>();
@@ -109,6 +113,9 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<WorkItemKind>().HaveConversion<SnakeCaseEnumConverter<WorkItemKind>>().HaveMaxLength(32);
         configurationBuilder.Properties<WorkItemStatus>().HaveConversion<SnakeCaseEnumConverter<WorkItemStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<AttemptStatus>().HaveConversion<SnakeCaseEnumConverter<AttemptStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<WaitMode>().HaveConversion<SnakeCaseEnumConverter<WaitMode>>().HaveMaxLength(32);
+        configurationBuilder.Properties<WaitStatus>().HaveConversion<SnakeCaseEnumConverter<WaitStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<WaitReleaseReason>().HaveConversion<SnakeCaseEnumConverter<WaitReleaseReason>>().HaveMaxLength(32);
         configurationBuilder.Properties<ApprovalStatus>().HaveConversion<SnakeCaseEnumConverter<ApprovalStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<DecisionStatus>().HaveConversion<SnakeCaseEnumConverter<DecisionStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<RouteScope>().HaveConversion<SnakeCaseEnumConverter<RouteScope>>().HaveMaxLength(32);
@@ -499,6 +506,33 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
             // Single-flight is a database guarantee, not a service convention: one live attempt per work item.
             attempt.HasIndex(a => a.WorkItemId).IsUnique().HasFilter("status IN ('scheduled','running')").HasDatabaseName("ix_attempts_one_live_per_item");
+        });
+
+        modelBuilder.Entity<WorkItemWait>(wait =>
+        {
+            wait.HasKey(w => w.Id);
+
+            // Releasing a wait and cancelling its item must not both win, and the status is what they both change.
+            wait.Property(w => w.Status).IsConcurrencyToken();
+
+            // One open wait per item: an item is waiting for one thing at a time, and the database is what says so.
+            wait.HasIndex(w => w.WorkItemId).IsUnique().HasFilter("status = 'open'").HasDatabaseName("ix_work_item_waits_one_open_per_item");
+
+            // An item's waits by how they stand: the resume step finds each waiting item's open wait here, and a wait that has
+            // closed is found by its item only here.
+            wait.HasIndex(w => new { w.WorkItemId, w.Status });
+            wait.HasOne(w => w.WorkItem).WithMany().HasForeignKey(w => w.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+            wait.HasOne(w => w.Attempt).WithMany().HasForeignKey(w => w.AttemptId).OnDelete(DeleteBehavior.Restrict);
+            wait.HasOne(w => w.ResumedByAttempt).WithMany().HasForeignKey(w => w.ResumedByAttemptId).OnDelete(DeleteBehavior.Restrict);
+            wait.HasMany(w => w.Items).WithOne(i => i.Wait).HasForeignKey(i => i.WaitId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<WorkItemWaitItem>(named =>
+        {
+            // A wait names an item once; the key also serves the resume step, which reads a wait's items by the wait.
+            named.HasKey(i => new { i.WaitId, i.ChildWorkItemId });
+            named.HasIndex(i => i.ChildWorkItemId);
+            named.HasOne(i => i.ChildWorkItem).WithMany().HasForeignKey(i => i.ChildWorkItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Role>(role =>

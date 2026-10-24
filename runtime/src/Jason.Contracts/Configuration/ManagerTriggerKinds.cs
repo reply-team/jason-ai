@@ -22,7 +22,7 @@ public static class ManagerTriggerKinds
         "suppression_added", "suppression_removed",
         "workitem_created", "workitem_updated", "workitem_context_updated", "workitem_scheduled", "workitem_processing",
         "workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired", "workitem_released",
-        "workitem_awaiting_approval", "workitem_reopened",
+        "workitem_awaiting_approval", "workitem_reopened", "workitem_waiting", "workitem_resumed",
         "approval_requested", "approval_approved", "approval_rejected", "approval_superseded", "approval_cancelled",
         "role_added", "role_updated", "role_note_set",
         "profile_created", "profile_revised", "profile_disabled", "profile_enabled",
