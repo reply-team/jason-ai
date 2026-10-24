@@ -281,6 +281,91 @@ public sealed class WorkingFolderTests : IDisposable
     }
 
     /// <summary>
+    /// A verb that names a campaign by its id is about that campaign, whatever folder the shell stands in: run inside a
+    /// campaign's own folder, none of them is given the folder's project, none asks the runtime what the marker names, and
+    /// nothing is said on stderr. The rows are the campaign-id verbs of the verb map, so a verb added to the map without
+    /// being listed here is a verb nobody has shown to be safe from the fill.
+    /// </summary>
+    [Theory]
+    [Critical(Family.X2, "a campaign-id verb is never filled from the campaign folder a shell stands in")]
+    [InlineData("get", Operations.CampaignGet, "campaign get {id}")]
+    [InlineData("update", Operations.CampaignUpdate, "campaign update {id} --name Renamed")]
+    [InlineData("start", Operations.CampaignStart, "campaign start {id}")]
+    [InlineData("pause", Operations.CampaignPause, "campaign pause {id}")]
+    [InlineData("archive", Operations.CampaignArchive, "campaign archive {id}")]
+    [InlineData("update-context", Operations.CampaignUpdateContext, "campaign update-context {id} --set {\"stage\":\"warm\"}")]
+    [InlineData("add-contacts", Operations.CampaignAddContacts, "campaign add-contacts {id} --file {file}")]
+    [InlineData("remove-contacts", Operations.CampaignRemoveContacts, "campaign remove-contacts {id} --contact cnt_A")]
+    [InlineData("list-contacts", Operations.CampaignListContacts, "campaign list-contacts {id}")]
+    public async Task A_campaign_id_verb_run_in_a_campaign_s_folder_is_never_given_the_folder_s_project(string verb, string operation, string line)
+    {
+        var contacts = Path.Combine(_tree, "contacts.json");
+        File.WriteAllText(contacts, """[{"first_name":"Marta","channels":{"email":"marta@example.com"}}]""");
+        using var cli = new FolderRun(LeadsFolder, Answers());
+
+        // The template is split before anything is put into it, so a path holding a space stays one argument.
+        var exit = await cli.RunAsync([.. line.Split(' ').Select(word => word.Replace("{id}", Leads, StringComparison.Ordinal).Replace("{file}", contacts, StringComparison.Ordinal))]);
+
+        Assert.True(exit == ExitCodes.Success, $"'campaign {verb}' ended {exit}: {cli.Error}");
+        Assert.True(new[] { operation }.SequenceEqual(cli.Operations), $"'campaign {verb}' asked the runtime for {string.Join(", ", cli.Operations)}, and not only for {operation}.");
+        var body = Assert.Single(cli.Bodies);
+        Assert.False(body.ContainsKey("project_id"), $"'campaign {verb}' was sent with a project: {body.ToJsonString()}");
+        Assert.True(cli.ErrorLines.Count == 0, $"'campaign {verb}' said something on stderr: {cli.Error}");
+    }
+
+    /// <summary>
+    /// <c>project update</c> names its project by the id it is given. Run inside a project's folder it sends exactly the id
+    /// and the new name, asks nothing about the marker and says nothing on stderr. The body alone would not show a fill
+    /// that ran first, since the id written afterwards replaces the filled one; what shows it is the single request and the
+    /// empty stderr, which a fill would break with the line that says where the project came from.
+    /// </summary>
+    [Fact]
+    public async Task A_project_update_in_a_project_s_folder_sends_the_id_it_was_given_and_asks_nothing_of_the_marker()
+    {
+        using var cli = new FolderRun(AcmeFolder, Answers());
+
+        var exit = await cli.RunAsync("project", "update", Beta, "--name", "Beta renamed");
+
+        Assert.True(exit == ExitCodes.Success, $"'project update' ended {exit}: {cli.Error}");
+        Assert.Equal(new[] { Operations.ProjectUpdate }, cli.Operations);
+        cli.AssertSent(0, new JsonObject { ["project_id"] = Beta, ["name"] = "Beta renamed" }.ToJsonString());
+        Assert.True(cli.ErrorLines.Count == 0, $"'project update' said something on stderr: {cli.Error}");
+    }
+
+    /// <summary>
+    /// Which verbs fill a project from a folder is decided where each is built, and three places ask: the two campaign
+    /// verbs that take an optional project (create and list), and <c>project get</c> with neither id nor slug. A fourth is a
+    /// verb whose writes are now addressed by where a shell stands, so it has to come here by name, with its own row above.
+    /// Read off the sources, since a call that is not made leaves nothing to observe. Only the qualified spelling is counted,
+    /// which is how every caller outside <c>WorkingFolder</c> has to write it and what leaves the definition itself out of
+    /// the count; a call written unqualified inside WorkingFolder.cs, or one made through <c>using static</c>, would not be
+    /// seen.
+    /// </summary>
+    [Fact]
+    public void Only_three_places_in_the_client_fill_a_project_from_a_folder()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        var callers = Directory.EnumerateFiles(Path.Combine(root.FullName, "runtime", "src", "Jason.Cli"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Select(file => (File: Path.GetFileName(file), Calls: System.Text.RegularExpressions.Regex.Count(File.ReadAllText(file), System.Text.RegularExpressions.Regex.Escape("WorkingFolder.FillProjectAsync("))))
+            .Where(caller => caller.Calls > 0)
+            .OrderBy(caller => caller.File, StringComparer.Ordinal)
+            .Select(caller => $"{caller.File} x{caller.Calls}")
+            .ToList();
+
+        Assert.True(callers.Count > 0, "No source of the client was read.");
+        Assert.True(
+            new[] { "CampaignCommands.cs x2", "ProjectCommands.cs x1" }.SequenceEqual(callers),
+            $"The calls to WorkingFolder.FillProjectAsync are in: {string.Join(", ", callers)}.");
+    }
+
+    /// <summary>
     /// <c>campaign list</c> inside a project's folder lists that project's campaigns; <c>--all-projects</c> lists every
     /// project's from there, and no marker is read for it.
     /// </summary>

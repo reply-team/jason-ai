@@ -84,6 +84,21 @@ public class ProviderOpCommandTests
     }
 
     /// <summary>
+    /// A route that binds no account is a plan whose binding is null, and the invocation carries it as null: the
+    /// command does not stand an empty object in for the absence, which a plugin could not tell from an account
+    /// that holds nothing.
+    /// </summary>
+    [Fact]
+    public void A_plan_with_no_binding_makes_an_invocation_with_no_binding()
+    {
+        var plan = PlanFor("campaign.get") with { Binding = null, BindingIdentity = null };
+
+        var request = ProviderOpCommand.RequestFor(ContextWith(plan, secondsLeft: 600));
+
+        Assert.True(request.Binding is null, $"The invocation carries a binding: {request.Binding?.ToJsonString()}");
+    }
+
+    /// <summary>
     /// A provider attempt without a plan is a mistake in the claim, and the claim is the only place that builds
     /// one. It is loud here rather than quiet in production: there is no invocation this command could invent.
     /// </summary>

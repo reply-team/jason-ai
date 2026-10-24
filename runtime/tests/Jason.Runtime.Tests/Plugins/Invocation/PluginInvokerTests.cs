@@ -80,6 +80,29 @@ public class PluginInvokerTests
         Assert.Equal(result.Provenance.InvocationId, context["invocation_id"]!.GetValue<string>());
     }
 
+    /// <summary>
+    /// A route that binds no account reaches the plugin as a context whose binding is null, present as a key and
+    /// not an empty object. A plugin tells "no account was bound" from "an account with nothing in it" by that
+    /// difference, so the last step of the path must not turn the one into the other.
+    /// </summary>
+    [Fact]
+    public async Task A_request_with_no_binding_reaches_the_plugin_as_a_null_binding_and_not_an_empty_one()
+    {
+        await using var api = await StartAsync();
+
+        var result = await InvokeAsync(api, new PluginInvocationRequest(
+            TestPlugins.FakeProviderId,
+            "context.echo",
+            new JsonObject(),
+            null,
+            "att_01K0NOBINDING"),
+            Ct);
+
+        var context = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Result!.AsObject();
+        Assert.True(context.ContainsKey("binding"), $"The context has no 'binding' key: {context.ToJsonString()}");
+        Assert.Null(context["binding"]);
+    }
+
     [Fact]
     public async Task A_program_the_plugin_starts_sees_its_granted_variable_and_nothing_of_the_runtime()
     {

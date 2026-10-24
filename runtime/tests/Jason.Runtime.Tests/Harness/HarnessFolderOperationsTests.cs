@@ -1,9 +1,14 @@
 using System.Net;
 using Jason.Contracts.Api;
 using Jason.Contracts.Harness;
+using Jason.Contracts.Json;
+using Jason.Runtime.Campaigns;
 using Jason.Runtime.Harness;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Projects;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Harness;
@@ -322,6 +327,44 @@ public sealed class HarnessFolderOperationsTests
     }
 
     /// <summary>
+    /// The folder has moved and the save that records its new path then fails — the database refuses it, which is not the
+    /// caller going away: the update is not committed, and the folder is put back where the database records it, so the
+    /// row and the disk agree and nothing stays at the target. The failure that came out is the save's own.
+    /// </summary>
+    [Fact]
+    [Critical(Family.X2, "a save that fails after the folder moved puts the folder back")]
+    public async Task A_save_that_fails_once_the_folder_has_moved_puts_the_folder_back_where_the_row_records_it()
+    {
+        using var database = new TestDatabase();
+        var failing = new FailsWhenAFolderIsRecorded();
+        using var db = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(failing).Options);
+        var clock = new FixedClock(new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+        var folders = TestHarness.FoldersFor(db);
+        var projects = new ProjectService(db, new JournalWriter(clock), clock, folders);
+        var campaigns = new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), folders);
+        var acme = await projects.CreateAsync(new ProjectCreateRequest("Acme Corp", null, null, null), Ct);
+        var beta = await projects.CreateAsync(new ProjectCreateRequest("Beta", null, null, null), Ct);
+        var leads = await campaigns.CreateAsync(new CampaignCreateRequest("Q3 leads", null, null, null, ProjectId: acme.Id), Ct);
+        await campaigns.CreateAsync(new CampaignCreateRequest("Q4 leads", null, null, null, ProjectId: beta.Id), Ct);
+        var disk = Snapshot(TestHarness.RootFor(db));
+        failing.Arm();
+
+        var thrown = await Assert.ThrowsAsync<SaveRefused>(() => campaigns.UpdateAsync(
+            new CampaignUpdateRequest(leads.Id, Optional<string?>.Absent, Optional<string?>.Absent, Optional<int?>.Absent, null, null, Optional<string?>.Of(beta.Id)),
+            Ct));
+
+        Assert.Same(failing.Refused, thrown);
+        using var fresh = database.Open();
+        var row = await fresh.Campaigns.AsNoTracking().Include(campaign => campaign.Project).SingleAsync(campaign => campaign.PublicId == leads.Id, Ct);
+        Assert.Equal((acme.Id, leads.FolderPath), (row.Project!.PublicId, row.FolderPath));
+        Assert.True(Directory.Exists(leads.FolderPath), $"the folder is not at '{leads.FolderPath}', where the row records it.");
+        Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, leads.Id), HarnessMarker.In(leads.FolderPath!));
+        Assert.False(Directory.Exists(Path.Combine(beta.FolderPath!, "campaigns", Path.GetFileName(leads.FolderPath!))), "a folder is left at the target.");
+        Assert.DoesNotContain("campaign_updated", await fresh.Journal.AsNoTracking().Select(entry => entry.Kind).ToListAsync(Ct));
+        Assert.Equal(disk, Snapshot(TestHarness.RootFor(db)));
+    }
+
+    /// <summary>
     /// A move into a project with no folder recorded — the default project of an installation that upgraded — whose
     /// campaign's folder is not where it was recorded is refused before anything is made: that project gets no folder,
     /// and nothing on the disk or in the database changes.
@@ -515,5 +558,36 @@ public sealed class HarnessFolderOperationsTests
         }
 
         return snapshot;
+    }
+
+    /// <summary>What the interceptor throws: not a cancellation, not a conflict, a save the database refuses.</summary>
+    private sealed class SaveRefused() : Exception("the save was refused");
+
+    /// <summary>
+    /// Fails the first save, once armed, that records a campaign's new folder path: the one run under no caller's token
+    /// after the folder has moved. Every other save passes untouched.
+    /// </summary>
+    private sealed class FailsWhenAFolderIsRecorded : SaveChangesInterceptor
+    {
+        private bool _armed;
+
+        public SaveRefused? Refused { get; private set; }
+
+        public void Arm() => _armed = true;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(eventData);
+            if (_armed && Refused is null && eventData.Context!.ChangeTracker.Entries<Campaign>().Any(entry => entry.State == EntityState.Modified && entry.Property(campaign => campaign.FolderPath).IsModified))
+            {
+                Refused = new SaveRefused();
+                throw Refused;
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 }

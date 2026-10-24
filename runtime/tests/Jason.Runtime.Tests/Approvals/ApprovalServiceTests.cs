@@ -62,6 +62,25 @@ public class ApprovalServiceTests
     }
 
     /// <summary>
+    /// And the runtime's own actor never reaches that rule at all: every caller is refused the system actor before any
+    /// verb reads it, as a request that is wrong rather than as work only a person may do.
+    /// </summary>
+    [Fact]
+    public async Task The_runtimes_own_actor_is_refused_before_the_verb_sees_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (_, approval) = await ParkedWork.WriteAsync(db, Ct);
+
+        var refused = await Assert.ThrowsAsync<ValidationException>(
+            () => Service(db).ApproveAsync(new ApprovalDecisionRequest(approval.PublicId, new ActorRef(ActorType.System, "dispatcher"), null), Ct));
+
+        Assert.Equal("actor.type", refused.Details![0].Field);
+        Assert.Equal("not_allowed", refused.Details[0].Code);
+        Assert.Equal(ApprovalStatus.Pending, (await db.Approvals.AsNoTracking().SingleAsync(Ct)).Status);
+    }
+
+    /// <summary>
     /// Two people answering the same preview, and the second one loses cleanly: the decision that was made
     /// stands, and the work is not moved twice.
     /// </summary>

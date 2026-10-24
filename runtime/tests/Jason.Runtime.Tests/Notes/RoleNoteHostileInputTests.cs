@@ -18,6 +18,16 @@ public class RoleNoteHostileInputTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
+    /// The other tests here take the cap from the constant on both sides of their comparison, so a changed constant
+    /// moves the test with it. This one holds the number itself, which the published pages state.
+    /// </summary>
+    [Fact]
+    public void The_cap_is_sixty_four_kibibytes()
+    {
+        Assert.Equal(65536, RoleNoteService.MaxNoteBytes);
+    }
+
+    /// <summary>
     /// The cap is measured on the canonical form, so the two sides of it are computable and the test computes
     /// them: one byte under is a note, one byte over is refused. Measured rather than approximated, because a
     /// role that is told "too large" has to be able to make its note smaller and know when it has — and the

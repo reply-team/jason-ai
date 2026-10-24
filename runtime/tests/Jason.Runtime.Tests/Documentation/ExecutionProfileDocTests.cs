@@ -114,6 +114,10 @@ public partial class ExecutionProfileDocTests
             contract,
             StringComparison.Ordinal);
 
+        // The figure above follows the constant, so a constant and a page changed together would still agree; the
+        // number the page has always stated is held here as written.
+        Assert.Contains("64 KiB", contract, StringComparison.Ordinal);
+
         // And what that number counts: UTF-8, not the escaped form the note is named by, which counted three times
         // as much for anybody writing in another script — and the page that gives the figure is where they will
         // look after a refusal.

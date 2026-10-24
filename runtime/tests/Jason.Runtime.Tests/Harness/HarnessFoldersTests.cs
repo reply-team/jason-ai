@@ -526,6 +526,62 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal(before, Snapshot(Root));
     }
 
+    /// <summary>
+    /// A folder that is gone when the rename comes is a rename the disk refuses, on every platform and not only where an
+    /// open file stops one: the move is refused <c>harness_folder_unavailable</c>, and nothing is made at the target.
+    /// </summary>
+    [Fact]
+    [Critical(Family.X2, "a rename the disk refuses is refused, and makes nothing at the target")]
+    public async Task A_move_whose_source_is_gone_at_the_rename_is_refused_and_nothing_is_made_at_the_target()
+    {
+        var folders = TestHarness.Folders(Home);
+        var acme = folders.MakeProjectFolder(Project, "acme");
+        var other = folders.MakeProjectFolder(Other, "other");
+        await MakeAsync(folders, other, "cmp_01K7QN000000000000000THERE", "Q4 leads");
+        var campaign = await MakeAsync(folders, acme, Campaign, "Q3 leads");
+        var leaf = await folders.PlanCampaignMoveAsync(campaign, Campaign, other, HeldAsync);
+        Directory.Delete(campaign, recursive: true);
+        var before = Snapshot(Root);
+
+        var refused = Assert.Throws<DomainException>(() => folders.MoveCampaignFolder(campaign, other, leaf));
+
+        Assert.Equal("harness_folder_unavailable", refused.Code);
+        Assert.False(Directory.Exists(Path.Combine(other, "campaigns", leaf)), $"a folder was made at the target '{leaf}'.");
+        Assert.Equal(before, Snapshot(Root));
+    }
+
+    /// <summary>
+    /// Putting a moved folder back is one rename: the folder is at the path the database records again, with what was in
+    /// it. A folder that cannot be put back — the recorded path is taken — is left where the move put it, and nothing
+    /// is thrown, since the refusal that follows says where it is.
+    /// </summary>
+    [Fact]
+    public void A_moved_folder_is_put_back_and_one_that_cannot_be_is_left_where_it_is_without_a_throw()
+    {
+        var moved = Path.Combine(_tree.Root, "moved");
+        var recorded = Path.Combine(_tree.Root, "recorded");
+        Directory.CreateDirectory(moved);
+        File.WriteAllText(Path.Combine(moved, "AGENTS.md"), "kept");
+
+        HarnessFolders.MoveBack(moved, recorded);
+
+        Assert.False(Directory.Exists(moved), $"'{moved}' is still there.");
+        Assert.Equal("kept", Text(recorded, "AGENTS.md"));
+
+        var stuck = Path.Combine(_tree.Root, "stuck");
+        var taken = Path.Combine(_tree.Root, "taken");
+        Directory.CreateDirectory(stuck);
+        File.WriteAllText(Path.Combine(stuck, "AGENTS.md"), "left");
+        Directory.CreateDirectory(taken);
+        File.WriteAllText(Path.Combine(taken, "AGENTS.md"), "theirs");
+
+        HarnessFolders.MoveBack(stuck, taken);
+
+        Assert.Equal("left", Text(stuck, "AGENTS.md"));
+        Assert.Equal("theirs", Text(taken, "AGENTS.md"));
+        Assert.Equal(["AGENTS.md"], Directory.GetFileSystemEntries(taken).Select(Path.GetFileName));
+    }
+
     /// <summary>Nothing the policy does writes a repository's files: no <c>.git</c>, no <c>.gitignore</c>, at any level.</summary>
     [Fact]
     public async Task No_level_is_ever_given_a_repository_s_files()

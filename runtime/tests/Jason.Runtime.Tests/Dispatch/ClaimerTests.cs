@@ -10,6 +10,7 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Json;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Registry;
@@ -1039,6 +1040,57 @@ public class ClaimerTests
         Assert.Equal(first.PublicId, approvals[0].PublicId);
         Assert.Equal("input_changed", approvals[1].Reason);
         Assert.Equal("48211", (string?)approvals[1].Subject["input"]!["contacts"]![0]!["external_ids"]!["contact"]);
+    }
+
+    /// <summary>
+    /// An approval given before the composed input carried the person's name, company, title and time zone was given about
+    /// a document that is no longer the one a plugin would receive. The hash of what would run now is not the hash the
+    /// person approved, so the work is asked about again, with the old decision kept as the one a person made, rather than
+    /// run under an approval of a subject nobody can show it matches.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S2, "an approval given on an older subject is asked again")]
+    public async Task An_approval_made_on_the_older_subject_without_the_person_s_fields_is_asked_again_as_input_changed()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var approved = await Decide(db, ApprovalStatus.Approved);
+
+        // The same subject as it was written before the person's fields were composed into it: every other part of it, the
+        // item, the plugin, the arguments and the person's id and channel, is as it was, and the hash is of that document.
+        string[] added = ["first_name", "last_name", "company", "title", "time_zone"];
+        var older = (JsonObject)approved.Subject.DeepClone();
+        var person = (JsonObject)older["input"]!["contacts"]![0]!;
+        Assert.True(added.All(person.ContainsKey), $"The person in the subject does not carry the fields: {person.ToJsonString()}");
+        foreach (var field in added)
+        {
+            person.Remove(field);
+        }
+
+        approved.Subject = older;
+        approved.SubjectHash = CanonicalJson.Hash(older);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Empty(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        var approvals = await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).ToListAsync(Ct);
+        Assert.Equal(2, approvals.Count);
+        Assert.Equal((approved.PublicId, ApprovalStatus.Superseded), (approvals[0].PublicId, approvals[0].Status));
+        Assert.Equal((ActorType.Human, "operator", "go ahead"), (approvals[0].DecidedByType, approvals[0].DecidedById, approvals[0].DecisionReason));
+        Assert.Equal((ApprovalStatus.Pending, "input_changed"), (approvals[1].Status, approvals[1].Reason));
+        Assert.NotEqual(approvals[0].SubjectHash, approvals[1].SubjectHash);
+        Assert.True(added.All(((JsonObject)approvals[1].Subject["input"]!["contacts"]![0]!).ContainsKey), "The new question's subject lacks the person's fields.");
     }
 
     /// <summary>

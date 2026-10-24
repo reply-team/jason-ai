@@ -329,6 +329,34 @@ public class PreferenceServiceTests
         Assert.Equal("Plain.", (string?)(await db.Preferences.AsNoTracking().SingleAsync(Ct)).Value["summary"]);
     }
 
+    /// <summary>
+    /// The runtime's own actor never reaches that rule: it is refused as a request that is wrong, before the verb reads it,
+    /// and what is stored and journalled stays as it was.
+    /// </summary>
+    [Fact]
+    public async Task The_runtimes_own_actor_neither_sets_nor_unsets_a_preference()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var service = NewService(db);
+        await service.SetAsync(new PreferenceSetRequest("tone_of_voice", Tone("Plain."), Marta, null), Ct);
+        var lines = await db.Journal.CountAsync(Ct);
+        var dispatcher = new ActorRef(ActorType.System, "dispatcher");
+
+        var set = await Assert.ThrowsAsync<ValidationException>(() =>
+            service.SetAsync(new PreferenceSetRequest("tone_of_voice", Tone("Loud."), dispatcher, null), Ct));
+        var unset = await Assert.ThrowsAsync<ValidationException>(() =>
+            service.UnsetAsync(new PreferenceUnsetRequest("tone_of_voice", dispatcher, null), Ct));
+
+        Assert.All(new[] { set, unset }, refused =>
+        {
+            Assert.Equal("actor.type", refused.Details![0].Field);
+            Assert.Equal("not_allowed", refused.Details[0].Code);
+        });
+        Assert.Equal(lines, await db.Journal.CountAsync(Ct));
+        Assert.Equal("Plain.", (string?)(await db.Preferences.AsNoTracking().SingleAsync(Ct)).Value["summary"]);
+    }
+
     /// <summary>As a decision is: what is recorded has to name the person whose word it is.</summary>
     [Theory]
     [InlineData(false)]

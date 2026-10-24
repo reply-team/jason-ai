@@ -605,6 +605,55 @@ public sealed class ProjectLinkTests
     }
 
     /// <summary>
+    /// A path that reaches a copied project folder through a link is refused naming the folder as the disk resolves it,
+    /// never as the path was spelled: the refusal names the folder a person finds when they look, whichever way they
+    /// came to it. The test makes the link itself, so the difference between the given spelling and the real one is
+    /// held on every platform, and not only where the temporary folder happens to lie under a link.
+    /// </summary>
+    [Fact]
+    public async Task A_marked_folder_reached_through_a_link_is_named_as_the_disk_resolves_it()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var acme = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Acme Corp" }, Ct);
+        var beta = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Beta" }, Ct);
+        Directory.Move(acme.FolderPath!, Path.Combine(Outside(api), "acme-gone"));
+
+        // A copy carries the marker of what it was copied from, and the runtime records no copy.
+        var holder = Path.Combine(Outside(api), "holder");
+        var copy = Path.Combine(holder, "beta-copy");
+        CopyFolder(beta.FolderPath!, copy);
+        var link = Path.Combine(Outside(api), "via");
+        MakeLink(link, holder);
+        try
+        {
+            var given = Path.Combine(link, "beta-copy", "notes");
+            Directory.CreateDirectory(given);
+            var disk = Snapshot(holder);
+            var lines = (await KindsAsync(api)).Count;
+
+            var refused = await api.PostErrorAsync(Operations.ProjectLink, new { project_id = acme.Id, path = given }, HttpStatusCode.Conflict, Ct);
+
+            var real = Path.Combine(FolderPaths.Real(holder), "beta-copy");
+            Assert.True(refused.Code == "harness_folder_taken", $"a path through a link was answered {refused.Code}: {refused.Message}");
+            Assert.Contains($"'{real}'", refused.Message, StringComparison.Ordinal);
+            var spelled = Path.Combine(link, "beta-copy");
+            Assert.False(refused.Message.Contains($"'{spelled}'", StringComparison.Ordinal), $"the refusal names the path as it was spelled, '{spelled}': {refused.Message}");
+            Assert.Equal(lines, (await KindsAsync(api)).Count);
+            Assert.Equal(disk, Snapshot(holder));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(link);
+            }
+            catch (Exception unremoved) when (unremoved is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
     /// A folder of the person's own named <c>campaigns</c>, anywhere but in a project's folder, is a folder like any other:
     /// no rule goes by a name, and the one in a project's folder is refused because the folder holding it is a project's.
     /// </summary>
@@ -713,6 +762,28 @@ public sealed class ProjectLinkTests
         Directory.CreateDirectory(Path.Combine(folder, HarnessMarker.Directory));
         File.WriteAllText(HarnessMarker.PathIn(folder), marker);
         return folder;
+    }
+
+    /// <summary>A link at <paramref name="link"/> to the directory <paramref name="target"/>, of the kind this account may make.</summary>
+    private static void MakeLink(string link, string target)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Directory.CreateSymbolicLink(link, target);
+            return;
+        }
+
+        // A junction: a symbolic link needs a privilege an ordinary Windows account does not hold, and a junction does not.
+        // Started through the door, as every child is, so no console window opens on the desktop.
+        var start = ChildProcess.StartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"), ChildKind.SystemTool);
+        foreach (var argument in new[] { "/c", "mklink", "/J", link, target })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = ChildProcess.Start(start)!;
+        Assert.True(process.WaitForExit(TimeSpan.FromSeconds(30)), $"mklink did not end within 30 seconds making '{link}'.");
+        Assert.True(Directory.Exists(link), $"the junction at '{link}' was not made: {process.StandardError.ReadToEnd()}");
     }
 
     private static void CopyFolder(string from, string to)
