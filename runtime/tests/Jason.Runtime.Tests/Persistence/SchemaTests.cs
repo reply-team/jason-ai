@@ -95,10 +95,15 @@ public class SchemaTests
         Assert.Contains("ix_work_items_status_finished_at", indexes);
         Assert.Contains("ix_work_items_contact_id", indexes);
         Assert.Contains("ix_work_items_campaign_id_contact_id", indexes);
+        Assert.Contains("ix_work_items_campaign_id_finished_at", indexes);
         Assert.Contains("ix_attempts_work_item_id_number", indexes);
         Assert.Contains("ix_attempts_status", indexes);
         Assert.Contains("ix_roles_name", indexes);
         Assert.Contains("ix_journal_work_item_id_public_id", indexes);
+
+        var byFinish = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_work_items_campaign_id_finished_at'");
+        Assert.Contains("(\"campaign_id\", \"finished_at\")", byFinish, StringComparison.Ordinal);
+        Assert.Contains("WHERE finished_at IS NOT NULL", byFinish, StringComparison.Ordinal);
 
         var singleFlight = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_attempts_one_live_per_item'");
         Assert.Contains("UNIQUE", singleFlight, StringComparison.Ordinal);

@@ -393,29 +393,34 @@ public class RecordedExchangesTests
         await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = seed.LatAm, actor = ada }, Ct);
         Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "archived-campaign", new { campaign_id = seed.LatAm, contacts = new[] { new { contact_id = seed.Mateo } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
 
-        // Mateo answers again on the same thread: his timeline then has two reply rows that open one thread.
+        // Mateo answers again on the same thread: his timeline then has two reply rows that open one thread. The event names
+        // no provider campaign, so it reaches both his campaigns by his pin and is said in each, under one key.
         using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
             var person = await db.Contacts.SingleAsync(c => c.PublicId == seed.Mateo, Ct);
             var pilot = await db.Campaigns.SingleAsync(c => c.PublicId == seed.LatAm, Ct);
-            db.Journal.Add(new JournalEntry
+            var reEngage = await db.Campaigns.SingleAsync(c => c.PublicId == seed.ReEngage, Ct);
+            foreach (var (id, campaign) in new[] { ("jrn_01K7QN00000000000000000198", reEngage), ("jrn_01K7QN00000000000000000199", pilot) })
             {
-                PublicId = "jrn_01K7QN00000000000000000199",
-                Ts = new DateTime(2026, 10, 16, 8, 55, 0, DateTimeKind.Utc),
-                ActorType = Actors.Dispatcher.Type,
-                ActorId = Actors.Dispatcher.Id,
-                Kind = JournalKinds.InboundReplyObserved,
-                CampaignId = pilot.Id,
-                ContactId = person.Id,
-                Key = "reply-t_501-0855",
-                New = new JsonObject { ["plugin"] = "reply", ["thread"] = "t_501", ["channel"] = "email", ["last_activity_at"] = "2026-10-16T08:55:00.000Z", ["unread"] = true, ["has_meeting_intent"] = null, ["contact_id"] = seed.Mateo },
-            });
+                db.Journal.Add(new JournalEntry
+                {
+                    PublicId = id,
+                    Ts = new DateTime(2026, 10, 16, 8, 55, 0, DateTimeKind.Utc),
+                    ActorType = Actors.Dispatcher.Type,
+                    ActorId = Actors.Dispatcher.Id,
+                    Kind = JournalKinds.InboundReplyObserved,
+                    CampaignId = campaign.Id,
+                    ContactId = person.Id,
+                    Key = "reply-t_501-0855",
+                    New = new JsonObject { ["plugin"] = "reply", ["thread"] = "t_501", ["channel"] = "email", ["last_activity_at"] = "2026-10-16T08:55:00.000Z", ["unread"] = true, ["has_meeting_intent"] = null, ["contact_id"] = seed.Mateo, ["event_id"] = "evt_01K7QN00000000000000000001", ["attributed_by"] = "contact_pin" },
+                });
+            }
             await db.SaveChangesAsync(Ct);
         }
 
         var twice = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-replied-twice", new { contact_id = seed.Mateo, kinds = all, limit = 50 }, Ct);
-        Assert.Equal(2, twice.Items.Count(e => e.Kind == JournalKinds.InboundReplyObserved));
+        Assert.Equal(3, twice.Items.Count(e => e.Kind == JournalKinds.InboundReplyObserved));
     }
 
     /// <summary>
@@ -525,6 +530,53 @@ public class RecordedExchangesTests
         await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "summer-pending", new { status = "pending", campaign_id = summer, limit = 50 }, Ct);
         await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "summer-pending", new { status = "pending", campaign_id = summer, limit = 50 }, Ct);
         await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "summer", new { campaign_id = summer, kinds = (string[])[.. replies, .. work, .. decisions, .. changes], limit = 50 }, Ct);
+
+        // Performance: the whole operation's week, today, and two campaigns, the two series the page draws, and the people
+        // behind a tile or a bar, as the page asks, with no campaign named or with the ones chosen.
+        const string Today = "2026-10-16T00:00:00.000Z";
+        string[] two = [seed.Spring, seed.Autumn];
+        Assert.Equal(
+            new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1),
+            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-7-days", new { since = WeekStart, until = Now }, Ct)).Total);
+        Assert.Equal(
+            new CampaignActivityTotal(0, 0, 0, 0, 0, 0, Removed: 0),
+            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-today", new { since = Today, until = Now }, Ct)).Total);
+        Assert.Equal(
+            new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1),
+            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "two", new { campaign_ids = two, since = WeekStart, until = Now }, Ct)).Total);
+
+        async Task<int[]> SeriesAsync(string @case, object body) =>
+            [.. (await api.RecordAsync<CampaignActivityByPeriodResponse>(Operations.CampaignActivityByPeriod, @case, body, Ct)).Buckets.Select(bucket => bucket.Value)];
+        // Contacted: Ivy and Tess on the 12th, Uma on the 13th, Vic on the 14th. Replied: Rae on the 12th, Oli on the 14th.
+        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-7-days", new { count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
+        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-7-days", new { count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
+        Assert.Equal(new int[9], await SeriesAsync("contacted-today", new { count = "contacted", period = "hour", since = Today, until = Now, zone = "UTC" }));
+        Assert.Equal(new int[9], await SeriesAsync("replied-today", new { count = "replied", period = "hour", since = Today, until = Now, zone = "UTC" }));
+        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-two", new { campaign_ids = two, count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
+        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-two", new { campaign_ids = two, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
+        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-one", new { campaign_ids = new[] { seed.Spring }, count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
+        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-one", new { campaign_ids = new[] { seed.Spring }, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
+
+        async Task<string[]> CountedAsync(string @case, object body) =>
+            [.. (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, @case, body, Ct)).Items.Select(item => item.Contact.FirstName!)];
+        Assert.Equal(["Oli", "Rae"], await CountedAsync("activity-replied-all", new { activity = "replied", since = WeekStart, until = Now, limit = 50 }));
+        Assert.Equal(14, (await CountedAsync("activity-people-all", new { activity = "people", since = WeekStart, until = Now, limit = 50 })).Length);
+        Assert.Equal(["Rae"], await CountedAsync("activity-replied-day", new { activity = "replied", since = "2026-10-12T00:00:00.000Z", until = "2026-10-13T00:00:00.000Z", limit = 50 }));
+        Assert.Empty(await CountedAsync("activity-replied-today", new { activity = "replied", since = Today, until = Now, limit = 50 }));
+        // Performance counts an archived campaign as any other, so its picker offers them all.
+        Assert.Equal(
+            [seed.Spring, seed.Autumn, seed.Winter, seed.Summer],
+            (await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "campaigns-for-picker", new { limit = 10, include_archived = true }, Ct)).Items.Select(c => c.Id));
+
+        // Oli's panel, opened from his row: his record, his open work and his lines under All.
+        string[] personAll = ["inbound_reply_observed", "provider_event_observed", "workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired",
+            "external_effect_reported", "approval_requested", "approval_approved", "approval_rejected", "decision_raised", "decision_answered",
+            "contact_created", "contact_updated", "contact_archived"];
+        Assert.Equal("Oli", (await api.RecordAsync<ContactDto>(Operations.ContactGet, "oli", new { contact_id = seed.Oli }, Ct)).FirstName);
+        await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "oli-open", new { contact_id = seed.Oli, status = new[] { "created", "awaiting_approval", "scheduled", "processing" }, order = "due", limit = 50 }, Ct);
+        await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "oli", new { contact_id = seed.Oli, kinds = personAll, limit = 50 }, Ct);
+        // A campaign an address names that the runtime no longer knows.
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.CampaignGet, "gone-here", new { campaign_id = "cmp_01K7QN00000000000000000999" }, HttpStatusCode.NotFound, Ct)).Code);
     }
 
     /// <summary>
@@ -1087,7 +1139,7 @@ public class RecordedExchangesTests
             await db.SaveChangesAsync(Ct);
         }
 
-        internal sealed record CampaignIds(string Spring, string Autumn, string Winter, string Summer, string Hal, string Zoe, string AdaApproval, string BenQuestion);
+        internal sealed record CampaignIds(string Spring, string Autumn, string Winter, string Summer, string Hal, string Zoe, string AdaApproval, string BenQuestion, string Oli);
 
         /// <summary>
         /// <see cref="CampaignWorld"/> at fixed ids, beside it a paused campaign two of its people are new in, a person in no
@@ -1155,7 +1207,8 @@ public class RecordedExchangesTests
             await db.SaveChangesAsync(Ct);
 
             return new CampaignIds(
-                world.Spring.PublicId, world.Autumn.PublicId, world.Winter.PublicId, summer.PublicId, world.People["Hal"].PublicId, zoe.PublicId, adaApproval.PublicId, benQuestion.PublicId);
+                world.Spring.PublicId, world.Autumn.PublicId, world.Winter.PublicId, summer.PublicId, world.People["Hal"].PublicId, zoe.PublicId, adaApproval.PublicId, benQuestion.PublicId,
+                world.People["Oli"].PublicId);
         }
 
         private static async Task<Campaign> CampaignAsync(JasonDbContext db)

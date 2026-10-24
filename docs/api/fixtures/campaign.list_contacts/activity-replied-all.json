@@ -1,0 +1,189 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "activity-replied-all",
+  "request": {
+    "activity": "replied",
+    "since": "2026-10-10T00:00:00.000Z",
+    "until": "2026-10-16T09:00:00.000Z",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "contact": {
+          "id": "cnt_6",
+          "first_name": "Oli",
+          "last_name": "Example",
+          "company": "Oli Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "oli@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "excluded",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-15T10:00:00.000Z"
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_3",
+            "ts": "2026-10-14T10:00:00.000Z",
+            "actor": {
+              "type": "system",
+              "id": null
+            },
+            "kind": "provider_event_observed",
+            "campaign_id": "cmp_1",
+            "work_item_id": null,
+            "attempt_id": null,
+            "key": null,
+            "old": null,
+            "new": {
+              "kind": "reply_detected",
+              "plugin": "reply",
+              "event_id": "evt_1",
+              "occurred_at": "2026-10-14T08:00:00.000Z",
+              "channel": "email",
+              "contact_id": "cnt_6"
+            },
+            "reason": null,
+            "contact_id": "cnt_6",
+            "campaign_name": "Spring",
+            "contact_name": "Oli Example",
+            "work_item_kind": null,
+            "work_item_role": null,
+            "work_item_operation": null,
+            "actor_role": null
+          }
+        },
+        "state": "excluded",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-15T10:00:00.000Z",
+        "why": {
+          "kind": "activity",
+          "text": null,
+          "code": "email",
+          "at": "2026-10-14T08:00:00.000Z",
+          "approval_id": null,
+          "decision_id": null
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "email",
+              "at": "2026-10-14T08:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
+      },
+      {
+        "contact": {
+          "id": "cnt_7",
+          "first_name": "Rae",
+          "last_name": "Example",
+          "company": "Rae Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "rae@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_4",
+            "ts": "2026-10-12T10:00:00.000Z",
+            "actor": {
+              "type": "system",
+              "id": null
+            },
+            "kind": "inbound_reply_observed",
+            "campaign_id": "cmp_1",
+            "work_item_id": null,
+            "attempt_id": null,
+            "key": null,
+            "old": null,
+            "new": {
+              "plugin": "reply",
+              "thread": "t-Rae",
+              "channel": "email",
+              "last_activity_at": "2026-10-12T08:00:00.000Z",
+              "contact_id": "cnt_7"
+            },
+            "reason": null,
+            "contact_id": "cnt_7",
+            "campaign_name": "Spring",
+            "contact_name": "Rae Example",
+            "work_item_kind": null,
+            "work_item_role": null,
+            "work_item_operation": null,
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "why": {
+          "kind": "activity",
+          "text": null,
+          "code": "email",
+          "at": "2026-10-12T08:00:00.000Z",
+          "approval_id": null,
+          "decision_id": null
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "email",
+              "at": "2026-10-12T08:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}

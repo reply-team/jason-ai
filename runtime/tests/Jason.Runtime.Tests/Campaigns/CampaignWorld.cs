@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Campaigns;
@@ -67,6 +68,30 @@ internal sealed class CampaignWorld
     {
         await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
         return await WriteAsync(scope.ServiceProvider.GetRequiredService<JasonDbContext>(), ct);
+    }
+
+    /// <summary>
+    /// A research item about the person that succeeded in each campaign named, at ten in the morning of the day given
+    /// for it: one more person worked on in the week, in each of those campaigns.
+    /// </summary>
+    public static Task WorkedOnAsync(RuntimeApiFixture api, Contact person, CancellationToken ct, params (Campaign Campaign, int Day)[] where) =>
+        WorkedOnAsync(api, person, ct, [.. where.Select(each => (each.Campaign, At(each.Day)))]);
+
+    /// <summary>Research on a person, finished at exactly these moments, in these campaigns.</summary>
+    public static async Task WorkedOnAsync(RuntimeApiFixture api, Contact person, CancellationToken ct, params (Campaign Campaign, DateTime FinishedAt)[] where)
+    {
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        foreach (var (campaign, finishedAt) in where)
+        {
+            var item = WorkItemFactory.NewAiRole(await db.Campaigns.SingleAsync(found => found.Id == campaign.Id, ct), "researcher", Since);
+            item.ContactId = person.Id;
+            item.Status = WorkItemStatus.Succeeded;
+            item.FinishedAt = finishedAt;
+            db.WorkItems.Add(item);
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <param name="db">The context the world is written through.</param>

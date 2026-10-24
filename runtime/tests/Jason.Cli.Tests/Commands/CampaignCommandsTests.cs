@@ -248,16 +248,16 @@ public class CampaignCommandsTests
     }
 
     [Theory]
-    [InlineData(new[] { "--state", "excluded", "--limit", "10" }, "{\"campaign_id\":\"cmp_A\",\"state\":\"excluded\",\"limit\":10}")]
-    [InlineData(new[] { "--summary", "failed", "--query", "ada" }, "{\"campaign_id\":\"cmp_A\",\"summary\":\"failed\",\"query\":\"ada\"}")]
+    [InlineData(new[] { "cmp_A", "--state", "excluded", "--limit", "10" }, "{\"campaign_ids\":[\"cmp_A\"],\"state\":\"excluded\",\"limit\":10}")]
+    [InlineData(new[] { "cmp_A", "cmp_B", "--summary", "failed", "--query", "ada" }, "{\"campaign_ids\":[\"cmp_A\",\"cmp_B\"],\"summary\":\"failed\",\"query\":\"ada\"}")]
     [InlineData(
         new[] { "--activity", "worked_on", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z" },
-        "{\"campaign_id\":\"cmp_A\",\"activity\":\"worked_on\",\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\"}")]
+        "{\"activity\":\"worked_on\",\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\"}")]
     public async Task List_contacts_passes_its_filter(string[] options, string posted)
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync(["campaign", "list-contacts", "cmp_A", .. options]);
+        var exit = await cli.RunAsync(["campaign", "list-contacts", .. options]);
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(Operations.CampaignListContacts, posted);
@@ -292,6 +292,48 @@ public class CampaignCommandsTests
     }
 
     [Fact]
+    public async Task Activity_by_period_sends_its_count_period_window_and_the_zone_named_or_this_machine_s()
+    {
+        using var named = new CliRun();
+        using var unnamed = new CliRun();
+
+        Assert.Equal(ExitCodes.Success, await named.RunAsync(
+            "campaign", "activity-by-period", "cmp_A", "--count", "replied", "--period", "day",
+            "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z", "--zone", "Europe/Kyiv"));
+        Assert.Equal(ExitCodes.Success, await unnamed.RunAsync(
+            "campaign", "activity-by-period", "--count", "people", "--period", "hour", "--since", "2026-10-16T00:00:00Z", "--until", "now"));
+
+        named.AssertPosted(
+            Operations.CampaignActivityByPeriod,
+            "{\"campaign_ids\":[\"cmp_A\"],\"count\":\"replied\",\"period\":\"day\",\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\",\"zone\":\"Europe/Kyiv\"}");
+        var zone = JsonNode.Parse(unnamed.Sent!)!["zone"]!.GetValue<string>();
+        Assert.True(TimeZoneInfo.FindSystemTimeZoneById(zone).HasIanaId, zone);
+    }
+
+    [Fact]
+    public async Task Human_mode_renders_the_buckets()
+    {
+        var series = JsonSerializer.Serialize(
+            new CampaignActivityByPeriodResponse(
+                ActivityPeriod.Day,
+                "UTC",
+                [
+                    new ActivityBucket(new DateTimeOffset(2026, 10, 12, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 13, 0, 0, 0, TimeSpan.Zero), 1),
+                    new ActivityBucket(new DateTimeOffset(2026, 10, 13, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero), 0),
+                ]),
+            JasonJson.Options);
+        using var cli = new CliRun(series);
+        var exit = await cli.RunAsync(
+            "campaign", "activity-by-period", "--count", "replied", "--period", "day", "--since", "2026-10-12T00:00:00Z", "--until", "2026-10-13T09:00:00Z", "--human");
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["FROM", "TO", "PEOPLE"], Cells(lines[0]));
+        Assert.Equal(3, Cells(lines[2]).Length);
+        Assert.Equal("1", Cells(lines[2])[^1]);
+        Assert.Equal("0", Cells(lines[3])[^1]);
+    }
+
+    [Fact]
     public async Task Human_mode_renders_the_summary_with_a_dash_where_no_sequence_is_linked()
     {
         var summary = JsonSerializer.Serialize(
@@ -299,7 +341,8 @@ public class CampaignCommandsTests
             [
                 new CampaignSummaryRow("cmp_A", 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
                 new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
-            ]),
+            ],
+            new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Removed: 1)),
             JasonJson.Options);
         using var cli = new CliRun(summary);
 
@@ -310,13 +353,27 @@ public class CampaignCommandsTests
         Assert.Equal(["CAMPAIGN", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED"], Cells(lines[0]));
         Assert.Equal(["cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1"], Cells(lines[2]));
         Assert.Equal(["cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(lines[3]));
+        Assert.Equal(["TOTAL", "22", "3", "3", "2", "3", "7", "2", "6", "1"], Cells(lines[^1]));
+
+        // With no campaign linked to a sequence, the total has none to count either.
+        var unlinked = JsonSerializer.Serialize(
+            new CampaignSummaryResponse(
+                [new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 1, Removed: 0, SequenceLinked: false)],
+                new CampaignSummaryTotal(2, 0, 0, 0, 1, 1, 0, 1, Removed: 0)),
+            JasonJson.Options);
+        using var alone = new CliRun(unlinked);
+        Assert.Equal(ExitCodes.Success, await alone.RunAsync("campaign", "summary", "cmp_B", "--human"));
+        var only = alone.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["TOTAL", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(only[^1]));
     }
 
     [Fact]
     public async Task Human_mode_renders_the_activity()
     {
         var activity = JsonSerializer.Serialize(
-            new CampaignActivityResponse([new CampaignActivityRow("cmp_A", 14, 2, 9, 4, 2, 2, Removed: 1)]),
+            new CampaignActivityResponse(
+                [new CampaignActivityRow("cmp_A", 14, 2, 9, 4, 2, 2, Removed: 1), new CampaignActivityRow("cmp_B", 1, 0, 1, 0, 0, 0, Removed: 0)],
+                new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1)),
             JasonJson.Options);
         using var cli = new CliRun(activity);
 
@@ -326,6 +383,7 @@ public class CampaignCommandsTests
         var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         Assert.Equal(["CAMPAIGN", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED"], Cells(lines[0]));
         Assert.Equal(["cmp_A", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[2]));
+        Assert.Equal(["TOTAL", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[^1]));
     }
 
     [Fact]
@@ -453,19 +511,23 @@ public class CampaignCommandsTests
             [],
             Moment,
             Moment,
-            null);
+            null,
+            Campaigns: [new ContactCampaignDto("cmp_A", "Spring", MembershipState.Enrolled, Moment, Moment), new ContactCampaignDto("cmp_B", "Autumn", MembershipState.Enrolled, Moment, Moment)]);
+        var worked = new MembershipWhy("activity", null, "researcher", Moment, null, null);
         var page = JsonSerializer.Serialize(
-            new Page<MembershipItemDto>([new MembershipItemDto(contact, MembershipState.Enrolled, Moment, Moment)], null),
+            new Page<MembershipItemDto>([new MembershipItemDto(contact, MembershipState.Enrolled, Moment, Moment, worked, [new CountedIn("cmp_B", worked), new CountedIn("cmp_A")])], null),
             JasonJson.Options);
         using var cli = new CliRun(page);
 
-        var exit = await cli.RunAsync("campaign", "list-contacts", "cmp_A", "--human");
+        var exit = await cli.RunAsync("campaign", "list-contacts", "cmp_A", "cmp_B", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("cnt_A", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Ada Lovelace", cli.Text, StringComparison.Ordinal);
         Assert.Contains("enrolled", cli.Text, StringComparison.Ordinal);
         Assert.Contains("ada@example.com", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Autumn, Spring", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("researcher", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 

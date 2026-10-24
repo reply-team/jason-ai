@@ -35,6 +35,7 @@ public static class CampaignCommands
         campaign.Subcommands.Add(ListContacts(env, actor));
         campaign.Subcommands.Add(Summary(env, actor));
         campaign.Subcommands.Add(Activity(env, actor));
+        campaign.Subcommands.Add(ActivityByPeriod(env, actor));
         return campaign;
     }
 
@@ -349,9 +350,10 @@ public static class CampaignCommands
     {
         var command = new Command(
             "list-contacts",
-            "List the contacts of a campaign, or exactly the people one count of campaign summary or campaign activity counts. "
+            "List the people of the campaigns named, or of every one, each once with the campaigns that list them; or exactly "
+            + "the people one count of campaign summary or campaign activity counts, the latest first for an activity. "
             + "Excluded ones appear only when asked for by state.");
-        var id = CampaignId();
+        var ids = CampaignIds();
         var state = new Option<string?>("--state") { Description = "Only members in this state: enrolled, paused, finished or excluded." };
         var summary = new Option<string?>("--summary")
         {
@@ -368,7 +370,7 @@ public static class CampaignCommands
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
-        command.Arguments.Add(id);
+        command.Arguments.Add(ids);
         command.Options.Add(state);
         command.Options.Add(summary);
         command.Options.Add(activity);
@@ -383,7 +385,7 @@ public static class CampaignCommands
         {
             ActorOption.Parse(parseResult.GetValue(actor));
             var body = RequestBody.Empty()
-                .Set("campaign_id", parseResult.GetValue(id))
+                .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
                 .Set("state", parseResult.GetValue(state))
                 .Set("summary", parseResult.GetValue(summary))
                 .Set("activity", parseResult.GetValue(activity))
@@ -449,6 +451,63 @@ public static class CampaignCommands
         });
 
         return command;
+    }
+
+    private static Command ActivityByPeriod(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "activity-by-period",
+            "One count of campaign activity over time: how many people it counts in each hour, day or week of a window, across "
+            + "the campaigns named or every one. A person counted on two days is in both, and once in the total `campaign activity` "
+            + "gives for the window.");
+        var ids = CampaignIds();
+        var count = new Option<string?>("--count")
+        {
+            Description = "The count: people (anything at all), added, worked_on, contacted, replied, opted_out or removed.",
+            Required = true,
+        };
+        var period = new Option<string?>("--period") { Description = "What each bucket is: hour, day or week (Monday to Sunday).", Required = true };
+        var since = VerbOptions.Moment("--since", "The window's start, included, as ISO-8601 UTC, or now.");
+        since.Required = true;
+        var until = VerbOptions.Moment("--until", "The window's end, not included, as ISO-8601 UTC, or now.");
+        until.Required = true;
+        var zone = new Option<string?>("--zone")
+        {
+            Description = "The IANA time zone the hours, days and weeks are cut in, such as Europe/Kyiv; this machine's when absent.",
+        };
+        var human = VerbOptions.Human();
+        command.Arguments.Add(ids);
+        command.Options.Add(count);
+        command.Options.Add(period);
+        command.Options.Add(since);
+        command.Options.Add(until);
+        command.Options.Add(zone);
+        command.Options.Add(human);
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            var body = RequestBody.Empty()
+                .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
+                .Set("count", parseResult.GetValue(count))
+                .Set("period", parseResult.GetValue(period))
+                .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
+                .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System))
+                .Set("zone", parseResult.GetValue(zone) ?? ThisMachinesZone());
+            return OperationRunner.RunAsync(env, Operations.CampaignActivityByPeriod, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.ActivityByPeriod), cancellationToken);
+        });
+        return command;
+    }
+
+    /// <summary>The days a person at this machine lives by: its zone's IANA id, or UTC when it has none.</summary>
+    private static string ThisMachinesZone()
+    {
+        var local = TimeZoneInfo.Local;
+        if (local.HasIanaId)
+        {
+            return local.Id;
+        }
+
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(local.Id, out var iana) ? iana : "UTC";
     }
 
     /// <summary>The campaigns named, or nothing at all when none is: then the runtime answers for every campaign campaign list shows.</summary>

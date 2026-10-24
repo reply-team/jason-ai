@@ -405,6 +405,9 @@ describe('A campaign’s people', () => {
         expect(screen.getByRole('tab', { name: 'People Activity' }).getAttribute('aria-selected')).toBe('true');
         expect((await screen.findByRole('button', { name: /^All\s*14$/ })).getAttribute('aria-pressed')).toBe('true');
         expect(await row('Quinn Example')).toBeTruthy();
+        // Each row says the latest thing that happened, by the count it was.
+        expect((await row('Oli Example')).textContent).toContain('replied by email');
+        expect((await row('Kit Example')).textContent).toContain('opted out of email');
         // New, and nothing happened to him this week.
         expect(screen.queryByText('Hal Example')).toBeNull();
     });

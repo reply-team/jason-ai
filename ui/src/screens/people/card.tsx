@@ -1,5 +1,5 @@
 import type { Contact } from '../../api/types';
-import type { PeopleFilters, PersonTab } from '../../router';
+import type { PersonTab, Route } from '../../router';
 import { place, shortDate } from '../../time/format';
 import { displayName } from './labels';
 import { linked } from './threads';
@@ -10,7 +10,8 @@ import { Tabs } from '../../layout/tabs';
 type Props = {
     person: Contact;
     tab: PersonTab;
-    filters: PeopleFilters;
+    /** Where each tab of this person is, on the screen the card is shown on. */
+    to: (tab: PersonTab) => Route;
     now: Date;
     zone: string;
     onAdd: () => void;
@@ -37,9 +38,8 @@ function sub(person: Contact, now: Date): string {
 }
 
 /** Who the person is and the campaigns they are on, what can be done, and the tabs: laid out as Work items' panel is. */
-export function PersonCard({ person, tab, filters, now, zone, onAdd, onClose }: Props) {
+export function PersonCard({ person, tab, to, now, zone, onAdd, onClose }: Props) {
     const { name, noFirstName } = displayName(person);
-    const to = (next: PersonTab) => ({ screen: 'people' as const, id: person.id, tab: next, filters });
     const tabs: PersonTab[] = linked(person) ? ['timeline', 'details', 'threads'] : ['timeline', 'details'];
     const campaigns = [...(person.campaigns ?? [])].sort(
         (a, b) => Number(a.state === 'excluded') - Number(b.state === 'excluded'),

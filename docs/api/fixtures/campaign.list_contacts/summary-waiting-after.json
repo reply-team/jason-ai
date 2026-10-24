@@ -52,7 +52,20 @@
           "at": "2026-10-13T10:00:00.000Z",
           "approval_id": null,
           "decision_id": "dec_1"
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "question",
+              "text": "Follow up on LinkedIn?",
+              "code": null,
+              "at": "2026-10-13T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": "dec_1"
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -97,7 +110,20 @@
           "at": "2026-10-13T10:00:00.000Z",
           "approval_id": null,
           "decision_id": "dec_2"
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "question",
+              "text": "Follow up on LinkedIn?",
+              "code": null,
+              "at": "2026-10-13T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": "dec_2"
+            }
+          }
+        ]
       }
     ],
     "next_cursor": null

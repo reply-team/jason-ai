@@ -542,6 +542,15 @@ provenance of the attempt that learned the pin, so one account's identifier is n
 such route is refused with `no_route`; a person whose matching route fails a plugin check is refused with that check's
 own code, as a conflict (409).
 
+These two are the only reads on request, `jason contact threads` and `jason contact thread` from the command line, and
+another operation joins them only by being named here. A read's route is each campaign's for the operation, then the
+global one, resolved as §2 resolves any, and held to the checks of §7 that are about the route, the plugin and its
+binding; a person known to several providers names the plugin to read from. The input is composed as a work item's
+would be, from the person's own identifiers at that plugin, and checked against the operation's schema; the answer is
+checked against the document too, and one that does not satisfy it is `result_invalid`. A failure the operation
+declares comes back with its own code and class, retryable only when it is `transient`, and a thread that is not this
+person's is refused as `thread_not_this_contact`.
+
 ## 12. Known limitations of this version
 
 - **No operation-family wildcards.** A route names one operation or is the default; there is no

@@ -72,6 +72,18 @@ decisions or changes; its **People** are listed by the same counts with a search
 everyone something happened to (`--activity people`); its **Details** are its record, its context as the roles read
 it, and what each provider calls it.
 
+## Performance
+
+The whole operation over time, from the same counts as Campaigns' Activity: what happened to people today, in the last
+7, 30 or 90 days, across every campaign or the ones chosen, each person counted once however many campaigns count them
+(`jason campaign activity` and its `total`). Two charts show contacted and replied people by the hour today, by the day
+over 7 or 30 days and by the week over 90, in this browser's time zone (`jason campaign activity-by-period`): a person
+counted on two days stands in both bars and once in the number above them. A count's tile lists its people under the
+tiles, the latest to whom it happened first, grouped by that day, each with the campaigns that count them and what
+happened (`jason campaign list-contacts --activity` with the campaigns and the period); a bar lists that hour's, day's
+or week's. Opening a person shows them beside the list as People does, with the same tabs. The period, the campaigns,
+the count and the bar are part of the page's address.
+
 ## Work items
 
 Three tabs over the same filters: **Now** is what is running and what waits for your approval, **Planned** is what

@@ -124,7 +124,15 @@ public sealed record CampaignSummaryRow(
     int Removed,
     bool SequenceLinked);
 
-public sealed record CampaignSummaryResponse(IReadOnlyList<CampaignSummaryRow> Campaigns);
+/// <summary>
+/// The same counts across every campaign asked, each person counted once however many of them count the person; a person
+/// may still be in two counts, as in one campaign. There is no <c>sequence_linked</c>: a campaign not linked counts nobody
+/// in the sequence.
+/// </summary>
+public sealed record CampaignSummaryTotal(int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Removed);
+
+/// <summary>A row per campaign asked, and <c>total</c> across them.</summary>
+public sealed record CampaignSummaryResponse(IReadOnlyList<CampaignSummaryRow> Campaigns, CampaignSummaryTotal Total);
 
 /// <summary>The campaigns as <see cref="CampaignSummaryRequest"/> names them, and the period: <c>since</c> included, <c>until</c> not, both required.</summary>
 public sealed record CampaignActivityRequest(IReadOnlyList<string>? CampaignIds, DateTimeOffset? Since, DateTimeOffset? Until);
@@ -135,4 +143,30 @@ public sealed record CampaignActivityRequest(IReadOnlyList<string>? CampaignIds,
 /// </summary>
 public sealed record CampaignActivityRow(string CampaignId, int People, int Added, int WorkedOn, int Contacted, int Replied, int OptedOut, int Removed);
 
-public sealed record CampaignActivityResponse(IReadOnlyList<CampaignActivityRow> Campaigns);
+/// <summary>The period's counts across every campaign asked, each person counted once however many of them count the person.</summary>
+public sealed record CampaignActivityTotal(int People, int Added, int WorkedOn, int Contacted, int Replied, int OptedOut, int Removed);
+
+/// <summary>A row per campaign asked, and <c>total</c> across them.</summary>
+public sealed record CampaignActivityResponse(IReadOnlyList<CampaignActivityRow> Campaigns, CampaignActivityTotal Total);
+
+/// <summary>
+/// One Activity count over time: the campaigns as <see cref="CampaignSummaryRequest"/> names them, the count, the period
+/// each bucket is (an hour, a day or a week), the window (<c>since</c> included, <c>until</c> not) and the IANA zone the
+/// buckets are cut in, UTC when absent.
+/// </summary>
+public sealed record CampaignActivityByPeriodRequest(
+    IReadOnlyList<string>? CampaignIds,
+    CampaignActivityFilter? Count,
+    ActivityPeriod? Period,
+    DateTimeOffset? Since,
+    DateTimeOffset? Until,
+    string? Zone = null);
+
+/// <summary>
+/// The count with this bucket as its period, people counted once within it across the campaigns asked: a person counted
+/// on two days stands in two buckets and once in <c>campaign.activity</c>'s total over the window.
+/// </summary>
+public sealed record ActivityBucket(DateTimeOffset Start, DateTimeOffset End, int Value);
+
+/// <summary>Every bucket of the window, in order, zeros included; the first and the last are clipped to the window.</summary>
+public sealed record CampaignActivityByPeriodResponse(ActivityPeriod Period, string Zone, IReadOnlyList<ActivityBucket> Buckets);

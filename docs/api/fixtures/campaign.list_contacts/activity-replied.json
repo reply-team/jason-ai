@@ -83,7 +83,20 @@
           "at": "2026-10-14T08:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "email",
+              "at": "2026-10-14T08:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -156,7 +169,20 @@
           "at": "2026-10-12T08:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "email",
+              "at": "2026-10-12T08:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       }
     ],
     "next_cursor": null

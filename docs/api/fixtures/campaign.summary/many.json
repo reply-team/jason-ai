@@ -1408,6 +1408,17 @@
         "removed": 0,
         "sequence_linked": false
       }
-    ]
+    ],
+    "total": {
+      "people": 51,
+      "waiting": 0,
+      "failed": 0,
+      "working": 0,
+      "new": 51,
+      "idle": 0,
+      "sequence": 0,
+      "out": 0,
+      "removed": 0
+    }
   }
 }

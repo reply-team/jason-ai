@@ -25,22 +25,29 @@ public class CountEqualsListTests
         var row = Assert.Single((await api.PostOkAsync<CampaignSummaryResponse>(
             Operations.CampaignSummary, new { CampaignIds = new[] { world.Spring.PublicId } }, Ct)).Campaigns);
         var listed = await WalkAsync(api, new { CampaignId = world.Spring.PublicId, Summary = filter });
-
-        var counted = filter switch
-        {
-            CampaignSummaryFilter.Waiting => row.Waiting,
-            CampaignSummaryFilter.Failed => row.Failed,
-            CampaignSummaryFilter.Working => row.Working,
-            CampaignSummaryFilter.New => row.New,
-            CampaignSummaryFilter.Idle => row.Idle,
-            CampaignSummaryFilter.Sequence => row.Sequence,
-            CampaignSummaryFilter.Out => row.Out,
-            CampaignSummaryFilter.Removed => row.Removed,
-            _ => throw new ArgumentOutOfRangeException(nameof(filter), filter, "A count with no field in the row."),
-        };
-        Assert.Equal(counted, listed.Count);
+        Assert.Equal(Of(filter, new CampaignSummaryTotal(row.People, row.Waiting, row.Failed, row.Working, row.New, row.Idle, row.Sequence, row.Out, row.Removed)), listed.Count);
         Assert.Equal(listed.Count, listed.Distinct().Count());
+
+        // Across both campaigns, where Ada and Hal are each in two counts: the total is the people listed, each once.
+        string[] both = [world.Spring.PublicId, world.Autumn.PublicId];
+        var total = (await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { CampaignIds = both }, Ct)).Total;
+        var across = await WalkAsync(api, new { CampaignIds = both, Summary = filter });
+        Assert.Equal(Of(filter, total), across.Count);
+        Assert.Equal(across.Count, across.Distinct().Count());
     }
+
+    private static int Of(CampaignSummaryFilter filter, CampaignSummaryTotal counts) => filter switch
+    {
+        CampaignSummaryFilter.Waiting => counts.Waiting,
+        CampaignSummaryFilter.Failed => counts.Failed,
+        CampaignSummaryFilter.Working => counts.Working,
+        CampaignSummaryFilter.New => counts.New,
+        CampaignSummaryFilter.Idle => counts.Idle,
+        CampaignSummaryFilter.Sequence => counts.Sequence,
+        CampaignSummaryFilter.Out => counts.Out,
+        CampaignSummaryFilter.Removed => counts.Removed,
+        _ => throw new ArgumentOutOfRangeException(nameof(filter), filter, "A count with no field in the row."),
+    };
 
     [Theory]
     [MemberData(nameof(ActivityFilters))]
@@ -52,21 +59,29 @@ public class CountEqualsListTests
         var row = Assert.Single((await api.PostOkAsync<CampaignActivityResponse>(
             Operations.CampaignActivity, new { CampaignIds = new[] { world.Spring.PublicId }, Since, Until }, Ct)).Campaigns);
         var listed = await WalkAsync(api, new { CampaignId = world.Spring.PublicId, Activity = filter, Since, Until });
-
-        var counted = filter switch
-        {
-            CampaignActivityFilter.People => row.People,
-            CampaignActivityFilter.Added => row.Added,
-            CampaignActivityFilter.WorkedOn => row.WorkedOn,
-            CampaignActivityFilter.Contacted => row.Contacted,
-            CampaignActivityFilter.Replied => row.Replied,
-            CampaignActivityFilter.OptedOut => row.OptedOut,
-            CampaignActivityFilter.Removed => row.Removed,
-            _ => throw new ArgumentOutOfRangeException(nameof(filter), filter, "A count with no field in the row."),
-        };
-        Assert.Equal(counted, listed.Count);
+        Assert.Equal(Of(filter, new CampaignActivityTotal(row.People, row.Added, row.WorkedOn, row.Contacted, row.Replied, row.OptedOut, row.Removed)), listed.Count);
         Assert.Equal(listed.Count, listed.Distinct().Count());
+
+        // Across both campaigns, Hal worked on in each: the total is the people listed, each once.
+        await CampaignWorld.WorkedOnAsync(api, world.People["Hal"], Ct, (world.Spring, 13), (world.Autumn, 14));
+        string[] both = [world.Spring.PublicId, world.Autumn.PublicId];
+        var total = (await api.PostOkAsync<CampaignActivityResponse>(Operations.CampaignActivity, new { CampaignIds = both, Since, Until }, Ct)).Total;
+        var across = await WalkAsync(api, new { CampaignIds = both, Activity = filter, Since, Until });
+        Assert.Equal(Of(filter, total), across.Count);
+        Assert.Equal(across.Count, across.Distinct().Count());
     }
+
+    private static int Of(CampaignActivityFilter filter, CampaignActivityTotal counts) => filter switch
+    {
+        CampaignActivityFilter.People => counts.People,
+        CampaignActivityFilter.Added => counts.Added,
+        CampaignActivityFilter.WorkedOn => counts.WorkedOn,
+        CampaignActivityFilter.Contacted => counts.Contacted,
+        CampaignActivityFilter.Replied => counts.Replied,
+        CampaignActivityFilter.OptedOut => counts.OptedOut,
+        CampaignActivityFilter.Removed => counts.Removed,
+        _ => throw new ArgumentOutOfRangeException(nameof(filter), filter, "A count with no field in the row."),
+    };
 
     private static async Task<List<string>> WalkAsync(RuntimeApiFixture api, object filter)
     {

@@ -116,7 +116,36 @@ public class MembershipEndpointTests
         Assert.Equal("Ada", member.Contact.FirstName);
         Assert.Equal(MembershipState.Enrolled, member.State);
         Assert.Equal(campaignId, Assert.Single(member.Contact.Campaigns!).CampaignId);
+        Assert.Equal(campaignId, Assert.Single(member.Counted!).CampaignId);
         Assert.Equal(JournalKinds.ContactCreated, member.Contact.LastActivity?.Kind);
+    }
+
+    [Fact]
+    public async Task Several_campaigns_list_a_person_once_with_the_campaigns_that_counted_them()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+        string[] both = [world.Spring.PublicId, world.Autumn.PublicId];
+        var since = new DateTimeOffset(CampaignWorld.Since, TimeSpan.Zero);
+        var until = new DateTimeOffset(CampaignWorld.Until, TimeSpan.Zero);
+
+        // Ada and Hal are in both campaigns: twenty-four memberships, twenty-two people.
+        var everyone = await api.PostOkAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, new { CampaignIds = both, Limit = 100 }, Ct);
+        Assert.Equal(22, everyone.Items.Count);
+        var hal = everyone.Items.Single(item => item.Contact.FirstName == "Hal");
+        Assert.Equal(both.Order(StringComparer.Ordinal), hal.Counted!.Select(counted => counted.CampaignId));
+        var unnamed = await api.PostOkAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, new { Limit = 100 }, Ct);
+        Assert.Equal(everyone.Items.Select(item => item.Contact.Id), unnamed.Items.Select(item => item.Contact.Id));
+
+        // Worked on in Spring on the 13th and in Autumn on the 14th: one row, the later first, and the row says the later.
+        await CampaignWorld.WorkedOnAsync(api, world.People["Hal"], Ct, (world.Spring, 13), (world.Autumn, 14));
+        var worked = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignIds = both, Activity = CampaignActivityFilter.WorkedOn, Since = since, Until = until, Limit = 100 }, Ct);
+        var halWorked = Assert.Single(worked.Items, item => item.Contact.FirstName == "Hal");
+        Assert.Equal([world.Autumn.PublicId, world.Spring.PublicId], halWorked.Counted!.Select(counted => counted.CampaignId));
+        var at14 = new DateTimeOffset(2026, 10, 14, 10, 0, 0, TimeSpan.Zero);
+        Assert.Equal(new MembershipWhy("activity", null, "researcher", at14, null, null), halWorked.Why);
+        Assert.Equal(halWorked.Why, halWorked.Counted![0].Why);
     }
 
     [Fact]
@@ -158,7 +187,7 @@ public class MembershipEndpointTests
     }
 
     [Fact]
-    public async Task An_activity_row_says_when_and_what()
+    public async Task An_activity_row_says_when_and_what_and_the_rows_come_newest_first()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
         var world = await CampaignWorld.WriteAsync(api, Ct);
@@ -171,7 +200,15 @@ public class MembershipEndpointTests
             Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.Contacted, Since = since, Until = until }, Ct);
         var removed = await api.PostOkAsync<Page<MembershipItemDto>>(
             Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.Removed, Since = since, Until = until }, Ct);
+        var people = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.People, Since = since, Until = until, Limit = 100 }, Ct);
 
+        // Oli replied on the 14th, Rae on the 12th: the latest to whom it happened first. From the calendar's start, the window
+        // that reads back from the page's top stops at the period's start, and Jon's and Sam's earlier first replies follow.
+        Assert.Equal(["Oli", "Rae"], replied.Items.Select(item => item.Contact.FirstName));
+        var always = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.Replied, Since = DateTimeOffset.MinValue, Until = until }, Ct);
+        Assert.Equal(["Oli", "Rae", "Jon", "Sam"], always.Items.Select(item => item.Contact.FirstName));
         var rae = replied.Items.Single(item => item.Contact.FirstName == "Rae");
         Assert.Equal(new MembershipWhy("activity", null, "email", new DateTimeOffset(2026, 10, 12, 8, 0, 0, TimeSpan.Zero), null, null), rae.Why);
         var oli = replied.Items.Single(item => item.Contact.FirstName == "Oli");
@@ -181,6 +218,17 @@ public class MembershipEndpointTests
         Assert.Equal(
             new MembershipWhy("activity", null, "removed", new DateTimeOffset(2026, 10, 13, 10, 0, 0, TimeSpan.Zero), null, null),
             Assert.Single(removed.Items).Why);
+
+        // Under People a row says the latest thing that happened, its text naming the count, since a reply and an opt-out
+        // both say a channel: Uma opted out on the 11th and was replied to on the 13th; Oli was taken out on the 13th and
+        // replied on the 14th.
+        Assert.Equal(
+            new MembershipWhy("activity", "worked_on", "conversation.reply", new DateTimeOffset(2026, 10, 13, 10, 0, 0, TimeSpan.Zero), null, null),
+            people.Items.Single(item => item.Contact.FirstName == "Uma").Why);
+        Assert.Equal(
+            new MembershipWhy("activity", "replied", "email", new DateTimeOffset(2026, 10, 14, 8, 0, 0, TimeSpan.Zero), null, null),
+            people.Items.Single(item => item.Contact.FirstName == "Oli").Why);
+        Assert.Equal("opted_out", people.Items.Single(item => item.Contact.FirstName == "Kit").Why!.Text);
     }
 
     [Fact]
@@ -219,6 +267,9 @@ public class MembershipEndpointTests
         { """{"since":"2026-10-09T00:00:00Z"}""", ["since:invalid"] },
         { """{"activity":"added"}""", ["since:required", "until:required"] },
         { $$"""{"query":"{{new string('a', 201)}}"}""", ["query:too_long"] },
+        { """{"campaign_ids":["cmp_01K7QN00000000000000000001"]}""", ["campaign_ids:invalid"] },
+        // A moment no calendar holds, in a cursor nobody was given.
+        { """{"activity":"replied","since":"2026-10-09T00:00:00Z","until":"2026-10-16T00:00:00Z","cursor":"OTk5OTk5OTk5OTk5OTk5OTl8Y250X3g"}""", ["cursor:invalid"] },
     };
 
     [Theory]

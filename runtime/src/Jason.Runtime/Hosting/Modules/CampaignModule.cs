@@ -41,6 +41,8 @@ public static class CampaignModule
             Operations.CampaignSummary, (service, request, cancellationToken) => service.SummaryAsync(request, cancellationToken));
         app.MapOperation<CampaignNumbers, CampaignActivityRequest, CampaignActivityResponse>(
             Operations.CampaignActivity, (service, request, cancellationToken) => service.ActivityAsync(request, cancellationToken));
+        app.MapOperation<CampaignNumbers, CampaignActivityByPeriodRequest, CampaignActivityByPeriodResponse>(
+            Operations.CampaignActivityByPeriod, (service, request, cancellationToken) => service.ActivityByPeriodAsync(request, cancellationToken));
 
         app.MapOperation<JournalService, JournalAppendRequest, JournalEntryDto>(
             Operations.JournalAppend, (service, request, cancellationToken) => service.AppendAsync(request, cancellationToken));

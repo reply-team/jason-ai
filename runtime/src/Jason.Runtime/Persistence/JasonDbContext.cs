@@ -281,6 +281,9 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
             // A campaign's work by person, in order: how the campaign's people are counted, one pass per campaign asked.
             item.HasIndex(w => new { w.CampaignId, w.ContactId });
+
+            // A campaign's finished work by when it finished: what a period of the campaigns asked reads, and no other's.
+            item.HasIndex(w => new { w.CampaignId, w.FinishedAt }).HasFilter("finished_at IS NOT NULL");
             item.HasOne(w => w.Campaign).WithMany().HasForeignKey(w => w.CampaignId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne(w => w.Contact).WithMany().HasForeignKey(w => w.ContactId).OnDelete(DeleteBehavior.Restrict);
             item.HasMany(w => w.Attempts).WithOne(a => a.WorkItem).HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);

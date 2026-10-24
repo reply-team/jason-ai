@@ -50,6 +50,17 @@
         "removed": 0,
         "sequence_linked": false
       }
-    ]
+    ],
+    "total": {
+      "people": 23,
+      "waiting": 2,
+      "failed": 3,
+      "working": 3,
+      "new": 5,
+      "idle": 7,
+      "sequence": 2,
+      "out": 6,
+      "removed": 1
+    }
   }
 }

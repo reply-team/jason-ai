@@ -83,7 +83,10 @@ public static class CampaignRenderers
     public static string ScopedByFolder(string project, string rows) =>
         RenderText.Lines([$"Project: {project}, from the working directory (--all-projects lists every project's)", string.Empty, rows]);
 
-    /// <summary>A page of memberships: who is in the campaign, where they stand, and how to recognize them.</summary>
+    /// <summary>
+    /// A page of the campaigns' people: who they are, where they stand, how to recognize them, the campaigns that list them
+    /// and, under a count, what it counts them for.
+    /// </summary>
     public static string? Members(string json)
     {
         var page = RenderText.Read<Page<MembershipItemDto>>(json);
@@ -92,20 +95,26 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL");
+        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL", "CAMPAIGNS", "WHY");
         foreach (var member in page.Items)
         {
+            var names = (member.Contact?.Campaigns ?? []).ToDictionary(campaign => campaign.CampaignId, campaign => campaign.CampaignName, StringComparer.Ordinal);
             table.Row(
                 member.Contact?.Id,
                 RenderText.Name(member.Contact?.FirstName, member.Contact?.LastName),
                 RenderText.Snake(member.State),
-                RenderText.Email(member.Contact?.Channels));
+                RenderText.Email(member.Contact?.Channels),
+                string.Join(", ", (member.Counted ?? []).Select(counted => names.GetValueOrDefault(counted.CampaignId, counted.CampaignId))),
+                member.Why is { } why ? string.Join(" ", new[] { why.Text ?? why.Code, RenderText.Moment(why.At) }.Where(part => part is not null)) : null);
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);
     }
 
-    /// <summary>Where each campaign's people stand now; the provider's two counts are a dash while no sequence is linked.</summary>
+    /// <summary>
+    /// Where each campaign's people stand now, and the total across them; the provider's two counts are a dash while no
+    /// sequence is linked.
+    /// </summary>
     public static string? Summary(string json)
     {
         var summary = RenderText.Read<CampaignSummaryResponse>(json);
@@ -130,10 +139,19 @@ public static class CampaignRenderers
                 Count(row.Removed));
         }
 
+        if (summary.Total is { } total)
+        {
+            // With no campaign linked to a sequence, the total has no sequence to count either, as each row says.
+            var linked = summary.Campaigns.Any(row => row.SequenceLinked);
+            table.Row(
+                "TOTAL", Count(total.People), Count(total.Waiting), Count(total.Failed), Count(total.Working), Count(total.New), Count(total.Idle),
+                linked ? Count(total.Sequence) : "-", linked ? Count(total.Out) : "-", Count(total.Removed));
+        }
+
         return table.Render();
     }
 
-    /// <summary>What happened to each campaign's people in the period asked about.</summary>
+    /// <summary>What happened to each campaign's people in the period asked about, and the total across them.</summary>
     public static string? Activity(string json)
     {
         var activity = RenderText.Read<CampaignActivityResponse>(json);
@@ -148,6 +166,31 @@ public static class CampaignRenderers
             table.Row(
                 row.CampaignId, Count(row.People), Count(row.Added), Count(row.WorkedOn), Count(row.Contacted), Count(row.Replied), Count(row.OptedOut),
                 Count(row.Removed));
+        }
+
+        if (activity.Total is { } total)
+        {
+            table.Row(
+                "TOTAL", Count(total.People), Count(total.Added), Count(total.WorkedOn), Count(total.Contacted), Count(total.Replied), Count(total.OptedOut),
+                Count(total.Removed));
+        }
+
+        return table.Render();
+    }
+
+    /// <summary>One count over time: each bucket's span and the people it counts.</summary>
+    public static string? ActivityByPeriod(string json)
+    {
+        var series = RenderText.Read<CampaignActivityByPeriodResponse>(json);
+        if (series?.Buckets is null)
+        {
+            return null;
+        }
+
+        var table = new HumanTable("FROM", "TO", "PEOPLE");
+        foreach (var bucket in series.Buckets)
+        {
+            table.Row(RenderText.Moment(bucket.Start), RenderText.Moment(bucket.End), Count(bucket.Value));
         }
 
         return table.Render();

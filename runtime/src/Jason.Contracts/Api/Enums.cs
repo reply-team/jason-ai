@@ -151,6 +151,14 @@ public enum CampaignActivityFilter
     Removed,
 }
 
+/// <summary>The unit <c>campaign.activity_by_period</c> cuts a window into: the hours, days or Monday-to-Sunday weeks of a zone.</summary>
+public enum ActivityPeriod
+{
+    Hour,
+    Day,
+    Week,
+}
+
 /// <summary>
 /// Which of the four levels decided where an operation's work goes, most specific first. A campaign default
 /// hides every global operation override for that campaign: bringing one back takes an explicit campaign

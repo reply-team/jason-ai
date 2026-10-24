@@ -1,3 +1,4 @@
+import type { RefObject } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Unpaired } from '../api/client';
 import { session } from '../api/session';
@@ -232,6 +233,138 @@ export function SearchPicker({
                                 {entry?.hint && <span class="hint">{entry.hint}</span>}
                             </button>
                         ))}
+                        {found?.length === 0 && <div class="none">Nothing matches</div>}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * A long list to choose several from: the same search as SearchPicker's, each entry a box that ticks and unticks, the
+ * list kept open while the person ticks; Escape or a click outside closes it.
+ */
+export function MultiSearchPicker({
+    label,
+    set,
+    placeholder,
+    search,
+    chosen,
+    max,
+    onToggle,
+    opener,
+}: {
+    label: string;
+    set: boolean;
+    placeholder: string;
+    search: (query: string) => Promise<Found[]>;
+    chosen: readonly string[];
+    max: number;
+    onToggle: (entry: Found) => void;
+    /** The button that opens the list, for a caller that hands the keyboard back to it. */
+    opener?: RefObject<HTMLButtonElement | null>;
+}) {
+    const [open, setOpen] = useState(false);
+    const [text, setText] = useState('');
+    const [found, setFound] = useState<Found[] | null>(null);
+    const [active, setActive] = useState(0);
+    const box = useRef<HTMLDivElement>(null);
+    const own = useRef<HTMLButtonElement>(null);
+    const button = opener ?? own;
+    const field = useRef<HTMLInputElement>(null);
+    useOutsideClick(open, box, () => close(false));
+
+    useEffect(() => {
+        if (!open) return;
+        field.current?.focus();
+        const query = text.trim();
+        let current = true;
+        const ask = () =>
+            void search(query).then(
+                (results) => {
+                    if (!current) return;
+                    setFound(results);
+                    setActive(0);
+                },
+                (error: unknown) => {
+                    if (error instanceof Unpaired) session.clear();
+                    else if (current) setFound([]);
+                },
+            );
+        const timer = query ? setTimeout(ask, 250) : (ask(), undefined);
+        return () => {
+            current = false;
+            if (timer) clearTimeout(timer);
+        };
+    }, [open, text]);
+
+    const close = (refocus = true) => {
+        setOpen(false);
+        setText('');
+        setFound(null);
+        if (refocus) button.current?.focus();
+    };
+    const entries = found ?? [];
+    const full = (entry: Found) => !chosen.includes(entry.value) && chosen.length >= max;
+    const toggle = (at: number) => {
+        const entry = entries[at];
+        if (!entry || full(entry)) return;
+        onToggle(entry);
+        field.current?.focus();
+    };
+
+    return (
+        <div class="picker" ref={box}>
+            <button
+                ref={button}
+                type="button"
+                class={`select${set ? ' set' : ''}`}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => (open ? close() : setOpen(true))}
+            >
+                {label}
+                <span class="caret" aria-hidden="true">
+                    ▾
+                </span>
+            </button>
+            {open && (
+                <div class="menu">
+                    <input
+                        ref={field}
+                        class="search"
+                        type="search"
+                        placeholder={placeholder}
+                        aria-label={placeholder}
+                        value={text}
+                        onInput={(e) => setText((e.target as HTMLInputElement).value)}
+                        onKeyDown={listKeys(entries.length, active, setActive, toggle, close)}
+                    />
+                    <div role="listbox" aria-multiselectable="true">
+                        {entries.map((entry, at) => {
+                            const on = chosen.includes(entry.value);
+                            return (
+                                <button
+                                    key={entry.value}
+                                    type="button"
+                                    role="option"
+                                    tabIndex={-1}
+                                    class={at === active ? 'active' : ''}
+                                    aria-selected={on}
+                                    disabled={full(entry)}
+                                    title={full(entry) ? `At most ${max} campaigns` : undefined}
+                                    onMouseEnter={() => setActive(at)}
+                                    onClick={() => toggle(at)}
+                                >
+                                    <span class="name">
+                                        <span class={`box${on ? ' on' : ''}`} aria-hidden="true" />
+                                        {entry.label}
+                                    </span>
+                                    {entry.hint && <span class="hint">{entry.hint}</span>}
+                                </button>
+                            );
+                        })}
                         {found?.length === 0 && <div class="none">Nothing matches</div>}
                     </div>
                 </div>

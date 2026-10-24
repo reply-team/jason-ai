@@ -589,6 +589,22 @@ describe('People', () => {
         expect(screen.queryByText('loading…')).toBeNull();
     });
 
+    it('a reply said in two campaigns is one row that names both', async () => {
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity')
+                .answer('contact.get', 'contact.get/with-campaigns'),
+            'journal.list/by-contact-replied-twice',
+        );
+        open(api, {}, mateo.id);
+
+        const rows = await screen.findAllByRole('button', { name: /show the thread/ });
+        expect(rows.map((row) => row.querySelector('.in')?.textContent)).toEqual([
+            'LatAm pilot, Re-engage Q2 no-replies',
+            'LatAm pilot · mentions a meeting',
+        ]);
+    });
+
     it("the timeline's reply row opens its thread in place", async () => {
         const api = timeline(
             new FakeApi()

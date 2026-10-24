@@ -2059,6 +2059,10 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.HasIndex("CampaignId", "ContactId")
                         .HasDatabaseName("ix_work_items_campaign_id_contact_id");
 
+                    b.HasIndex("CampaignId", "FinishedAt")
+                        .HasDatabaseName("ix_work_items_campaign_id_finished_at")
+                        .HasFilter("finished_at IS NOT NULL");
+
                     b.HasIndex("CampaignId", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ix_work_items_one_per_campaign_idempotency_key")

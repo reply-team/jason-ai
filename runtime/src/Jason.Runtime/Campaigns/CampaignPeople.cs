@@ -31,6 +31,19 @@ internal static class CampaignPeople
 {
     private const string Asked = "(SELECT value FROM json_each({0}))";
 
+    /// <summary>
+    /// The operations whose reach is act and that address a person: what Contacted counts. The counts, the series and the
+    /// rows' whys read this one list.
+    /// </summary>
+    private const string ActOperationsSql = "'campaign.enroll', 'message.send', 'conversation.reply', 'social_invitation.send'";
+
+    internal static readonly string[] ActOperations = [.. ActOperationsSql.Split(',').Select(name => name.Trim().Trim('\''))];
+
+    private const string ContactedSql = $"w.kind = 'provider_op' AND w.status = 'succeeded' AND w.operation IN ({ActOperationsSql})";
+
+    // Worked on: the work ended, done or failed; a rejection is a person's decision about the work, not the work failing.
+    private const string WorkedOnSql = "(w.status = 'succeeded' OR (w.status = 'failed' AND json_extract(w.last_error_json, '$.code') IS NOT 'approval_rejected'))";
+
     // One pass over the campaigns' work, grouped by person: whether any is open or running, whether they were put into the
     // sequence or stopped there, and whether a failure is among their latest finished work — the latest failure finished
     // when their latest work did. A rejection ends the item as failed, but it is a person's decision about the work, not
@@ -71,15 +84,15 @@ internal static class CampaignPeople
 
     // One arm per kind, so each reads its campaigns' lines of that kind through the kind's own index.
     private const string OutLines = $$"""
-        SELECT j.campaign_id, j.contact_id
-        FROM journal AS j
-        WHERE j.campaign_id IN {{Asked}} AND j.kind = 'inbound_reply_observed' AND j.contact_id IS NOT NULL
+        SELECT jl.campaign_id, jl.contact_id
+        FROM journal AS jl
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'inbound_reply_observed' AND jl.contact_id IS NOT NULL
         UNION
-        SELECT j.campaign_id, j.contact_id
-        FROM journal AS j
-        WHERE j.campaign_id IN {{Asked}} AND j.kind = 'provider_event_observed' AND j.contact_id IS NOT NULL
-          AND (json_extract(j.new_json, '$.kind') = 'reply_detected'
-               OR (json_extract(j.new_json, '$.kind') = 'bounce' AND json_extract(j.new_json, '$.bounce') = 'hard'))
+        SELECT jl.campaign_id, jl.contact_id
+        FROM journal AS jl
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'provider_event_observed' AND jl.contact_id IS NOT NULL
+          AND (json_extract(jl.new_json, '$.kind') = 'reply_detected'
+               OR (json_extract(jl.new_json, '$.kind') = 'bounce' AND json_extract(jl.new_json, '$.bounce') = 'hard'))
         """;
 
     private const string Suppressed = $$"""
@@ -91,27 +104,26 @@ internal static class CampaignPeople
         """;
 
     private const string ReAdded = $$"""
-        SELECT DISTINCT j.campaign_id, p.id AS contact_id
-        FROM journal AS j INDEXED BY ix_journal_contacts_added_campaign_ts, json_each(j.new_json, '$.contact_ids') AS added
+        SELECT DISTINCT jl.campaign_id, p.id AS contact_id
+        FROM journal AS jl INDEXED BY ix_journal_contacts_added_campaign_ts, json_each(jl.new_json, '$.contact_ids') AS added
         JOIN contacts AS p ON p.public_id = added.value
-        WHERE j.campaign_id IN {{Asked}} AND j.kind = 'contacts_added' AND j.ts >= {1} AND j.ts < {2}
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'contacts_added' AND jl.ts >= {1} AND jl.ts < {2}
         """;
 
     private const string Removals = $$"""
-        SELECT DISTINCT j.campaign_id, p.id AS contact_id
-        FROM journal AS j INDEXED BY ix_journal_contacts_removed_campaign_ts, json_each(j.new_json, '$.contact_ids') AS removed
+        SELECT DISTINCT jl.campaign_id, p.id AS contact_id
+        FROM journal AS jl INDEXED BY ix_journal_contacts_removed_campaign_ts, json_each(jl.new_json, '$.contact_ids') AS removed
         JOIN contacts AS p ON p.public_id = removed.value
-        WHERE j.campaign_id IN {{Asked}} AND j.kind = 'contacts_removed' AND j.ts >= {1} AND j.ts < {2}
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'contacts_removed' AND jl.ts >= {1} AND jl.ts < {2}
         """;
 
-    // Contacted: the operations whose reach is act and that address a person; research and bookkeeping never count.
+    // Worked on and contacted in the period, per person and campaign; research and bookkeeping never contact anyone. Read
+    // by person, so the grouping streams: the index by finish would have every row of a long period sorted again.
     private const string Finished = $$"""
         SELECT w.campaign_id, w.contact_id,
-               max(w.status = 'succeeded'
-                   OR (w.status = 'failed' AND json_extract(w.last_error_json, '$.code') IS NOT 'approval_rejected')) AS worked_on,
-               max(w.kind = 'provider_op' AND w.status = 'succeeded'
-                   AND w.operation IN ('campaign.enroll', 'message.send', 'conversation.reply', 'social_invitation.send')) AS contacted
-        FROM work_items AS w
+               max({{WorkedOnSql}}) AS worked_on,
+               max({{ContactedSql}}) AS contacted
+        FROM work_items AS w INDEXED BY ix_work_items_campaign_id_contact_id
         WHERE w.campaign_id IN {{Asked}} AND w.contact_id IS NOT NULL AND w.finished_at >= {1} AND w.finished_at < {2}
         GROUP BY w.campaign_id, w.contact_id
         """;
@@ -120,14 +132,14 @@ internal static class CampaignPeople
     // a backfill writes a reply from months ago today. The moment is ISO-8601 text, so it is compared by its julian day.
     private const string FirstReply = $$"""
         SELECT r.campaign_id, r.contact_id, min(r.day) AS first
-        FROM (SELECT j.campaign_id, j.contact_id, julianday(json_extract(j.new_json, '$.last_activity_at')) AS day
-              FROM journal AS j
-              WHERE j.campaign_id IN {{Asked}} AND j.kind = 'inbound_reply_observed' AND j.contact_id IS NOT NULL
+        FROM (SELECT jl.campaign_id, jl.contact_id, julianday(json_extract(jl.new_json, '$.last_activity_at')) AS day
+              FROM journal AS jl
+              WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'inbound_reply_observed' AND jl.contact_id IS NOT NULL
               UNION ALL
-              SELECT j.campaign_id, j.contact_id, julianday(json_extract(j.new_json, '$.occurred_at')) AS day
-              FROM journal AS j
-              WHERE j.campaign_id IN {{Asked}} AND j.kind = 'provider_event_observed' AND j.contact_id IS NOT NULL
-                AND json_extract(j.new_json, '$.kind') = 'reply_detected') AS r
+              SELECT jl.campaign_id, jl.contact_id, julianday(json_extract(jl.new_json, '$.occurred_at')) AS day
+              FROM journal AS jl
+              WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'provider_event_observed' AND jl.contact_id IS NOT NULL
+                AND json_extract(jl.new_json, '$.kind') = 'reply_detected') AS r
         GROUP BY r.campaign_id, r.contact_id
         """;
 
@@ -135,9 +147,9 @@ internal static class CampaignPeople
     // among the channels by its value; whose campaign they are in is the memberships' join to say.
     private const string OptedOut = """
         SELECT DISTINCT ch.contact_id
-        FROM journal AS j INDEXED BY ix_journal_suppression_added_ts
-        JOIN contact_channels AS ch ON ch.channel = json_extract(j.new_json, '$.channel') AND ch.value = json_extract(j.new_json, '$.value')
-        WHERE j.kind = 'suppression_added' AND j.ts >= {1} AND j.ts < {2}
+        FROM journal AS jl INDEXED BY ix_journal_suppression_added_ts
+        JOIN contact_channels AS ch ON ch.channel = json_extract(jl.new_json, '$.channel') AND ch.value = json_extract(jl.new_json, '$.value')
+        WHERE jl.kind = 'suppression_added' AND jl.ts >= {1} AND jl.ts < {2}
         """;
 
     // Every membership, the removed ones too: Removed counts them, and every other count only the members (Current).
@@ -214,11 +226,6 @@ internal static class CampaignPeople
         definition => definition.Filter,
         definition => $"SELECT * FROM ({Facts(definition.Parts, SummaryMembers)}) AS f WHERE {definition.Condition}");
 
-    /// <summary>Each Activity count's people, as rows of <c>campaign_contacts</c>.</summary>
-    internal static readonly FrozenDictionary<CampaignActivityFilter, string> Activity = ActivityDefinitions.ToFrozenDictionary(
-        definition => definition.Filter,
-        definition => $"SELECT * FROM ({Facts(definition.Parts, ActivityMembers)}) AS f WHERE {definition.Condition}");
-
     /// <summary>Every Summary count per campaign, from the same conditions the lists filter by.</summary>
     internal static readonly string SummaryCountsSql =
         $"SELECT f.campaign_id AS CampaignId, sum(CASE WHEN {Current} THEN 1 ELSE 0 END) AS People, {Sums(SummaryDefinitions)} "
@@ -228,23 +235,103 @@ internal static class CampaignPeople
         $"SELECT f.campaign_id AS CampaignId, {Sums(ActivityDefinitions)} "
         + $"FROM ({Facts(ActivityDefinitions.SelectMany(definition => definition.Parts), ActivityMembers)}) AS f GROUP BY f.campaign_id";
 
+    // When each Activity count's happenings happened, one row each, dated where the list's why dates it: an addition by
+    // the membership or the line that added the person back, work by its finish, a reply by the provider's moment of the
+    // first, an opt-out and a removal by their line. Only members are counted, as the counts count memberships. Work is
+    // read by its finish, so a short window reads only the work that finished in it.
+    private const string AddedMoments = $$"""
+        SELECT cc.campaign_id, cc.contact_id, julianday(cc.added_at) AS day
+        FROM campaign_contacts AS cc
+        WHERE cc.campaign_id IN {{Asked}} AND cc.added_at >= {1} AND cc.added_at < {2}
+        UNION ALL
+        SELECT jl.campaign_id, p.id AS contact_id, julianday(jl.ts) AS day
+        FROM journal AS jl INDEXED BY ix_journal_contacts_added_campaign_ts, json_each(jl.new_json, '$.contact_ids') AS added
+        JOIN contacts AS p ON p.public_id = added.value
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'contacts_added' AND jl.ts >= {1} AND jl.ts < {2}
+        """;
+
+    private const string WorkedOnMoments = $$"""
+        SELECT w.campaign_id, w.contact_id, julianday(w.finished_at) AS day
+        FROM work_items AS w INDEXED BY ix_work_items_campaign_id_finished_at
+        WHERE w.campaign_id IN {{Asked}} AND w.contact_id IS NOT NULL AND w.finished_at >= {1} AND w.finished_at < {2}
+          AND {{WorkedOnSql}}
+        """;
+
+    private const string ContactedMoments = $$"""
+        SELECT w.campaign_id, w.contact_id, julianday(w.finished_at) AS day
+        FROM work_items AS w INDEXED BY ix_work_items_campaign_id_finished_at
+        WHERE w.campaign_id IN {{Asked}} AND w.contact_id IS NOT NULL AND w.finished_at >= {1} AND w.finished_at < {2}
+          AND {{ContactedSql}}
+        """;
+
+    private const string RepliedMoments = $$"""
+        SELECT fr.campaign_id, fr.contact_id, fr.first AS day
+        FROM ({{FirstReply}}) AS fr
+        WHERE fr.first >= julianday({1}) AND fr.first < julianday({2})
+        """;
+
+    private const string OptedOutMoments = $$"""
+        SELECT m.campaign_id, ch.contact_id, julianday(jl.ts) AS day
+        FROM journal AS jl INDEXED BY ix_journal_suppression_added_ts
+        JOIN contact_channels AS ch ON ch.channel = json_extract(jl.new_json, '$.channel') AND ch.value = json_extract(jl.new_json, '$.value')
+        JOIN campaign_contacts AS m ON m.contact_id = ch.contact_id
+        WHERE m.campaign_id IN {{Asked}} AND jl.kind = 'suppression_added' AND jl.ts >= {1} AND jl.ts < {2}
+        """;
+
+    private const string RemovedMoments = $$"""
+        SELECT jl.campaign_id, p.id AS contact_id, julianday(jl.ts) AS day
+        FROM journal AS jl INDEXED BY ix_journal_contacts_removed_campaign_ts, json_each(jl.new_json, '$.contact_ids') AS removed
+        JOIN contacts AS p ON p.public_id = removed.value
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'contacts_removed' AND jl.ts >= {1} AND jl.ts < {2}
+        """;
+
+    private static readonly FrozenDictionary<CampaignActivityFilter, string> HappeningMoments = new Dictionary<CampaignActivityFilter, string>
+    {
+        [CampaignActivityFilter.Added] = AddedMoments,
+        [CampaignActivityFilter.WorkedOn] = WorkedOnMoments,
+        [CampaignActivityFilter.Contacted] = ContactedMoments,
+        [CampaignActivityFilter.Replied] = RepliedMoments,
+        [CampaignActivityFilter.OptedOut] = OptedOutMoments,
+        [CampaignActivityFilter.Removed] = RemovedMoments,
+    }.ToFrozenDictionary();
+
+    // People is every count's happenings; Contacted's are work that finished, so Worked on already holds them.
+    private static readonly string People = string.Join(
+        " UNION ALL ", HappeningMoments.Where(pair => pair.Key != CampaignActivityFilter.Contacted).Select(pair => pair.Value));
+
+    /// <summary>
+    /// Each Activity count's happenings in the period, a member's id and the moment as Unix milliseconds, which SQLite's
+    /// julian day rounds to exactly; People is every count's.
+    /// </summary>
+    internal static readonly FrozenDictionary<CampaignActivityFilter, string> Moments = Enum.GetValues<CampaignActivityFilter>().ToFrozenDictionary(
+        count => count,
+        count => "SELECT h.contact_id AS ContactId, CAST(round((h.day - 2440587.5) * 86400000.0) AS INTEGER) AS Ms "
+            + $"FROM ({(count == CampaignActivityFilter.People ? People : HappeningMoments[count])}) AS h "
+            + "JOIN campaign_contacts AS cc ON cc.campaign_id = h.campaign_id AND cc.contact_id = h.contact_id");
+
+    /// <summary>
+    /// The people one Activity count counts across the campaigns asked, once each, with the latest moment it happened to
+    /// them: what an activity listing orders by, newest first.
+    /// </summary>
+    internal static readonly FrozenDictionary<CampaignActivityFilter, string> PeopleByMoment = Moments.ToFrozenDictionary(
+        pair => pair.Key,
+        pair => "SELECT bym.ContactId AS ContactId, p.public_id AS PublicId, max(bym.Ms) AS Ms "
+            + $"FROM ({pair.Value}) AS bym JOIN contacts AS p ON p.id = bym.ContactId GROUP BY bym.ContactId, p.public_id");
+
+    /// <summary>Every Summary count across the campaigns asked, a person once, from the same conditions.</summary>
+    internal static readonly string SummaryTotalSql =
+        $"SELECT 0 AS CampaignId, count(DISTINCT CASE WHEN {Current} THEN f.contact_id END) AS People, {Distincts(SummaryDefinitions)} "
+        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), SummaryMembers)}) AS f";
+
+    internal static readonly string ActivityTotalSql =
+        $"SELECT 0 AS CampaignId, {Distincts(ActivityDefinitions)} "
+        + $"FROM ({Facts(ActivityDefinitions.SelectMany(definition => definition.Parts), ActivityMembers)}) AS f";
+
     /// <summary>The people of these campaigns one Summary count counts, now.</summary>
     public static IQueryable<CampaignContact> Matching(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignSummaryFilter filter)
     {
         ArgumentNullException.ThrowIfNull(db);
         return db.CampaignContacts.FromSqlRaw(Summary[filter], Keys(campaignIds));
-    }
-
-    /// <summary>The memberships of these campaigns one Activity count counts in the period, removed ones included.</summary>
-    public static IQueryable<CampaignContact> Happened(
-        JasonDbContext db,
-        IReadOnlyCollection<int> campaignIds,
-        CampaignActivityFilter filter,
-        DateTime since,
-        DateTime until)
-    {
-        ArgumentNullException.ThrowIfNull(db);
-        return db.CampaignContacts.FromSqlRaw(Activity[filter], Keys(campaignIds), Utc(since), Utc(until));
     }
 
     /// <summary>Every Summary count of each campaign asked that has people, in one read.</summary>
@@ -263,6 +350,37 @@ internal static class CampaignPeople
             .ToDictionaryAsync(counts => counts.CampaignId, ct);
     }
 
+    /// <summary>Every Summary count across the campaigns asked, each person once.</summary>
+    public static Task<SummaryCounts> SummaryTotalAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.SqlQueryRaw<SummaryCounts>(SummaryTotalSql, Keys(campaignIds)).SingleAsync(ct);
+    }
+
+    /// <summary>Every Activity count across the campaigns asked, each person once.</summary>
+    public static Task<ActivityCounts> ActivityTotalAsync(
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, DateTime since, DateTime until, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.SqlQueryRaw<ActivityCounts>(ActivityTotalSql, Keys(campaignIds), Utc(since), Utc(until)).SingleAsync(ct);
+    }
+
+    /// <summary>The people of one Activity count across the campaigns asked, each with the latest moment it happened, to compose on.</summary>
+    public static IQueryable<PersonMoment> ByMoment(
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignActivityFilter count, DateTime since, DateTime until)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.SqlQueryRaw<PersonMoment>(PeopleByMoment[count], Keys(campaignIds), Utc(since), Utc(until));
+    }
+
+    /// <summary>Every happening of one Activity count in the period, across the campaigns asked, in no order.</summary>
+    public static Task<List<Moment>> MomentsAsync(
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignActivityFilter count, DateTime since, DateTime until, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.SqlQueryRaw<Moment>(Moments[count], Keys(campaignIds), Utc(since), Utc(until)).ToListAsync(ct);
+    }
+
     /// <summary>The campaigns among these whose provider campaign is pinned: only they can say who is in the sequence.</summary>
     public static async Task<IReadOnlySet<int>> PinnedAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CancellationToken ct)
     {
@@ -276,6 +394,10 @@ internal static class CampaignPeople
             .ConfigureAwait(false);
         return pinned.ToHashSet();
     }
+
+    private static string Distincts<TFilter>(Definition<TFilter>[] definitions)
+        where TFilter : struct, Enum =>
+        string.Join(", ", definitions.Select(definition => $"count(DISTINCT CASE WHEN {definition.Condition} THEN f.contact_id END) AS {definition.Filter}"));
 
     private static string Sums<TFilter>(Definition<TFilter>[] definitions)
         where TFilter : struct, Enum =>
@@ -307,6 +429,12 @@ internal static class CampaignPeople
 
     private static DateTime Utc(DateTime moment) => moment.Kind == DateTimeKind.Utc ? moment : moment.ToUniversalTime();
 }
+
+/// <summary>One happening of a count: whose, and when, in Unix milliseconds.</summary>
+internal sealed record Moment(int ContactId, long Ms);
+
+/// <summary>A person one count counts, and the latest moment it happened to them, in Unix milliseconds.</summary>
+internal sealed record PersonMoment(int ContactId, string PublicId, long Ms);
 
 /// <summary>One campaign's Summary counts, as <see cref="CampaignPeople.SummaryCountsAsync"/> reads them.</summary>
 internal sealed record SummaryCounts(int CampaignId, int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Removed);

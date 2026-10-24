@@ -9,6 +9,7 @@ public class TimeZoneRulesTests
     [InlineData("Europe/Kyiv", "Europe/Kyiv")]
     [InlineData("America/Vancouver", "America/Vancouver")]
     [InlineData("Etc/UTC", "Etc/UTC")]
+    [InlineData("UTC", "UTC")] // Windows resolves "UTC" to a zone with no IANA id; it is UTC on every system.
     [InlineData("  Asia/Tokyo  ", "Asia/Tokyo")]
     public void An_iana_id_is_accepted_and_stored_as_given(string raw, string expected)
     {

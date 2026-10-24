@@ -233,70 +233,225 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
         var text = ValidateListing(request, out var period);
+        List<(int Id, string PublicId)> campaigns = request.CampaignId is not null
+            ? [await OneAsync(request.CampaignId, cancellationToken).ConfigureAwait(false)]
+            : await CampaignNumbers.ResolveAsync(db, request.CampaignIds, cancellationToken).ConfigureAwait(false);
+        var ids = campaigns.Select(campaign => campaign.Id).ToList();
+        var publicIds = campaigns.ToDictionary(campaign => campaign.Id, campaign => campaign.PublicId);
+        var order = campaigns.Select((campaign, index) => (campaign.Id, index)).ToDictionary(pair => pair.Id, pair => pair.index);
         var limit = Paging.ResolveLimit(request.Limit);
-        var after = Paging.DecodeCursor(request.Cursor);
 
-        // A filter decides who is listed by its own definition — the counts' — so it takes no state: a summary count lists
-        // today's members, and an activity count everyone it happened to, removed since or not.
-        IQueryable<CampaignContact> query;
+        // A summary count decides who is listed by its own definition — the counts' — so it takes no state. Under an activity
+        // count the moments decide who is listed, and the page's people's memberships are few: one is counted exactly when
+        // the count's why says what happened in it, removed since or not.
+        IQueryable<CampaignContact> memberships;
         if (request.Summary is { } summary)
         {
-            query = CampaignPeople.Matching(db, [campaign.Id], summary);
+            memberships = CampaignPeople.Matching(db, ids, summary);
         }
-        else if (request.Activity is { } activity)
+        else if (request.Activity is not null)
         {
-            query = CampaignPeople.Happened(db, [campaign.Id], activity, period.Since, period.Until);
+            memberships = db.CampaignContacts.Where(membership => ids.Contains(membership.CampaignId));
         }
         else
         {
             // Excluded members are the answer to "who did we take out", never to "who is in this campaign".
-            query = db.CampaignContacts.Where(membership => membership.CampaignId == campaign.Id);
-            query = request.State is { } state
-                ? query.Where(membership => membership.State == state)
-                : query.Where(membership => membership.State != MembershipState.Excluded);
+            memberships = db.CampaignContacts.Where(membership => ids.Contains(membership.CampaignId));
+            memberships = request.State is { } state
+                ? memberships.Where(membership => membership.State == state)
+                : memberships.Where(membership => membership.State != MembershipState.Excluded);
         }
 
+        var (people, next) = request.Activity is { } happened
+            ? await ByMomentAsync(ids, happened, period, text, request.Cursor, limit, cancellationToken).ConfigureAwait(false)
+            : await ByIdAsync(memberships, text, request.Cursor, limit, cancellationToken).ConfigureAwait(false);
+
+        var loaded = await db.Contacts.AsNoTracking()
+            .Include(contact => contact.Channels)
+            .Include(contact => contact.ExternalIds)
+            .Where(contact => people.Contains(contact.Id))
+            .ToDictionaryAsync(contact => contact.Id, cancellationToken)
+            .ConfigureAwait(false);
+        var page = people.Select(id => loaded[id]).ToList();
+        var contacts = await ContactService.WithCampaignsAndLatestLineAsync(db, page, cancellationToken).ConfigureAwait(false);
+
+        var counted = await memberships
+            .Where(membership => people.Contains(membership.ContactId))
+            .Select(membership => new { membership.ContactId, membership.CampaignId, membership.State, membership.AddedAt, membership.UpdatedAt })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var pairs = counted.Select(membership => (membership.ContactId, membership.CampaignId)).ToList();
+        var why = request switch
+        {
+            { Summary: { } count } => await CampaignWhy.ForSummaryAsync(db, pairs, page, count, cancellationToken).ConfigureAwait(false),
+            { Activity: { } count } => await CampaignWhy.ForActivityAsync(db, pairs, page, count, period.Since, period.Until, cancellationToken).ConfigureAwait(false),
+            _ => null,
+        };
+        if (request.Activity is not null)
+        {
+            counted = [.. counted.Where(membership => why!.ContainsKey((membership.ContactId, membership.CampaignId)))];
+        }
+
+        var items = new List<MembershipItemDto>(page.Count);
+        foreach (var (contact, dto) in page.Zip(contacts))
+        {
+            var mine = counted
+                .Where(membership => membership.ContactId == contact.Id)
+                .Select(membership => (Membership: membership, Why: why?.GetValueOrDefault((contact.Id, membership.CampaignId))))
+                .OrderByDescending(entry => request.Activity is null ? null : entry.Why?.At)
+                .ThenBy(entry => order[entry.Membership.CampaignId])
+                .ToList();
+            if (mine.Count == 0)
+            {
+                continue;
+            }
+
+            var lead = mine[0];
+            items.Add(new MembershipItemDto(
+                dto,
+                lead.Membership.State,
+                ContactMapper.ToOffset(lead.Membership.AddedAt),
+                ContactMapper.ToOffset(lead.Membership.UpdatedAt),
+                lead.Why,
+                [.. mine.Select(entry => new CountedIn(publicIds[entry.Membership.CampaignId], entry.Why))]));
+        }
+
+        return new Page<MembershipItemDto>(items, next);
+    }
+
+    private async Task<(int Id, string PublicId)> OneAsync(string campaignId, CancellationToken cancellationToken)
+    {
+        var campaign = await CampaignService.LoadAsync(db, campaignId, cancellationToken).ConfigureAwait(false);
+        return (campaign.Id, campaign.PublicId);
+    }
+
+    /// <summary>A page of the people these memberships name, once each, by their public id.</summary>
+    private async Task<(List<int> People, string? Next)> ByIdAsync(
+        IQueryable<CampaignContact> memberships, string? text, string? cursor, int limit, CancellationToken cancellationToken)
+    {
+        var fetched = await PageById(db, memberships, text, Paging.DecodeCursor(cursor), limit + 1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var kept = fetched.Take(limit).ToList();
+        return ([.. kept.Select(person => person.Id)], fetched.Count > limit ? Paging.EncodeCursor(kept[^1].PublicId) : null);
+    }
+
+    /// <summary>
+    /// The query behind <see cref="ByIdAsync"/>'s page, apart so that its plan can be read. It starts from the memberships, so
+    /// it grows with the campaigns asked: started from the contacts, SQLite walks every contact of the installation.
+    /// </summary>
+    internal static IQueryable<PersonById> PageById(
+        JasonDbContext db, IQueryable<CampaignContact> memberships, string? text, string? after, int take)
+    {
+        var people = memberships.Select(membership => new { membership.ContactId, membership.Contact!.PublicId }).Distinct();
         if (text is not null)
         {
             var found = ContactSearch.Apply(db.Contacts, text);
-            query = query.Where(membership => found.Any(contact => contact.Id == membership.ContactId));
+            people = people.Where(person => found.Any(contact => contact.Id == person.ContactId));
         }
 
         if (after is not null)
         {
-            query = query.Where(membership => string.Compare(membership.Contact!.PublicId, after) > 0);
+            people = people.Where(person => string.Compare(person.PublicId, after) > 0);
         }
 
-        var fetched = await query
-            .Include(membership => membership.Contact!)
-            .ThenInclude(contact => contact.Channels)
-            .Include(membership => membership.Contact!)
-            .ThenInclude(contact => contact.ExternalIds)
-            .OrderBy(membership => membership.Contact!.PublicId)
-            .Take(limit + 1)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        return people
+            .OrderBy(person => person.PublicId)
+            .Select(person => new PersonById(person.ContactId, person.PublicId))
+            .Take(take);
+    }
 
-        var page = Paging.ToPage(fetched, limit, membership => membership.Contact!.PublicId, membership => membership);
-        var people = page.Items.Select(membership => membership.Contact!).ToList();
-        var contacts = await ContactService.WithCampaignsAndLatestLineAsync(db, people, cancellationToken).ConfigureAwait(false);
-        var why = request switch
+    internal sealed record PersonById(int Id, string PublicId);
+
+    /// <summary>
+    /// A page of the people one activity count counts, once each, the latest to whom it happened first; the cursor carries
+    /// the moment and the public id of the last one shown.
+    /// </summary>
+    private async Task<(List<int> People, string? Next)> ByMomentAsync(
+        List<int> campaigns,
+        CampaignActivityFilter count,
+        (DateTime Since, DateTime Until) period,
+        string? text,
+        string? cursor,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        // A person's place is the latest moment it happened to them, so a page needs only what happened since the earliest
+        // moment it shows: the window reads back from the page's top, growing until it holds a page or reaches the period's
+        // start. Whoever's latest moment falls inside it is found with that moment; nobody outside it could rank higher.
+        var after = MomentCursor(cursor);
+        var top = after is { } last ? DateTimeOffset.FromUnixTimeMilliseconds(last.Ms).UtcDateTime : period.Until;
+        var span = TimeSpan.FromTicks(Math.Max(TimeSpan.FromHours(1).Ticks, (period.Until - period.Since).Ticks / 32));
+        List<PersonMoment> fetched;
+        while (true)
         {
-            { Summary: { } counted } => await CampaignWhy.ForSummaryAsync(db, campaign.Id, people, counted, cancellationToken).ConfigureAwait(false),
-            { Activity: { } happened } => await CampaignWhy.ForActivityAsync(db, campaign.Id, people, happened, period.Since, period.Until, cancellationToken).ConfigureAwait(false),
-            _ => null,
-        };
+            // Compared as spans: near the calendar's start, top - span would fall before it.
+            var from = top - period.Since <= span ? period.Since : top - span;
+            fetched = await PageByMoment(db, campaigns, count, from, period.Until, text, after, limit + 1)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (fetched.Count > limit || from == period.Since)
+            {
+                break;
+            }
 
-        return new Page<MembershipItemDto>(
-            [.. page.Items.Zip(contacts, (membership, contact) => new MembershipItemDto(
-                contact,
-                membership.State,
-                ContactMapper.ToOffset(membership.AddedAt),
-                ContactMapper.ToOffset(membership.UpdatedAt),
-                why?.GetValueOrDefault(membership.ContactId)))],
-            page.NextCursor);
+            span *= 4;
+        }
+
+        var kept = fetched.Take(limit).ToList();
+        var next = fetched.Count > limit
+            ? Paging.EncodeCursor(string.Create(CultureInfo.InvariantCulture, $"{kept[^1].Ms}|{kept[^1].PublicId}"))
+            : null;
+        return ([.. kept.Select(row => row.ContactId)], next);
+    }
+
+    /// <summary>The query behind one pass of <see cref="ByMomentAsync"/>'s window, apart so that its plan can be read.</summary>
+    internal static IQueryable<PersonMoment> PageByMoment(
+        JasonDbContext db,
+        List<int> campaigns,
+        CampaignActivityFilter count,
+        DateTime from,
+        DateTime until,
+        string? text,
+        (long Ms, string PublicId)? after,
+        int take)
+    {
+        var rows = CampaignPeople.ByMoment(db, campaigns, count, from, until);
+        if (text is not null)
+        {
+            var found = ContactSearch.Apply(db.Contacts, text);
+            rows = rows.Where(row => found.Any(contact => contact.Id == row.ContactId));
+        }
+
+        if (after is { } a)
+        {
+            rows = rows.Where(row => row.Ms < a.Ms || (row.Ms == a.Ms && string.Compare(row.PublicId, a.PublicId) > 0));
+        }
+
+        return rows.OrderByDescending(row => row.Ms).ThenBy(row => row.PublicId).Take(take);
+    }
+
+    private static readonly long MinMs = DateTimeOffset.MinValue.ToUnixTimeMilliseconds();
+
+    private static readonly long MaxMs = DateTimeOffset.MaxValue.ToUnixTimeMilliseconds();
+
+    private static (long Ms, string PublicId)? MomentCursor(string? cursor)
+    {
+        if (Paging.DecodeCursor(cursor) is not { } decoded)
+        {
+            return null;
+        }
+
+        var bar = decoded.IndexOf('|', StringComparison.Ordinal);
+        if (bar <= 0
+            || !long.TryParse(decoded.AsSpan(0, bar), NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms)
+            || ms < MinMs || ms > MaxMs)
+        {
+            throw new ValidationException([new ErrorDetail("cursor", "invalid", "cursor must be the next_cursor returned by an earlier page.")]);
+        }
+
+        return (ms, decoded[(bar + 1)..]);
     }
 
     /// <summary>One filter at most; an activity's period, and a period only with an activity; no state beside a filter.</summary>
@@ -304,6 +459,11 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
     {
         period = default;
         var errors = new ValidationErrors();
+        if (request.CampaignId is not null && request.CampaignIds is not null)
+        {
+            errors.Add("campaign_ids", "invalid", "Name the campaigns in campaign_ids or one in campaign_id, not both.");
+        }
+
         if (request.Summary is not null && request.Activity is not null)
         {
             errors.Add("activity", "invalid", "Ask for one count: summary or activity, not both.");

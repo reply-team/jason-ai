@@ -5,6 +5,7 @@ import { replace, type Route } from '../../router';
 import { when } from '../../time/format';
 import { displayName, entryLabel } from '../people/labels';
 import { activityColumns, atTheProvider, everyone, summaryColumns } from './labels';
+import { happened } from './why';
 import { Notice } from '../../layout/notice';
 import { Chips } from '../../layout/chips';
 
@@ -39,9 +40,7 @@ function why(person: MembershipItem, filter: string | undefined, me: string, now
         case 'failure':
             return [reason.text ?? reason.code, at].filter(Boolean).join(' · ');
         default:
-            if (filter === 'replied') return `replied by ${reason.code ?? 'a message'} ${at ?? ''}`.trim();
-            if (filter === 'opted_out') return `opted out of ${reason.code ?? 'a channel'} ${at ?? ''}`.trim();
-            return [reason.code, at].filter(Boolean).join(' ');
+            return [happened(reason, filter), at].filter(Boolean).join(' ');
     }
 }
 

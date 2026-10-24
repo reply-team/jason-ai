@@ -78,6 +78,30 @@ function memberships(person: Contact): Happened[] {
     });
 }
 
+/**
+ * The kinds a provider's event is said by. An event that reaches several of the person's campaigns is said once in each,
+ * under one key, so it is one row naming them all.
+ */
+const saidPerCampaign = new Set(['inbound_reply_observed', 'provider_event_observed']);
+
+/** The person's lines, each event once where its newest line stands, with the campaigns it was said in. */
+function happenings(entries: JournalEntry[]): { entry: JournalEntry; campaigns: string[] }[] {
+    const rows: { entry: JournalEntry; campaigns: string[] }[] = [];
+    const said = new Map<string, string[]>();
+    for (const entry of entries) {
+        const key = saidPerCampaign.has(entry.kind) && entry.key ? `${entry.kind}/${entry.key}` : null;
+        const campaigns = key && entry.campaign_name ? [entry.campaign_name] : [];
+        const earlier = key ? said.get(key) : undefined;
+        if (earlier) {
+            earlier.push(...campaigns);
+            continue;
+        }
+        if (key) said.set(key, campaigns);
+        rows.push({ entry, campaigns });
+    }
+    return rows;
+}
+
 /** The thread a reply line names, as the reply's plugin calls it. */
 function threadOf(entry: JournalEntry): { pluginId: string; threadId: string } | null {
     if (entry.kind !== 'inbound_reply_observed') return null;
@@ -101,21 +125,23 @@ export function Timeline({ person, me, now, zone }: Props) {
     }, [api, person.id]);
 
     const mine = store.timelineOf.value === store.subjectKey({ contact_id: person.id });
-    const lines: Happened[] = (mine ? store.lines.value : []).map((entry) => {
+    const entries = mine ? store.lines.value : [];
+    const lines: Happened[] = happenings(entries).map(({ entry, campaigns }) => {
         const label = entryLabel(entry, me);
         return {
             key: entry.id,
             at: new Date(entry.ts),
             mark: label.mark,
             title: label.title,
-            note: label.note,
+            note: [campaigns.join(', '), label.note].filter(Boolean).join(' · ') || null,
             link: linkOf(entry),
             thread: threadOf(entry),
         };
     });
     // A membership shows once the lines loaded reach its time, so it never sits above lines not yet read.
     const exhausted = store.linesCursor.value === null;
-    const oldest = lines.at(-1)?.at;
+    const last = entries.at(-1);
+    const oldest = last ? new Date(last.ts) : undefined;
     const placed =
         chip === 'all' || chip === 'changes'
             ? memberships(person).filter((m) => exhausted || (oldest !== undefined && m.at >= oldest))

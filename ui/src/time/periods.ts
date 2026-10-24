@@ -3,10 +3,15 @@ import type { Period } from '../router';
 const dayMs = 24 * 60 * 60 * 1000;
 
 /** What each period is called wherever the page names it. */
-export const periodLabels: Record<Period, string> = { today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days' };
+export const periodLabels: Record<Period, string> = {
+    today: 'Today',
+    '7d': 'Last 7 days',
+    '30d': 'Last 30 days',
+    '90d': 'Last 90 days',
+};
 
-/** How many whole days before today each period starts: today alone, or the six or twenty-nine before it as well. */
-const daysBefore: Record<Period, number> = { today: 0, '7d': 6, '30d': 29 };
+/** How many whole days before today each period starts: today alone, or the six, twenty-nine or eighty-nine before it as well. */
+const daysBefore: Record<Period, number> = { today: 0, '7d': 6, '30d': 29, '90d': 89 };
 
 /**
  * The period's two instants, as the runtime takes them: from the person's local midnight that many days ago, included,

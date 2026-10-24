@@ -21,6 +21,15 @@
         "opted_out": 0,
         "removed": 0
       }
-    ]
+    ],
+    "total": {
+      "people": 51,
+      "added": 51,
+      "worked_on": 0,
+      "contacted": 0,
+      "replied": 0,
+      "opted_out": 0,
+      "removed": 0
+    }
   }
 }

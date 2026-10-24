@@ -44,6 +44,8 @@ import type {
     ContactThreads,
     ContactThreadRequest,
     ContactThread,
+    CampaignActivityByPeriodRequest,
+    CampaignActivityByPeriodResponse,
 } from '../api/types';
 
 import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.approve/already-decided.json';
@@ -62,11 +64,22 @@ import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/
 import approvalListUnauthorized from '../../../docs/api/fixtures/approval.list/unauthorized.json';
 import approvalRejectFromWorkItem from '../../../docs/api/fixtures/approval.reject/from-work-item.json';
 import approvalRejectRejected from '../../../docs/api/fixtures/approval.reject/rejected.json';
+import campaignActivityAll7Days from '../../../docs/api/fixtures/campaign.activity/all-7-days.json';
+import campaignActivityAllToday from '../../../docs/api/fixtures/campaign.activity/all-today.json';
 import campaignActivityLast7Days from '../../../docs/api/fixtures/campaign.activity/last-7-days.json';
 import campaignActivityMany from '../../../docs/api/fixtures/campaign.activity/many.json';
 import campaignActivityManyOne from '../../../docs/api/fixtures/campaign.activity/many-one.json';
 import campaignActivityOne from '../../../docs/api/fixtures/campaign.activity/one.json';
 import campaignActivityToday from '../../../docs/api/fixtures/campaign.activity/today.json';
+import campaignActivityTwo from '../../../docs/api/fixtures/campaign.activity/two.json';
+import campaignActivityByPeriodContacted7Days from '../../../docs/api/fixtures/campaign.activity_by_period/contacted-7-days.json';
+import campaignActivityByPeriodContactedOne from '../../../docs/api/fixtures/campaign.activity_by_period/contacted-one.json';
+import campaignActivityByPeriodContactedToday from '../../../docs/api/fixtures/campaign.activity_by_period/contacted-today.json';
+import campaignActivityByPeriodContactedTwo from '../../../docs/api/fixtures/campaign.activity_by_period/contacted-two.json';
+import campaignActivityByPeriodReplied7Days from '../../../docs/api/fixtures/campaign.activity_by_period/replied-7-days.json';
+import campaignActivityByPeriodRepliedOne from '../../../docs/api/fixtures/campaign.activity_by_period/replied-one.json';
+import campaignActivityByPeriodRepliedToday from '../../../docs/api/fixtures/campaign.activity_by_period/replied-today.json';
+import campaignActivityByPeriodRepliedTwo from '../../../docs/api/fixtures/campaign.activity_by_period/replied-two.json';
 import campaignAddContactsAlreadyMember from '../../../docs/api/fixtures/campaign.add_contacts/already-member.json';
 import campaignAddContactsArchivedCampaign from '../../../docs/api/fixtures/campaign.add_contacts/archived-campaign.json';
 import campaignAddContactsOnePerson from '../../../docs/api/fixtures/campaign.add_contacts/one-person.json';
@@ -76,11 +89,13 @@ import campaignAddContactsToArchived from '../../../docs/api/fixtures/campaign.a
 import campaignGetArchived from '../../../docs/api/fixtures/campaign.get/archived.json';
 import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.json';
 import campaignGetGone from '../../../docs/api/fixtures/campaign.get/gone.json';
+import campaignGetGoneHere from '../../../docs/api/fixtures/campaign.get/gone-here.json';
 import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
 import campaignGetUnknown from '../../../docs/api/fixtures/campaign.get/unknown.json';
 import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinked.json';
+import campaignListCampaignsForPicker from '../../../docs/api/fixtures/campaign.list/campaigns-for-picker.json';
 import campaignListFirstPage from '../../../docs/api/fixtures/campaign.list/first-page.json';
 import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
 import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
@@ -92,8 +107,12 @@ import campaignListScreenQuery from '../../../docs/api/fixtures/campaign.list/sc
 import campaignListContactsActivityMany from '../../../docs/api/fixtures/campaign.list_contacts/activity-many.json';
 import campaignListContactsActivityManyNext from '../../../docs/api/fixtures/campaign.list_contacts/activity-many-next.json';
 import campaignListContactsActivityPeople from '../../../docs/api/fixtures/campaign.list_contacts/activity-people.json';
+import campaignListContactsActivityPeopleAll from '../../../docs/api/fixtures/campaign.list_contacts/activity-people-all.json';
 import campaignListContactsActivityRemoved from '../../../docs/api/fixtures/campaign.list_contacts/activity-removed.json';
 import campaignListContactsActivityReplied from '../../../docs/api/fixtures/campaign.list_contacts/activity-replied.json';
+import campaignListContactsActivityRepliedAll from '../../../docs/api/fixtures/campaign.list_contacts/activity-replied-all.json';
+import campaignListContactsActivityRepliedDay from '../../../docs/api/fixtures/campaign.list_contacts/activity-replied-day.json';
+import campaignListContactsActivityRepliedToday from '../../../docs/api/fixtures/campaign.list_contacts/activity-replied-today.json';
 import campaignListContactsEveryone from '../../../docs/api/fixtures/campaign.list_contacts/everyone.json';
 import campaignListContactsQuery from '../../../docs/api/fixtures/campaign.list_contacts/query.json';
 import campaignListContactsQueryTooLong from '../../../docs/api/fixtures/campaign.list_contacts/query-too-long.json';
@@ -117,6 +136,7 @@ import campaignSummaryWithArchived from '../../../docs/api/fixtures/campaign.sum
 import contactGetArchived from '../../../docs/api/fixtures/contact.get/archived.json';
 import contactGetImported from '../../../docs/api/fixtures/contact.get/imported.json';
 import contactGetNoFirstName from '../../../docs/api/fixtures/contact.get/no-first-name.json';
+import contactGetOli from '../../../docs/api/fixtures/contact.get/oli.json';
 import contactGetOne from '../../../docs/api/fixtures/contact.get/one.json';
 import contactGetUnrouted from '../../../docs/api/fixtures/contact.get/unrouted.json';
 import contactGetWithCampaigns from '../../../docs/api/fixtures/contact.get/with-campaigns.json';
@@ -170,6 +190,7 @@ import journalListByExpiredItem from '../../../docs/api/fixtures/journal.list/by
 import journalListByFailedItem from '../../../docs/api/fixtures/journal.list/by-failed-item.json';
 import journalListBySucceededItem from '../../../docs/api/fixtures/journal.list/by-succeeded-item.json';
 import journalListByWorkItem from '../../../docs/api/fixtures/journal.list/by-work-item.json';
+import journalListOli from '../../../docs/api/fixtures/journal.list/oli.json';
 import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
@@ -234,6 +255,7 @@ import workitemListFailed from '../../../docs/api/fixtures/workitem.list/failed.
 import workitemListFailedOn16 from '../../../docs/api/fixtures/workitem.list/failed-on-16.json';
 import workitemListFailedOn17 from '../../../docs/api/fixtures/workitem.list/failed-on-17.json';
 import workitemListNow from '../../../docs/api/fixtures/workitem.list/now.json';
+import workitemListOliOpen from '../../../docs/api/fixtures/workitem.list/oli-open.json';
 import workitemListPlanned from '../../../docs/api/fixtures/workitem.list/planned.json';
 import workitemListPlannedMany from '../../../docs/api/fixtures/workitem.list/planned-many.json';
 import workitemListPlannedManyNext from '../../../docs/api/fixtures/workitem.list/planned-many-next.json';
@@ -274,10 +296,7 @@ export const fixtures = {
         ApprovalListRequest,
         Page<ApprovalSummary>
     >,
-    'approval.list/by-work-item': approvalListByWorkItem satisfies Exchange<
-        ApprovalListRequest & { work_item_id: string },
-        Page<ApprovalSummary>
-    >,
+    'approval.list/by-work-item': approvalListByWorkItem satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/decided': approvalListDecided satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/empty': approvalListEmpty satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/pending': approvalListPending satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
@@ -288,6 +307,14 @@ export const fixtures = {
     'approval.list/unauthorized': approvalListUnauthorized satisfies Exchange<ApprovalListRequest, ErrorEnvelope>,
     'approval.reject/from-work-item': approvalRejectFromWorkItem satisfies Exchange<ApprovalDecisionRequest, Approval>,
     'approval.reject/rejected': approvalRejectRejected satisfies Exchange<ApprovalDecisionRequest, Approval>,
+    'campaign.activity/all-7-days': campaignActivityAll7Days satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
+    'campaign.activity/all-today': campaignActivityAllToday satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
     'campaign.activity/last-7-days': campaignActivityLast7Days satisfies Exchange<
         CampaignActivityRequest,
         CampaignActivityResponse
@@ -304,6 +331,39 @@ export const fixtures = {
     'campaign.activity/today': campaignActivityToday satisfies Exchange<
         CampaignActivityRequest,
         CampaignActivityResponse
+    >,
+    'campaign.activity/two': campaignActivityTwo satisfies Exchange<CampaignActivityRequest, CampaignActivityResponse>,
+    'campaign.activity_by_period/contacted-7-days': campaignActivityByPeriodContacted7Days satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
+    >,
+    'campaign.activity_by_period/contacted-one': campaignActivityByPeriodContactedOne satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
+    >,
+    'campaign.activity_by_period/contacted-today': campaignActivityByPeriodContactedToday satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
+    >,
+    'campaign.activity_by_period/contacted-two': campaignActivityByPeriodContactedTwo satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
+    >,
+    'campaign.activity_by_period/replied-7-days': campaignActivityByPeriodReplied7Days satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
+    >,
+    'campaign.activity_by_period/replied-one': campaignActivityByPeriodRepliedOne satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
+    >,
+    'campaign.activity_by_period/replied-today': campaignActivityByPeriodRepliedToday satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
+    >,
+    'campaign.activity_by_period/replied-two': campaignActivityByPeriodRepliedTwo satisfies Exchange<
+        CampaignActivityByPeriodRequest,
+        CampaignActivityByPeriodResponse
     >,
     'campaign.add_contacts/already-member': campaignAddContactsAlreadyMember satisfies Exchange<
         AddContactsRequest,
@@ -332,11 +392,16 @@ export const fixtures = {
     'campaign.get/archived': campaignGetArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/details': campaignGetDetails satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/gone': campaignGetGone satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
+    'campaign.get/gone-here': campaignGetGoneHere satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
-    'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, CampaignSummary>,
-    'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, CampaignSummary>,
+    'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.list/campaigns-for-picker': campaignListCampaignsForPicker satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
     'campaign.list/first-page': campaignListFirstPage satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/for-picker': campaignListForPicker satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/include-archived': campaignListIncludeArchived satisfies Exchange<
@@ -366,11 +431,27 @@ export const fixtures = {
         ListContactsRequest,
         Page<MembershipItem>
     >,
+    'campaign.list_contacts/activity-people-all': campaignListContactsActivityPeopleAll satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
     'campaign.list_contacts/activity-removed': campaignListContactsActivityRemoved satisfies Exchange<
         ListContactsRequest,
         Page<MembershipItem>
     >,
     'campaign.list_contacts/activity-replied': campaignListContactsActivityReplied satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/activity-replied-all': campaignListContactsActivityRepliedAll satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/activity-replied-day': campaignListContactsActivityRepliedDay satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/activity-replied-today': campaignListContactsActivityRepliedToday satisfies Exchange<
         ListContactsRequest,
         Page<MembershipItem>
     >,
@@ -442,6 +523,7 @@ export const fixtures = {
     'contact.get/archived': contactGetArchived satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.get/imported': contactGetImported satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.get/no-first-name': contactGetNoFirstName satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.get/oli': contactGetOli satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.get/one': contactGetOne satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.get/unrouted': contactGetUnrouted satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.get/with-campaigns': contactGetWithCampaigns satisfies Exchange<{ contact_id: string }, Contact>,
@@ -549,6 +631,7 @@ export const fixtures = {
         Page<JournalEntry>
     >,
     'journal.list/by-work-item': journalListByWorkItem satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'journal.list/oli': journalListOli satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/summer': journalListSummer satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
@@ -655,6 +738,7 @@ export const fixtures = {
     'workitem.list/failed-on-16': workitemListFailedOn16 satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
     'workitem.list/failed-on-17': workitemListFailedOn17 satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
     'workitem.list/now': workitemListNow satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
+    'workitem.list/oli-open': workitemListOliOpen satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
     'workitem.list/planned': workitemListPlanned satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
     'workitem.list/planned-many': workitemListPlannedMany satisfies Exchange<
         WorkItemListRequest,

@@ -392,6 +392,17 @@ public sealed partial class CanonicalReadsDocTests
         Assert.Contains($"- `{count}` — ", page[start..(end < 0 ? page.Length : end)], StringComparison.Ordinal);
     }
 
+    /// <summary>The series' two refusals, in the numbers the runtime enforces.</summary>
+    [Fact]
+    public void Work_execution_states_the_limits_a_series_is_refused_by()
+    {
+        var text = Flat(Source("docs/work-execution.md"));
+
+        Assert.Contains($"A window cut into more than {Jason.Runtime.Campaigns.ActivityBuckets.MaxBuckets} buckets is refused", text, StringComparison.Ordinal);
+        Assert.Equal(8, Jason.Runtime.Campaigns.ActivityBuckets.Edge.TotalDays);
+        Assert.Contains("within eight days of either end of the calendar", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Work_execution_names_where_the_operations_are_rather_than_listing_them() =>
         Assert.Contains(

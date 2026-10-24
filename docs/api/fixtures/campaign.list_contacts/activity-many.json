@@ -46,7 +46,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -83,7 +96,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -120,7 +146,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -157,7 +196,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -194,7 +246,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -231,7 +296,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -268,7 +346,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -305,7 +396,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -342,7 +446,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -379,7 +496,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -416,7 +546,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -453,7 +596,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -490,7 +646,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -527,7 +696,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -564,7 +746,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -601,7 +796,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -638,7 +846,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -675,7 +896,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -712,7 +946,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -749,7 +996,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -786,7 +1046,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -823,7 +1096,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -860,7 +1146,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -897,7 +1196,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -934,7 +1246,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -971,7 +1296,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1008,7 +1346,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1045,7 +1396,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1082,7 +1446,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1119,7 +1496,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1156,7 +1546,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1193,7 +1596,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1230,7 +1646,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1267,7 +1696,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1304,7 +1746,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1341,7 +1796,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1378,7 +1846,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1415,7 +1896,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1452,7 +1946,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1489,7 +1996,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1526,7 +2046,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1563,7 +2096,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1600,7 +2146,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1637,7 +2196,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1674,7 +2246,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1711,7 +2296,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1748,7 +2346,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1785,7 +2396,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1822,7 +2446,20 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -1859,9 +2496,22 @@
           "at": "2026-10-12T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "added",
+              "at": "2026-10-12T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       }
     ],
-    "next_cursor": "Y250XzAxSzdRTjAwMDAwMDAwMDAwMDAwMDAwNTUw"
+    "next_cursor": "MTc5MTc5OTIwMDAwMHxjbnRfMDFLN1FOMDAwMDAwMDAwMDAwMDAwMDA1NTA"
   }
 }

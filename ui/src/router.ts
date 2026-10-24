@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals';
+import { campaignIdsLimit } from './api/types';
 
 export type Tab = 'now' | 'planned' | 'done';
 export type WorkItemFilters = {
@@ -21,7 +22,7 @@ export type PeopleFilters = {
 
 export type CampaignTab = 'timeline' | 'people' | 'details';
 export type CampaignView = 'summary' | 'activity';
-export type Period = 'today' | '7d' | '30d';
+export type Period = 'today' | '7d' | '30d' | '90d';
 export type CampaignFilters = {
     /** Find a campaign: any part of its name. */
     q?: string;
@@ -31,6 +32,9 @@ export type CampaignFilters = {
 /** The counts of each view, by the names the runtime takes: a People tab's filter is one of its view's. */
 export const summaryCounts = ['waiting', 'failed', 'working', 'new', 'idle', 'sequence', 'out', 'removed'] as const;
 export const activityCounts = ['added', 'worked_on', 'contacted', 'replied', 'opted_out', 'removed'] as const;
+/** What Performance's tiles count: everyone something happened to, then each of Activity's counts. */
+export const performanceCounts = ['people', ...activityCounts] as const;
+export type ActivityCount = (typeof performanceCounts)[number];
 
 const day = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -49,6 +53,20 @@ export type Route =
           filters: CampaignFilters;
           /** The People tab's count, one of the view's. */
           filter?: string;
+      }
+    | {
+          screen: 'performance';
+          /** The person open beside the list, on their tab. */
+          id?: string;
+          tab: PersonTab;
+          period: Period;
+          /** The campaigns chosen, in the order they were; none is every campaign. */
+          campaigns: string[];
+          /** The tile whose people are listed; no list until one is chosen. */
+          count?: ActivityCount;
+          /** One bar's window, as the runtime answered it: the list then shows that bucket's people. */
+          from?: string;
+          to?: string;
       };
 
 const tabs: readonly Tab[] = ['now', 'planned', 'done'];
@@ -61,6 +79,7 @@ export function parseRoute(hash: string): Route {
     if (segments[0] === 'workitems') return workItems(segments.slice(1), query);
     if (segments[0] === 'people') return people(segments.slice(1), query);
     if (segments[0] === 'campaigns') return campaigns(segments.slice(1), query);
+    if (segments[0] === 'performance') return performance(segments.slice(1), query);
     const decided = new URLSearchParams(query).get('decided') === '1' ? { decided: true as const } : {};
     if (segments[0] === 'attention' && (segments[1] === 'approvals' || segments[1] === 'questions') && segments[2]) {
         const id = decode(segments[2]);
@@ -121,6 +140,51 @@ function campaigns(segments: string[], query: string): Route {
     return filter && counts.includes(filter) ? { ...at, filter } : at;
 }
 
+const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
+
+/** An instant as the runtime writes one, and a real one: it reads back as written, so 30 February is not. */
+function moment(text: string | null): Date | null {
+    if (!text || !instant.test(text)) return null;
+    const date = new Date(text);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 19) === text.slice(0, 19) ? date : null;
+}
+
+/** A bar's window: two real instants, the first before the second. */
+function barWindow(from: string | null, to: string | null): { from: string; to: string } | null {
+    const start = moment(from);
+    const end = moment(to);
+    return start && end && start < end ? { from: from!, to: to! } : null;
+}
+
+function performance(segments: string[], query: string): Route {
+    const id = segments[0] ? decode(segments[0]) : null;
+    const params = new URLSearchParams(query);
+    const asked = params.get('period');
+    const period: Period = asked === 'today' || asked === '30d' || asked === '90d' ? asked : '7d';
+    const campaigns = [...new Set(params.getAll('campaign').filter((c) => c.length > 0))].slice(0, campaignIdsLimit);
+    const at: Extract<Route, { screen: 'performance' }> = { screen: 'performance', tab: 'timeline', period, campaigns };
+    const count = performanceCounts.find((c) => c === params.get('count'));
+    if (count) {
+        at.count = count;
+        const bar = barWindow(params.get('from'), params.get('to'));
+        if (bar) Object.assign(at, bar);
+    }
+    if (id === null) return at;
+    const tab: PersonTab = segments[1] === 'details' || segments[1] === 'threads' ? segments[1] : 'timeline';
+    return { ...at, id, tab };
+}
+
+/** The Performance address in a fixed key order, its defaults left out; the campaigns as one key each. */
+function performanceQuery(route: Extract<Route, { screen: 'performance' }>): string {
+    const parts: string[] = [];
+    if (route.period !== '7d') parts.push(`period=${route.period}`);
+    for (const campaign of route.campaigns) parts.push(`campaign=${encodeURIComponent(campaign)}`);
+    if (route.count) parts.push(`count=${route.count}`);
+    if (route.count && route.from && route.to)
+        parts.push(`from=${encodeURIComponent(route.from)}`, `to=${encodeURIComponent(route.to)}`);
+    return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
 /** The Campaigns address in a fixed key order, its defaults left out. */
 function campaignQuery(route: Extract<Route, { screen: 'campaigns' }>): string {
     const parts: string[] = [];
@@ -178,6 +242,11 @@ export function href(route: Route): string {
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';
         const tab = route.id && route.tab !== 'timeline' ? `/${route.tab}` : '';
         return `#/campaigns${id}${tab}${campaignQuery(route)}`;
+    }
+    if (route.screen === 'performance') {
+        const id = route.id ? `/${encodeURIComponent(route.id)}` : '';
+        const tab = route.id && route.tab !== 'timeline' ? `/${route.tab}` : '';
+        return `#/performance${id}${tab}${performanceQuery(route)}`;
     }
     const decided = route.decided ? '?decided=1' : '';
     return route.kind && route.id

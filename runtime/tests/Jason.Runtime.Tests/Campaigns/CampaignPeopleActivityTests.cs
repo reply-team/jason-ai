@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Campaigns;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Campaigns;
 
@@ -88,11 +89,14 @@ public class CampaignPeopleActivityTests
     private static Task<string[]> TheWeekAsync(CampaignActivityFilter filter) =>
         HappenedAsync(filter, CampaignWorld.Since, CampaignWorld.Until);
 
+    /// <summary>The people a count counts in the period, as the activity list reads them: each once, by their latest moment.</summary>
     private static async Task<string[]> HappenedAsync(CampaignActivityFilter filter, DateTime since, DateTime until)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
         var world = await CampaignWorld.WriteAsync(db, Ct);
-        return await CampaignPeopleSummaryTests.NamesAsync(db, CampaignPeople.Happened(db, [world.Spring.Id], filter, since, until));
+        var people = (await CampaignPeople.ByMoment(db, [world.Spring.Id], filter, since, until).ToListAsync(Ct)).Select(person => person.ContactId).ToList();
+        var names = await db.Contacts.Where(contact => people.Contains(contact.Id)).Select(contact => contact.FirstName!).ToListAsync(Ct);
+        return [.. names.Order(StringComparer.Ordinal)];
     }
 }

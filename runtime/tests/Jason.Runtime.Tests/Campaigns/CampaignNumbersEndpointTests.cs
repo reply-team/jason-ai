@@ -8,7 +8,7 @@ public class CampaignNumbersEndpointTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task The_summary_answers_every_count_for_each_campaign_asked()
+    public async Task The_summary_answers_every_count_for_each_campaign_asked_and_for_them_all()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
         var world = await CampaignWorld.WriteAsync(api, Ct);
@@ -22,13 +22,16 @@ public class CampaignNumbersEndpointTests
                 new CampaignSummaryRow(world.Autumn.PublicId, 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
             ],
             summary.Campaigns);
+        // Ada waits in Spring and is new in Autumn; Hal is new in Spring and idle in Autumn: each is one person in two counts.
+        Assert.Equal(new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Removed: 1), summary.Total);
     }
 
     [Fact]
-    public async Task The_activity_answers_the_period()
+    public async Task The_activity_answers_the_period_for_each_campaign_asked_and_for_them_all()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
         var world = await CampaignWorld.WriteAsync(api, Ct);
+        await CampaignWorld.WorkedOnAsync(api, world.People["Hal"], Ct, (world.Spring, 13), (world.Autumn, 13));
 
         var activity = await api.PostOkAsync<CampaignActivityResponse>(
             Operations.CampaignActivity,
@@ -37,10 +40,12 @@ public class CampaignNumbersEndpointTests
 
         Assert.Equal(
             [
-                new CampaignActivityRow(world.Spring.PublicId, 14, 2, 9, 4, 2, 2, Removed: 1),
-                new CampaignActivityRow(world.Autumn.PublicId, 0, 0, 0, 0, 0, 0, Removed: 0),
+                new CampaignActivityRow(world.Spring.PublicId, 15, 2, 10, 4, 2, 2, Removed: 1),
+                new CampaignActivityRow(world.Autumn.PublicId, 1, 0, 1, 0, 0, 0, Removed: 0),
             ],
             activity.Campaigns);
+        // Hal, worked on in both campaigns this week, is in both rows and once in the total.
+        Assert.Equal(new CampaignActivityTotal(15, 2, 10, 4, 2, 2, Removed: 1), activity.Total);
     }
 
     [Fact]

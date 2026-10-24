@@ -82,7 +82,12 @@
         },
         "state": "enrolled",
         "added_at": "2026-10-01T10:00:00.000Z",
-        "updated_at": "2026-10-01T10:00:00.000Z"
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_2"
+          }
+        ]
       },
       {
         "contact": {
@@ -126,7 +131,12 @@
         },
         "state": "enrolled",
         "added_at": "2026-10-01T10:00:00.000Z",
-        "updated_at": "2026-10-01T10:00:00.000Z"
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_2"
+          }
+        ]
       }
     ],
     "next_cursor": null

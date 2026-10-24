@@ -6,6 +6,7 @@ describe('periodWindow', () => {
         ['today', '2026-10-16T00:00:00.000Z'],
         ['7d', '2026-10-10T00:00:00.000Z'],
         ['30d', '2026-09-17T00:00:00.000Z'],
+        ['90d', '2026-07-19T00:00:00.000Z'],
     ] as const)('%s starts at a local midnight and ends now', (period, since) => {
         const now = new Date('2026-10-16T09:00:00.000Z');
         expect(periodWindow(period, now, 'UTC')).toEqual({ since, until: '2026-10-16T09:00:00.000Z' });

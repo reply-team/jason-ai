@@ -16,6 +16,8 @@ public class UiDocTests
     [InlineData("jason campaign summary")]
     [InlineData("jason campaign activity")]
     [InlineData("jason campaign list-contacts --summary")]
+    [InlineData("jason campaign activity-by-period")]
+    [InlineData("jason campaign list-contacts --activity")]
     [InlineData("ui/custom")]
     [InlineData("ui/default")]
     [InlineData("Runtime:Port")]

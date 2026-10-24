@@ -83,7 +83,20 @@
           "at": "2026-10-13T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": null,
+              "code": "removed",
+              "at": "2026-10-13T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       }
     ],
     "next_cursor": null

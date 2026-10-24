@@ -91,7 +91,20 @@
           "at": "2026-10-01T10:00:00.000Z",
           "approval_id": "apr_1",
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "approval",
+              "text": "Put one person into the campaign at the provider.",
+              "code": null,
+              "at": "2026-10-01T10:00:00.000Z",
+              "approval_id": "apr_1",
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -136,7 +149,20 @@
           "at": "2026-10-13T10:00:00.000Z",
           "approval_id": null,
           "decision_id": "dec_1"
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "question",
+              "text": "Follow up on LinkedIn?",
+              "code": null,
+              "at": "2026-10-13T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": "dec_1"
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -181,7 +207,20 @@
           "at": "2026-10-13T10:00:00.000Z",
           "approval_id": null,
           "decision_id": "dec_2"
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "question",
+              "text": "Follow up on LinkedIn?",
+              "code": null,
+              "at": "2026-10-13T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": "dec_2"
+            }
+          }
+        ]
       }
     ],
     "next_cursor": null

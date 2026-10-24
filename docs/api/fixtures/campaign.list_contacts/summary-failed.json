@@ -78,7 +78,20 @@
           "at": "2026-10-14T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "failure",
+              "text": "It did not work.",
+              "code": "provider_error",
+              "at": "2026-10-14T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -123,7 +136,20 @@
           "at": "2026-10-10T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "failure",
+              "text": null,
+              "code": "expired",
+              "at": "2026-10-10T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       },
       {
         "contact": {
@@ -168,7 +194,20 @@
           "at": "2026-10-13T10:00:00.000Z",
           "approval_id": null,
           "decision_id": null
-        }
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "failure",
+              "text": "It did not work.",
+              "code": "role_error",
+              "at": "2026-10-13T10:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
       }
     ],
     "next_cursor": null

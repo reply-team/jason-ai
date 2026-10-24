@@ -1,9 +1,13 @@
 import type { Api } from '../api/client';
 import type { CampaignSummary, Contact, Page } from '../api/types';
 
-/** The first ten campaigns, or the first ten whose name holds the text. Archived ones are not offered. */
-export async function searchCampaigns(api: Api, query: string): Promise<CampaignSummary[]> {
-    const page = await api.call<Page<CampaignSummary>>('campaign.list', query ? { query, limit: 10 } : { limit: 10 });
+/**
+ * The first ten campaigns, or the first ten whose name holds the text. Archived ones are offered only where asked for:
+ * nobody adds people to one, but its numbers still count.
+ */
+export async function searchCampaigns(api: Api, query: string, archived = false): Promise<CampaignSummary[]> {
+    const asked = { ...(query ? { query } : {}), limit: 10, ...(archived ? { include_archived: true } : {}) };
+    const page = await api.call<Page<CampaignSummary>>('campaign.list', asked);
     return page.items;
 }
 

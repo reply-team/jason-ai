@@ -128,7 +128,7 @@ export function PeopleScreen() {
                             <PersonCard
                                 person={person}
                                 tab={tab}
-                                filters={filters}
+                                to={(next) => ({ screen: 'people', id: person.id, tab: next, filters })}
                                 now={now}
                                 zone={zone}
                                 onAdd={() => setAdding(true)}
