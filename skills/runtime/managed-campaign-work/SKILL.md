@@ -275,3 +275,6 @@ jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 The roles that perform background AI work and how each of them reasons; anything a campaign manager does with
 a check-in; and installing plugins, writing routes or updating the installation. Those are other roles' jobs or
 other skills, and guessing at them here would be worse than saying so.
+
+A check-in is the launched manager's. A session that keeps a campaign moving asks the person and commits what they
+decide, as above, and `approvals-and-questions` and `troubleshooting-jason` cover what is waiting and what stopped.

@@ -33,6 +33,83 @@ public partial class CraftBlockTests
         }
     }
 
+    /// <summary>
+    /// The manager has no session file. It organises the other roles' work on a check-in it was woken for, and in a
+    /// person's own conversation nothing woke anybody: the person is there and decides, and a session keeping a campaign
+    /// moving does that through the skills a person's session already reads. A refusal by name rather than a roster of
+    /// the pairs, because the pairs are found by name: a roster here would make every new pair an edit in two places.
+    /// </summary>
+    [Fact]
+    public void The_manager_has_no_session_file()
+    {
+        var manager = SessionFilesFor("manager", CraftBlock.SessionFiles());
+        Assert.True(
+            manager.Count == 0,
+            $"{string.Join(", ", manager.Select(name => $"'{name}'"))} is a session file for the manager, and the manager has "
+            + "none: it organises the other roles' work on a check-in, and a person keeping a campaign moving does that "
+            + "through managed-campaign-work, approvals-and-questions and troubleshooting-jason. skills/runtime/README.md "
+            + "says so in 'A role that sits with a person', in the sentence that begins \"The manager has none\".");
+    }
+
+    /// <summary>
+    /// And the refusal above reads a listing that holds one. Today's pack has no such file, so the fact is green on the day
+    /// it is written and would show nothing about itself without a stand-in it must find.
+    /// </summary>
+    [Fact]
+    public void The_manager_refusal_finds_a_session_file_named_for_the_manager()
+    {
+        var file = Path.Combine(SkillPack.Root(), "manager-in-session", SkillPack.SkillFile);
+        var standIn = new SessionFile(new PackSkill("manager-in-session", Path.GetDirectoryName(file)!, file, IsRole: false), "manager");
+
+        var found = SessionFilesFor("manager", [.. CraftBlock.SessionFiles(), standIn]);
+        Assert.True(
+            found.SequenceEqual(["manager-in-session"], StringComparer.Ordinal),
+            $"The refusal found [{string.Join(", ", found)}] in a listing holding a stand-in session file for the manager.");
+    }
+
+    /// <summary>
+    /// The refusal above sends its reader to the catalog's sentence for the reason, so the sentence is held: a message
+    /// pointing at a sentence nobody kept sends its reader to nothing.
+    /// </summary>
+    [Fact]
+    public void The_catalog_says_the_manager_has_no_session_file()
+    {
+        const string sentence =
+            "The manager has none: it organises the other roles' work on a check-in, and a person keeping a campaign moving "
+            + "does that through `managed-campaign-work`, `approvals-and-questions` and `troubleshooting-jason`.";
+        var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
+        var start = catalog.IndexOf("The manager has none", StringComparison.Ordinal);
+        var found = start < 0 ? "no sentence that begins so" : catalog[start..Math.Min(catalog.Length, start + sentence.Length)];
+        Assert.True(
+            catalog.Contains(sentence, StringComparison.Ordinal),
+            $"skills/runtime/README.md, in 'A role that sits with a person', holds {found}, where it must say \"{sentence}\" "
+            + "The_manager_has_no_session_file names that sentence as the reason.");
+    }
+
+    /// <summary>
+    /// A session file names its profession's method in another skill and carries none of it: <c>METHOD.md</c> is the
+    /// file the business pack places beside a launched role's, which that role's launch contract tells it to read. One
+    /// beside a session file would be a second copy of a method the session already reaches by name, and nothing would
+    /// hold the two together.
+    /// </summary>
+    [Fact]
+    public void No_session_file_carries_a_method_file()
+    {
+        var sessions = Directory.EnumerateDirectories(SkillPack.Root(), "*-in-session").ToList();
+        Assert.True(sessions.Count > 0, $"No directory under '{SkillPack.Root()}' is named '*-in-session', so this guard holds nothing.");
+
+        var methods = sessions.Select(directory => Path.Combine(directory, "METHOD.md")).Where(File.Exists).ToList();
+        Assert.True(
+            methods.Count == 0,
+            $"[{string.Join(", ", methods.Select(file => $"'{file}'"))}] is a method file beside a session file. A session "
+            + "file names the skill that carries its method; METHOD.md belongs beside a launched role's file only.");
+    }
+
+    private static IReadOnlyList<string> SessionFilesFor(string role, IEnumerable<SessionFile> sessions) =>
+    [
+        .. sessions.Where(session => string.Equals(session.Role, role, StringComparison.Ordinal)).Select(session => session.Skill.Name),
+    ];
+
     [Fact]
     public void A_role_and_its_session_file_share_one_craft_block_byte_for_byte()
     {
