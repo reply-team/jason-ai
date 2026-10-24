@@ -284,7 +284,8 @@ fields withheld, and the bundle names each one. The home directory, a data direc
 or another the runtime reports — and the names of the account and the machine are rewritten before anything
 is written. It never carries the capability token, a request body or a prompt, and it reaches nothing beyond
 this machine. It writes one file and prints where; **sending it anywhere is the person's act, never yours.**
-`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign and
+`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
+project link recorded, campaign and
 work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
 do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the
 errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the failure

@@ -4,9 +4,11 @@
 # the licence and the third-party notices beside it as jason-LICENSE and jason-THIRD-PARTY-NOTICES; and that
 # directory added to the PATH behind a marker line unless --no-modify-path says otherwise. Running it again over
 # the same version downloads nothing and says so, unless a licence file is missing beside it, which it then writes.
+# Either way it says where Jason will keep what it learns about your business — Jason in your home directory, unless
+# Harness:Root in the settings names another folder — and makes no folder for it.
 #
 #   curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
-#   curl -fsSL https://jasonharness.ai/releases/download/v0.14.0/install.sh | sh -s -- --version 0.14.0 --no-modify-path
+#   curl -fsSL https://jasonharness.ai/releases/download/v0.15.0/install.sh | sh -s -- --version 0.15.0 --no-modify-path
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, manifest.json and checksums.txt — which is how CI runs it against the archives it has just
@@ -254,6 +256,21 @@ else
     write_notices || fail "Jason $STARTED is installed at $TARGET, and its licence files could not be written beside it: $REASON. Run this script again."
     echo "Installed Jason $STARTED to $TARGET"
 fi
+
+# --- where the files will be ---------------------------------------------------------------------------------
+
+# What Jason learns about the person's business is kept in plain files under the harness root, which the runtime makes
+# at the first project or campaign it creates; this script makes no folder there. The folder is said as the default,
+# made as the runtime makes it, Jason in the home: Harness:Root in the settings can name another, and only the runtime
+# reads its settings, so the root in force is for `jason status` to say rather than for a second reader of them here.
+# Each text is in single quotes, so its backticks are text and not a command to substitute. The home loses every
+# separator at its end, as the runtime reads it: `/home/marta//` is `/home/marta`, and a home of `/` gives `/Jason`.
+ROOT_HOME="$HOME"
+while [ "${ROOT_HOME%/}" != "$ROOT_HOME" ]; do
+    ROOT_HOME="${ROOT_HOME%/}"
+done
+printf 'Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and campaign, in `%s` by default; to keep them somewhere else, set `Harness:Root` in the settings before your first campaign.\n' "$ROOT_HOME/Jason"
+printf '%s\n' 'Campaigns you create without naming a project go to the project `Default`; rename it, or make one project per product.'
 
 # --- the PATH ------------------------------------------------------------------------------------------------
 

@@ -1,0 +1,24 @@
+{
+  "operation": "rolenote.list",
+  "case": "client",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "campaign_id": null,
+        "project_id": null,
+        "role": "researcher",
+        "note_hash": "sha256:recorded-6",
+        "note_bytes": 61,
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "updated_by": {
+          "type": "role",
+          "id": "researcher"
+        }
+      }
+    ],
+    "next_cursor": null
+  }
+}

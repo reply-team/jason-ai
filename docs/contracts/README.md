@@ -119,10 +119,9 @@ A preference document is `{key, version, summary, value_schema}` and nothing els
 carries one and no plugin is invoked for one, so it is under `preferences/` and read by a catalog of its own. A key is
 lower-case words of letters, digits and underscores, each starting with a letter, joined by dots, at most 64
 characters, and its document is named for it. Every value is a JSON object, checked against the key's `value_schema`
-in the dialect below, of at most 64 KiB in its canonical form, in which every character outside ASCII is escaped at six
-bytes, and so are DEL and each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, while a character outside the Basic
-Multilingual Plane takes twelve
-(a preference reports the `value_bytes` the cap compares). A key's schema changes only by gaining an optional
+in the dialect below, of at most 64 KiB of UTF-8 in its canonical form, counted with nothing escaped, so a character
+costs what UTF-8 spells it in, from one byte in ASCII to four outside the Basic Multilingual Plane
+(a preference reports the `value_bytes` the cap compares, once the value has been changed by this version). A key's schema changes only by gaining an optional
 field, which raises the document's version, so a skill reading the document knows which fields may be present; anything
 else is a new key. There is one value per key for the whole installation, set and unset by a person
 and read by everyone else. Its fixtures live under [`fixtures/preferences/`](fixtures/preferences) and are run by the
@@ -399,8 +398,8 @@ Every operation is at `version: 1`. A plugin's manifest declares the operation-c
 `contracts.operations`, and a plugin that declares family version N implements version N of every operation it
 lists.
 
-- **Additive** — a new optional input field, a new optional output field, a new failure code, a new external-id
-  kind — keeps the version.
+- **Additive** — a new optional input field, a required input field made optional, a new optional output field, a new
+  failure code, a new external-id kind — keeps the version.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,

@@ -1,0 +1,29 @@
+{
+  "operation": "project.link",
+  "case": "relinked",
+  "request": {
+    "path": "~/Clients/acme-corp",
+    "reason": "moved with the other clients"
+  },
+  "status": 200,
+  "response": {
+    "project": {
+      "id": "prj_1",
+      "name": "Acme Corp",
+      "slug": "acme-corp",
+      "default": false,
+      "created_at": "2026-10-16T09:00:00.000Z",
+      "updated_at": "2026-10-16T09:00:00.000Z",
+      "folder_path": "~/Clients/acme-corp"
+    },
+    "folder": "relinked",
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "folder_path": "~/Clients/acme-corp/campaigns/q3-leads",
+        "outcome": "relinked"
+      }
+    ],
+    "reported": []
+  }
+}

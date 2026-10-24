@@ -39,8 +39,8 @@ without asking what was meant.
   preferences, past results. Take it as they give it: in their own words, typed, as a link, a file
   or a voice note. With Jason, that brief becomes the context of Jason's own campaign when the
   campaign is created (`jason campaign create`, not the provider operation `campaign.create`),
-  before any contact is added and before anything is sent, so the plan and the roles that read
-  the campaign start from the same brief.
+  under a project named from what is sold, before any contact is added and before anything is
+  sent, so the plan and the roles that read the campaign start from the same brief.
 - The operation contract (`sdr-operations`), because a plan is expressed in operations.
 - A credential, if the plan is to be checked against a real installation. The constraint reads
   in step 2 need one; the plan can still be written without one, provided it states which
@@ -229,6 +229,8 @@ in `approval-boundaries`.
 
 ## Changelog
 
+- 2.4.0 (2026-10-23): with Jason, the campaign the brief becomes goes under a project named from
+  what is sold, one project per product.
 - 2.3.0 (2026-10-18): the brief is taken as the person gives it, in their own words, and with
   Jason it becomes the context of Jason's own campaign when the campaign is created, before any
   contact is added and before anything is sent. Adds a pilot, then the rest, as one natural path a

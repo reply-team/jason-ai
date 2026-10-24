@@ -1,0 +1,32 @@
+{
+  "operation": "rolenote.set",
+  "case": "project",
+  "request": {
+    "project_id": "prj_1",
+    "role": "copywriter",
+    "note": {
+      "voice": "short sentences; the product's name once"
+    },
+    "actor": {
+      "type": "role",
+      "id": "copywriter"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": null,
+    "project_id": "prj_1",
+    "role": "copywriter",
+    "note": {
+      "voice": "short sentences; the product's name once"
+    },
+    "note_hash": "sha256:recorded-3",
+    "note_bytes": 52,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "updated_by": {
+      "type": "role",
+      "id": "copywriter"
+    }
+  }
+}

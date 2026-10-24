@@ -1,0 +1,32 @@
+{
+  "operation": "rolenote.set",
+  "case": "campaign",
+  "request": {
+    "campaign_id": "cmp_1",
+    "role": "researcher",
+    "note": {
+      "gatekeeper": "the switchboard hangs up after six"
+    },
+    "actor": {
+      "type": "role",
+      "id": "researcher"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "project_id": null,
+    "role": "researcher",
+    "note": {
+      "gatekeeper": "the switchboard hangs up after six"
+    },
+    "note_hash": "sha256:recorded-5",
+    "note_bytes": 51,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "updated_by": {
+      "type": "role",
+      "id": "researcher"
+    }
+  }
+}

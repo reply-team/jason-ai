@@ -242,6 +242,7 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
+| | the harness root can take the first project or campaign |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked — so a runtime that is down is a failed check rather than an
@@ -280,9 +281,11 @@ of the log, what the runtime says about itself and each plugin by its id, versio
 problem codes, which plugin performs which operation, here and per campaign, by plugin id and operation
 name — never which account a route binds — and the journal and the work items counted, with the newest entries by kind and ids and the
 newest failures by their error's code — never by what they say. It never holds the capability token,
-request or response bodies, prompts, work-item results, the database, plugin packages, or a route's
-account and its identity. Only
-`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, campaign
+request or response bodies, prompts, work-item results, the database, plugin packages, a route's
+account and its identity, or anything read from the folder Jason keeps what it learns about your business in —
+`~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only
+`--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
+project link recorded, campaign
 and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
 do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with,
 the errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the
@@ -322,7 +325,9 @@ reported and kept unless `--force` says otherwise.
 **The data directory is kept** — the database, the settings, the plugins, the logs and the work directories
 are the record of what you did — and the verb says in one line that it kept it and where. `--purge-data`
 removes what Jason keeps there, and the directory once nothing else is in it; in the machine shape the word
-has to be said in advance, because there is nobody there to be asked. Like `status`, this verb has no API
+has to be said in advance, because there is nobody there to be asked. The folder Jason keeps what it learns about
+your business in — `~/Jason` unless `Harness:Root` names another — is never touched, `--purge-data` included: it is
+yours. Like `status`, this verb has no API
 operation behind it: removing Jason from a machine is not something the runtime performs or is asked about.
 [docs/INSTALL.md](docs/INSTALL.md) §7 is the fuller account.
 
@@ -378,7 +383,7 @@ everything else keeps running:
 jason profile create local-claude --host claude_code --program claude   --deny Write --host-version-verified 2.1.275
 jason profile list --human
 jason workitem create <campaign-id> --kind ai_role --role researcher --execution-profile local-claude
-jason rolenote get <campaign-id> researcher
+jason rolenote get --role researcher --campaign <campaign-id>
 ```
 
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
@@ -400,8 +405,8 @@ into `<data>/skills/roles/<role>/` from the packs under [`skills/`](skills) and 
 into each attempt's own work directory. The packs contribute different files to it — this repository's
 runtime pack the `SKILL.md` holding the launch contract, a business pack the profession's method beside
 it — so that installing one never overwrites the other. What a role *remembers* is a **role note** — one document per
-campaign and role, written by that role for its own later runs, and deliberately not authoritative:
-where a note disagrees with campaign state, the state is what is true.
+role at each of three levels, the client's, a project's and a campaign's, written by that role for its own later
+runs, and deliberately not authoritative: where a note disagrees with campaign state, the state is what is true.
 
 What a plugin package is, every rule its manifest is held to, what the Host SDK offers and under
 which limits, how capabilities are granted, and the invocation protocol between the runtime and the

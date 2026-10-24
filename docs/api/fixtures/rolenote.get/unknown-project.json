@@ -1,0 +1,16 @@
+{
+  "operation": "rolenote.get",
+  "case": "unknown-project",
+  "request": {
+    "project_id": "prj_2",
+    "role": "researcher"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "project_not_found",
+      "message": "No project with id 'prj_2'.",
+      "retryable": false
+    }
+  }
+}

@@ -7,10 +7,12 @@ Downloads jason-win-x64.zip from the latest release, or from the release -Versio
 checksums.txt before unpacking, puts jason.exe in %LOCALAPPDATA%\Programs\jason with the licence and the
 third-party notices beside it as jason-LICENSE and jason-THIRD-PARTY-NOTICES, and adds that directory to the
 user's PATH unless -NoModifyPath says otherwise. Running it again over the same version downloads nothing and
-says so, unless a licence file is missing beside it, which it then writes.
+says so, unless a licence file is missing beside it, which it then writes. Either way it says where Jason will keep
+what it learns about your business - Jason in your home directory, unless Harness:Root in the settings names
+another folder - and makes no folder for it.
 
     irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.14.0/install.ps1))) -Version 0.14.0 -NoModifyPath
+    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.15.0/install.ps1))) -Version 0.15.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just
@@ -328,6 +330,17 @@ function Install-Jason {
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
+
+    # --- where the files will be ------------------------------------------------------------------------------
+
+    # What Jason learns about the person's business is kept in plain files under the harness root, which the runtime
+    # makes at the first project or campaign it creates; this script makes no folder there. The folder is said as the
+    # default, made as the runtime makes it: Harness:Root in the settings can name another, and only the runtime reads
+    # its settings, so the root in force is for `jason status` to say rather than for a second reader of them here.
+    # Single-quoted, so the backticks are text.
+    $harnessRoot = [IO.Path]::Combine([Environment]::GetFolderPath('UserProfile'), 'Jason')
+    Write-Host ('Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and campaign, in `' + $harnessRoot + '` by default; to keep them somewhere else, set `Harness:Root` in the settings before your first campaign.')
+    Write-Host 'Campaigns you create without naming a project go to the project `Default`; rename it, or make one project per product.'
 
     # --- the PATH ---------------------------------------------------------------------------------------------
 
