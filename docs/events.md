@@ -6,7 +6,8 @@ point the plugin's own cursor names — and how what it read reaches a campaign:
 which wakes its manager like a failed item or an answered question does ([campaign manager](campaign-manager.md)).
 
 Nothing here reads meaning. An event is identifiers, moments and the provider's own flags; which campaigns it concerns
-is decided by the identifiers the campaigns' own operations pinned, and what it calls for is the manager's.
+is decided by the identifiers the campaigns' own operations pinned — the provider campaign first, the person where that
+finds no campaign — and what it calls for is the manager's.
 
 This page is the contract for reading an account, the events store and the lines it writes, a span read again on a
 person's request, and the record of the accounts. What a plugin author implements is
@@ -64,9 +65,10 @@ Three tables, in the runtime's own database.
 **Kept whole.** The store is append-only three times over, as the journal is: no operation of the Runtime API changes
 or removes an event; the runtime refuses to before the database is reached; and the triggers `events_no_update`,
 `events_no_delete`, `event_attributions_no_update` and `event_attributions_no_delete` refuse a raw statement that tries.
-An event no campaign's pins match is kept, concerning nobody. Nothing re-attributes an event later: which campaigns it
-concerns is decided once, when it is stored, by the pins as they stood then — as a campaign linked late is read by the
-inbound read only from then ([inbound sync](inbound-sync.md) §5).
+An event that reaches no campaign by either rule (section 3) is kept, concerning nobody. Nothing re-attributes an event
+later: which campaigns it concerns is decided once, when it is stored, by the pins and the memberships as they stood
+then — as a campaign linked late is read by the inbound read only from then ([inbound sync](inbound-sync.md) §5), and a
+person who joins a campaign after an event was stored never brings that event to it.
 
 **Each event once.** An event's key is the `sha256:` of the plugin, the kind, the identifiers the kind names and the
 moment it happened, and for a moved thread who moved it: the provider setting a category as a reply arrives, at the same
@@ -81,13 +83,24 @@ began. A page that does not land leaves the cursor where it was, and the next re
 
 ## 3. Which campaigns an event concerns
 
-An event reaches a campaign by the provider's campaign identifier it names, when exactly one campaign that is not
-archived holds that identifier pinned at the event's own plugin — rule `campaign_pin` — and by nothing else: not a
-route to the plugin, not a membership, not a tag, not a name. When no campaign holds it, or more than one does, the
-event concerns nobody. A value kept only as a divergence beside a pin is not a pin.
+Two rules, asked in this order; the first that finds a campaign decides alone.
 
-An event that names no provider campaign — a direct email's reply, a LinkedIn message outside a sequence — concerns
-nobody in this version.
+1. **`campaign_pin`.** An event reaches a campaign by the provider's campaign identifier it names, when exactly one
+   campaign that is not archived holds that identifier pinned at the event's own plugin.
+2. **`contact_pin`.** Otherwise — the event names no provider campaign, or no campaign that is not archived holds it, or
+   more than one does — it reaches every campaign that is not archived and holds, as a local member, the one contact
+   pinned with the event's contact identifier at that plugin. A local member is any membership but `excluded`, so a
+   paused or finished one counts; an archived contact is a member of nothing here, and an event still names them.
+
+An event that finds a campaign by neither concerns nobody: nothing else counts, not a route to the plugin, not a tag,
+not a name. A value kept only as a divergence beside a pin is not a pin, and an identifier pinned to two contacts names
+nobody, so it reaches no campaign by the person either.
+
+**Why in that order.** A sequence's event belongs to the campaign that runs the sequence. The inbound read lists a
+campaign's own threads, and the events path must agree with it about a campaign; so the person's rule is the rule for
+the event no provider campaign places — a direct email's reply, a LinkedIn message outside a sequence — never a second
+audience beside a campaign already found. The inbound read's step aside asks the first rule alone
+([inbound sync](inbound-sync.md) §5).
 
 ## 4. What a stored event says
 
@@ -103,18 +116,24 @@ Both lines are written by `system:dispatcher`, name the campaign and no work ite
 manager is woken by under the default `Manager:Triggers`.
 
 - **`inbound_reply_observed`** is the line the inbound read writes, with its fields — `plugin`, `thread`, `channel`,
-  `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id` — and one more, `event_id`, the stored event. It is
-  keyed as the inbound read keys it, by the plugin, the thread and the moment, so a move both reads found is said once.
+  `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id` — and two more, `event_id`, the stored event, and
+  `attributed_by`, the rule that found the campaign (section 3). The inbound read's own line carries neither, since the
+  thread it names is the campaign's own by the read that listed it. It is keyed as the inbound read keys it, by the
+  plugin, the thread and the moment, so a move both reads found is said once.
   A move the provider cannot say who made reads as a reply, so a follow-up sent into a thread that already has a reply
   is said again, as the inbound read says it.
-- **`provider_event_observed`** carries `kind`, `plugin`, `event_id`, `occurred_at`, `channel`, `contact_id`, and the
-  kind's own identifiers and flags: `thread` for a detected reply, `account` for an accepted invitation, `message` and
-  `bounce` for a bounce. It is keyed by the event's own key.
+- **`provider_event_observed`** carries `kind`, `plugin`, `event_id`, `occurred_at`, `channel`, `contact_id`,
+  `attributed_by`, and the kind's own identifiers and flags: `thread` for a detected reply, `account` for an accepted
+  invitation, `message` and `bounce` for a bounce. It is keyed by the event's own key.
 
 **Said once.** A campaign says each line once under its key, and the database refuses a second; one key may be said in
-two campaigns. **History is not said.** An event that happened before the campaign first went live is stored and found
-to concern it, and says no line: `events_from` is set when a campaign first goes live, a pause and a resume leave it,
-and an installation upgrading into the events store gives every active and paused campaign the moment of the upgrade.
+two campaigns, and the rule that found a campaign is no part of the key. **History is not said.** An event that
+happened before the campaign first went live is stored and found to concern it, and says no line: `events_from` is set
+when a campaign first goes live, a pause and a resume leave it, and an installation upgrading into the events store
+gives every active and paused campaign the moment of the upgrade. An event found by the person is history, too, when it
+happened before the person was added to the campaign: it is said only when it happened on or after both. A person
+taken out and added back keeps the moment they were first added, so an event of the interval they were out, stored
+after they were added back, is said.
 
 **Never a person's words.** No line, no log line and no answer of the runtime carries a subject, a preview, a name or a
 cursor: the contract admits none into an event, and the runtime writes none of its own.
@@ -245,6 +264,5 @@ it — and its ten newest spans asked for again with where each stands.
 
 ## 8. Not here yet
 
-- **A campaign without a provider campaign.** An event that names a person and no provider campaign concerns nobody.
 - **Reading the store.** No operation of the Runtime API lists stored events; a manager reads the lines they say.
 - **Calling a span off.** A span asked for again ends by being read or by failing; nothing withdraws it.

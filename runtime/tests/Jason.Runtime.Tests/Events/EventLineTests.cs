@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
@@ -56,6 +57,7 @@ public class EventLineTests
                 ["has_meeting_intent"] = null,
                 ["contact_id"] = marta.PublicId,
                 ["event_id"] = events[0].PublicId,
+                ["attributed_by"] = EventAttributionRules.CampaignPin,
             }.ToJsonString(),
             lines[0].New!.ToJsonString());
     }
@@ -175,6 +177,7 @@ public class EventLineTests
                 ["occurred_at"] = Stamp(Noon.AddHours(-3)),
                 ["channel"] = null,
                 ["contact_id"] = null,
+                ["attributed_by"] = EventAttributionRules.CampaignPin,
                 ["message"] = "m_88",
                 ["bounce"] = "hard",
             }.ToJsonString(),
@@ -258,6 +261,161 @@ public class EventLineTests
         Assert.Equal("c-1", (await db.EventSources.SingleAsync(Ct)).Cursor);
     }
 
+    /// <summary>
+    /// An event that names no provider campaign reaches each campaign the person is a member of, and says one line in
+    /// each, under the one key the event has: the campaign is the first part of what a line is said once under.
+    /// </summary>
+    [Fact]
+    public async Task A_person_s_event_says_one_line_in_each_of_their_campaigns_under_one_key()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var first = await store.CampaignAsync();
+        var second = await store.CampaignAsync();
+        var marta = await store.ContactAsync("c_1001");
+        await store.MemberAsync(marta, first);
+        await store.MemberAsync(marta, second);
+
+        var result = await store.StoreAsync(source, null, Page("c-1", Detected(campaign: null)));
+
+        Assert.True(result.Said == 2, $"Expected one line in each of two campaigns, said {result.Said}.");
+        var one = Assert.Single(await store.LinesAsync(first, JournalKinds.ProviderEventObserved));
+        var two = Assert.Single(await store.LinesAsync(second, JournalKinds.ProviderEventObserved));
+        await using var db = store.Open();
+        var stored = await db.Events.SingleAsync(Ct);
+        Assert.True(one.Key == stored.Key && two.Key == stored.Key, $"The lines are keyed {one.Key} and {two.Key}, not by the event's {stored.Key}.");
+        Assert.True(one.ContactId == marta.Id && two.ContactId == marta.Id, $"The lines name contacts {one.ContactId} and {two.ContactId}, not {marta.Id}.");
+        var rules = await db.EventAttributions.Select(row => row.Rule).Distinct().ToListAsync(Ct);
+        Assert.True(rules.SequenceEqual([EventAttributionRules.ContactPin]), $"The attributions were recorded by {string.Join(",", rules)}.");
+    }
+
+    /// <summary>
+    /// What happened before the person joined a campaign is history to it, as what happened before the campaign went live
+    /// is: the event is found to concern the campaign and says no line, and from the moment they joined it is said.
+    /// </summary>
+    [Fact]
+    public async Task An_event_before_the_person_joined_is_attributed_and_says_no_line()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var campaign = await store.CampaignAsync(eventsFrom: Noon.AddDays(-1));
+        var marta = await store.ContactAsync("c_1001");
+        var joined = Noon.AddHours(-2);
+        await store.MemberAsync(marta, campaign, addedAt: joined);
+
+        var result = await store.StoreAsync(
+            source,
+            null,
+            Page("c-1", Bounced(campaign: null, at: joined.AddMilliseconds(-1)), Bounced(campaign: null, at: joined)));
+
+        Assert.True(result.Stored == 2 && result.Said == 1, $"Stored {result.Stored} and said {result.Said}; expected 2 and 1.");
+        var said = Assert.Single(await store.LinesAsync(campaign, JournalKinds.ProviderEventObserved));
+        Assert.Equal(Stamp(joined), (string?)said.New!["occurred_at"]);
+        await using var db = store.Open();
+        var attributed = await db.EventAttributions.CountAsync(Ct);
+        Assert.True(attributed == 2, $"Both events concern the campaign; {attributed} were attributed.");
+    }
+
+    /// <summary>
+    /// A person taken out of a campaign and added back keeps the moment they were first added: an event of the interval
+    /// they were out, stored after they were added back, is said, and one from before they were first added is not.
+    /// </summary>
+    [Fact]
+    public async Task A_person_taken_out_and_added_back_is_told_from_when_they_were_first_added()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var campaign = await store.CampaignAsync(eventsFrom: Noon.AddDays(-1));
+        var marta = await store.ContactAsync("c_1001");
+        var first = Noon.AddHours(-6);
+        var clock = new FixedClock(first);
+        await using (var db = store.Open())
+        {
+            var memberships = new MembershipService(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+            var add = new AddContactsRequest(campaign.PublicId, null, [new AddContactsItem(marta.PublicId, null, null, null, null, null, null, null)], null, "added");
+            await memberships.AddAsync(add, Ct);
+            clock.Now = Noon.AddHours(-4);
+            await memberships.RemoveAsync(new RemoveContactsRequest(campaign.PublicId, [marta.PublicId], null, "taken out"), Ct);
+            clock.Now = Noon.AddHours(-2);
+            var back = await memberships.AddAsync(add, Ct);
+            Assert.True(back.Summary.Added == 1, $"The person was not added back: {back.Summary}.");
+        }
+
+        var whileOut = Noon.AddHours(-3);
+        var result = await store.StoreAsync(
+            source,
+            null,
+            Page("c-1", Bounced(campaign: null, at: first.AddMilliseconds(-1)), Bounced(campaign: null, at: whileOut)));
+
+        Assert.True(result.Stored == 2 && result.Said == 1, $"Stored {result.Stored} and said {result.Said}; expected 2 and 1.");
+        var said = Assert.Single(await store.LinesAsync(campaign, JournalKinds.ProviderEventObserved));
+        Assert.True((string?)said.New!["occurred_at"] == Stamp(whileOut), $"The line said the event of {said.New["occurred_at"]}, not the one of {Stamp(whileOut)}.");
+    }
+
+    /// <summary>A campaign that has never been live, reached by the person, is found to concern the event and says no line.</summary>
+    [Fact]
+    public async Task A_draft_campaign_the_person_is_a_member_of_is_attributed_and_says_no_line()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var draft = await store.CampaignAsync(status: CampaignStatus.Draft, live: false);
+        await store.MemberAsync(await store.ContactAsync("c_1001"), draft);
+
+        var result = await store.StoreAsync(source, null, Page("c-1", Bounced(campaign: null)));
+
+        Assert.True(result.Stored == 1 && result.Said == 0, $"Stored {result.Stored} and said {result.Said}; expected 1 and 0.");
+        Assert.Empty(await store.AllLinesAsync());
+        await using var db = store.Open();
+        var rules = await db.EventAttributions.Where(row => row.CampaignId == draft.Id).Select(row => row.Rule).ToListAsync(Ct);
+        Assert.True(rules.SequenceEqual([EventAttributionRules.ContactPin]), $"The draft campaign was attributed by {(rules.Count == 0 ? "nothing" : string.Join(",", rules))}.");
+    }
+
+    /// <summary>Both lines the store writes say which rule found the campaign, as the attribution row records it.</summary>
+    [Theory]
+    [InlineData("thread_moved", EventAttributionRules.CampaignPin)]
+    [InlineData("thread_moved", EventAttributionRules.ContactPin)]
+    [InlineData("bounce", EventAttributionRules.CampaignPin)]
+    [InlineData("bounce", EventAttributionRules.ContactPin)]
+    public async Task Each_line_the_store_writes_says_the_rule_that_found_the_campaign(string kind, string rule)
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var campaign = await store.CampaignAsync(pins: (Reader, "p_1"));
+        await store.MemberAsync(await store.ContactAsync("c_1001"), campaign);
+        var named = rule == EventAttributionRules.CampaignPin ? "p_1" : null;
+
+        await store.StoreAsync(source, null, Page("c-1", kind == "bounce" ? Bounced(campaign: named) : Moved(campaign: named)));
+
+        var line = Assert.Single(await store.AllLinesAsync());
+        var expected = kind == "bounce" ? JournalKinds.ProviderEventObserved : JournalKinds.InboundReplyObserved;
+        Assert.True(line.Kind == expected, $"A {kind} said {line.Kind}.");
+        Assert.True((string?)line.New!["attributed_by"] == rule, $"A {kind} found by {rule} says attributed_by {line.New["attributed_by"]?.ToJsonString() ?? "(absent)"}.");
+    }
+
+    /// <summary>
+    /// A campaign the campaign rule refused because two campaigns hold the provider campaign, reached by the person, says
+    /// its line under the key the line of a sole holder would have: the rule is no part of what a line is said once under,
+    /// so the inbound read's own line for that thread and this one are one line.
+    /// </summary>
+    [Fact]
+    public async Task A_contact_pin_line_where_two_hold_the_provider_campaign_is_said_under_the_holder_s_key()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var member = await store.CampaignAsync(pins: (Reader, "p_1"));
+        var other = await store.CampaignAsync(pins: (Reader, "p_1"));
+        await store.MemberAsync(await store.ContactAsync("c_1001"), member);
+        var at = Noon.AddHours(-3);
+
+        await store.StoreAsync(source, null, Page("c-1", Moved(thread: "t_501", campaign: "p_1", at: at)));
+
+        var line = Assert.Single(await store.LinesAsync(member, JournalKinds.InboundReplyObserved));
+        Assert.True((string?)line.New!["attributed_by"] == EventAttributionRules.ContactPin, $"The line says attributed_by {line.New["attributed_by"]?.ToJsonString()}.");
+        var key = InboundSync.ObservationKey(Reader, "t_501", Stamp(at));
+        Assert.True(line.Key == key, $"The line is keyed {line.Key}, not {key} as a sole holder's and the inbound read's are.");
+        Assert.Empty(await store.LinesAsync(other, JournalKinds.InboundReplyObserved));
+    }
+
     /// <summary>A line the store writes is a trigger: under the default triggers, a bounce wakes the campaign's manager.</summary>
     [Fact]
     public async Task A_provider_event_wakes_the_manager_under_the_default_triggers()
@@ -302,7 +460,7 @@ public class EventLineTests
         public int Campaign { get; set; }
 
         public IReadOnlyList<Attributed> Attribute(ReadEvent read, PinFacts pins) =>
-            [new Attributed(Campaign, EventAttributionRules.CampaignPin), new Attributed(Campaign, "contact_pin")];
+            [new Attributed(Campaign, EventAttributionRules.CampaignPin), new Attributed(Campaign, EventAttributionRules.ContactPin)];
     }
 
     /// <summary>An attribution of the test's: every event concerns the campaigns it is told to.</summary>

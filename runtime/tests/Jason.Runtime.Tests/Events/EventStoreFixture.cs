@@ -23,7 +23,7 @@ internal sealed class EventStoreFixture : IDisposable
     public EventStoreFixture(IEventAttribution? attribution = null)
     {
         Clock = new FixedClock(Noon);
-        Store = new EventStore(new JournalWriter(Clock), Clock, attribution ?? new CampaignPinAttribution());
+        Store = new EventStore(new JournalWriter(Clock), Clock, attribution ?? EventAttributionSequence.OfThisVersion());
     }
 
     public FixedClock Clock { get; }
@@ -108,6 +108,15 @@ internal sealed class EventStoreFixture : IDisposable
 
         await db.SaveChangesAsync();
         return contact;
+    }
+
+    /// <summary>The contact made a member of the campaign, in the state given, since <paramref name="addedAt"/> — the day before noon unless said.</summary>
+    public async Task MemberAsync(Contact contact, Campaign campaign, MembershipState state = MembershipState.Enrolled, DateTime? addedAt = null)
+    {
+        await using var db = Open();
+        var since = addedAt ?? Noon.AddDays(-1);
+        db.CampaignContacts.Add(new CampaignContact { CampaignId = campaign.Id, ContactId = contact.Id, State = state, AddedAt = since, UpdatedAt = since });
+        await db.SaveChangesAsync();
     }
 
     /// <summary>Stores a page through a context of its own, as the reader will.</summary>

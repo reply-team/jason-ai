@@ -41,6 +41,25 @@ public partial class EventsDocTests
     }
 
     /// <summary>
+    /// Which campaigns an event concerns: both rules, in the order the store asks them, the line's field that says which
+    /// found the campaign, and no longer a person's event that concerns nobody.
+    /// </summary>
+    [Fact]
+    public void The_attribution_section_names_both_rules_in_their_order()
+    {
+        var page = Flattened(Read("events.md"));
+        var section = page[page.IndexOf("## 3. Which campaigns an event concerns", StringComparison.Ordinal)..page.IndexOf("## 4. What a stored event says", StringComparison.Ordinal)];
+
+        var campaign = section.IndexOf($"1. **`{EventAttributionRules.CampaignPin}`.**", StringComparison.Ordinal);
+        var contact = section.IndexOf($"2. **`{EventAttributionRules.ContactPin}`.**", StringComparison.Ordinal);
+        Assert.True(campaign >= 0 && contact > campaign, $"Section 3 does not name {EventAttributionRules.CampaignPin} first and {EventAttributionRules.ContactPin} second:{Environment.NewLine}{section}");
+        Assert.Contains("the first that finds a campaign decides alone", section, StringComparison.Ordinal);
+        Assert.Contains("`attributed_by`", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("concerns nobody in this version", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("A campaign without a provider campaign.", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The reading section, held to the constants and the setting that decide it: how far back a read reaches, how many
     /// pages one takes, the cadence's default and range, the lines a read writes, and the inbound read's fourth skip.
     /// </summary>

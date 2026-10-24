@@ -55,4 +55,33 @@ public class CampaignPinRuleTests
                 $"Campaign {campaign.Id} ({live} live, {archived} archived, {elsewhere} at another plugin): the skip says {reached}, the store attributed {string.Join(",", attributed)}.");
         }
     }
+
+    /// <summary>
+    /// The inbound read asks the campaign rule alone: a campaign the store reaches only by the person — the provider
+    /// campaign it is linked to held by two, or no provider campaign of its own — is still read by the inbound read, which
+    /// lists the campaign's own threads, and an event the campaign rule would not give it is never what that read waits for.
+    /// </summary>
+    [Fact]
+    public async Task The_inbound_skip_asks_the_campaign_rule_alone_and_not_the_person_s()
+    {
+        using var it = new EventStoreFixture();
+        var shared = await it.CampaignAsync(pins: (Reader, "p_1"));
+        await it.CampaignAsync(pins: (Reader, "p_1"));
+        var unlinked = await it.CampaignAsync();
+        var marta = await it.ContactAsync("c_1001");
+        await it.MemberAsync(marta, shared);
+        await it.MemberAsync(marta, unlinked);
+        var source = await it.SourceAsync();
+
+        await it.StoreAsync(source, null, Page("c-1", Bounced(campaign: "p_1")));
+
+        await using var db = it.Open();
+        var attributed = await db.EventAttributions.AsNoTracking().OrderBy(row => row.CampaignId).Select(row => row.CampaignId).ToListAsync(Ct);
+        Assert.True(attributed.SequenceEqual([shared.Id, unlinked.Id]), $"The person's campaigns {shared.Id} and {unlinked.Id} were not reached: {string.Join(",", attributed)}.");
+        foreach (var campaign in new[] { shared, unlinked })
+        {
+            var reached = await CampaignPinRule.ReachesAsync(db, Reader, campaign.Id, Ct);
+            Assert.False(reached, $"The skip would leave campaign {campaign.Id}, reached only by the person, to the events.");
+        }
+    }
 }

@@ -26,4 +26,10 @@ public static class EventAttributionRules
 {
     /// <summary>The event names the provider's campaign, and exactly one campaign holds that identifier pinned at the event's plugin.</summary>
     public const string CampaignPin = "campaign_pin";
+
+    /// <summary>
+    /// The campaign rule found nobody, and the campaign holds, as a local member, the one contact pinned with the event's
+    /// contact identifier at the event's plugin.
+    /// </summary>
+    public const string ContactPin = "contact_pin";
 }

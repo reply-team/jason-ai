@@ -37,7 +37,7 @@ the campaign is linked there — that plugin has pinned the campaign's own ident
 |---|---|
 | `no_route` | Nothing routes `conversation.list` for this campaign. |
 | `plugin_operation_unsupported` | The plugin it is routed to is loaded and does not perform `conversation.list`. |
-| `campaign_not_linked` | The campaign has no identifier pinned at that plugin, so a read would have nothing to name it by. |
+| `campaign_not_linked` | The campaign has no identifier pinned at that plugin, so a read would have nothing to name it by. Where the plugin reads its accounts' events, those the campaign rule places in no campaign still reach it by its people ([events](events.md) §3). |
 | `plugin_reads_events` | That plugin reads its accounts' events, an event naming the campaign's provider campaign would reach it, and the source of the account the route binds is healthy. |
 
 **When the plugin reads its accounts' events.** A plugin that declares the events contract has its accounts read on a
@@ -52,8 +52,9 @@ all. A source that fails, or that is not read for that long, hands its campaigns
 at the watermark — the moment of the last skip less the look-back, so never later than the start of the source's last
 read that succeeded, and nothing is missed in the hand-back — and the inbound read is the fallback for as long as it
 lasts. A move both reads find is said once: they say it under the same key. The step aside rests on a promise every
-plugin that reads events makes, to name under `campaign` the provider campaign a moved thread belongs to: a plugin that
-reads events and names no campaign on a move silences the campaigns it serves.
+plugin that reads events makes, to name under `campaign` the provider campaign a moved thread belongs to. A move that
+names no campaign reaches, by the person, every campaign that is not archived and holds the contact as a member
+([events](events.md) §3), rather than the one campaign whose thread it is alone.
 
 A skip is logged once for its campaign and reason in the life of the process, not once a cadence.
 

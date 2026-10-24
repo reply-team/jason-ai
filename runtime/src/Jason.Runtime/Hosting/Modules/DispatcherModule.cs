@@ -77,11 +77,11 @@ public static class DispatcherModule
         // The pool is sized once and the counters are one per process, so both outlive any request scope.
         services.AddSingleton<HandlerPool>();
 
-        // The accounts' events: the store writes through the journal, finds campaigns by the rule of this version, and the
+        // The accounts' events: the store writes through the journal, finds campaigns by the rules of this version, and the
         // reader invokes plugins through the invoker the plugin module registers — a test registers its own first. One
         // reader, which is both what the scan hands a read to and the service that reads off the scan.
         services.TryAddScoped<JournalWriter>();
-        services.TryAddSingleton<IEventAttribution, CampaignPinAttribution>();
+        services.TryAddSingleton<IEventAttribution>(_ => EventAttributionSequence.OfThisVersion());
         services.TryAddScoped<IEventsInvoker, PluginEventsInvoker>();
         services.AddSingleton(provider => new EventReader(
             provider.GetRequiredService<IServiceScopeFactory>(),

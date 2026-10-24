@@ -91,4 +91,52 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A line found by the person may name a thread this campaign did not start: the manager reads it before it raises
+    /// the responder, and never answers a thread another live campaign's outreach owns.
+    /// </summary>
+    [Fact]
+    public void The_manager_reads_a_thread_found_by_the_person_before_it_answers()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("under `attributed_by`", skill, StringComparison.Ordinal);
+        Assert.Contains("`contact_pin` is the person alone", skill, StringComparison.Ordinal);
+        Assert.Contains("Raise the responder at your next review, once the read shows whose thread it is;", skill, StringComparison.Ordinal);
+        Assert.Contains("a thread another live campaign's outreach owns is that campaign's to answer, never yours.", skill, StringComparison.Ordinal);
+        Assert.Contains("or the read alone where the line says `attributed_by` `contact_pin`", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The read of a thread found by the person follows this campaign's route, which may lead elsewhere than the plugin the
+    /// line came from: it is queued only where the two agree, and otherwise the manager asks.
+    /// </summary>
+    [Fact]
+    public void The_manager_reads_a_thread_found_by_the_person_only_at_the_line_s_plugin()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("Then queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
+        Assert.Contains("jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get", skill, StringComparison.Ordinal);
+        Assert.Contains("Where it names another plugin, or none, queue nothing, say so in your note and raise one question instead.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A thread no campaign's outreach owns reaches every live campaign the person is in, and one answer is all the person
+    /// should get: before raising the responder the manager reads the person's chronicle across campaigns, and leaves the
+    /// thread to a campaign that already answers it.
+    /// </summary>
+    [Fact]
+    public void The_manager_leaves_a_thread_no_campaign_owns_to_a_campaign_already_answering_it()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("before you raise the responder for it, read the person's chronicle across campaigns", skill, StringComparison.Ordinal);
+        Assert.Contains("jason journal list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Where another live campaign has already raised the responder or replied in that thread, leave the thread to it and say so in your note; otherwise raise the responder.",
+            skill,
+            StringComparison.Ordinal);
+    }
 }

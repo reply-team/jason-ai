@@ -53,10 +53,10 @@ public readonly record struct EventFence
 /// output schema before it got here, so there is nothing else in it to read.
 /// </para>
 /// <para>
-/// Every event is kept, whether or not anything it names is pinned: an event no campaign's pins match concerns nobody,
-/// and stays. An event read twice — a page read again after a crash, a range a person asked for again — is stored once:
-/// the keys the store already holds are read first, and the store's unique index refuses the rest. A campaign says a
-/// line once under its key, the same way.
+/// Every event is kept, whether or not anything it names is pinned: an event that reaches no campaign by either rule
+/// concerns nobody, and stays. An event read twice — a page read again after a crash, a range a person asked for again
+/// — is stored once: the keys the store already holds are read first, and the store's unique index refuses the rest. A
+/// campaign says a line once under its key, the same way.
 /// </para>
 /// </remarks>
 public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEventAttribution attribution)
@@ -186,9 +186,13 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
             {
                 db.EventAttributions.Add(new EventAttribution { EventId = row.Id, CampaignId = attributed.CampaignId, Rule = attributed.Rule });
 
-                // What happened before the campaign went live is history: kept, and found to concern it, and said by no line.
+                // What happened before the campaign went live, or before the person it was found by joined it, is history:
+                // kept, and found to concern it, and said by no line.
                 var campaign = campaigns[attributed.CampaignId];
-                if (campaign.EventsFrom is not { } from || row.OccurredAt < from || Line(source.PluginId, read, row, contact) is not { } line)
+                if (campaign.EventsFrom is not { } from
+                    || row.OccurredAt < from
+                    || (attributed.SaidFrom is { } joined && row.OccurredAt < joined)
+                    || Line(source.PluginId, read, row, contact, attributed.Rule) is not { } line)
                 {
                     continue;
                 }
@@ -266,9 +270,9 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
     /// The line an event says in a campaign, or none. A thread the other side moved — or one the provider cannot say who
     /// moved — is said as the inbound read says a reply, with the same fields and under the same key; a thread the
     /// account or the provider moved is no reply and says nothing; every other kind is said as a provider event, with
-    /// its kind.
+    /// its kind. Either says which rule found the campaign, under <c>attributed_by</c>.
     /// </summary>
-    private static (string Kind, string Key, JsonObject New)? Line(string pluginId, ReadEvent read, ProviderEvent row, ContactPin? contact)
+    private static (string Kind, string Key, JsonObject New)? Line(string pluginId, ReadEvent read, ProviderEvent row, ContactPin? contact, string rule)
     {
         if (read.Kind == ReadEvent.ThreadMoved)
         {
@@ -283,6 +287,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
                     ["has_meeting_intent"] = read.Data["has_meeting_intent"]?.DeepClone(),
                     ["contact_id"] = contact?.ContactPublicId,
                     ["event_id"] = row.PublicId,
+                    ["attributed_by"] = rule,
                 })
                 : null;
         }
@@ -295,6 +300,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
             ["occurred_at"] = EventKeys.Moment(read),
             ["channel"] = read.Text("channel"),
             ["contact_id"] = contact?.ContactPublicId,
+            ["attributed_by"] = rule,
         };
         foreach (var name in Carried[read.Kind])
         {
@@ -329,7 +335,11 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
 
     /// <summary>
     /// The pins the page's events can be found by: the plugin's own, under the two kinds an event names, for the values the
-    /// page holds. A campaign that is archived is told nothing, and a value kept only as a divergence is not a pin.
+    /// page holds, and the local memberships of the contacts those name — one contact a value, as an event names its
+    /// person. A campaign that is archived is told nothing, and a value kept only as a divergence is not a pin; an
+    /// archived contact is a member of nothing here and is still the person an event names. The members are read here, for
+    /// every person the page names, before any rule runs, because the rules are pure over these facts and read nothing
+    /// themselves.
     /// </summary>
     private static async Task<PinFacts> PinsAsync(JasonDbContext db, string pluginId, List<ReadEvent> reads, CancellationToken ct)
     {
@@ -345,7 +355,21 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
                 .Select(pin => new ContactPin(pin.ContactId!.Value, pin.Contact!.PublicId, pin.Value))
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
-        return new PinFacts(campaigns, contacts);
+
+        var named = new PinFacts(campaigns, contacts, []);
+        var people = reads.Select(named.ContactOf).OfType<ContactPin>().Select(pin => pin.ContactId).Distinct().ToList();
+        List<ContactMembership> members = people.Count == 0
+            ? []
+            : await db.CampaignContacts
+                .AsNoTracking()
+                .Where(member => people.Contains(member.ContactId)
+                    && member.State != MembershipState.Excluded
+                    && member.Campaign!.Status != CampaignStatus.Archived
+                    && member.Contact!.ArchivedAt == null)
+                .Select(member => new ContactMembership(member.ContactId, member.CampaignId, member.AddedAt))
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        return new PinFacts(campaigns, contacts, members);
     }
 
     /// <summary>Which of these lines these campaigns have already said, by kind and key: one query for the page.</summary>

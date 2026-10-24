@@ -8,8 +8,9 @@ namespace Jason.Runtime.Tests.Events;
 
 /// <summary>
 /// An event reaches a campaign by the provider's campaign identifier it names, pinned at the event's own plugin by
-/// exactly one campaign that is not archived — and by nothing else. A campaign routed to the plugin, a campaign the
-/// person is a member of, a campaign pinning the same value at another plugin: none of them is told.
+/// exactly one campaign that is not archived. A campaign routed to the plugin, a campaign pinning the same value at
+/// another plugin, and — once that one campaign is found — a campaign the person is a member of: none of them is told.
+/// Where the campaign rule finds nobody, the person's campaigns are reached instead (<see cref="ContactPinRuleTests"/>).
 /// </summary>
 public class EventAttributionTests
 {
