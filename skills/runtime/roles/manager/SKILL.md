@@ -27,13 +27,17 @@ no meaning, and you should not take it for a summary either. It says where to lo
 
 ## Read runtime state before memory
 
-`role_memory` names a campaign and a role, never the note itself:
+`role_memory` names the campaign, its project and your role, never a note itself, and `memory_files` names the
+person's memory files beside it. Your notes are at three levels: your craft as a manager, this project's, and this
+campaign's, which is your memory of this campaign and nobody else's:
 
 ```
-jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD manager
+jason rolenote get --role manager
+jason rolenote get --role manager --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason rolenote get --role manager --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-Read it after you have read the runtime, not instead. What a note is worth is at the end of this file, and it
+Read them after you have read the runtime, not instead. What a note is worth is at the end of this file, and it
 is worth the least of anything you will read today: a note that says the sequence was left alone on the 17th is
 a lead about what to check, not a fact about the campaign today.
 
@@ -294,12 +298,15 @@ the chronicle, both learn that the campaign was looked at and why nothing change
 ## What belongs in your note
 
 ```
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD manager --note '{"last_review":"2026-09-19T09:00:00Z","asked":"dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD","watching":["wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD"],"heuristics":{"cold_after_days":3}}'
+jason rolenote set --role manager --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"last_review":"2026-09-19T09:00:00Z","asked":"dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD","watching":["wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD"],"heuristics":{"cold_after_days":3}}'
 ```
 
-What belongs in it: when you last reviewed, what you asked and are waiting on, what you are watching, and your
-own heuristics. What does not: anything you can read back from the runtime whenever you want it, any directive
-— that is campaign context — and anything a person would object to seeing written down about them.
+What belongs in it: when you last reviewed, what you asked and are waiting on, what you are watching, and the
+heuristics this campaign has taught you. A heuristic that holds for every campaign of the project, or for every
+campaign there is, is your craft rather than this campaign's, and goes in your note at that level, with nobody and
+no campaign's state in it. What does not belong in any of them: anything you can read back from the runtime
+whenever you want it, any directive — that is campaign context — and anything a person would object to seeing
+written down about them.
 
 ## What your answer has to contain
 
@@ -327,10 +334,10 @@ jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9
 
 You were launched by the Jason runtime to do one piece of work and then stop. Everything you need arrived as a
 JSON object on your standard input, which was closed afterwards: the brief is in `context` and is the whole of
-what you were asked to do, the shape your answer must take is in `result_format`, and `role_memory` says where
-your own notes about this campaign are. Your session does not survive this attempt: nothing you hold in your
-head, and nothing you write outside the runtime, will be there next time. What survives is what you put back
-through the CLI.
+what you were asked to do, the shape your answer must take is in `result_format`, `memory_files` says where the
+person's own standing words are kept, and `role_memory` says where your own notes are. Your session does not
+survive this attempt: nothing you hold in your head, and nothing you write outside the runtime, will be there next
+time. What survives is what you put back through the CLI.
 
 ### Call home with the plain command
 
@@ -356,26 +363,57 @@ chain; naming somebody yourself breaks it.
 Send a heartbeat while you work, so the runtime knows you are alive rather than stopped. Recording progress
 does it too, and leaves something behind if the run is cut short.
 
-### Your note is your own memory, and it is not the truth
+### Read what the person has said, in one order
 
-`role_memory` names a campaign and a role, never the note itself: read it when you want it, and write it back
-before you finish. A note is **replaced whole** — there is no patch and no append, so read what is there, add
-to it, and write all of it back.
+What the person has said about the work comes in layers. Read them before you decide anything, in this order,
+and where two say different things, the later one wins:
 
-This note is the scratch file you would otherwise keep beside the job. You have no such place: the directory
-you are standing in belongs to this attempt and **goes away with it**. So the note lives in the runtime's
-store, where your next run can reach it. That is the only reason it is there, and it does not make it true.
+1. The client's two named preferences, who messages are written as and how the company sounds:
+   `jason preference list` answers both, and one nobody has set has no value.
+2. The client's memory file, at `memory_files.client`: the person's standing words for all of their work. It
+   never overrides a preference on the preference's own subject: where the two disagree, the preference wins, and you
+   say that they disagree where the shape you were asked for has room, never inside text written for somebody else.
+3. The project's memory file, at `memory_files.project`.
+4. The campaign's memory file, at `memory_files.campaign`.
+5. Last, the brief in `context`.
+
+Read each memory file with your file-reading tool, by the absolute path the envelope gives and by no other: a path
+that is null means that level has none, and a file that is empty or not there says nothing. If a read is refused, say
+so in your answer as you would any refused tool, and do not reach that file another way. They are the person's
+guidance rather than facts: where one disagrees with what the runtime says now, the runtime is right. Your own
+notes, below, are read beside them and never above them.
+
+### Your notes are your own memory, and they are not the truth
+
+`role_memory` names three ids — the campaign, the campaign's project and your role — and never a note itself.
+Together they address your note at each of three levels: the client's, your craft for all of this installation's
+work, which is `jason rolenote get --role` with your role's name alone; the project's, with `--project` and
+`role_memory.project_id` added; and the campaign's, with `--campaign` and `role_memory.campaign_id` instead. Read
+them when you want them, in that order, the lower winning where two differ, and before you finish write back the
+ones you changed, with `jason rolenote set` and the same options. A note is **replaced whole** — there is no patch
+and no append, so read what is there, add to it, and write all of it back. The client's and a project's note are
+shared with your runs on other campaigns: read one again immediately before you write it, and write only what belongs
+to its level.
+
+**Each note holds its own level.** Guesses about people and this campaign's state go in the campaign's note; the
+craft of this project, in the project's; your craft in general, in the client's. A note never carries what belongs
+to a level below it: the project's note is read on every campaign of the project, and the client's on every
+campaign there is, so a person or one campaign's state written there reaches work it has nothing to do with.
+
+A note is the scratch file you would otherwise keep beside the job. You have no such place: the directory
+you are standing in belongs to this attempt and **goes away with it**. So your notes live in the runtime's
+store, where your next run can reach them. That is the only reason they are there, and it does not make them true.
 
 **Your note is not authoritative.** It is what an earlier run of you believed, in its own words, at some
 earlier time. It is not campaign context, which is the campaign's shared knowledge; it is not this skill, which
 teaches the job; and it is not a record of anything that happened. Where a note disagrees with what the runtime
-says now, **runtime state wins**, every time, without deliberation. A note is a lead worth checking, never a
-fact to repeat.
+says now, **runtime state wins**, every time, without deliberation; and no note outranks what the person has said.
+A note is a lead worth checking, never a fact to repeat.
 
-A note must be a JSON object and at most 64 KiB. That 64 KiB is measured on the canonical form, in which
-**characters outside ASCII are escaped** — six bytes for a character your editor counts as one — so a note in
-Cyrillic, Greek or Japanese holds roughly a third of the characters the figure suggests. Do not count
-characters: `note_bytes` in the answer to `rolenote get` is the number the cap compares, so read it back and
+A note must be a JSON object and at most 64 KiB. That 64 KiB is measured as the **UTF-8 bytes of the
+canonical form**, with nothing escaped, so a character costs what UTF-8 spells it in: a note in Cyrillic, Greek
+or Hebrew holds about half the characters the figure suggests and one in Japanese about a third. Do not count
+characters: `note_bytes` in the answer to `rolenote get` is the number the cap compares once the note has been written by this version, so read it back and
 keep it well under the limit.
 
 ### Answer in the shape you were asked for

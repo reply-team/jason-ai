@@ -114,6 +114,10 @@
       "port": 52766,
       "configured_port": 52766
     },
-    "ui": null
+    "ui": null,
+    "harness": {
+      "root": "~/Jason",
+      "root_state": "absent"
+    }
   }
 }

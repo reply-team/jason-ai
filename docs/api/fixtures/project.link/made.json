@@ -1,0 +1,33 @@
+{
+  "operation": "project.link",
+  "case": "made",
+  "request": {
+    "project_id": "prj_2"
+  },
+  "status": 200,
+  "response": {
+    "project": {
+      "id": "prj_2",
+      "name": "Default",
+      "slug": "default",
+      "default": true,
+      "created_at": "2026-10-16T09:00:00.000Z",
+      "updated_at": "2026-10-16T09:00:00.000Z",
+      "folder_path": "~/Jason/projects/default"
+    },
+    "folder": "made",
+    "campaigns": [
+      {
+        "campaign_id": "cmp_2",
+        "folder_path": "~/Jason/projects/default/campaigns/spring-push",
+        "outcome": "made"
+      },
+      {
+        "campaign_id": "cmp_3",
+        "folder_path": null,
+        "outcome": "archived"
+      }
+    ],
+    "reported": []
+  }
+}

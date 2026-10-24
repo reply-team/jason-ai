@@ -25,8 +25,8 @@ yes. With nobody to ask, leave it undone and say so. A question tool that comes 
 ask.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
-- Do §2, then §4 to §6, in order, and stop there. §3 is for a person who has the runtime's source, which is not
-  published here, and §7 takes the installation off again.
+- Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
+  §7 takes the installation off again.
 - Install by the first route that fits. Where §2 names a package for this platform and its package manager is
   already on this machine, use it (*With a package manager*). Where it is not, where it fails, or where it or your
   harness refuses it, say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release,
@@ -44,7 +44,7 @@ ask.
 - With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
   `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
   name the step that remains.
-- Install nothing else and build nothing: the runtime's source is not here (§3). A 404 from a download is §2's:
+- Install nothing else and build nothing (§3). A 404 from a download is §2's:
   stop and report exactly that. Leave no long-running process behind except the runtime that
   `jason runtime start` starts.
 - A refusal — by your harness, or by a package manager — is reported once, as it stands, and never worked around.
@@ -56,13 +56,15 @@ ask.
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
-  exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work,
-  and ask them once what comes next: [the wiring check](golden-path.md) first, in this session, or their real work at
-  once. Name the wiring check for what it is: a synthetic walk to meet the system, which connects their provider and
-  proves it with their own address, and is not the real work. A skip is honoured: do not offer the walk again. The
-  real work, at once or after the walk, begins with an invitation to tell you about their first campaign in their own
-  words — typed, a link, a file or a voice note, or one of a few examples you offer to start from — and goes on as a
-  campaign planned with the `campaign-planning` skill and worked by Jason's roles.
+  exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work
+  and where it will keep their files — the two lines §2 shows, with the folder the `harness_root` check of
+  `jason status` names, which is the one in force — and ask them once what comes next:
+  [the wiring check](golden-path.md) first, in this session, or their real work at once. Name the wiring check for
+  what it is: a synthetic walk to meet the system, which connects their provider and proves it with their own
+  address, and is not the real work. A skip is honoured: do not offer the walk again. The real work, at once or after
+  the walk, begins with an invitation to tell you about their first campaign in their own words — typed, a link, a
+  file or a voice note, or one of a few examples you offer to start from — and goes on as a campaign planned with the
+  `campaign-planning` skill and worked by Jason's roles.
 
 ---
 
@@ -89,6 +91,28 @@ installs the executable under your own account — with its licence and the thir
 already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
 it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
 
+Then, before the PATH step, each script says where Jason will keep what it learns about your business, and where a
+campaign goes that names no project. On Windows, for an account whose home directory is `C:\Users\Marta`:
+
+```text
+Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and campaign, in `C:\Users\Marta\Jason` by default; to keep them somewhere else, set `Harness:Root` in the settings before your first campaign.
+Campaigns you create without naming a project go to the project `Default`; rename it, or make one project per product.
+```
+
+That folder, the harness root, is `Jason` in your home directory — `/home/marta/Jason` on Linux, `/Users/marta/Jason`
+on macOS — unless `Harness:Root` in `~/.jason/config/settings.json` names another; a script cannot know what the
+runtime makes of its settings, so it says "by default", and `jason status` names the root in force. The install makes
+no folder there. The runtime makes the root the first time a project or a campaign is created, and each project and
+campaign a folder of its own below it, each with the marker that makes it Jason's, `.jason/marker.json`, an empty
+`AGENTS.md` for your own words, and one line, `@AGENTS.md`, in the file Claude Code reads (`~/Jason/CLAUDE.md` at the
+root), so that it reads them too; a `Jason` folder already there is taken as the root then, its marker written and
+nothing it holds changed, unless it is marked as something else, which `jason status` reports. `Harness:Root` set
+before that first create is all it takes. A folder you move later is recorded
+again with `jason project link`, the root's once `Harness:Root` names where it is now. Jason never writes a word of
+those memory files, never runs `git` there and never writes a `.gitignore`. `git init` in the root is yours to run:
+it gives the folder a history, and lets Codex — which reads the `AGENTS.md` files from the top of a repository down
+to the folder it starts in — read the root's and the project's with a campaign's.
+
 On Windows, `install.ps1` waits up to 10 seconds for a file another program holds open — a virus scanner reading
 the executable it has just unpacked or run — before it gives up and names the file, or the directory it was unpacking into. And if the new `jason.exe`
 cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never
@@ -112,14 +136,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.14.0/install.sh | sh -s -- --version 0.14.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.15.0/install.sh | sh -s -- --version 0.15.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.14.0/install.ps1))) -Version 0.14.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.15.0/install.ps1))) -Version 0.15.0
 ```
 
-These install 0.14.0 with 0.14.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.15.0 with 0.15.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -318,6 +342,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
+| | the harness root can take the first project or campaign |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked. The JSON body carries `ready` and a state per check, so
@@ -467,12 +492,15 @@ jason uninstall --purge-data --yes
 
 It removes what Jason keeps in the data directory, and the directory itself once nothing else is in it: a file
 of yours in there stays, and is named. And a data directory that is not one — a file system's root, a directory
-holding your profile, the temporary directory or the installation, which a stray `JASON_DATA_DIR` can name — is
-refused before anything is removed.
+holding your profile, the temporary directory or the installation, or a folder of the harness root, one inside it, or
+one holding such a folder directly in it or anywhere in a folder the purge would delete, known by its
+`.jason/marker.json`, or holding a folder there that cannot be looked into, which a stray `JASON_DATA_DIR` can name —
+is refused before anything is removed.
 
 Nothing else is touched: no skill without a receipt, no other skill in an agent harness, no provider CLI, no
 model credential, no PATH entry the installer did not write, no other account's logon registration, and none of
-the notifications already in the notification center. It exits 0
+the notifications already in the notification center. Nor is anything under the harness root (§2) — your memory
+files and every project's and campaign's folder — whatever `--purge-data` says. It exits 0
 when everything it set out to remove is gone, and 1 when it did not get there — it refused (a runtime that would
 not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
 read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did

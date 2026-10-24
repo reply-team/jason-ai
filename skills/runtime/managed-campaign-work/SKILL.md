@@ -40,8 +40,10 @@ jason plugin list
 ```
 
 If `plugins` is empty, or the operation you need is not in a plugin's `operations`, stop and say so: installing a
-package and writing a route is an operator's explicit act, not something to work around. To see where one
-operation would go for one campaign:
+package and writing a route is an operator's explicit act, not something to work around. That stop is for work that
+reaches a provider: a project, a campaign and the people it is about need none, so they are made with no plugin
+loaded, and the stop comes at the first work item that would reach one. To see where one operation would go for one
+campaign:
 
 ```
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll
@@ -55,16 +57,58 @@ them once is `operating-the-installation`'s. The real work begins with the perso
 their first campaign, in their own words — and a campaign planned with the business pack's `campaign-planning` skill,
 and this skill is how the brief and that plan become work the runtime and Jason's roles perform.
 
-## The work itself
+## What the person has already written down
 
-A campaign, the people it is about, and then one work item per thing to be done.
+Some of what the person wants was written down before this conversation, and you read it before any work is
+created, in one order, the later winning where two say different things: the client's named preferences, who
+messages are written as and how the company sounds; then the person's memory file for the client, then the
+project's, then the campaign's; and last what they tell you now. The client's file never overrides a preference on
+the preference's own subject: where the two disagree, the preference wins, and you tell the person so they can make
+the two agree.
+
+A memory file is the `AGENTS.md` in a level's folder. The campaign's folder is the `folder_path` that
+`jason campaign get` answers with, the project's is the one `jason project get` answers with, and the client's is
+the harness root, which `jason runtime status` reports as the root in force; where it names none, `Jason` in the home
+directory. The root's `AGENTS.md` is the client's only where it carries its marker, the `.jason/marker.json` that says
+the folder is the root: a folder without one is not Jason's, and its file is not read.
 
 ```
-jason campaign create --name "Q3 LatAm founders" --context '{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia","their_words":"Our best customers came through their accountants. We sell to founders, never to HR."}' --idempotency-key q3-latam
+jason preference list
+jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason project get prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+Your host may have given you some of those files when this session started, and only some. Claude Code in print
+mode, started in a campaign's folder, keeps that folder's file and drops, without asking, the ones that lie outside
+it, the project's and the client's; Codex, by its documentation and not by a measurement, outside a git repository
+reads only its own folder's file of these. So read by path every one of the three you were not given. They are the
+person's standing guidance, not facts: where one disagrees with what the runtime records, the record is right, and no
+role's note outranks them.
+
+## The work itself
+
+A project for what is sold, a campaign under it, the people the campaign is about, and then one work item per thing
+to be done.
+
+```
+jason project list --query payroll
+jason project create --name "Payroll for Latin America"
+jason campaign create --name "Q3 LatAm founders" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia","their_words":"Our best customers came through their accountants. We sell to founders, never to HR."}' --idempotency-key q3-latam
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+**What is sold is the project.** A project gathers the campaigns of one product, so it is named from what the person
+sells, in their words, and looked for before it is made: `jason project list --query` with a word of that name answers
+whether this product has one already. Make it only when there is none. A create refused with `project_exists` names, in
+its details, the project that already has the slug: read it with `jason project get`, and where its name is this
+product's, it is the one to use, since the first create's answer was lost; where it is another product's, the two
+names make the same slug, so give the new project one of its own with `--slug`. The campaign then goes under it, named
+with `--project` and the project's id: `Default` holds the campaigns made without one and is never the home of a named
+product's first campaign, unless the person renamed it to that product's name, which makes it that product's project
+and the one `jason project list --query` finds. The project a command could take from the folder it runs in is no
+answer for that first create.
 
 **The brief becomes the campaign.** What the person told you about the campaign — the product, the audience, how it
 sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any
@@ -177,23 +221,27 @@ completion that does not satisfy it is refused, however well it reads.
 
 ### A role's notes are its memory, not the truth
 
-A role can keep one note per campaign — what it looked at, what it ruled out, what is still open — and
-read it again on its next run. The launch envelope names where it is; the note itself is read when it
-is wanted:
+A role keeps a note at each of three levels — its craft for all of this installation's work, a project's, and a
+campaign's, where it keeps what it looked at, what it ruled out and what is still open — and reads them again on
+its next run, the client's first and the campaign's last, the lower winning where two differ. The launch envelope
+names where they are; a note itself is read when it is wanted:
 
 ```
-jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six"}'
+jason rolenote get --role researcher
+jason rolenote get --role researcher --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason rolenote get --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason rolenote set --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"gatekeeper":"the switchboard hangs up after six"}'
 ```
 
 A note is written **whole** — there is no patch, so read it, add to it and write all of it back — and
-it is at most 64 KiB of JSON object. A campaign nobody has written about yet answers with an empty
-note rather than an error.
+it is at most 64 KiB of JSON object. A level nobody has written at yet answers with an empty note rather
+than an error.
 
 **It is not authoritative.** It is one role's own account, in its own words, from whenever it was
-written. Where a note disagrees with what the runtime says now, the runtime is right. Read a note for
-where to look first; check what it claims before you repeat it. Campaign context is the campaign's
-shared knowledge and a different thing — do not write one into the other.
+written. Where a note disagrees with what the runtime says now, the runtime is right, and no note outranks
+what the person has written down or tells you. Read a note for where to look first; check what it claims
+before you repeat it. Campaign context is the campaign's shared knowledge and a different thing — do not
+write one into the other.
 
 ## Three things that will happen to work you created
 

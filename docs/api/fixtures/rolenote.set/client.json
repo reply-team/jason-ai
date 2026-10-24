@@ -1,0 +1,32 @@
+{
+  "operation": "rolenote.set",
+  "case": "client",
+  "request": {
+    "role": "researcher",
+    "note": {
+      "craft": "open with the question the prospect already asked"
+    },
+    "actor": {
+      "type": "role",
+      "id": "researcher"
+    },
+    "reason": "What three campaigns taught."
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": null,
+    "project_id": null,
+    "role": "researcher",
+    "note": {
+      "craft": "open with the question the prospect already asked"
+    },
+    "note_hash": "sha256:recorded-1",
+    "note_bytes": 61,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "updated_by": {
+      "type": "role",
+      "id": "researcher"
+    }
+  }
+}

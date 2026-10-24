@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.304. It covers what this build does and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -189,6 +190,16 @@ Do not send a test notification through the operating system's own tools, and do
 shows, and what it leaves in the account, is the runtime's to write and `jason uninstall`'s to remove. Do not disturb
 is invisible to Jason: a toast sent then goes to the notification center without a banner, and is recorded delivered.
 
+## Where the person's files live
+
+What the person tells Jason about their business in their own words is kept in plain files under one folder, the
+harness root: `Jason` in the home directory, unless `Harness:Root` in `~/.jason/config/settings.json` names another
+folder as an absolute path; `jason runtime status` says which root is in force. Move it only when the person asks:
+move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it:
+`jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the
+project by the marker there. Nothing moves by itself, and a campaign created in a project not linked again is
+refused until it is.
+
 ## The plugins it has loaded and where work goes
 
 A plugin is a package of provider operations. A route says which plugin performs which operation for which
@@ -348,8 +359,7 @@ under the person's own account — `~/.local/bin` on macOS and Linux, `%LOCALAPP
 and puts that directory on the `PATH` unless `--no-modify-path` is passed. Nothing needs administrator rights.
 
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
-stands, and that there is nothing to build instead — the runtime's source is not published. Do not paste a line
-again in the hope of a different answer.
+stands, and that there is nothing to build instead. Do not paste a line again in the hope of a different answer.
 
 When `jason status` says `ready`, ask the person once what comes next: the wiring check, `docs/golden-path.md`, in the
 same session, or their real work at once. Name the wiring check for what it is: a synthetic walk to meet the system,

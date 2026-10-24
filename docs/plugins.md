@@ -135,9 +135,12 @@ workspace, which mailbox. It never carries the credential: the plugin reaches th
 environment variables the user granted it, and a binding is written and read by the people who
 operate the installation, so a field named like a secret is refused rather than filled in. Every route
 to this plugin is held to that schema — at activation, and again at the claim against the package in
-front of it — so a route that does not satisfy it never reaches your code. The key is optional and
-additive, so `manifest_version` stays `1`. §7 is the same key from the plugin's side: what a binding
-is for, and what reaches the code as `context.binding`.
+front of it — so a route that does not satisfy it never reaches your code. A route with no binding is
+measured against the schema as the empty object and reaches your code as `null`, so a plugin requires a binding
+exactly when its schema refuses `{}`. It is still a route of its own: it has no identity where `{}` has one,
+so trading one for the other is a change of account in provenance, in event sources and in reads by the
+account a person was learned in. The key is optional and additive, so `manifest_version` stays `1`. §7 is the
+same key from the plugin's side: what a binding is for, and what reaches the code as `context.binding`.
 
 An invocation's effective timeout and memory are `min(what the manifest asks for, the installation's
 ceiling)`, and a caller's own budget may lower the timeout further, never raise it. A manifest with
@@ -217,7 +220,9 @@ the entry module, capability declarations, size, readability. One of these in **
 rejects the whole reload: the previous snapshot stays active, `plugin reload` answers
 `409 plugin_reload_rejected` (`retryable: false`) with one detail per problem and exits 1, and
 `plugin list` keeps showing the old snapshot with `"activated": false` on the root and the same
-problems under `last_reload`.
+problems under `last_reload`. A `settings.json` the reload cannot read rejects it as well, with a
+`settings_file_unreadable` detail in the 409 (§9), and so does a `Plugins` section of the settings file that fails
+its validator (`plugins_settings_invalid`).
 
 At the first load there is no previous snapshot to keep, so the same rule empties the registry: one
 bad package leaves every other package unloaded until it is fixed, and the startup report names it
@@ -353,7 +358,7 @@ no CLR**; `eval` and `new Function` do not compile. Everything a plugin can reac
 ```
 
 `binding` is the caller's non-secret note to the plugin, in the shape the manifest's `binding` schema
-declares (§3 and §7), at most 64 KiB; `attempt_id`,
+declares (§3 and §7), or `null` when the route carries none, at most 64 KiB; `attempt_id`,
 `attempt_number`, `work_item_id` and `campaign_id` are filled once provider operations are routed —
 `attempt_number` is what tells a plugin it is being repeated. No secret is ever in `context`.
 
@@ -757,7 +762,8 @@ the write may have happened — and its class is the write's own.
 
 `binding:` in the manifest (§3) is a schema — in the same dialect as the contracts — for what an
 installation must tell your plugin before it can act: which account, which workspace, which mailbox.
-The value satisfying it reaches you as `context.binding`.
+The value satisfying it reaches you as `context.binding`. A route with no binding hands you `null`, also when your
+schema declares fields (all of them optional); read it as `{}`.
 
 **A binding selects an identity; it never carries a credential.** A declared property named anything
 like one is refused at load with `binding_secret_like`, because a binding is written and read by the
@@ -925,7 +931,18 @@ copied package grants nothing — the default is nothing, and a plugin with no g
 `valid`. An entry the manifest never requested grants nothing and is reported as a
 `grant_unrequested` warning at `grants.<capability>[i]`; it does not make the plugin unavailable.
 Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
-the next `jason plugin reload`, and `plugin list` always shows requested next to granted.
+the next `jason plugin reload`, and `plugin list` always shows requested next to granted. The reload
+reads `settings.json` itself before it resolves anything, so a reload sent straight after an edit
+holds the edit. The one exception is two edits that land within the settings watch's own delay of each other: a
+reload can meet the watch still applying the earlier edit and hold that one, and the next reload holds the later
+edit, so after a quick second save, reload once more. A file that is there and cannot be read — not valid JSON, or held open by an
+editor — rejects the reload as a package problem does: `409 plugin_reload_rejected` with one
+`settings_file_unreadable` detail at `settings.json`, naming the failure by its type and, for JSON,
+by its line and byte, never by what the file holds; the previous snapshot stays active, nothing is
+journaled, and `plugin reload` exits 1. A file that is not there rejects nothing: the reload resolves
+the settings in force, and the runtime's log says by the failure's type that the file could not be
+read. Where no setting has come from the file, as on an installation that has never had one, those
+are the defaults and nothing is said.
 
 Two consequences worth knowing. A capability the manifest never requested is **absent** from the
 invocation rather than empty, which is a different thing from one that is present and always says no.
