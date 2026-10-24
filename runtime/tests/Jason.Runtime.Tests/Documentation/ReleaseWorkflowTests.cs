@@ -959,13 +959,14 @@ public class ReleaseWorkflowTests
         """;
 
     /// <summary>
-    /// PB2 and PA7: the tests run at the tag before anything is packaged, and one <c>-p:Version=</c> reaches
+    /// PB2 and PA7: the tests run at the tag before the leg that runs them packages, and one <c>-p:Version=</c> reaches
     /// build, test and publish alike. <c>VersionPrefix</c> is never stamped — it would leave the suffix behind
-    /// and print <c>0.2.0-dev</c> on a release.
+    /// and print <c>0.2.0-dev</c> on a release. The tier is the Linux leg's alone, so it precedes that leg's packaging; the
+    /// other legs package beside it, and the publishing job waits for every leg, so nothing is published before it passes.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a release is tested first")]
-    public void The_tests_run_at_the_tag_before_anything_is_packaged()
+    public void The_tests_run_at_the_tag_before_the_leg_that_runs_them_packages()
     {
         var release = Read(Release);
         Assert.DoesNotContain("VersionPrefix", release, StringComparison.Ordinal);
@@ -985,6 +986,36 @@ public class ReleaseWorkflowTests
         }
 
         Assert.NotNull(Scalar(Mapping(steps[packaged], "with"), "version"));
+    }
+
+    /// <summary>
+    /// The critical tier runs at the tag on Linux alone. The tag is the tree the release's pull request tested whole on every
+    /// platform, and what differs at the tag is only the version string, which the Linux run stamps and tests: the same tier
+    /// on Windows and macOS would repeat a run that tree already passed there, on the dearest runners. The build the tier
+    /// tests is the Linux leg's alone for the same reason, since the packaging step publishes on its own; every platform
+    /// still packages and is smoke-tested.
+    /// </summary>
+    [Fact]
+    public void The_critical_tier_and_the_build_it_tests_run_on_linux_alone_while_every_platform_packages()
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var building = (YamlMappingNode)jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Value;
+        var steps = Assert.IsType<YamlSequenceNode>(Node(building, "steps")).Children.Cast<YamlMappingNode>().ToList();
+
+        const string OnLinux = "matrix.rid == 'linux-x64'";
+        var ranOnLinuxAlone = steps
+            .Where(step => Scalar(step, "run") is { } run && (run.StartsWith("dotnet test", StringComparison.Ordinal) || run.StartsWith("dotnet build", StringComparison.Ordinal) || run.StartsWith("dotnet restore", StringComparison.Ordinal)))
+            .ToList();
+        Assert.Equal(3, ranOnLinuxAlone.Count);
+        var action = Read(Action);
+        var publish = Assert.Single(action.Split('\n'), line => line.TrimStart().StartsWith("dotnet publish ", StringComparison.Ordinal));
+        Assert.DoesNotContain("--no-build", publish, StringComparison.Ordinal);
+        Assert.DoesNotContain("--no-restore", publish, StringComparison.Ordinal);
+        Assert.All(ranOnLinuxAlone, step => Assert.True(Scalar(step, "if") == OnLinux, $"'{Scalar(step, "name")}' has the condition '{Scalar(step, "if")}', not '{OnLinux}'"));
+
+        var everywhere = steps.Where(step => Scalar(step, "uses") == "./.github/actions/package" || Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true).ToList();
+        Assert.Equal(2, everywhere.Count);
+        Assert.All(everywhere, step => Assert.True(Scalar(step, "if") is null, $"'{Scalar(step, "name") ?? Scalar(step, "uses")}' runs only when '{Scalar(step, "if")}'"));
     }
 
     [Fact]

@@ -1,9 +1,9 @@
-# A tag named v<version> builds the release: three native runners, each running the critical tier at the tag
-# and packaging one platform through the same action ci.yml runs on every pull request, and one job that archives the
-# Reply plugin's package from the tag's tree; then one job — the only one that holds the publication token —
-# assembles the manifest and the checksums, creates the release as a draft in reply-team/jason-ai, and opens the pull
-# request that brings that repository to this version. Merging that pull request is what tags the release there and
-# publishes it.
+# A tag named v<version> builds the release: three native runners, each packaging one platform through the same action
+# ci.yml runs on every pull request, and smoke-testing what it published, the Linux one first running the critical tier
+# at the tag, and one job that archives the Reply plugin's package from the tag's tree; then one job — the only one that
+# holds the publication token — assembles the manifest and the checksums, creates the release as a draft in
+# reply-team/jason-ai, and opens the pull request that brings that repository to this version. Merging that pull request
+# is what tags the release there and publishes it.
 #
 # The button (workflow_dispatch) builds the same draft, for a dry run, and stops there: nothing is tagged and no
 # pull request is opened, so a dry run leaves nothing behind once its draft is deleted.
@@ -71,18 +71,25 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Restore, build and the critical tier below run on Linux alone; the package action restores and builds what it
+      # publishes on every platform by itself.
       - name: Restore
+        if: matrix.rid == 'linux-x64'
         run: dotnet restore runtime/Jason.slnx
 
-      # One version through build, test and publish, so that what the tests ran is what the archive holds.
+      # One version through build, test and publish, so that the Linux tier runs under the version every archive carries.
       - name: Build (warnings are errors)
+        if: matrix.rid == 'linux-x64'
         run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
-      # The whole suite ran once on this tree, on every platform, on the release's pull request into main, and the tag is
-      # that merge. What runs here, before anything is packaged, is the critical tier, stamped with the version the tag
-      # names and on the platform the archive is built for: a release is a build of a tree the suite passed, whose tier
-      # passes under its own version.
+      # The whole suite ran on this tree, on every platform, on the release's pull request into main, and again under the
+      # bare version on Linux; the tag is that merge, so its tree is the one those runs passed, and the version the tag
+      # stamps is the only thing that differs from what the platform legs built. What runs here, before anything is
+      # published, is the critical tier on Linux, stamped with the version the tag names: a release is a build of a tree
+      # the suite passed, whose tier passes under its own version. The same tier on Windows and macOS would repeat a run
+      # this tree already passed there, on the dearest runners, so those two legs go straight to packaging.
       - name: Test the critical tier (offline)
+        if: matrix.rid == 'linux-x64'
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
 
       - name: Package
@@ -141,7 +148,8 @@ jobs:
     runs-on: ubuntu-latest
     # Once per release, not once per platform: the package is JavaScript, the same on every machine. Archived from the
     # tag's own checkout, whose line endings .gitattributes fixes, so the archive unpacks to the content digest of the
-    # package at the tag; the build legs run the test that holds the script to that before anything is published.
+    # package at the tag; the release's pull request ran the test that holds the script to that digest on this tree, on every
+    # platform.
     steps:
       - uses: actions/checkout@v7
 

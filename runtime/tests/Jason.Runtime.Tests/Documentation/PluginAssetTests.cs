@@ -18,8 +18,8 @@ namespace Jason.Runtime.Tests.Documentation;
 /// </summary>
 /// <remarks>
 /// The script is executed, not read, and its output is measured by the runtime's own digest rather than by a second
-/// description of it. The build legs of a release run this suite at the tag before anything is published, so the
-/// fact holds of the very tree the release archives.
+/// description of it. The release's pull request runs this suite on every platform on the tree the tag names, so the
+/// fact holds of the very tree the release archives; nothing at the tag runs it again.
 /// </remarks>
 public sealed class PluginAssetTests
 {
