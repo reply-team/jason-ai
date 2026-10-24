@@ -197,6 +197,15 @@ public sealed record OperationContract(
                 $"{source}: `preflight.provider_contact` is `{Word(ProviderContactNames, mode)}`, so the plugin returns the provider's identifier for the person it finds, and `external_ids.contact` does not declare it.");
         }
 
+        // Only the way that creates is paired with a channel. `find_only` finds the person "by that value, or through what
+        // the operation names" (the contact proxy rule), so a document of that word may take no channel: the reply in a
+        // thread finds the person through its thread, and a later one may do the same with `channel: none`.
+        if (mode == ProviderContact.FindOrCreate && contract.Preflight.Channel != ChannelRequirement.FromArgs)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `preflight.provider_contact` is `find_or_create`, so the person is looked up by the channel the arguments name and created from it, and `preflight.channel` is not `from_args`.");
+        }
+
         if (mode == ProviderContact.PinnedOnly
             && !contract.FailureCodes.Any(code => string.Equals(code.Code, "contact_not_linked", StringComparison.Ordinal)))
         {

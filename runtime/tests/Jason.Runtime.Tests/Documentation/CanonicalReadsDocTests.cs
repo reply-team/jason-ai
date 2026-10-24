@@ -22,6 +22,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used`")]
     [InlineData("what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence")]
     [InlineData("a required input field made optional")]
+    [InlineData("`find_or_create` takes its channel `from_args`")]
     public void The_contracts_readme_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/contracts/README.md")), StringComparison.Ordinal);
 
@@ -31,6 +32,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("`provider_answer_too_large`")]
     [InlineData("a code every published contract declares")]
     [InlineData("### The contact proxy rule")]
+    [InlineData("`find_or_create` takes its channel `from_args`")]
     [InlineData("1. **The plugin owns the binding.**")]
     [InlineData("2. **A pin is worked by, and never overwritten.**")]
     [InlineData("3. **Deleting a Jason contact never deletes the provider's.**")]
@@ -214,6 +216,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("for `enrollment.stop` a pin the provider no longer holds reads as the completed stop it cannot be told apart from")]
     [InlineData("except the stop, which reads it as a person who takes no part")]
     [InlineData("it also covers a lookup by address the plugin could not finish")]
+    [InlineData("reply-cli gives an unfinished lookup the same word as an unreachable Reply, so the Reply plugin answers `provider_unavailable`, which is transient")]
     public void The_divergence_file_speaks_for_every_operation_about_a_person(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/contracts/divergence-from-l1.md")), StringComparison.Ordinal);
 
@@ -269,6 +272,19 @@ public sealed partial class CanonicalReadsDocTests
         Assert.Contains("`dispatch.in_paused_campaign: runs`", item, StringComparison.Ordinal);
         Assert.NotEmpty(OperationCatalog.RunsInPausedCampaign);
         Assert.All(OperationCatalog.RunsInPausedCampaign, id => Assert.Contains($"`{id}`", item, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The approvals section says a pin the item's own earlier attempt learned changes what the plugin receives, so a
+    /// person decides once more: the claim composes the input with every pin, and the page may not promise otherwise.
+    /// </summary>
+    [Fact]
+    public void Work_execution_says_a_pin_an_earlier_attempt_learned_asks_for_one_more_decision()
+    {
+        var text = Flat(Source("docs/work-execution.md"));
+
+        Assert.Contains("A pin that the item's own earlier attempt learned is such a change too", text, StringComparison.Ordinal);
+        Assert.Contains("a person decides once more on what the plugin now receives", text, StringComparison.Ordinal);
     }
 
     /// <summary>

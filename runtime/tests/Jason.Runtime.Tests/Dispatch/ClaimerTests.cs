@@ -1001,6 +1001,47 @@ public class ClaimerTests
     }
 
     /// <summary>
+    /// What a person approved is what the plugin receives, and the pins the person carries are part of it. A pin learned
+    /// by the item's own earlier attempt is such a change as much as an edit is: the next claim composes the input with
+    /// it, so the same decision no longer matches and the person decides once more on what the plugin now receives.
+    /// </summary>
+    [Fact]
+    public async Task A_pin_learned_by_an_earlier_attempt_parks_the_item_again_as_a_changed_input()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var first = await Decide(db, ApprovalStatus.Approved);
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        Assert.Equal(item.PublicId, work.WorkItemPublicId);
+
+        // The attempt found the person at the provider, pinned them, and failed in a way that is tried again.
+        var attempt = await db.Attempts.SingleAsync(Ct);
+        attempt.Status = AttemptStatus.Failed;
+        item.Status = WorkItemStatus.Created;
+        item.Contact!.ExternalIds.Add(ContactPin("stand-in-provider", "48211"));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        var approvals = await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).ToListAsync(Ct);
+        Assert.Equal([ApprovalStatus.Superseded, ApprovalStatus.Pending], approvals.Select(a => a.Status));
+        Assert.Equal(first.PublicId, approvals[0].PublicId);
+        Assert.Equal("input_changed", approvals[1].Reason);
+        Assert.Equal("48211", (string?)approvals[1].Subject["input"]!["contacts"]![0]!["external_ids"]!["contact"]);
+    }
+
+    /// <summary>
     /// `confirm_each`: one decision per item, each its own act against a named person. A reply in a thread is parked
     /// before anything exists that could send it, with the line a person reads naming who it reaches and carrying the
     /// whole text; the decision is bound to the composed input that text is part of, and it releases that reply once.

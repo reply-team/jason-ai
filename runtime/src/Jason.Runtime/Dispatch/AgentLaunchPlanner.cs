@@ -13,13 +13,15 @@ namespace Jason.Runtime.Dispatch;
 /// </summary>
 /// <param name="MemoryFiles">The person's memory files as the claim found them, which the envelope names as they are.</param>
 /// <param name="Unreadable">The levels whose file the claim named and the host could not write as a read rule.</param>
+/// <param name="ProjectPublicId">The public id of the project whose folder the memory files were placed under; null for provider work, which has no launch decision.</param>
 public sealed record AgentPlan(
     IReadOnlyList<string> Command,
     IReadOnlyList<string> Deny,
     string CliCommand,
     AgentProvenanceDto Provenance,
     MemoryFileLocations MemoryFiles,
-    IReadOnlyList<string> Unreadable);
+    IReadOnlyList<string> Unreadable,
+    string? ProjectPublicId);
 
 /// <summary>What the claim decided about launching one agent work item.</summary>
 public abstract record AgentLaunchDecision
@@ -31,7 +33,7 @@ public abstract record AgentLaunchDecision
     /// memory files are decided here all the same, so the envelope names what the claim found whoever composed the
     /// command.
     /// </summary>
-    public sealed record Legacy(AgentProvenanceDto Provenance, MemoryFileLocations MemoryFiles) : AgentLaunchDecision;
+    public sealed record Legacy(AgentProvenanceDto Provenance, MemoryFileLocations MemoryFiles, string? ProjectPublicId) : AgentLaunchDecision;
 
     /// <param name="Decided">
     /// How far the choice got before it was refused, where a level did name a profile. Null where nothing was
@@ -74,12 +76,19 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
                 return new AgentLaunchDecision.Refused(refused.Code, refused.Message, Decided(refused));
 
             case AgentVerdict.Legacy:
+            {
+                var (legacyFiles, legacyProject) = await MemoryFilesAsync(db, item, cancellationToken).ConfigureAwait(false);
                 return new AgentLaunchDecision.Legacy(
                     new AgentProvenanceDto(ProfileResolutionSource.RoleEntryCommand),
-                    await MemoryFilesAsync(db, item, cancellationToken).ConfigureAwait(false));
+                    legacyFiles,
+                    legacyProject);
+            }
 
             case AgentVerdict.Launch launch:
-                return Compose(launch, await MemoryFilesAsync(db, item, cancellationToken).ConfigureAwait(false));
+            {
+                var (files, project) = await MemoryFilesAsync(db, item, cancellationToken).ConfigureAwait(false);
+                return Compose(launch, files, project);
+            }
 
             default:
                 throw new InvalidOperationException($"Unknown agent verdict '{verdict.GetType().Name}'.");
@@ -89,8 +98,13 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
     /// <summary>
     /// Where the person's memory files are, as this claim finds the root and the records: the campaign's folder and its
     /// project's, as recorded now, and the root by its marker. Never a word of what the files say.
+    /// <para>
+    /// The project's public id comes back beside the files: it is the project these folders were placed under, so
+    /// whoever needs the project for this attempt takes it from this decision and not from a navigation the claim
+    /// happens to hold.
+    /// </para>
     /// </summary>
-    private async Task<MemoryFileLocations> MemoryFilesAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
+    private async Task<(MemoryFileLocations Files, string? ProjectPublicId)> MemoryFilesAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
     {
         var campaign = item.Campaign ?? throw new InvalidOperationException($"Work item '{item.PublicId}' was claimed without its campaign.");
         var project = db.Entry(campaign).Reference(c => c.Project);
@@ -99,10 +113,10 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             await project.LoadAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return folders.MemoryFiles(campaign.Project?.FolderPath, campaign.FolderPath);
+        return (folders.MemoryFiles(campaign.Project?.FolderPath, campaign.FolderPath), campaign.Project?.PublicId);
     }
 
-    private AgentLaunchDecision Compose(AgentVerdict.Launch launch, MemoryFileLocations memoryFiles)
+    private AgentLaunchDecision Compose(AgentVerdict.Launch launch, MemoryFileLocations memoryFiles, string? projectPublicId)
     {
         var revision = launch.Revision;
 
@@ -149,7 +163,8 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             ProgramResolver.CliCommandFor(revision.CliCommand),
             provenance,
             memoryFiles,
-            composed.Unreadable));
+            composed.Unreadable,
+            projectPublicId));
     }
 
     /// <summary>What the pre-flight had decided when it refused: the level and the profile, and no more.</summary>

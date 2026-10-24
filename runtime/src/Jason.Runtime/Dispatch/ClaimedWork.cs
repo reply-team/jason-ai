@@ -39,7 +39,14 @@ public sealed record ClaimedWork(
     /// file of an entry-command launch, which is composed none, is named all the same. Null for provider work, which
     /// has no envelope.
     /// </summary>
-    MemoryFileLocations? MemoryFiles = null);
+    MemoryFileLocations? MemoryFiles = null,
+
+    /// <summary>
+    /// The public id of the campaign's project as the claim found it, for every role launch: the project the role is told
+    /// its notes are kept under, read where the memory files were decided, so a campaign moved between the claim and the
+    /// start of the attempt gives the role one project's files and not another's notes. Null for provider work only.
+    /// </summary>
+    string? ProjectPublicId = null);
 
 /// <summary>The per-item half of an agent launch, as the claim resolved it.</summary>
 public sealed record AgentLaunch(IReadOnlyList<string> Deny, string CliCommand);

@@ -535,6 +535,38 @@ public class OperationCatalogTests
     }
 
     /// <summary>
+    /// A way that looks the person up by a value, and creates them where nobody matches, needs the value: the channel the
+    /// arguments name. A document that creates the person and takes no channel would hand the plugin nothing to look up
+    /// or to create from. <c>find_only</c> is not paired: it finds by that value or through what the operation names, a
+    /// thread for one, so a document of that word may take no channel and still loads.
+    /// </summary>
+    [Theory]
+    [InlineData("none", "find_or_create", ProviderContact.FindOrCreate, false)]
+    [InlineData("from_args", "find_or_create", ProviderContact.FindOrCreate, true)]
+    [InlineData("none", "find_only", ProviderContact.FindOnly, true)]
+    public void A_document_that_creates_the_person_names_the_channel_it_looks_them_up_by(string channel, string mode, ProviderContact read, bool loads)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = "control";
+        document["preflight"] = JsonNode.Parse($$"""{ "contact": "required", "channel": "{{channel}}", "suppression": "checked", "provider_contact": "{{mode}}" }""");
+        document["contact_projection"] = JsonNode.Parse($$"""{ "fields": ["id"], "channels": "{{(channel == "none" ? "none" : "consumed")}}" }""");
+        DeclaresAContactIdentifier(document);
+
+        if (loads)
+        {
+            Assert.Equal(read, OperationContract.Parse("list_membership.add.json", document).Preflight.ProviderContact);
+            return;
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("list_membership.add.json", document));
+
+        Assert.Contains("list_membership.add.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`find_or_create`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`preflight.channel`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`from_args`", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The identifier a finding document declares is the provider's contact for the person. A kind named
     /// <c>contact</c> that declares another entity — a campaign's identifier — is no declaration of it, and is refused as
     /// the document that declares none is.

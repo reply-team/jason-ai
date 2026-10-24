@@ -123,6 +123,7 @@ operation: the vendor tool refused the call or never started, so nothing the ope
 and repeating it runs the same broken call. For the seven writes that look a person up by address —
 `campaign.enroll`, `list_membership.add`, `optout.record`, `enrollment.stop`, `contact.update`, `social_invitation.send` and `message.send` — it also covers a lookup by
 address the plugin could not finish: nothing was done, and a repeat would read the same pages. For `campaign.create`
-it covers a list of the provider's campaigns the plugin could not read to its end, for the same reason. It is
+it covers a list of the provider's campaigns the plugin could not read to its end, for the same reason. The Reply
+plugin is the exception to both: reply-cli gives an unfinished lookup the same word as an unreachable Reply, so the Reply plugin answers `provider_unavailable`, which is transient. `provider_call_failed` is
 deliberately apart from `provider_unavailable`, which is transient and means the provider was reachable enough
 to say "not now".

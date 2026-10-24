@@ -162,6 +162,27 @@ public class ReplyEnrollmentStopTests
         Assert.Equal(["sequence remove-contact 7"], Paths(account));
     }
 
+    /// <summary>
+    /// A removal that answers no contact at all says Reply holds nobody under the identifier the call went by. The
+    /// plugin pins only what Reply reports now, so the item carries no identifier and the answer pins the campaign
+    /// alone: asserting the identifier the call went by again would pin what Reply just said it does not hold.
+    /// </summary>
+    [Fact]
+    public async Task A_removal_that_names_no_contact_pins_the_campaign_alone()
+    {
+        using var account = Planted();
+        account.Returns("sequence remove-contact", new JsonObject { ["status"] = "not_in_sequence", ["sequence_id"] = 7, ["contact_id"] = null });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(pinned: "4242"));
+
+        var answer = ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal($$$"""{"items":[{"contact_id":"{{{ContactId}}}","status":"already_stopped"}]}""", answer.ToJsonString());
+        Assert.Equal("""{"campaign":"7"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal(["sequence remove-contact 7"], Paths(account));
+    }
+
     [Fact]
     public async Task The_person_is_taken_out_and_never_marked_as_having_finished()
     {

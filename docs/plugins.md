@@ -654,7 +654,7 @@ in one of four words, and the rule below is the same for every one of them.
 | `not_used` | The operation names nobody, so there is nobody to find. | every other operation |
 
 The loader holds each word to what it implies, so a document cannot say one thing and declare another: a way that
-finds the person declares `external_ids.contact`, `pinned_only` declares `contact_not_linked`, and `not_used` is said
+finds the person declares `external_ids.contact`, `find_or_create` takes its channel `from_args`, `pinned_only` declares `contact_not_linked`, and `not_used` is said
 of exactly the documents whose `preflight.contact` is `not_used`. A document's `precondition` says only what its word
 does not.
 

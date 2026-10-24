@@ -378,6 +378,33 @@ public class AgentPreflightTests
     }
 
     /// <summary>
+    /// The project a role is told its notes are kept under is read where the memory files are decided, at the claim, and
+    /// travels with the claimed work for every role launch, a profile's or a role's own command.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_claim_carries_the_project_the_memory_files_were_decided_under(bool byProfile)
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        if (byProfile)
+        {
+            await SeedProfileAsync(db, "chosen", "claude");
+        }
+
+        await SeedItemAsync(db, configure: w => w.ExecutionProfile = byProfile ? "chosen" : null);
+
+        var claimed = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        // Read through a second context: the claim's own must not have been handed the project beforehand.
+        await using var reading = database.Open();
+        var project = await reading.Projects.SingleAsync(p => p.Id == DefaultProject.Id, Ct);
+        Assert.Equal(project.PublicId, claimed.ProjectPublicId);
+    }
+
+    /// <summary>
     /// A memory file whose path the host would read as a pattern, or split at a parenthesis, is still named — the folder
     /// is Jason's, and null means a folder Jason does not know — and gets no rule, so the role's read is refused. The
     /// claim says so once, as a warning under the attempt, by the level alone: the path is built from names a person gave

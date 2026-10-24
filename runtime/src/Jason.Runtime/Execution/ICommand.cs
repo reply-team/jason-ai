@@ -27,7 +27,7 @@ namespace Jason.Runtime.Execution;
 /// The bare word the launched agent calls home with, as its profile names it. Null means this executable's own
 /// name, which is the one the launcher puts within the child's reach.
 /// </param>
-/// <param name="ProjectId">The campaign's project, by its public id, as the runtime records it when the attempt starts.</param>
+/// <param name="ProjectId">The campaign's project, by its public id, as the claim found it where the memory files were decided; null for provider work.</param>
 /// <param name="MemoryFiles">
 /// The person's memory files as the claim decided them, which the envelope names as they are; null for provider work.
 /// </param>

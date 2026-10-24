@@ -184,6 +184,13 @@ public sealed class Claimer(
                         AgentLaunchDecision.Ready launched => launched.Plan.MemoryFiles,
                         AgentLaunchDecision.Legacy legacy => legacy.MemoryFiles,
                         _ => null,
+                    },
+                    // The project comes from the decision that placed the memory files, not from a navigation the claim holds.
+                    agent switch
+                    {
+                        AgentLaunchDecision.Ready launched => launched.Plan.ProjectPublicId,
+                        AgentLaunchDecision.Legacy legacy => legacy.ProjectPublicId,
+                        _ => null,
                     }));
 
                 if (agent is AgentLaunchDecision.Ready { Plan.Unreadable: { Count: > 0 } levels })
@@ -387,9 +394,11 @@ public sealed class Claimer(
     /// </summary>
     /// <remarks>
     /// The comparison is between two hashes and nothing else. An approval authorizes its subject until something
-    /// supersedes it, so a retriable failure runs again under the same decision — the operator approved an
-    /// effect, and a provider timing out did not change what that effect is. What they did not approve is a
-    /// different document, and that is what the hash is for. That holds for <c>confirm_each</c> as for
+    /// supersedes it, so a retriable failure runs again under the same decision, unless what the plugin would
+    /// receive changed meanwhile — the operator approved an effect, and a provider timing out did not change what
+    /// that effect is. What they did not approve is a different document, and that is what the hash is for: a pin
+    /// the failed attempt learned is among such changes, since the input is composed with it, so the person
+    /// decides once more. That holds for <c>confirm_each</c> as for
     /// <c>confirm_once</c>: the decision is this item's alone and the item is one person, so a retry after a failure
     /// that sent nothing performs the one act the person approved, and an end that may have sent is never repeated
     /// by an operation that says so.

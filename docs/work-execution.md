@@ -217,7 +217,9 @@ the work item, the composed input the plugin would have received, the plugin tha
 the account's binding identity, together with the canonical `sha256:` of that document. Before a later
 claim runs the work it computes the subject again and compares the hash: an input edited after the
 decision no longer matches, so the item is parked again with the reason `input_changed` rather than
-run under a decision nobody made about it. The plugin's version and the package's digest are
+run under a decision nobody made about it. A pin that the item's own earlier attempt learned is such a change
+too: the next claim composes the input with it, so a person decides once more on what the plugin now receives,
+and that costs one more decision, never a performance nobody approved. The plugin's version and the package's digest are
 deliberately not part of the subject — they are provenance, recorded on the attempt that runs, and
 including them would supersede every pending decision the moment an operator reloaded a package.
 
