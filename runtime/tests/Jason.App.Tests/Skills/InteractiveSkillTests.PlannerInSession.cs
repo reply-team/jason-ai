@@ -5,6 +5,20 @@ namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>The catalog says how the planner in a session opens and names the campaign, so a reader choosing a skill learns it before opening the file.</summary>
+    [Fact]
+    public void The_catalog_says_that_the_planner_in_a_session_asks_one_question_at_a_time_and_names_the_campaign_for_what_it_is_for()
+    {
+        var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
+        var start = catalog.IndexOf("- [`planner-in-session`]", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The catalog has no line for 'planner-in-session'.");
+        var end = catalog.IndexOf(" - [`", start + 1, StringComparison.Ordinal);
+        var line = end > start ? catalog[start..end] : catalog[start..];
+
+        Assert.Contains("asking for what is missing one question at a time", line, StringComparison.Ordinal);
+        Assert.Contains("a campaign named for what it is for", line, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A host chooses a skill by its description, so the description is the agreed sentence, whole: the moment the skill
     /// is for and the four things the seat decides. One that kept its opening and lost the rest could promise anything

@@ -2,6 +2,19 @@ namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
+    /// <summary>The catalog says what the manager now reads in a noticed reply or provider-event line, so a reader choosing a role learns it before opening the file.</summary>
+    [Fact]
+    public void The_catalog_says_that_the_manager_reads_what_a_noticed_reply_asks_and_whose_thread_it_is()
+    {
+        var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
+        var start = catalog.IndexOf("- [`roles/manager`]", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The catalog has no line for 'manager'.");
+        var end = catalog.IndexOf(" - [`", start + 1, StringComparison.Ordinal);
+        var line = end > start ? catalog[start..end] : catalog[start..];
+
+        Assert.Contains("what a noticed reply or provider-event line asks of it and whose thread it is", line, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_manager_is_told_which_items_run_without_anybody_and_proposes_the_rest()
     {
@@ -94,7 +107,7 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// A line found by the person may name a thread this campaign did not start: the manager reads it before it raises
-    /// the responder, and never answers a thread another live campaign's outreach owns.
+    /// the responder, and never answers a thread the outreach of another campaign that is not archived owns.
     /// </summary>
     [Fact]
     public void The_manager_reads_a_thread_found_by_the_person_before_it_answers()
@@ -104,7 +117,7 @@ public partial class RoleSkillTests
         Assert.Contains("under `attributed_by`", skill, StringComparison.Ordinal);
         Assert.Contains("`contact_pin` is the person alone", skill, StringComparison.Ordinal);
         Assert.Contains("Raise the responder at your next review, once the read shows whose thread it is;", skill, StringComparison.Ordinal);
-        Assert.Contains("a thread another live campaign's outreach owns is that campaign's to answer, never yours.", skill, StringComparison.Ordinal);
+        Assert.Contains("a thread the outreach of another campaign that is not archived owns is that campaign's to answer, never yours.", skill, StringComparison.Ordinal);
         Assert.Contains("or the read alone where the line says `attributed_by` `contact_pin`", skill, StringComparison.Ordinal);
     }
 
@@ -123,7 +136,7 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// A thread no campaign's outreach owns reaches every live campaign the person is in, and one answer is all the person
+    /// A thread no campaign's outreach owns reaches every campaign that is not archived the person is in, and one answer is all the person
     /// should get: before raising the responder the manager reads the person's chronicle across campaigns, and leaves the
     /// thread to a campaign that already answers it.
     /// </summary>
@@ -135,7 +148,7 @@ public partial class RoleSkillTests
         Assert.Contains("before you raise the responder for it, read the person's chronicle across campaigns", skill, StringComparison.Ordinal);
         Assert.Contains("jason journal list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "Where another live campaign has already raised the responder or replied in that thread, leave the thread to it and say so in your note; otherwise raise the responder.",
+            "Where another campaign that is not archived has already raised the responder or replied in that thread, leave the thread to it and say so in your note; otherwise raise the responder.",
             skill,
             StringComparison.Ordinal);
     }

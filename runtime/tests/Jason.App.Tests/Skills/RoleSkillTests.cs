@@ -30,7 +30,7 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// The roles that write copy were told that no operation writes a message, which stopped being true when a reply in
-    /// a thread could be sent. They are told what is true instead: nothing writes outreach, and the one operation that
+    /// a thread could be sent. They are told what is true instead: nothing sends outreach, and the one operation that
     /// writes a message answers inside a thread somebody wrote in.
     /// </summary>
     [Theory]
@@ -42,7 +42,7 @@ public partial class RoleSkillTests
 
         Assert.DoesNotContain("No operation this build publishes writes a message", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "**No operation this build publishes writes outreach: the one that writes a message, `conversation.reply`, answers a person inside the thread they wrote in.**",
+            "**No operation this build publishes sends outreach. The one that writes a message, `conversation.reply`, only answers inside the thread the person wrote in.**",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("Nothing here composes outreach and sends it.", skill, StringComparison.Ordinal);

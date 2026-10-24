@@ -1252,7 +1252,8 @@ An events plugin is a provider plugin that also reads what happened in its accou
 provider detected, an invitation accepted, a message that bounced. It is invoked for the events contract
 [`events.read`](contracts/events/events.read.md) by the runtime itself, once for each page of a read, with the binding
 of the account it reads; no work item names it and no route carries it. A read belongs to no campaign, and the
-runtime finds the campaigns an event concerns by the identifiers your operations pinned.
+runtime finds the campaigns an event concerns by the identifiers your operations pinned or, where that finds none, by the
+contact pinned at the plugin, through every campaign that is not archived and holds them as a member.
 
 **The manifest.** `kind: provider`, its `operations` as ever, and the events contract version it speaks:
 
@@ -1279,8 +1280,9 @@ replies, categories and read flags move threads too. Name a thread that moved as
 reports as `last_activity_at`, to the millisecond — so that a move both reads find is said once. Name under `campaign`
 the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier `campaign.get` pins,
 and `null` only for a thread outside every provider campaign: the runtime leaves a campaign's inbound read to your
-plugin on the strength of that, so a plugin that names no campaign on a move silences the campaigns it serves. Return
-no `external_ids`: a read pins nothing.
+plugin on the strength of that. A move that names no campaign reaches, by the person, every campaign that is not archived
+and holds them as a member; naming the campaign is still the right course, because the first rule decides alone when it
+finds one. Return no `external_ids`: a read pins nothing.
 
 **Reading by date.** With `since`, return across the pages your cursors chain every event at or after it (and before
 `until`); page a provider that pages only by offset newest first until the last item's moment passes `since`, and

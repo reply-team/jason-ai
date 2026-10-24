@@ -29,8 +29,8 @@ jason rolenote get --role copywriter --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 result; where the campaign must keep a decision about wording, that belongs in campaign context, which the role
 holding that operation writes. Nothing is sent by being written.
 
-**No operation this build publishes writes outreach: the one that writes a message, `conversation.reply`, answers a
-person inside the thread they wrote in.** Some write and the rest only read: enrolling somebody puts
+**No operation this build publishes sends outreach. The one that writes a message, `conversation.reply`, only answers
+inside the thread the person wrote in.** Some write and the rest only read: enrolling somebody puts
 them into the provider's own campaign, starting a campaign releases its first step to everybody in it, and whatever
 goes out after that is the provider's doing, on its schedule. Nothing here composes outreach and sends it.
 `campaign.activate` is what starts a campaign sending, and a person approves it with a preview that names how many

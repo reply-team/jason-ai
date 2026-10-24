@@ -14,8 +14,9 @@ the two seem to differ, the document is right and this page is a bug.
 Jason learns what happened at a provider — a reply came in, an invitation was accepted, a message bounced — by reading
 it, on a cadence the runtime keeps, from each account a route binds. One read asks for everything after the point the
 plugin's own cursor names, a page at a time. What it reads is kept by the runtime as it was read, and a campaign hears
-of an event only through the provider identifiers that the operations of that campaign pinned. A machine that was off
-loses nothing: the cursor waits.
+of an event only through the provider identifiers that the operations of that campaign pinned or, where that finds none,
+by the contact pinned at the plugin, through every campaign that is not archived and holds them as a member. A machine
+that was off loses nothing: the cursor waits.
 
 What travels is identifiers, moments and the provider's own flags. Nothing anybody wrote does: no subject, no preview,
 no message's text, no name.
@@ -163,9 +164,11 @@ A plugin that performs this contract:
   `occurred_at` the moment the thread last moved — the moment `conversation.list` reports as its `last_activity_at`, to the
   millisecond — so that a move both reads find is said once;
 - names, under `campaign`, the provider campaign a moved thread belongs to wherever the provider keeps one, by the
-  identifier `campaign.get` pins; `null` is for a thread outside every provider campaign, which reaches no campaign until
-  a contact pin can say whose it is. The runtime leaves a campaign's inbound read to the events on the strength of this
-  line, so a plugin that reads events and names no campaign on a move silences the campaigns it serves;
+  identifier `campaign.get` pins; `null` is for a thread outside every provider campaign, a move that reaches, by the
+  person, every campaign that is not archived and holds them as a member. The runtime leaves a campaign's inbound read to
+  the events on the strength of this line, so naming the campaign is still the right course: the first rule decides alone
+  when it finds one, and a move that names none reaches the campaigns the person is in rather than the one whose thread
+  it is;
 - reports `moved_by: null` only where the provider cannot say, knowing that such a move wakes a manager as a reply;
 - answers `events_cursor_unknown` for a cursor it can no longer read, and `events_unreachable` for a provider that did
   not answer or is unavailable for now;

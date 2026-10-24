@@ -100,7 +100,7 @@ nobody, so it reaches no campaign by the person either.
 campaign's own threads, and the events path must agree with it about a campaign; so the person's rule is the rule for
 the event no provider campaign places — a direct email's reply, a LinkedIn message outside a sequence — never a second
 audience beside a campaign already found. The inbound read's step aside asks the first rule alone
-([inbound sync](inbound-sync.md) §5).
+([inbound sync](inbound-sync.md) §2).
 
 ## 4. What a stored event says
 

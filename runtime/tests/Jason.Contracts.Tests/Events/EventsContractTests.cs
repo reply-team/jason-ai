@@ -117,12 +117,12 @@ public sealed class EventsContractTests
     /// <summary>
     /// The inbound read steps aside for a campaign on the strength of one promise: a moved thread names the provider
     /// campaign it belongs to, by the identifier the campaign's own operation pinned. The document makes it, and the
-    /// plugin author's page says it and what breaking it costs.
+    /// plugin author's page says it and what breaking it costs: a move that names no campaign is placed by the person instead.
     /// </summary>
     [Fact]
     public void The_conformance_says_a_moved_thread_names_its_provider_campaign()
     {
-        const string Promise = "Names, under campaign, the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier campaign.get pins, so that the runtime can leave that campaign's inbound read to the events; null is for a thread outside every provider campaign, which reaches no campaign until a contact pin can say whose it is.";
+        const string Promise = "Names, under campaign, the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier campaign.get pins, so that the runtime can leave that campaign's inbound read to the events; null is for a thread outside every provider campaign, a move that reaches, by the person, every campaign that is not archived and holds them as a member. Naming the campaign is still the right course, because the first rule decides alone when it finds one.";
         var contract = EventsCatalog.Find("events.read")!;
 
         Assert.Contains(Promise, contract.Conformance);
@@ -131,7 +131,9 @@ public sealed class EventsContractTests
         var page = string.Join(' ', File.ReadAllText(Path.Combine(OperationContracts.ContractFiles.Package, "events", "events.read.md"))
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         Assert.Contains("names, under `campaign`, the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier `campaign.get` pins", page, StringComparison.Ordinal);
-        Assert.Contains("a plugin that reads events and names no campaign on a move silences the campaigns it serves", page, StringComparison.Ordinal);
+        Assert.Contains("a move that reaches, by the person, every campaign that is not archived and holds them as a member", page, StringComparison.Ordinal);
+        Assert.Contains("naming the campaign is still the right course: the first rule decides alone when it finds one", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("silences", page, StringComparison.Ordinal);
     }
 
     /// <summary>A read finds pins and never writes one: any identifier beside its result is refused, whatever its kind.</summary>

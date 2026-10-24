@@ -164,27 +164,27 @@ the check against `sent_at` above applies to the line as it does to the inbound 
 
 Such a line also says how it found this campaign, under `attributed_by`. `campaign_pin` is the provider campaign this
 campaign's own operations pinned: the thread is this campaign's outreach. `contact_pin` is the person alone — the
-provider named no campaign, or one that no live campaign or more than one is linked to — so the thread may be one this
-campaign did not start: a direct email, a message outside any sequence, another campaign's outreach. Then queue the
-read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`: the read
-follows this campaign's route, which may lead elsewhere, and this names where it goes:
+provider named no campaign, or one that no campaign that is not archived is linked to, or more than one is — so the
+thread may be one this campaign did not start: a direct email, a message outside any sequence, another campaign's
+outreach. Then queue the read alone, and only where this campaign reads conversations at the plugin the line names under
+`plugin`: the read follows this campaign's route, which may lead elsewhere, and this names where it goes:
 
 ```
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get
 ```
 
 Where it names another plugin, or none, queue nothing, say so in your note and raise one question instead. Raise the
-responder at your next review, once the read shows whose thread it is; a thread another live campaign's outreach owns
-is that campaign's to answer, never yours. A thread no live campaign's outreach owns may have reached every live
-campaign the person is in, and one answer is all they should get: before you raise the responder for it, read the
-person's chronicle across campaigns, by the line's `contact_id`:
+responder at your next review, once the read shows whose thread it is; a thread the outreach of another campaign that is
+not archived owns is that campaign's to answer, never yours. Where the thread is the outreach of no campaign that is
+not archived, it may have reached every such campaign the person is in, and one answer is all they should get: before
+you raise the responder for it, read the person's chronicle across campaigns, by the line's `contact_id`:
 
 ```
 jason journal list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-Where another live campaign has already raised the responder or replied in that thread, leave the thread to it and say
-so in your note; otherwise raise the responder. Say in your note which it was.
+Where another campaign that is not archived has already raised the responder or replied in that thread, leave the thread
+to it and say so in your note; otherwise raise the responder. Say in your note which it was.
 
 ## When a provider event woke you
 
