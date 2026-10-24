@@ -20,10 +20,13 @@ export function Search({
         if (mounted.current) setText(value);
         mounted.current = true;
     }, [value]);
+    // The search runs after a pause, so it calls the latest onSearch: a view or a filter changed meanwhile stays changed.
+    const latest = useRef(onSearch);
+    latest.current = onSearch;
     useEffect(() => {
         const query = text.trim();
         if (query === value || (query.length > 0 && query.length < 2)) return;
-        const timer = setTimeout(() => onSearch(query), 250);
+        const timer = setTimeout(() => latest.current(query), 250);
         return () => clearTimeout(timer);
     }, [text]);
     return (

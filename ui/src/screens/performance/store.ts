@@ -52,7 +52,7 @@ export function listKey(at: At): string {
     return JSON.stringify([at.period, at.campaigns, at.count ?? null, at.from ?? null, at.to ?? null]);
 }
 
-/** The campaigns the reads name: none named is every campaign, which the runtime takes as no list at all. */
+/** The campaigns the reads name: none named is every campaign not archived, which the runtime takes as no list. */
 function scope(at: At): Record<string, unknown> {
     return at.campaigns.length > 0 ? { campaign_ids: at.campaigns } : {};
 }

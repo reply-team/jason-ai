@@ -46,6 +46,11 @@ export function CampaignsScreen() {
     const countedUnder = store.numbersKey(table);
     const selected = at.id ?? null;
 
+    // What the screen said on an earlier visit is not said again.
+    useEffect(() => {
+        store.notice.value = null;
+    }, [api]);
+
     useEffect(() => {
         void store.load(api, table, new Date(), zone);
     }, [api, key]);
@@ -57,6 +62,8 @@ export function CampaignsScreen() {
             return;
         }
         store.notice.value = null;
+        // A campaign opened starts its timeline on All; Back from what opened in place, or another tab, keeps the chip.
+        timeline.chip.value = 'all';
         void store.open(api, selected, table, new Date(), zone, at.tab !== 'people').then((known) => {
             if (known) return;
             store.notice.value = 'The campaign in this address no longer exists; it was closed.';
@@ -90,11 +97,14 @@ export function CampaignsScreen() {
             void timeline.loadTimeline(api, { campaign_id: selected }, timeline.chip.value, false);
         }
     };
-    /** After Pause, Start or Add people: the table's row and the panel say what is true now. */
-    const reread = () => {
+    // After Pause, Start or Add people: the table's row and the panel say what is true now. It runs when the write
+    // answers, so it reads what is open by then, not what was open when the write began.
+    const latestReread = useRef(() => {});
+    latestReread.current = () => {
         void store.load(api, table, new Date(), zone);
         rereadPanel();
     };
+    const reread = () => latestReread.current();
 
     // The People tab: its count or All, and the search typed into it, which the address does not keep.
     // Kept with the campaign it was typed for, so another campaign opens unsearched without an effect racing a keystroke.

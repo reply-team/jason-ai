@@ -204,9 +204,10 @@ jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-10-09T00:00:
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary failed
 ```
 
-Name several campaigns, or none for every one, and each answer also carries `total`: the same counts across them, a
-person counted once however many of them count the person; `list-contacts` then lists each person once, with the
-campaigns that count them. How one count moved over a window, an hour, a day or a week at a time:
+Name several campaigns, or none for every campaign not archived, in every project, and each answer also carries
+`total`: the same counts across them, a person counted once however many of them count the person; `list-contacts`
+then lists each person once, with the campaigns that count them. How one count moved over a window, an hour, a day
+or a week at a time:
 
 ```
 jason campaign activity-by-period --count replied --period day --since 2026-10-09T00:00:00Z --until now

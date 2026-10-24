@@ -153,7 +153,9 @@ describe('People', () => {
         expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'timeline', filters: { q: 'mat' } });
         await waitFor(() => expect(screen.getByText('Mateo Ruiz').closest('a')!.className).toContain('selected'));
 
-        route.value = { screen: 'people', id: mateo.id, tab: 'details', filters: { q: 'mat' } };
+        const details = { screen: 'people' as const, id: mateo.id, tab: 'details' as const, filters: { q: 'mat' } };
+        location.hash = href(details);
+        route.value = details;
         fireEvent.input(screen.getByRole('searchbox', { name: 'Search people' }), { target: { value: 'aguilar' } });
         await waitFor(() => expect(route.value).toMatchObject({ filters: { q: 'aguilar' } }));
         expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'details', filters: { q: 'aguilar' } });
@@ -431,6 +433,9 @@ describe('People', () => {
         const tab = await screen.findByRole('tab', { name: 'Threads' });
         expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Timeline', 'Details', 'Threads']);
         expect(api.calls.some((c) => c.operation === 'contact.threads')).toBe(false);
+        // A click that asks for a new browser tab is left to the browser.
+        expect(fireEvent.click(tab, { ctrlKey: true })).toBe(true);
+        expect(fireEvent.click(tab, { metaKey: true })).toBe(true);
 
         fireEvent.click(tab);
         expect(route.value).toMatchObject({ id: mateo.id, tab: 'threads' });

@@ -86,6 +86,8 @@ describe('Campaigns', () => {
                 'campaign.list/screen-query',
                 'campaign.list/screen',
                 'campaign.list/include-archived',
+                'campaign.list/screen',
+                'campaign.list/screen-query',
             )
             .answer(
                 'campaign.summary',
@@ -94,6 +96,8 @@ describe('Campaigns', () => {
                 'campaign.summary/some',
                 'campaign.summary/all',
                 'campaign.summary/with-archived',
+                'campaign.summary/all',
+                'campaign.summary/some',
             )
             .answer('campaign.get', 'campaign.get/details');
         open(api, { ...table, id: 'cmp_1', tab: 'details' });
@@ -114,6 +118,16 @@ describe('Campaigns', () => {
 
         expect(await screen.findByRole('cell', { name: /^Winter/ })).toBeTruthy();
         expect(sent(api, 'campaign.list').at(-1)).toEqual(fixtures['campaign.list/include-archived'].request);
+
+        // Archived turned off while a search waits for the pause: the search keeps the box as it is when it runs.
+        fireEvent.input(find, { target: { value: 'spr' } });
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
+        await waitFor(() => expect(sent(api, 'campaign.list')).toHaveLength(6), { timeout: 2000 });
+        expect(sent(api, 'campaign.list').slice(4)).toEqual([
+            fixtures['campaign.list/screen'].request,
+            fixtures['campaign.list/screen-query'].request,
+        ]);
+        expect(location.hash).toBe('#/campaigns/cmp_1/details?q=spr');
         // The counts read: the table's with each listing, and the open campaign's once, when it opened.
         expect(sent(api, 'campaign.summary')).toEqual([
             fixtures['campaign.summary/all'].request,
@@ -121,6 +135,8 @@ describe('Campaigns', () => {
             fixtures['campaign.summary/some'].request,
             fixtures['campaign.summary/all'].request,
             fixtures['campaign.summary/with-archived'].request,
+            fixtures['campaign.summary/all'].request,
+            fixtures['campaign.summary/some'].request,
         ]);
     });
 
@@ -233,11 +249,22 @@ describe('The campaign panel', () => {
         const api = new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all')
-            .answer('campaign.get', 'campaign.get/unknown');
+            .answer('campaign.get', 'campaign.get/unknown')
+            .answer('contact.list', 'contact.list/by-activity');
         open(api, { ...table, id: fixtures['campaign.get/unknown'].request.campaign_id, tab: 'timeline' });
 
         expect((await screen.findByRole('status')).textContent).toContain('no longer exists');
         await waitFor(() => expect(location.hash).toBe('#/campaigns'));
+
+        // Said once: coming back to the screen later finds it gone.
+        const people: Route = { screen: 'people', tab: 'timeline', filters: {} };
+        location.hash = href(people);
+        route.value = people;
+        await screen.findByText('Mateo Ruiz');
+        location.hash = href(table);
+        route.value = table;
+        await screen.findByRole('cell', { name: /^Spring/ });
+        await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     });
 
     it('in Activity, its numbers are the period’s, and none of Summary’s show while they are on their way', async () => {
@@ -620,16 +647,32 @@ describe('A campaign’s Timeline', () => {
         expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
     });
 
-    it('a waiting approval opens in place', async () => {
+    it('a waiting approval opens in place, and Back finds the timeline under the chip it left', async () => {
         const api = timelineApi().answer('approval.get', 'approval.get/for-campaign-row');
         open(api, { ...table, id: 'cmp_1', tab: 'timeline' });
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
 
         const waiting = (await screen.findByText('Waiting for you')).parentElement as HTMLElement;
         fireEvent.click(within(waiting).getByRole('button', { name: /Ada Example/ }));
 
         expect(await screen.findByRole('button', { name: 'Approve' })).toBeTruthy();
         expect(sent(api, 'approval.get')).toEqual([fixtures['approval.get/for-campaign-row'].request]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to the campaign' }));
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(3));
+        expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign-changes'].request);
+        expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
+
+        // Closed and opened again, the campaign starts on All.
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(location.hash).toBe('#/campaigns'));
+        const again: Route = { ...table, id: 'cmp_1', tab: 'timeline' };
+        location.hash = href(again);
+        route.value = again;
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(4));
+        expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
     });
 });
 
@@ -657,9 +700,11 @@ describe('What the panel does', () => {
     }
 
     it('Pause says what pausing does, Escape leaves it, the reason is sent, and Start releases the work again', async () => {
-        const api = actionsApi('campaign.get/details', 2)
+        const api = actionsApi()
             .answer('campaign.pause', 'campaign.pause/with-reason')
-            .answer('campaign.start', 'campaign.start/after-pause');
+            .answer('campaign.start', 'campaign.start/after-pause')
+            .answer('campaign.get', 'campaign.get/details', 'campaign.get/unlinked')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some', 'campaign.summary/unlinked');
         open(api, details);
         await screen.findByRole('heading', { level: 2, name: 'Spring' });
 
@@ -689,13 +734,26 @@ describe('What the panel does', () => {
         fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
         const start = await screen.findByRole('dialog', { name: 'Start Spring' });
         expect(start.textContent).toContain("Jason releases this campaign's work again.");
+        // Another campaign is opened while Start is on its way: the answer, and what is read after it, leave it open.
+        const release = api.hold('campaign.start');
         fireEvent.click(within(start).getByRole('button', { name: 'Start' }));
         await waitFor(() =>
             expect(sent(api, 'campaign.start')).toEqual([written(fixtures['campaign.start/after-pause'].request)]),
         );
-        await waitFor(() =>
-            expect((document.querySelector('.panel-header') as HTMLElement).textContent).toContain('active'),
+        const autumn: Route = { ...details, id: 'cmp_2' };
+        location.hash = href(autumn);
+        route.value = autumn;
+        await screen.findByRole('heading', { level: 2, name: 'Autumn' });
+        const before = sent(api, 'campaign.summary').length;
+        release();
+        await waitFor(() => expect(sent(api, 'campaign.summary')).toHaveLength(before + 2));
+        expect(sent(api, 'campaign.summary').slice(before)).toEqual(
+            expect.arrayContaining([
+                fixtures['campaign.summary/all'].request,
+                fixtures['campaign.summary/unlinked'].request,
+            ]),
         );
+        expect(screen.getByRole('heading', { level: 2, name: 'Autumn' })).toBeTruthy();
     });
 
     it('Add people adds the people chosen and says what happened to each', async () => {

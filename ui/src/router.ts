@@ -60,7 +60,7 @@ export type Route =
           id?: string;
           tab: PersonTab;
           period: Period;
-          /** The campaigns chosen, in the order they were; none is every campaign. */
+          /** The campaigns chosen, in the order they were; none is every campaign not archived. */
           campaigns: string[];
           /** The tile whose people are listed; no list until one is chosen. */
           count?: ActivityCount;

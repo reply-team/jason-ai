@@ -350,7 +350,7 @@ public static class CampaignCommands
     {
         var command = new Command(
             "list-contacts",
-            "List the people of the campaigns named, or of every one, each once with the campaigns that list them; or exactly "
+            "List the people of the campaigns named, or of every campaign not archived, in every project, each once with the campaigns that list them; or exactly "
             + "the people one count of campaign summary or campaign activity counts, the latest first for an activity. "
             + "Excluded ones appear only when asked for by state.");
         var ids = CampaignIds();
@@ -458,7 +458,7 @@ public static class CampaignCommands
         var command = new Command(
             "activity-by-period",
             "One count of campaign activity over time: how many people it counts in each hour, day or week of a window, across "
-            + "the campaigns named or every one. A person counted on two days is in both, and once in the total `campaign activity` "
+            + "the campaigns named or every campaign not archived, in every project. A person counted on two days is in both, and once in the total `campaign activity` "
             + "gives for the window.");
         var ids = CampaignIds();
         var count = new Option<string?>("--count")
@@ -510,13 +510,13 @@ public static class CampaignCommands
         return TimeZoneInfo.TryConvertWindowsIdToIanaId(local.Id, out var iana) ? iana : "UTC";
     }
 
-    /// <summary>The campaigns named, or nothing at all when none is: then the runtime answers for every campaign campaign list shows.</summary>
+    /// <summary>The campaigns named, or nothing at all when none is: then the runtime answers for every campaign not archived, in every project.</summary>
     private static JsonArray? Ids(string[]? ids) =>
         ids is null || ids.Length == 0 ? null : new JsonArray([.. ids.Select(id => (JsonNode?)JsonValue.Create(id))]);
 
     private static Argument<string[]> CampaignIds() => new("campaign-id")
     {
-        Description = "The campaigns, as cmp_…; none means every campaign campaign list shows.",
+        Description = "The campaigns, as cmp_…; none means every campaign not archived, in every project.",
         Arity = ArgumentArity.ZeroOrMore,
     };
 

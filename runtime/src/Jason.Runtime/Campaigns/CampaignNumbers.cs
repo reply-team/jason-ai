@@ -92,7 +92,6 @@ public sealed class CampaignNumbers(JasonDbContext db)
 
     private static long Milliseconds(DateTime utc) => new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-    /// <summary>UTC by its IANA names: Windows resolves "UTC" to a zone of its own that has no IANA id.</summary>
     /// <summary>Both ends required, and a period that ends before it starts is refused rather than read as empty.</summary>
     internal static (DateTime Since, DateTime Until) Period(DateTimeOffset? since, DateTimeOffset? until)
     {

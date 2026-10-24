@@ -322,22 +322,22 @@ return, without paging through them.
 
 ## A campaign's people, counted
 
-`jason campaign summary` (`campaign.summary`) answers, for each campaign named or every one `jason campaign list` shows,
-where its people stand now; `jason campaign activity` (`campaign.activity`) answers what happened to them between
-`--since`, included, and `--until`, not included. Each count is a number of people, never of work items: a person may be
-in several counts at once, so the counts need not add up. Both answers also carry `total`: the same counts across every
-campaign asked, each person counted once however many of those campaigns count them. The total's `out` counts a
-suppressed person in a campaign with no sequence too, whose own `sequence` and `out` the CLI prints as `-`, as it prints
-the total's when no campaign asked has a sequence. `jason campaign list-contacts` (`campaign.list_contacts`) lists the
-people of the campaigns named, or of every one, each person once with the campaigns that list them under `counted`; with
-`--summary <count>`, or with `--activity <count>` and the same period, it lists exactly the people one count counts,
-each with why it counts them in each of those campaigns: the approval or question waiting, how their latest work ended,
-or when in the period it happened, the latest first. Under `--activity people` the why is the latest of what happened to
-them, its `text` naming the count it was. Work about a person is work in that campaign whose person they are, and a line
-about them a journal line of that campaign that names them. A provider's event is a line of each campaign it reaches
-([docs/events.md](events.md) §3): one that no campaign's provider campaign places, such as the reply to a direct email
-or a message outside a sequence, reaches every campaign not archived that the person is a member of, so one reply counts
-in each of them and once in `total`.
+`jason campaign summary` (`campaign.summary`) answers, for each campaign named or every campaign not archived, in every
+project, where its people stand now; `jason campaign activity` (`campaign.activity`) answers what happened to them
+between `--since`, included, and `--until`, not included. Each count is a number of people, never of work items: a
+person may be in several counts at once, so the counts need not add up. Both answers also carry `total`: the same counts
+across every campaign asked, each person counted once however many of those campaigns count them. The total's `out`
+counts a suppressed person in a campaign with no sequence too, whose own `sequence` and `out` the CLI prints as `-`, as
+it prints the total's when no campaign asked has a sequence. `jason campaign list-contacts` (`campaign.list_contacts`)
+lists the people of the campaigns named, or of every campaign not archived, each person once with the campaigns that
+list them under `counted`; with `--summary <count>`, or with `--activity <count>` and the same period, it lists exactly
+the people one count counts, each with why it counts them in each of those campaigns: the approval or question waiting,
+how their latest work ended, or when in the period it happened, the latest first. Under `--activity people` the why is
+the latest of what happened to them, its `text` naming the count it was. Work about a person is work in that campaign
+whose person they are, and a line about them a journal line of that campaign that names them. A provider's event is a
+line of each campaign it reaches ([docs/events.md](events.md) §3): one that no campaign's provider campaign places, such
+as the reply to a direct email or a message outside a sequence, reaches every campaign not archived that the person is a
+member of, so one reply counts in each of them and once in `total`.
 
 Now:
 
@@ -374,10 +374,10 @@ In a period, removed people included, so a past period does not change when some
 - `removed` — They were taken out of the campaign in the period, whether added back since or not.
 
 The same counts over time: `jason campaign activity-by-period` (`campaign.activity_by_period`) takes the campaigns named
-or every one, one count's name, a period of `hour`, `day` or `week` (Monday to Sunday) and a window, and answers that
-count for each bucket of the window as if the bucket were the period, people counted once within it across the campaigns.
-A person counted on two days stands in both buckets and once in `campaign.activity`'s `total` over the window, so the
-buckets may add up to more.
+or every campaign not archived, one count's name, a period of `hour`, `day` or `week` (Monday to Sunday) and a window,
+and answers that count for each bucket of the window as if the bucket were the period, people counted once within it
+across the campaigns. A person counted on two days stands in both buckets and once in `campaign.activity`'s `total` over
+the window, so the buckets may add up to more.
 The buckets are cut in the IANA zone the request names, UTC when it names none, and `jason campaign activity-by-period`
 names this machine's zone unless `--zone` names another; a day is the zone's day, 23 or 25 hours long where its clocks
 change; the first and the last are clipped to the window. A window cut into more than 744

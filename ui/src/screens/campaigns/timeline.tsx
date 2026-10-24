@@ -80,7 +80,9 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
     const subject = { campaign_id: campaign.id };
     const chip = timeline.chip.value;
     useEffect(() => {
-        void timeline.loadTimeline(api, subject, 'all', false);
+        // Back from what opened in place, or another tab, finds the chip it left; the screen sets All when a campaign opens.
+        const same = timeline.timelineOf.value === timeline.subjectKey(subject);
+        void timeline.loadTimeline(api, subject, same ? timeline.chip.value : 'all', false);
         void store.loadPending(api, campaign.id);
     }, [api, campaign.id]);
 

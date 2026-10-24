@@ -454,7 +454,10 @@ export async function decide(api: Api, operation: string, body: Record<string, u
     }
 }
 
-/** Pauses or starts the open campaign as the paired person; the panel shows the campaign the runtime answers with. */
+/**
+ * Pauses or starts the open campaign as the paired person; the panel shows the campaign the runtime answers with, while
+ * it is still the one open.
+ */
 export async function transition(
     api: Api,
     operation: 'campaign.pause' | 'campaign.start',
@@ -463,7 +466,8 @@ export async function transition(
 ): Promise<void> {
     const body: Record<string, unknown> = { campaign_id: id };
     if (reason) body['reason'] = reason;
-    campaign.value = await api.call<Campaign>(operation, body, 'write');
+    const answered = await api.call<Campaign>(operation, body, 'write');
+    if (campaign.value?.id === id) campaign.value = answered;
 }
 
 /** Adds people to the open campaign as the paired person: the runtime says, for each, whether it added them. */

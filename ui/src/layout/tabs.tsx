@@ -20,6 +20,8 @@ export function Tabs<T extends string>({
                     class={active === each.key ? 'active' : ''}
                     href={href(to(each.key))}
                     onClick={(event) => {
+                        // A click that asks for another browser tab or window is the browser's to follow.
+                        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
                         event.preventDefault();
                         navigate(to(each.key));
                     }}
