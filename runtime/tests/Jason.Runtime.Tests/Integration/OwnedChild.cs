@@ -212,6 +212,7 @@ internal static class OwnedChild
 
         DateTimeOffset started;
         string seen;
+        bool proven;
         try
         {
             if (process.HasExited)
@@ -222,6 +223,15 @@ internal static class OwnedChild
 
             started = StartOf(process);
             seen = process.ProcessName;
+            var nameFits = names.Length == 0 || names.Any(name => NameFits(seen, name));
+            var timeFits = bothWays ? (started - recorded).Duration() <= StartAllowance : started <= recorded + StartAllowance;
+            proven = timeFits && nameFits;
+            if (proven)
+            {
+                // Asked for once the process is proven, the handle is opened and kept for the life of the Held, so on
+                // Windows the pid stays this process's until it is disposed, and a wait on it waits on this process.
+                _ = process.SafeHandle;
+            }
         }
         catch (InvalidOperationException)
         {
@@ -235,9 +245,7 @@ internal static class OwnedChild
             return null;
         }
 
-        var nameFits = names.Length == 0 || names.Any(name => NameFits(seen, name));
-        var timeFits = bothWays ? (started - recorded).Duration() <= StartAllowance : started <= recorded + StartAllowance;
-        if (timeFits && nameFits)
+        if (proven)
         {
             return new Held(process, started);
         }

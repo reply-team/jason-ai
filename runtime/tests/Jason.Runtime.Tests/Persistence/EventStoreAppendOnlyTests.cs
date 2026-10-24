@@ -85,15 +85,15 @@ public class EventStoreAppendOnlyTests
     }
 
     /// <summary>
-    /// The first of the three: the Runtime API's operations, all of them named in one list, hold no verb that would
-    /// rewrite or remove what the store keeps. A read of events, and a request that more be read, add to it; nothing
-    /// changes what is there.
+    /// The first of the three: the Runtime API's operations, all of them named in one list, hold no events verb but the
+    /// three that leave what the store keeps as it was. A read of the sources, a request that more be read, and a nudge
+    /// to read sooner add to it or leave it; any other verb, whatever it is called, is taken to change what is there
+    /// until this list says otherwise.
     /// </summary>
     [Fact]
     [Critical(Family.P1, "no API path rewrites an event")]
     public void No_operation_of_the_runtime_api_rewrites_or_removes_an_event()
     {
-        string[] rewriting = ["update", "delete", "remove", "set", "unset", "archive", "edit", "replace", "clear"];
         var operations = typeof(Jason.Contracts.Api.Operations)
             .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
             .Where(field => field.IsLiteral && field.FieldType == typeof(string))
@@ -102,7 +102,7 @@ public class EventStoreAppendOnlyTests
 
         Assert.NotEmpty(operations);
         var offending = operations
-            .Where(name => name.Split('.') is [var noun, var verb] && noun is "event" or "events" && rewriting.Contains(verb, StringComparer.Ordinal))
+            .Where(name => name.Split('.') is [var noun, var verb] && noun is "event" or "events" && verb is not ("sources" or "backfill" or "signal"))
             .ToList();
         Assert.True(offending.Count == 0, $"These operations would rewrite or remove the events store: {string.Join(", ", offending)}");
     }

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests.Integration;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -678,6 +679,7 @@ public sealed class InstallScriptHeldTests : IDisposable
             start.ArgumentList.Add(argument);
         }
 
+        List<OwnedChild.Held>? children = null;
         try
         {
             var failure = await Assert.ThrowsAsync<Xunit.Sdk.FailException>(() => RunAsync(start, TimeSpan.FromSeconds(15)));
@@ -685,57 +687,38 @@ public sealed class InstallScriptHeldTests : IDisposable
             Assert.True(File.Exists(pids), "The script was killed before it had started anything, so nothing here says what a kill ends.");
             Assert.Contains("was killed", failure.Message, StringComparison.Ordinal);
             Assert.Contains("started", failure.Message, StringComparison.Ordinal);
-            foreach (var pid in File.ReadAllLines(pids).Select(int.Parse))
+            children = Children(pids);
+            foreach (var child in children)
             {
-                Assert.True(Gone(pid, TimeSpan.FromSeconds(10)), $"Process {pid}, which the script started or was, still runs after the kill.");
+                Assert.True(child.Process.WaitForExit(TimeSpan.FromSeconds(10)), $"Process {child.Id}, which the script started or was, still runs after the kill.");
             }
         }
         finally
         {
-            // Whatever a failure here left behind is ended, so a red run does not leave a ping running for ten minutes.
-            foreach (var pid in File.Exists(pids) ? File.ReadAllLines(pids).Select(int.Parse) : Enumerable.Empty<int>())
+            // Whatever a failure here left behind is ended, so a red run does not leave a ping running for ten minutes;
+            // only a process the file proves the script's, never whatever has one of its numbers now.
+            foreach (var child in children ?? Children(pids))
             {
-                try
-                {
-                    using var left = System.Diagnostics.Process.GetProcessById(pid);
-                    left.Kill(entireProcessTree: true);
-                }
-                catch (ArgumentException)
-                {
-                }
-                catch (InvalidOperationException)
-                {
-                }
+                OwnedChild.End(child);
+                child.Dispose();
             }
         }
     }
 
-    /// <summary>Whether the process with this id has gone, or goes within the time given.</summary>
-    private static bool Gone(int pid, TimeSpan within)
+    /// <summary>
+    /// The script and the ping it started, from the pids it wrote down, each opened only if it is still the process that
+    /// had that number: it started no later than the moment the file was written, and it has the name it had. A program
+    /// that took one of the numbers once the kill had freed it started after that, so it is left alone.
+    /// </summary>
+    private static List<OwnedChild.Held> Children(string pids)
     {
-        var deadline = DateTime.UtcNow + within;
-        while (true)
+        if (!File.Exists(pids))
         {
-            try
-            {
-                using var process = System.Diagnostics.Process.GetProcessById(pid);
-                if (process.HasExited)
-                {
-                    return true;
-                }
-            }
-            catch (ArgumentException)
-            {
-                return true;
-            }
-
-            if (DateTime.UtcNow >= deadline)
-            {
-                return false;
-            }
-
-            Thread.Sleep(50);
+            return [];
         }
+
+        var written = new DateTimeOffset(File.GetLastWriteTimeUtc(pids), TimeSpan.Zero);
+        return [.. File.ReadAllLines(pids).Select(int.Parse).Select(pid => OwnedChild.Open(pid, written, "powershell", "PING")).OfType<OwnedChild.Held>()];
     }
 
     /// <summary>The real <c>install.ps1</c> under the shell named, against this test's feed and directories.</summary>

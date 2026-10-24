@@ -67,4 +67,53 @@ public class JournalAppendOnlyTests
         Assert.Null(db.Journal.Single(e => e.PublicId == "jrn_C").CampaignId);
         Assert.Equal(campaign.Id, db.Journal.Single(e => e.PublicId == "jrn_D").CampaignId);
     }
+
+    /// <summary>
+    /// The first of the three: the Runtime API's operations, all of them named in one list, hold no journal verb but the
+    /// two that leave what is there as it was. An entry is appended and read; any other verb, whatever it is called, is
+    /// taken to change what is there until this list says otherwise.
+    /// </summary>
+    [Fact]
+    [Critical(Family.P1, "no API path rewrites a journal entry")]
+    public void No_operation_of_the_runtime_api_rewrites_or_removes_a_journal_entry()
+    {
+        var operations = OperationsOf(typeof(Operations));
+
+        Assert.NotEmpty(operations);
+        var offending = RewritingTheJournal(operations);
+        Assert.True(offending.Count == 0, $"These operations would rewrite or remove a journal entry: {string.Join(", ", offending)}");
+    }
+
+    /// <summary>The same reading of a catalogue that does hold such operations names them, and only them, a verb no list foresaw included.</summary>
+    [Fact]
+    public void A_catalogue_with_an_operation_that_rewrites_the_journal_is_caught()
+    {
+        var offending = RewritingTheJournal(OperationsOf(typeof(RewritingCatalogue)));
+
+        Assert.True(
+            offending.Order(StringComparer.Ordinal).SequenceEqual(["journal.delete", "journal.purge", "journal.update"], StringComparer.Ordinal),
+            $"The reading named: {string.Join(", ", offending)}");
+    }
+
+    private static List<string> OperationsOf(Type catalogue) =>
+    [
+        .. catalogue
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(field => (string)field.GetRawConstantValue()!),
+    ];
+
+    private static List<string> RewritingTheJournal(IEnumerable<string> operations) =>
+        [.. operations.Where(name => name.Split('.') is ["journal", var verb] && verb is not ("append" or "list"))];
+
+    /// <summary>A stand-in for the operations list, with three paths that would rewrite an entry beside the two that do not.</summary>
+    private static class RewritingCatalogue
+    {
+        public const string Append = "journal.append";
+        public const string Update = "journal.update";
+        public const string Delete = "journal.delete";
+        public const string Purge = "journal.purge";
+        public const string List = "journal.list";
+        public const string CampaignUpdate = "campaign.update";
+    }
 }

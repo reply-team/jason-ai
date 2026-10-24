@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests.Integration;
 
 namespace Jason.PluginHost.Tests.Sdk;
 
@@ -189,12 +190,12 @@ public sealed class KillGraceTests : IDisposable
         WarmUp();
         var watch = Stopwatch.StartNew();
         var killedAt = TimeSpan.Zero;
-        var pid = 0;
+        OwnedChild.Held? program = null;
         using var release = new ManualResetEventSlim();
         using var harness = Harness(kill: process =>
         {
             killedAt = watch.Elapsed;
-            pid = process.Id;
+            program = Own(process);
             release.Wait(TimeSpan.FromSeconds(30));
         });
 
@@ -215,7 +216,7 @@ public sealed class KillGraceTests : IDisposable
         finally
         {
             release.Set();
-            EndByNumber(pid);
+            End(program);
         }
     }
 
@@ -229,12 +230,12 @@ public sealed class KillGraceTests : IDisposable
     [Fact]
     public async Task A_kill_that_finishes_after_the_call_has_answered_still_ends_the_program()
     {
-        var pid = 0;
+        OwnedChild.Held? program = null;
         using var answered = new ManualResetEventSlim();
         var killed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var harness = Harness(kill: process =>
         {
-            pid = process.Id;
+            program = Own(process);
             answered.Wait(TimeSpan.FromSeconds(30));
             Thread.Sleep(TimeSpan.FromSeconds(3));
             ExecService.TryKill(process);
@@ -248,15 +249,13 @@ public sealed class KillGraceTests : IDisposable
             await killed.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
 
             Assert.True(result["timed_out"]!.GetValue<bool>());
-            Assert.True(Gone(pid, TimeSpan.FromSeconds(10)), $"Process {pid} still runs after the kill that finished once the call had answered.");
-
-            // Seen gone: the number may now be another program's.
-            pid = 0;
+            Assert.NotNull(program);
+            Assert.True(Gone(program, TimeSpan.FromSeconds(10)), $"Process {program.Id} still runs after the kill that finished once the call had answered.");
         }
         finally
         {
             answered.Set();
-            EndByNumber(pid);
+            End(program);
         }
     }
 
@@ -289,54 +288,26 @@ public sealed class KillGraceTests : IDisposable
         Assert.True(Unconfirmed(harness).Count == 0, $"A clean exit was said to be a kill that failed: {harness.Stderr}");
     }
 
-    /// <summary>Whether the process with this id has gone, or goes within the time given.</summary>
-    internal static bool Gone(int pid, TimeSpan within)
+    /// <summary>
+    /// The program a test's kill stands in for, opened by its number while the host's own handle proves the number is the
+    /// program's: the kill has not happened yet, so the program is still in its sleep. The start time is the one that
+    /// handle reads, and the program is ended later only while its number still answers with it.
+    /// </summary>
+    private static OwnedChild.Held? Own(Process process) =>
+        OwnedChild.OpenKnown(process.Id, new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero));
+
+    /// <summary>Whether the program has gone, or goes within the time given, as its own handle sees it rather than its number.</summary>
+    private static bool Gone(OwnedChild.Held program, TimeSpan within) => program.Process.WaitForExit(within);
+
+    /// <summary>A program a test's kill stood in for is ended, whatever the test found, if it is still the one that was opened.</summary>
+    private static void End(OwnedChild.Held? program)
     {
-        var deadline = Stopwatch.StartNew();
-        while (true)
-        {
-            try
-            {
-                using var process = Process.GetProcessById(pid);
-                if (process.HasExited)
-                {
-                    return true;
-                }
-            }
-            catch (ArgumentException)
-            {
-                return true;
-            }
-
-            if (deadline.Elapsed >= within)
-            {
-                return false;
-            }
-
-            Thread.Sleep(50);
-        }
-    }
-
-    /// <summary>A program a test's kill stood in for is ended by its number, whatever the test found.</summary>
-    internal static void EndByNumber(int pid)
-    {
-        if (pid <= 0)
+        if (program is null)
         {
             return;
         }
 
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            process.Kill(entireProcessTree: true);
-        }
-        catch (ArgumentException)
-        {
-            // Already gone.
-        }
-        catch (InvalidOperationException)
-        {
-            // Gone between the lookup and the kill.
-        }
+        OwnedChild.End(program);
+        program.Dispose();
     }
 }
