@@ -38,6 +38,12 @@ public sealed record RuntimeHostOptions(
     /// </summary>
     internal Jason.Contracts.Files.HeldFileRule? DescriptorPublishing { get; init; }
 
+    /// <summary>
+    /// How the endpoint descriptor's publisher takes a pause between two tries, at the start and at the stop; null means
+    /// <see cref="Jason.Contracts.Files.HeldFileRetry.Sleep"/>. A test takes its own, to act from inside the wait itself.
+    /// </summary>
+    internal Action<TimeSpan, CancellationToken>? DescriptorPause { get; init; }
+
     /// <summary>The port to listen on, overriding the settings when set. The test suite sets 0 so every test runtime is on a random port.</summary>
     public int? Port { get; init; }
 

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Files;
+using Jason.Runtime.Discovery;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Tests.Integration;
 using Microsoft.Extensions.DependencyInjection;
@@ -97,8 +98,9 @@ public sealed class DescriptorRefusalAtStartTests
     }
 
     /// <summary>
-    /// A start stopped while it waits for a reader stops waiting: the start's own cancellation reaches the wait, which
-    /// would otherwise run its full ten seconds.
+    /// A start stopped while it waits for a reader stops waiting: the start's own cancellation reaches the wait. The stop
+    /// comes from inside the wait's first pause, and the runtime's clock does not move until a second one, so a start whose
+    /// cancellation never reached the pause goes on to its second pause and is refused as held, which fails the row by name.
     /// </summary>
     [Fact]
     public async Task A_start_cancelled_while_it_waits_for_the_descriptor_stops_waiting()
@@ -110,14 +112,89 @@ public sealed class DescriptorRefusalAtStartTests
         await File.WriteAllTextAsync(data.Paths.DescriptorFile, "{}", Ct);
         using var reader = new FileStream(data.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        var started = TimeProvider.System.GetTimestamp();
+        var clock = new HeldClock();
+        var pauses = 0;
 
-        // Stopped once the start is well into the descriptor's ten-second wait; a start still short of it is stopped
-        // earlier and answers the same, so this cannot be red for a slow machine, only for a wait that ignores the stop.
-        stop.CancelAfter(TimeSpan.FromSeconds(3));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => RuntimeHost.StartAsync(data.Paths, TestRuntimeOptions.Quiet, stop.Token));
+        var ended = await EndedAsync(RuntimeHost.StartAsync(
+            data.Paths,
+            TestRuntimeOptions.Quiet with
+            {
+                Clock = clock,
+                DescriptorPublishing = Short,
+                DescriptorPause = (delay, cancellationToken) =>
+                {
+                    switch (Interlocked.Increment(ref pauses))
+                    {
+                        case 1:
+                            stop.Cancel();
+                            break;
+                        case 2:
+                            clock.Advance(Short.Wait);
+                            break;
+                    }
 
-        Assert.True(TimeProvider.System.GetElapsedTime(started) < TimeSpan.FromSeconds(8), "the start waited out the descriptor's rule after it was stopped.");
+                    HeldFileRetry.Sleep(delay, cancellationToken);
+                },
+            },
+            stop.Token));
+
+        Assert.IsAssignableFrom<OperationCanceledException>(ended);
+        Assert.Equal(1, pauses);
+    }
+
+    /// <summary>
+    /// The wait for a reader is timed by the runtime's own clock, as the start's other waits are: that clock is moved past
+    /// the rule's ten seconds in the wait's first pause, and the start is refused with the held descriptor's reason after
+    /// that one pause. A wait timed by the system's clock would pause for ten seconds of real time before it was refused.
+    /// </summary>
+    [Fact]
+    public async Task A_start_waits_for_the_descriptor_by_the_runtimes_own_clock()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Elsewhere a reader does not stop a rename over the file it reads.");
+
+        using var data = new TempDataDir();
+        Directory.CreateDirectory(data.Paths.RunDirectory);
+        await File.WriteAllTextAsync(data.Paths.DescriptorFile, "{}", Ct);
+        using var reader = new FileStream(data.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var clock = new HeldClock();
+        var pauses = 0;
+
+        var ended = await EndedAsync(RuntimeHost.StartAsync(
+            data.Paths,
+            TestRuntimeOptions.Quiet with
+            {
+                Clock = clock,
+                DescriptorPause = (delay, cancellationToken) =>
+                {
+                    if (Interlocked.Increment(ref pauses) == 1)
+                    {
+                        clock.Advance(DescriptorPublisher.PublishRule.Wait);
+                    }
+
+                    HeldFileRetry.Sleep(delay, cancellationToken);
+                },
+            },
+            Ct));
+
+        var refused = Assert.IsType<DescriptorUnpublishableException>(ended);
+        Assert.Equal("replacing it was refused for 10 seconds", refused.Why);
+        Assert.Equal(1, pauses);
+    }
+
+    /// <summary>
+    /// What a start that had to be refused ended with. One that started after all, because nothing held its descriptor,
+    /// is stopped before the row fails, so its host and its lock do not outlive the row.
+    /// </summary>
+    private static async Task<Exception> EndedAsync(Task<RunningRuntime> start)
+    {
+        var ended = await Record.ExceptionAsync(() => start);
+        if (ended is null)
+        {
+            await (await start).DisposeAsync();
+            Assert.Fail("The start succeeded: nothing held its descriptor, so it never waited for a reader.");
+        }
+
+        return ended;
     }
 
     /// <summary>What the start said where it was started from; it has to have refused with 1, and nothing may have escaped.</summary>

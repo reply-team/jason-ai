@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Files;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Api;
@@ -196,7 +197,13 @@ public static class RuntimeHost
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses.FirstOrDefault()
                 ?? throw new InvalidOperationException("Kestrel started without reporting a listening address.");
             app.Services.GetRequiredService<ListeningEndpoint>().Port = new Uri(address).Port;
-            var publisher = new DescriptorPublisher(paths) { Publishing = options.DescriptorPublishing ?? DescriptorPublisher.PublishRule };
+            // The wait for a reader to let go of the descriptor is timed by the clock the services carry, as theirs are.
+            var publisher = new DescriptorPublisher(paths)
+            {
+                Publishing = options.DescriptorPublishing ?? DescriptorPublisher.PublishRule,
+                Clock = app.Services.GetRequiredService<TimeProvider>(),
+                Pause = options.DescriptorPause ?? HeldFileRetry.Sleep,
+            };
             RuntimeDescriptor descriptor;
             try
             {

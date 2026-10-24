@@ -16,7 +16,28 @@ public sealed class DescriptorHeldTests
 
     private static readonly HeldFileRule Short = new(TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(50), AccessDeniedCounts: true);
 
+    /// <summary>Far more pauses than a reader that lets go after a moment can cost: ten seconds of them at the least.</summary>
+    private const int AbsurdlyManyPauses = 200;
+
     private static FileStream Reader(string path) => new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+    /// <summary>
+    /// The real pause, until there have been absurdly many of them: then the held clock is moved past the rule, so a file
+    /// nothing lets go of ends the row as held, which names the hold, instead of never ending.
+    /// </summary>
+    private static Action<TimeSpan, CancellationToken> GivingUpAfterAbsurdlyMany(HeldClock clock, HeldFileRule rule)
+    {
+        var pauses = 0;
+        return (delay, cancellationToken) =>
+        {
+            if (Interlocked.Increment(ref pauses) == AbsurdlyManyPauses)
+            {
+                clock.Advance(rule.Wait);
+            }
+
+            HeldFileRetry.Sleep(delay, cancellationToken);
+        };
+    }
 
     [Fact]
     [Critical(Family.F5, "the held descriptor wait")]
@@ -25,7 +46,10 @@ public sealed class DescriptorHeldTests
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Elsewhere a reader does not stop a rename over the file it reads.");
 
         using var dir = new TempDataDir();
-        var publisher = new DescriptorPublisher(dir.Paths);
+        // Its clock moves only after absurdly many pauses, so a loaded machine that keeps the reader back cannot run the
+        // rule's wait out first.
+        var clock = new HeldClock();
+        var publisher = new DescriptorPublisher(dir.Paths) { Clock = clock, Pause = GivingUpAfterAbsurdlyMany(clock, DescriptorPublisher.PublishRule) };
         publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "first", TestContext.Current.CancellationToken);
         var reader = Reader(dir.Paths.DescriptorFile);
         var letGo = LetGoAfter(Moment, reader.Dispose);
@@ -64,7 +88,10 @@ public sealed class DescriptorHeldTests
         Assert.Single(Directory.EnumerateFileSystemEntries(dir.Paths.RunDirectory));
     }
 
-    /// <summary>A cancellation ends the wait: the publish stops with it rather than waiting out the rule.</summary>
+    /// <summary>
+    /// A cancellation ends the wait: the publish stops with it rather than waiting out the rule. It is cancelled as its
+    /// first pause begins, long before the rule's ten seconds are out, so a publish that ignored it would be refused as held.
+    /// </summary>
     [Fact]
     public void A_cancelled_publish_stops_waiting_for_the_reader()
     {
@@ -73,12 +100,17 @@ public sealed class DescriptorHeldTests
         using var dir = new TempDataDir();
         new DescriptorPublisher(dir.Paths).Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "first", TestContext.Current.CancellationToken);
         using var reader = Reader(dir.Paths.DescriptorFile);
-        using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        var started = TimeProvider.System.GetTimestamp();
+        using var cancelled = new CancellationTokenSource();
+        var publisher = new DescriptorPublisher(dir.Paths)
+        {
+            Pause = (delay, cancellationToken) =>
+            {
+                cancelled.Cancel();
+                HeldFileRetry.Sleep(delay, cancellationToken);
+            },
+        };
 
-        Assert.ThrowsAny<OperationCanceledException>(() => new DescriptorPublisher(dir.Paths).Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:2"), "second", cancelled.Token));
-
-        Assert.True(TimeProvider.System.GetElapsedTime(started) < TimeSpan.FromSeconds(5), "the publish waited out its rule after it was cancelled.");
+        Assert.ThrowsAny<OperationCanceledException>(() => publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:2"), "second", cancelled.Token));
     }
 
     /// <summary>The sentence's number is the rule's: ten seconds at a real start.</summary>
@@ -185,7 +217,10 @@ public sealed class DescriptorHeldTests
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Elsewhere a reader does not stop a delete of the file it reads.");
 
         using var dir = new TempDataDir();
-        var publisher = new DescriptorPublisher(dir.Paths);
+        // Its clock moves only after absurdly many pauses, so a loaded machine that keeps the reader back cannot run the
+        // rule's wait out first.
+        var clock = new HeldClock();
+        var publisher = new DescriptorPublisher(dir.Paths) { Clock = clock, Pause = GivingUpAfterAbsurdlyMany(clock, DescriptorPublisher.RemoveRule) };
         publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "first", TestContext.Current.CancellationToken);
         var reader = Reader(dir.Paths.DescriptorFile);
         var letGo = LetGoAfter(Moment, reader.Dispose);

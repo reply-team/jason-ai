@@ -27,8 +27,9 @@ public enum DescriptorRemoval
 /// <remarks>
 /// Every CLI command reads the descriptor, and on Windows a reader's open handle refuses the rename over it — with an
 /// access-denied, not a sharing violation — and refuses its delete, for as long as the read lasts. A read is one small
-/// file read at once, so each is tried again for a while before it is given up on. The wait is measured by the system's
-/// clock whatever the runtime's own is, because it is a wait for another program.
+/// file read at once, so each is tried again for a while before it is given up on. The wait is timed by the runtime's
+/// own clock, the system's outside a test, so a test decides when it is over; each pause is still taken in real time,
+/// because it is a wait for another program, which lets go in real time whatever the runtime's clock says.
 /// </remarks>
 public sealed class DescriptorPublisher(JasonPaths paths)
 {
@@ -60,7 +61,7 @@ public sealed class DescriptorPublisher(JasonPaths paths)
     /// <summary>The rule the delete is tried under: <see cref="RemoveRule"/>, except in a test.</summary>
     internal HeldFileRule Removing { get; init; } = RemoveRule;
 
-    /// <summary>What the waits are measured by.</summary>
+    /// <summary>What the waits are timed by: the runtime's clock when a runtime made it, the system's otherwise.</summary>
     internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
     /// <summary>How a pause is taken.</summary>
