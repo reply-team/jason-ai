@@ -176,4 +176,27 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A waiting item is work the runtime will start again by itself, so a review that took it for stale work and raised
+    /// it once more would run the step twice; and the wait is ended early on a person's word, never on the manager's.
+    /// </summary>
+    [Fact]
+    public void The_manager_does_not_take_a_waiting_item_for_stale_work()
+    {
+        var skill = Flattened("manager");
+
+        var stale = skill.IndexOf("**Stale and blocked work.**", StringComparison.Ordinal);
+        var waiting = skill.IndexOf("**A `waiting` item is not stale.**", StringComparison.Ordinal);
+        var approvals = skill.IndexOf("**Pending approvals and pending decisions.**", StringComparison.Ordinal);
+        Assert.True(
+            stale >= 0 && waiting > stale && approvals > waiting,
+            $"Stale work opens at {stale}, the waiting item at {waiting} and approvals at {approvals}: the waiting item belongs inside stale work.");
+
+        Assert.Contains("Do not create it, or the work it waits for, a second time", skill, StringComparison.Ordinal);
+        Assert.Contains("A wait is ended early only by a person, who resumes it under their own name with `jason workitem resume`, never by you", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status waiting",
+            SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("manager").File)));
+    }
 }

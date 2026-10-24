@@ -1,6 +1,6 @@
 ---
 name: troubleshooting-jason
-description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the ten states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
+description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the eleven states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
 metadata:
   status: draft
 ---
@@ -66,10 +66,10 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
 ```
 
-## The ten states
+## The eleven states
 
-Ten things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
-anybody: four of them are not failures at all, four of them nobody can fix from a session, and only two are
+Eleven things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
+anybody: five of them are not failures at all, four of them nobody can fix from a session, and only two are
 about the work you asked for.
 
 **The codes named below are the common ones, not all of them.** The runtime publishes more than two dozen
@@ -216,6 +216,29 @@ version that does not answer. Such a plugin loads as unavailable rather than rej
 everything else keeps working and only its operations stop. The listed problem names what is wrong on the
 machine.
 
+### 11. Waiting
+
+**How you recognise it.** The status is `waiting`: a run of the item raised other work and ended by waiting for
+it, for a moment, or both. Its `wait` block says on which items, whether all of them or any one, and until when.
+A park on a provider block, once the runtime makes one, reads as this same `waiting` state with its block named,
+not as a twelfth.
+
+```
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status waiting --human
+```
+
+**What it means.** Nothing is wrong, and the item is not holding anything up: while it waits it holds no slot,
+and the work it waits for is claimed like any other. The runtime starts it again by itself when that work has
+ended, when the moment it named comes, or when the wait's deadline does, whichever is first. If it seems to
+wait too long, look at what it waits for — an item there may itself be in one of the states above. There is no
+repair while the wait holds: do not cancel it to unstick it, and do not create its work again. Where the person
+decides it has waited enough, they end the wait themselves, and the item is started again with what is there:
+
+```
+jason --actor human:ada workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the replies in are enough to decide"
+```
+
 ## The repairs that are safe
 
 Five. Nothing else on this list, and nothing off it.
@@ -270,7 +293,7 @@ over, and a package whose contents no longer match its digest stops running rath
 
 ## What a useful report carries when it is none of these
 
-When the ten states do not explain it, the useful thing to produce is a description somebody else can act
+When the eleven states do not explain it, the useful thing to produce is a description somebody else can act
 on, not a theory — and `jason doctor` collects the installation's half of it into one file, whether or not
 the runtime answers.
 

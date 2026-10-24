@@ -257,6 +257,39 @@ public partial class InteractiveSkillTests
         Assert.DoesNotContain("waits briefly for handlers", skill, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A waiting item is the runtime doing what it was told, and it has no repair while the wait holds: a session that
+    /// cancelled it, or raised its work again, to unstick it would undo a plan or run it twice. Ending it early is a person's
+    /// word, and the line printed for it names them.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_tells_a_waiting_item_apart_and_leaves_its_early_end_to_a_person()
+    {
+        var file = SkillPack.Find("troubleshooting-jason").File;
+        var skill = Flattened("troubleshooting-jason");
+
+        // The heading names the state, not one thing it waits on: a park on a provider block is this state as well.
+        var headings = File.ReadAllLines(file).Where(line => line.StartsWith("### 11. ", StringComparison.Ordinal)).ToList();
+        Assert.True(
+            headings is ["### 11. Waiting"],
+            $"The troubleshooting skill heads state 11 as [{string.Join(" | ", headings)}]; it is headed '### 11. Waiting'.");
+        Assert.Contains(
+            "A park on a provider block, once the runtime makes one, reads as this same `waiting` state with its block named, not as a twelfth.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("**How you recognise it.** The status is `waiting`", skill, StringComparison.Ordinal);
+        Assert.Contains("There is no repair while the wait holds", skill, StringComparison.Ordinal);
+        Assert.Contains("do not cancel it to unstick it, and do not create its work again", skill, StringComparison.Ordinal);
+        Assert.Contains("five of them are not failures at all", skill, StringComparison.Ordinal);
+
+        var resumes = SkillPack.PrintedCommands(File.ReadAllLines(file))
+            .Where(line => line.Contains(" workitem resume ", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            resumes.Count == 1 && resumes[0].StartsWith("jason --actor human:", StringComparison.Ordinal),
+            $"The troubleshooting skill prints [{string.Join(" | ", resumes)}] to end a wait; it prints one, naming the person.");
+    }
+
     private static readonly string[] Counted =
         ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
 

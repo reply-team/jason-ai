@@ -1,6 +1,8 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.App.Tests.EndToEnd;
+using Jason.Contracts.Api;
 using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
@@ -160,6 +162,49 @@ public partial class LaunchContractTests
                 text.Contains("names a campaign and a role", StringComparison.Ordinal),
                 $"'{skill.File}' says role_memory names a campaign and a role; it names three ids, one level each.");
         }
+    }
+
+    /// <summary>
+    /// A run that needs other work done first ends by waiting for it, and its next run is told why it woke: said once, in
+    /// the block every role carries, because a role that held its attempt open to watch would keep its own campaign busy,
+    /// and the work it watched would never be claimed. The reasons are the ones the runtime records, read from the
+    /// enumeration rather than typed here, less the one a role's wait never has.
+    /// </summary>
+    [Fact]
+    public void The_launch_contract_teaches_a_run_to_end_by_waiting_and_to_read_why_it_woke()
+    {
+        var file = SkillPack.All().First(skill => skill.IsRole).File;
+        var block = LaunchContract.Extract(file) ?? string.Empty;
+        var contract = Flattened(block);
+
+        var waits = SkillPack.PrintedCommands(block.Split('\n'))
+            .Where(line => line.StartsWith("jason workitem wait ", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            waits.Count == 1 && waits[0].Contains(" --attempt ", StringComparison.Ordinal) && waits[0].Contains(" --on ", StringComparison.Ordinal),
+            $"The launch contract prints [{string.Join(" | ", waits)}] as its wait; it prints one, naming the attempt and the items waited for.");
+
+        Assert.Contains("raise that work as work items, then end this attempt by waiting for them", contract, StringComparison.Ordinal);
+        Assert.Contains("**Never poll, sleep or hold your attempt open** to watch the work you raised", contract, StringComparison.Ordinal);
+        Assert.Contains("while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start", contract, StringComparison.Ordinal);
+        Assert.Contains("A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait is refused with `wait_not_allowed`.", contract, StringComparison.Ordinal);
+        Assert.Contains("The moment printed above is an example: `--until` names a moment ahead of now, and one already past is refused.", contract, StringComparison.Ordinal);
+        Assert.Contains("A wait the runtime refuses changes nothing, and you still hold the attempt", contract, StringComparison.Ordinal);
+
+        Assert.Contains("the envelope's `resumption` says why", contract, StringComparison.Ordinal);
+        Assert.Contains("`resumption` is null when this run follows no wait", contract, StringComparison.Ordinal);
+        Assert.Contains("`woke_because`", contract, StringComparison.Ordinal);
+        foreach (var reason in Enum.GetValues<WaitReleaseReason>().Where(reason => reason != WaitReleaseReason.BlockCleared))
+        {
+            var word = $"`{JsonNamingPolicy.SnakeCaseLower.ConvertName(reason.ToString())}`";
+            Assert.True(
+                contract.Contains(word, StringComparison.Ordinal),
+                $"The launch contract does not name {word}, a reason the runtime records for releasing a role's wait.");
+        }
+
+        Assert.DoesNotContain("block_cleared", contract, StringComparison.Ordinal);
+        Assert.Contains("A result marked `result_omitted` did not fit: read it with `jason workitem get`.", contract, StringComparison.Ordinal);
+        Assert.Contains("what that means for the work is yours to decide", contract, StringComparison.Ordinal);
     }
 
     /// <summary>

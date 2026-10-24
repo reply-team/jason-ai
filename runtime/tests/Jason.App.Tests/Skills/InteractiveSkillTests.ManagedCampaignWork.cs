@@ -661,6 +661,37 @@ public partial class InteractiveSkillTests
         return null;
     }
 
+    /// <summary>
+    /// A person who asks what a waiting item is doing is answered from the item's own <c>wait</c> block, field by field, and
+    /// a person who wants it to go on sooner ends the wait on their own word, which the line records as theirs.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_says_what_waiting_means_and_reads_the_wait_block_to_the_person()
+    {
+        var skill = Flattened("managed-campaign-work");
+
+        Assert.Contains("**An item that is `waiting` is neither stuck nor finished.**", skill, StringComparison.Ordinal);
+        Assert.Contains("While it waits it holds no slot, and the work it waits for runs.", skill, StringComparison.Ordinal);
+        foreach (var field in new[] { "`on`", "`mode`", "`until`", "`deadline`", "`opened_at`" })
+        {
+            Assert.True(
+                skill.Contains($"{field} is", StringComparison.Ordinal),
+                $"The managed path does not say what the wait block's {field} is.");
+        }
+
+        Assert.Contains("read them its `wait` block from `workitem get`", skill, StringComparison.Ordinal);
+        Assert.Contains("and null for a wait on a moment alone", skill, StringComparison.Ordinal);
+        Assert.Contains("A `workitem list` carries the block too, with `on_count` and `ended_count`", skill, StringComparison.Ordinal);
+        Assert.Contains("Only a waiting item can be resumed", skill, StringComparison.Ordinal);
+
+        var resumes = SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("managed-campaign-work").File))
+            .Where(line => line.Contains(" workitem resume ", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            resumes.Count == 1 && resumes[0].StartsWith("jason --actor human:", StringComparison.Ordinal),
+            $"The managed path prints [{string.Join(" | ", resumes)}] to end a wait; it prints one, naming the person.");
+    }
+
     [GeneratedRegex(@"`docs/contracts/operations/([a-z_]+\.[a-z_]+)\.md`")]
     private static partial Regex OperationDocument();
 }

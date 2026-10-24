@@ -162,4 +162,52 @@ public partial class RoleSkillTests
 
         Assert.DoesNotContain("goes into your note at the level it belongs to", Flattened("planner"), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The pilot is several runs of the planner, each raising the next step's work and ending by waiting for it, in the
+    /// order the runtime's own end-to-end chain takes: research, the sends a person approves, a hold for the replies, the
+    /// analyst, and the turn taken back to the person. Said in the launched planner's own part of the file, because the
+    /// judgement it shares with the session file is the same wherever the planner works, and a session does not wait.
+    /// </summary>
+    [Fact]
+    public void The_launched_planner_runs_a_pilot_as_waits_in_the_order_the_chain_takes()
+    {
+        var file = SkillPack.Find("planner").File;
+        var skill = Flattened("planner");
+
+        var steps = new[] { "**Research.**", "**The sends.**", "**The replies.**", "**The reading.**", "**The turn.**" };
+        var at = steps.Select(step => skill.IndexOf(step, StringComparison.Ordinal)).ToList();
+        Assert.True(
+            at.All(index => index >= 0) && at.Zip(at.Skip(1)).All(pair => pair.First < pair.Second),
+            $"The planner names the pilot's steps at [{string.Join(", ", at)}] for [{string.Join(", ", steps)}]: each must be there, in that order.");
+
+        Assert.Contains("each run raises the next step's work, waits for it with `jason workitem wait`, and ends", skill, StringComparison.Ordinal);
+        Assert.Contains("Raise a researcher's item for each of the ten, and wait on all ten.", skill, StringComparison.Ordinal);
+        Assert.Contains("Each send parks at its claim for a person to approve what it would send", skill, StringComparison.Ordinal);
+        Assert.Contains("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
+        Assert.Contains("A reply that arrives meanwhile is the manager's and the responder's, never yours.", skill, StringComparison.Ordinal);
+        Assert.Contains("raise an analyst's item to read the pilot's results, and wait on it", skill, StringComparison.Ordinal);
+        Assert.Contains("Their answer wakes the manager, not you.", skill, StringComparison.Ordinal);
+        Assert.Contains("rather than wait for the same thing again", skill, StringComparison.Ordinal);
+
+        // A printed moment is in the past by the time a planner reads it, and a wait until a past moment is refused.
+        Assert.Contains("The moments in these two lines are examples: work yours out from now", skill, StringComparison.Ordinal);
+
+        var waits = SkillPack.PrintedCommands(File.ReadAllLines(file))
+            .Where(line => line.StartsWith("jason workitem wait ", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            waits.Any(line => line.Contains(" --on ", StringComparison.Ordinal))
+            && waits.Any(line => line.Contains(" --until ", StringComparison.Ordinal) && !line.Contains(" --on ", StringComparison.Ordinal)),
+            $"The planner prints [{string.Join(" | ", waits)}]: a wait on the items a step raised, and a hold with --until alone.");
+
+        // The craft block is the session file's as well, and a session never waits: the pilot as waits is the launched planner's.
+        var craft = CraftBlock.Extract(file) ?? string.Empty;
+        Assert.DoesNotContain("jason workitem wait", craft, StringComparison.Ordinal);
+
+        // What is in flight includes a waiting item: a planner that read only what runs would raise the same work again.
+        Assert.Contains(
+            "jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status scheduled --status processing --status awaiting_approval --status waiting",
+            SkillPack.PrintedCommands(File.ReadAllLines(file)));
+    }
 }
