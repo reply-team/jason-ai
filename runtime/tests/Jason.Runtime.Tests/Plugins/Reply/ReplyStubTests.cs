@@ -249,27 +249,57 @@ public class ReplyStubTests
     {
         using var account = new ReplyAccount();
         account.WithSequence(7, "Nurture", "active");
-        account.Hangs("sequence get", 3000);
+        var directory = Path.Combine(Path.GetTempPath(), "jason-hold", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var started = Path.Combine(directory, "started");
+        var release = Path.Combine(directory, "release");
 
-        var run = account.RunAsync([.. Prefix, "sequence", "get", "7"], Ct);
-
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        while (account.Calls.Count == 0 && DateTime.UtcNow < deadline)
+        try
         {
-            await Task.Delay(10, Ct);
+            // Held until the test lets it go, so "still working" is a state the test controls rather than a
+            // margin of time it hopes the machine leaves it.
+            account.HoldsOn("sequence get", started, release);
+            var run = account.RunAsync([.. Prefix, "sequence", "get", "7"], Ct);
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+            while (!File.Exists(started) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(25, Ct);
+            }
+
+            Assert.True(File.Exists(started), "The held call never said it had started.");
+
+            // Written before the answer, not after it: the entry is readable while the program is still working. The
+            // state left behind could never show that, because a provider answers the same either way.
+            var recorded = Assert.Single(account.Calls);
+            Assert.False(run.IsCompleted, "The call answered without waiting to be let go.");
+            Assert.Equal("sequence get", recorded.Command);
+            Assert.Equal(["7"], recorded.Operands);
+            Assert.Null(recorded.Body);
+            Assert.Equal([.. Prefix, "sequence", "get", "7"], recorded.Args);
+
+            await File.WriteAllTextAsync(release, string.Empty, Ct);
+            var (exit, _, _) = await run.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+            Assert.Equal(0, exit);
         }
-
-        // Written before the answer, not after it: the entry is readable while the program is still working. The
-        // state left behind could never show that, because a provider answers the same either way.
-        var recorded = Assert.Single(account.Calls);
-        Assert.False(run.IsCompleted);
-        Assert.Equal("sequence get", recorded.Command);
-        Assert.Equal(["7"], recorded.Operands);
-        Assert.Null(recorded.Body);
-        Assert.Equal([.. Prefix, "sequence", "get", "7"], recorded.Args);
-
-        var (exit, _, _) = await run;
-        Assert.Equal(0, exit);
+        finally
+        {
+            // Let the call go first, so a stub still held when an assertion failed ends now rather than waiting out
+            // its cap; then take the directory away. Neither may hide what failed before it.
+            try
+            {
+                File.WriteAllText(release, string.Empty);
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException)
+            {
+                // The temporary folder outlives the test, which is better than a failure that is not the real one.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // The same: a file still held by the stub that was let go a moment ago.
+            }
+        }
     }
 
     [Fact]

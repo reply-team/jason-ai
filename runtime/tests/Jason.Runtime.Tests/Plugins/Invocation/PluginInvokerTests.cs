@@ -7,6 +7,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests.Integration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Plugins.Invocation;
@@ -706,9 +707,9 @@ public class PluginInvokerTests
         finally
         {
             // Whatever a failure left: the host and the program, by the numbers they wrote down, and only those not seen gone.
-            foreach (var (pid, name) in LeftBehind(api.Paths).Where(each => !gone.Contains(each.Pid)))
+            foreach (var (pid, name, recorded) in LeftBehind(api.Paths).Where(each => !gone.Contains(each.Pid)))
             {
-                EndByNumber(pid, name);
+                OwnedChild.End(pid, recorded, name);
             }
         }
     }
@@ -806,38 +807,12 @@ public class PluginInvokerTests
     }
 
     /// <summary>
-    /// A process a failed test may have left running, ended by its number and its tree — only while that number still
-    /// belongs to a process of the name it was written down with, so that a number the system has since given to another
-    /// program is left alone. Linux keeps the first fifteen characters of a name, so those are what is compared.
-    /// </summary>
-    private static void EndByNumber(int pid, string name)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            var seen = process.ProcessName;
-            if (seen.Length >= Math.Min(name.Length, 15) && name.StartsWith(seen, StringComparison.OrdinalIgnoreCase))
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Already gone.
-        }
-        catch (InvalidOperationException)
-        {
-            // Gone between the lookup and the kill.
-        }
-    }
-
-    /// <summary>
     /// What the stand-in host and the program it ran wrote down about themselves in this runtime's invocation directories:
     /// the host its own number as it started, the call its program's as it timed out. Read whatever the invocation got to.
     /// </summary>
-    private static List<(int Pid, string Name)> LeftBehind(JasonPaths paths)
+    private static List<(int Pid, string Name, DateTimeOffset Recorded)> LeftBehind(JasonPaths paths)
     {
-        var left = new List<(int Pid, string Name)>();
+        var left = new List<(int Pid, string Name, DateTimeOffset Recorded)>();
         if (!Directory.Exists(paths.PluginWorkDirectory))
         {
             return left;
@@ -845,16 +820,26 @@ public class PluginInvokerTests
 
         foreach (var log in Directory.EnumerateFiles(paths.PluginWorkDirectory, "stderr.log", SearchOption.AllDirectories))
         {
+            // The moment each number is recorded by is the time of the very line that wrote it, which is written after
+            // its process began. A line without a time falls back to the file's: made after the host began, and last
+            // written after the program it ran began.
+            var hostFallback = new DateTimeOffset(File.GetCreationTimeUtc(log), TimeSpan.Zero);
+            var programFallback = new DateTimeOffset(File.GetLastWriteTimeUtc(log), TimeSpan.Zero);
             foreach (var line in HostLines(log))
             {
+                var at = line["ts"] is JsonValue stamp
+                    && stamp.TryGetValue<string>(out var text)
+                    && DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed)
+                    ? parsed
+                    : (DateTimeOffset?)null;
                 var pid = line["data"] is JsonObject data && data["pid"] is JsonValue number && number.TryGetValue<int>(out var read) ? read : 0;
                 switch (line["message"]?.GetValue<string>())
                 {
                     case StuckKillHostLocator.StartedMessage when pid > 0:
-                        left.Add((pid, StuckKillHostLocator.ProcessName));
+                        left.Add((pid, StuckKillHostLocator.ProcessName, at ?? hostFallback));
                         break;
                     case "exec_kill_unconfirmed" or "exec_kill_unfinished" when pid > 0:
-                        left.Add((pid, FakeProviderCli.ExecutableName));
+                        left.Add((pid, FakeProviderCli.ExecutableName, at ?? programFallback));
                         break;
                 }
             }

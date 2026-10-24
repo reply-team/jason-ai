@@ -43,6 +43,22 @@ public class FakeAgentHostTests
     }
 
     [Fact]
+    public async Task The_start_line_says_when_the_process_began_as_the_system_reports_it()
+    {
+        using var dir = new TempDataDir();
+        var before = DateTimeOffset.UtcNow;
+
+        var run = await RunAsync(Envelope(dir.Paths.DescriptorFile), "silent");
+
+        // A reading of a start time is exact to the second on Linux, so the window is widened by two.
+        var after = DateTimeOffset.UtcNow;
+        var said = Integration.FakeHostRuntime.StartIn(run.StandardError);
+        Assert.True(
+            said is { } at && at >= before.AddSeconds(-2) && at <= after.AddSeconds(2),
+            $"The host began between {before:O} and {after:O} and said it began at {said:O}; it said: {run.StandardError}");
+    }
+
+    [Fact]
     public async Task Crash_leaves_with_its_own_exit_code()
     {
         using var dir = new TempDataDir();

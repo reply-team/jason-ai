@@ -49,7 +49,7 @@ public class FakeHostLifetimeTests
         {
             if (pid > 0)
             {
-                FakeHostRuntime.Kill(pid);
+                host.EndChild(pid);
             }
         }
     }

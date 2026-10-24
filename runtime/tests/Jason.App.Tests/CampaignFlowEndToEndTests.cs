@@ -5,6 +5,7 @@ using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Integration;
 
 namespace Jason.App.Tests;
 
@@ -30,7 +31,7 @@ public class CampaignFlowEndToEndTests
         var root = Path.Combine(Path.GetTempPath(), "jason-flow", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var paths = new JasonPaths(root);
-        var seenPids = new HashSet<int>();
+        var seenPids = new Dictionary<int, DateTimeOffset>();
 
         try
         {
@@ -39,10 +40,10 @@ public class CampaignFlowEndToEndTests
             var started = await StartRuntimeAsync(root);
             AssertSuccess(started, root);
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
-            seenPids.Add(descriptor.Pid);
+            seenPids[descriptor.Pid] = descriptor.StartedAt;
             Assert.Equal(descriptor.InstanceId, (string?)Json(started)["instance_id"]);
             Assert.NotEqual(Environment.ProcessId, descriptor.Pid);
-            Assert.True(IsRunning(descriptor.Pid), "The runtime the descriptor names is not in the process table.");
+            Assert.True(OwnedChild.IsRunning(descriptor.Pid), "The runtime the descriptor names is not in the process table.");
 
             var campaign = (string)Json(await Ok(root, "campaign", "create", "--name", "Flow"))["id"]!;
 
@@ -67,7 +68,7 @@ public class CampaignFlowEndToEndTests
             Assert.True((bool)stopped["stopping"]!);
             Assert.Equal(descriptor.InstanceId, (string?)stopped["instance_id"]);
             Assert.False(File.Exists(paths.DescriptorFile));
-            Assert.False(IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
+            Assert.False(OwnedChild.IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
 
             var status = await JasonAsync(root, "runtime", "status");
             Assert.Equal(ExitCodes.RuntimeUnavailable, status.ExitCode);
@@ -77,7 +78,7 @@ public class CampaignFlowEndToEndTests
             var again = await StartRuntimeAsync(root);
             AssertSuccess(again, root);
             var restarted = ReadDescriptor(paths)!;
-            seenPids.Add(restarted.Pid);
+            seenPids[restarted.Pid] = restarted.StartedAt;
             Assert.NotEqual(descriptor.InstanceId, restarted.InstanceId);
             Assert.Equal(restarted.InstanceId, (string?)Json(again)["instance_id"]);
 
@@ -112,12 +113,12 @@ public class CampaignFlowEndToEndTests
             // the one still alive, and the set holds every one that ever was.
             if (ReadDescriptor(paths) is { } surviving)
             {
-                seenPids.Add(surviving.Pid);
+                seenPids[surviving.Pid] = surviving.StartedAt;
             }
 
-            foreach (var pid in seenPids)
+            foreach (var (pid, started) in seenPids)
             {
-                Kill(pid);
+                OwnedChild.End(pid, started);
             }
 
             try
@@ -277,42 +278,6 @@ public class CampaignFlowEndToEndTests
         catch (JsonException)
         {
             return null;
-        }
-    }
-
-    private static bool IsRunning(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
-    private static void Kill(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the state this is trying to reach.
-        }
-        catch (InvalidOperationException)
-        {
         }
     }
 

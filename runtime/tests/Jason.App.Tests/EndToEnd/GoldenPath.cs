@@ -7,6 +7,7 @@ using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Plugins.Reply;
 
 namespace Jason.App.Tests.EndToEnd;
@@ -39,7 +40,7 @@ internal sealed record SettingsShape(
 /// </summary>
 internal sealed class Installation : IDisposable
 {
-    private readonly HashSet<int> _children = [];
+    private readonly Dictionary<int, DateTimeOffset> _children = [];
 
     internal Installation(string root, ReplyAccount account)
     {
@@ -58,25 +59,28 @@ internal sealed class Installation : IDisposable
     /// <summary>The runtime process the descriptor last named, which is what a kill and a stop are aimed at.</summary>
     public int? Pid { get; internal set; }
 
+    /// <summary>The moment the descriptor said that runtime started, which is what proves the process is still it.</summary>
+    public DateTimeOffset PidStartedAt { get; internal set; }
+
     /// <summary>
     /// A child this installation started that a test may have to wait for. A runtime killed without its tree
     /// leaves the plugin host and the vendor CLI alive; on Windows a live child holding files under the data
     /// directory makes the cleanup fail, so what is known is recorded and settled rather than hoped about.
     /// </summary>
-    public void Track(int pid) => _children.Add(pid);
+    public void Track(int pid, DateTimeOffset recorded) => _children[pid] = recorded;
 
-    public IReadOnlyCollection<int> Children => _children;
+    public IReadOnlyDictionary<int, DateTimeOffset> Children => _children;
 
     public void Dispose()
     {
-        foreach (var pid in _children)
+        foreach (var (pid, recorded) in _children)
         {
-            GoldenPath.Kill(pid);
+            OwnedChild.End(pid, recorded);
         }
 
         if (Pid is { } runtime)
         {
-            GoldenPath.Kill(runtime);
+            OwnedChild.End(runtime, PidStartedAt);
         }
 
         Account.Dispose();
@@ -278,6 +282,7 @@ internal static class GoldenPath
         var descriptor = ReadDescriptor(it.Paths)
             ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
         it.Pid = descriptor.Pid;
+        it.PidStartedAt = descriptor.StartedAt;
         return descriptor;
     }
 
@@ -304,9 +309,13 @@ internal static class GoldenPath
     {
         ArgumentNullException.ThrowIfNull(it);
         var pid = it.Pid ?? throw new InvalidOperationException("There is no runtime process to kill.");
-        using var process = Process.GetProcessById(pid);
-        process.Kill(entireProcessTree: false);
-        process.WaitForExit();
+        using var held = OwnedChild.Open(pid, it.PidStartedAt)
+            ?? throw new InvalidOperationException($"Process {pid} is gone, or is not the runtime the descriptor named.");
+        OwnedChild.End(held, tree: false);
+        if (!held.Process.WaitForExit(30_000))
+        {
+            throw new InvalidOperationException($"Process {pid} was not ended: it is no longer the runtime it was opened as, or it will not end.");
+        }
     }
 
     /// <summary>
@@ -318,13 +327,21 @@ internal static class GoldenPath
     public static async Task<int?> ChildPidAsync(Installation it, string workItemId)
     {
         var item = Json(await Ok(JasonAsync(it, "workitem", "get", workItemId)));
-        var pid = item["attempts"]?.AsArray()
-            .Select(attempt => (int?)attempt?["launch"]?["pid"])
-            .LastOrDefault(value => value is not null);
+        var launched = item["attempts"]?.AsArray()
+            .Where(attempt => (int?)attempt?["launch"]?["pid"] is not null)
+            .LastOrDefault();
 
-        if (pid is { } found)
+        if (launched is null)
         {
-            it.Track(found);
+            return null;
+        }
+
+        // Ended later only if the record does not say it exited, and proven by the moment its number is read now:
+        // the claim comes before the child exists, and the child may begin well after it.
+        var pid = (int)launched["launch"]!["pid"]!;
+        if (LaunchedChild.Of(launched, DateTimeOffset.UtcNow) is { } child)
+        {
+            it.Track(child.Pid, child.Recorded);
         }
 
         return pid;
@@ -346,14 +363,14 @@ internal static class GoldenPath
     {
         ArgumentNullException.ThrowIfNull(it);
         var deadline = DateTime.UtcNow.Add(within);
-        foreach (var pid in it.Children)
+        foreach (var (pid, recorded) in it.Children)
         {
             while (IsRunning(pid) && DateTime.UtcNow < deadline)
             {
                 await Task.Delay(100, Ct);
             }
 
-            Kill(pid);
+            OwnedChild.End(pid, recorded);
         }
     }
 
@@ -539,41 +556,7 @@ internal static class GoldenPath
         }
     }
 
-    public static bool IsRunning(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
-    public static void Kill(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the state this is trying to reach.
-        }
-        catch (InvalidOperationException)
-        {
-        }
-    }
+    public static bool IsRunning(int pid) => OwnedChild.IsRunning(pid);
 
     public static void Copy(string source, string destination)
     {

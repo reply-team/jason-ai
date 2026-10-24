@@ -7,6 +7,7 @@ using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Integration;
 
 namespace Jason.App.Tests.EndToEnd;
 
@@ -37,7 +38,7 @@ public class EventsE2ETests
         var mark = "zq" + Guid.NewGuid().ToString("N");
         using var run = new Run("feed", mark);
         await run.AccountAsync(prefix: "c-" + mark + "-");
-        var pids = new HashSet<int>();
+        var pids = new Dictionary<int, DateTimeOffset>();
         try
         {
             await run.StartAsync(pids);
@@ -116,7 +117,7 @@ public class EventsE2ETests
         await run.EventsAsync(
             Bounced("c-1", "p-1", now.AddDays(-40), $"e-{mark}-1"),
             Bounced("c-2", "p-1", now.AddHours(-1), $"e-{mark}-2"));
-        var pids = new HashSet<int>();
+        var pids = new Dictionary<int, DateTimeOffset>();
         try
         {
             await run.StartAsync(pids);
@@ -166,7 +167,7 @@ public class EventsE2ETests
             .Append(Bounced("c-after", "p-1", to.AddHours(1), $"e-{mark}-after"))
             .ToArray();
         await run.EventsAsync(old);
-        var pids = new HashSet<int>();
+        var pids = new Dictionary<int, DateTimeOffset>();
         try
         {
             await run.StartAsync(pids);
@@ -303,7 +304,7 @@ public class EventsE2ETests
             await File.WriteAllTextAsync(file, held.ToJsonString(), Ct);
         }
 
-        public async Task StartAsync(HashSet<int> pids)
+        public async Task StartAsync(Dictionary<int, DateTimeOffset> pids)
         {
             Assert.True(File.Exists(Assembly), $"The shipped program is not beside these tests: '{Assembly}'.");
             var started = await PatientStart.RunAsync(
@@ -314,11 +315,11 @@ public class EventsE2ETests
             Assert.True(started.ExitCode == ExitCodes.Success, $"runtime start exited with {started.ExitCode}: {started.Output} {started.Error}");
             if (ReadDescriptor() is { } descriptor)
             {
-                pids.Add(descriptor.Pid);
+                pids[descriptor.Pid] = descriptor.StartedAt;
             }
         }
 
-        public async Task RestartAsync(HashSet<int> pids)
+        public async Task RestartAsync(Dictionary<int, DateTimeOffset> pids)
         {
             await Ok(JasonAsync("runtime", "stop"));
             await StartAsync(pids);
@@ -383,29 +384,16 @@ public class EventsE2ETests
             _ = campaign;
         }
 
-        public void Stop(HashSet<int> pids)
+        public void Stop(Dictionary<int, DateTimeOffset> pids)
         {
             if (ReadDescriptor() is { } surviving)
             {
-                pids.Add(surviving.Pid);
+                pids[surviving.Pid] = surviving.StartedAt;
             }
 
-            foreach (var pid in pids)
+            foreach (var (pid, started) in pids)
             {
-                try
-                {
-                    using var process = Process.GetProcessById(pid);
-                    if (!process.HasExited)
-                    {
-                        process.Kill(entireProcessTree: true);
-                    }
-                }
-                catch (ArgumentException)
-                {
-                }
-                catch (InvalidOperationException)
-                {
-                }
+                OwnedChild.End(pid, started);
             }
         }
 

@@ -10,6 +10,7 @@ using Jason.Runtime.Discovery;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Integration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -71,12 +72,12 @@ public class PluginFlowEndToEndTests
         var package = paths.PluginPackageDirectory(PluginId);
         Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", PluginId), package);
 
-        var pids = new HashSet<int>();
+        var pids = new Dictionary<int, DateTimeOffset>();
         try
         {
             AssertSuccess(await StartRuntimeAsync(root));
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
-            pids.Add(descriptor.Pid);
+            pids[descriptor.Pid] = descriptor.StartedAt;
 
             // The package was on disk before the runtime was, so the startup load is what is active.
             var listed = Json(await Ok(JasonAsync(root, "plugin", "list")));
@@ -121,7 +122,7 @@ public class PluginFlowEndToEndTests
             var result = await RoundtripAsync(paths);
             if (result.Launch?.Pid is { } child)
             {
-                pids.Add(child);
+                pids[child] = result.Launch.StartedAt;
             }
 
             var succeeded = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
@@ -137,19 +138,19 @@ public class PluginFlowEndToEndTests
 
             AssertSuccess(await JasonAsync(root, "runtime", "stop"));
             Assert.False(File.Exists(paths.DescriptorFile));
-            Assert.False(IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
+            Assert.False(OwnedChild.IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
         }
         finally
         {
             // Whatever went wrong, nothing this test started is left running.
             if (ReadDescriptor(paths) is { } surviving)
             {
-                pids.Add(surviving.Pid);
+                pids[surviving.Pid] = surviving.StartedAt;
             }
 
-            foreach (var pid in pids)
+            foreach (var (pid, started) in pids)
             {
-                Kill(pid);
+                OwnedChild.End(pid, started);
             }
 
             try
@@ -305,42 +306,6 @@ public class PluginFlowEndToEndTests
         catch (JsonException)
         {
             return null;
-        }
-    }
-
-    private static bool IsRunning(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
-    private static void Kill(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the state this is trying to reach.
-        }
-        catch (InvalidOperationException)
-        {
         }
     }
 

@@ -6,6 +6,7 @@ using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Integration;
 
 namespace Jason.App.Tests.EndToEnd;
 
@@ -97,13 +98,13 @@ public class ProviderOperationE2ETests
         // Installing a plugin is copying its directory. There is no install verb, and none is needed.
         Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", PluginId), paths.PluginPackageDirectory(PluginId));
 
-        var pids = new HashSet<int>();
+        var pids = new Dictionary<int, DateTimeOffset>();
         try
         {
             Assert.True(File.Exists(Assembly), $"The shipped program is not beside these tests: '{Assembly}'.");
             AssertSuccess(await StartRuntimeAsync(root));
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
-            pids.Add(descriptor.Pid);
+            pids[descriptor.Pid] = descriptor.StartedAt;
 
             // 1. The route is frozen by the same act that freezes the packages it names, and the registry says
             //    which route snapshot is active beside which plugin snapshot.
@@ -231,7 +232,7 @@ public class ProviderOperationE2ETests
             // 10. The runtime is stopped before the logs are read, so nothing is still buffered when they are.
             AssertSuccess(await JasonAsync(root, "runtime", "stop"));
             Assert.False(File.Exists(paths.DescriptorFile));
-            Assert.False(IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
+            Assert.False(OwnedChild.IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
 
             AssertNothingPrivateIsLogged(paths, first, mark, workspace, address, list, refusedName);
         }
@@ -240,12 +241,12 @@ public class ProviderOperationE2ETests
             // Whatever went wrong, nothing this test started is left running.
             if (ReadDescriptor(paths) is { } surviving)
             {
-                pids.Add(surviving.Pid);
+                pids[surviving.Pid] = surviving.StartedAt;
             }
 
-            foreach (var pid in pids)
+            foreach (var (pid, started) in pids)
             {
-                Kill(pid);
+                OwnedChild.End(pid, started);
             }
 
             Delete(root);
@@ -502,42 +503,6 @@ public class ProviderOperationE2ETests
         catch (JsonException)
         {
             return null;
-        }
-    }
-
-    private static bool IsRunning(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
-    private static void Kill(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the state this is trying to reach.
-        }
-        catch (InvalidOperationException)
-        {
         }
     }
 

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
@@ -89,7 +90,18 @@ internal static class Diagnostics
     public static Task WriteStartLineAsync(string behaviour, LaunchEnvelope envelope, string? token) =>
         WriteAsync(string.Create(
             CultureInfo.InvariantCulture,
-            $"behaviour={behaviour} pid={Environment.ProcessId} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()}"));
+            $"behaviour={behaviour} pid={Environment.ProcessId} started={StartedAt()} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()}"));
+
+    /// <summary>
+    /// When this process began, as the system reports it, in round-trip UTC. A test that must end this child by the
+    /// number it wrote down compares the start time of whatever answers to that number with this one, so a process
+    /// that took the number after this one exited cannot be taken for it.
+    /// </summary>
+    private static string StartedAt()
+    {
+        using var self = Process.GetCurrentProcess();
+        return self.StartTime.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+    }
 
     private static string Variable(string name) =>
         Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : "unset";

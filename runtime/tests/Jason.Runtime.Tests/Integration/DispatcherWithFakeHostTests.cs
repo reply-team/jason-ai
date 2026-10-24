@@ -375,6 +375,11 @@ public class DispatcherWithFakeHostTests
     /// up. The fix is the fake host's own patience, not a reordering of the test — the runtime and the child are
     /// behaving correctly in both runs, and it is the stand-in's give-up rule that is too short for a machine
     /// running four test assemblies at once.
+    /// <para>
+    /// The stop may also land before the child's first call, so that call is refused and the child carries on
+    /// without having reported; that is fine, because what is asserted is that it is still there, not what it
+    /// managed to say before the runtime went.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task A_child_waits_longer_than_two_beats_for_a_successor_when_it_is_told_to()

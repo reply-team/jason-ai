@@ -3,10 +3,12 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.App.Tests.EndToEnd;
 using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Integration;
 
 namespace Jason.App.Tests;
 
@@ -62,14 +64,14 @@ public class WorkFlowEndToEndTests
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
 
         var behaviour = Path.Combine(root, "behaviour.txt");
-        var seenPids = new HashSet<int>();
+        var seenPids = new Dictionary<int, DateTimeOffset>();
         var workItems = new List<string>();
 
         try
         {
             AssertSuccess(await StartRuntimeAsync(root));
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
-            seenPids.Add(descriptor.Pid);
+            seenPids[descriptor.Pid] = descriptor.StartedAt;
             Assert.NotEqual(Environment.ProcessId, descriptor.Pid);
 
             var campaign = (string)Json(await Ok(JasonAsync(root, "campaign", "create", "--name", "Work")))["id"]!;
@@ -190,7 +192,7 @@ public class WorkFlowEndToEndTests
 
             AssertSuccess(await JasonAsync(root, "runtime", "stop"));
             Assert.False(File.Exists(paths.DescriptorFile));
-            Assert.False(IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
+            Assert.False(OwnedChild.IsRunning(descriptor.Pid), "The runtime process was still alive after runtime stop returned.");
         }
         finally
         {
@@ -198,20 +200,20 @@ public class WorkFlowEndToEndTests
             // hosts by the pid each attempt recorded.
             if (ReadDescriptor(paths) is { } surviving)
             {
-                seenPids.Add(surviving.Pid);
+                seenPids[surviving.Pid] = surviving.StartedAt;
             }
 
             foreach (var id in workItems)
             {
-                foreach (var pid in await PidsOfAsync(root, id))
+                foreach (var (pid, recorded) in await PidsOfAsync(root, id))
                 {
-                    seenPids.Add(pid);
+                    seenPids[pid] = recorded;
                 }
             }
 
-            foreach (var pid in seenPids)
+            foreach (var (pid, started) in seenPids)
             {
-                Kill(pid);
+                OwnedChild.End(pid, started);
             }
 
             try
@@ -386,8 +388,8 @@ public class WorkFlowEndToEndTests
             ? string.Create(CultureInfo.InvariantCulture, $"{(at - start).TotalSeconds:+0.000;-0.000} s")
             : "never";
 
-    /// <summary>Every process the runtime recorded as having run an attempt of this item.</summary>
-    private static async Task<IEnumerable<int>> PidsOfAsync(string root, string workItemId)
+    /// <summary>Every process the runtime recorded as having run an attempt of this item that its record does not say exited, with the moment its number is read now: the process began before it.</summary>
+    private static async Task<IEnumerable<(int Pid, DateTimeOffset Recorded)>> PidsOfAsync(string root, string workItemId)
     {
         var result = await JasonAsync(root, "workitem", "get", workItemId);
         if (result.ExitCode != ExitCodes.Success)
@@ -395,9 +397,10 @@ public class WorkFlowEndToEndTests
             return [];
         }
 
+        var readAt = DateTimeOffset.UtcNow;
         return Json(result)["attempts"]?.AsArray()
-            .Select(attempt => (int?)attempt?["launch"]?["pid"])
-            .OfType<int>()
+            .Select(attempt => LaunchedChild.Of(attempt, readAt))
+            .OfType<(int Pid, DateTimeOffset Recorded)>()
             .ToList() ?? [];
     }
 
@@ -480,42 +483,6 @@ public class WorkFlowEndToEndTests
         catch (JsonException)
         {
             return null;
-        }
-    }
-
-    private static bool IsRunning(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
-    private static void Kill(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the state this is trying to reach.
-        }
-        catch (InvalidOperationException)
-        {
         }
     }
 

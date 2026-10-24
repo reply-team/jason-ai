@@ -28,12 +28,18 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
     private readonly List<string> _items = [];
 
     /// <summary>
-    /// Every child this runtime is known to have started, by pid, learned from the start line the host writes
-    /// before it does anything. Disposal kills what is in here whether or not the runtime is still answering:
-    /// a test that stopped its own runtime — or a test process that died — cannot ask the API for a pid, and
-    /// that is exactly the case where a child is left behind holding the runner's pipes open.
+    /// Every child this runtime is known to have started, by pid, as a handle opened while the child was alive —
+    /// learned from the start line the host writes before it does anything. Disposal ends what is in here
+    /// whether or not the runtime is still answering: a test that stopped its own runtime — or a test process
+    /// that died — cannot ask the API for a pid, and that is exactly the case where a child is left behind
+    /// holding the runner's pipes open. It ends them through the handle: a pid written down is not the child's
+    /// any more once the child has gone, and test classes run in parallel, so the number may be another test's
+    /// live host by then.
     /// </summary>
-    private readonly HashSet<int> _children = [];
+    private readonly Dictionary<int, OwnedChild.Held> _children = [];
+
+    /// <summary>The names a host child answers to: the shared host that runs its assembly, or its own program.</summary>
+    private static readonly string[] HostNames = ["dotnet", "Jason.FakeAgentHost"];
 
     private FakeHostRuntime(RuntimeApiFixture fixture, FixedClock clock)
     {
@@ -157,23 +163,82 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
         var stderr = Path.Combine(Paths.AttemptWorkDirectory(workItemId, attempt.Id), "stderr.log");
 
         var pid = 0;
+        var started = default(DateTimeOffset);
         Assert.True(
             await DispatchHarness.EventuallyAsync(
-                () => File.Exists(stderr) && PidIn(ReadShared(stderr)) is { } found && (pid = found) > 0,
+                () =>
+                {
+                    if (!File.Exists(stderr))
+                    {
+                        return false;
+                    }
+
+                    var line = ReadShared(stderr);
+                    if (PidIn(line) is not { } foundPid || StartIn(line) is not { } foundStart)
+                    {
+                        return false;
+                    }
+
+                    (pid, started) = (foundPid, foundStart);
+                    return pid > 0;
+                },
                 ct,
                 timeoutMilliseconds: 20_000),
             $"The child of {attempt.Id} never said which process it was.");
 
-        _children.Add(pid);
+        // The handle is opened now, while the child that wrote the line is certainly there, and only if the
+        // process that answers to the number began when the child said it did: the child's own word, read twice.
+        if (!_children.ContainsKey(pid) && OwnedChild.OpenKnown(pid, started, HostNames) is { } handle)
+        {
+            _children.Add(pid, handle);
+        }
+
         return pid;
+    }
+
+    /// <summary>Ends the child with that pid if this runtime started it, through the handle opened while it lived.</summary>
+    public void EndChild(int pid)
+    {
+        if (_children.Remove(pid, out var held))
+        {
+            using (held)
+            {
+                OwnedChild.End(held);
+            }
+        }
     }
 
     /// <summary>Stops the runtime and takes its data directory with it, leaving any child of it orphaned.</summary>
     public ValueTask StopRuntimeAsync() => Fixture.DisposeAsync();
 
-    private static int? PidIn(string startLine)
+    /// <summary>The pid the child gave in its start line, if the line is there.</summary>
+    internal static int? PidIn(string startLine) =>
+        int.TryParse(FieldIn(startLine, "pid="), CultureInfo.InvariantCulture, out var pid) ? pid : null;
+
+    /// <summary>When the child said its process began, in its start line: its own reading of its own start time.</summary>
+    internal static DateTimeOffset? StartIn(string startLine) =>
+        DateTimeOffset.TryParseExact(FieldIn(startLine, " started="), "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var started)
+            ? started
+            : null;
+
+    /// <summary>
+    /// The child an attempt's record says may still be running, as the pid and the moment the child itself said
+    /// it began; null for one that cannot be. An attempt whose launch has an exit code is one whose child exited
+    /// and was reaped before the record was written, so the number is nobody's to end any more: a process that
+    /// answers to it now can only be a stranger. A pid the start line does not agree with is not the child either.
+    /// </summary>
+    internal static (int Pid, DateTimeOffset Start)? StillRunning(AttemptLaunchDto? launch, string startLine)
     {
-        const string marker = "pid=";
+        if (launch?.Pid is not { } pid || launch.ExitCode is not null)
+        {
+            return null;
+        }
+
+        return PidIn(startLine) == pid && StartIn(startLine) is { } started ? (pid, started) : null;
+    }
+
+    private static string? FieldIn(string startLine, string marker)
+    {
         var at = startLine.IndexOf(marker, StringComparison.Ordinal);
         if (at < 0)
         {
@@ -181,8 +246,8 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
         }
 
         var rest = startLine[(at + marker.Length)..];
-        var end = rest.IndexOf(' ', StringComparison.Ordinal);
-        return int.TryParse(end < 0 ? rest : rest[..end], CultureInfo.InvariantCulture, out var pid) ? pid : null;
+        var end = rest.IndexOfAny([' ', '\r', '\n']);
+        return end < 0 ? rest : rest[..end];
     }
 
     /// <summary>Polls an asynchronous condition without ever blocking a thread on it.</summary>
@@ -229,40 +294,7 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
             string.Create(CultureInfo.InvariantCulture, $"Process {pid} was still running."));
     }
 
-    public static bool IsRunning(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
-    public static void Kill(int pid)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (ArgumentException)
-        {
-        }
-        catch (InvalidOperationException)
-        {
-        }
-    }
+    public static bool IsRunning(int pid) => OwnedChild.IsRunning(pid);
 
     public async ValueTask DisposeAsync()
     {
@@ -299,7 +331,12 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
         {
         }
 
-        // Whatever is left is killed by pid, which is on the attempt once its run has been accounted for.
+        // Whatever is left is ended through its handle. A child nobody asked about by pid has its pid on the
+        // attempt too, if its run was accounted for without an exit code: but a pid is only a number, so it is
+        // ended only if the process that answers to it began when the child itself said it did, and is a host.
+        // An attempt that has an exit code is not looked at: its child has exited, and whatever has that number
+        // now is somebody else's.
+        var recorded = new List<(int Pid, DateTimeOffset Start)>();
         foreach (var id in _items)
         {
             try
@@ -307,22 +344,31 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
                 var item = await GetAsync(id, CancellationToken.None);
                 foreach (var attempt in item.Attempts ?? [])
                 {
-                    if (attempt.Launch?.Pid is { } pid)
+                    var stderr = Path.Combine(Paths.AttemptWorkDirectory(id, attempt.Id), "stderr.log");
+                    if (attempt.Launch?.Pid is { } pid
+                        && !_children.ContainsKey(pid)
+                        && File.Exists(stderr)
+                        && StillRunning(attempt.Launch, ReadShared(stderr)) is { } child)
                     {
-                        _children.Add(pid);
+                        recorded.Add(child);
                     }
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException or ObjectDisposedException)
+            catch (Exception ex) when (ex is HttpRequestException or ObjectDisposedException or IOException)
             {
                 // The runtime is already gone, so the pids it would have reported are the ones collected as
                 // the children announced themselves. That is why they are collected at all.
             }
         }
 
-        foreach (var pid in _children)
+        foreach (var (pid, start) in recorded)
         {
-            Kill(pid);
+            OwnedChild.EndKnown(pid, start, HostNames);
+        }
+
+        foreach (var pid in _children.Keys.ToList())
+        {
+            EndChild(pid);
         }
 
         await Fixture.DisposeAsync();
