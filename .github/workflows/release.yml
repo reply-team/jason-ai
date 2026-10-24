@@ -1,5 +1,5 @@
-# A tag named v<version> builds the release: three native runners, each running the tests at the tag and
-# packaging one platform through the same action ci.yml runs on every pull request, and one job that archives the
+# A tag named v<version> builds the release: three native runners, each running the critical tier at the tag
+# and packaging one platform through the same action ci.yml runs on every pull request, and one job that archives the
 # Reply plugin's package from the tag's tree; then one job — the only one that holds the publication token —
 # assembles the manifest and the checksums, creates the release as a draft in reply-team/jason-ai, and opens the pull
 # request that brings that repository to this version. Merging that pull request is what tags the release there and
@@ -78,9 +78,12 @@ jobs:
       - name: Build (warnings are errors)
         run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
-      # The tests run at the tag, on the platform, before anything is packaged: a release is a build the tests passed.
-      - name: Test (offline)
-        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
+      # The whole suite ran once on this tree, on every platform, on the release's pull request into main, and the tag is
+      # that merge. What runs here, before anything is packaged, is the critical tier, stamped with the version the tag
+      # names and on the platform the archive is built for: a release is a build of a tree the suite passed, whose tier
+      # passes under its own version.
+      - name: Test the critical tier (offline)
+        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
 
       - name: Package
         id: package

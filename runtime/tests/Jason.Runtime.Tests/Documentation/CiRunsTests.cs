@@ -900,12 +900,13 @@ public class CiRunsTests
     /// <summary>
     /// Only one step of the workflows filters the suite: the linux-x64 job's step a draft's push, a pull request into a
     /// release branch and the version pull request run, which is the job's whole-suite step with the tier's filter after it,
-    /// so both test the same build. Every other
-    /// test step — the job's whole-suite step, the suite under a release's version, and the release's own — runs the whole
-    /// suite.
+    /// so both test the same build. The release workflow's step is the only other one that filters, and it carries the same
+    /// filter: the tag is the tree the release's pull request tested whole, so at the tag the critical tier runs under the
+    /// tag's version. Every other test step — the job's whole-suite step and the suite under a release's version — runs the
+    /// whole suite.
     /// </summary>
     [Fact]
-    [Critical(Family.B7, "the one filtered test step is the tier's, and the release tests the whole suite")]
+    [Critical(Family.B7, "the filtered test steps are the tier's and the release's tier at the tag, and every other step tests the whole suite")]
     public void Only_the_step_that_tests_the_critical_tier_filters_the_suite()
     {
         var jobs = Jobs();
@@ -915,12 +916,17 @@ public class CiRunsTests
         Assert.Equal(2, steps.Count);
         Assert.Equal($"{Scalar(whole, "run")} {TierFilter}", Scalar(tier, "run"));
 
+        var atTheTag = Mapping(Parse(Read(Release)), "jobs").Children.Values.Cast<YamlMappingNode>().SelectMany(TestSteps)
+            .Select(step => Scalar(step, "run")!)
+            .ToList();
+        var atTheTagCommand = Assert.Single(atTheTag);
+        Assert.Contains(TierFilter, atTheTagCommand, StringComparison.Ordinal);
+
         var others = jobs.Children.Values.Cast<YamlMappingNode>().SelectMany(TestSteps)
-            .Concat(Mapping(Parse(Read(Release)), "jobs").Children.Values.Cast<YamlMappingNode>().SelectMany(TestSteps))
             .Where(step => step != tier)
             .Select(step => Scalar(step, "run")!)
             .ToList();
-        Assert.True(others.Count >= 3, $"Only {others.Count} other test steps were found: {string.Join(" | ", others)}");
+        Assert.True(others.Count >= 2, $"Only {others.Count} other test steps were found: {string.Join(" | ", others)}");
         Assert.All(others, command => Assert.False(command.Contains("filter", StringComparison.Ordinal), $"'{command}' filters the suite"));
     }
 

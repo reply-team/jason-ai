@@ -129,7 +129,9 @@ push runs the Linux set: the version check, the linux-x64 build and the critical
 install script on Ubuntu and the UI's checks; it keeps no record of the tree it tested, and the release's pull request
 is the one draft this flow opens. Marking a pull request into a release branch ready runs the Linux set with the
 critical tier on linux-x64; the whole suite runs once per release, on the release's pull request, and locally, once per
-branch, while the branch is read, for a change under `runtime/`.
+branch, while the branch is read, for a change under `runtime/`. The tag is the tree that pull request tested on all three
+operating systems, so the release workflow does not run the whole suite again: at the tag it runs the critical tier
+under the tag's version on each platform, packages, and smoke-tests the published executable.
 The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
 and that run is the release's gate; a pull request into `main` from any other branch — a document, a change to the
 pipeline — runs the Linux set and reports the rest as skipped by rule. The version pull request into `main` runs the
@@ -189,7 +191,9 @@ release branch after it takes `main`, never merged by hand.
 
 **The version.** A release branch sets its version when its release pull request opens — the number after the last
 tag — and the branch that merges second sets its own again then. The pull request into `main` is marked ready with the
-bare version, so the suite that gates the release runs under the version the tag will carry. After a release, the pull
+bare version, so the suite that gates the release runs under the version the tag will carry. The platform legs
+build the `-dev` version, and the suite runs once more under the bare version on one Linux runner; the tag's own
+critical tier then runs under that version on each platform. After a release, the pull
 request that moves `main` to the next version carries the version prefix and every pin the version guards hold to it,
 and nothing else, and is squash-merged. The release's own flow opens it right after the tag, as the release's last
 act on `main`, so that `main` holds the next version between releases and every release branch inherits it when it
@@ -244,4 +248,5 @@ the same breath, or every merge blocks.
 approved and no review asks for changes; squash is the only merge method there, and the branch is deleted at the
 merge. The release's pull request into `main` merges when the three-platform run is green at its head and the
 architecture session's review is done, by rebase, by the owner; the tag follows, and the release workflow does the
-rest: `docs/release-and-update.md` is the contract.
+rest: it runs the critical tier on each platform, packages and publishes, and does not run the whole suite again, since
+the tag is the tree that run tested. `docs/release-and-update.md` is the contract.
