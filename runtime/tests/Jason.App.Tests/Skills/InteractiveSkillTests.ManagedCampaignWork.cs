@@ -1,3 +1,8 @@
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using Jason.Cli.Tests.Documentation;
+using Jason.Contracts.Operations;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
@@ -284,4 +289,378 @@ public partial class InteractiveSkillTests
             description,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The inbox writes and the provider's pause are taught by naming their documents, which say what each reaches, whether
+    /// it can be undone, what it needs approved and what its input holds. A name that points at no document sends a session
+    /// looking for a rule nobody wrote, and a document that is not named leaves the session to guess the input.
+    /// </summary>
+    [Fact]
+    public void The_operation_documents_the_managed_path_names_exist()
+    {
+        var skill = Flattened("managed-campaign-work");
+        var named = OperationDocument().Matches(skill).Select(match => match.Groups[1].Value).Distinct(StringComparer.Ordinal).ToList();
+
+        foreach (var operation in new[] { "conversation.get", "conversation.reply", "conversation.classify", "conversation.close", "conversation.reopen", "campaign.pause" })
+        {
+            Assert.True(
+                named.Contains(operation, StringComparer.Ordinal),
+                $"managed-campaign-work names the documents [{string.Join(", ", named)}], and not `docs/contracts/operations/{operation}.md`.");
+        }
+
+        foreach (var operation in named)
+        {
+            var page = Path.Combine(SkillPack.RepositoryRoot(), "docs", "contracts", "operations", operation + ".md");
+            Assert.True(
+                File.Exists(page) && OperationCatalog.Knows(operation),
+                $"managed-campaign-work names `docs/contracts/operations/{operation}.md`, and no operation of that name is published.");
+        }
+    }
+
+    /// <summary>
+    /// The guard over printed commands asks only whether a line parses; the arguments of a provider operation are judged
+    /// later, at <c>workitem.create</c>, against the operation's own document. So each <c>--input</c> the skill prints is
+    /// judged here against that document, and an operation that needs the work item's person names one: a session copies
+    /// these lines, and a line refused at the create teaches the session that the managed path does not work.
+    /// </summary>
+    [Fact]
+    public void Every_provider_operation_the_managed_path_prints_carries_arguments_its_document_accepts()
+    {
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File)
+            .Where(line => line.Contains(" --kind provider_op ", StringComparison.Ordinal))
+            .ToList();
+
+        var operations = new List<string>();
+        foreach (var line in printed)
+        {
+            var words = ShellWords.Split(line);
+            var operation = ValueOf(words, "--operation") ?? string.Empty;
+            var contract = OperationCatalog.Find(operation);
+            Assert.True(contract is not null, $"managed-campaign-work prints a work item for '{operation}', which is no published operation: {line}");
+
+            var input = ValueOf(words, "--input");
+            Assert.True(input is not null, $"managed-campaign-work prints a work item for {operation} with no --input: {line}");
+            var problems = SchemaValidator.Verdicts(SchemaValidator.Validate(JsonNode.Parse(input), contract.ArgumentSchema));
+            Assert.True(
+                problems.Count == 0,
+                $"The --input managed-campaign-work prints for {operation} is refused by its document: "
+                + $"{string.Join("; ", problems.Select(problem => $"{problem.Pointer} {problem.Message}"))}. The line: {line}");
+
+            Assert.True(
+                contract.Preflight.Contact != ContactRequirement.Required || ValueOf(words, "--contact") is not null,
+                $"{operation} needs the person a work item is about, and the line managed-campaign-work prints for it names none: {line}");
+            operations.Add(operation);
+        }
+
+        foreach (var operation in new[] { "conversation.get", "conversation.reply", "conversation.classify", "conversation.close", "conversation.reopen", "campaign.pause" })
+        {
+            Assert.True(
+                operations.Contains(operation, StringComparer.Ordinal),
+                $"managed-campaign-work prints work items for [{string.Join(", ", operations)}], and none for {operation}.");
+        }
+    }
+
+    /// <summary>
+    /// A reply reaches a person, so it is decided one send at a time and goes where the person wrote: a session that put two
+    /// texts behind one approval, or answered with a message outside the thread, would send something nobody approved as
+    /// such, to an inbox the person never wrote from. The decision itself is the approvals skill's, named rather than copied.
+    /// </summary>
+    [Fact]
+    public void A_reply_is_one_approval_per_send_in_the_person_s_own_thread()
+    {
+        var section = Whitespace().Replace(Section("Answering a conversation"), " ");
+
+        Assert.Contains("**A reply goes into the thread the person wrote in, and each send is approved on its own.**", section, StringComparison.Ordinal);
+        Assert.Contains("never a new thread", section, StringComparison.Ordinal);
+        Assert.Contains("one approval is one send: one work item is one reply to one person", section, StringComparison.Ordinal);
+        Assert.Contains("Two replies are two work items and two approvals, never one item for both.", section, StringComparison.Ordinal);
+        Assert.Contains("`approvals-and-questions`", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A reply the runtime noticed is a line that says a thread moved and nothing of what was written in it. A session that
+    /// drafted an answer from the line alone would answer a message it never read — or a follow-up of its own. So the line,
+    /// then the thread, then the reply, in that order, and what was read is said to the person before anything is drafted.
+    /// </summary>
+    [Fact]
+    public void A_reply_the_runtime_saw_is_read_and_said_before_it_is_answered()
+    {
+        var raw = Section("Answering a conversation");
+        Assert.Contains(
+            "So when the person asks you to answer one, read the thread first and tell them what you read — who wrote last, when, and what they said — before anything is drafted.",
+            Whitespace().Replace(raw, " "),
+            StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
+        var seen = printed.FindIndex(line => line.StartsWith("jason journal list --campaign cmp_", StringComparison.Ordinal) && line.Contains(" --kind inbound_reply_observed", StringComparison.Ordinal));
+        var read = printed.FindIndex(line => line.StartsWith("jason contact thread cnt_", StringComparison.Ordinal));
+        var reply = printed.FindIndex(line => line.Contains(" --operation conversation.reply ", StringComparison.Ordinal));
+        Assert.True(
+            seen >= 0 && read > seen && reply > read,
+            $"Under \"Answering a conversation\" the noticed reply is listed at {seen}, its thread read at {read} and the reply created at {reply} of: "
+            + $"{string.Join(" | ", printed)}. The line, then the thread, then the reply.");
+    }
+
+    /// <summary>
+    /// An operation's approval class is its document's, and a second copy in a skill drifts from it the day the document
+    /// changes. The skill says which writes reach a person and therefore park, and spells one class only: the provider's
+    /// pause, whose not waiting for anyone is what a person stopping a send has to know — and that one is read here from
+    /// the document, so the skill cannot keep a class the document no longer gives.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_restates_no_approval_class_but_the_provider_pause_s_from_its_document()
+    {
+        var skill = Flattened("managed-campaign-work");
+        var pause = OperationCatalog.Find("campaign.pause")!.Approval.Value;
+
+        Assert.Contains($"its document, `docs/contracts/operations/campaign.pause.md`, gives it `{pause}` approval", skill, StringComparison.Ordinal);
+
+        var spelled = OperationContract.ApprovalWords
+            .SelectMany(word => Regex.Matches(skill, Regex.Escape($"`{word}`")).Select(_ => word))
+            .ToList();
+        Assert.True(
+            spelled.Count == 1,
+            $"managed-campaign-work spells an approval class {spelled.Count} times ([{string.Join(", ", spelled)}]); it names the "
+            + "provider's pause's alone, from its document, and every other is the operation document's to state.");
+    }
+
+    /// <summary>
+    /// "Stop it" and "not yet" are four different acts, and a session that reached for the wrong one would believe a thing
+    /// stopped that did not: a cancelled item takes nothing back at the provider, a held one still runs later, Jason's pause
+    /// leaves the provider's sequence sending, and the provider's pause is an act at the provider. The two pauses share a
+    /// name, so one sentence tells them apart in terms a person can act on; and when the wrong copy already went out, the
+    /// provider is stopped first.
+    /// </summary>
+    [Fact]
+    public void Stopping_or_holding_work_names_four_acts_and_what_each_does_not_stop()
+    {
+        var raw = Section("Stopping or holding work");
+        var section = Whitespace().Replace(raw, " ");
+
+        Assert.Contains(
+            "`jason campaign pause` stops Jason's own work and leaves the provider sending; only a work item naming the operation `campaign.pause` stops the provider's campaign, so when the provider has to stop, that work item is the one to create.",
+            section,
+            StringComparison.Ordinal);
+
+        foreach (var fact in new[]
+        {
+            "**`jason workitem cancel` ends one work item for good.**",
+            "It touches no provider: what an attempt already did there stays done",
+            "**`jason workitem update` holds or reorders one work item without ending it.**",
+            "Neither stops an attempt already running",
+            "**`jason campaign pause` pauses Jason's campaign.**",
+            "It does not stop the provider's sequence",
+            "**The provider operation `campaign.pause` pauses the provider's campaign**",
+            "It is an act at the provider",
+            "**When the wrong copy already went out**, stop the provider first",
+            "It runs even while Jason's campaign is paused.",
+            "tell the person the provider has stopped only once that work item has succeeded",
+            "so it works for a campaign linked there, whose pin names it, and fails at the claim for one that is not",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Stopping or holding work\" no longer says: {fact}");
+        }
+
+        var pause = OperationCatalog.Find("campaign.pause")!.Dispatch.InPausedCampaign;
+        Assert.True(
+            pause == InPausedCampaign.Runs,
+            $"\"Stopping or holding work\" says the provider's pause runs while Jason's campaign is paused, and its document says {pause}.");
+
+        var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
+        var provider = printed.FindIndex(line => line.Contains(" --operation campaign.pause ", StringComparison.Ordinal));
+        var jason = printed.FindIndex(line => line.StartsWith("jason campaign pause cmp_", StringComparison.Ordinal));
+        var acts = new[]
+        {
+            printed.FindIndex(line => line.StartsWith("jason workitem cancel wi_", StringComparison.Ordinal)),
+            printed.FindIndex(line => line.StartsWith("jason workitem update wi_", StringComparison.Ordinal) && line.Contains(" --not-before ", StringComparison.Ordinal)),
+            printed.FindIndex(line => line.StartsWith("jason workitem update wi_", StringComparison.Ordinal) && line.Contains(" --priority ", StringComparison.Ordinal)),
+            printed.FindIndex(line => line.StartsWith("jason campaign start cmp_", StringComparison.Ordinal)),
+        };
+        Assert.True(
+            provider >= 0 && jason > provider && acts.All(index => index >= 0),
+            $"\"Stopping or holding work\" prints the provider's pause at {provider}, Jason's at {jason}, and the cancel, the two holds "
+            + $"and the resume at [{string.Join(", ", acts)}] of: {string.Join(" | ", printed)}. Each is printed, the provider's pause first.");
+    }
+
+    /// <summary>
+    /// Closing and reopening a thread move the thread and nothing else, and filing one need not: a provider may give a
+    /// category it reserves a meaning of its own, and filing there asks for that meaning too. A session told that filing
+    /// reaches nobody would file under such a category with nobody asked. So the skill says so, sends the reader to the
+    /// section of the classify document that says what that meaning can be, by the heading the document has, and says the
+    /// example's category promises nothing.
+    /// </summary>
+    [Fact]
+    public void Filing_a_thread_may_carry_the_provider_s_own_meaning_and_closing_or_reopening_reaches_no_person()
+    {
+        var section = Whitespace().Replace(Section("Answering a conversation"), " ");
+        const string Reserved = "The provider's own meaning on its reserved names";
+
+        var classify = File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "docs", "contracts", "operations", "conversation.classify.md"))
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.True(
+            classify.Contains($"\n## {Reserved}\n", StringComparison.Ordinal),
+            $"managed-campaign-work sends the reader to the section \"{Reserved}\" of conversation.classify.md, which has no such heading.");
+
+        Assert.False(
+            section.Contains("Filing, closing and reopening a thread reach no person", StringComparison.Ordinal),
+            "\"Answering a conversation\" still says filing a thread reaches no person.");
+        foreach (var fact in new[]
+        {
+            "**Closing and reopening a thread reach no person.**",
+            "**Filing it may reach one.**",
+            $"its document's section \"{Reserved}\" says what that can be",
+            "a campaign that must own every send files under categories of its own",
+            "The `Interested` below is only an example",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Answering a conversation\" does not say: {fact}");
+        }
+    }
+
+    /// <summary>
+    /// A noticed reply is not always a line that names its person: <c>contact_id</c> is null where no contact, or more
+    /// than one, is pinned with the thread's identifier, and a reply the provider's events reported is a line of another
+    /// kind. A session that knew one kind and one read would miss the other and stop where there is no person to name. So
+    /// both kinds are listed, a line with no person is read by its thread in its own campaign, the reply's person is found
+    /// before the reply, and the reads on request say what they refuse and what they take.
+    /// </summary>
+    [Fact]
+    public void A_line_that_names_no_person_is_read_by_its_thread_and_answered_in_its_campaign()
+    {
+        var raw = Section("Answering a conversation");
+        var section = Whitespace().Replace(raw, " ");
+
+        foreach (var fact in new[]
+        {
+            "or a `provider_event_observed` line of kind `reply_detected`",
+            "**A line that names no person is read by its thread.**",
+            "Its `contact_id` is null when no contact, or more than one, is pinned at that plugin",
+            "Read it with a `conversation.get` work item in the line's campaign, which needs only the thread.",
+            "find them with `jason contact list --query`, or have the person name them, and create the reply in that same campaign",
+            "refuse with `no_route` when no current route reaches the plugin that learned the person's identifier",
+            "take `--plugin` for a person several providers know",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Answering a conversation\" does not say: {fact}");
+        }
+
+        var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
+        var seen = printed.Find(line => line.StartsWith("jason journal list --campaign cmp_", StringComparison.Ordinal));
+        Assert.True(
+            seen is not null
+            && seen.Contains(" --kind inbound_reply_observed", StringComparison.Ordinal)
+            && seen.Contains(" --kind provider_event_observed", StringComparison.Ordinal),
+            $"Under \"Answering a conversation\" the noticed replies are listed by '{seen}', which does not ask for both kinds.");
+
+        var read = printed.Find(line => line.Contains(" --operation conversation.get ", StringComparison.Ordinal));
+        Assert.True(
+            read is not null && read.StartsWith("jason workitem create cmp_", StringComparison.Ordinal) && !read.Contains(" --contact ", StringComparison.Ordinal),
+            $"Under \"Answering a conversation\" the thread of a line with no person is read by '{read}', not by a work item in the campaign that names only the thread.");
+    }
+
+    /// <summary>
+    /// A campaign runs one work item at a time, so while the wrong copy is being sent, the provider's pause waits behind
+    /// it whatever its priority. A session that paused first and cancelled last would watch the copy finish before the
+    /// pause was claimed. So the running item is cancelled first, and the skill says what that cancel cannot tell — whether
+    /// the provider already had it — and that a reply cannot be taken back.
+    /// </summary>
+    [Fact]
+    public void The_wrong_copy_is_stopped_by_freeing_the_campaign_before_the_provider_s_pause()
+    {
+        var raw = Section("Stopping or holding work");
+        var section = Whitespace().Replace(raw, " ");
+
+        foreach (var fact in new[]
+        {
+            "while one of its items is scheduled or running, nothing more of it is claimed, the provider's pause included, whatever its `--priority`.",
+            "So cancel the item that is running or scheduled to send the copy, then create the provider's `campaign.pause` with a high `--priority`, then pause Jason's campaign",
+            "whether it reached the provider before it was stopped",
+            "a reply that went out cannot be taken back",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Stopping or holding work\" does not say: {fact}");
+        }
+
+        var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
+        var cancel = printed.FindIndex(line => line.StartsWith("jason workitem cancel wi_", StringComparison.Ordinal));
+        var provider = printed.FindIndex(line => line.Contains(" --operation campaign.pause ", StringComparison.Ordinal));
+        var jason = printed.FindIndex(line => line.StartsWith("jason campaign pause cmp_", StringComparison.Ordinal));
+        Assert.True(
+            cancel >= 0 && provider > cancel && jason > provider,
+            $"\"Stopping or holding work\" prints the cancel at {cancel}, the provider's pause at {provider} and Jason's at {jason} of: "
+            + $"{string.Join(" | ", printed)}. The cancel, then the provider's pause, then Jason's.");
+    }
+
+    /// <summary>
+    /// The four conversation writes wait while their campaign is paused, and a paused campaign's threads are not read. A
+    /// session that paused Jason's campaign and then approved an answer would wait for a send that never runs. The claim is
+    /// held against the four documents, so a document that let one of them run would turn this red.
+    /// </summary>
+    [Fact]
+    public void Answering_a_conversation_needs_an_active_campaign()
+    {
+        var section = Whitespace().Replace(Section("Answering a conversation"), " ");
+
+        foreach (var fact in new[]
+        {
+            "**The campaign has to be active** for an answer to run and for Jason's read of the campaign's threads to notice a reply",
+            "a paused campaign's threads are not read",
+            "After a pause, `jason campaign start` comes first.",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Answering a conversation\" does not say: {fact}");
+        }
+
+        foreach (var operation in new[] { "conversation.reply", "conversation.classify", "conversation.close", "conversation.reopen" })
+        {
+            var dispatch = OperationCatalog.Find(operation)!.Dispatch.InPausedCampaign;
+            Assert.True(
+                dispatch == InPausedCampaign.Waits,
+                $"\"Answering a conversation\" says an answer needs an active campaign, and {operation}'s document says it {dispatch} in a paused one.");
+        }
+    }
+
+    /// <summary>
+    /// A host loads a skill by its description, and a person who asks to answer a reply, or to stop what is going out,
+    /// says neither of the words the description was first written with. It names both.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_s_description_names_answering_and_stopping_work()
+    {
+        var description = SkillFrontMatter.Read(SkillPack.Find("managed-campaign-work").File).Top.GetValueOrDefault("description") ?? string.Empty;
+
+        foreach (var words in new[] { "answering a conversation", "stopping or holding work" })
+        {
+            Assert.True(
+                description.Contains(words, StringComparison.Ordinal),
+                $"managed-campaign-work's description does not say '{words}': {description}");
+        }
+    }
+
+    /// <summary>One section of managed-campaign-work, from its heading to the next.</summary>
+    private static string Section(string heading)
+    {
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var from = text.IndexOf($"\n## {heading}\n", StringComparison.Ordinal);
+        var to = from < 0 ? -1 : text.IndexOf("\n## ", from + 1, StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, $"managed-campaign-work has no section \"## {heading}\" followed by another.");
+        return text[from..to];
+    }
+
+    /// <summary>The word after an option on a split command line, or null where the line does not give the option.</summary>
+    private static string? ValueOf(IReadOnlyList<string> words, string option)
+    {
+        for (var index = 0; index < words.Count - 1; index++)
+        {
+            if (string.Equals(words[index], option, StringComparison.Ordinal))
+            {
+                return words[index + 1];
+            }
+        }
+
+        return null;
+    }
+
+    [GeneratedRegex(@"`docs/contracts/operations/([a-z_]+\.[a-z_]+)\.md`")]
+    private static partial Regex OperationDocument();
 }

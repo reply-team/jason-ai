@@ -23,8 +23,8 @@ description that promises everything matches nothing.
 
 - [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
   Turning an objective into durable campaign work and following it: the provider check, what the person has
-  already written down, the campaign, the people it is about, provider operations and AI role work, and what the
-  runtime does with them afterwards.
+  already written down, the campaign, the people it is about, provider operations and AI role work, what the
+  runtime does with them afterwards, answering a conversation, and stopping or holding work.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
