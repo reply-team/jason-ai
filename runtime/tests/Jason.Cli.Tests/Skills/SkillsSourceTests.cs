@@ -221,6 +221,262 @@ public class SkillsSourceTests
         Assert.Equal("the tree that was already here", await File.ReadAllTextAsync(marker, Ct));
     }
 
+    /// <summary>
+    /// A fetch that was cut off leaves a directory that has a skills tree in it and is not the release. The next run
+    /// must fetch again rather than take it as it is: a half-populated tree is deployed as the pack, and the record
+    /// then says a release's skills are in place when files of it are missing.
+    /// </summary>
+    [Fact]
+    public async Task A_fetch_that_was_cancelled_part_way_is_fetched_again_rather_than_used_as_it_is()
+    {
+        using var dir = new TempPaths();
+        const string Source = "https://example.test/x.git";
+        var cutOff = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                WritePack(request.Arguments[^1], "half of the pack");
+                throw new OperationCanceledException();
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => SkillsSource.StageAsync(Machine(dir, cutOff), Source, "v0.1.0", overriddenByRecord: null, Ct));
+
+        var whole = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                WritePack(request.Arguments[^1], "the whole pack");
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+
+        var staged = await SkillsSource.StageAsync(Machine(dir, whole), Source, "v0.1.0", overriddenByRecord: null, Ct);
+
+        var text = await File.ReadAllTextAsync(Path.Combine(staged.Directory, "skills", "runtime", "operating", "SKILL.md"), Ct);
+        Assert.True(
+            text == "the whole pack",
+            $"The directory a cancelled fetch left was used as it was: it holds '{text}' where a fetch of the ref holds 'the whole pack'.");
+        Assert.Contains(whole.Requested, request => request.Arguments[0] == "clone");
+    }
+
+    /// <summary>
+    /// A directory staged before a completion mark existed cannot be told from a cut-off one, so it is fetched again
+    /// once; and what that fetch completes is trusted from then on, as the test above this one holds.
+    /// </summary>
+    [Fact]
+    public async Task A_staged_directory_that_nothing_completed_is_fetched_again()
+    {
+        using var dir = new TempPaths();
+        var origin = await RepositoryAsync(dir, "v0.1.0");
+        var stale = dir.Paths.SkillsStagedSourceDirectory("v0.1.0");
+        WritePack(stale, "a tree nothing completed");
+
+        var staged = await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", overriddenByRecord: null, Ct);
+
+        var text = await File.ReadAllTextAsync(Path.Combine(staged.Directory, "skills", "runtime", "operating", "SKILL.md"), Ct);
+        Assert.True(
+            text != "a tree nothing completed",
+            "The directory nothing had completed was used as it was, and the source was never fetched.");
+    }
+
+    /// <summary>
+    /// A real clone at the ref that nothing marked complete — one an earlier build staged — is staged again, on Windows
+    /// too. git writes a clone's pack files read-only and Windows deletes no read-only file, so a bare recursive delete
+    /// threw there, and every later install, update and dry run failed the same way until somebody deleted the directory
+    /// by hand.
+    /// </summary>
+    [Fact]
+    public async Task A_real_clone_nothing_marked_complete_is_staged_again_rather_than_refused()
+    {
+        using var dir = new TempPaths();
+        var origin = await RepositoryAsync(dir, "v0.1.0");
+        var unmarked = dir.Paths.SkillsStagedSourceDirectory("v0.1.0");
+        Directory.CreateDirectory(dir.Paths.SkillsStagedSourcesDirectory);
+        await RunAsync(ProgramRunners.ForThisMachine(), dir.Paths.SkillsStagedSourcesDirectory, ["clone", "--depth", "1", "--branch", "v0.1.0", "--", new Uri(origin).AbsoluteUri, unmarked]);
+        var packFiles = Directory.GetFiles(Path.Combine(unmarked, ".git", "objects", "pack"));
+        Assert.True(packFiles.Length > 0, "The clone this test made has no pack files, so it does not stand for a real one.");
+        await File.WriteAllTextAsync(Path.Combine(unmarked, "skills", "README.md"), "a clone nothing marked complete", Ct);
+
+        var staged = await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", overriddenByRecord: null, Ct);
+
+        var text = await File.ReadAllTextAsync(Path.Combine(staged.Directory, "skills", "README.md"), Ct);
+        Assert.True(text != "a clone nothing marked complete", "The clone nothing had marked complete was used as it was.");
+        Assert.NotNull(staged.Commit);
+    }
+
+    /// <summary>
+    /// What a fetch that never finished left beside the ref, read-only pack files and all, is removed by the next fetch of
+    /// that ref; nothing of it is ever at the ref's own path.
+    /// </summary>
+    [Fact]
+    public async Task A_fetch_left_unfinished_beside_the_ref_is_removed_by_the_next_fetch()
+    {
+        using var dir = new TempPaths();
+        var origin = await RepositoryAsync(dir, "v0.1.0");
+        var leftover = Partial(dir, "v0.1.0");
+        await File.WriteAllTextAsync(Path.Combine(leftover, "claim"), string.Empty, Ct);
+
+        await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", overriddenByRecord: null, Ct);
+
+        Assert.False(Directory.Exists(leftover), $"'{leftover}', a fetch nobody was making any more, was left in staging.");
+    }
+
+    /// <summary>
+    /// And a fetch of the same ref that another run is still making is left alone: deleting it under that run is how one
+    /// command broke another's install.
+    /// </summary>
+    [Fact]
+    public async Task A_fetch_another_run_is_still_making_is_left_alone()
+    {
+        using var dir = new TempPaths();
+        var origin = await RepositoryAsync(dir, "v0.1.0");
+        var inFlight = Partial(dir, "v0.1.0");
+
+        using (new FileStream(Path.Combine(inFlight, "claim"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+        {
+            await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", overriddenByRecord: null, Ct);
+
+            Assert.True(
+                File.Exists(Path.Combine(inFlight, "tree", ".git", "objects", "pack", "x.idx")),
+                $"'{inFlight}', a fetch another run was still making, was deleted under it.");
+        }
+    }
+
+    /// <summary>
+    /// A clone whose tree holds no packs is refused and is never at the ref's path, and what it left is not marked
+    /// complete: the mark is written last, after the packs are checked.
+    /// </summary>
+    [Fact]
+    public async Task A_clone_with_no_packs_is_refused_and_nothing_is_marked_complete()
+    {
+        using var dir = new TempPaths();
+        var empty = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                Directory.CreateDirectory(Path.Combine(request.Arguments[^1], ".git"));
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+
+        await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, empty), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct));
+
+        AssertNothingCompleted(dir, "v0.1.0");
+    }
+
+    /// <summary>
+    /// A fetch cancelled while its commit is read is not complete either: the commit is read before the mark is written,
+    /// and nothing is at the ref's path.
+    /// </summary>
+    [Fact]
+    public async Task A_fetch_cancelled_while_its_commit_is_read_is_not_marked_complete()
+    {
+        using var dir = new TempPaths();
+        var cancelled = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                WritePack(request.Arguments[^1], "the whole pack");
+                Directory.CreateDirectory(Path.Combine(request.Arguments[^1], ".git"));
+                return new ProgramResult(0, string.Empty, string.Empty, false);
+            }
+
+            throw new OperationCanceledException();
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => SkillsSource.StageAsync(Machine(dir, cancelled), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct));
+
+        AssertNothingCompleted(dir, "v0.1.0");
+    }
+
+    /// <summary>
+    /// The mark lives where no checkout writes: a source that tracks a file of the mark's name, or of its old name, at its
+    /// root does not make a tree nothing completed read as complete.
+    /// </summary>
+    [Fact]
+    public async Task A_tracked_file_named_like_the_mark_does_not_make_a_tree_complete()
+    {
+        using var dir = new TempPaths();
+        var origin = await RepositoryAsync(dir, "v0.1.0");
+        var stale = dir.Paths.SkillsStagedSourceDirectory("v0.1.0");
+        WritePack(stale, "a tree nothing completed");
+        await File.WriteAllTextAsync(Path.Combine(stale, "jason-staged"), "tracked by the source", Ct);
+        await File.WriteAllTextAsync(Path.Combine(stale, ".jason-staged"), "tracked by the source", Ct);
+
+        var staged = await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", overriddenByRecord: null, Ct);
+
+        var text = await File.ReadAllTextAsync(Path.Combine(staged.Directory, "skills", "runtime", "operating", "SKILL.md"), Ct);
+        Assert.True(text != "a tree nothing completed", "A tree whose only mark was a file the source could track was used as it was.");
+    }
+
+    /// <summary>
+    /// Two runs fetching the same ref: the one that finishes second finds the first one's tree at the ref's path, uses
+    /// it — the same commit, since a pinned ref does not move — and leaves nothing of its own behind.
+    /// </summary>
+    [Fact]
+    public async Task A_fetch_that_finishes_second_uses_the_tree_the_first_one_put_in_place()
+    {
+        using var dir = new TempPaths();
+        var final = dir.Paths.SkillsStagedSourceDirectory("v0.1.0");
+        var second = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                // The other run's finished tree arrives while this one is still fetching.
+                WritePack(final, "the first run's tree");
+                Directory.CreateDirectory(Path.Combine(final, ".git"));
+                File.WriteAllText(Path.Combine(final, ".git", "jason-staged"), "abc123");
+
+                WritePack(request.Arguments[^1], "the second run's tree");
+                Directory.CreateDirectory(Path.Combine(request.Arguments[^1], ".git"));
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+
+        var staged = await SkillsSource.StageAsync(Machine(dir, second), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct);
+
+        Assert.Equal(final, staged.Directory);
+        var text = await File.ReadAllTextAsync(Path.Combine(final, "skills", "runtime", "operating", "SKILL.md"), Ct);
+        Assert.True(text == "the first run's tree", $"The ref's path holds '{text}' where the first run's finished tree was.");
+        var left = Directory.GetDirectories(dir.Paths.SkillsStagedSourcesDirectory).Where(path => path != final).ToList();
+        Assert.True(left.Count == 0, $"The second fetch left {string.Join(", ", left)} in staging.");
+    }
+
+    /// <summary>Nothing at the ref's path, and no mark anywhere in staging.</summary>
+    private static void AssertNothingCompleted(TempPaths dir, string reference)
+    {
+        var final = dir.Paths.SkillsStagedSourceDirectory(reference);
+        Assert.False(Directory.Exists(final), $"'{final}' exists after a fetch that did not finish.");
+        var marks = Directory.EnumerateFiles(dir.Paths.SkillsStagedSourcesDirectory, "*", SearchOption.AllDirectories)
+            .Where(path => Path.GetFileName(path) is "jason-staged" or ".jason-staged")
+            .ToList();
+        Assert.True(marks.Count == 0, $"A fetch that did not finish is marked complete at {string.Join(", ", marks)}.");
+    }
+
+    /// <summary>
+    /// What an unfinished fetch of a ref leaves beside it: a directory of its own with the clone's tree in it, a pack file
+    /// in that tree marked read-only as git marks them.
+    /// </summary>
+    private static string Partial(TempPaths dir, string reference)
+    {
+        var partial = $"{dir.Paths.SkillsStagedSourceDirectory(reference)}.partial-{Guid.NewGuid():N}";
+        var tree = Path.Combine(partial, "tree");
+        WritePack(tree, "half of the pack");
+        var pack = Directory.CreateDirectory(Path.Combine(tree, ".git", "objects", "pack")).FullName;
+        var index = Path.Combine(pack, "x.idx");
+        File.WriteAllText(index, "index");
+        File.SetAttributes(index, FileAttributes.ReadOnly);
+        return partial;
+    }
+
     /// <summary>An environment with no program runner refuses rather than reaching for the network.</summary>
     [Fact]
     public async Task Without_a_program_runner_a_git_source_is_refused()
@@ -249,6 +505,13 @@ public class SkillsSourceTests
 
     private static CliEnvironment Machine(TempPaths dir, IProgramRunner? runner = null) =>
         new(new StringWriter(), new StringWriter(), dir.Paths, Programs: runner ?? ProgramRunners.ForThisMachine());
+
+    /// <summary>A skills tree with one pack in it, whose text says how much of the release it is.</summary>
+    private static void WritePack(string directory, string text)
+    {
+        var pack = Directory.CreateDirectory(Path.Combine(directory, "skills", "runtime", "operating")).FullName;
+        File.WriteAllText(Path.Combine(pack, "SKILL.md"), text);
+    }
 
     /// <summary>A directory shaped the way this repository is: a skills tree with a pack in it.</summary>
     private static string Pack(TempPaths dir, string name)

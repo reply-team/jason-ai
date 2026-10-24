@@ -65,6 +65,7 @@ public static class SkillsCommands
         update.SetAction(async (parse, cancellationToken) => (await UpdateAsync(
             env,
             new InstallOptions(null, null, parse.GetValue(root), parse.GetValue(host), parse.GetValue(pack), parse.GetValue(dryRun), parse.GetValue(force), RolesOnly: false),
+            null,
             cancellationToken).ConfigureAwait(false)).Exit);
 
         return update;
@@ -75,10 +76,15 @@ public static class SkillsCommands
     /// runtime's own, from the source each record names. The verb's own body, not a second one: <c>jason update apply</c>
     /// runs it as the build it has just installed, so the same deployment is repeated at that build's tag.
     /// </summary>
-    internal static Task<SkillsUpdateOutcome> UpdateRecordedAsync(CliEnvironment env, CancellationToken cancellationToken) =>
-        UpdateAsync(env, new InstallOptions(null, null, null, null, null, DryRun: false, Force: false, RolesOnly: false), cancellationToken);
+    /// <param name="progress">
+    /// Where the verb says which pack group it is in and adds each group as its deployment ends, so that a caller whose
+    /// call throws part way still holds the groups that had been deployed before it did, and the one it stopped in. Null
+    /// where the caller only wants the outcome.
+    /// </param>
+    internal static Task<SkillsUpdateOutcome> UpdateRecordedAsync(CliEnvironment env, SkillsUpdateProgress? progress, CancellationToken cancellationToken) =>
+        UpdateAsync(env, new InstallOptions(null, null, null, null, null, DryRun: false, Force: false, RolesOnly: false), progress, cancellationToken);
 
-    private static async Task<SkillsUpdateOutcome> UpdateAsync(CliEnvironment env, InstallOptions options, CancellationToken cancellationToken)
+    private static async Task<SkillsUpdateOutcome> UpdateAsync(CliEnvironment env, InstallOptions options, SkillsUpdateProgress? progress, CancellationToken cancellationToken)
     {
         IReadOnlyList<HarnessRoot> harnesses;
         try
@@ -140,12 +146,14 @@ public static class SkillsCommands
         }
 
         var exit = ExitCodes.Success;
-        var carried = new List<SkillsUpdateGroup>();
+        progress ??= new SkillsUpdateProgress();
+        var carried = progress.Carried;
         foreach (var ((source, reference, overridden, pack), members) in groups)
         {
             var (pin, why) = UpdatePin(env, source, reference, overridden);
             var updating = $"{pack} in {string.Join(", ", members)} from {source}{why}";
             env.Out.WriteLine($"Updating {updating}");
+            progress.Entered = (pack, members);
 
             // The line and staging are handed the same ref, decided once, above. Passing null where the record did
             // not override let staging re-derive this build's pin on its own, so on a runtime upgraded since the
@@ -159,10 +167,11 @@ public static class SkillsCommands
                 .ConfigureAwait(false);
 
             carried.Add(new SkillsUpdateGroup(pack, members, deployed, $"{updating} {said}".TrimEnd(), refused));
+            progress.Entered = null;
             exit = exit == ExitCodes.Success ? deployed : exit;
         }
 
-        return new SkillsUpdateOutcome(exit, carried, NothingRecorded: false);
+        return new SkillsUpdateOutcome(exit, [.. carried], NothingRecorded: false);
     }
 
     /// <summary>
@@ -366,6 +375,17 @@ public static class SkillsCommands
             Refuse(problem);
         }
 
+        // A pack left with no record is one no update will reach, and nothing else says so: `jason status` reads records.
+        // The install that completes it is this one again, narrowed the way this one was.
+        foreach (var (pack, roots) in report.Unrecorded.GroupBy(left => left.Pack, left => left.Root, StringComparer.Ordinal).Select(left => (left.Key, left.ToList())))
+        {
+            var repair = options.RolesOnly ? "jason skills install --roles-only"
+                : options.Pack is { } named ? $"jason skills install --pack {named}"
+                : "jason skills install";
+            Refuse($"{pack} in {string.Join(", ", roots)} is left unrecorded, because a skill of it was refused. "
+                + $"Run '{repair}' to complete it and record it; 'jason skills update' will not, since it moves recorded packs only.");
+        }
+
         var said = report.Written == 0 && report.Problems.Count == 0
             ? string.Create(CultureInfo.InvariantCulture, $"Already current: nothing to write ({report.Unchanged} files already in place).")
             : string.Create(CultureInfo.InvariantCulture, $"Written: {report.Written} files, {report.Unchanged} already in place.");
@@ -446,6 +466,19 @@ public sealed class SkillsRefused(string message) : Exception(message);
 /// for somebody who typed it and nothing to do for an update.
 /// </param>
 internal sealed record SkillsUpdateOutcome(int Exit, IReadOnlyList<SkillsUpdateGroup> Carried, bool NothingRecorded);
+
+/// <summary>
+/// How far one run of <c>jason skills update</c> has got, kept by the verb as it goes, for a caller whose call may throw
+/// part way: what it carried before it stopped, and the group it stopped in.
+/// </summary>
+internal sealed class SkillsUpdateProgress
+{
+    /// <summary>Each pack group whose deployment ended, in the order they ended.</summary>
+    public List<SkillsUpdateGroup> Carried { get; } = [];
+
+    /// <summary>The pack group being deployed, from the moment the verb enters it until its deployment ends; null between groups.</summary>
+    public (string Pack, IReadOnlyList<string> Roots)? Entered { get; set; }
+}
 
 /// <summary>One pack, from one source at one ref, in the roots whose records name it so: one deployment of the update.</summary>
 /// <param name="Exit">That deployment's own exit code: one group refused is not every group refused.</param>

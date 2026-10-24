@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Jason.Cli.Process;
 using Jason.Runtime.Tests;
+using OperatingSystemProcess = System.Diagnostics.Process;
 
 namespace Jason.Cli.Tests.Process;
 
@@ -60,6 +61,104 @@ public class ProgramRunnerTests
             $"The bound was 400 ms and the call took {started.Elapsed}. A bound that is not enforced is not a bound.");
     }
 
+    /// <summary>
+    /// A caller that gives up stops what it started. The runner killed its child only when its own bound expired, so
+    /// a cancelled <c>git clone</c> kept running with no console to receive Ctrl+C, and went on filling a directory
+    /// that the next run would find and trust. The child here starts a grandchild of its own, the way git does, and
+    /// both must be gone.
+    /// </summary>
+    [Fact]
+    public async Task A_caller_that_cancels_stops_the_whole_tree_of_the_program()
+    {
+        using var tree = new TempPaths();
+        var pidFile = Path.Combine(tree.Paths.Root, "grandchild.pid");
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+
+        var run = Task.Run(
+            () => ProgramRunners.ForThisMachine().RunAsync(
+                ChildThatStartsAGrandchild.Program,
+                ChildThatStartsAGrandchild.ArgumentsFor(pidFile),
+                null,
+                Generous,
+                cancel.Token),
+            Ct);
+
+        var grandchild = await ChildThatStartsAGrandchild.WaitForGrandchildAsync(pidFile, Ct);
+        try
+        {
+            await cancel.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+
+            Assert.True(
+                await HasExitedAsync(grandchild, Ct),
+                $"The caller cancelled and the program's own child, process {grandchild.Id}, was still running {TimeSpan.FromSeconds(20)} later.");
+        }
+        finally
+        {
+            if (!grandchild.HasExited)
+            {
+                grandchild.Kill(entireProcessTree: true);
+            }
+
+            grandchild.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A kill of the tree that fails part way — the operating system raises every descendant it could not end as one
+    /// aggregate — is absorbed by the stop. It escaped, and on a caller's cancel it took the place of the cancellation,
+    /// so the update's skills step reported the kill's failure where it should have said "cancelled".
+    /// </summary>
+    [Fact]
+    public async Task A_kill_of_the_tree_that_fails_part_way_does_not_escape_the_stop()
+    {
+        var failed = new AggregateException(new System.ComponentModel.Win32Exception(5, "Access is denied."));
+
+        var escaped = await Record.ExceptionAsync(
+            () => ProgramRunners.StopAsync(() => throw failed, _ => Task.CompletedTask, TimeSpan.FromSeconds(1)));
+
+        Assert.True(escaped is null, $"The stop let {escaped?.GetType().Name} escape: {escaped?.Message}");
+    }
+
+    /// <summary>
+    /// The stop returns once the program is gone, not as soon as the kill is sent: a kill lands later than it is asked
+    /// for, and the caller goes on to read or remove what the program was writing.
+    /// </summary>
+    [Fact]
+    public async Task The_stop_returns_once_the_program_has_exited()
+    {
+        var gone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var stop = ProgramRunners.StopAsync(() => { }, token => gone.Task.WaitAsync(token), TimeSpan.FromMinutes(5));
+
+        Assert.False(stop.IsCompleted, "The stop returned before the program it killed had exited.");
+        gone.SetResult();
+        await stop.WaitAsync(Ct);
+    }
+
+    /// <summary>And it waits a bounded while: a program that never goes is given up on, never waited for for good.</summary>
+    [Fact]
+    public async Task The_stop_gives_up_waiting_at_the_end_of_its_grace()
+    {
+        var escaped = await Record.ExceptionAsync(
+            () => ProgramRunners.StopAsync(() => { }, token => Task.Delay(Timeout.Infinite, token), TimeSpan.Zero).WaitAsync(Ct));
+
+        Assert.True(escaped is null, $"The stop at the end of its grace threw {escaped?.GetType().Name}: {escaped?.Message}");
+    }
+
+    /// <summary>Whether a process is gone, given a while for the kill to land.</summary>
+    private static async Task<bool> HasExitedAsync(OperatingSystemProcess process, CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+        while (!process.HasExited && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50, cancellationToken);
+        }
+
+        return process.HasExited;
+    }
+
     /// <summary>The working directory is the child's, so a caller can run git inside a clone it just made.</summary>
     [Fact]
     public async Task A_working_directory_is_where_the_program_runs()
@@ -91,5 +190,55 @@ public class ProgramRunnerTests
             OperatingSystem.IsWindows()
                 ? ["-n", (seconds + 1).ToString(CultureInfo.InvariantCulture), "127.0.0.1"]
                 : [seconds.ToString(CultureInfo.InvariantCulture)];
+    }
+
+    /// <summary>
+    /// A program that starts a program of its own, writes that one's process id to a file, and waits for it, spelled
+    /// for whichever machine this is. The grandchild never ends by itself within the test.
+    /// </summary>
+    private static class ChildThatStartsAGrandchild
+    {
+        public static string Program => OperatingSystem.IsWindows() ? "powershell" : "sh";
+
+        public static IReadOnlyList<string> ArgumentsFor(string pidFile) =>
+            OperatingSystem.IsWindows()
+                ? [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "$p = Start-Process ping -ArgumentList '-n','61','127.0.0.1' -PassThru -NoNewWindow; "
+                    + $"Set-Content -LiteralPath '{pidFile.Replace("'", "''", StringComparison.Ordinal)}' -Value $p.Id; "
+                    + "$p.WaitForExit()",
+                ]
+                : ["-c", "sleep 60 & echo $! > \"$1\"; wait", "sh", pidFile];
+
+        public static async Task<OperatingSystemProcess> WaitForGrandchildAsync(string pidFile, CancellationToken cancellationToken)
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (File.Exists(pidFile))
+                {
+                    string text;
+                    try
+                    {
+                        text = await File.ReadAllTextAsync(pidFile, cancellationToken);
+                    }
+                    catch (IOException)
+                    {
+                        text = string.Empty;
+                    }
+
+                    if (int.TryParse(text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var id))
+                    {
+                        return OperatingSystemProcess.GetProcessById(id);
+                    }
+                }
+
+                await Task.Delay(50, cancellationToken);
+            }
+
+            throw new TimeoutException($"The program never wrote the process id of its child to '{pidFile}'.");
+        }
     }
 }

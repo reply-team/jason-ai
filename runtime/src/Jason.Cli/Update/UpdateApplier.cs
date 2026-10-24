@@ -145,7 +145,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         }
 
         env.Error.WriteLine(cause);
-        Say(Ui, $"not updated — {OneLine(cause)}; run: jason ui install");
+        Say(Ui, $"not updated — {ReasonSaid(cause)}; run: jason ui install");
     }
 
     /// <summary>
@@ -178,10 +178,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         using var complained = new StringWriter(CultureInfo.InvariantCulture);
         SkillsUpdateOutcome outcome;
         string? cause = null;
+
+        // Filled by the verb as it goes, so that a group which throws does not take the lines of the groups deployed before
+        // it — their records are written and their files are in place, and the document has to say so — and so that the
+        // line for the one it threw in can name it.
+        var progress = new SkillsUpdateProgress();
         try
         {
             outcome = await SkillsCommands
-                .UpdateRecordedAsync(env with { BuildVersion = ledger.ToVersion.ToString(), Out = said, Error = complained }, cancellationToken)
+                .UpdateRecordedAsync(env with { BuildVersion = ledger.ToVersion.ToString(), Out = said, Error = complained }, progress, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -189,7 +194,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             // The person stopped the apply while the skills were being fetched. That stops the skills and not the update,
             // which was complete before this began: the answer still says so, rather than a cancellation saying it failed.
             cause = "cancelled";
-            outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);
+            outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [.. progress.Carried], NothingRecorded: false);
         }
         catch (Exception error)
         {
@@ -198,7 +203,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             // into one reported as refused.
             complained.WriteLine(error.Message);
             cause = error.Message;
-            outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);
+            outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [.. progress.Carried], NothingRecorded: false);
         }
 
         if (outcome.NothingRecorded)
@@ -219,15 +224,25 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         {
             Say(Skills, group.Exit == ExitCodes.Success
                 ? group.Line
-                : $"{group.Pack} in {string.Join(", ", group.Roots)} not updated — {OneLine(group.Refused)}; run: jason skills update");
+                : $"{group.Pack} in {string.Join(", ", group.Roots)} not updated — {ReasonSaid(group.Refused)}; run: jason skills update");
         }
 
-        // And where it never reached a group at all — a record it could not read, a cancel, anything thrown — one line.
-        if (outcome.Exit != ExitCodes.Success && outcome.Carried.Count == 0)
+        // And where the verb stopped outside any group's own refusal — a record it could not read before it reached one, a
+        // cancel, anything thrown, in the first group or a later one — one line for that, after the lines of the groups
+        // that were deployed, naming the group it stopped in where it was in one.
+        if (outcome.Exit != ExitCodes.Success && (outcome.Carried.Count == 0 || cause is not null))
         {
-            Say(Skills, $"not updated — {cause ?? OneLine(complained.ToString())}; run: jason skills update");
+            var stoppedIn = cause is not null && progress.Entered is { } entered ? $"{entered.Pack} in {string.Join(", ", entered.Roots)} " : string.Empty;
+            Say(Skills, $"{stoppedIn}not updated — {ReasonSaid(cause ?? complained.ToString())}; run: jason skills update");
         }
     }
+
+    /// <summary>
+    /// Why something was not updated, as one line. A deployment that gave no words — an exception with an empty message,
+    /// a refusal that wrote nothing — is said to have given none, so the line never reads "not updated — ;".
+    /// </summary>
+    private static string ReasonSaid(string said) =>
+        OneLine(said) is { Length: > 0 } reason ? reason : "no reason was given";
 
     /// <summary>What a deployment said across lines, as one line: a step's line is one line.</summary>
     private static string OneLine(string text) =>

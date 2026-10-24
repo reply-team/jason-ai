@@ -1,4 +1,5 @@
 using System.Globalization;
+using Jason.Cli.Files;
 using Jason.Cli.Process;
 using Jason.Contracts;
 using Jason.Contracts.Update;
@@ -42,6 +43,20 @@ public static class SkillsSource
 {
     /// <summary>The repository this build's skills come from when nobody says otherwise.</summary>
     public const string DefaultSource = "https://github.com/reply-team/jason-ai.git";
+
+    /// <summary>
+    /// The file a staged clone gets in its <c>.git</c> directory once it has finished and been checked, and not before. A
+    /// directory at the ref without it is not used as it stands: it was staged before this mark existed. Inside
+    /// <c>.git</c>, because no checkout writes there; a file of this name in the work tree is the source's own.
+    /// </summary>
+    private const string CompletionMark = "jason-staged";
+
+    /// <summary>
+    /// The file a fetch in progress holds open, alone, in the directory it clones into. A directory beside the ref whose
+    /// claim nobody holds is what a fetch that never finished left, and is removed; one whose claim is held is another
+    /// run's fetch of the same ref, and is left alone.
+    /// </summary>
+    private const string Claim = "claim";
 
     /// <summary>How long a fetch is given before it is stopped.</summary>
     public static TimeSpan FetchTimeout => TimeSpan.FromMinutes(2);
@@ -138,47 +153,147 @@ public static class SkillsSource
 
         // A tree already fetched at this ref is used as it is. It was cloned at a pinned ref, which is one
         // commit and cannot have moved, so re-fetching buys nothing -- and a dry run after the first one spends
-        // no network fetch and destroys no cache.
-        if (Directory.Exists(staged) && Directory.Exists(Path.Combine(staged, "skills")))
+        // no network fetch and destroys no cache. Only a finished tree is ever at the ref's own path: a fetch clones
+        // beside it and is moved into place once it has finished, so one that was cut off never stands where the
+        // next run looks.
+        if (Completed(staged))
         {
-            RequirePacks(staged, where);
-            var known = await runner.RunAsync("git", ["rev-parse", "HEAD"], staged, FetchTimeout, cancellationToken).ConfigureAwait(false);
-            return new StagedSource(staged, where, pin, overridden, known.ExitCode == 0 ? known.StandardOutput.Trim() : null);
-        }
-
-        if (Directory.Exists(staged))
-        {
-            Directory.Delete(staged, recursive: true);
+            return await ReuseAsync(runner, staged, where, pin, overridden, cancellationToken).ConfigureAwait(false);
         }
 
         Directory.CreateDirectory(env.Paths.SkillsStagedSourcesDirectory);
+        RemoveLeftovers(staged);
 
-        var clone = await runner.RunAsync(
-            "git",
-            ["clone", "--depth", "1", "--branch", pin, "--", where, staged],
-            null,
-            FetchTimeout,
-            cancellationToken).ConfigureAwait(false);
-
-        if (clone.TimedOut)
+        var partial = $"{staged}.partial-{Guid.NewGuid():N}";
+        var tree = Path.Combine(partial, "tree");
+        string? commit;
+        bool placed;
+        Directory.CreateDirectory(partial);
+        using (new FileStream(Path.Combine(partial, Claim), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
         {
-            throw new SkillsSourceUnavailable($"Fetching '{where}' at '{pin}' did not finish in {FetchTimeout.TotalMinutes.ToString(CultureInfo.InvariantCulture)} minutes.");
+            var clone = await runner.RunAsync(
+                "git",
+                ["clone", "--depth", "1", "--branch", pin, "--", where, tree],
+                null,
+                FetchTimeout,
+                cancellationToken).ConfigureAwait(false);
+
+            if (clone.TimedOut)
+            {
+                throw new SkillsSourceUnavailable($"Fetching '{where}' at '{pin}' did not finish in {FetchTimeout.TotalMinutes.ToString(CultureInfo.InvariantCulture)} minutes.");
+            }
+
+            if (clone.ExitCode != 0)
+            {
+                // Its own words, because "git failed" is not something anybody can act on -- and the commonest
+                // case is the one this build creates: the pin is a release tag that has not been published yet.
+                throw new SkillsSourceUnavailable(
+                    $"'{where}' could not be fetched at '{pin}'. git said: {clone.StandardError.Trim()}"
+                    + (overridden ? string.Empty : $" This build's pinned ref is '{pin}'; if no release has published it yet, install from a directory with --source."));
+            }
+
+            RequirePacks(tree, where);
+
+            var head = await runner.RunAsync("git", ["rev-parse", "HEAD"], tree, FetchTimeout, cancellationToken).ConfigureAwait(false);
+            commit = head.ExitCode == 0 ? head.StandardOutput.Trim() : null;
+
+            // The last thing written before the move, so a fetch that ends any earlier is never taken for a finished one.
+            var git = Directory.CreateDirectory(Path.Combine(tree, ".git")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(git, CompletionMark), commit ?? string.Empty, cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                Directory.Move(tree, staged);
+                placed = true;
+            }
+            catch (IOException) when (Completed(staged))
+            {
+                // Another run fetching the same ref finished first and put its tree in place. A pinned ref is one commit,
+                // so that tree is this one, and it is the one used.
+                placed = false;
+            }
         }
 
-        if (clone.ExitCode != 0)
-        {
-            // Its own words, because "git failed" is not something anybody can act on -- and the commonest
-            // case is the one this build creates: the pin is a release tag that has not been published yet.
-            throw new SkillsSourceUnavailable(
-                $"'{where}' could not be fetched at '{pin}'. git said: {clone.StandardError.Trim()}"
-                + (overridden ? string.Empty : $" This build's pinned ref is '{pin}'; if no release has published it yet, install from a directory with --source."));
-        }
+        // What is left here is the claim, and the tree that lost the race beside it. Removed if it can be, and otherwise
+        // by the next fetch of this ref, since nobody holds its claim any more.
+        TryRemove(partial);
 
+        return placed
+            ? new StagedSource(staged, where, pin, overridden, commit)
+            : await ReuseAsync(runner, staged, where, pin, overridden, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A tree at the ref that a fetch finished, read again for the commit it holds.</summary>
+    private static async Task<StagedSource> ReuseAsync(
+        IProgramRunner runner,
+        string staged,
+        string where,
+        string pin,
+        bool overridden,
+        CancellationToken cancellationToken)
+    {
         RequirePacks(staged, where);
+        var known = await runner.RunAsync("git", ["rev-parse", "HEAD"], staged, FetchTimeout, cancellationToken).ConfigureAwait(false);
+        return new StagedSource(staged, where, pin, overridden, known.ExitCode == 0 ? known.StandardOutput.Trim() : null);
+    }
 
-        var head = await runner.RunAsync("git", ["rev-parse", "HEAD"], staged, FetchTimeout, cancellationToken).ConfigureAwait(false);
-        var commit = head.ExitCode == 0 ? head.StandardOutput.Trim() : null;
-        return new StagedSource(staged, where, pin, overridden, commit);
+    /// <summary>Whether a fetch finished the tree at that path: it carries the completion mark.</summary>
+    private static bool Completed(string staged) =>
+        File.Exists(Path.Combine(staged, ".git", CompletionMark));
+
+    /// <summary>
+    /// What earlier fetches of this ref left: every directory beside it that a fetch made and nobody is fetching into any
+    /// more, and a tree at the ref itself that nothing marked complete, which an earlier build staged. Through the CLI's
+    /// one tree delete, since git leaves its pack files read-only and Windows deletes no read-only file.
+    /// </summary>
+    /// <remarks>
+    /// A tree at the ref is in the way of this fetch, so failing to remove it fails the fetch. One beside it is not, so
+    /// failing to remove that one leaves it for the next fetch.
+    /// </remarks>
+    private static void RemoveLeftovers(string staged)
+    {
+        var parent = Path.GetDirectoryName(staged)!;
+        foreach (var partial in Directory.EnumerateDirectories(parent, $"{Path.GetFileName(staged)}.partial-*"))
+        {
+            if (!Claimed(partial))
+            {
+                TryRemove(partial);
+            }
+        }
+
+        if (Directory.Exists(staged) && !Completed(staged))
+        {
+            DirectoryTrees.Delete(staged);
+        }
+    }
+
+    /// <summary>
+    /// Whether a fetch is still being made into that directory: its claim is held. A claim not there yet is a fetch that
+    /// has made its directory and not yet its claim, and counts as held too.
+    /// </summary>
+    private static bool Claimed(string partial)
+    {
+        try
+        {
+            using var claim = new FileStream(Path.Combine(partial, Claim), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            return false;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
+    private static void TryRemove(string partial)
+    {
+        try
+        {
+            DirectoryTrees.Delete(partial);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Left for the next fetch of this ref, which finds its claim free.
+        }
     }
 
     /// <summary>Whether what was staged is a thing with packs in it, said before anything downstream looks.</summary>

@@ -212,7 +212,7 @@ public class UpdateSkillsStepTests
         Assert.True(exit == ExitCodes.Success, $"The update exited {exit}: {installation.Out} {installation.Error}");
         var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.Equal("complete", answer.Step);
-        Assert.Equal("skills: not updated — the runner gave up; run: jason skills update", Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)));
+        AssertTheFirstGroupStopped(installation, Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)), "the runner gave up");
     }
 
     /// <summary>
@@ -236,7 +236,7 @@ public class UpdateSkillsStepTests
         var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.Equal("complete", answer.Step);
         var line = Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal));
-        Assert.StartsWith("skills: not updated — ", line, StringComparison.Ordinal);
+        Assert.StartsWith($"skills: {SkillPacks.Business} in {Harness(installation)} not updated — ", line, StringComparison.Ordinal);
         Assert.Contains(Path.GetFileName(sources), line, StringComparison.Ordinal);
         Assert.EndsWith("; run: jason skills update", line, StringComparison.Ordinal);
         Assert.All(Deployments(installation), deployment => Assert.True(deployment.Ref == $"v{Before}", $"{deployment.Pack} moved to {deployment.Ref} in a step the filesystem refused."));
@@ -296,7 +296,7 @@ public class UpdateSkillsStepTests
         var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.Equal("complete", answer.Step);
         Assert.Equal(installation.To.ToString(), installation.Installed());
-        Assert.Equal("skills: not updated — cancelled; run: jason skills update", Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)));
+        AssertTheFirstGroupStopped(installation, Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)), "cancelled");
     }
 
     /// <summary>
@@ -319,7 +319,7 @@ public class UpdateSkillsStepTests
         var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.Equal("complete", answer.Step);
         Assert.Equal(installation.To.ToString(), installation.Installed());
-        Assert.Equal("skills: not updated — the fetch timed out; run: jason skills update", Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)));
+        AssertTheFirstGroupStopped(installation, Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)), "the fetch timed out");
     }
 
     /// <summary>
@@ -352,6 +352,119 @@ public class UpdateSkillsStepTests
         Assert.Contains(TaggedSource.Body(Tag(installation)), await File.ReadAllTextAsync(Path.Combine(installation.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
         var business = Assert.Single(SkillsRecord.Read(Harness(installation))!.Packs, pack => pack.Pack == SkillPacks.Business);
         Assert.True(business.Ref == $"v{Before}", $"The business pack moved to {business.Ref} with the person's edit refused.");
+    }
+
+    /// <summary>
+    /// An exception in a later pack group, after an earlier one was redeployed, leaves the earlier group's line in the
+    /// document. The records, the status and the exit were right already; the document said one "not updated" for
+    /// everything, which is untrue of the group that landed.
+    /// </summary>
+    [Fact]
+    public async Task An_exception_in_a_later_pack_group_keeps_the_line_of_the_group_that_was_redeployed()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", Tag(installation));
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+
+        // The business group is fetched with two programs (the clone and the commit read) and deployed; the runtime group
+        // reads the commit of what is already fetched, and that is the third program asked for.
+        var asked = 0;
+        var machine = ProgramRunners.ForThisMachine();
+        var env = Env(installation, new FakeProgramRunnerOf((program, arguments, directory, timeout, cancellation) =>
+            ++asked <= 2
+                ? machine.RunAsync(program, arguments, directory, timeout, cancellation)
+                : throw new InvalidOperationException("the runner gave up")));
+
+        var exit = await UpdateCommands.ApplyAsync(env, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+
+        Assert.True(exit == ExitCodes.Success, $"The update exited {exit}: {installation.Out} {installation.Error}");
+        var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
+        Assert.Equal("complete", answer.Step);
+        var skills = answer.Steps.Where(step => step.StartsWith("skills:", StringComparison.Ordinal)).ToList();
+        Assert.True(skills.Count == 2, $"The skills step said: {string.Join(" | ", skills)}");
+        var landed = Assert.Single(skills, line => line.StartsWith("skills: jason-business-skills in ", StringComparison.Ordinal));
+        Assert.Contains("Written:", landed, StringComparison.Ordinal);
+        Assert.DoesNotContain("not updated", landed, StringComparison.Ordinal);
+        AssertTheGroupThatStopped(installation, Assert.Single(skills, line => line != landed), "the runner gave up");
+        var business = Assert.Single(SkillsRecord.Read(Harness(installation))!.Packs, pack => pack.Pack == SkillPacks.Business);
+        Assert.True(business.Ref == Tag(installation), $"The business pack stands at {business.Ref}, not the tag it was redeployed at.");
+        var runtime = Assert.Single(SkillsRecord.Read(installation.Paths.RoleSkillsDirectory)!.Packs, pack => pack.Pack == SkillPacks.Runtime);
+        Assert.True(runtime.Ref == $"v{Before}", $"The runtime pack moved to {runtime.Ref} in a group that threw.");
+    }
+
+    /// <summary>
+    /// And a cancel in a later pack group is the same: the group that was redeployed keeps its line, and the group the
+    /// cancel stopped is named as not updated because it was cancelled.
+    /// </summary>
+    [Fact]
+    public async Task A_cancel_in_a_later_pack_group_keeps_the_line_of_the_group_that_was_redeployed()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", Tag(installation));
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+
+        // As above: the third program is the runtime group's, and the person cancels while it runs.
+        var asked = 0;
+        var machine = ProgramRunners.ForThisMachine();
+        using var person = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var env = Env(installation, new FakeProgramRunnerOf((program, arguments, directory, timeout, cancellation) =>
+        {
+            if (++asked <= 2)
+            {
+                return machine.RunAsync(program, arguments, directory, timeout, cancellation);
+            }
+
+            person.Cancel();
+            throw new OperationCanceledException(person.Token);
+        }));
+
+        var exit = await UpdateCommands.ApplyAsync(env, installation.Feed.AbsoluteUri, null, 0, human: false, person.Token);
+
+        Assert.True(exit == ExitCodes.Success, $"The update exited {exit}: {installation.Out} {installation.Error}");
+        var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
+        var skills = answer.Steps.Where(step => step.StartsWith("skills:", StringComparison.Ordinal)).ToList();
+        Assert.True(skills.Count == 2, $"The skills step said: {string.Join(" | ", skills)}");
+        var landed = Assert.Single(skills, line => line.StartsWith($"skills: {SkillPacks.Business} in ", StringComparison.Ordinal));
+        Assert.Contains("Written:", landed, StringComparison.Ordinal);
+        AssertTheGroupThatStopped(installation, Assert.Single(skills, line => line != landed), "cancelled");
+    }
+
+    /// <summary>The line for the later group, the runtime's, when the verb stopped in it: its pack and roots, not updated, and why.</summary>
+    private static void AssertTheGroupThatStopped(FakeInstallation installation, string line, string why) =>
+        AssertStoppedIn(line, SkillPacks.Runtime, installation.Paths.RoleSkillsDirectory, why);
+
+    /// <summary>And for the first group, the business pack's, which is where a step that throws on its first program stops.</summary>
+    private static void AssertTheFirstGroupStopped(FakeInstallation installation, string line, string why) =>
+        AssertStoppedIn(line, SkillPacks.Business, Harness(installation), why);
+
+    /// <summary>The line for the group the verb was in when it stopped: that group's pack and roots, not updated, and why.</summary>
+    private static void AssertStoppedIn(string line, string pack, string root, string why) =>
+        Assert.True(
+            line.StartsWith($"skills: {pack} in ", StringComparison.Ordinal)
+            && line.Contains(root, StringComparison.Ordinal)
+            && line.EndsWith($" not updated — {why}; run: jason skills update", StringComparison.Ordinal),
+            $"The line for the group that stopped reads '{line}', which does not name {pack} in '{root}' as not updated because '{why}'.");
+
+    /// <summary>
+    /// A step that failed and has nothing to say for itself still gives a line that reads: no reason is said as none given,
+    /// rather than as a dash with nothing after it.
+    /// </summary>
+    [Fact]
+    public async Task A_step_that_fails_with_no_reason_does_not_print_a_dash_with_nothing_after_it()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", Tag(installation));
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+        var env = Env(installation, new FakeProgramRunner(_ => throw new InvalidOperationException(string.Empty)));
+
+        var exit = await UpdateCommands.ApplyAsync(env, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+
+        Assert.True(exit == ExitCodes.Success, $"The update exited {exit}: {installation.Out} {installation.Error}");
+        var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
+        AssertTheFirstGroupStopped(installation, Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)), "no reason was given");
     }
 
     /// <summary>
@@ -475,6 +588,13 @@ public class UpdateSkillsStepTests
         var error = new StringWriter();
         var exit = await CliApp.RunAsync(arguments, Env(installation) with { Out = output, Error = error, BuildVersion = Before }, Ct);
         Assert.True(exit == ExitCodes.Success, $"'{string.Join(' ', arguments)}' at {Before} exited {exit}: {error}");
+    }
+
+    /// <summary>A runner whose answer is a function of the call, for a test that lets some programs run and refuses others.</summary>
+    private sealed class FakeProgramRunnerOf(Func<string, IReadOnlyList<string>, string?, TimeSpan, CancellationToken, Task<ProgramResult>> answer) : IProgramRunner
+    {
+        public Task<ProgramResult> RunAsync(string program, IReadOnlyList<string> arguments, string? workingDirectory, TimeSpan timeout, CancellationToken cancellationToken) =>
+            answer(program, arguments, workingDirectory, timeout, cancellationToken);
     }
 
     /// <summary>The machine's runner, with every program it was asked to run kept for the test to read.</summary>

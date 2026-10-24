@@ -127,4 +127,42 @@ public class UpdateUiStepTests
         Assert.Equal("mine", await File.ReadAllTextAsync(Path.Combine(installation.Paths.UiCustomDirectory, "index.html"), Ct));
         Assert.Equal(["index.html"], Directory.EnumerateFileSystemEntries(installation.Paths.UiCustomDirectory).Select(Path.GetFileName));
     }
+
+    /// <summary>
+    /// A failure that gives no words still gives a line that reads: none given, rather than a dash with nothing after it,
+    /// as the skills step says it.
+    /// </summary>
+    [Fact]
+    public async Task A_ui_step_that_fails_with_no_reason_does_not_print_a_dash_with_nothing_after_it()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        using var wordless = new WordlessAt(installation, UiAssetLayout.AssetName);
+        var applier = new UpdateApplier(installation.Env with { HttpHandler = wordless }, installation.Update, TimeProvider.System, installation.InstallPath);
+
+        var ledger = await applier.ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal("ui: not updated — no reason was given; run: jason ui install", applier.Steps[^1]);
+    }
+
+    /// <summary>The installation's own answers, except that a request for one file throws with no message at all.</summary>
+    private sealed class WordlessAt(HttpMessageHandler inner, string file) : HttpMessageHandler
+    {
+        private readonly HttpMessageInvoker _inner = new(inner, disposeHandler: false);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            request.RequestUri!.AbsolutePath.EndsWith($"/{file}", StringComparison.Ordinal)
+                ? throw new InvalidOperationException(string.Empty)
+                : _inner.SendAsync(request, cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
 }

@@ -17,6 +17,12 @@ public sealed record DeploymentReport(
     IReadOnlyList<string> Notes)
 {
     public bool Succeeded => Problems.Count == 0;
+
+    /// <summary>
+    /// Each pack, and the root, that this run left on disk with no record because a skill of it was refused. The verb
+    /// says which run completes it: an update moves recorded packs only, so it is not one.
+    /// </summary>
+    public IReadOnlyList<(string Pack, string Root)> Unrecorded { get; init; } = [];
 }
 
 /// <summary>Writes a plan, one whole skill at a time, and writes the record last.</summary>
@@ -93,6 +99,7 @@ public static class SkillsDeployer
         var written = 0;
         var unchanged = 0;
         var staged = new List<string>();
+        var leftUnrecorded = new List<(string Pack, string Root)>();
 
         foreach (var root in plan.Roots)
         {
@@ -136,6 +143,16 @@ public static class SkillsDeployer
 
                     written += unit.Files.Count;
                     mine.AddRange(Planned(root, unit));
+                }
+
+                // With no record of the pack there is no old deployment to keep, and a record at the new ref with a refused
+                // skill's files left out would be a lie: the pack read as current, `jason status` named no repair, and
+                // the next update found nothing to move. So the pack stays unrecorded. The skills that did land are on disk
+                // without a record, as after a crash, and the next install completes the pack and writes the record.
+                if (kept && recorded is null)
+                {
+                    leftUnrecorded.Add((pack.Pack, root));
+                    continue;
                 }
 
                 // And so must the rest of what the record says about this pack. A skill still holding the old tree is
@@ -189,7 +206,7 @@ public static class SkillsDeployer
             SkillsSwap.Tidy(directory);
         }
 
-        return new DeploymentReport(written, unchanged, edited, problems, notes);
+        return new DeploymentReport(written, unchanged, edited, problems, notes) { Unrecorded = leftUnrecorded };
     }
 
     /// <summary>

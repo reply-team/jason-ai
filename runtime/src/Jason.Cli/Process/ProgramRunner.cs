@@ -43,6 +43,49 @@ public static class ProgramRunners
 {
     public static IProgramRunner ForThisMachine() => MachineProgramRunner.Instance;
 
+    /// <summary>How long a stopped program's tree is waited for before the stop gives up waiting.</summary>
+    internal static TimeSpan StopGrace => TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// A program stopped, tree and all, whichever way the kill goes.
+    /// </summary>
+    /// <param name="killTree">The kill of the program and everything it started.</param>
+    /// <param name="exited">Completes once the program and whatever holds its output are gone.</param>
+    /// <param name="grace">How long that is waited for.</param>
+    /// <remarks>
+    /// Nothing it meets escapes. On a caller's cancel the stop runs before the cancellation is thrown on, and a kill that
+    /// failed took the cancellation's place: the update's skills step then reported the kill's failure rather than that
+    /// it was cancelled. A descendant the kill could not end comes back as an aggregate of every one it could not.
+    /// </remarks>
+    internal static async Task StopAsync(Action killTree, Func<CancellationToken, Task> exited, TimeSpan grace)
+    {
+        ArgumentNullException.ThrowIfNull(killTree);
+        ArgumentNullException.ThrowIfNull(exited);
+
+        try
+        {
+            // The tree, because the thing that outstayed its bound may be a child of what was started.
+            killTree();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException or AggregateException)
+        {
+            // It ended between the bound expiring and this line, which is the outcome asked for; or a part of the tree
+            // could not be ended, which the wait below gives the rest of it the time to.
+        }
+
+        // And gone before the caller goes on to read or remove what it was writing, since a kill lands later than it is
+        // asked for. The program's exit, and the end of its output, which its descendants hold open until they go too.
+        using var waited = new CancellationTokenSource(grace);
+        try
+        {
+            await exited(waited.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Not gone within the grace. Nothing more is done about it here: the kill was sent.
+        }
+    }
+
     private sealed class MachineProgramRunner : IProgramRunner
     {
         public static MachineProgramRunner Instance { get; } = new();
@@ -91,9 +134,18 @@ public static class ProgramRunners
             {
                 await process.WaitForExitAsync(bound.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                Stop(process);
+                // Either way the child goes, tree and all. A caller that gives up has no more use for it than a bound
+                // that expired has, and this child has no console of its own for Ctrl+C to reach: left running, a
+                // cancelled clone keeps filling a directory that the next run may find and trust.
+                await StopAsync(() => process.Kill(entireProcessTree: true), process.WaitForExitAsync, StopGrace).ConfigureAwait(false);
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+
                 return new ProgramResult(-1, output.ToString(), error.ToString(), true);
             }
 
@@ -105,19 +157,6 @@ public static class ProgramRunners
             if (line is not null)
             {
                 text.AppendLine(line);
-            }
-        }
-
-        private static void Stop(OperatingSystemProcess process)
-        {
-            try
-            {
-                // The tree, because the thing that outstayed its bound may be a child of what was started.
-                process.Kill(entireProcessTree: true);
-            }
-            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
-            {
-                // It ended between the bound expiring and this line, which is the outcome asked for.
             }
         }
     }

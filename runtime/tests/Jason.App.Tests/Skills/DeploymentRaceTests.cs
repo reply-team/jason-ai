@@ -181,6 +181,106 @@ public class DeploymentRaceTests
         }
     }
 
+    /// <summary>
+    /// A pack with no record yet, one of whose skills is refused, is not recorded at all. The record is written last
+    /// to say what is on disk, and it was written at the new ref with the refused skill's files left out: the pack then
+    /// read as current, <c>jason status</c> named no repair, and an update found nothing to move. With no earlier
+    /// record there is no old deployment to keep, so the honest record is none, and the run that finds the skill free
+    /// completes the pack and records it.
+    /// </summary>
+    [Fact]
+    public async Task A_skill_refused_in_a_pack_with_no_record_leaves_the_pack_unrecorded_until_a_run_completes_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to move a directory that holds an open file.");
+
+        using var data = new TempDataDir();
+        using var tree = new TempTree();
+
+        var live = Path.Combine(data.Paths.RoleSkillsDirectory, Role);
+        Compose(live, files: 1, marker: "OLD");
+
+        var source = Path.Combine(tree.Root, "source");
+        Compose(Path.Combine(source, "skills", "runtime", "roles", Role), files: 1, marker: "NEW");
+        Compose(Path.Combine(source, "skills", "runtime", "roles", "writer"), files: 1, marker: "NEW", name: "writer");
+        var harness = Directory.CreateDirectory(Path.Combine(tree.Root, "harness")).FullName;
+
+        var error = new StringWriter();
+        int refusedExit;
+        using (File.Open(Path.Combine(live, RoleSkillRules.SkillFile), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            refusedExit = await CliApp.RunAsync(
+                ["skills", "install", "--source", source, "--root", harness],
+                Machine(data, harness) with { Error = error },
+                Ct);
+        }
+
+        Assert.True(refusedExit == ExitCodes.ApiError, $"The install with a role held open exited {refusedExit}: {error}");
+        var recorded = SkillsRecord.Read(data.Paths.RoleSkillsDirectory)?.Packs ?? [];
+        Assert.True(
+            recorded.Count == 0,
+            $"The role root records {string.Join(", ", recorded.Select(pack => $"{pack.Pack} with {pack.Files.Count} files"))} after '{Role}' was refused and no record had existed.");
+        AssertRepairNamed(error, data, "jason skills install");
+
+        var retry = new StringWriter();
+        var exit = await CliApp.RunAsync(
+            ["skills", "install", "--source", source, "--root", harness],
+            Machine(data, harness) with { Error = retry },
+            Ct);
+
+        Assert.True(exit == ExitCodes.Success, $"The install once nothing held the role exited {exit}: {retry}");
+        var completed = Assert.Single(SkillsRecord.Read(data.Paths.RoleSkillsDirectory)!.Packs, pack => pack.Pack == SkillPacks.Runtime);
+        Assert.True(
+            completed.Files.Count(file => file.Path.StartsWith($"{Role}/", StringComparison.Ordinal)) == 2,
+            $"The completed record names {string.Join(", ", completed.Files.Select(file => file.Path))}.");
+    }
+
+    /// <summary>
+    /// And the repair the refusal names is the install that was run, narrowed the way it was: a pack named with
+    /// <c>--pack</c> is named again, and the role skills alone are deployed again alone. An update would not do, since it
+    /// moves recorded packs only, and the line says so.
+    /// </summary>
+    [Theory]
+    [InlineData("--pack", "jason skills install --pack jason-runtime-skills")]
+    [InlineData("--roles-only", "jason skills install --roles-only")]
+    public async Task A_pack_left_unrecorded_names_the_install_that_completes_it(string narrowed, string repair)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to move a directory that holds an open file.");
+
+        using var data = new TempDataDir();
+        using var tree = new TempTree();
+
+        var live = Path.Combine(data.Paths.RoleSkillsDirectory, Role);
+        Compose(live, files: 1, marker: "OLD");
+
+        var source = Path.Combine(tree.Root, "source");
+        Compose(Path.Combine(source, "skills", "runtime", "roles", Role), files: 1, marker: "NEW");
+        Compose(Path.Combine(source, "skills", "runtime", "roles", "writer"), files: 1, marker: "NEW", name: "writer");
+        var harness = Directory.CreateDirectory(Path.Combine(tree.Root, "harness")).FullName;
+        string[] arguments = narrowed == "--pack"
+            ? ["skills", "install", "--source", source, "--root", harness, "--pack", SkillPacks.Runtime]
+            : ["skills", "install", "--source", source, "--roles-only"];
+
+        var error = new StringWriter();
+        int exit;
+        using (File.Open(Path.Combine(live, RoleSkillRules.SkillFile), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            exit = await CliApp.RunAsync(arguments, Machine(data, harness) with { Error = error }, Ct);
+        }
+
+        Assert.True(exit == ExitCodes.ApiError, $"The install with a role held open exited {exit}: {error}");
+        AssertRepairNamed(error, data, repair);
+    }
+
+    /// <summary>The line that says the runtime's pack was left unrecorded in the role root, and which install completes it.</summary>
+    private static void AssertRepairNamed(StringWriter error, TempDataDir data, string repair)
+    {
+        var expected = $"{SkillPacks.Runtime} in {data.Paths.RoleSkillsDirectory} is left unrecorded, because a skill of it was refused. "
+            + $"Run '{repair}' to complete it and record it; 'jason skills update' will not, since it moves recorded packs only.";
+        Assert.True(
+            error.ToString().Split(Environment.NewLine).Contains(expected, StringComparer.Ordinal),
+            $"The install said:{Environment.NewLine}{error}{Environment.NewLine}and not the line: {expected}");
+    }
+
     private static CliEnvironment Machine(TempDataDir data, string harness) =>
         new(
             new StringWriter(),
@@ -190,12 +290,12 @@ public class DeploymentRaceTests
             Harnesses: HarnessLocators.At(harness),
             Programs: new FakeProgramRunner());
 
-    private static void Compose(string directory, int files, string marker)
+    private static void Compose(string directory, int files, string marker, string name = Role)
     {
         Directory.CreateDirectory(directory);
         File.WriteAllText(
             Path.Combine(directory, RoleSkillRules.SkillFile),
-            $"---\nname: {Role}\ndescription: one line\n---\n\n{marker}\n");
+            $"---\nname: {name}\ndescription: one line\n---\n\n{marker}\n");
 
         for (var index = 0; index < files; index++)
         {
