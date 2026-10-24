@@ -24,10 +24,6 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("planner-in-session");
 
-        // A brief comes in whatever form the person has. A session that handed over a form would make the person do
-        // the reading the session is there to do.
-        Assert.Contains("rather than handing over a form", skill, StringComparison.Ordinal);
-
         // Two hundred lookups in a conversation are lost when it ends, and nobody resumes them. Heavy, repeated work is
         // work Jason runs.
         Assert.Contains("What is heavy or repeated does not happen in the conversation", skill, StringComparison.Ordinal);
@@ -324,6 +320,52 @@ public partial class InteractiveSkillTests
         // A second campaign of a product that has its project: that project's file is the person's guidance for it, and it
         // can be read only once the project is found, which comes after the reading order the session starts with.
         Assert.Contains("Where what they sell already has its project, read that project's memory file as soon as the project is found, before you plan.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The opening asks what is missing one question per message and waits for each answer before the next. A host once
+    /// asked five questions as one list against a sentence that said "one at a time", so the method itself carries the
+    /// wait, and the file names the failure it forbids, a numbered list of questions: once, where the opening is described.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_asks_the_opening_one_question_per_message()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = Whitespace().Replace(SectionOf(text, "## Take the brief as it comes"), " ");
+
+        // A brief comes in whatever form the person has. A session that handed over a form would make the person do the
+        // reading the session is there to do.
+        foreach (var held in new[]
+        {
+            "Ask for what is missing one question per message",
+            "ask it, stop, and ask the next only once its answer is in",
+            "A numbered list of questions is the form this opening never hands over, however many are missing.",
+        })
+        {
+            Assert.True(section.Contains(held, StringComparison.Ordinal), $"'Take the brief as it comes' reads '{section.Trim()}', without '{held}'.");
+        }
+
+        var named = Regex.Matches(Flattened("planner-in-session"), "numbered list of questions", RegexOptions.IgnoreCase).Count;
+        Assert.True(named == 1, $"planner-in-session names the numbered list of questions {named} times; it is said once, where the opening is described.");
+    }
+
+    /// <summary>
+    /// A campaign has a name of its own, drawn from what it is for: a number or a placeholder tells the person nothing when
+    /// they read their campaigns back. The name is the session's to propose and the person's to change, said once, where
+    /// the campaign is created.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_names_a_campaign_for_what_it_is_for()
+    {
+        const string Sentence =
+            "The campaign has a name of its own, drawn from what it is for, never a number or a placeholder; the name is "
+            + "yours to propose before the campaign is made, and the person's to change.";
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = Whitespace().Replace(SectionOf(text, "## Commit it"), " ");
+        Assert.True(section.Contains(Sentence, StringComparison.Ordinal), $"'Commit it' reads '{section.Trim()}', without '{Sentence}'.");
+
+        var said = Regex.Matches(Flattened("planner-in-session"), "a name of its own", RegexOptions.IgnoreCase).Count;
+        Assert.True(said == 1, $"planner-in-session says 'a name of its own' {said} times; it is said once, where the campaign is created.");
     }
 
     /// <summary>The sentence the planner opens with, as the install says it.</summary>
