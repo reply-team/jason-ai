@@ -136,14 +136,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.15.0/install.sh | sh -s -- --version 0.15.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.16.0/install.sh | sh -s -- --version 0.16.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.15.0/install.ps1))) -Version 0.15.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.16.0/install.ps1))) -Version 0.16.0
 ```
 
-These install 0.15.0 with 0.15.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.16.0 with 0.16.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -500,7 +500,8 @@ is refused before anything is removed.
 Nothing else is touched: no skill without a receipt, no other skill in an agent harness, no provider CLI, no
 model credential, no PATH entry the installer did not write, no other account's logon registration, and none of
 the notifications already in the notification center. Nor is anything under the harness root (§2) — your memory
-files and every project's and campaign's folder — whatever `--purge-data` says. It exits 0
+files and every project's and campaign's folder — whatever `--purge-data` says. A link in the data directory, a
+symbolic link or a junction, is removed as itself, and what it points to is never touched. It exits 0
 when everything it set out to remove is gone, and 1 when it did not get there — it refused (a runtime that would
 not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
 read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did

@@ -117,8 +117,10 @@ their name, ask it.
 Read all of the brief, in whatever form it came, before you ask for anything. What you need from it follows the
 order above: what they sell and how the product works, whom this campaign sells to, whether its people come from a
 list they bring or from a search and by which principle, the channels, and what would count as success; most of it
-is usually there already. Ask for what is missing a question at a time, in your own words, at the step that needs it,
-rather than handing over a form. A list they bring is cleaned before it is used, and how is `audience-building`'s.
+is usually there already. Ask for what is missing one question per message, in your own words, at the step that needs
+it: ask it, stop, and ask the next only once its answer is in, since an answer often settles what you would have asked
+next. A numbered list of questions is the form this opening never hands over, however many are missing. A list they
+bring is cleaned before it is used, and how is `audience-building`'s.
 
 The wiring check is no step of this opening. Offered once and skipped, it stays skipped: a person who skipped it
 plans exactly as one who took it, and a provider is connected when the work first reaches for one, as
@@ -155,8 +157,9 @@ Their agreement is to the direction, not to sending: what a plan's approval does
 Once the direction is agreed, it becomes campaign work through `managed-campaign-work`, which is how a campaign, its
 people and its work are created, with the keys they carry; this file does not repeat it. The first campaign of what
 they sell goes under a project named from it, never under `Default`, and the campaign is made with the brief as its
-context before anyone is added to it. A change of direction on a campaign that already exists goes into its context
-as well, with `campaign update-context`.
+context before anyone is added to it. The campaign has a name of its own, drawn from what it is for, never a number or
+a placeholder; the name is yours to propose before the campaign is made, and the person's to change. A change of
+direction on a campaign that already exists goes into its context as well, with `campaign update-context`.
 
 ## The first message, before anything is sent
 

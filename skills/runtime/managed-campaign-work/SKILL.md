@@ -1,6 +1,6 @@
 ---
 name: managed-campaign-work
-description: Use when a person wants Jason to start outbound work for them, such as getting meetings or running a campaign, and asks what to do first, and when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
+description: Use when a person wants Jason to start outbound work for them, such as getting meetings or running a campaign, and asks what to do first, and when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them; and when a person wants Jason to answer somebody who wrote back - answering a conversation in its own thread, filing, closing or reopening it - or says stop it or not yet about work Jason holds - stopping or holding work, from cancelling one work item to pausing the provider's campaign.
 metadata:
   status: draft
 ---
@@ -270,8 +270,127 @@ The chronicle is the record of all of it:
 jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+## Answering a conversation
+
+Somebody wrote back, and the person wants Jason to answer them, file the thread, set it aside or put it back. Each
+of those is a managed provider operation, a work item like the enrolment above, with a document of its own:
+`docs/contracts/operations/conversation.reply.md`, `docs/contracts/operations/conversation.classify.md`,
+`docs/contracts/operations/conversation.close.md` and `docs/contracts/operations/conversation.reopen.md`. Each says,
+once, what the operation reaches and whether that can be undone, the approval it needs and the arguments its
+`--input` carries; read the one you need before you type its line.
+
+**The campaign has to be active** for an answer to run and for Jason's read of the campaign's threads to notice a
+reply: each of the four documents says what its work does in a paused campaign, and a paused campaign's threads are
+not read. After a pause, `jason campaign start` comes first.
+
+**Read the thread before you act on it.** A reply the runtime noticed is an `inbound_reply_observed` line in the
+chronicle, or a `provider_event_observed` line of kind `reply_detected` where the provider's own events reported it,
+so list both kinds. Either line names the thread, its channel and the person (`contact_id`) but never what anybody
+wrote. So when the person asks you to answer one, read the thread first and tell them what you read — who wrote last,
+when, and what they said — before anything is drafted.
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed
+jason contact threads cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812
+```
+
+`jason contact thread` reads the thread from the provider now and records nothing. It and `jason contact threads`
+refuse with `no_route` when no current route reaches the plugin that learned the person's identifier, and take
+`--plugin` for a person several providers know. A `conversation.get` work item reads the thread as work instead, and
+keeps what it read as the item's result (`docs/contracts/operations/conversation.get.md`).
+
+**A line that names no person is read by its thread.** Its `contact_id` is null when no contact, or more than one, is
+pinned at that plugin with the identifier the provider gave, so there is nobody to name to `jason contact thread`.
+Read it with a `conversation.get` work item in the line's campaign, which needs only the thread. A reply then needs
+the person the thread is with: find them with `jason contact list --query`, or have the person name them, and create
+the reply in that same campaign.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.get --input '{"thread":{"external_id":"t_99812"},"limit":20,"offset":0}' --reason "the reply Jason noticed names no person" --idempotency-key q3-latam-read-t99812
+```
+
+**A reply goes into the thread the person wrote in, and each send is approved on its own.** `conversation.reply`
+answers inside the thread it names and reaches nobody else: never a new thread, and never a message to somebody
+outside one, which is another operation and not how a reply is answered. It reaches a person, so it parks for a
+person's approval, and one approval is one send: one work item is one reply to one person, its `body` exactly the
+text the person read with you.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","thread":{"external_id":"t_99812"},"body":"Thursday at 10 works. I will send an invitation."}' --reason "the person's answer to Marta's reply" --idempotency-key q3-latam-reply-marta-t99812
+```
+
+Recording their decision on it is `approvals-and-questions`. Two replies are two work items and two approvals, never
+one item for both.
+
+**Closing and reopening a thread reach no person.** `conversation.close` sets it aside as worked, and
+`conversation.reopen` puts it back among those that need attention. **Filing it may reach one.**
+`conversation.classify` files it under one of the provider's own categories, as the provider names them, and
+a category the provider reserves carries that provider's own meaning with it, which filing there asks for too: its
+document's section "The provider's own meaning on its reserved names" says what that can be, and a campaign that must
+own every send files under categories of its own, and lists them in the campaign's context under
+`filing_categories`, written as the provider names them, when you set it up: the responder Jason launches for
+a reply files a thread under one of those and under nothing else. The `Interested` below is only an example: whether a
+category of that name is reserved at the provider, and what filing there sets off, is that provider's. None of the three is a way
+to stop writing to somebody: that is `optout.record` or `enrollment.stop`, each with a document of its own.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.classify --input '{"thread":{"external_id":"t_99812"},"category":{"name":"Interested"}}' --reason "Marta asked for a call" --idempotency-key q3-latam-classify-t99812
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.close --input '{"thread":{"external_id":"t_99812"}}' --reason "the call is booked" --idempotency-key q3-latam-close-t99812
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reopen --input '{"thread":{"external_id":"t_99812"}}' --reason "Marta wrote again" --idempotency-key q3-latam-reopen-t99812
+```
+
+## Stopping or holding work
+
+A person who says "stop it" or "not yet" means one of four acts, and each stops something different. Two of them
+share a name: `jason campaign pause` stops Jason's own work and leaves the provider sending; only a work item naming
+the operation `campaign.pause` stops the provider's campaign, so when the provider has to stop, that work item is the
+one to create.
+
+**`jason workitem cancel` ends one work item for good.** A running attempt is stopped, and an approval the item was
+parked on ends with it. It touches no provider: what an attempt already did there stays done, and taking it back is
+work of its own.
+
+**`jason workitem update` holds or reorders one work item without ending it.** `--not-before` keeps it from starting
+before the moment it names, and `--priority` moves it ahead of the campaign's other work or behind it, the higher
+first. Neither stops an attempt already running, and neither changes any other item.
+
+**`jason campaign pause` pauses Jason's campaign.** Nothing more of it is claimed until `jason campaign start`
+resumes it — what is already running finishes — except the provider operations whose documents say they run in a
+paused campaign, the provider's pause among them. It does not stop the provider's sequence: what the provider was
+sending, it goes on sending.
+
+**The provider operation `campaign.pause` pauses the provider's campaign**, which stops it sending. It is an act at
+the provider, made as a work item and approved as its document says, like any other: its document,
+`docs/contracts/operations/campaign.pause.md`, gives it `auto` approval, so nobody is asked when it is claimed, and the
+person's word in this conversation is the only one it gets. Create it when they say so, and not before. It runs even
+while Jason's campaign is paused. The pause printed below gives no identifier of the provider's campaign, so it works
+for a campaign linked there, whose pin names it, and fails at the claim for one that is not; its document says how the
+first pause names the provider's campaign.
+
+**When the wrong copy already went out**, stop the provider first, and free the campaign for that before anything
+else: a campaign runs one work item at a time, and while one of its items is scheduled or running, nothing more of it
+is claimed, the provider's pause included, whatever its `--priority`. So cancel the item that is running or scheduled
+to send the copy, then create the provider's `campaign.pause` with a high `--priority`, then pause Jason's campaign so
+that nothing more of Jason's follows, and tell the person the provider has stopped only once that work item has
+succeeded. Cancelling a provider operation that was already running leaves one thing unknown — whether it reached the
+provider before it was stopped — so do not tell the person it did not go out; and a reply that went out cannot be
+taken back. Starting the provider's campaign again later is `campaign.activate`, with a document of its own.
+
+```
+jason workitem cancel wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the person stopped this send"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"content","note":"the wrong copy went out in step 2"}}' --reason "the person asked the provider to stop sending" --idempotency-key q3-latam-pause-wrong-copy
+jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the wrong copy went out in step 2"
+jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --not-before 2026-11-02T09:00:00Z --reason "the person said not before Monday"
+jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 10 --reason "the person wants this one first"
+jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the corrected copy is in place"
+```
+
 ## What this skill does not cover
 
 The roles that perform background AI work and how each of them reasons; anything a campaign manager does with
 a check-in; and installing plugins, writing routes or updating the installation. Those are other roles' jobs or
 other skills, and guessing at them here would be worse than saying so.
+
+A check-in is the launched manager's. A session that keeps a campaign moving asks the person and commits what they
+decide, as above, and `approvals-and-questions` and `troubleshooting-jason` cover what is waiting and what stopped.

@@ -159,7 +159,7 @@ The second group is Jason's own, and it is about execution:
 
 | Field | What it says |
 |---|---|
-| `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them); and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used` — [`docs/plugins.md`](../plugins.md) §7, "The contact proxy rule", is the rule), which the loader holds to what each word implies: a way that finds the person declares `external_ids.contact`, `pinned_only` declares `contact_not_linked`, and `not_used` is said exactly where `contact` is `not_used` |
+| `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them); and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used` — [`docs/plugins.md`](../plugins.md) §7, "The contact proxy rule", is the rule), which the loader holds to what each word implies: a way that finds the person declares `external_ids.contact`, `find_or_create` takes its channel `from_args`, `pinned_only` declares `contact_not_linked`, and `not_used` is said exactly where `contact` is `not_used` |
 | `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm |
 | `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change. It names exactly what the operation's implementation reads, the least of a person that reaches a plugin's process, for the fields as for the channels |
 | `precondition` | what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence |
@@ -399,7 +399,9 @@ Every operation is at `version: 1`. A plugin's manifest declares the operation-c
 lists.
 
 - **Additive** — a new optional input field, a required input field made optional, a new optional output field, a new
-  failure code, a new external-id kind — keeps the version.
+  failure code, a new external-id kind — keeps the version. A required input field made optional is additive only where
+  the runtime supplies the field's former value to the plugin's input, or the operation's document says the plugin must
+  take its absence; otherwise it is a breaking change of the operation's version.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,

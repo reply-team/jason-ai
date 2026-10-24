@@ -138,6 +138,11 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"thread":"501","read":"wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE"}' --reason "a reply to answer" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-respond-501
 ```
 
+Where the line's `contact_id` is null, nobody is pinned to the thread: create the responder's item without
+`--contact`, and the responder finds the person through the read. Where it finds none, or more than one, it drafts no
+reply and says who wrote, and you raise one question at your next review. The same holds where the read does not show
+the thread's latest message: the responder drafts no reply and says so, and the question is yours.
+
 Neither wakes you when it ends: a read that succeeded is not a trigger. Say in your note that you are watching both,
 and decide at your next review, when what they found is there to read. A thread the line names can have moved for a
 follow-up sent into it rather than for a reply; the read is how you tell. Whether the provider's list moves a thread
@@ -157,6 +162,30 @@ Read it as any other. From that record, where the provider says who moved the th
 own reply among them — says no line at all, whatever the provider's list does with that reply; where it cannot say,
 the check against `sent_at` above applies to the line as it does to the inbound read's.
 
+Such a line also says how it found this campaign, under `attributed_by`. `campaign_pin` is the provider campaign this
+campaign's own operations pinned: the thread is this campaign's outreach. `contact_pin` is the person alone — the
+provider named no campaign, or one that no campaign that is not archived is linked to, or more than one is — so the
+thread may be one this campaign did not start: a direct email, a message outside any sequence, another campaign's
+outreach. Then queue the read alone, and only where this campaign reads conversations at the plugin the line names under
+`plugin`: the read follows this campaign's route, which may lead elsewhere, and this names where it goes:
+
+```
+jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get
+```
+
+Where it names another plugin, or none, queue nothing, say so in your note and raise one question instead. Raise the
+responder at your next review, once the read shows whose thread it is; a thread the outreach of another campaign that is
+not archived owns is that campaign's to answer, never yours. Where the thread is the outreach of no campaign that is
+not archived, it may have reached every such campaign the person is in, and one answer is all they should get: before
+you raise the responder for it, read the person's chronicle across campaigns, by the line's `contact_id`:
+
+```
+jason journal list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+Where another campaign that is not archived has already raised the responder or replied in that thread, leave the thread
+to it and say so in your note; otherwise raise the responder. Say in your note which it was.
+
 ## When a provider event woke you
 
 `trigger` is `provider_event_observed` when the provider's own record of an account said something happened that
@@ -172,10 +201,11 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_eve
 ```
 
 Each one is a fact to plan from, and what it calls for is yours to decide inside your boundary, as with any line. A
-detected reply is read as a reply is: queue the read of its thread and the responder after it, as above. A hard bounce
-is a person that channel no longer reaches: work waiting to write to them there is work the campaign may no longer
-need. An accepted invitation is a channel that opened. Whatever you do or leave, say it in your note; where the next
-step is a person's to choose, raise one question.
+detected reply is read as a reply is: queue the read of its thread and the responder after it, as above — or the read
+alone where the line says `attributed_by` `contact_pin`. A hard bounce is a person that channel no longer reaches:
+work waiting to write to them there is work the campaign may no longer need. An accepted invitation is a channel that
+opened. Whatever you do or leave, say it in your note; where the next step is a person's to choose, raise one
+question.
 
 ## What you may decide yourself
 
