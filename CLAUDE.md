@@ -117,7 +117,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3
   rejected, 4 host failure). Declaration is not permission: capabilities are requested by the manifest
   and granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
-  four classes — `transient` is retried, `permanent` and `validation` are final, and `ambiguous` says the
+  five classes — `transient` is retried, `permanent`, `validation` and `blocked` are final, and `ambiguous` says the
   provider may already have acted, so it is repeated only where the operation's own contract declares
   that repeating it is safe or that a recovery read makes it safe. An activated load journals
   `plugins_reloaded`; there is no `plugin.invoke` operation. `docs/plugins.md` is the contract.

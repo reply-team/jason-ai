@@ -39,8 +39,8 @@ internal sealed class FakeProviderReads : IProviderReadInvoker
 
     public static InvocationOutcome Result(JsonNode result) => new InvocationOutcome.Succeeded(result, null, Diagnostics);
 
-    public static InvocationOutcome Failure(string code, FailureClass failureClass) =>
-        new InvocationOutcome.Failed(new OutcomeError(failureClass, code, "the provider said no", null, null), Diagnostics);
+    public static InvocationOutcome Failure(string code, FailureClass failureClass, JsonObject? block = null) =>
+        new InvocationOutcome.Failed(new OutcomeError(failureClass, code, "the provider said no", null, null, block), Diagnostics);
 
     public static InvocationOutcome Protocol(string code) => new InvocationOutcome.ProtocolFailure(code, "the protocol did not complete", null, null);
 }

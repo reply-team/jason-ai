@@ -9,7 +9,9 @@ namespace Jason.Contracts.Api;
 /// Why an attempt failed. <c>Retriable</c> is the runtime's judgement, not the executor's: one rule set decides
 /// whether the work is worth another attempt. <c>Trace</c> is diagnostic and never travels onto the work item.
 /// <c>Class</c> is present only where something with the standing to classify the failure did so — a plugin
-/// answering for a provider — so an attempt nobody classified serialises exactly as it always has.
+/// answering for a provider — so an attempt nobody classified serialises exactly as it always has. <c>Block</c> is
+/// present only on a <c>blocked</c> failure whose block satisfies the published provider-block contract: what is
+/// blocked, why, and where a person clears it.
 /// </summary>
 public sealed record AttemptErrorDto(
     string Code,
@@ -17,7 +19,8 @@ public sealed record AttemptErrorDto(
     bool Retriable,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Trace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ErrorDetail>? Details = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FailureClass? Class = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FailureClass? Class = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonObject? Block = null);
 
 /// <summary>How an attempt was actually run: provenance without secrets.</summary>
 /// <param name="StdoutTruncated">

@@ -350,6 +350,50 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// A block the published contract accepts is final, and it is kept on the attempt and on the item, where a person
+    /// reads what is blocked, why and where it is cleared.
+    /// </summary>
+    [Fact]
+    public async Task A_provider_block_is_final_and_kept_where_a_person_reads_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+        var block = new JsonObject { ["scope"] = "sender", ["sender_external_id"] = "li_5531", ["reason"] = "limit", ["clears_at"] = "2026-09-16T00:00:00Z" };
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "the sender is at its limit", null, null, block)));
+
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+        Assert.Equal((FailureClass?)FailureClass.Blocked, scene.Attempt.Error!.Class);
+        Assert.False(scene.Attempt.Error.Retriable);
+        Assert.Null(scene.Attempt.Error.Details);
+        Assert.Equal("li_5531", (string?)scene.Attempt.Error.Block!["sender_external_id"]);
+        Assert.Equal("limit", (string?)scene.Item.LastError!.Block!["reason"]);
+    }
+
+    /// <summary>
+    /// A block outside its contract is refused the way an undeclared identifier is: the plugin's failure stands, recorded
+    /// permanent, with what is wrong with the block named beside it, and the block itself is not kept.
+    /// </summary>
+    [Fact]
+    public async Task A_block_outside_its_contract_is_recorded_permanent_with_its_problem_named()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+        var block = new JsonObject { ["scope"] = "account", ["reason"] = "insufficient_credits" };
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "out of credits", null, null, block)));
+
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+        Assert.Equal(("provider_blocked", (FailureClass?)FailureClass.Permanent, false), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class, scene.Attempt.Error.Retriable));
+        Assert.Null(scene.Attempt.Error.Block);
+        Assert.Null(scene.Item.LastError!.Block);
+        var detail = Assert.Single(scene.Attempt.Error.Details!);
+        Assert.Equal(("/error/block/reason", "enum"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
     /// What the attempt kept says it kept the identifiers "as it returned them", and an undeclared kind is the
     /// one case where that matters: nothing else in Jason will ever mention that key again. A provider that
     /// spells its kind `contactId` has to be readable beside the pointer that refuses it, which names that same

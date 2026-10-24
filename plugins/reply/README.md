@@ -259,8 +259,9 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
 ## What can go wrong
 
 Every failure carries a code the operation's own contract publishes and a class the runtime acts on:
-`transient` is retried inside the work item's budget, `permanent` and `validation` are final, and
-`ambiguous` stops the item for a person, because Reply may already have acted. The tables below are
+`transient` is retried inside the work item's budget, `permanent` and `validation` are final,
+`ambiguous` stops the item for a person, because Reply may already have acted, and `blocked` says Reply refused the
+call for a reason outside the work item and did nothing for it. The tables below are
 [`modules/errors.js`](modules/errors.js), which is their single source — a test reads that file and holds
 every code in it to the operation's published contract, the same code under the same class.
 
@@ -318,6 +319,7 @@ route's binding names them.
 | The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
 | Reply asked to wait longer than the CLI waits on its own (`rate_limited`). | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt; the wait Reply asked for is in the trace. |
 | Reply refused the call (`reply.refused`), refused a field no row below names (`reply.invalid_request`), or the CLI answered a code this version does not know. | `provider_call_failed` | permanent | The CLI's code, Reply's own code and its sentence are in the trace. A refusal that recurs belongs in the table. |
+| Not reported yet: Reply refused the call for the account's money or plan, an allowance it counts, a revoked key or a disconnected channel, and did nothing for it. | `provider_blocked` | blocked | Clear it at Reply where the block says. Pending: the CLI publishes no code for this today, so nothing reaches the row `account_or_sender_blocked` in the table; when the CLI publishes one, its mapping in `rowOf` is where the switch lands, and the failure then carries the block. Until then such a refusal arrives as one of the rows above or below, under the class that row gives it. |
 
 A call that runs out of time is the package's to answer, so each call is given what is left of the invocation's
 budget less five seconds (never more than half of what is left) rather than all of it. A call given everything

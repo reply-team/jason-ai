@@ -27,9 +27,10 @@ public static class OutcomeContract
     public const string OnTheError = "/error";
 
     /// <summary>
-    /// Whether a failed attempt of <paramref name="contract"/> is worth another one. Three of the four classes
-    /// mean the same thing whatever was being attempted — a transient failure may pass, and a permanent or a
-    /// validation failure would fail the same way again — so only an ambiguous one reads the operation at all.
+    /// Whether a failed attempt of <paramref name="contract"/> is worth another one. Four of the five classes
+    /// mean the same thing whatever was being attempted — a transient failure may pass, a permanent or a
+    /// validation failure would fail the same way again, and a blocked one waits on something outside the work
+    /// item — so only an ambiguous one reads the operation at all.
     /// </summary>
     /// <remarks>
     /// Ambiguous says the provider may already have acted, and what that costs is the operation's own business:
@@ -45,8 +46,26 @@ public static class OutcomeContract
         {
             FailureClass.Transient => true,
             FailureClass.Ambiguous => contract.RepeatAfterAmbiguous is RepeatAfterAmbiguous.Safe or RepeatAfterAmbiguous.AfterRecoveryRead,
+
+            // Final until the runtime parks work on a block: repeating at once would meet the same block, and the
+            // block clearing is no part of an attempt's budget.
+            FailureClass.Blocked => false,
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// The class a failure is recorded under: the plugin's own, except that a block outside its published contract is
+    /// recorded <see cref="FailureClass.Permanent"/>, with what is wrong with it in <paramref name="blockProblems"/>.
+    /// An answer that does not satisfy the contract is a refused answer, so a malformed block never stands for a real
+    /// one, and nothing that later reads the class acts on data the contract refuses.
+    /// </summary>
+    public static FailureClass Recorded(OutcomeError error, out IReadOnlyList<SchemaProblem> blockProblems)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+
+        blockProblems = error.Class == FailureClass.Blocked ? ProviderBlockContract.Published.Check(error.Block) : [];
+        return blockProblems.Count == 0 ? error.Class : FailureClass.Permanent;
     }
 
     /// <summary>Validates a succeeded result against the operation's output schema.</summary>

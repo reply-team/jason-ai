@@ -246,6 +246,7 @@ public sealed class InvocationRunner : IInvocationRunner
                         ? message[..PluginProtocol.MaxErrorMessageLength]
                         : message,
                     Details = Redact(error.Details),
+                    Block = Redact(error.Block) as JsonObject,
                 },
                 Cost());
         }
@@ -254,8 +255,9 @@ public sealed class InvocationRunner : IInvocationRunner
             new(watch.ElapsedMilliseconds, budget.ExecCalls, budget.HttpCalls, diagnostics.LogLines);
 
         /// <summary>
-        /// The details are the plugin's own words and may quote a value the host knows to be a secret; the
-        /// runtime stores this text, so it is masked here rather than at every place that writes it down.
+        /// The details and the block are the plugin's own words and may quote a value the host knows to be a
+        /// secret; the runtime stores this text, so it is masked here rather than at every place that writes it
+        /// down. The mask is ordinary text, so a block it touches still satisfies its contract.
         /// </summary>
         private JsonNode? Redact(JsonNode? details)
         {

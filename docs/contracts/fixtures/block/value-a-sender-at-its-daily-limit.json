@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "one mailbox reached the allowance the provider counts for it, and the provider says when the allowance renews",
+  "value": { "scope": "sender", "sender_external_id": "mbx_1042", "reason": "limit", "clears_at": "2026-10-25T00:00:00Z" },
+  "expect": "valid"
+}

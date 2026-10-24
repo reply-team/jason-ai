@@ -156,8 +156,115 @@ public sealed class InvocationRunnerTests
     }
 
     [Fact]
-    [Critical(Family.R1, "four failure classes only")]
-    public void A_failure_outside_the_four_classes_is_refused_where_the_plugin_stands()
+    public void A_blocked_failure_carries_its_block_out_of_the_plugin()
+    {
+        var outcome = Run("""
+            export function invoke() {
+              throw host.fail({
+                class: "blocked",
+                code: "provider_blocked",
+                message: "the account is out of credits",
+                block: { scope: "account", reason: "billing", link: "https://provider.example/billing" },
+              });
+            }
+            """);
+
+        var error = Error(outcome);
+        Assert.Equal(FailureClass.Blocked, error.Class);
+        Assert.Equal("provider_blocked", error.Code);
+        Assert.Equal("billing", error.Block!["reason"]!.GetValue<string>());
+        Assert.Equal("https://provider.example/billing", error.Block!["link"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("{ class: \"blocked\", code: \"provider_blocked\", message: \"m\" }")]
+    [InlineData("{ class: \"permanent\", code: \"c\", message: \"m\", block: { scope: \"account\", reason: \"other\" } }")]
+    [InlineData("{ class: \"blocked\", code: \"provider_blocked\", message: \"m\", block: \"billing\" }")]
+    [InlineData("{ class: \"blocked\", code: \"provider_blocked\", message: \"m\", block: { scope: \"account\", reason: \"other\", note: \"x\".repeat(9000) } }")]
+    public void A_block_travels_with_the_class_blocked_and_never_without_it(string specification)
+    {
+        var outcome = Run($$"""
+            export function invoke() {
+              try {
+                host.fail({{specification}});
+              } catch (e) {
+                return { result: { caught: e.name } };
+              }
+
+              return { result: { caught: "nothing" } };
+            }
+            """);
+
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Equal("TypeError", outcome.Result!["caught"]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// The block is the plugin's own words as much as the details are, and is stored and shown the same way, so a
+    /// granted secret quoted in it is masked on the way out; the mask is ordinary text, so the block it leaves
+    /// still satisfies its contract.
+    /// </summary>
+    [Fact]
+    public void A_secret_quoted_in_a_block_is_masked_and_the_block_still_satisfies_its_contract()
+    {
+        const string secret = "super-secret-block-token";
+        var variable = "FAKE_BLOCK_TOKEN_" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(variable, secret);
+        try
+        {
+            var outcome = Run(
+                $$"""
+                export function invoke() {
+                  const token = host.env("{{variable}}");
+                  throw host.fail({
+                    class: "blocked",
+                    code: "provider_blocked",
+                    message: "the mailbox is at its limit",
+                    block: { scope: "sender", sender_external_id: "mbx_" + token, reason: "limit", link: "https://provider.example/" + token },
+                  });
+                }
+                """,
+                configure: builder => builder.Grants = new InvocationGrants(null, null, new EnvGrants([variable])));
+
+            var block = Error(outcome).Block!;
+            Assert.DoesNotContain(secret, block.ToJsonString(), StringComparison.Ordinal);
+            Assert.Equal("mbx_" + Redactor.Mask, block["sender_external_id"]!.GetValue<string>());
+            Assert.Equal("https://provider.example/" + Redactor.Mask, block["link"]!.GetValue<string>());
+            var problems = ProviderBlockContract.Published.Check(block);
+            Assert.True(problems.Count == 0, "the masked block was refused: " + string.Join("; ", problems.Select(problem => problem.ToString())));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
+    }
+
+    [Theory]
+    [InlineData("class: \"blocked\"")]
+    [InlineData("class: \"permanent\", block: { scope: \"account\", reason: \"other\" }")]
+    [InlineData("class: \"blocked\", block: \"billing\"")]
+    [InlineData("class: \"blocked\", block: { scope: \"account\", reason: \"other\", note: \"x\".repeat(9000) }")]
+    public void A_failure_built_by_hand_that_host_fail_would_refuse_is_a_plugin_exception(string fields)
+    {
+        // Nothing stops a plugin from building the object host.fail would have made; the host reads it again
+        // rather than trusting the name it gives itself.
+        var outcome = Run($$"""
+            export function invoke() {
+              const failure = new Error("m");
+              Object.assign(failure, { name: "JasonFailure", code: "provider_blocked", {{fields}} });
+              throw failure;
+            }
+            """);
+
+        var error = Error(outcome);
+        Assert.Equal(OutcomeCodes.PluginException, error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Null(error.Block);
+    }
+
+    [Fact]
+    [Critical(Family.R1, "five failure classes only")]
+    public void A_failure_outside_the_five_classes_is_refused_where_the_plugin_stands()
     {
         var outcome = Run("""
             export function invoke() {

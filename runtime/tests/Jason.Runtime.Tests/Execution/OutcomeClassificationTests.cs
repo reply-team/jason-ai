@@ -36,4 +36,11 @@ public class OutcomeClassificationTests
         Assert.Equal(FailureClass.Ambiguous, OutcomeClassification.ClassOf("anything_else"));
         Assert.Equal(FailureClass.Ambiguous, OutcomeClassification.ClassOf(string.Empty));
     }
+
+    /// <summary>Only a provider's own refusal says blocked; no protocol failure is one, whatever its code.</summary>
+    [Fact]
+    public void No_protocol_failure_is_a_block() =>
+        Assert.All(
+            typeof(ProtocolCodes).GetFields().Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue()!),
+            code => Assert.NotEqual(FailureClass.Blocked, OutcomeClassification.ClassOf(code)));
 }

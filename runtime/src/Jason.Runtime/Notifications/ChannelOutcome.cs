@@ -13,7 +13,8 @@ public enum ChannelResult
 }
 
 /// <summary>
-/// What one channel did with one notification. A failure carries a code and one of the four failure classes; a channel
+/// What one channel did with one notification. A failure carries a code and one of the four failure classes the
+/// delivery family declares — never <c>blocked</c>, which belongs to provider operations alone; a channel
 /// not tried, or a toast shown into nothing, carries a reason. <see cref="Detail"/> is a diagnostic and never what the
 /// notification said; <see cref="Receipt"/> is a plugin's own id for the message it sent.
 /// </summary>
@@ -35,7 +36,9 @@ public sealed record ChannelOutcome(
         new(channel, kind, ChannelResult.Silenced, Reason: reason);
 
     public static ChannelOutcome Failed(string channel, string kind, string code, FailureClass @class, string? detail = null) =>
-        new(channel, kind, ChannelResult.Failed, code, @class, Detail: detail);
+        @class == FailureClass.Blocked
+            ? throw new ArgumentOutOfRangeException(nameof(@class), @class, "A channel's failure is never blocked; the delivery family declares no block.")
+            : new(channel, kind, ChannelResult.Failed, code, @class, Detail: detail);
 
     public static ChannelOutcome NotAttempted(string channel, string kind, string reason, string? detail = null) =>
         new(channel, kind, ChannelResult.NotAttempted, Reason: reason, Detail: detail, Attempts: 0);

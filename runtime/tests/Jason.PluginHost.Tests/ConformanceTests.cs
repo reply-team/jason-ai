@@ -193,6 +193,31 @@ public sealed class ConformanceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_blocked_failure_carries_its_block_out_of_the_process()
+    {
+        var outcome = await OutcomeAsync(
+            "fail.blocked",
+            new JsonObject
+            {
+                ["code"] = "provider_blocked",
+                ["message"] = "the sender is at its daily limit",
+                ["block"] = new JsonObject
+                {
+                    ["scope"] = "sender",
+                    ["sender_external_id"] = "li_5531",
+                    ["reason"] = "limit",
+                    ["clears_at"] = "2026-10-25T00:00:00Z",
+                },
+            });
+
+        Assert.Equal(OutcomeStatus.Failed, outcome.Status);
+        Assert.Equal(FailureClass.Blocked, outcome.Error!.Class);
+        Assert.Equal("provider_blocked", outcome.Error!.Code);
+        Assert.Equal("li_5531", outcome.Error!.Block!["sender_external_id"]!.GetValue<string>());
+        Assert.Equal("2026-10-25T00:00:00Z", outcome.Error!.Block!["clears_at"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task A_plugin_that_only_computes_and_never_ends_failed_permanently()
     {
         var outcome = await OutcomeAsync(

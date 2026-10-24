@@ -134,6 +134,37 @@ public class ProviderSpineTests
     }
 
     /// <summary>
+    /// A provider block through a real child process: the account refuses the call for a reason outside the work item,
+    /// and the plugin says so as a block. The item ends final on its first attempt, with the block kept where a person
+    /// reads it, and no later scan asks the provider again.
+    /// </summary>
+    [Fact]
+    public async Task A_provider_block_ends_the_item_with_the_block_kept_and_nothing_repeated()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WithList(ProviderList, "Q3 prospects");
+        await using var api = await StartAsync(workspace);
+        var campaign = await CampaignAsync(api);
+        var contact = await ContactAsync(api, campaign, Marta);
+        var item = await ItemAsync(api, campaign, "list_membership.add", ToTheList(), contact);
+        workspace.RefuseOnce(item, "account_blocked");
+
+        await ScanAsync(api);
+        await ScanAsync(api);
+
+        var read = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.Failed, read.Status);
+        var attempt = Assert.Single(InOrder(read));
+        Assert.Equal(("provider_blocked", (FailureClass?)FailureClass.Blocked, false), (attempt.Error!.Code, attempt.Error.Class, attempt.Error.Retriable));
+        Assert.Equal("billing", (string?)read.LastError!.Block!["reason"]);
+        Assert.Equal("https://provider.example/billing", (string?)read.LastError.Block["link"]);
+
+        // Nothing landed, and the second scan asked the account for nothing.
+        Assert.Empty(workspace.MembersOf(ProviderList));
+        Assert.Equal(["contact ensure", "list add"], workspace.Calls);
+    }
+
+    /// <summary>
     /// PA3d. A2 through a real child process: the provider answers something the operation's output schema
     /// refuses, and the attempt is final whatever the operation's repeat rule allows. The pointers say where,
     /// and the answer itself is kept on the attempt so its author can see what was actually sent.

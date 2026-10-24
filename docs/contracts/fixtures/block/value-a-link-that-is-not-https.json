@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "a link a person would be sent to over plain http",
+  "value": { "scope": "account", "reason": "billing", "link": "http://app.example.com/billing" },
+  "expect": { "invalid": [{ "pointer": "/link", "reason": "pattern" }] }
+}

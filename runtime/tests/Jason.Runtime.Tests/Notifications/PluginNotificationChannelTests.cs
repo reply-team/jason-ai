@@ -325,6 +325,26 @@ public sealed class PluginNotificationChannelTests
         Assert.Equal((ChannelResult.Failed, "notification_unreachable", (FailureClass?)FailureClass.Transient), (outcome.Result, outcome.Code, outcome.Class));
     }
 
+    /// <summary>The delivery family declares no block, so a channel that answers blocked has answered outside its contract.</summary>
+    [Fact]
+    public async Task A_channel_that_answers_blocked_is_an_answer_outside_the_contract()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "carrier",
+            "export function invoke() { throw host.fail({ class: 'blocked', code: 'provider_blocked', message: 'no', block: { scope: 'account', reason: 'billing' } }); }"));
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "result_invalid", (FailureClass?)FailureClass.Ambiguous), (outcome.Result, outcome.Code, outcome.Class));
+    }
+
+    [Fact]
+    public void A_channel_failure_is_never_blocked()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => ChannelOutcome.Failed("carrier", ChannelKinds.Plugin, "provider_blocked", FailureClass.Blocked));
+    }
+
     [Fact]
     public async Task A_plugin_that_throws_is_the_host_s_failure_recorded_with_its_class()
     {

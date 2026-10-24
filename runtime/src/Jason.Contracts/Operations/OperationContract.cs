@@ -409,6 +409,7 @@ public sealed record OperationContract(
             ["permanent"] = FailureClass.Permanent,
             ["validation"] = FailureClass.Validation,
             ["ambiguous"] = FailureClass.Ambiguous,
+            ["blocked"] = FailureClass.Blocked,
         };
 
     private static L1Origin ReadOrigin(JsonObject origin, DocumentReader outer)

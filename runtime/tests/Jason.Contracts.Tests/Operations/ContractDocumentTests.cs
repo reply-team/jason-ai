@@ -89,6 +89,21 @@ public class ContractDocumentTests
             $"`{code.Key}` is declared as " + string.Join(", ", code.Select(entry => $"{entry.Class} by {entry.Id}")) + "."));
     }
 
+    /// <summary>
+    /// A provider can refuse any call for a reason outside the work item — money, a limit it counts, a credential, a
+    /// channel — so every operation declares the one code of the class <c>blocked</c>, the protective ones included, and
+    /// no other code is filed under it: the code is the one that carries the block.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void Every_operation_declares_the_provider_block_and_nothing_else_under_its_class(string id)
+    {
+        var blocked = Contract(id).FailureCodes.Where(code => code.Class == Jason.Contracts.Plugins.FailureClass.Blocked).ToList();
+
+        Assert.Equal("provider_blocked", Assert.Single(blocked).Code);
+        Assert.Contains("did nothing for it", blocked[0].When, StringComparison.Ordinal);
+    }
+
     [Theory]
     [MemberData(nameof(CriticalPublishedForEveryField))]
     public void Every_document_states_every_field_and_nothing_else(string id)

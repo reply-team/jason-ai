@@ -723,7 +723,7 @@ everything manually.
 
 ### 8.11 Failure and recovery responsibility
 
-Runtime must distinguish transient, permanent, validation, and ambiguous failures and apply
+Runtime must distinguish transient, permanent, validation, ambiguous, and blocked failures and apply
 deterministic policies appropriate to each. It must prefer recovery and continuation over
 blind replay of whole plans. For provider effects, the canonical operation contract must
 expose idempotency and recovery-read (`before_repeating`) semantics where possible. For AI
@@ -1000,8 +1000,8 @@ eligible managed work
 Each operation eventually defines: a stable identifier and version; input schema and
 validation; output and normalized outcome schema; side-effect and reversibility
 classification; approval requirements; idempotency and correlation expectations;
-`before_repeating` or other recovery-read behavior; transient, permanent, validation, and
-ambiguous failure semantics; timeout and cancellation expectations; capability requirements;
+`before_repeating` or other recovery-read behavior; transient, permanent, validation, ambiguous,
+and blocked failure semantics; timeout and cancellation expectations; capability requirements;
 and evidence needed for conformance and reconciliation.
 
 The exact catalog and schemas are deferred. Runtime need not expose an entire vendor-neutral
@@ -1464,7 +1464,7 @@ awareness but do not recreate pre-execution approval.
 Reliable operation requires more than retrying failed calls. The architecture requires:
 stable correlation and invocation identities; idempotency keys where the canonical operation
 supports them; explicit recovery reads (`before_repeating`) where necessary; honest
-classification of transient, permanent, validation, and ambiguous failure; durable attempt
+classification of transient, permanent, validation, ambiguous, and blocked failure; durable attempt
 and configuration provenance; recovery by reading known state before replaying side effects;
 separation of provider uncertainty from Runtime protocol failure; and continuation from
 accepted work rather than blind replay of a plan. These guarantees apply to Runtime-managed

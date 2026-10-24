@@ -22,7 +22,7 @@ public static partial class HostFailure
 
     public const string Function = "host.fail";
 
-    private static readonly HashSet<string> Allowed = new(StringComparer.Ordinal) { "class", "code", "message", "details", "external_ids" };
+    private static readonly HashSet<string> Allowed = new(StringComparer.Ordinal) { "class", "code", "message", "details", "external_ids", "block" };
 
     public static JsValue Create(Engine engine, JsValue[] args)
     {
@@ -39,6 +39,7 @@ public static partial class HostFailure
         var message = ArgumentReader.RequiredString(engine, specification, "message", Function, PluginProtocol.MaxErrorMessageLength);
         var details = ReadDetails(engine, specification);
         var externalIds = ReadExternalIds(engine, specification);
+        var block = ReadBlock(engine, specification, failureClass);
 
         var error = engine.Intrinsics.Error.Construct(message);
         error.FastSetDataProperty("name", Name);
@@ -46,6 +47,7 @@ public static partial class HostFailure
         error.FastSetDataProperty("code", code);
         error.FastSetDataProperty("details", JsJson.FromJson(engine, details));
         error.FastSetDataProperty("external_ids", JsJson.FromJson(engine, externalIds));
+        error.FastSetDataProperty("block", JsJson.FromJson(engine, block));
         return error;
     }
 
@@ -88,13 +90,23 @@ public static partial class HostFailure
 
         TryReadExternalIds(JsJson.ToJson(engine, instance.Get("external_ids")), out var externalIds);
 
+        // A block is the class's own payload, so a failure that carries one under another class, or claims the class
+        // without one, is not a failure the host can vouch for.
+        var block = JsJson.ToJson(engine, instance.Get("block"));
+        if ((parsed == FailureClass.Blocked) != block is not null
+            || block is not null && (block is not JsonObject || Bytes(block) > ProviderBlockContract.MaxBytes))
+        {
+            return false;
+        }
+
         var text = message.AsString();
         error = new OutcomeError(
             parsed,
             code.AsString(),
             text.Length > PluginProtocol.MaxErrorMessageLength ? text[..PluginProtocol.MaxErrorMessageLength] : text,
             details,
-            externalIds);
+            externalIds,
+            block as JsonObject);
         return true;
     }
 
@@ -143,6 +155,9 @@ public static partial class HostFailure
             case "ambiguous":
                 failureClass = FailureClass.Ambiguous;
                 return true;
+            case "blocked":
+                failureClass = FailureClass.Blocked;
+                return true;
             default:
                 failureClass = FailureClass.Permanent;
                 return false;
@@ -154,7 +169,7 @@ public static partial class HostFailure
         var value = ArgumentReader.RequiredString(engine, specification, "class", Function, 32);
         return TryParseClass(value, out _)
             ? value
-            : throw ArgumentReader.TypeError(engine, $"{Function}: 'class' must be transient, permanent, validation or ambiguous.");
+            : throw ArgumentReader.TypeError(engine, $"{Function}: 'class' must be transient, permanent, validation, ambiguous or blocked.");
     }
 
     private static JsonNode? ReadDetails(Engine engine, JsonObject specification)
@@ -188,6 +203,38 @@ public static partial class HostFailure
         }
 
         return externalIds;
+    }
+
+    /// <summary>
+    /// The block a blocked failure carries: an object, required with that class and refused with any other. Its
+    /// fields are the published contract's, checked where the failure is recorded rather than here, so a host never
+    /// holds a second copy of the rule.
+    /// </summary>
+    private static JsonObject? ReadBlock(Engine engine, JsonObject specification, string failureClass)
+    {
+        var blocked = string.Equals(failureClass, "blocked", StringComparison.Ordinal);
+        if (!specification.TryGetPropertyValue("block", out var node) || node is null)
+        {
+            return blocked
+                ? throw ArgumentReader.TypeError(engine, $"{Function}: the class 'blocked' needs a 'block' saying what is blocked and why.")
+                : null;
+        }
+
+        if (!blocked)
+        {
+            throw ArgumentReader.TypeError(engine, $"{Function}: 'block' travels only with the class 'blocked'.");
+        }
+
+        if (node is not JsonObject block)
+        {
+            throw ArgumentReader.TypeError(engine, $"{Function}: 'block' must be an object.");
+        }
+
+        return Bytes(block) > ProviderBlockContract.MaxBytes
+            ? throw ArgumentReader.TypeError(
+                engine,
+                string.Create(CultureInfo.InvariantCulture, $"{Function}: 'block' is larger than {ProviderBlockContract.MaxBytes} bytes."))
+            : (JsonObject)block.DeepClone();
     }
 
     private static int Bytes(JsonNode node) => Encoding.UTF8.GetByteCount(node.ToJsonString());

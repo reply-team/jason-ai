@@ -30,6 +30,7 @@ function probe(attempt) {
 // What each of the provider's refusals means for a retry. The classes are the plugin's own judgement, which is
 // exactly the judgement a contract's failure-code table records: a caller must never have to guess.
 const FAILURE_CLASSES = {
+  account_blocked: "blocked",
   campaign_not_found: "permanent",
   campaign_not_enrollable: "permanent",
   collision_refused: "permanent",
@@ -105,11 +106,15 @@ function cli(context, subcommand, request, learned) {
 
   const parsed = JSON.parse(answer.stdout);
   if (parsed.error) {
+    // A block is the contract's own code, whatever the account calls it, and says what a person clears.
+    const failureClass = FAILURE_CLASSES[parsed.error.code] || "permanent";
+    const blocked = failureClass === "blocked";
     throw host.fail(compact({
-      class: FAILURE_CLASSES[parsed.error.code] || "permanent",
-      code: parsed.error.code,
+      class: failureClass,
+      code: blocked ? "provider_blocked" : parsed.error.code,
       message: parsed.error.message,
       external_ids: learned,
+      block: blocked ? { scope: "account", reason: "billing", link: "https://provider.example/billing" } : undefined,
     }));
   }
 
@@ -286,6 +291,7 @@ export function invoke(operation, input, context) {
       message: input.message ?? "provoked failure",
       details: input.details,
       external_ids: input.external_ids,
+      block: input.block,
     }));
   }
 

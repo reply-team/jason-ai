@@ -56,6 +56,10 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     /// A verdict from the same source, overriding <see cref="FailureClassifier"/> for this one failure. Null
     /// leaves the decision exactly where it was: the code decides, as it does for every agent attempt.
     /// </param>
+    /// <param name="block">
+    /// What a provider block says, kept on the error where a person reads it; only a blocked failure whose block the
+    /// published contract accepts carries one.
+    /// </param>
     public WorkItemStatus Fail(
         JasonDbContext db,
         WorkItem item,
@@ -67,13 +71,14 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
         ActorRef actor,
         string? reason = null,
         FailureClass? failureClass = null,
-        bool? retriable = null)
+        bool? retriable = null,
+        JsonObject? block = null)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(attempt);
         var now = clock.GetUtcNow().UtcDateTime;
         var worthRepeating = retriable ?? FailureClassifier.IsRetriable(code);
-        var error = new AttemptErrorDto(code, message, worthRepeating, trace, details, failureClass);
+        var error = new AttemptErrorDto(code, message, worthRepeating, trace, details, failureClass, block?.DeepClone().AsObject());
 
         attempt.Status = AttemptStatus.Failed;
         attempt.FinishedAt = now;

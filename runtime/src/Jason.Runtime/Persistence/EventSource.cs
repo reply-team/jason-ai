@@ -54,7 +54,11 @@ public sealed class EventSource
     /// <summary>The code the last read failed with; null after a read that succeeded.</summary>
     public string? LastCode { get; set; }
 
-    /// <summary>The class of that failure, as the contract's word: <c>transient</c>, <c>permanent</c>, <c>validation</c> or <c>ambiguous</c>.</summary>
+    /// <summary>
+    /// The class of that failure, as the contract's word: <c>transient</c>, <c>permanent</c>, <c>validation</c> or
+    /// <c>ambiguous</c>. Never <c>blocked</c>: the events family declares no block, so a blocked answer is one outside
+    /// its contract and is kept as <c>result_invalid</c>, ambiguous.
+    /// </summary>
     public string? LastClass { get; set; }
 
     /// <summary>Whether the last read stopped with more to read now — at the most pages a read takes — so the next is due at once.</summary>

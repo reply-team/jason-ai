@@ -297,7 +297,7 @@ with the last error visible on the item.
 
 That table is the rule for **agent** work, where the failure happened inside this machine. A
 `provider_op` attempt is answered differently, because its work happened at somebody else's system:
-the failure carries one of four **classes** — `transient`, `permanent`, `validation`, `ambiguous` —
+the failure carries one of five **classes** — `transient`, `permanent`, `validation`, `ambiguous`, `blocked` —
 and the class plus the operation's own `repeat_after_ambiguous` rule decide, not the code table. Every
 way such an attempt can end with nobody answering for it — the invoker's timeout, `lease_expired`,
 `heartbeat_missed`, a command that could not be started (`executor_launch_failed`) and one that was
@@ -660,8 +660,9 @@ the attempt ends `validation_timed_out`, `transient`, and the dispatcher retries
 retry rule — never `input_invalid` or `binding_invalid`, which would send a planner to edit an item that
 may be right.
 
-**A failure's class decides the retry, not the code table.** A provider attempt ends with one of four
-classes: `transient` comes back, `permanent` and `validation` are final, and `ambiguous` — the
+**A failure's class decides the retry, not the code table.** A provider attempt ends with one of five
+classes: `transient` comes back, `permanent` and `validation` are final, `blocked` — the provider refused the
+account or a sender and did nothing — is final with its block kept on the item's `last_error`, and `ambiguous` — the
 provider may already have acted — is repeated only where the operation's own contract says a repeat is
 `safe` or is answerable `after_recovery_read`. An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated. An answer a pattern of

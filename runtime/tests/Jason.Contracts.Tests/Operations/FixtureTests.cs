@@ -252,9 +252,11 @@ public class FixtureTests
             case "failed":
                 Assert.Equal(OutcomeStatus.Failed, outcome.Status);
                 Assert.NotNull(outcome.Error);
-                Assert.Equal(Class(expected), outcome.Error.Class);
                 TheFailureTheOperationDeclares(relative, contract, outcome.Error);
-                Assert.Equal(OutcomeContract.Retriable(outcome.Error.Class, contract), (bool)expected["retriable"]!);
+                var recorded = OutcomeContract.Recorded(outcome.Error, out var blockProblems);
+                Assert.Equal(Class(expected), recorded);
+                TheBlockTheFailureCarries(relative, expected, outcome.Error, blockProblems);
+                Assert.Equal(OutcomeContract.Retriable(recorded, contract), (bool)expected["retriable"]!);
                 TheIdentifiersTheFailureLeaves(relative, contract, expected, outcome);
                 break;
 
@@ -312,6 +314,56 @@ public class FixtureTests
         Assert.Equal(
             (expected["pinned"] as JsonObject ?? []).ToJsonString(),
             pinned.ToJsonString());
+    }
+
+    /// <summary>
+    /// What a failure says about a block. A blocked failure states <c>expect.block</c>: <c>"kept"</c> where the block
+    /// satisfies its contract and stays beside the error, or the problems the check reports where it does not, and then
+    /// the failure is recorded permanent. Any other class states no block, because it carries none.
+    /// </summary>
+    private static void TheBlockTheFailureCarries(string relative, JsonObject expected, OutcomeError error, IReadOnlyList<SchemaProblem> problems)
+    {
+        if (error.Class != FailureClass.Blocked)
+        {
+            Assert.True(expected["block"] is null, $"{relative} expects a block of a `{Name(error.Class)}` failure, which carries none.");
+            Assert.True(error.Block is null, $"{relative} puts a block on a `{Name(error.Class)}` failure; the block is only ever beside `blocked`.");
+            return;
+        }
+
+        switch (expected["block"])
+        {
+            case JsonValue kept:
+                Assert.Equal("kept", (string?)kept);
+                Assert.True(problems.Count == 0, $"{relative} keeps its block, and the check says {Listed([.. problems.Select(problem => problem.Pointer + " " + problem.Reason)])}.");
+                break;
+
+            case JsonObject refused:
+                TheStatedProblemsAndNoOthers(relative, refused, problems);
+                break;
+
+            default:
+                Assert.Fail($"{relative} is a blocked failure and does not say what becomes of its block.");
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The blocked answer is published for a send, an invitation, a reply and a read, and a block outside its contract
+    /// beside them, so a plugin author sees both what is kept and what is refused.
+    /// </summary>
+    [Fact]
+    public void A_blocked_answer_is_published_kept_and_refused()
+    {
+        var blocked = ContractFiles.FixtureFiles("outcome").Select(Read)
+            .Where(fixture => (string?)fixture["outcome"]?["error"]?["class"] == "blocked")
+            .ToList();
+
+        foreach (var operation in new[] { "message.send", "social_invitation.send", "conversation.reply", "sender.list" })
+        {
+            Assert.Contains(blocked, fixture => (string?)fixture["operation"] == operation && fixture["expect"]!["block"] is JsonValue kept && (string?)kept == "kept");
+        }
+
+        Assert.Contains(blocked, fixture => fixture["expect"]!["block"] is JsonObject && (string?)fixture["expect"]!["class"] == "permanent");
     }
 
     /// <summary>

@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "the whole account is blocked, and the block names a sender as if only one were",
+  "value": { "scope": "account", "sender_external_id": "mbx_1042", "reason": "limit" },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

@@ -94,6 +94,10 @@ a person approved. `sender_limit_reached` is the account's daily or weekly allow
 the invitation is proposed again once it renews. `limit_reached` is the provider's account full: it will hold no further
 contact, and the person had to be created.
 
+`sender_unavailable`, `sender_limit_reached` and `unauthorized` stand for an answer the plugin cannot read as a provider
+block. Where it can — the provider refused for a block and did nothing — the code is `provider_blocked`, with the block
+that says what is blocked, why and where a person clears it ([the provider block](../block/provider_block.md)).
+
 ## What a person reads before deciding
 
 > Invite https://www.linkedin.com/in/marta-example to connect on LinkedIn, from the provider's account 34

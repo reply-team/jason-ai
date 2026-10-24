@@ -644,6 +644,47 @@ public class WorkItemCommandsTests
     }
 
     /// <summary>
+    /// A provider block is what a person has to clear at the provider, so the page says what is blocked, why, where
+    /// to go and when it may clear, under the error it came with; an item whose error carries no block has no such line.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        """{"scope":"account","reason":"billing","link":"https://app.example.com/billing"}""",
+        "Blocked:      account · billing · https://app.example.com/billing")]
+    [InlineData(
+        """{"scope":"sender","sender_external_id":"mbx_1042","reason":"limit","link":"https://app.example.com/mailboxes/1042","clears_at":"2026-10-25T00:00:00Z"}""",
+        "Blocked:      sender mbx_1042 · limit · https://app.example.com/mailboxes/1042 · clears 2026-10-25 00:00:00 UTC")]
+    [InlineData(
+        """{"scope":"account","reason":"other"}""",
+        "Blocked:      account · other")]
+    public async Task Human_mode_says_what_a_provider_block_holds_under_the_last_error(string block, string expected)
+    {
+        var lastError = new AttemptErrorDto(
+            "provider_blocked", "the provider refused the account", false, Class: FailureClass.Blocked, Block: JsonNode.Parse(block)!.AsObject());
+        using var cli = new CliRun(Serialize(Item(null, lastError: lastError)));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.ReplaceLineEndings().Split(Environment.NewLine);
+        var at = Array.FindIndex(lines, line => line.StartsWith("Last error:", StringComparison.Ordinal));
+        Assert.True(at >= 0 && at + 1 < lines.Length, "no last error line in: " + cli.Text);
+        Assert.Equal("Last error:   provider_blocked — the provider refused the account", lines[at]);
+        Assert.Equal(expected, lines[at + 1]);
+    }
+
+    [Fact]
+    public async Task Human_mode_prints_no_block_line_for_an_error_without_one()
+    {
+        using var cli = new CliRun(Serialize(Item(null)));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain("Blocked:", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Where this item's executor comes from, on the page a person reads before asking why work is stuck. The
     /// inherited line names the profile, the revision it was pinned at, and the attempt it came from, so the
     /// chain can be walked back without a database.
@@ -871,7 +912,8 @@ public class WorkItemCommandsTests
     private static WorkItemDto Item(
         IReadOnlyList<AttemptDto>? attempts,
         IReadOnlyList<ReportSummaryDto>? externalReports = null,
-        LineageDto? lineage = null) => new(
+        LineageDto? lineage = null,
+        AttemptErrorDto? lastError = null) => new(
         "wi_A",
         "cmp_A",
         "cnt_A",
@@ -894,7 +936,7 @@ public class WorkItemCommandsTests
         null,
         1,
         "att_A",
-        new AttemptErrorDto("executor_exited", "the process exited with code 1", true),
+        lastError ?? new AttemptErrorDto("executor_exited", "the process exited with code 1", true),
         attempts,
         externalReports,
         Moment,

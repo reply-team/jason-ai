@@ -3,6 +3,10 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.6.1
+
+- the error table names `provider_blocked`, the runtime's class `blocked` from 0.17.0; no Reply answer reaches it until reply-cli reports a block; no behaviour change.
+
 ## 0.6.0
 
 - `message.send`, `social_invitation.send` and `contact.update` are `find_or_create` now, as their documents say: a

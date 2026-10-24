@@ -38,6 +38,9 @@ public sealed class ProviderOutcomeRecorder(
     LiveSettings<PluginsOptions> plugins,
     PatternTiming? timing = null)
 {
+    /// <summary>Where a failed outcome carries its block, as a pointer from the outcome's root.</summary>
+    private const string OnTheBlock = OutcomeContract.OnTheError + "/block";
+
     /// <summary>How an answer is matched against the output schema's patterns: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
@@ -123,6 +126,11 @@ public sealed class ProviderOutcomeRecorder(
                 // An undeclared kind is refused rather than recorded, but it does not replace the failure the
                 // plugin reported — hiding the reason an operation failed behind a shape error helps nobody.
                 await PinAsync(db, contract, pluginId, item, attempt, failed.Error.ExternalIds, cancellationToken).ConfigureAwait(false);
+
+                // A block outside its contract is refused the same way an undeclared identifier is: the failure the
+                // plugin reported stands, recorded permanent, with what is wrong with the block named beside it, and
+                // the block itself is not kept, so nothing that later reads a block reads one the contract refuses.
+                var recorded = OutcomeContract.Recorded(failed.Error, out var blockProblems);
                 outcomes.Fail(
                     db,
                     item,
@@ -130,10 +138,11 @@ public sealed class ProviderOutcomeRecorder(
                     failed.Error.Code,
                     failed.Error.Message,
                     failed.Error.Details?.ToJsonString(),
-                    Refused(contract, failed.Error.ExternalIds),
+                    Refused(contract, failed.Error.ExternalIds, blockProblems),
                     Actors.Dispatcher,
-                    failureClass: failed.Error.Class,
-                    retriable: OutcomeContract.Retriable(failed.Error.Class, contract));
+                    failureClass: recorded,
+                    retriable: OutcomeContract.Retriable(recorded, contract),
+                    block: recorded == FailureClass.Blocked ? failed.Error.Block : null);
                 break;
 
             case InvocationOutcome.ProtocolFailure protocol:
@@ -170,15 +179,25 @@ public sealed class ProviderOutcomeRecorder(
         [.. OutcomeContract.CheckResult(contract, succeeded.Result, timing), .. OutcomeContract.CheckExternalIds(contract, succeeded.ExternalIds)];
 
     /// <summary>
-    /// Which of a failed answer's identifiers were not written down, named beside the failure that was kept. The
-    /// same check the success path refuses the whole answer on: one reading of "the contract does not declare it".
-    /// The pointers are addressed from the outcome's root, and a failed answer keeps its identifiers on the error
-    /// — so that is what an author is sent to, rather than a key that is null in the document they wrote.
+    /// Which of a failed answer's identifiers were not written down, and what is wrong with a block that was not
+    /// kept, named beside the failure that was kept. The identifiers meet the same check the success path refuses the
+    /// whole answer on: one reading of "the contract does not declare it". The pointers are addressed from the
+    /// outcome's root, and a failed answer keeps its identifiers and its block on the error — so that is what an
+    /// author is sent to, rather than a key that is null in the document they wrote.
     /// </summary>
-    private static IReadOnlyList<ErrorDetail>? Refused(OperationContract contract, JsonObject? externalIds) =>
-        OutcomeContract.CheckExternalIds(contract, externalIds, OutcomeContract.OnTheError) is { Count: > 0 } problems
-            ? ErrorDetail.From(problems)
-            : null;
+    private static IReadOnlyList<ErrorDetail>? Refused(
+        OperationContract contract,
+        JsonObject? externalIds,
+        IReadOnlyList<SchemaProblem> blockProblems)
+    {
+        IReadOnlyList<SchemaProblem> problems =
+        [
+            .. OutcomeContract.CheckExternalIds(contract, externalIds, OutcomeContract.OnTheError),
+            .. blockProblems.Select(problem => problem with { Pointer = OnTheBlock + problem.Pointer }),
+        ];
+
+        return problems.Count > 0 ? ErrorDetail.From(problems) : null;
+    }
 
     /// <summary>
     /// The identifiers the plugin answered with, whichever way it ended, as it returned them. Anything that is

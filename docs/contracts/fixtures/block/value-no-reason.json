@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "a block that does not say why",
+  "value": { "scope": "account" },
+  "expect": { "invalid": [{ "pointer": "/reason", "reason": "required" }] }
+}

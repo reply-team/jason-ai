@@ -13,7 +13,7 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// </summary>
 public class ReplyErrorTableTests
 {
-    private static readonly string[] Classes = ["transient", "permanent", "validation", "ambiguous"];
+    private static readonly string[] Classes = ["transient", "permanent", "validation", "ambiguous", "blocked"];
 
     /// <summary>
     /// Every operation the package's manifest says it performs, read from the manifest itself: a list written here was
@@ -313,6 +313,27 @@ public class ReplyErrorTableTests
                 Assert.True(rows.Contains(row!.GetValue<string>()), $"{operation} maps '{code}' to '{row}', which it has no row for.");
             }
         }
+    }
+
+    /// <summary>
+    /// Every operation declares the provider block, so the table has its row; but reply-cli publishes no code that says
+    /// Reply refused a call for money, an allowance, a key or a channel and did nothing for it, so no code maps to the row
+    /// and nothing reaches it. Mapping one of today's codes there would assert that Reply did nothing where the CLI never
+    /// said so. The README names the row as the place the switch lands.
+    /// </summary>
+    [Fact]
+    public void The_block_has_a_row_that_nothing_reaches_until_the_cli_says_so()
+    {
+        var row = ReplyErrorTable.Shared["account_or_sender_blocked"]!.AsObject();
+        Assert.Equal(("provider_blocked", "blocked"), (Text(row, "code"), Text(row, "class")));
+
+        var mapped = ReplyErrorTable.Codes["shared"]!.AsObject().Select(entry => entry.Value!.GetValue<string>())
+            .Concat(ReplyErrorTable.Codes["per_operation"]!.AsObject().SelectMany(operation => operation.Value!.AsObject().Select(entry => entry.Value!.GetValue<string>())));
+        Assert.DoesNotContain("account_or_sender_blocked", mapped);
+
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        Assert.Contains("| `provider_blocked` | blocked |", readme, StringComparison.Ordinal);
+        Assert.Contains("`account_or_sender_blocked`", readme, StringComparison.Ordinal);
     }
 
     private static string Text(JsonObject row, string member) => row[member]?.GetValue<string>() ?? string.Empty;

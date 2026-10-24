@@ -115,7 +115,22 @@ public static partial class OutcomeValidator
     {
         if (!Enum.IsDefined(error.Class))
         {
-            problem = "error.class must be one of transient, permanent, validation, ambiguous.";
+            problem = "error.class must be one of transient, permanent, validation, ambiguous, blocked.";
+            return false;
+        }
+
+        // The block is what makes a blocked failure readable by a person, and it means nothing beside any other
+        // class, so its presence is the class's own rule in both directions. Its content is the contract's business,
+        // checked where the failure is recorded; here only its presence and its size are the protocol's.
+        if (error.Class == FailureClass.Blocked && error.Block is null)
+        {
+            problem = "a blocked failure must carry error.block.";
+            return false;
+        }
+
+        if (error.Class != FailureClass.Blocked && error.Block is not null)
+        {
+            problem = "error.block travels only with the class blocked.";
             return false;
         }
 
@@ -132,6 +147,7 @@ public static partial class OutcomeValidator
         }
 
         return Fits(error.Details, PluginProtocol.MaxDetailsBytes, "error.details", out problem)
+            && Fits(error.Block, ProviderBlockContract.MaxBytes, "error.block", out problem)
             && IdsFit(error.ExternalIds, "error.external_ids", out problem);
     }
 

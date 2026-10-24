@@ -4,7 +4,8 @@ using Jason.Runtime.Plugins.Invocation;
 namespace Jason.Runtime.Execution;
 
 /// <summary>
-/// What a protocol failure was, in the same four classes a plugin answers in. Whether a class is worth another
+/// What a protocol failure was, in four of the five classes a plugin answers in — never <c>blocked</c>, which only a
+/// provider's own refusal can say, and a protocol failure is not one. Whether a class is worth another
 /// attempt is not asked here: that question belongs to the operation being performed and is answered once, by
 /// <see cref="Jason.Contracts.Operations.OutcomeContract.Retriable"/>, which reads the operation's own contract.
 /// </summary>

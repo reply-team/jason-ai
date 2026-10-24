@@ -182,7 +182,7 @@ public enum Family
 
     // Protocols.
 
-    /// <summary>The plugin protocol: the digest the child recomputes, the exit codes, exactly one outcome, the four failure classes, manifests and reloads.</summary>
+    /// <summary>The plugin protocol: the digest the child recomputes, the exit codes, exactly one outcome, the five failure classes, manifests and reloads.</summary>
     R1,
 
     /// <summary>The CLI's exit codes and JSON, its declared exceptions, and the API's dialect and error envelope.</summary>

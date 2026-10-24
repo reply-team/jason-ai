@@ -142,6 +142,10 @@ public class EventFailureTests
     [InlineData("rate_limited", FailureClass.Transient, false)]
     [InlineData("events_unauthorized", FailureClass.Transient, false)]
     [InlineData("events_unreachable", FailureClass.Transient, true)]
+
+    // The events family declares no block, so a blocked answer is outside it whatever its code.
+    [InlineData("provider_blocked", FailureClass.Blocked, false)]
+    [InlineData("events_unreachable", FailureClass.Blocked, false)]
     public async Task A_failure_the_contract_does_not_declare_as_it_came_is_an_answer_outside_it(string code, FailureClass failureClass, bool pinned)
     {
         using var harness = Create();

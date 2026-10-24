@@ -403,11 +403,13 @@ then it can only be answered one way: a binding over the cap never became a rout
 
 ## 8. What "ambiguous" costs, in operator terms
 
-A failed provider attempt carries one of four classes, and the class decides what happens next:
+A failed provider attempt carries one of five classes, and the class decides what happens next:
 
 - **`transient`** — nothing happened; the item comes back and is attempted again, within its own
   `max_attempts`.
 - **`permanent`** and **`validation`** — it would fail the same way again; the item is finished.
+- **`blocked`** — the provider refused the account or a sender, not this item, and did nothing; the item is
+  finished, and the [block](contracts/block/provider_block.md) it carries says what a person clears.
 - **`ambiguous`** — *the provider may already have acted*, and the answer never arrived.
 
 For an ambiguous end the runtime reads the operation's own contract rather than guessing. `campaign.get`

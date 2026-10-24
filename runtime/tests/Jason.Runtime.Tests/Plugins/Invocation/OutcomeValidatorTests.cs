@@ -112,13 +112,62 @@ public class OutcomeValidatorTests
     }
 
     [Fact]
-    [Critical(Family.R1, "four classes")]
-    public void A_class_outside_the_four_is_refused()
+    [Critical(Family.R1, "five classes")]
+    public void A_class_outside_the_five_is_refused()
     {
         var document = Document(status: "failed", error: Error(failureClass: "maybe"));
 
         Assert.False(OutcomeValidator.TryValidate(document, Expected, out _, out var problem));
         Assert.Contains("class", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_blocked_failure_with_its_block_is_accepted_and_keeps_it()
+    {
+        var error = Error(failureClass: "blocked", code: "provider_blocked");
+        error["block"] = new JsonObject { ["scope"] = "account", ["reason"] = "billing" };
+
+        Assert.True(OutcomeValidator.TryValidate(Document(status: "failed", error: error), Expected, out var outcome, out var problem), problem);
+        Assert.Equal(FailureClass.Blocked, outcome!.Error!.Class);
+        Assert.Equal("billing", outcome.Error.Block!["reason"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void A_blocked_failure_without_a_block_is_refused()
+    {
+        var document = Document(status: "failed", error: Error(failureClass: "blocked", code: "provider_blocked"));
+
+        Assert.False(OutcomeValidator.TryValidate(document, Expected, out _, out var problem));
+        Assert.Contains("a blocked failure must carry error.block", problem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("transient")]
+    [InlineData("permanent")]
+    [InlineData("validation")]
+    [InlineData("ambiguous")]
+    public void A_block_beside_any_other_class_is_refused(string failureClass)
+    {
+        var error = Error(failureClass: failureClass);
+        error["block"] = new JsonObject { ["scope"] = "account", ["reason"] = "billing" };
+
+        Assert.False(OutcomeValidator.TryValidate(Document(status: "failed", error: error), Expected, out _, out var problem));
+        Assert.Contains("error.block travels only with the class blocked", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_block_larger_than_its_contract_allows_is_refused()
+    {
+        var error = Error(failureClass: "blocked", code: "provider_blocked");
+        error["block"] = new JsonObject
+        {
+            ["scope"] = "account",
+            ["reason"] = "other",
+            ["link"] = "https://provider.example/" + new string('x', ProviderBlockContract.MaxBytes),
+        };
+
+        Assert.False(OutcomeValidator.TryValidate(Document(status: "failed", error: error), Expected, out _, out var problem));
+        Assert.Contains("error.block is at most 8192 bytes", problem, StringComparison.Ordinal);
     }
 
     [Fact]

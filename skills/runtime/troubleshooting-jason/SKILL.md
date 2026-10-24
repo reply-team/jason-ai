@@ -173,6 +173,15 @@ fail in the same way. The operation's own document is what the runtime enforces,
 project's source under `docs/contracts/operations/`; **no verb prints one**, so on a machine with no copy of
 the source, ask the operator for it rather than guessing at the correction.
 
+**A failure classed `blocked` is final too, and its repair is elsewhere.** Its code is `provider_blocked`: the
+provider refused the account, or one sender under it, rather than this item's arguments — money or a plan, an
+allowance it counts, a key it no longer accepts, a channel disconnected or paused — and did nothing for the call.
+`last_error.block` on the item says what is blocked (`scope`, and `sender_external_id` when it is one sender), why
+(`reason`), where a person goes to clear it (`link`), and, where the provider said, when it may clear by itself
+(`clears_at`). Read those to the person. The repair is theirs, at the provider — topping up, reconnecting, renewing a
+key, or waiting for an allowance to renew — and never an edit of the item; once the block has cleared, the work is
+proposed again.
+
 ### 8. An attempt that was interrupted
 
 **How you recognise it.** The failure was recorded as `ambiguous`.

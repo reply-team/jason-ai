@@ -106,6 +106,11 @@ sender's account is not connected with: invite them with `social_invitation.send
 allowance spent, which one in the details; the message is proposed again once it renews. `limit_reached` is the
 provider's account full: it will hold no further contact, and the person had to be created.
 
+`sender_unavailable`, `sender_limit_reached`, `insufficient_credits` and `unauthorized` stand for an answer the plugin
+cannot read as a provider block. Where it can — the provider refused for a block and did nothing — the code is
+`provider_blocked`, with the block that says what is blocked, why and where a person clears it
+([the provider block](../block/provider_block.md)).
+
 ## What a person reads before deciding
 
 > Send marta@example.com a message by email, from the provider's account 12 (ann@example.com), outside any campaign —

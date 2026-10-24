@@ -124,6 +124,13 @@ public sealed class PluginNotificationChannel(
         return result.Outcome switch
         {
             InvocationOutcome.Succeeded succeeded => ResultOutcome(id, succeeded, contract.CheckResult(succeeded.Result, _timing)),
+            // The delivery family declares no block, so a channel that answers blocked has answered outside its contract.
+            InvocationOutcome.Failed { Error.Class: FailureClass.Blocked } => ChannelOutcome.Failed(
+                id,
+                Kind,
+                "result_invalid",
+                FailureClass.Ambiguous,
+                "the answer is blocked, which the delivery contract does not declare"),
             InvocationOutcome.Failed failed => ChannelOutcome.Failed(id, Kind, failed.Error.Code, failed.Error.Class),
             InvocationOutcome.ProtocolFailure protocol => ChannelOutcome.Failed(id, Kind, protocol.Code, OutcomeClassification.ClassOf(protocol.Code)),
             _ => ChannelOutcome.Failed(id, Kind, "result_invalid", FailureClass.Ambiguous),

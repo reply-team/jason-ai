@@ -34,7 +34,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.6.0", plugin.Version);
+        Assert.Equal("0.6.1", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record", "sender.list", "social_invitation.send"],
@@ -146,7 +146,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.6.0", result.Provenance.Version);
+        Assert.Equal("0.6.1", result.Provenance.Version);
     }
 
     /// <summary>
@@ -369,7 +369,7 @@ public class ReplyPackageTests
         var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
         Assert.True(start >= 0, "The README has no section on what the package cannot do.");
         var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
-        var entry = Flat(ChangelogSection(2));
+        var entry = Flat(ChangelogSection(3));
 
         Assert.All(
             new[]
@@ -393,15 +393,31 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// The release that names the provider block in the error table and changes nothing a Reply answer reaches, so one
+    /// version never has two contents.
+    /// </summary>
+    [Fact]
+    public void The_changelog_opens_with_0_6_1_and_says_no_reply_answer_reaches_the_block_row()
+    {
+        var section = Flat(ChangelogSection(0));
+
+        Assert.StartsWith(" ## 0.6.1 ", section, StringComparison.Ordinal);
+        Assert.Contains(
+            "## 0.6.1 - the error table names `provider_blocked`, the runtime's class `blocked` from 0.17.0; no Reply answer reaches it until reply-cli reports a block; no behaviour change.",
+            section,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The release in which the sends and the update create the person Reply holds nobody for: the three operations it
     /// changes, the CLI release and the Jason release it needs, and what a person reads in it about the read that still
     /// comes first — for a contact the command's own import matched too — the one command that imports, the route's word
     /// on deriving and the new refusals. No send reaches a contact Reply held without that read, so nothing says one does.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_6_0_and_the_three_operations_that_now_create_the_person()
+    public void The_changelog_keeps_0_6_0_and_the_three_operations_that_now_create_the_person()
     {
-        var section = Flat(ChangelogSection(0));
+        var section = Flat(ChangelogSection(1));
 
         Assert.StartsWith(" ## 0.6.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -439,7 +455,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_5_0_and_the_three_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(1));
+        var section = Flat(ChangelogSection(2));
 
         Assert.StartsWith(" ## 0.5.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -455,7 +471,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_4_0_and_the_four_inbox_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(2));
+        var section = Flat(ChangelogSection(3));
 
         Assert.StartsWith(" ## 0.4.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -472,7 +488,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_2_and_the_operation_it_added()
     {
-        var section = ChangelogSection(3);
+        var section = ChangelogSection(4);
 
         Assert.StartsWith("\n## 0.3.2\n", section, StringComparison.Ordinal);
         Assert.Contains("`campaign.create`", section, StringComparison.Ordinal);
@@ -483,7 +499,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_1_and_the_rule()
     {
-        var section = ChangelogSection(4);
+        var section = ChangelogSection(5);
 
         Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
         Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);

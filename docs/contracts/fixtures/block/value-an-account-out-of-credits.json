@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "the account has run out of what it pays with, and the provider says where to top it up",
+  "value": { "scope": "account", "reason": "billing", "link": "https://app.example.com/billing" },
+  "expect": "valid"
+}

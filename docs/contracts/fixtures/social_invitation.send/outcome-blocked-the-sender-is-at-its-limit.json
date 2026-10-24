@@ -1,0 +1,22 @@
+{
+  "operation": "social_invitation.send",
+  "version": 1,
+  "case": "the sending account has spent the invitations the provider allows it this week, and the provider says when the allowance renews",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "blocked",
+      "code": "provider_blocked",
+      "message": "The sending account has no invitations left this week, so nothing was sent.",
+      "details": null,
+      "external_ids": null,
+      "block": { "scope": "sender", "sender_external_id": "li_5531", "reason": "limit", "clears_at": "2026-10-27T00:00:00Z" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "blocked", "retriable": false, "block": "kept" }
+}

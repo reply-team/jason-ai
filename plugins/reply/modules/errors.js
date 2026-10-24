@@ -380,6 +380,12 @@ export const ROWS = {
       "code": "provider_call_failed",
       "class": "permanent",
       "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
+    },
+    "account_or_sender_blocked": {
+      "when": "Not reported yet. The CLI publishes no code that says Reply refused a call for the account's money or plan, an allowance it counts, a revoked key or a disconnected channel, and did nothing for it; this row is where such a code lands once it does (see the README, \"Endings every operation can meet\").",
+      "code": "provider_blocked",
+      "class": "blocked",
+      "note": "Reply refused this call for a reason outside the work item and did nothing for it. Clear it at Reply where the block says; the work can be proposed again once it clears."
     }
   },
   "per_operation": {

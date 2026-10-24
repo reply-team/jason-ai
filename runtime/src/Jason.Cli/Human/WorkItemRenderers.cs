@@ -38,13 +38,23 @@ public static class WorkItemRenderers
             Line("Retry after:", RenderText.Moment(item.RetryAfter)),
             Line("Attempts:", Attempts(item.AttemptCount, item.CurrentAttemptId)),
             Line("Last error:", Error(item.LastError)),
+        };
+
+        // Only under a provider block: what a person clears at the provider, which no other line says.
+        if (Blocked(item.LastError?.Block) is { } blocked)
+        {
+            lines.Add(Line("Blocked:", blocked));
+        }
+
+        lines.AddRange(
+        [
             Line("Created:", RenderText.Moment(item.CreatedAt)),
             Line("Updated:", RenderText.Moment(item.UpdatedAt)),
             Line("Finished:", RenderText.Moment(item.FinishedAt)),
             Line("Context keys:", RenderText.Keys(item.Context)),
             Line("Input:", Input(item.Context)),
             Line("Result:", item.Result is null ? "none" : "present"),
-        };
+        ]);
 
         // Only for an item created under a key: the key its creator chose, which a repeat of that create sends again.
         if (item.IdempotencyKey is { } key)
@@ -255,6 +265,35 @@ public static class WorkItemRenderers
 
     private static string? Error(AttemptErrorDto? error) =>
         error?.Code is null ? null : error.Message is null ? error.Code : error.Code + " — " + error.Message;
+
+    /// <summary>
+    /// The provider block as one line: what is blocked — the account, or one sender by the provider's identifier —,
+    /// why, where a person clears it, and when the provider said it clears by itself. A moment that does not read
+    /// as one is printed as it came rather than dropped.
+    /// </summary>
+    private static string? Blocked(JsonObject? block)
+    {
+        if (block is null)
+        {
+            return null;
+        }
+
+        var scope = Text(block, "scope");
+        var sender = Text(block, "sender_external_id");
+        var clearsAt = Text(block, "clears_at");
+        return Parts(
+            sender is null ? scope : scope + " " + sender,
+            Text(block, "reason"),
+            Text(block, "link"),
+            clearsAt is null
+                ? null
+                : "clears " + (DateTimeOffset.TryParse(clearsAt, CultureInfo.InvariantCulture, DateTimeStyles.None, out var moment)
+                    ? RenderText.Moment(moment)
+                    : clearsAt));
+    }
+
+    private static string? Text(JsonObject block, string name) =>
+        block[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
 }

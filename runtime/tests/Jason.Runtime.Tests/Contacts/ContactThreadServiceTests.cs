@@ -118,6 +118,8 @@ public class ContactThreadServiceTests
     [Theory]
     [InlineData("rate limited", "rate_limited", true)]
     [InlineData("feature unavailable", "feature_unavailable", false)]
+    [InlineData("a provider block", "provider_blocked", false)]
+    [InlineData("a block outside its contract", "provider_blocked", false)]
     [InlineData("a code the contract does not declare", "result_invalid", false)]
     [InlineData("an answer outside the schema", "result_invalid", false)]
     [InlineData("the protocol", "provider_read_failed", false)]
@@ -128,6 +130,14 @@ public class ContactThreadServiceTests
         {
             "rate limited" => FakeProviderReads.Failure("rate_limited", FailureClass.Transient),
             "feature unavailable" => FakeProviderReads.Failure("feature_unavailable", FailureClass.Permanent),
+            "a provider block" => FakeProviderReads.Failure(
+                "provider_blocked",
+                FailureClass.Blocked,
+                new JsonObject { ["scope"] = "account", ["reason"] = "credential" }),
+            "a block outside its contract" => FakeProviderReads.Failure(
+                "provider_blocked",
+                FailureClass.Blocked,
+                new JsonObject { ["scope"] = "account", ["reason"] = "insufficient_credits" }),
             "a code the contract does not declare" => FakeProviderReads.Failure("made_up", FailureClass.Permanent),
             "an answer outside the schema" => FakeProviderReads.Result(new JsonObject { ["items"] = new JsonArray() }),
             _ => FakeProviderReads.Protocol("plugin_timeout"),

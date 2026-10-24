@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "a reason in the provider's words rather than the contract's: a plugin translates, and says other where none fits",
+  "value": { "scope": "account", "reason": "insufficient_credits" },
+  "expect": { "invalid": [{ "pointer": "/reason", "reason": "enum" }] }
+}

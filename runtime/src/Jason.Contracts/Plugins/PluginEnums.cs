@@ -37,7 +37,10 @@ public enum SnapshotSource
 
 /// <summary>
 /// What the caller may conclude from a failure. The dispatcher reads the class, never the code: transient may be
-/// repeated, permanent and validation are final, and ambiguous means the provider may already have acted.
+/// repeated, permanent and validation are final, ambiguous means the provider may already have acted, and blocked
+/// means the provider refused the call for a reason outside the work item — money, a reached limit, a revoked
+/// credential, a broken channel — and did nothing for it. A blocked failure carries the block
+/// (<see cref="ProviderBlockContract"/>); until the runtime parks work on it, it is final.
 /// </summary>
 public enum FailureClass
 {
@@ -45,6 +48,7 @@ public enum FailureClass
     Permanent,
     Validation,
     Ambiguous,
+    Blocked,
 }
 
 /// <summary>The two ways one invocation can end on the protocol level.</summary>

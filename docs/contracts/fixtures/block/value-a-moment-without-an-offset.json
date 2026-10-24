@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "a moment the block clears at, written without an offset, so nobody can say when it is",
+  "value": { "scope": "sender", "sender_external_id": "mbx_1042", "reason": "limit", "clears_at": "2026-10-25 00:00" },
+  "expect": { "invalid": [{ "pointer": "/clears_at", "reason": "format" }] }
+}
