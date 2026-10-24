@@ -325,11 +325,13 @@ one item for both.
 
 **Closing and reopening a thread reach no person.** `conversation.close` sets it aside as worked, and
 `conversation.reopen` puts it back among those that need attention. **Filing it may reach one.**
-`conversation.classify` files it under one of the provider's own categories, the ones a read of the thread reports, and
+`conversation.classify` files it under one of the provider's own categories, as the provider names them, and
 a category the provider reserves carries that provider's own meaning with it, which filing there asks for too: its
 document's section "The provider's own meaning on its reserved names" says what that can be, and a campaign that must
-own every send files under categories of its own. The `Interested` below is only an example: whether a category of
-that name is reserved at the provider, and what filing there sets off, is that provider's. None of the three is a way
+own every send files under categories of its own, and lists them in the campaign's context under
+`filing_categories`, written as the provider names them, when you set it up: the responder Jason launches for
+a reply files a thread under one of those and under nothing else. The `Interested` below is only an example: whether a
+category of that name is reserved at the provider, and what filing there sets off, is that provider's. None of the three is a way
 to stop writing to somebody: that is `optout.record` or `enrollment.stop`, each with a document of its own.
 
 ```

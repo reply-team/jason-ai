@@ -139,4 +139,28 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A line whose <c>contact_id</c> is null names nobody, so the responder's item names nobody either: the responder
+    /// finds the person through the read, and where it cannot, or the read stops short of the latest message, the question
+    /// is the manager's to raise.
+    /// </summary>
+    [Fact]
+    public void The_manager_raises_the_responder_without_a_person_when_the_line_names_none()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains(
+            "Where the line's `contact_id` is null, nobody is pinned to the thread: create the responder's item without `--contact`, and the responder finds the person through the read.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Where it finds none, or more than one, it drafts no reply and says who wrote, and you raise one question at your next review.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "The same holds where the read does not show the thread's latest message: the responder drafts no reply and says so, and the question is yours.",
+            skill,
+            StringComparison.Ordinal);
+    }
 }

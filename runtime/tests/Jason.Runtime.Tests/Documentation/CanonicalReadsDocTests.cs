@@ -380,14 +380,14 @@ public sealed partial class CanonicalReadsDocTests
 
     /// <summary>
     /// The draft roles say what this build gives them, and two of those sentences said a read did not exist. They now
-    /// say where a reply and a count come from — the result of a provider operation — and the three that listed the
-    /// operations that act now say what writing does without counting the writes, which a new one would make untrue.
+    /// say where a reply and a count come from — the result of a provider operation — and the two that listed the
+    /// operations that act now say what writing does without counting the writes, which a new one would make untrue. The
+    /// responder, which now writes a reply, has its sentence held by its own role's tests.
     /// </summary>
     [Theory]
     [InlineData("skills/runtime/roles/responder/SKILL.md", "**This build reads a reply only through the provider.** A `provider_op` item naming `conversation.list` or `conversation.get` does it, and its result carries the threads; no verb of Jason's reads a mailbox.")]
     [InlineData("skills/runtime/roles/analyst/SKILL.md", "Jason records no open, click, reply or delivery of its own; the provider's counts reach it only as the result of a `provider_op` item naming `engagement.summarize`, with the envelope that says what each number counts.")]
     [InlineData("skills/runtime/roles/copywriter/SKILL.md", "Some write and the rest only read: enrolling somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,")]
-    [InlineData("skills/runtime/roles/responder/SKILL.md", "Some write and the rest only read: enrolling somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,")]
     [InlineData("skills/runtime/roles/personalizer/SKILL.md", "Some write and the rest only read: enrolling somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,")]
     public void A_draft_role_says_where_a_read_comes_from(string skill, string sentence) =>
         Assert.Contains(sentence, Flat(Source(skill)), StringComparison.Ordinal);

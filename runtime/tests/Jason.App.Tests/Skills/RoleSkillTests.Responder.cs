@@ -1,3 +1,7 @@
+using System.Text.Json.Nodes;
+using Jason.Cli.Tests.Documentation;
+using Jason.Contracts.Operations;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
@@ -48,5 +52,197 @@ public partial class RoleSkillTests
         Assert.Contains("When the brief names a `read`", skill, StringComparison.Ordinal);
         Assert.Contains("the reply is that item's result", skill, StringComparison.Ordinal);
         Assert.Contains("if it has not succeeded, fail with a code rather than answer a reply you have not seen", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The answer is a reply in the thread the person wrote in, as work: never a new thread, on the thread's own channel,
+    /// the whole text in the item under a key of its own, and drafted only after the two checks that can make a reply
+    /// wrong. The catalog says the same of the role, and nothing says the answer is only words.
+    /// </summary>
+    [Fact]
+    public void The_responder_answers_in_the_person_s_own_thread_and_never_in_a_new_one()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("you answer with the reading and with the reply item you create.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "What you would write back is a `provider_op` item naming `conversation.reply`, in this campaign, for the person the thread is with, naming the read's thread: it answers inside that thread and reaches nobody else, never a new thread.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Its `channel` is the thread's, as the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Its key is built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then `-reply-501-2` — so that two replies in one thread are two keys.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("--idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-reply-501-1", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "is its document's, `docs/contracts/operations/conversation.reply.md`, and a mismatch comes back as the item's error `thread_contact_mismatch`, with nothing sent.",
+            skill,
+            StringComparison.Ordinal);
+
+        // Drafted after the two checks that can make a reply wrong: whether there is one to answer, and whose it is.
+        var nothing = skill.IndexOf("**Nothing to answer when the latest message is your side's own.**", StringComparison.Ordinal);
+        var nobody = skill.IndexOf("**Where your item names nobody, find the person through the thread.**", StringComparison.Ordinal);
+        var reply = skill.IndexOf("--operation conversation.reply", StringComparison.Ordinal);
+        Assert.True(
+            nothing >= 0 && nobody > nothing && reply > nobody,
+            $"the reply is printed at {reply}, after both checks (nothing to answer at {nothing}, nobody named at {nobody})");
+
+        // What was false once a reply could be sent: that nothing writes a message, and that the answer is only words.
+        Assert.DoesNotContain("No operation this build publishes writes a message", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("A reply you draft is this work item's result", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("the words you would send back", skill, StringComparison.Ordinal);
+        var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
+        Assert.DoesNotContain("the answer is a reading and a draft rather than anything sent", catalog, StringComparison.Ordinal);
+        Assert.Contains("the answer goes into the person's own thread as a reply a person approves, one approval for each send", catalog, StringComparison.Ordinal);
+    }
+
+    /// <summary>A reply reaches a person, so it parks, and one item is one send: the responder neither approves nor bundles.</summary>
+    [Fact]
+    public void The_responder_asks_one_approval_for_each_send()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("It reaches a person, so it parks for a person's approval, and you do not approve it.", skill, StringComparison.Ordinal);
+        Assert.Contains("One work item is one reply to one person and one approval: two replies are two work items, never one item for both.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A thread whose latest message is outbound moved for something sent from this side: there is nothing to answer. A
+    /// read that stops short of the end, or a last message nobody can place, does not show the latest message: a question.
+    /// </summary>
+    [Fact]
+    public void The_responder_has_nothing_to_answer_when_the_latest_message_is_Jason_s_own()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains(
+            "**Nothing to answer when the latest message is your side's own.** The read's messages come oldest first; when the last one is `outbound`,",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("there is no reply to answer: say so in your answer and create nothing.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "When the read's `has_more` is true, or the last message's `direction` is `unknown`, the read does not show you the latest message: create no reply, and say so in your answer, so that a person can be asked.",
+            skill,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Somebody who asked to stop gets no answer: the stop is recorded and nothing is drafted, so the opt-out section
+    /// comes before the reply and says so. A stop from somebody Jason cannot name still reaches the register, by address.
+    /// </summary>
+    [Fact]
+    public void The_responder_sends_no_answer_to_a_person_who_asked_to_stop()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("Somebody who asked to stop is sent no answer: recording the stop is the whole of what you do about that reply.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Where no single person was found, the register's entry is still made, by the address they wrote from; no `optout.record` item is created, because it needs the person, and your answer says that the provider's half waits for a person.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.True(
+            skill.IndexOf("--operation optout.record", StringComparison.Ordinal) < skill.IndexOf("--operation conversation.reply", StringComparison.Ordinal),
+            "the stop is taught before the answer");
+    }
+
+    /// <summary>
+    /// A line that named no person brings an item that names nobody. The responder looks the person up by the address
+    /// they wrote from, and a match counts only on that exact address; exactly one is an answer, none or several is a
+    /// question for a person, never a guess, and the reply's own check is what stands behind a wrong one.
+    /// </summary>
+    [Fact]
+    public void The_responder_finds_the_person_through_the_thread_when_its_item_names_nobody()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("**Where your item names nobody, find the person through the thread.**", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Look them up in Jason by the address the latest inbound message came `from`, never by the read's `contact`, which carries the provider's own identifier and a name: the name only says who wrote.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("jason contact list --query marta@example.com", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A person found counts only when their value on the thread's channel equals that address exactly: `--query` matches any part of a name, a company, a title or a channel value, so a result can be somebody else, and a `from` that is a display name rather than an address matches nobody.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("Exactly one such person: the reply names them with `--contact`.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "None, or more than one: create no reply, and say in your answer who wrote, from which address, and why nothing was drafted as an item, so that a person can be asked.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("A reply that names the wrong person anyway is refused by the reply's own check, below, with nothing sent.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Filing a thread can carry the provider's own meaning, so the responder files only under a category the campaign
+    /// lists as its own under one key, written as the provider names it; anything else is named in the answer and not
+    /// filed. A read of one thread reports only the category it sits in now, so nothing is checked against it.
+    /// </summary>
+    [Fact]
+    public void The_responder_files_the_thread_only_under_a_category_the_campaign_names()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("**File the thread only under a category the campaign names as its own.**", skill, StringComparison.Ordinal);
+        Assert.Contains("under `filing_categories`, a list of category names written as the provider names them.", skill, StringComparison.Ordinal);
+        Assert.Contains("file it under one that list names, with a `provider_op` item naming `conversation.classify`, and under nothing else", skill, StringComparison.Ordinal);
+        Assert.Contains("--operation conversation.classify", skill, StringComparison.Ordinal);
+        Assert.Contains("`docs/contracts/operations/conversation.classify.md`", skill, StringComparison.Ordinal);
+        Assert.Contains("A name the provider does not hold fails `category_not_found`, with nothing filed.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Where the key is absent or empty, file nothing, and name in your answer the category you would have filed it under.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("and the read reports", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("as a read of a thread reports them", skill, StringComparison.Ordinal);
+
+        // The key is said in one more place, written the same way: where a session is told how a thread is filed.
+        var session = Flattened("managed-campaign-work");
+        Assert.Contains("lists them in the campaign's context under `filing_categories`, written as the provider names them,", session, StringComparison.Ordinal);
+        Assert.Contains("files it under one of the provider's own categories, as the provider names them,", session, StringComparison.Ordinal);
+        Assert.DoesNotContain("the ones a read of the thread reports", session, StringComparison.Ordinal);
+        Assert.DoesNotContain("as a read of a thread reports them", session, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A launched responder copies these lines, and a line refused at the create is an answer that never parks: each
+    /// <c>--input</c> it prints is judged against the operation's own document, and an operation that needs the person
+    /// names one.
+    /// </summary>
+    [Fact]
+    public void Every_provider_operation_the_responder_prints_carries_arguments_its_document_accepts()
+    {
+        var operations = new List<string>();
+        foreach (var line in SkillPack.PrintedCommands(SkillPack.Find("responder").File).Where(line => line.Contains(" --kind provider_op ", StringComparison.Ordinal)))
+        {
+            var words = ShellWords.Split(line).ToList();
+            string? Value(string option) => words.IndexOf(option) is var at and >= 0 && at < words.Count - 1 ? words[at + 1] : null;
+
+            var operation = Value("--operation") ?? string.Empty;
+            var contract = OperationCatalog.Find(operation);
+            Assert.True(contract is not null, $"The responder prints a work item for '{operation}', which is no published operation: {line}");
+            var input = Value("--input");
+            Assert.True(input is not null, $"The responder prints a work item for {operation} with no --input: {line}");
+            var problems = SchemaValidator.Verdicts(SchemaValidator.Validate(JsonNode.Parse(input), contract.ArgumentSchema));
+            Assert.True(
+                problems.Count == 0,
+                $"The --input the responder prints for {operation} is refused by its document: "
+                + $"{string.Join("; ", problems.Select(problem => $"{problem.Pointer} {problem.Message}"))}. The line: {line}");
+            Assert.True(
+                contract.Preflight.Contact != ContactRequirement.Required || Value("--contact") is not null,
+                $"{operation} needs the person a work item is about, and the line the responder prints for it names none: {line}");
+            operations.Add(operation);
+        }
+
+        foreach (var operation in new[] { "optout.record", "enrollment.stop", "conversation.reply", "conversation.classify" })
+        {
+            Assert.True(
+                operations.Contains(operation, StringComparer.Ordinal),
+                $"The responder prints work items for [{string.Join(", ", operations)}], and none for {operation}.");
+        }
     }
 }

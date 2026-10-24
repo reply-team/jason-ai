@@ -138,6 +138,11 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"thread":"501","read":"wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE"}' --reason "a reply to answer" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-respond-501
 ```
 
+Where the line's `contact_id` is null, nobody is pinned to the thread: create the responder's item without
+`--contact`, and the responder finds the person through the read. Where it finds none, or more than one, it drafts no
+reply and says who wrote, and you raise one question at your next review. The same holds where the read does not show
+the thread's latest message: the responder drafts no reply and says so, and the question is yours.
+
 Neither wakes you when it ends: a read that succeeded is not a trigger. Say in your note that you are watching both,
 and decide at your next review, when what they found is there to read. A thread the line names can have moved for a
 follow-up sent into it rather than for a reply; the read is how you tell. Whether the provider's list moves a thread

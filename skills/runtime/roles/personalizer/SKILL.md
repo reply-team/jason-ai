@@ -26,9 +26,10 @@ jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 **There is no per-contact draft store in this build.** What you write for one person is this work item's result;
 the contact record holds that person's own data and is not a place to park drafts about them.
 
-**No operation this build publishes writes a message.** Some write and the rest only read: enrolling somebody puts
+**No operation this build publishes writes outreach: the one that writes a message, `conversation.reply`, answers a
+person inside the thread they wrote in.** Some write and the rest only read: enrolling somebody puts
 them into the provider's own campaign, starting a campaign releases its first step to everybody in it, and whatever
-goes out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
+goes out after that is the provider's doing, on its schedule. Nothing here composes outreach and sends it.
 `campaign.activate` is what starts a campaign sending, and a person approves it with a preview that names how many
 people its first step goes to.
 

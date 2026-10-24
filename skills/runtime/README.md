@@ -103,8 +103,9 @@ for a role that sits with a person, the judgement it shares with its session fil
   guardrails: what to read before judging it, what a verdict is worth here, and why saying plainly what fails
   is the whole of the job.
 - [`roles/responder`](roles/responder/SKILL.md) — **draft.** What a reply means and what should happen
-  next: the reply is in the brief, in the result of a provider operation that read it, or nowhere, and the
-  answer is a reading and a draft rather than anything sent.
+  next: the reply is in the brief, in the result of a provider operation that read it, or nowhere; the answer
+  goes into the person's own thread as a reply a person approves, one approval for each send, and the thread is
+  filed only under a category the campaign names as its own.
 - [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the three
   things this runtime keeps — the work items, the chronicle and the reports — and honest about where the
   record runs out.
