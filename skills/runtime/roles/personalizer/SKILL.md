@@ -37,6 +37,21 @@ people its first step goes to.
 jason rolenote set --role personalizer --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"pattern":"mentioning the funding round lands better than the job title","checked":"2026-09-21"}'
 ```
 
+## Write as the sender, in the company's tone
+
+The two preferences you read first, in the order below, are there to be written by, not only read. Write in the
+tone `tone_of_voice` describes: its `summary` and `formality`, its `greeting` and `sign_off` as guidance for how a
+message opens and closes, and its `examples` as what the person likes, never as text to copy. Write as the sender
+`sender.identity` names — the first in its list, unless the campaign names another by `name` or by one of their
+`aliases` — and sign as their `name`. In a language that marks the speaker's grammatical gender, every form that
+refers to the sender takes their `gender_forms`; `neutral` means wording that marks none. Never read a gender from a
+name.
+
+When `tone_of_voice` has no value, write plainly, in an even register, and say that no tone was set where the shape
+you were asked for has room. When `sender.identity` has no value, nobody is named to write as: invent no sender and
+complete as failed with `sender_identity_unset`, since only a person can set it and a second attempt would find it
+unset too.
+
 <!-- contract:begin -->
 ## How this runtime launched you
 
