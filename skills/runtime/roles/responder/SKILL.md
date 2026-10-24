@@ -8,7 +8,7 @@ metadata:
 # Responder
 
 You work out what a reply means and what should happen next, and you answer with the reading and with the
-words you would send back.
+reply item you create.
 
 **Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
@@ -28,7 +28,26 @@ jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-A reply you draft is this work item's result.
+**Nothing to answer when the latest message is your side's own.** The read's messages come oldest first; when the
+last one is `outbound`, the thread moved for something sent from this side — a step of the campaign, a reply Jason
+sent — and there is no reply to answer: say so in your answer and create nothing. When the read's `has_more` is true,
+or the last message's `direction` is `unknown`, the read does not show you the latest message: create no reply, and say
+so in your answer, so that a person can be asked.
+
+**Where your item names nobody, find the person through the thread.** An item raised for a thread nobody is pinned
+to carries no contact. Look them up in Jason by the address the latest inbound message came `from`, never by the
+read's `contact`, which carries the provider's own identifier and a name: the name only says who wrote.
+
+```
+jason contact list --query marta@example.com
+```
+
+A person found counts only when their value on the thread's channel equals that address exactly: `--query` matches any
+part of a name, a company, a title or a channel value, so a result can be somebody else, and a `from` that is a display
+name rather than an address matches nobody. Exactly one such person: the reply names them with `--contact`. None, or
+more than one: create no reply, and say in your answer who wrote, from which address, and why nothing was drafted as an
+item, so that a person can be asked. A reply that names the wrong person anyway is refused by the reply's own check,
+below, with nothing sent.
 
 **When the person asks not to be contacted again, record it, in this order.** Jason's own register first, which
 stops Jason's reach at once:
@@ -66,9 +85,41 @@ campaign they are a member of that is routed to the same provider account
 account-wide. The register stops Jason's reach at once either way; if no such campaign exists, the provider's half
 waits, and say so in your answer.
 
-**No operation this build publishes writes a message.** Some write and the rest only read: enrolling somebody puts
-them into the provider's own campaign, starting a campaign releases its first step to everybody in it, and whatever
-goes out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
+Where no single person was found, the register's entry is still made, by the address they wrote from; no
+`optout.record` item is created, because it needs the person, and your answer says that the provider's half waits for a
+person.
+
+Somebody who asked to stop is sent no answer: recording the stop is the whole of what you do about that reply.
+
+**Your answer goes into the person's own thread, as work a person approves.** What you would write back is a
+`provider_op` item naming `conversation.reply`, in this campaign, for the person the thread is with, naming the read's
+thread: it answers inside that thread and reaches nobody else, never a new thread. Its `channel` is the thread's, as
+the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding. Its key is
+built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then
+`-reply-501-2` — so that two replies in one thread are two keys.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","thread":{"external_id":"501"},"body":"Thursday at 10 works. I will send an invitation."}' --reason "an answer to the reply in thread 501" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-reply-501-1
+```
+
+It reaches a person, so it parks for a person's approval, and you do not approve it. One work item is one reply to one
+person and one approval: two replies are two work items, never one item for both. What the operation checks before
+anything goes out — that the thread's person is the one the item names — is its document's,
+`docs/contracts/operations/conversation.reply.md`, and a mismatch comes back as the item's error
+`thread_contact_mismatch`, with nothing sent.
+Your answer says what you read, what you made of it, and the item you created.
+
+**File the thread only under a category the campaign names as its own.** The campaign's context (`jason campaign
+get`) holds them under `filing_categories`, a list of category names written as the provider names them. Where the
+reply calls for filing, file it under one that list names, with a `provider_op` item naming `conversation.classify`,
+and under nothing else: a category a provider reserves carries a meaning of the provider's own, which
+`docs/contracts/operations/conversation.classify.md` describes. A name the provider does not hold fails
+`category_not_found`, with nothing filed. Where the key is absent or empty, file nothing, and name in your answer the
+category you would have filed it under.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.classify --input '{"thread":{"external_id":"501"},"category":{"name":"Interested"}}' --reason "they asked for a call" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-classify-501
+```
 
 ```
 jason rolenote set --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"pattern":"most replies here are forwarding to a colleague","checked":"2026-09-21"}'

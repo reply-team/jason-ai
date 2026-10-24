@@ -3,12 +3,12 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.15.0**.
+this pack ships with Jason **0.16.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
-**What they do not teach yet.** None of the six mentions `jason skills install`; `jason skills update` and
+**What they do not teach yet.** None of the seven mentions `jason skills install`; `jason skills update` and
 `jason status` are mentioned only by `operating-the-installation`, and `jason logs` and `jason doctor` are
 taught by `troubleshooting-jason` only; both of those skills are drafts until a host reads them. `verified` in
 this repository means a named agent host read *that exact text* — its description and its body — while driving
@@ -23,8 +23,8 @@ description that promises everything matches nothing.
 
 - [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
   Turning an objective into durable campaign work and following it: the provider check, what the person has
-  already written down, the campaign, the people it is about, provider operations and AI role work, and what the
-  runtime does with them afterwards.
+  already written down, the campaign, the people it is about, provider operations and AI role work, what the
+  runtime does with them afterwards, answering a conversation, and stopping or holding work.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
@@ -40,9 +40,15 @@ description that promises everything matches nothing.
   produced somewhere else, before it acts on a view of the world that is wrong.
 - [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
   conversation about a campaign: its first words on where the person's files live, an opening in the order a real
-  start needs, with who writes and how the company sounds set as the person's word, taking a brief as it comes, what
-  stays a quick look, what is agreed with the person before anything is created, when it becomes campaign work, and
-  the first message seen before anything is sent. The session file of the planner, below.
+  start needs, with who writes and how the company sounds set as the person's word, taking a brief as it comes and
+  asking for what is missing one question at a time, what stays a quick look, what is agreed with the person before
+  anything is created, among it a campaign named for what it is for, under a project named from what they sell, when it
+  becomes campaign work, and the first message seen before anything is sent. The session file of the planner, below.
+- [`researcher-in-session`](researcher-in-session/SKILL.md) — **draft.** The researcher's judgement in a person's own
+  conversation about an account or a person: taking the question as it comes, what stays a quick look and what
+  becomes research work items, what Jason already holds and the launched researcher's notes read as a lead, the
+  method left to `sdr-operations`, and an answer that says what was established and what was not. The session file
+  of the researcher, below.
 
 ### Installing them
 
@@ -52,7 +58,7 @@ jason skills install --pack jason-runtime-skills
 jason skills update --pack jason-runtime-skills
 ```
 
-That deploys the six interactive skills into the agent harnesses it finds, and the nine role skills below
+That deploys the seven interactive skills into the agent harnesses it finds, and the nine role skills below
 into the runtime's own data directory, where the runtime reads them at every launch. The second destination is
 not optional: a runtime with no role skills launches every role untaught — which is why it can be deployed on
 its own, into nothing but the runtime's directory:
@@ -77,29 +83,31 @@ takes — held identical by a test. What
 differs between them is one paragraph of purpose and one of what this build can and cannot give that role — and,
 for a role that sits with a person, the judgement it shares with its session file (below).
 
-- [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** The brief a role is given when the runtime
-  launches it: how to call home in the one command form that is permitted, how to read and keep its notes, and
-  how to answer in the shape the work item asked for.
+- [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** What a brief asks about an account or a person,
+  found and verified: what counts as established, why anything from outside Jason is the host's doing and never
+  the runtime's promise, an answer that says what was established and what was not, and what belongs in its note.
 - [`roles/manager`](roles/manager/SKILL.md) — **draft**, because it was re-authored onto the shared launch
   contract after the run that last read it, and no host has read the text that ships. The review a manager
   is launched for: why it was
-  woken, what it reads and in which order, what it may decide alone, how it asks a person the one question it
-  cannot answer, and the line it leaves in the chronicle every time.
+  woken, what a noticed reply or provider-event line asks of it and whose thread it is, what it reads and in which
+  order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
+  the chronicle every time.
 - [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
   before it plans, the order a first campaign opens in, what this build stores of a plan and what it does not, and
   how a horizon becomes work items a dispatcher will claim.
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
-  itself says about voice and guardrails, where the copy goes when it is written, and why writing it is not
-  sending it.
+  itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
+  written, and why writing it is not sending it.
 - [`roles/personalizer`](roles/personalizer/SKILL.md) — **draft.** The messaging adapted to one person: what
-  this runtime knows about them and where to read it, where the wording goes afterwards, and why a contact
-  record is not the place for it.
+  this runtime knows about them and where to read it, the tone and the sender's forms it writes in, where the
+  wording goes afterwards, and why a contact record is not the place for it.
 - [`roles/critic`](roles/critic/SKILL.md) — **draft.** The review of a draft against the brief and the
   guardrails: what to read before judging it, what a verdict is worth here, and why saying plainly what fails
   is the whole of the job.
 - [`roles/responder`](roles/responder/SKILL.md) — **draft.** What a reply means and what should happen
-  next: the reply is in the brief, in the result of a provider operation that read it, or nowhere, and the
-  answer is a reading and a draft rather than anything sent.
+  next: the reply is in the brief, in the result of a provider operation that read it, or nowhere; the answer
+  goes into the person's own thread as a reply a person approves, one approval for each send, and the thread is
+  filed only under a category the campaign names as its own.
 - [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the three
   things this runtime keeps — the work items, the chronicle and the reports — and honest about where the
   record runs out.
@@ -141,7 +149,10 @@ person has two files. **The launched role's file**, `roles/<role>/SKILL.md`, is 
 role it launches: it answers in the shape a work item asks for and carries the launch contract. **The session
 file**, `<role>-in-session/SKILL.md`, is one of the skills a person's own session reads: it talks with the person,
 carries no launch contract, and hands the commit to `managed-campaign-work`. Today that is the planner,
-[`roles/planner`](roles/planner/SKILL.md) and [`planner-in-session`](planner-in-session/SKILL.md).
+[`roles/planner`](roles/planner/SKILL.md) and [`planner-in-session`](planner-in-session/SKILL.md), and the
+researcher, [`roles/researcher`](roles/researcher/SKILL.md) and [`researcher-in-session`](researcher-in-session/SKILL.md).
+The manager has none: it organises the other roles' work on a check-in, and a person keeping a campaign moving does
+that through `managed-campaign-work`, `approvals-and-questions` and `troubleshooting-jason`.
 
 The two share one block, the role's judgement, between `<!-- craft:begin -->` and `<!-- craft:end -->`, and a test
 holds it to the same bytes in both; everything outside it belongs to one file. The block prints no command, because

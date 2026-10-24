@@ -38,8 +38,9 @@ destroyed.
    by it, then delete it by it.
 2. Otherwise fail `contact_not_linked` before the provider is asked anything.
 
-The second path is decided by the plugin, after the claim: a person approving a delete for somebody nobody pinned reads
-a dash where the identifier would be, and the work then fails `contact_not_linked`.
+The runtime decides the second path first, at the claim and before anybody is asked to approve: a delete for somebody
+the routed plugin has pinned nobody for fails `contact_not_linked` there, so nobody approves a delete that cannot run.
+A plugin handed such an input anyway still refuses it the same way.
 
 ## The input you receive
 
@@ -82,7 +83,8 @@ The runtime renders this summary from the composed input when it parks the work 
 > are.
 
 It names the person by the value the delete consumes, and highlights that value and the provider's identifier, so
-whoever decides sees which contact goes. With nobody pinned the identifier renders as a dash. The fixtures
+whoever decides sees which contact goes. With nobody pinned the identifier renders as a dash, though the claim refuses
+such a delete before it is parked, so nobody is shown that preview to decide on. The fixtures
 [`fixtures/contact.delete/preview-*.json`](../fixtures/contact.delete) show each case.
 
 ## The properties

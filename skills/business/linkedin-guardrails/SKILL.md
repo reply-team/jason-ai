@@ -94,7 +94,10 @@ Open expert questions:
    charged per invitation sent. Invitations therefore do not compete with outreach for one
    allowance, and running out of one says nothing about the other: read both before planning a
    day's work. Where parallel work runs against the same account, `sender.reserve` claims a unit
-   so two runs cannot spend it twice.
+   so two runs cannot spend it twice. The note is at most 200 characters, counted as characters
+   and not bytes, and a longer one is refused when the work is created, before anything is sent
+   (`docs/contracts/operations/social_invitation.send.json`): write it to fit, because a note
+   shortened after approval is not the note the person approved.
 6. **Ask before writing** (`conversation_window.get`): may we write to this person freely right
    now, only with pre-approved content, or only by spending a credit? `social_credit.get` says
    how many credits are left, when they expire, and whether a reply gives one back. Where the
@@ -109,7 +112,11 @@ Open expert questions:
    artefact, a ceiling and an expiry, recorded. See `approval-boundaries`.
 8. **Pace like a person.** Activity spread through business hours, no bursts, no round-the-clock
    patterns. Automation is detected by rhythm as much as by volume — which is why spacing is
-   part of the limit decision and not an afterthought to it.
+   part of the limit decision and not an afterthought to it. For invitations that means the same
+   small number each working day, spread across its hours and across the week, never a day's
+   allowance spent in one sitting or a week's in one day. How many is the account's to say — read
+   it from `sender.health` and `channel.describe`, keep well under it — and no figure in this
+   skill replaces that read.
 9. **Watch acceptance.** Falling acceptance on invitations is the leading indicator of trouble —
    it degrades before the platform acts. `social_invitation.list` gives the outstanding set and
    its age. Where the floor must enforce itself with nobody present, `stoprule.set` names what
@@ -198,6 +205,11 @@ email and less forgiving. Full rules: `approval-boundaries`.
 
 ## Changelog
 
+- 0.4.0 (2026-10-24): the invitation's note carries its length bound, the one the operation's
+  contract enforces, said once where the skill speaks about inviting. Invitation pacing is said
+  in words: the same small number each working day, spread across its hours and the week, with
+  how many read from the account rather than written here. No pacing number was validated or
+  invented: every expert marker survives untouched.
 - 0.3.0 (2026-08-10): rewritten against the 325-operation contract. `sender.limits.read` became
   `sender.get` and `sender.limits.update` became `sender_limit.set`, which is `confirm_once` in
   both directions — so the first move in an incident is `sender.pause`, which is `auto`. The
