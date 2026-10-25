@@ -170,6 +170,8 @@ with `JASON_DATA_DIR`). There are no install verbs in this version. The package 
 the Reply plugin, is also published with every release from 0.11.0 on as `jason-plugin-reply.zip`, its
 files at the archive's root: checked against that release's `checksums.txt` and unpacked into
 `~/.jason/plugins/reply`, it is installed. Step 3 of [the wiring check](golden-path.md) prints the lines.
+The runtime carries the package its own release publishes and says in `system.info`'s `released_plugins` whether the
+one installed is it, by content digest, so `jason status` names an earlier release's package left behind by an update.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/

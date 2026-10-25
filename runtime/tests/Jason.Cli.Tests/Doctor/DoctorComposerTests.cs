@@ -1716,6 +1716,32 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// How the installed plugin packages stand against the release's travels whole: ids, versions, digests and states are
+    /// the runtime's own words about packages, none of them a person's, so the bundle withholds no field of the section, and
+    /// the readiness check composed from it travels beside it.
+    /// </summary>
+    [Fact]
+    public async Task The_released_plugin_packages_travel_as_the_runtime_reports_them()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with
+        {
+            ReleasedPlugins = [new ReleasedPluginInfo("reply", ReleasedPluginState.Behind, new PluginPackageInfo("0.7.0", "sha256:b"), new PluginPackageInfo("0.6.1", "sha256:a"))],
+        };
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var entry = Section(bundle, "runtime")["system_info"]!["released_plugins"]!.AsArray().Single()!;
+        Assert.Equal("behind", Text(entry["state"]));
+        Assert.Equal("0.7.0", Text(entry["released"]!["version"]));
+        Assert.Equal("sha256:a", Text(entry["installed"]!["digest"]));
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(item => Text(item!["name"]) == "plugin_package")!;
+        Assert.Equal("failed", Text(check["state"]));
+        Assert.DoesNotContain(DoctorComposer.SystemInfoWithheld, field => field.Path.StartsWith("released_plugins", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// And nothing read from under the root does: the bundle lists and opens no folder or file of it, so a word of a memory
     /// file and a memory file's name never reach it, the journal's entries asked for or not, and it says so among what it
     /// never carries. A folder under the root travels only as the journal recorded it: a project link's entry holds the

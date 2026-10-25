@@ -171,6 +171,24 @@ what is running. A development build carries the number of the release it is on 
 which is *older* than that release and newer than every release before it: it advertises that release once it is
 published, and none that came before.
 
+### And what it says about the plugin packages its release publishes
+
+`system.info` carries a `released_plugins` section as well, read with no network: the runtime carries the plugin
+packages its own release publishes beside its archives — today the Reply plugin — and says, for each, how the
+package of that id installed stands against it:
+
+```json
+[{ "id": "reply", "state": "behind", "released": { "version": "0.7.0", "digest": "sha256:…" }, "installed": { "version": "0.6.1", "digest": "sha256:…" } }]
+```
+
+`current` is the same content digest; `behind` is another digest with a lower version, an earlier release's
+package; `differs` is another digest with the same version or a higher one, so a later release's package or one
+built or edited on this machine; `not_installed` has `installed: null`. The yardstick is the release this runtime
+is, never the newest one — whether a newer release exists is `update`'s to say — and a development build compares
+with its own tree. The section is `null` on a runtime older than it. `jason status` reads it as the optional
+`plugin_package` check. The recorded exchanges under `docs/api/fixtures/system.info/` number their digests per
+occurrence, so a `current` recording shows two different words where the runtime saw one digest.
+
 ### And what it says about the skills it will teach from
 
 `system.info` carries a `skills` section beside it, describing the one directory the runtime reads role skills
@@ -396,6 +414,10 @@ work directories. Nor does it touch anything you registered with the machine to 
 a scheduled task, a login item — because the file at the install path is replaced in place rather than moved
 elsewhere, so whatever points at that path still points at Jason.
 
+So after an update the plugin packages installed are the earlier release's, until you install the new release's:
+`jason status` fails its optional `plugin_package` check and names the installed version and the version this
+release published, and step 3 of [the wiring check](golden-path.md) prints the lines that place the package.
+
 Its last step, after `complete`, is the skills: exactly what `jason skills update` does, at the new release's tag.
 The runtime's own role skills, and each agent harness this machine detects, are redeployed wherever a deployment
 there was recorded, from the source its record names; a deployment made with `--root` into a directory detection
@@ -464,6 +486,8 @@ went back to then fails `role_skills`, because its role skills belong to a relea
 until `jason skills update` — or `jason skills install --roles-only`, for the role skills alone — brings them to the
 tag of the version you are on. It leaves the UI where the update put it too, and `jason status` names
 `jason ui install` for the default UI from the newer release, which places the one of the version you are on.
+A rollback leaves the plugins as the update left them as well, and a package the newer release published then reads
+`differs` in `system.info` and passes `plugin_package`.
 
 **The database is restored only while it is certain that nothing has happened since.** That is decided from the
 chronicle: the line it stood at when the new version was declared healthy, against the line it stands at now. If

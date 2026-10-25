@@ -6,6 +6,10 @@ namespace Jason.Contracts.Api;
 /// The role skills this runtime will teach from; null on a runtime older than the section, which reads the
 /// same way as the other sections that arrived late.
 /// </param>
+/// <param name="ReleasedPlugins">
+/// The plugin packages this runtime's release publishes, each beside the package of that id the active snapshot holds;
+/// null on a runtime older than the section.
+/// </param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -22,7 +26,35 @@ public sealed record SystemInfoResponse(
     NotificationsInfo? Notifications = null,
     ListeningInfo? Listening = null,
     UiModuleInfo? Ui = null,
-    HarnessInfo? Harness = null);
+    HarnessInfo? Harness = null,
+    IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins = null);
+
+/// <summary>
+/// A plugin package this runtime's release publishes beside its archives, and the package of the same id the active
+/// snapshot holds. The yardstick is the release this runtime is, never the newest one: whether a newer release exists is
+/// the <c>update</c> section's to say, and the package a person installs is the one of the release they run.
+/// </summary>
+/// <param name="Installed">The package of this id in the active snapshot; null exactly when the state is <c>not_installed</c>.</param>
+public sealed record ReleasedPluginInfo(string Id, ReleasedPluginState State, PluginPackageInfo Released, PluginPackageInfo? Installed);
+
+/// <summary>One package as its manifest names it and as its content digest identifies it.</summary>
+public sealed record PluginPackageInfo(string Version, string Digest);
+
+/// <summary>How the installed package stands against the one this runtime's release publishes.</summary>
+public enum ReleasedPluginState
+{
+    /// <summary>The installed package is the release's: the two content digests are equal.</summary>
+    Current,
+
+    /// <summary>The digests differ and the installed manifest names a lower version: a package an earlier release published.</summary>
+    Behind,
+
+    /// <summary>The digests differ and the installed version is the same or higher: a later release's package, or one built or edited on this machine.</summary>
+    Differs,
+
+    /// <summary>The active snapshot holds no package of this id.</summary>
+    NotInstalled,
+}
 
 /// <summary>
 /// The harness root in force — the settings' <c>Harness:Root</c>, or <c>Jason</c> in the home directory, the last value

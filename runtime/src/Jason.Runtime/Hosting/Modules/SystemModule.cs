@@ -30,6 +30,7 @@ public static class SystemModule
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<ShutdownCoordinator>();
         services.AddSingleton<DrainCoordinator>();
+        services.AddSingleton(_ => ReleasedPlugins.Embedded());
         return services;
     }
 
@@ -54,7 +55,8 @@ public static class SystemModule
              Presence presence,
              ListeningEndpoint listening,
              UiModule ui,
-             HarnessFolders harness) =>
+             HarnessFolders harness,
+             ReleasedPlugins released) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -91,7 +93,10 @@ public static class SystemModule
                     Ui: ui.Active(),
                     // Where the person's files live, as the runtime will make and find them, so a status line shows the
                     // root in force rather than working one out for itself.
-                    Harness: harness.Report())));
+                    Harness: harness.Report(),
+                    // Against the snapshot in force at the moment it is asked, so a reload is said at once; the release's
+                    // own packages are hashed once per process, on the first ask.
+                    ReleasedPlugins: released.Compare(plugins.Snapshot))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

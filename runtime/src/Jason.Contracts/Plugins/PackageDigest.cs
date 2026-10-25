@@ -9,6 +9,9 @@ public sealed class PackageTooLargeException(string message) : Exception(message
 
 public sealed record PackageDigestResult(string Digest, int FileCount, long TotalBytes);
 
+/// <summary>One file of a package as the digest reads it: its forward-slashed relative path, its length, and its bytes.</summary>
+public sealed record PackageFile(string Path, long Length, Func<Stream> Open);
+
 /// <summary>
 /// The identity of an installed package: SHA-256 over a canonical stream of its files. Both sides compute it —
 /// the runtime at reload, the child before it runs — so a package edited between the two is caught rather than
@@ -52,17 +55,37 @@ public static class PackageDigest
         var files = Files(root);
         if (files.Count > MaxFiles)
         {
-            throw new PackageTooLargeException(string.Create(
-                CultureInfo.InvariantCulture,
-                $"A plugin package holds at most {MaxFiles} files; this one holds {files.Count}."));
+            throw TooMany(files.Count);
+        }
+
+        return Compute(files.Select(relative =>
+        {
+            var full = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+            return new PackageFile(relative, new FileInfo(full).Length, () => File.OpenRead(full));
+        }));
+    }
+
+    /// <summary>
+    /// The same stream over files that are not a directory on disk — the package a build carries as resources. Hidden
+    /// paths are left out and the rest sorted exactly as <see cref="Files"/> does, so the same paths and bytes give the
+    /// digest the directory holding them gives.
+    /// </summary>
+    /// <exception cref="PackageTooLargeException">The package holds more files or more bytes than a plugin may.</exception>
+    public static PackageDigestResult Compute(IEnumerable<PackageFile> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+
+        var ordered = files.Where(file => !IsHidden(file.Path)).ToList();
+        ordered.Sort((left, right) => StringComparer.Ordinal.Compare(left.Path, right.Path));
+        if (ordered.Count > MaxFiles)
+        {
+            throw TooMany(ordered.Count);
         }
 
         var total = 0L;
-        var lengths = new long[files.Count];
-        for (var index = 0; index < files.Count; index++)
+        foreach (var file in ordered)
         {
-            lengths[index] = new FileInfo(Path.Combine(root, files[index].Replace('/', Path.DirectorySeparatorChar))).Length;
-            total += lengths[index];
+            total += file.Length;
             if (total > MaxBytes)
             {
                 throw new PackageTooLargeException(string.Create(
@@ -73,14 +96,14 @@ public static class PackageDigest
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[81920];
-        for (var index = 0; index < files.Count; index++)
+        foreach (var file in ordered)
         {
-            hash.AppendData(Encoding.UTF8.GetBytes(files[index]));
+            hash.AppendData(Encoding.UTF8.GetBytes(file.Path));
             hash.AppendData([0]);
-            hash.AppendData(Encoding.ASCII.GetBytes(lengths[index].ToString(CultureInfo.InvariantCulture)));
+            hash.AppendData(Encoding.ASCII.GetBytes(file.Length.ToString(CultureInfo.InvariantCulture)));
             hash.AppendData([0]);
 
-            using var stream = File.OpenRead(Path.Combine(root, files[index].Replace('/', Path.DirectorySeparatorChar)));
+            using var stream = file.Open();
             int read;
             while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
             {
@@ -88,8 +111,11 @@ public static class PackageDigest
             }
         }
 
-        return new PackageDigestResult($"{Algorithm}:{Convert.ToHexStringLower(hash.GetHashAndReset())}", files.Count, total);
+        return new PackageDigestResult($"{Algorithm}:{Convert.ToHexStringLower(hash.GetHashAndReset())}", ordered.Count, total);
     }
+
+    private static PackageTooLargeException TooMany(int count) =>
+        new(string.Create(CultureInfo.InvariantCulture, $"A plugin package holds at most {MaxFiles} files; this one holds {count}."));
 
     private static bool IsHidden(string relativePath)
     {

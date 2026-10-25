@@ -126,6 +126,17 @@
     "harness": {
       "root": "~/Jason",
       "root_state": "absent"
-    }
+    },
+    "released_plugins": [
+      {
+        "id": "reply",
+        "state": "not_installed",
+        "released": {
+          "version": "0.7.0",
+          "digest": "sha256:recorded-1"
+        },
+        "installed": null
+      }
+    ]
   }
 }

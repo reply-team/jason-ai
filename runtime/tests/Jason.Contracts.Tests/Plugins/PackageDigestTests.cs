@@ -169,4 +169,44 @@ public class PackageDigestTests : IDisposable
             stream.AddRange(content);
         }
     }
+
+    /// <summary>
+    /// A package that is not a directory — the files a build carries as resources — is hashed by the same stream: the
+    /// same paths and bytes give the digest the directory gives, in whatever order they are handed over, and a hidden
+    /// path is left out as it is on disk.
+    /// </summary>
+    [Fact]
+    public void Files_handed_over_hash_as_the_directory_holding_them_does()
+    {
+        Write("plugin.yaml", "a\n");
+        Write("main.js", "b");
+        Write("modules/helper.js", "h");
+
+        var handed = PackageDigest.Compute(
+        [
+            Handed("modules/helper.js", "h"),
+            Handed(".DS_Store", "junk"),
+            Handed("plugin.yaml", "a\n"),
+            Handed("main.js", "b"),
+        ]);
+
+        var onDisk = PackageDigest.Compute(_root);
+        Assert.True(onDisk == handed, $"handed over {handed}, on disk {onDisk}");
+
+        static PackageFile Handed(string path, string content)
+        {
+            var bytes = Encoding.UTF8.GetBytes(content);
+            return new PackageFile(path, bytes.Length, () => new MemoryStream(bytes));
+        }
+    }
+
+    [Fact]
+    public void Files_handed_over_are_held_to_the_same_ceilings()
+    {
+        var many = Enumerable.Range(0, PackageDigest.MaxFiles + 1)
+            .Select(index => new PackageFile($"f{index.ToString(CultureInfo.InvariantCulture)}.js", 1, () => new MemoryStream([1])));
+
+        Assert.Throws<PackageTooLargeException>(() => PackageDigest.Compute(many));
+        Assert.Throws<PackageTooLargeException>(() => PackageDigest.Compute([new PackageFile("big.bin", PackageDigest.MaxBytes + 1, () => Stream.Null)]));
+    }
 }

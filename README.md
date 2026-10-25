@@ -235,11 +235,12 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
 | the runtime answers | a provider plugin is installed |
-| the running runtime is the build this CLI is | a route is configured |
-| migrations are applied | a binding names an account |
-| the plugin registry is alive (zero plugins is alive) | a provider CLI **you name** answers |
-| role skills are present, named after their directories and within the runtime's live cap | the skill packs are deployed to an agent harness |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
+| the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
+| migrations are applied | a route is configured |
+| the plugin registry is alive (zero plugins is alive) | a binding names an account |
+| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
+| | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
 | | the harness root can take the first project or campaign |

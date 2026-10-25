@@ -336,6 +336,11 @@ And **never run `jason update apply` unless the person asked for it**. It replac
 running and stops the runtime to do it, so work in flight is drained and everything pointing at Jason is briefly
 pointing at a file being swapped. Noticing an update is yours; deciding to take it is theirs.
 
+An update leaves the plugins under `~/.jason/plugins/` as they were, so afterwards `jason status`'s optional
+`plugin_package` check can fail: the package installed is an earlier release's. Its fact names the installed version,
+the version this release published, and the lines that place it; replacing a package is a change to the installation,
+so ask first, then `jason plugin reload`.
+
 ## Installing it in the first place
 
 Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>),

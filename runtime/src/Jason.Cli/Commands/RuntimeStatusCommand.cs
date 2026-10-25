@@ -100,6 +100,7 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Migrations: {info.Database.AppliedMigrations.Count} applied");
         output.WriteLine($"Dispatcher: {Dispatcher(info.Dispatcher)}");
         output.WriteLine($"Plugins:    {Plugins(info.Plugins)}");
+        output.WriteLine($"Packages:   {Packages(info.ReleasedPlugins)}");
         output.WriteLine($"Routes:     {Routes(info.Routes)}");
         output.WriteLine($"Skills:     {Skills(info.Skills)}");
         output.WriteLine($"UI:         {Ui(info.Ui)}");
@@ -129,6 +130,23 @@ public static class RuntimeStatusCommand
         // Every state the runtime says has its arm above; the words are read by name, never as numbers, so no other value
         // is ever read from an answer.
         _ => throw new ArgumentOutOfRangeException(nameof(harness), harness.RootState, "There is no such harness root state."),
+    };
+
+    /// <summary>How each plugin package this runtime's release publishes stands against the installed one.</summary>
+    private static string Packages(IReadOnlyList<ReleasedPluginInfo>? packages) => packages switch
+    {
+        null => "unknown",
+        [] => "none carried",
+        _ => string.Join("; ", packages.Select(package => package.State switch
+        {
+            ReleasedPluginState.Current => $"{package.Id} {package.Installed?.Version}, this release's",
+            ReleasedPluginState.Behind => $"{package.Id} {package.Installed?.Version}, behind this release's {package.Released.Version}",
+            ReleasedPluginState.Differs => $"{package.Id} {package.Installed?.Version}, not this release's {package.Released.Version} (a later release's, or built or edited here)",
+            ReleasedPluginState.NotInstalled => $"{package.Id} not installed, this release's is {package.Released.Version}",
+
+            // Every state the runtime says has its arm above; the words are read by name, never as numbers.
+            _ => throw new ArgumentOutOfRangeException(nameof(packages), package.State, "There is no such package state."),
+        })),
     };
 
     private static string Ui(UiModuleInfo? ui) => ui switch

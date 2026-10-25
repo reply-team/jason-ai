@@ -201,6 +201,10 @@ public static class ApiFixtures
         "rolenote.set/project",
         "rolenote.set/two-levels",
         "route.list/empty",
+        "system.info/released-plugin-behind",
+        "system.info/released-plugin-current",
+        "system.info/released-plugin-differs",
+        "system.info/released-plugin-not-installed",
         "system.info/with-ui",
         "system.info/without-ui",
         "ui.revoke/never-used",
@@ -405,7 +409,8 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null)
         if (Digest().IsMatch(text))
         {
             _digests++;
-            // Not hex on purpose: the catalog test holds every file free of real digests.
+            // Not hex on purpose: the catalog test holds every file free of real digests. Numbered per occurrence, so
+            // two equal digests read as two words: a recording shows where a digest stands, never which are equal.
             return "sha256:recorded-" + _digests.ToString(CultureInfo.InvariantCulture);
         }
 

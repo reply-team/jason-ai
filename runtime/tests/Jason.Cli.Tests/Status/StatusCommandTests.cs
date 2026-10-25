@@ -1070,7 +1070,7 @@ public class StatusCommandTests
     /// <summary>A descriptor on disk and a runtime behind it answering the three operations status asks.</summary>
     /// <summary>A descriptor and a runtime behind it. <paramref name="roles"/> null makes role.list fail.</summary>
     /// <remarks><paramref name="version"/> is the version the runtime says it is, a development one unless a fact names another.</remarks>
-    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null, string version = Version, UiModuleInfo? ui = null, ListeningInfo? listening = null, HarnessInfo? harness = null)
+    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null, string version = Version, UiModuleInfo? ui = null, ListeningInfo? listening = null, HarnessInfo? harness = null, IReadOnlyList<ReleasedPluginInfo>? releasedPlugins = null)
     {
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_01J"));
         Answers[dir.Paths.Root] = (
@@ -1081,13 +1081,14 @@ public class StatusCommandTests
             version,
             ui,
             listening,
-            harness);
+            harness,
+            releasedPlugins);
     }
 
     /// <summary>The version the runtime here says it is, and the build the CLI under test goes by, unless a fact names others.</summary>
     internal const string Version = "0.1.0-dev";
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt, string Version, UiModuleInfo? Ui, ListeningInfo? Listening, HarnessInfo? Harness)> Answers = [];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt, string Version, UiModuleInfo? Ui, ListeningInfo? Listening, HarnessInfo? Harness, IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins)> Answers = [];
 
     /// <summary>
     /// The machine these run against: this test's own data directory, a runtime that exists only in a handler,
@@ -1141,7 +1142,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness }, JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

@@ -121,7 +121,7 @@ public class RecordedExchangesTests
     [Fact]
     public async Task System_info_with_and_without_a_ui_and_the_two_read_only_lists()
     {
-        await using var without = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        await using var without = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine), configureServices: ReleasedReply(() => OtherBytes));
         var bare = await without.RecordAsync<SystemInfoResponse>(Operations.SystemInfo, "without-ui", null, Ct);
         Assert.Null(bare.Ui);
 
@@ -129,7 +129,7 @@ public class RecordedExchangesTests
         {
             File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
             UiBuild.Write(paths.UiDefaultDirectory, version: "0.10.0");
-        });
+        }, configureServices: ReleasedReply(() => OtherBytes));
         var info = await with.RecordAsync<SystemInfoResponse>(Operations.SystemInfo, "with-ui", null, Ct);
         Assert.Equal("default", info.Ui!.Source);
 
@@ -138,6 +138,50 @@ public class RecordedExchangesTests
         var routes = await with.RecordAsync<RoutesDto>(Operations.RouteList, "empty", null, Ct);
         Assert.Null(routes.Global.Default);
     }
+
+    /// <summary>
+    /// The released package in each of its four states against what is installed. The release is injected, so the files
+    /// never move with the package the tree carries: it publishes <c>reply</c> 0.7.0, and the installed package is the
+    /// same bytes, an earlier version, the same version edited here, or absent.
+    /// </summary>
+    [Theory]
+    [InlineData("released-plugin-current", "0.7.0", true)]
+    [InlineData("released-plugin-behind", "0.6.1", false)]
+    [InlineData("released-plugin-differs", "0.7.0", false)]
+    [InlineData("released-plugin-not-installed", null, false)]
+    public async Task System_info_says_how_the_installed_package_stands_against_the_released_one(string @case, string? installed, bool sameBytes)
+    {
+        string? digest = null;
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine), prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            if (installed is not null)
+            {
+                var root = TestPlugins.Write(paths, "reply", TestPlugins.Manifest("reply").Replace("version: 1.0.0", $"version: {installed}", StringComparison.Ordinal), "export function invoke() {}");
+                digest = PackageDigest.Compute(root).Digest;
+            }
+        }, configureServices: ReleasedReply(() => sameBytes ? digest! : OtherBytes));
+
+        var info = await api.RecordAsync<SystemInfoResponse>(Operations.SystemInfo, @case, null, Ct);
+
+        var entry = Assert.Single(info.ReleasedPlugins!);
+        var expected = (installed, sameBytes) switch
+        {
+            (null, _) => ReleasedPluginState.NotInstalled,
+            (_, true) => ReleasedPluginState.Current,
+            ("0.6.1", _) => ReleasedPluginState.Behind,
+            _ => ReleasedPluginState.Differs,
+        };
+        Assert.Equal(expected, entry.State);
+        Assert.Equal(installed, entry.Installed?.Version);
+    }
+
+    /// <summary>A digest no installed package has: the release's package when the installed one is not its bytes.</summary>
+    private const string OtherBytes = "sha256:7e1a5c0ffee0d15ea5e0ddba11ab1e5ca1ab1e0b5e55ed0ff1ce0fdecade5eed";
+
+    /// <summary>A release that publishes <c>reply</c> 0.7.0 with the digest given, read once the data directory is written.</summary>
+    private static Action<IServiceCollection> ReleasedReply(Func<string> digest) =>
+        services => services.AddSingleton(_ => ReleasedPlugins.Of(new ReleasedPlugin("reply", "0.7.0", digest())));
 
     [Fact]
     public async Task Ui_tokens_none_two_and_one_revoked()

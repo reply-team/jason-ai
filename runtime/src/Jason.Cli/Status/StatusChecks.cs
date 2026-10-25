@@ -207,6 +207,7 @@ internal static class StatusChecks
             checks.Add(Path(env));
 
             checks.Add(ProviderPlugin(info));
+            checks.Add(PluginPackage(info));
             var routes = client is null ? null : await ReadAsync<RoutesDto>(client, Operations.RouteList, cancellationToken).ConfigureAwait(false);
             checks.Add(Route(routes));
             checks.Add(Binding(routes));
@@ -705,6 +706,62 @@ internal static class StatusChecks
             : info.Plugins.ActiveCount == 0
                 ? new StatusCheck("provider_plugin", false, CheckState.Absent, "No provider plugin is installed, so no campaign can reach a provider yet.", null)
                 : new StatusCheck("provider_plugin", false, CheckState.Ok, string.Create(CultureInfo.InvariantCulture, $"{info.Plugins.ActiveCount} installed."), null);
+
+    /// <summary>
+    /// Whether each plugin package this runtime's release publishes is the one installed. Optional: a provider package is
+    /// the person's to choose, so this never decides readiness. An earlier release's package fails it, and the fact says how
+    /// to install this one's, because no command does: the wiring check's step 3 prints the lines. One built or edited here
+    /// passes with a line that says so, and a development build compares against its own tree, named in the fact.
+    /// </summary>
+    private static StatusCheck PluginPackage(SystemInfoResponse? info)
+    {
+        const string Name = "plugin_package";
+        if (info is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so which plugin packages its release publishes was not asked.", null);
+        }
+
+        if (info.ReleasedPlugins is not { } packages)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime is older than this CLI and does not say which plugin packages its release publishes.", null);
+        }
+
+        if (packages.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, $"Runtime {info.RuntimeVersion} carries no plugin package.", null);
+        }
+
+        var state = packages.Any(package => package.State == ReleasedPluginState.Behind) ? CheckState.Failed
+            : packages.Any(package => package.State is ReleasedPluginState.Current or ReleasedPluginState.Differs) ? CheckState.Ok
+            : CheckState.Absent;
+        return new StatusCheck(Name, false, state, string.Join(" ", packages.Select(package => PackageLine(info, package))), null);
+    }
+
+    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package)
+    {
+        var runtime = info.RuntimeVersion;
+        var released = $"{package.Id} {package.Released.Version}";
+        var installed = package.Installed is { } mine ? $"{package.Id} {mine.Version}" : package.Id;
+
+        // The runtime's own data directory, written with the separator it writes, so the line names the folder a person
+        // finds on that machine.
+        var separator = info.DataDir.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
+        var directory = string.Join(separator, info.DataDir.TrimEnd('/', '\\'), "plugins", package.Id);
+
+        return package.State switch
+        {
+            ReleasedPluginState.Current => $"{installed} is installed, the package runtime {runtime} carries.",
+            ReleasedPluginState.Behind =>
+                $"{installed} is installed; runtime {runtime} carries {released}, the package its release publishes. "
+                + $"Step 3 of the wiring check prints the two lines that place it: the checksum match, and the unpack into {directory} once the package there is moved away. "
+                + $"Then run `{Repair.ReloadPlugins}`.",
+            ReleasedPluginState.Differs => $"{installed} is installed and is not the package runtime {runtime} carries ({released}); it names the same version or a later one, so it is a later release's package or one built or edited on this machine.",
+            ReleasedPluginState.NotInstalled => $"{installed} is not installed; runtime {runtime} carries {released}, the package its release publishes, and step 3 of the wiring check prints the lines that install it.",
+
+            // Every state the runtime says has its arm above; the words are read by name, never as numbers.
+            _ => throw new ArgumentOutOfRangeException(nameof(package), package.State, "There is no such package state."),
+        };
+    }
 
     private static StatusCheck Route(RoutesDto? routes)
     {
