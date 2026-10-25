@@ -22,6 +22,14 @@ inputs:
     required: false
     default: ''
 
+  runtime-version:
+    description: >
+      The .NET runtime to publish on, as an exact version (10.0.13); it reaches the build as -p:RuntimeFrameworkVersion=.
+      Empty, the default, is the SDK's own runtime, which is what a release and every platform job want. The update job
+      names another, so that the version it updates to is built on a different runtime than the version it installed.
+    required: false
+    default: ''
+
   retention-days:
     description: >
       How many days the uploaded artifact is kept. 0, the default, is upload-artifact's own word for the repository's
@@ -71,10 +79,12 @@ runs:
       env:
         RID: ${{ inputs.rid }}
         VERSION: ${{ inputs.version }}
+        RUNTIME_VERSION: ${{ inputs.runtime-version }}
         EXECUTABLE: ${{ steps.name.outputs.executable }}
       run: |
         $publish = "artifacts/publish/$env:RID"
-        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" --output $publish
+        $runtime = @(if ($env:RUNTIME_VERSION) { "-p:RuntimeFrameworkVersion=$env:RUNTIME_VERSION" })
+        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime --output $publish
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish exited with $LASTEXITCODE" }
 
         # One executable and its symbols, and nothing else. A native library left beside the executable —

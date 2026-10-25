@@ -1,16 +1,25 @@
 # One .NET install for every job that builds: ci.yml and release.yml call it where they need the SDK.
-# It installs one exact SDK, the sdk-version input, from Microsoft's CDN, builds.dotnet.microsoft.com, through
-# Microsoft's own install scripts: given a version and a feed, the scripts ask nothing else. The SDK is pinned because
-# the two sides of an update, the executable installed and the one it updates to, must carry the same runtime patch
-# until the applier loads everything it needs before it swaps its own file; the pin moves when that lands. 10.0.402
-# carries runtime 10.0.13 and satisfies global.json's latestFeature roll forward. The scripts are fetched when the job
-# runs, from the addresses Microsoft publishes for them, rather than kept in this repository.
+# It installs one exact SDK, the sdk-version input, from Microsoft's CDN, builds.dotnet.microsoft.com, through Microsoft's
+# own install scripts: given a version and a feed, the scripts ask nothing else. Given an empty sdk-version it installs
+# the newest SDK the 10.0 channel has released, the latest-sdk of the release metadata on the same CDN. The scripts are
+# fetched when the job runs, from the addresses Microsoft publishes for them, rather than kept in this repository.
+#
+# The default is pinned, to 10.0.402 and so to runtime 10.0.13, because an update between two builds on two runtime
+# patches failed on Linux: the applier ran from the file it was replacing and read a library it had not yet needed out
+# of the new build after the swap. 0.19.0 brings the fix, a warm-up before the first rename and the rest of the update
+# handed to the new build, and the update job builds its two sides on two runtimes on purpose. That proof covers updates
+# performed by a build carrying the fix; the update to 0.19.0 is performed by the build before it, which has none. So
+# the pin stays for 0.19.0 and lifts in the release after it, whose updates are performed by 0.19.0. 10.0.402 satisfies
+# global.json's latestFeature roll forward.
 name: Set up .NET
 description: Install one exact .NET SDK from Microsoft's CDN and say which SDK the tree resolves.
 
 inputs:
   sdk-version:
-    description: The exact .NET SDK to install
+    description: >
+      An exact .NET SDK to install. Empty is the newest SDK the 10.0 channel has released, the latest-sdk of its release
+      metadata.
+    required: false
     default: '10.0.402'
 
 runs:
@@ -24,8 +33,11 @@ runs:
         SDK_VERSION: ${{ inputs.sdk-version }}
       run: |
         set -euo pipefail
-        [[ "$SDK_VERSION" =~ ^10\.0\.[0-9]+$ ]] || { echo "The sdk-version input reads '$SDK_VERSION', not a 10.0 release." >&2; exit 1; }
         feed=https://builds.dotnet.microsoft.com/dotnet
+        if [[ -z "$SDK_VERSION" ]]; then
+          SDK_VERSION=$(curl --fail --silent --show-error --location --retry 3 "$feed/release-metadata/10.0/releases.json" | jq --raw-output '."latest-sdk"')
+        fi
+        [[ "$SDK_VERSION" =~ ^10\.0\.[0-9]+$ ]] || { echo "The SDK to install reads '$SDK_VERSION', not a 10.0 release." >&2; exit 1; }
         install="$RUNNER_TEMP/dotnet"
         script="$RUNNER_TEMP/dotnet-install.sh"
         curl --fail --silent --show-error --location --retry 3 --output "$script" https://dot.net/v1/dotnet-install.sh
@@ -42,8 +54,11 @@ runs:
         SDK_VERSION: ${{ inputs.sdk-version }}
       run: |
         $ErrorActionPreference = 'Stop'
-        if ($env:SDK_VERSION -cnotmatch '^10\.0\.[0-9]+\z') { throw "The sdk-version input reads '$env:SDK_VERSION', not a 10.0 release." }
         $feed = 'https://builds.dotnet.microsoft.com/dotnet'
+        if (-not $env:SDK_VERSION) {
+          $env:SDK_VERSION = (Invoke-RestMethod -Uri "$feed/release-metadata/10.0/releases.json" -MaximumRetryCount 3).'latest-sdk'
+        }
+        if ($env:SDK_VERSION -cnotmatch '^10\.0\.[0-9]+\z') { throw "The SDK to install reads '$env:SDK_VERSION', not a 10.0 release." }
         $install = Join-Path $env:RUNNER_TEMP dotnet
         $script = Join-Path $env:RUNNER_TEMP dotnet-install.ps1
         Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile $script -MaximumRetryCount 3

@@ -1864,4 +1864,185 @@ public class ReleaseWorkflowTests
         Assert.Contains("newly_applied", after, StringComparison.Ordinal);
         Assert.Contains("backup_file", after, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The update job installs one version and updates to the next, built on another .NET runtime than the installed one,
+    /// every run, and says so in the files: what the installed executable carries is read out of it, the next version is
+    /// published on a runtime one patch away, and the executable that publish made is read again before anything is
+    /// installed.
+    /// </summary>
+    /// <remarks>
+    /// The executable is a single file that reads its .NET libraries out of itself as it first needs them, and an apply
+    /// runs from the file it replaces. Built on one runtime, both files kept every library at the same offset, and an
+    /// apply that read one out of the new file after the swap passed here; a release built on another runtime than the
+    /// installation it updated failed on Linux. A release and every platform job still publish on the SDK's own runtime.
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_job_updates_to_a_build_on_another_dotnet_runtime()
+    {
+        var jobs = Mapping(Parse(Read(Ci)), "jobs");
+        var steps = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "update-end-to-end"), "steps")).Children.Cast<YamlMappingNode>().ToList();
+
+        var decided = steps.FindIndex(step => Scalar(step, "id") == "next");
+        var packaged = steps.FindIndex(step => Scalar(step, "uses") == "./.github/actions/package");
+        var held = steps.FindIndex(step => Scalar(step, "run") is { } run && run.Contains("$env:EXECUTABLE", StringComparison.Ordinal) && run.Contains(RuntimeScript, StringComparison.Ordinal));
+        Assert.True(decided >= 0 && packaged > decided && held > packaged, $"the job does not read the installed runtime, publish on another and read the result, in that order: {decided}, {packaged}, {held}");
+
+        // The installed side is read, and the other runtime is its own output; the publish is told it.
+        var decide = Scalar(steps[decided], "run")!;
+        Assert.Contains(RuntimeScript, decide, StringComparison.Ordinal);
+        Assert.Contains("\"runtime=", decide, StringComparison.Ordinal);
+        Assert.Contains("\"installed-runtime=", decide, StringComparison.Ordinal);
+        Assert.Equal("${{ steps.next.outputs.runtime }}", Scalar(Mapping(steps[packaged], "with"), "runtime-version"));
+
+        // The executable that publish made is read before it is served, and refused on the installed side's runtime.
+        var env = Mapping(steps[held], "env");
+        Assert.Equal("${{ steps.package.outputs.executable }}", Scalar(env, "EXECUTABLE"));
+        Assert.Equal("${{ steps.next.outputs.installed-runtime }}", Scalar(env, "INSTALLED"));
+        Assert.Matches(@"if \(\$next -ne \$env:RUNTIME\) \{ throw", Scalar(steps[held], "run")!);
+        Assert.Matches(@"if \(\$next -eq \$env:INSTALLED\) \{ throw", Scalar(steps[held], "run")!);
+        Assert.True(held < steps.FindIndex(step => Scalar(step, "name") == "Serve that version from a feed on this machine"), "the next version is served before its runtime is read");
+
+        // And only there: everything else that packages publishes on the SDK's own runtime.
+        foreach (var workflow in (string[][])[Ci, Release])
+        {
+            var others = Mapping(Parse(Read(workflow)), "jobs").Children
+                .Where(job => job.Key.ToString() != "update-end-to-end")
+                .SelectMany(job => Node((YamlMappingNode)job.Value, "steps") is YamlSequenceNode sequence ? sequence.Children.Cast<YamlMappingNode>() : [])
+                .Where(step => Scalar(step, "uses") == "./.github/actions/package");
+            Assert.All(others, step => Assert.Null(Scalar(Mapping(step, "with"), "runtime-version")));
+        }
+
+        // The action hands the input to the publish as the runtime to build on, and nothing when it is not given.
+        var action = Read(Action);
+        Assert.Contains("RUNTIME_VERSION: ${{ inputs.runtime-version }}", action, StringComparison.Ordinal);
+        Assert.Contains("$runtime = @(if ($env:RUNTIME_VERSION) { \"-p:RuntimeFrameworkVersion=$env:RUNTIME_VERSION\" })", action, StringComparison.Ordinal);
+        var publish = Assert.Single(action.Split('\n'), line =>line.TrimStart().StartsWith("dotnet publish ", StringComparison.Ordinal));
+        Assert.Contains(" @runtime ", publish, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The runtime an executable carries is read out of the file, from the dependency manifest a single-file publish
+    /// bundles uncompressed, and a file that names none, or two, is refused rather than guessed at.
+    /// </summary>
+    [Fact]
+    public void The_runtime_an_executable_carries_is_read_out_of_the_file()
+    {
+        using var tree = new TempTree();
+        static byte[] Bytes(string text) => [0x7F, 0x45, 0x4C, 0x46, 0x00, .. Encoding.ASCII.GetBytes(text), 0x00, 0xFF];
+        var script = Path.Combine([RepositoryRoot(), .. RuntimeScriptPath]);
+
+        var one = Path.Combine(tree.Root, "one");
+        File.WriteAllBytes(one, Bytes("\"runtimepack.Microsoft.NETCore.App.Runtime.linux-x64/10.0.13\": {} \"runtimepack.Microsoft.NETCore.App.Runtime.linux-x64/10.0.13\": {\"type\": \"runtimepack\"} \"runtimepack.Microsoft.AspNetCore.App.Runtime.linux-x64/10.0.12\""));
+        var read = Pwsh(NoEnvironment, "-File", script, "-Executable", one);
+        Assert.True(read.Exit == 0, read.Stderr);
+        Assert.Equal("10.0.13", read.Stdout.Trim());
+
+        var none = Path.Combine(tree.Root, "none");
+        File.WriteAllBytes(none, Bytes("a file that names no runtime"));
+        Assert.NotEqual(0, Pwsh(NoEnvironment, "-File", script, "-Executable", none).Exit);
+
+        var two = Path.Combine(tree.Root, "two");
+        File.WriteAllBytes(two, Bytes("runtimepack.Microsoft.NETCore.App.Runtime.linux-x64/10.0.13 runtimepack.Microsoft.NETCore.App.Runtime.linux-x64/10.0.12"));
+        var refused = Pwsh(NoEnvironment, "-File", script, "-Executable", two);
+        Assert.NotEqual(0, refused.Exit);
+        Assert.Contains("10.0.12, 10.0.13", refused.Stderr, StringComparison.Ordinal);
+    }
+
+    private const string RuntimeScript = "./.github/scripts/Read-RuntimePack.ps1";
+
+    private static readonly string[] RuntimeScriptPath = [".github", "scripts", "Read-RuntimePack.ps1"];
+
+    /// <summary>
+    /// Every job of either workflow installs .NET through this repository's own action, never through
+    /// <c>actions/setup-dotnet</c>, and only once its checkout has put that action on the runner.
+    /// </summary>
+    /// <remarks>
+    /// The marketplace action reads Microsoft's older download origin, which refused for a day and took every job with it;
+    /// the repository's action installs from the CDN. A job that still named the marketplace action would go back to that
+    /// origin in silence, and a local action used before the checkout is a path to nothing.
+    /// </remarks>
+    [Fact]
+    public void Every_job_installs_dotnet_through_the_repository_s_action_after_its_checkout()
+    {
+        var uses = 0;
+        foreach (var workflow in (string[][])[Ci, Release])
+        {
+            foreach (var (name, job) in Mapping(Parse(Read(workflow)), "jobs").Children.Select(pair => (pair.Key.ToString(), (YamlMappingNode)pair.Value)))
+            {
+                if (Node(job, "steps") is not YamlSequenceNode sequence)
+                {
+                    continue;
+                }
+
+                var steps = sequence.Children.Cast<YamlMappingNode>().ToList();
+                Assert.DoesNotContain(steps, step => Scalar(step, "uses")?.StartsWith("actions/setup-dotnet@", StringComparison.Ordinal) == true);
+
+                var checkout = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/checkout@", StringComparison.Ordinal) == true);
+                for (var at = 0; at < steps.Count; at++)
+                {
+                    if (Scalar(steps[at], "uses") == "./.github/actions/setup-dotnet")
+                    {
+                        uses++;
+                        Assert.True(checkout >= 0 && checkout < at, $"{workflow[^1]}: the job '{name}' sets up .NET at step {at} and checks the repository out at step {checkout}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(uses >= 6, $"only {uses} job(s) set up .NET through the repository's action");
+    }
+
+    /// <summary>
+    /// The action installs one pinned SDK by default, from Microsoft's CDN, through the install scripts at the addresses
+    /// Microsoft publishes; given an empty version it installs the newest SDK the 10.0 channel has released, read from the
+    /// release metadata on that CDN; and whichever it is, a version that is not a 10.0 release stops the step before
+    /// anything is installed.
+    /// </summary>
+    /// <remarks>
+    /// The pin holds one runtime patch while the update into the release that fixes a swap between two patches is still
+    /// performed by a build without the fix. It lifts in the release after, by emptying the default, and the channel's
+    /// shape is held here already so that the lift is the one line.
+    /// </remarks>
+    [Fact]
+    public void The_dotnet_action_installs_the_pinned_sdk_and_can_install_the_channel_s_newest_from_the_cdn()
+    {
+        var action = Parse(Read(SetupDotnet));
+        Assert.Equal("10.0.402", Scalar(Mapping(Mapping(action, "inputs"), "sdk-version"), "default"));
+
+        var installs = Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>()
+            .Where(step => Scalar(step, "name") == "Install the .NET SDK")
+            .ToDictionary(step => Scalar(step, "shell")!, step => Scalar(step, "run")!, StringComparer.Ordinal);
+        Assert.Equal(["bash", "pwsh"], installs.Keys.Order(StringComparer.Ordinal));
+
+        foreach (var run in installs.Values)
+        {
+            Assert.Contains("https://builds.dotnet.microsoft.com/dotnet", run, StringComparison.Ordinal);
+            Assert.Contains("$feed/release-metadata/10.0/releases.json", run, StringComparison.Ordinal);
+            Assert.Contains("latest-sdk", run, StringComparison.Ordinal);
+        }
+
+        var bash = installs["bash"];
+        Assert.Contains("if [[ -z \"$SDK_VERSION\" ]]; then", bash, StringComparison.Ordinal);
+        Assert.Contains("https://dot.net/v1/dotnet-install.sh", bash, StringComparison.Ordinal);
+        Assert.Contains("--version \"$SDK_VERSION\" --azure-feed \"$feed\"", bash, StringComparison.Ordinal);
+        AssertCheckedBetween(bash, Regex.Match(bash, @"\[\[ ""\$SDK_VERSION"" =~ \^10\\\.0\\\.\[0-9\]\+\$ \]\] \|\| \{[^}\n]*exit 1; \}"), "dotnet-install.sh");
+
+        var pwsh = installs["pwsh"];
+        Assert.Contains("if (-not $env:SDK_VERSION) {", pwsh, StringComparison.Ordinal);
+        Assert.Contains("https://dot.net/v1/dotnet-install.ps1", pwsh, StringComparison.Ordinal);
+        Assert.Contains("-Version $env:SDK_VERSION -AzureFeed $feed", pwsh, StringComparison.Ordinal);
+        AssertCheckedBetween(pwsh, Regex.Match(pwsh, @"if \(\$env:SDK_VERSION -cnotmatch '\^10\\\.0\\\.\[0-9\]\+\\z'\) \{ throw"), "dotnet-install.ps1");
+
+        // The version is checked after the metadata may have named it and before the script that installs it is fetched.
+        static void AssertCheckedBetween(string run, Match check, string script)
+        {
+            Assert.True(check.Success, $"the step does not refuse a version that is not a 10.0 release:\n{run}");
+            Assert.True(
+                run.IndexOf("latest-sdk", StringComparison.Ordinal) < check.Index && check.Index < run.IndexOf(script, StringComparison.Ordinal),
+                $"the step checks the version outside the metadata read and the install:\n{run}");
+        }
+    }
+
+    private static readonly string[] SetupDotnet = [".github", "actions", "setup-dotnet", "action.yml"];
 }

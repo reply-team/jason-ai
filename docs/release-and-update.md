@@ -380,6 +380,23 @@ picks the sequence up at the step it names, and carries it through.
 all. Either way the applier says what it left behind: work still running keeps its lease, and the runtime that
 comes up next finishes it or its enforcer takes it back.
 
+**The new executable finishes the update.** `jason update apply` runs from the install path, which is the file
+it replaces. The executable is a single file that reads the .NET libraries inside it as it first needs them, and from
+`kept` on the file at its own path is no longer the one it is running, so a library first needed after that would be
+read out of another build. So the apply loads every library it can reach before it renames anything, and once
+`swapped` has put the new executable in place it runs `jason update apply` from that executable: the new build reads
+the ledger at `swapped` and takes `started`, `healthy` and `complete`, the skills and the UI, from a file that is its
+own. What it says on standard error is passed on. When it completes, its answer carries every step's line, the ones
+taken before it first; when it refuses, its refusal and its exit code are the apply's. A new executable that cannot be
+run, or that ends any other way — a crash, a kill, an answer cut short — is `update_not_healthy`, naming the step the
+update stands at: typing `jason update apply` again runs the new build, which finishes it, and `jason update rollback`
+puts the old one back. An apply that resumes past `swapped`, typed into the new executable, has nothing to hand over
+and carries on itself. A rollback loads the same before it moves the executable aside.
+
+An update from a build older than 0.19.0 is performed by that build, which does neither, so when the two builds carry
+different .NET patches it can stop at `started` with a failure to load a library. Typing `jason update apply` again
+runs the new build, which finishes it.
+
 **An update leaves a runtime running.** It stops the old one itself and starts the new one from the install
 path, so a machine that had a runtime up before the update has one up after it. So does a machine that did
 not: on an installation with no runtime answering, `drained` and `stopped` are satisfied without asking anybody
@@ -455,8 +472,9 @@ by name.
 **Between `kept` and `swapped` the install path is empty.** The old executable has been moved to
 `~/.jason/update/previous/`, its two notice files after it, and the new one is not in place yet. The
 window is a few renames wide, but it is the one window a person cannot type their way out of, because the
-`jason` on your PATH is the file that is not there. The process performing the swap is a copy of the applier under `~/.jason/update/applier/`, which is why
-the swap survives the file it is swapping — and it is also the first way out:
+`jason` on your PATH is the file that is not there. Before the window opens the applier leaves a copy of itself under
+`~/.jason/update/applier/`, an ordinary Jason that reads the ledger and finishes the update it finds, and that copy is
+the first way out:
 
 ```text
 ~/.jason/update/applier/jason update apply
@@ -575,7 +593,7 @@ a code on its own tells nobody what to do next.
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
 | `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
-| `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed. The executable can be put back |
+| `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed, or the new executable could not be run to finish the update. The executable can be put back |
 | `update_file_refused` | a file could not be moved, copied or written: a directory that is not one, a permission, a lock. It covers every file these two verbs touch — an update's renames and a rollback's, the ledger both are recorded in, and the database restore. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH. On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for 10 seconds first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable: the same command, once the file is free |
 | `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
 | `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
@@ -825,8 +843,8 @@ writing files beside it.
 
 That is also why an update writes under the data directory, and beside the executable only the executable and its
 two notice files. `~/.jason/update/`
-holds the ledger, the staged download, the executable that was replaced and the copy of the applier that
-replaced it; the install directory may be read-only, on another volume, or a directory somebody removes Jason
+holds the ledger, the staged download, the executable that was replaced and the copy of the applier kept
+for a resume by hand; the install directory may be read-only, on another volume, or a directory somebody removes Jason
 by deleting.
 
 `~/.jason/autostart/` holds one file, and only on Windows: the task document §8's `enable` hands to `schtasks`.

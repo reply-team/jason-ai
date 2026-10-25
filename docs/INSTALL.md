@@ -492,7 +492,7 @@ jason uninstall --force
 
 **The data directory is kept.** It holds the database, the settings, the plugins, the logs and the work
 directories — the record of what you did — and the copies an update keeps — the executable it replaced and the
-copy of itself that applied it, under `update/` — so a copy of the program stays there after an uninstall until
+copy of the program kept for finishing an interrupted update, under `update/` — so a copy of the program stays there after an uninstall until
 `--purge-data` removes it; and the verb says in one line that it kept it and where. To remove
 that as well you have to say so: `--human` prints what will be deleted and asks before anything at all is
 removed — and a no removes nothing at all — and when nobody is there to be asked the word is said in advance:

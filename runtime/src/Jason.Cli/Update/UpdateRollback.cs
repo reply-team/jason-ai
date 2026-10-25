@@ -49,6 +49,17 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     /// <summary>How a pause between two tries is taken: <see cref="HeldFileRetry.Sleep"/> outside a test, which counts them.</summary>
     internal Action<TimeSpan, CancellationToken> Pause { get; init; } = HeldFileRetry.Sleep;
 
+    /// <summary>
+    /// What loads every assembly this process may still need, before the executable at the install path is moved aside:
+    /// <see cref="AssemblyWarmUp.Run"/> outside a test, which sees when it ran.
+    /// </summary>
+    /// <remarks>
+    /// A rollback typed from the PATH is the executable it moves aside, and what it does after the move — starting the
+    /// runtime above all — would otherwise read assemblies it had not needed yet out of the file put back in its place,
+    /// another build. The update's own warm-up says why that fails.
+    /// </remarks>
+    internal Action WarmUp { get; init; } = AssemblyWarmUp.Run;
+
     public async Task<UpdateLedger> RollBackAsync(CancellationToken cancellationToken)
     {
         var ledger = UpdateLedger.ReadFile(update.Ledger)
@@ -67,6 +78,10 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         var chronicle = await ChronicleAsync(ledger, cancellationToken).ConfigureAwait(false);
 
         await StopAsync(cancellationToken).ConfigureAwait(false);
+
+        // Before the first move: from then on the file at this process's own path may be another build, and the start
+        // below is from the executable put back there, which is whole.
+        WarmUp();
         Restore(ledger);
 
         var (restored, unsafeToRestore) = RestoreDatabase(ledger, chronicle);

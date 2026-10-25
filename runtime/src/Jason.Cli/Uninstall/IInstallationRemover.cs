@@ -385,8 +385,8 @@ public static class InstallationRemovers
         /// after it had removed everything, because its report was the first JSON it wrote.
         /// </para>
         /// <para>
-        /// Two alternatives were considered. Re-executing from a copy of itself, the way the update applier
-        /// does, solves <em>replacing</em> the file rather than deleting it: the copy would still have to
+        /// Two alternatives were considered. Running a copy of itself, the way an update hands its remaining
+        /// steps to the executable it has just put in place, solves <em>replacing</em> the file rather than deleting it: the copy would still have to
         /// outlive this process to delete its image, so it needs exactly this cleanup as well, and a caller
         /// waiting for the verb's answer would get it from a process that had not yet done the work. And
         /// marking the file for deletion at the next reboot needs an administrator, which nothing in this

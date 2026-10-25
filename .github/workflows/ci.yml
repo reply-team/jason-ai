@@ -845,11 +845,37 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          RID: ${{ matrix.rid }}
         run: |
           # Two versions, or this job proves nothing: with the same build on both sides a completed swap and an
           # applier that did nothing look identical to --version, and the health check passes either way.
           $numbers = (($env:VERSION -split '\+')[0] -split '-')[0] -split '\.'
           "next=$($numbers[0]).$($numbers[1]).$([int]$numbers[2] + 1)" >> $env:GITHUB_OUTPUT
+
+          # And built on another .NET runtime than the installed one, on purpose and every run. The executable is a
+          # single file that reads the .NET libraries inside it as it first needs them, and the apply below runs
+          # from the file it replaces. Built on one runtime, the two files keep every library at the same offset, so an
+          # apply that read one out of the new file after the swap found the right bytes there and passed; a release
+          # built on another runtime than the installation it updated failed on Linux, at the start of its runtime. A
+          # runtime one patch below the installed one moves those offsets. The installed runtime is read out of the
+          # file, because running the installed executable before the update would open the database it must leave
+          # alone, which is also why its runtime stays stopped until the update below.
+          $peek = Join-Path $env:RUNNER_TEMP 'installed-runtime'
+          New-Item -ItemType Directory -Force $peek | Out-Null
+          if ($env:RID -like 'win-*') {
+            Expand-Archive -Path "installed/jason-$env:RID.zip" -DestinationPath $peek -Force
+            $exe = Join-Path $peek 'jason.exe'
+          } else {
+            tar -xzf "installed/jason-$env:RID.tar.gz" -C $peek
+            $exe = Join-Path $peek 'jason'
+          }
+          $installed = ./.github/scripts/Read-RuntimePack.ps1 -Executable $exe
+          $runtime = $installed -split '\.'
+          $patch = [int]$runtime[2]
+          $other = "$($runtime[0]).$($runtime[1]).$(if ($patch -gt 0) { $patch - 1 } else { $patch + 1 })"
+          "installed-runtime=$installed" >> $env:GITHUB_OUTPUT
+          "runtime=$other" >> $env:GITHUB_OUTPUT
+          Write-Host "the installed version runs on .NET $installed; the version it updates to is built on .NET $other"
 
       # Packaged by the action a release packages with, so what this job installs is an archive of the same
       # shape, with the same licence in it and the same digest written beside it. Only the artifact's name
@@ -863,8 +889,23 @@ jobs:
         with:
           rid: ${{ matrix.rid }}
           version: ${{ steps.next.outputs.next }}
+          runtime-version: ${{ steps.next.outputs.runtime }}
           artifact: next-jason-${{ matrix.rid }}
           retention-days: 3
+
+      - name: Hold the two sides to two .NET runtimes
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+          INSTALLED: ${{ steps.next.outputs.installed-runtime }}
+          RUNTIME: ${{ steps.next.outputs.runtime }}
+        run: |
+          # Read out of the file the update will install, so that a publish which quietly kept the SDK's own runtime
+          # stops the job here, rather than leaving it to pass on two files that differ only in their version.
+          $next = ./.github/scripts/Read-RuntimePack.ps1 -Executable $env:EXECUTABLE
+          if ($next -ne $env:RUNTIME) { throw "the next version was built on .NET $next, and this job asked for $env:RUNTIME" }
+          if ($next -eq $env:INSTALLED) { throw "both sides of this update are built on .NET $next" }
+          Write-Host "installed on .NET $env:INSTALLED, updating to a build on .NET $next"
 
       # The UI's package as the ui job built it from this tree, so the update's last step has a release's UI to place.
       - uses: actions/download-artifact@v7

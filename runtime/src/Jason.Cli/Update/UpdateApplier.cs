@@ -73,6 +73,33 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     internal Action<TimeSpan, CancellationToken> Pause { get; init; } = HeldFileRetry.Sleep;
 
     /// <summary>
+    /// What loads every assembly this process may still need, before <c>kept</c> renames the file it may be running as:
+    /// <see cref="AssemblyWarmUp.Run"/> outside a test, which sees when it ran.
+    /// </summary>
+    internal Action WarmUp { get; init; } = AssemblyWarmUp.Run;
+
+    /// <summary>
+    /// Whether a run that puts the new executable in place itself stops there, and leaves the rest of the update to that
+    /// executable: what <c>jason update apply</c> asks for. Left off, every step is taken in this process, which is how a
+    /// test drives the step machine alone.
+    /// </summary>
+    /// <remarks>
+    /// The process that typed <c>jason update apply</c> runs from the install path, so after the swap the file at its own
+    /// path is another build. A single-file executable reads its assemblies out of its own file as it first needs them,
+    /// and one read out of the other build's file fails; the warm-up before <c>kept</c> loads what can be named, and the
+    /// rest of the update — the start, the health check, the skills and the UI — is the new build's to run, from a file
+    /// that is its own. It reads the ledger at <c>swapped</c> and carries on from there, as it would for a person who
+    /// typed it.
+    /// </remarks>
+    public bool HandsOver { get; init; }
+
+    /// <summary>Whether this run stopped at <c>swapped</c> for the new executable to finish the update: see <see cref="HandsOver"/>.</summary>
+    public bool HandedOver { get; private set; }
+
+    /// <summary>Whether this run moved the new executable onto the install path, rather than finding it there.</summary>
+    private bool _placed;
+
+    /// <summary>
     /// Runs an update from wherever it stands: a fresh one from the feed, or the one a ledger says is in flight.
     /// </summary>
     public async Task<UpdateLedger> ApplyAsync(UpdateRequest request, CancellationToken cancellationToken)
@@ -91,6 +118,14 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             Record(ledger, step);
             ledger = await TakeAsync(step, ledger, request, cancellationToken).ConfigureAwait(false);
             Record(ledger, step);
+
+            // Whoever put the new executable in place hands it the rest. A run that found it there already is that
+            // executable, or a person resuming by hand, and carries on itself.
+            if (step == UpdateStep.Swapped && HandsOver && _placed)
+            {
+                HandedOver = true;
+                return ledger;
+            }
         }
 
         await RedeploySkillsAsync(ledger, cancellationToken).ConfigureAwait(false);
@@ -348,8 +383,8 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// </summary>
     /// <remarks>
     /// Resolved by the caller and handed in, rather than read inside the machine, for the reason the launch seam
-    /// was changed for: the applier runs from a copy of itself under the data directory, so "where am I?" is
-    /// exactly the question it must not ask about the file it is replacing.
+    /// was changed for: an update resumed after a kill may be running from the copy of the applier under the data
+    /// directory, so "where am I?" is exactly the question it must not ask about the file it is replacing.
     /// </remarks>
     public static string ResolveInstallPath() => ResolveInstallPath(SelfExecutable.Command, SelfExecutable.IsSingleFile);
 
@@ -533,6 +568,10 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// </remarks>
     private UpdateLedger Keep(UpdateLedger ledger)
     {
+        // Before anything is renamed: from the first move on, the file at the path this process started from may not
+        // be the file it is running.
+        WarmUp();
+
         OnDisk(
             "keeping the installed executable",
             update.Previous,
@@ -640,6 +679,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
                 ledger.InstallPath,
                 remedy,
                 () => ExecutableMove.Run(env, HeldFiles, clock, Pause, InPlace, ledger.StagedPath, remedy, () => File.Move(ledger.StagedPath, ledger.InstallPath)));
+            _placed = true;
             Say(UpdateStep.Swapped, $"{ledger.ToVersion} is at the install path");
         }
 
@@ -673,8 +713,8 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
 
-        // The install path, and never this process: the applier runs from a copy of itself under the data
-        // directory, so "start me again" would start the old build from the wrong place.
+        // The install path, and never this process: an update resumed by hand may be running from the copy of the
+        // applier under the data directory, so "start me again" would start the old build from the wrong place.
         using var child = processes.Launch(env.Paths, [ledger.InstallPath]);
 
         var waited = TimeSpan.Zero;

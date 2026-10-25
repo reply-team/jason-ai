@@ -1,8 +1,12 @@
 using System.CommandLine;
+using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Cli.Installation;
+using Jason.Cli.Process;
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
 
@@ -119,8 +123,16 @@ public static class UpdateCommands
         UpdateApplier applier;
         try
         {
-            applier = new UpdateApplier(env, new UpdatePaths(env.Paths), TimeProvider.System, env.InstallPath ?? UpdateApplier.ResolveInstallPath());
+            applier = new UpdateApplier(env, new UpdatePaths(env.Paths), TimeProvider.System, env.InstallPath ?? UpdateApplier.ResolveInstallPath())
+            {
+                HandsOver = true,
+            };
             var ledger = await applier.ApplyAsync(request, cancellationToken).ConfigureAwait(false);
+            if (applier.HandedOver)
+            {
+                return await HandOverAsync(env, applier.Steps, ledger, request, human, cancellationToken).ConfigureAwait(false);
+            }
+
             Print(env, human, applier.Steps, ledger);
             return ExitCodes.Success;
         }
@@ -142,6 +154,123 @@ public static class UpdateCommands
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
+    }
+
+    /// <summary>
+    /// The rest of an update, from <c>swapped</c> on, run by the executable now at the install path: <c>jason update
+    /// apply</c> typed into it, which reads the ledger and carries on (<see cref="UpdateApplier.HandsOver"/> says why).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When it completes, its document is this verb's with the lines of the steps taken here put in front of its own, so
+    /// the answer reads as one apply did all of it. It is asked for that document whatever this verb was asked for, and
+    /// the lines are rendered here, for a person or as the document. When it ends as this CLI ends — an exit code this
+    /// CLI gives and one JSON document — anything else it answers, a refusal above all, is passed on as it came, with its
+    /// exit code. What it says on standard error is passed on as it says it.
+    /// </para>
+    /// <para>
+    /// An executable that cannot be run at all, and one that ends any other way — a crash, a kill, a document cut short —
+    /// is refused as <c>update_not_healthy</c>, with the step the ledger stands at: the new build is in place, typing
+    /// <c>jason update apply</c> runs it and finishes, and <c>jason update rollback</c> puts the old one back.
+    /// </para>
+    /// </remarks>
+    private static async Task<int> HandOverAsync(
+        CliEnvironment env,
+        IReadOnlyList<string> steps,
+        UpdateLedger ledger,
+        UpdateRequest request,
+        bool human,
+        CancellationToken cancellationToken)
+    {
+        var processes = env.Processes ?? RuntimeProcessControl.Instance;
+        FinishedCommand finished;
+        try
+        {
+            finished = await processes
+                .RunAsync(env.Paths, [ledger.InstallPath, "update", "apply", "--feed", request.Feed.AbsoluteUri], env.Error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is Win32Exception or IOException or InvalidOperationException)
+        {
+            throw NotFinished(env, ledger, $"it could not be run to finish the update: {error.Message}", error);
+        }
+
+        if (finished.ExitCode is not (ExitCodes.Success or ExitCodes.ApiError or ExitCodes.Usage or ExitCodes.RuntimeUnavailable)
+            || Document(finished.StandardOutput) is not { } document)
+        {
+            throw NotFinished(
+                env,
+                ledger,
+                string.Create(CultureInfo.InvariantCulture, $"the update was handed to it and it ended without an answer this command gives, with exit code {finished.ExitCode}."),
+                null);
+        }
+
+        if (finished.ExitCode == ExitCodes.Success && WithStepsBefore(steps, document) is { } answer)
+        {
+            env.Out.WriteLine(human
+                ? string.Join(Environment.NewLine, answer["steps"]!.AsArray().Select(step => "- " + step!.GetValue<string>()))
+                : answer.ToJsonString(JasonJson.Options));
+            return ExitCodes.Success;
+        }
+
+        env.Out.Write(finished.StandardOutput);
+        return finished.ExitCode;
+    }
+
+    /// <summary>
+    /// The refusal for a hand-over that did not finish the update: the new build is in place, and the step the ledger stands
+    /// at — whatever the executable handed to reached — is named, with both ways on.
+    /// </summary>
+    private static UpdateException NotFinished(CliEnvironment env, UpdateLedger ledger, string why, Exception? cause)
+    {
+        UpdateStep step;
+        try
+        {
+            step = UpdateLedger.ReadFile(new UpdatePaths(env.Paths).Ledger)?.Step ?? ledger.Step;
+        }
+        catch (UpdateLedgerException)
+        {
+            step = ledger.Step;
+        }
+
+        return new UpdateException(
+            UpdateCodes.NotHealthy,
+            $"{ledger.ToVersion} is in place at {ledger.InstallPath}, and {why} The update stands at '{SnakeCase(step)}'. "
+            + $"Run `jason update apply` to finish it, or `jason update rollback` to put {ledger.FromVersion} back.",
+            cause);
+    }
+
+    /// <summary>What a command printed, when it is one JSON object; null when it is anything else.</summary>
+    private static JsonObject? Document(string printed)
+    {
+        try
+        {
+            return JsonNode.Parse(printed) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The document an apply printed, with <paramref name="before"/> in front of its steps; null where what it printed is
+    /// not one, so that it is passed on untouched. Read as a tree rather than as this build's type, so that a field a
+    /// later build adds is carried rather than dropped.
+    /// </summary>
+    internal static JsonObject? WithStepsBefore(IReadOnlyList<string> before, string printed) =>
+        Document(printed) is { } document ? WithStepsBefore(before, document) : null;
+
+    private static JsonObject? WithStepsBefore(IReadOnlyList<string> before, JsonObject answer)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        if (answer["steps"] is not JsonArray after || after.Any(step => step?.GetValueKind() != JsonValueKind.String))
+        {
+            return null;
+        }
+
+        answer["steps"] = new JsonArray([.. before.Select(step => (JsonNode?)JsonValue.Create(step)), .. after.Select(step => step!.DeepClone())]);
+        return answer;
     }
 
     private static Command RollBack(CliEnvironment env, Option<string?> actor)

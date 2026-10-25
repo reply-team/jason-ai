@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Jason.Cli;
+using Jason.Cli.Commands;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Process;
@@ -66,6 +67,8 @@ public sealed class FakeInstallation : HttpMessageHandler
                     WriteBackup(BackupStamp);
                 }
 
+                StartsHandedOver.Add(_handedOver);
+
                 // A version that migrates and then never listens publishes no descriptor: from outside, the
                 // start happened and nothing answers.
                 if (!StartsButNeverServes)
@@ -75,6 +78,25 @@ public sealed class FakeInstallation : HttpMessageHandler
                 }
 
                 return new FakeProcessHandle(4242);
+            },
+
+            // What the executable at the install path does when an update hands it the rest: `jason update apply` typed
+            // into it, against the data directory it was given. Here that program is this build, which is the build
+            // under test; what a real one is made of is the update job's to prove.
+            OnRun = async (paths, command, error, cancellationToken) =>
+            {
+                var feed = command[command.ToList().IndexOf("--feed") + 1];
+                var said = new StringWriter();
+                _handedOver = true;
+                try
+                {
+                    var exit = await UpdateCommands.ApplyAsync((Machine ?? Env!) with { Out = said, Error = error, Paths = paths }, feed, null, null, human: false, cancellationToken);
+                    return new FinishedCommand(exit, said.ToString());
+                }
+                finally
+                {
+                    _handedOver = false;
+                }
             },
         };
 
@@ -125,6 +147,19 @@ public sealed class FakeInstallation : HttpMessageHandler
     public StringWriter Error { get; }
 
     public FakeProcessControl Processes { get; }
+
+    /// <summary>Whether the update has been handed to the executable at the install path, and is being run there.</summary>
+    private bool _handedOver;
+
+    /// <summary>For each start of a runtime, in order, whether the executable the update was handed to made it.</summary>
+    public List<bool> StartsHandedOver { get; } = [];
+
+    /// <summary>
+    /// The machine the executable an update is handed to runs on: <see cref="Env"/>, unless a test gave the verb an
+    /// environment of its own — a runner for its programs, a harness to find — which a program started on that machine
+    /// would see as well, and so says so here.
+    /// </summary>
+    public CliEnvironment? Machine { get; set; }
 
     /// <summary>The process id the runtime here names in its descriptor and in its answers.</summary>
     public const int Pid = 77;

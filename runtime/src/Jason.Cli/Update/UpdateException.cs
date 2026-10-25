@@ -33,7 +33,10 @@ public static class UpdateCodes
     /// <summary>The runtime would not do its part — drain, or stop — so nothing was replaced.</summary>
     public const string RuntimeUnreachable = "update_runtime_unreachable";
 
-    /// <summary>The new version is in place but the runtime it starts is not the one this update installed.</summary>
+    /// <summary>
+    /// The new version is in place but the runtime it starts is not the one this update installed, or the new executable
+    /// could not be run to finish the update.
+    /// </summary>
     public const string NotHealthy = "update_not_healthy";
 
     /// <summary>

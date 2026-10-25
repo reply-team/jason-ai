@@ -21,6 +21,9 @@ public interface IProcessHandle : IDisposable
     string Said { get; }
 }
 
+/// <summary>What a command run to its end did: its exit code, and everything it wrote on standard output.</summary>
+public sealed record FinishedCommand(int ExitCode, string StandardOutput);
+
 /// <summary>
 /// The only place the CLI touches the operating system's process table. Behind an interface because the tests
 /// must never spawn a runtime, and because "is that pid still alive" is the one question whose answer differs
@@ -35,13 +38,23 @@ public interface IRuntimeProcessControl
     /// </summary>
     /// <param name="executable">
     /// What to run, as a command: the program and whatever has to come before the mode word. The caller names
-    /// it rather than the seam composing it, because the two callers do not want the same program — an ordinary
-    /// <c>jason runtime start</c> wants another copy of itself, and an applier running from a copy of itself
-    /// under the data directory wants the executable it has just installed. A seam that resolved this on its own
-    /// would have the applier start the old build from the wrong path, whereupon the health check would read the
-    /// old version and roll back an update that had in fact succeeded.
+    /// it rather than the seam composing it, because the callers do not want the same program — an ordinary
+    /// <c>jason runtime start</c> wants another copy of itself, and an update wants the executable it has just
+    /// installed, which is not this process's own file when a person resumed the update from the copy of the
+    /// applier under the data directory. A seam that resolved this on its own would have that update start the old
+    /// build, whereupon the health check would read the old version and fail an update that had in fact succeeded.
     /// </param>
     IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable);
+
+    /// <summary>
+    /// Runs a command of this product to its end against the given data directory and hands back its exit code and what
+    /// it wrote on standard output. What it writes on standard error is passed to <paramref name="error"/> as it comes.
+    /// </summary>
+    /// <remarks>
+    /// How an update hands the rest of itself to the executable it has just put in place. A cancellation ends the child
+    /// and nothing it started: what it started is a runtime, which is meant to outlive it.
+    /// </remarks>
+    Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken);
 
     bool IsRunning(int pid);
 
@@ -118,6 +131,94 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         process.BeginErrorReadLine();
 
         return new ProcessHandle(process, said);
+    }
+
+    public async Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(error);
+        if (command.Count == 0)
+        {
+            throw new ArgumentException("A command cannot be run from nothing.", nameof(command));
+        }
+
+        // The CLI writes what any console program writes, in the console's page, so it is read as a system tool is read.
+        // Its standard input is its own and closed at once: it asks nobody anything.
+        var startInfo = ChildProcess.StartInfo(command[0], ChildKind.SystemToolWithInput);
+        foreach (var argument in command.Skip(1))
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
+
+        // The child starts a runtime, which outlives it: neither may hold the streams of whoever is reading this process.
+        StandardStreams.KeepOutOfChildren();
+
+        var output = new System.Text.StringBuilder();
+        var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var process = new OperatingSystemProcess { StartInfo = startInfo, EnableRaisingEvents = true };
+        process.Exited += (_, _) => exited.TrySetResult();
+        process.OutputDataReceived += (_, line) =>
+        {
+            if (line.Data is not null)
+            {
+                lock (output)
+                {
+                    output.AppendLine(line.Data);
+                }
+            }
+        };
+        process.ErrorDataReceived += (_, line) =>
+        {
+            if (line.Data is not null)
+            {
+                lock (error)
+                {
+                    error.WriteLine(line.Data);
+                }
+            }
+        };
+
+        ChildProcess.Start(process);
+        process.StandardInput.Close();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        try
+        {
+            await exited.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: false);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or NotSupportedException)
+            {
+                // It has gone already, which is all the kill was for.
+            }
+
+            throw;
+        }
+
+        // The lines still in flight to the reader are waited for, and not for long: a grandchild holding the pipe would
+        // otherwise hold this answer too.
+        try
+        {
+            await Task.Run(process.WaitForExit, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // What arrived is what there is.
+        }
+
+        lock (output)
+        {
+            return new FinishedCommand(process.ExitCode, output.ToString());
+        }
     }
 
     /// <summary>

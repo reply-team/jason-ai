@@ -562,18 +562,22 @@ public class UpdateSkillsStepTests
 
     /// <summary>
     /// The installation's own environment, with a harness to detect in a home directory of the test's own and a runner
-    /// that really runs git — against <c>file://</c> repositories only.
+    /// that really runs git — against <c>file://</c> repositories only. It is also the machine the executable an update
+    /// hands itself to runs on, which is where the skills are redeployed from.
     /// </summary>
     private static CliEnvironment Env(FakeInstallation installation, IProgramRunner? programs = null)
     {
         Directory.CreateDirectory(Path.Combine(Home(installation), ".claude"));
-        return installation.Env with
+        var env = installation.Env with
         {
             Harnesses = HarnessLocators.ForHome(Home(installation)),
             Programs = programs ?? ProgramRunners.ForThisMachine(),
             Autostart = new RecordingRegistrar(),
             SearchPath = string.Empty,
         };
+
+        installation.Machine = env;
+        return env;
     }
 
     private static UpdateApplier Applier(FakeInstallation installation, IProgramRunner? programs = null) =>

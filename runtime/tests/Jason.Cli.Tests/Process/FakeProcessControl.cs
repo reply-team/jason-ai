@@ -55,6 +55,24 @@ public sealed class FakeProcessControl : IRuntimeProcessControl
     /// </summary>
     public Dictionary<int, DateTimeOffset?> StartTimes { get; } = [];
 
+    /// <summary>
+    /// What running a command to its end does and hands back. Null refuses: a test that runs a command says what it does,
+    /// and every other test runs none.
+    /// </summary>
+    public Func<JasonPaths, IReadOnlyList<string>, TextWriter, CancellationToken, Task<FinishedCommand>>? OnRun { get; set; }
+
+    /// <summary>Every command run to its end, in order, with the data directory it was run against.</summary>
+    public List<(string DataDirectory, IReadOnlyList<string> Command)> Runs { get; } = [];
+
+    public Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(command);
+        Runs.Add((paths.Root, command));
+        return OnRun?.Invoke(paths, command, error, cancellationToken)
+            ?? throw new InvalidOperationException($"This test runs no command, and '{string.Join(' ', command)}' was run.");
+    }
+
     public bool IsRunning(int pid) => RunningPids.Contains(pid);
 
     public DateTimeOffset? StartTime(int pid) => StartTimes.TryGetValue(pid, out var started) ? started : DateTimeOffset.MinValue;
