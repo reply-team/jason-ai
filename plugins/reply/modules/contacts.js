@@ -28,6 +28,9 @@ const FIND = "contact find";
 
 // The person's own fields, which every document of a write that may create them projects — as null where Jason holds
 // nothing in one. A runtime whose documents projected the identifier and the channel alone leaves them out altogether.
+// The source is the documents' `contact_projection.fields` (the operation documents under docs/contracts/operations/):
+// the plugin host does not hand a plugin the documents, so this list is a copy, which a test holds to what the
+// documents project.
 const PROJECTED = ["first_name", "last_name", "company", "title", "time_zone"];
 
 // What the CLI takes a person by, for each channel a document may name that Reply can look a person up by: an email,

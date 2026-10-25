@@ -97,17 +97,22 @@ API, of persistence and of the logs — are in `CLAUDE.md`, which every AI sessi
 the same. This section is the part of the process that no test runs for you. It describes the flow from the release
 after 0.14.0 on; where the pipeline still runs by the earlier rule, the paragraph says so.
 
-**Two kinds of branch.** `main` is what has been released: it changes when a release branch merges, and the tag
-follows that merge (`docs/release-and-update.md` is the contract). A release branch, `release/<name>`, carries one
-release's scope: a business increment heavy enough to be tried as a whole and to have release notes of its own, cut by
-urgency or by kind, never a polish. Several release branches run at once. Each is led by one session and owned by one
-person, who scopes it with the architecture session; the branches share nothing until a release. There is no cadence:
-the goal reached closes the release. A feature branch is cut from its release branch and its pull request targets that
-release branch. When a release merges, every other release branch takes `main` then, and conflicts are resolved there
-and nowhere else. A release branch takes `main` by a fast-forward, or by a rebase pushed straight to the branch by its
-owner, never through a pull request into the branch, because the release's rebase into `main` must find `main`'s own
-commits in the branch. The ruleset on the release branches lets a repository admin push to them for this act alone, and
-the push's run is the Linux set and gates nothing.
+**Two kinds of branch.** `main` is what has been released: it changes when a release branch merges, and the tag follows
+that merge (`docs/release-and-update.md` is the contract). A release branch, `release/<name>`, carries one release's
+scope: a business increment heavy enough to be tried as a whole and to have release notes of its own, cut by urgency or
+by kind, never a polish. Several release branches run at once. Each is led by one session and owned by one person, who
+scopes it with the architecture session; the branches share nothing until a release, but for the next release's branch,
+cut as below. There is no cadence: the goal reached closes the release. A feature branch is cut from its release branch
+and its pull request targets that release branch. When a release merges, every other release branch but the next one
+(below) takes `main` then, and conflicts are resolved there and nowhere else. The next release's branch is cut from the
+previous release branch's head the moment that release's pull request has both readings, not from `main` after the bump,
+so the next release does not wait for the previous one's platform runs, tag and publication. When the bump lands on
+`main`, the next branch takes `main` by a rebase onto it from the cut, and the previous release's commits, `main`'s by
+then, drop out of the replay. A fix that landed in the previous branch after the cut arrives that way; it is
+cherry-picked earlier only when the next branch's own checks need it. A release branch takes `main` by a fast-forward,
+or by a rebase pushed straight to the branch by its owner, never through a pull request into the branch, because the
+release's rebase into `main` must find `main`'s own commits in the branch. The ruleset on the release branches lets a
+repository admin push to them for this act alone, and the push's run is the Linux set and gates nothing.
 
 **One pull request per increment.** A branch carries one change: a feature, a fix, a document, a skill's text. Two
 independent things are two pull requests, even when they were written in one sitting. When the second builds on the
@@ -124,32 +129,42 @@ document — is named after the standing story kept for such changes.
 **Tests by stage.** A commit runs the critical tier locally before it is pushed — the tests that carry the `Critical`
 trait, about two minutes on a workstation — and never the whole suite, which takes seventeen minutes there and hours
 over a pull request's life. A branch that touches `runtime/` runs the whole suite locally once, in Release, with the log
-written to a file, while it is read (the paragraph below); one that changes Markdown only skips that. On CI, a draft's
-push runs the Linux set: the version check, the linux-x64 build and the critical tier, an update on linux-x64, the
-install script on Ubuntu and the UI's checks; it keeps no record of the tree it tested, and the release's pull request
-is the one draft this flow opens. Marking a pull request into a release branch ready runs the Linux set with the
-critical tier on linux-x64; the whole suite runs once per release, on the release's pull request, and locally, once per
-branch, while the branch is read, for a change under `runtime/`. The tag is the tree that pull request tested on all three
-operating systems, so the release workflow does not run the whole suite again: at the tag it runs the critical tier
-under the tag's version on Linux alone, since only the version differs from the tree that pull request tested, and
-each platform then packages and smoke-tests the published executable.
-The pull request from a release branch into `main` runs every check on all three operating systems, macOS included,
-and that run is the release's gate; a pull request into `main` from any other branch — a document, a change to the
-pipeline — runs the Linux set and reports the rest as skipped by rule. The version pull request into `main` runs the
-critical tier alone, on linux-x64 and under the `linux-x64` name a ruleset requires, since for it the tier is the ready
-run. A push to `main` or to a release branch whose tree a passing run recorded runs the version check alone, and so does
-a push to `main` whose change against its parent is documentation alone. Nothing runs
-nightly. The critical tier is the `Critical`
-trait, run with `--filter-trait "Category=Critical"`, and one table pins it: how many critical cases each family has in
-each test assembly (`CriticalTier.cs`). Each test assembly discovers itself and holds its column to the table, so a row
-that leaves the tier, which a run of the tier cannot notice, turns that guard red; every family keeps a critical case;
-the tier stays at or under 15 % of the suite's methods and of its discovered cases, with no floor; and every mark gives
-its reason, the attribute's own or a `// Critical:` comment above a marked row or above the member that marks rows.
-The guard also holds each assembly to at least the test methods the table measured, and to nine tenths of its cases,
-since the ceiling is measured on them; so a commit that marks or unmarks a test, adds or removes a row of a critical
-theory, or removes test methods rewrites the table in the same commit, from the numbers the guard prints. A draft's
-leg that tests the tier alone is named `linux-x64 (critical tier)`, so only a ready run reports the `linux-x64` that a
-ruleset requires. `CiRunsTests` holds the rule the workflow carries.
+written to a file, while it is read (the paragraph below); one that changes Markdown only skips that, unless it changes
+`docs/` or `skills/` (below). A page a test merely reads is documentation, and the version check treats a change to it
+so; only `docs/golden-path.md`, whose step 3 a test runs as a script in three shells, and `LICENSE-RUNTIME.md`, which
+every archive carries, are code to it. The page-reading tests are mostly outside the critical tier, which is all a
+documentation change on a pull request into a release branch, draft or ready, runs (a ready pull request into `main`
+that is not the release's, an unrecorded push to a release branch and a pull request into another branch run the whole
+suite on linux-x64), so a branch that changes `docs/` or `skills/` runs the whole suite locally before its pull request
+opens, and the release's pull request, where the whole suite runs, is the first place CI reads them. A red full run on
+the release's pull request puts it back to draft: the fix lands in the release branch, the whole suite runs locally on
+the fixed head until it is green, a red job the Linux set runs (the install script on Ubuntu, the update and the package
+on linux-x64) is proven fixed on a draft push's Linux set first, a red Windows or macOS install, update or package job
+is read from its log and its fix is read, and only then is the pull request marked ready again; the next ready run of
+every check proves it. On CI, a draft's push runs the Linux set: the version check, the linux-x64 build and the critical
+tier, an update on linux-x64, the install script on Ubuntu and the UI's checks; it keeps no record of the tree it
+tested, and the release's pull request is the one draft this flow opens. Marking a pull request into a release branch
+ready runs the Linux set with the critical tier on linux-x64; the whole suite runs once per release, on the release's
+pull request, and locally, once per branch, while the branch is read, for a change under `runtime/`. The tag is the tree
+that pull request tested on all three operating systems, so the release workflow does not run the whole suite again: at
+the tag it runs the critical tier under the tag's version on Linux alone, since only the version differs from the tree
+that pull request tested, and each platform then packages and smoke-tests the published executable. The pull request
+from a release branch into `main` runs every check on all three operating systems, macOS included, and that run is the
+release's gate; a pull request into `main` from any other branch — a document, a change to the pipeline — runs the Linux
+set and reports the rest as skipped by rule. The version pull request into `main` runs the critical tier alone, on
+linux-x64 and under the `linux-x64` name a ruleset requires, since for it the tier is the ready run. A push to `main` or
+to a release branch whose tree a passing run recorded runs the version check alone, and so does a push to `main` whose
+change against its parent is documentation alone. Nothing runs nightly. The critical tier is the `Critical` trait, run
+with `--filter-trait "Category=Critical"`, and one table pins it: how many critical cases each family has in each test
+assembly (`CriticalTier.cs`). Each test assembly discovers itself and holds its column to the table, so a row that
+leaves the tier, which a run of the tier cannot notice, turns that guard red; every family keeps a critical case; the
+tier stays at or under 15 % of the suite's methods and of its discovered cases, with no floor; and every mark gives its
+reason, the attribute's own or a `// Critical:` comment above a marked row or above the member that marks rows. The
+guard also holds each assembly to at least the test methods the table measured, and to nine tenths of its cases, since
+the ceiling is measured on them; so a commit that marks or unmarks a test, adds or removes a row of a critical theory,
+or removes test methods rewrites the table in the same commit, from the numbers the guard prints. A draft's leg that
+tests the tier alone is named `linux-x64 (critical tier)`, so only a ready run reports the `linux-x64` that a ruleset
+requires. `CiRunsTests` holds the rule the workflow carries.
 
 **Build on a branch, open the pull request after the readings.** A branch is pushed as the work goes, and no pull
 request is opened while it is built or read: the critical tier runs locally for each commit before it is pushed, and a

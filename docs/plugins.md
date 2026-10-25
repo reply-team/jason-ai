@@ -657,6 +657,16 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 - Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
   before. Another plugin's identifier for the same person is never visible to you.
 
+### A read on request
+
+Two operations are invoked when a person asks, by an API request outside any work item: `conversation.list` for a
+person's threads (`contact.threads`) and `conversation.get` for one thread (`contact.thread`). The invocation is the
+same, but the runtime takes only the route's half of the claim: the plugin is loaded and available, it performs the
+operation, and the route's binding passes its checks. It skips the claim's other half, and with it the attempt,
+provenance, the journal, pins, approval and retry, so nothing is recorded about the read, no identifier you return is
+pinned, and the invocation's `context` carries no attempt, work item or campaign. Such a read has no bound of its own:
+it runs outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.
+
 ### The contact proxy rule
 
 A provider's list or campaign holds the *provider's* contacts, not Jason's, so an operation about a person has you find

@@ -515,6 +515,7 @@ public class CiRunsTests
     /// </summary>
     [Theory]
     [InlineData("docs/plugins.md", "100644", false, true)]
+    [InlineData("docs/routing.md", "100644", false, true)]
     [InlineData("README.md", "100644", false, true)]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "100644", false, true)]
     [InlineData("ui/README.md", "100644", false, true)]

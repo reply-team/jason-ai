@@ -186,6 +186,12 @@ once, with the first page of the read that skips it, as an `events_gap_observed`
 the plugin and the span — keyed by the source and where the span starts, so a read tried again says it once. The next
 notification that reaches anybody counts it ([notifications](notifications.md)).
 
+A source whose reads keep failing is not a gap: a gap is a span a read skipped, and a failing read skips nothing. It shows
+in `jason events sources`, as how many reads in a row failed and how the last one did, and in the runtime's log, read with
+`jason logs`, as a warning naming the source, the code and the class; while the reads fail it is never said as an
+`events_gap_observed` line or counted by a notification. A failure that outlasts the 30 days leaves a gap, which the first
+read that succeeds says, and which is counted like any other.
+
 **When a read fails.**
 
 | How it ended | The next read |

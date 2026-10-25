@@ -15,6 +15,17 @@ namespace Jason.Runtime.Tests.Documentation;
 /// </summary>
 public partial class EventsDocTests
 {
+    /// <summary>A source whose reads keep failing is not a gap, and the page says where it shows instead.</summary>
+    [Fact]
+    public void A_source_whose_reads_keep_failing_is_said_not_to_be_a_gap_and_where_it_shows()
+    {
+        var page = Flattened(Read("events.md"));
+
+        Assert.Contains("A source whose reads keep failing is not a gap: a gap is a span a read skipped, and a failing read skips nothing.", page, StringComparison.Ordinal);
+        Assert.Contains("in the runtime's log, read with `jason logs`, as a warning naming the source, the code and the class; while the reads fail it is never said as an `events_gap_observed` line or counted by a notification.", page, StringComparison.Ordinal);
+        Assert.Contains("A failure that outlasts the 30 days leaves a gap, which the first read that succeeds says, and which is counted like any other.", page, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_kinds_and_the_codes_the_page_publishes_are_the_contract_s()
     {

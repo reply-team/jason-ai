@@ -22,6 +22,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used`")]
     [InlineData("what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence")]
     [InlineData("a required input field made optional")]
+    [InlineData("**Breaking** — a newly required field, a removed field, a changed enum")]
     [InlineData("`find_or_create` takes its channel `from_args`")]
     public void The_contracts_readme_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/contracts/README.md")), StringComparison.Ordinal);
@@ -42,6 +43,10 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("Where the value the claim reads for a contact is left beside the one holding the key, the primary moves to the holder, so the claim asks the register about the key.")]
     [InlineData("No stop is lost by either rewrite, the journal keeps every line it had, and neither adds one.")]
     [InlineData("### `host.channelKey`")]
+    [InlineData("### A read on request")]
+    [InlineData("the runtime takes only the route's half of the claim: the plugin is loaded and available, it performs the operation, and the route's binding passes its checks.")]
+    [InlineData("It skips the claim's other half, and with it the attempt, provenance, the journal, pins, approval and retry, so nothing is recorded about the read, no identifier you return is pinned, and the invocation's `context` carries no attempt, work item or campaign.")]
+    [InlineData("Such a read has no bound of its own: it runs outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.")]
     public void The_plugin_authors_page_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/plugins.md")), StringComparison.Ordinal);
 
@@ -344,6 +349,23 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
+    /// An operation that may create the provider's contact says, where its answer may be lost, that the contact may
+    /// already have been made — so a repeat reads before it creates, whatever the operation does besides.
+    /// </summary>
+    [Fact]
+    public void Every_operation_that_may_create_the_provider_s_contact_says_a_lost_answer_may_have_made_it()
+    {
+        var creating = OperationCatalog.All.Where(contract => contract.Preflight.ProviderContact == ProviderContact.FindOrCreate).ToList();
+
+        Assert.NotEmpty(creating);
+        Assert.All(creating, contract =>
+            Assert.Contains(
+                "the contact may already have been made",
+                contract.FailureCodes.Single(code => code.Code == "provider_answer_lost").When,
+                StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The routing page names the reads on request once: which operations they are, what they skip of a claim, and how
     /// the account is chosen — the operations read from the code that serves them.
     /// </summary>
@@ -355,6 +377,25 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("whose binding has the identity recorded in the provenance of the attempt that learned the pin")]
     public void The_routing_page_names_the_read_on_request(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/routing.md")), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The two published pages that say what a read on request keeps of a claim and what it skips say it in the words
+    /// the routing page does, so a change to the routing page's wording fails here until they follow.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/plugins.md")]
+    [InlineData("docs/ui.md")]
+    public void The_published_pages_say_a_read_on_request_in_the_routing_page_s_words(string page)
+    {
+        var published = Flat(Source(page));
+        var routing = Flat(Source("docs/routing.md"));
+
+        foreach (var words in new[] { "the plugin is loaded and available, it performs the operation, and the route's binding passes its checks", "the attempt, provenance, the journal, pins, approval and retry" })
+        {
+            Assert.Contains(words, published, StringComparison.Ordinal);
+            Assert.Contains(words, routing, StringComparison.Ordinal);
+        }
+    }
 
     /// <summary>
     /// What "ambiguous" costs is told per repeat rule, and the operations that say `never` are named there — read from

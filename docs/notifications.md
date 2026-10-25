@@ -175,7 +175,10 @@ start that ever wrote a line is not counted by a pointer — the work-item list 
 
 `counts.event_gaps` is how many accounts had events Jason did not read in the same window, counted by account however
 many gap lines one has, carried forward by a notification that reached nobody the same way, and sent to a channel only
-as words.
+as words. An account whose reads keep failing is not counted while they fail: a failing read skips nothing, so no span went
+unread. It shows in `jason events sources`, as how many reads in a row failed and how the last one did, and in the
+runtime's log, read with `jason logs`, as a warning naming the source, the code and the class. A failure that outlasts the
+30 days leaves a gap, which the first read that succeeds says, and which is counted like any other.
 
 `counts.blocks` is how many provider blocks were first said in the same window — a block whose first `provider_blocked`
 line came before it was counted by an earlier pointer — and were still open when this notification was sent, counted by

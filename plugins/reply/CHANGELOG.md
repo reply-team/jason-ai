@@ -3,6 +3,13 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.8.1
+
+- No behaviour changes. The list of the person's own fields a write that may create somebody carries, which every
+  document of one projects as `contact_projection`, now names that field of the documents as its source. The plugin
+  host does not hand a plugin the documents, so the list stays in the package, and a test holds it to what the
+  documents project.
+
 ## 0.8.0
 
 - `schedule.list` lists the account's sending schedules with `reply schedule list`, which gives every schedule the team

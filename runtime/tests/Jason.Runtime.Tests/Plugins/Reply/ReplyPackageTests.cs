@@ -34,7 +34,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.8.0", plugin.Version);
+        Assert.Equal("0.8.1", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record", "schedule.list", "sender.list", "social_invitation.send"],
@@ -146,7 +146,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.8.0", result.Provenance.Version);
+        Assert.Equal("0.8.1", result.Provenance.Version);
     }
 
     /// <summary>
@@ -369,7 +369,7 @@ public class ReplyPackageTests
         var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
         Assert.True(start >= 0, "The README has no section on what the package cannot do.");
         var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
-        var entry = Flat(ChangelogSection(5));
+        var entry = Flat(ChangelogSection(6));
 
         Assert.All(
             new[]
@@ -393,14 +393,51 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// The package's list of the person's own fields is a copy of what the documents project, since the plugin host does
+    /// not hand a plugin the documents; this holds the copy to every document that may create the provider's contact.
+    /// </summary>
+    [Fact]
+    public void The_list_of_the_person_s_own_fields_is_what_every_creating_document_projects_beside_the_identifier()
+    {
+        var source = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "modules", "contacts.js"));
+        var copy = Regex.Match(source, @"const PROJECTED = \[(?<fields>[^\]]*)\];").Groups["fields"].Value
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(field => field.Trim('"'))
+            .ToList();
+        var creating = OperationCatalog.All.Where(contract => contract.Preflight.ProviderContact == ProviderContact.FindOrCreate).ToList();
+
+        Assert.NotEmpty(copy);
+        Assert.NotEmpty(creating);
+        Assert.All(creating, contract =>
+            Assert.True(
+                contract.ContactProjection!.Fields.Where(field => field != "id").SequenceEqual(copy),
+                $"{contract.Id} projects {string.Join(", ", contract.ContactProjection.Fields)}; contacts.js lists {string.Join(", ", copy)}."));
+    }
+
+    /// <summary>
+    /// The release that changes no behaviour and says, beside the list of the person's own fields the package writes
+    /// with, where that list comes from, so a field added to the documents is not left for a reader to find missing here.
+    /// </summary>
+    [Fact]
+    public void The_changelog_opens_with_0_8_1_and_where_the_projected_fields_come_from()
+    {
+        var section = Flat(ChangelogSection(0));
+
+        Assert.StartsWith(" ## 0.8.1 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[] { "`contact_projection`", "No behaviour changes" },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The release that lists the sending schedules: the operation it adds, the command and the CLI release it needs, and
     /// what a person reads in it about the order a page counts in, the time zone carried as Reply spells it and the
     /// calendar it does not work out.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_8_0_and_the_schedules_it_lists()
+    public void The_changelog_keeps_0_8_0_and_the_schedules_it_lists()
     {
-        var section = Flat(ChangelogSection(0));
+        var section = Flat(ChangelogSection(1));
 
         Assert.StartsWith(" ## 0.8.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -420,7 +457,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_7_0_and_the_sender_s_block()
     {
-        var section = Flat(ChangelogSection(1));
+        var section = Flat(ChangelogSection(2));
 
         Assert.StartsWith(" ## 0.7.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -440,7 +477,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_6_1_and_says_no_reply_answer_reaches_the_block_row()
     {
-        var section = Flat(ChangelogSection(2));
+        var section = Flat(ChangelogSection(3));
 
         Assert.StartsWith(" ## 0.6.1 ", section, StringComparison.Ordinal);
         Assert.Contains(
@@ -458,7 +495,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_6_0_and_the_three_operations_that_now_create_the_person()
     {
-        var section = Flat(ChangelogSection(3));
+        var section = Flat(ChangelogSection(4));
 
         Assert.StartsWith(" ## 0.6.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -496,7 +533,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_5_0_and_the_three_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(4));
+        var section = Flat(ChangelogSection(5));
 
         Assert.StartsWith(" ## 0.5.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -512,7 +549,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_4_0_and_the_four_inbox_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(5));
+        var section = Flat(ChangelogSection(6));
 
         Assert.StartsWith(" ## 0.4.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -529,7 +566,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_2_and_the_operation_it_added()
     {
-        var section = ChangelogSection(6);
+        var section = ChangelogSection(7);
 
         Assert.StartsWith("\n## 0.3.2\n", section, StringComparison.Ordinal);
         Assert.Contains("`campaign.create`", section, StringComparison.Ordinal);
@@ -540,7 +577,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_1_and_the_rule()
     {
-        var section = ChangelogSection(7);
+        var section = ChangelogSection(8);
 
         Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
         Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);

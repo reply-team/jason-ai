@@ -278,9 +278,16 @@ jobs:
           PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest","name":"linux-x64"},{"rid":"win-x64","os":"windows-latest","name":"win-x64"},{"rid":"osx-arm64","os":"macos-latest","name":"osx-arm64"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
         run: |
-          # Documentation is Markdown a build compiles nothing of and no test runs as code: outside the runtime, the
-          # workflows and the plugins, a plain file before and after, and neither the wiring check's page, whose step 3 a
-          # test runs in sh and in both PowerShells, nor the runtime's licence, which every archive carries.
+          # Documentation is Markdown a build compiles nothing of: outside the runtime, the workflows and the plugins, a
+          # plain file before and after. Read is documentation, run is code: a page a test merely reads (the publication,
+          # page-claims and documented-commands tests read every published page) is documentation. Those tests are mostly
+          # outside the critical tier, which is all a documentation change on a pull request into a release branch, draft
+          # or ready, runs (a ready pull request into main that is not the release's, an unrecorded push to a release
+          # branch and a pull request into another branch run the whole suite on linux-x64). So a branch that changes
+          # docs/ or skills/ runs the whole suite locally before its pull request opens, and the release's pull request,
+          # where the whole suite runs, is the first place CI reads those pages. Two files differ in kind and stay code: the wiring check's page,
+          # docs/golden-path.md, whose step 3 a test runs as a script in sh and in both PowerShells, so a change to it
+          # runs the three legs; and the runtime's licence, LICENSE-RUNTIME.md, which every archive the legs package carries.
           $runAsCode = @('docs/golden-path.md', 'LICENSE-RUNTIME.md')
           function Documentation([string] $path, $kinds) {
             ($path -cmatch '\.md$') -and ($path -cnotmatch '^(runtime|\.github|plugins)/') -and ($runAsCode -cnotcontains $path) -and
