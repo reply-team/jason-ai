@@ -1,0 +1,102 @@
+{
+  "operation": "schedule.list",
+  "version": 1,
+  "case": "a page of one with more to follow: the next page starts at offset plus one",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "external_id": "41",
+          "name": null,
+          "time_zone": {
+            "id": "Eastern Standard Time",
+            "scheme": "windows"
+          },
+          "in_recipient_time_zone": false,
+          "skips_holidays": true,
+          "default": false,
+          "windows": [
+            {
+              "weekday": "monday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "tuesday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "friday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "saturday",
+              "active": false,
+              "ranges": []
+            }
+          ],
+          "follow_up_windows": null,
+          "vendor": {
+            "status": "inCurrentUserSequence"
+          }
+        }
+      ],
+      "has_more": true,
+      "vendor": {
+        "ordering": "id_asc"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 700,
+      "exec_calls": 1,
+      "http_calls": 0,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

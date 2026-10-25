@@ -584,10 +584,10 @@ person's is refused as `thread_not_this_contact`.
   standing approvals, no bulk decisions over a population, no expiry windows and no anomaly stop rules
   (DEF-APPROVAL-001). Nothing notifies anybody either, so a person finds out what is waiting by asking
   — `jason approval list` is the floor this version ships.
-- **Twenty-one operations, not a catalog.** The documents under `docs/contracts/operations/` — fifteen that write,
+- **Twenty-two operations, not a catalog.** The documents under `docs/contracts/operations/` — fifteen that write,
   `campaign.create`, `list_membership.add`, `campaign.enroll`, `campaign.pause`, `campaign.activate`, `optout.record`,
   `enrollment.stop`, `conversation.reply`, `conversation.classify`, `conversation.close`, `conversation.reopen`,
-  `contact.update`, `contact.delete`, `social_invitation.send` and `message.send`, and six reads — are the whole
+  `contact.update`, `contact.delete`, `social_invitation.send` and `message.send`, and seven reads — are the whole
   published set; an operation outside it cannot be routed, created or named, and adding one is a deliberate act with
   its own document, fixtures and version (DEF-OPS-001).
 - **No compatibility window and no deprecation policy.** Every published operation is at version 1, and a

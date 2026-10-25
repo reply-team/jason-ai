@@ -112,6 +112,10 @@ export const COMMANDS = {
     "kind": "read",
     "note": "The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what sender.list answers from."
   },
+  "schedule list": {
+    "kind": "read",
+    "note": "Every sending schedule the team can use, in one answer, each with its Windows time zone and its windows by weekday: what schedule.list answers from."
+  },
   "contact linkedin-connect": {
     "kind": "write",
     "note": "Invites the contact to connect on LinkedIn from the account named, with the note on stdin or with none. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
@@ -270,6 +274,9 @@ export const CODES = {
     "sender.list": {
       "access.feature_unavailable": "feature_not_included",
       "account.list_incomplete": "list_not_finished",
+      "network": "reply_not_reached"
+    },
+    "schedule.list": {
       "network": "reply_not_reached"
     },
     "social_invitation.send": {
@@ -983,6 +990,20 @@ export const ROWS = {
         "code": "provider_answer_too_large",
         "class": "permanent",
         "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated: name one channel with `sender_channel`, or raise `Plugins:Exec:OutputBytes`."
+      }
+    },
+    "schedule.list": {
+      "feature_not_included": {
+        "when": "Not reported by Reply. Reply refuses this read only for a key without its sequences read scope, which the CLI answers `access.feature_unavailable` and this package reports `unauthorized`; the code stays declared for a provider whose plan or role limits who may read its schedules.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "The provider's plan or the caller's role does not include its schedules, so the read lists nothing."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on `schedule list`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. Reply gives every schedule in one answer, so the same read would be cut at the same place and it is not repeated: raise `Plugins:Exec:OutputBytes`."
       }
     },
     "social_invitation.send": {

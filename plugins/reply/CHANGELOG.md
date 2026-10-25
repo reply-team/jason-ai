@@ -3,6 +3,18 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.8.0
+
+- `schedule.list` lists the account's sending schedules with `reply schedule list`, which gives every schedule the team
+  can use in one answer. The package orders them by Reply's identifier, the lowest first, and cuts the page itself, so a
+  page asked for again starts where it did. Each schedule carries its time zone as Reply holds it, a Windows time zone
+  identifier, under the scheme `windows` and never converted; whether its windows are read in each person's own time
+  zone; whether it skips holidays; whether it is the default of the user the credential signs in as; its windows by
+  weekday as authored; and the windows of a campaign's later steps where Reply's follow-up schedule is in use. The
+  windows are listed as written, a window that runs to the end of the day ending at `24:00`, and no calendar is worked
+  out from them. A credential without Reply's sequences read scope is
+  `unauthorized`. The package needs reply-cli 0.16.0 or newer, the first release with `reply schedule list`.
+
 ## 0.7.0
 
 - `message.send` and `social_invitation.send` say a sending account Reply refused for its own state is that sender's

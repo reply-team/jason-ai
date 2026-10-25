@@ -120,6 +120,7 @@ internal static partial class Account
         "contact linkedin-connect" or "contact send-email" or "contact linkedin-message" or "contact linkedin-inmail" or "contact linkedin-voice"
             => DirectSendCommand(root, command, line, stdin),
         "account list" => AccountList(root, line),
+        "schedule list" => ScheduleList(root),
         "auth whoami" => AuthWhoami(root),
         _ => throw new InvalidOperationException($"No handler for '{command}'."),
     };

@@ -78,6 +78,7 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
 | [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
+| [`schedule.list`](operations/schedule.list.md) | `schedule.resolve` | `read` | `auto` | `safe` | `not_used` | the provider's sending schedules, with the windows each one sets |
 | [`sender.list`](operations/sender.list.md) | `sender.list` | `read` | `auto` | `safe` | `not_used` | the provider's accounts a send can go from |
 | [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_or_create` | invite a person to connect, from one of the provider's accounts |
 
@@ -257,7 +258,7 @@ declares `preview: null`, and every `auto` operation does.
 ## Pages
 
 A read that can answer more items than one result may hold — `enrollment.list`, `conversation.list`,
-`conversation.get` and `sender.list` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
+`conversation.get`, `sender.list` and `schedule.list` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
 at most a row per channel and is not paged.
 
 - `args.limit` — at least 1, at most what the operation states — and `args.offset` — 0 to 1 000 000 — are both

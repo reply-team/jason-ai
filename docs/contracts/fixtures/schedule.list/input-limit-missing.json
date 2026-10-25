@@ -1,0 +1,26 @@
+{
+  "operation": "schedule.list",
+  "version": 1,
+  "case": "no page size: a page size nobody chose is a decision made on somebody's behalf",
+  "input": {
+    "args": {
+      "offset": 0
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/args/limit",
+        "reason": "required"
+      }
+    ]
+  }
+}

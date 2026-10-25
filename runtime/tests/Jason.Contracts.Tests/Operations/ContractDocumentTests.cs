@@ -66,7 +66,7 @@ public class ContractDocumentTests
                 "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list",
                 "conversation.reopen", "conversation.reply",
                 "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record",
-                "sender.list", "social_invitation.send",
+                "schedule.list", "sender.list", "social_invitation.send",
             ],
             OperationCatalog.All.Select(c => c.Id));
         Assert.All(OperationCatalog.All, contract => Assert.Equal(1, contract.Version));

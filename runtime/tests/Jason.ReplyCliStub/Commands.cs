@@ -2,7 +2,7 @@
 
 /// <summary>
 /// The grammar reply-cli documents, as of the release <see cref="Jason.ReplyCliStub.ReplyCliRelease"/> names, for the
-/// twenty-eight work commands the official package runs, and for <c>auth whoami</c>, the one command it runs that is not
+/// twenty-nine work commands the official package runs, and for <c>auth whoami</c>, the one command it runs that is not
 /// a work command: how many ids each takes, which options take a value, and which are switches. An option outside a
 /// command's own list is commander's usage error, exit 2. <c>contact update</c> takes its id as an optional argument, or
 /// the contact by the contact options instead.
@@ -46,6 +46,7 @@ internal static class Commands
             ["contact linkedin-inmail"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
             ["contact linkedin-voice"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
             ["account list"] = (0, ["--channel"], []),
+            ["schedule list"] = (0, [], []),
             ["auth whoami"] = (0, [], []),
         };
 

@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Twenty-one operations — the whole set this build publishes: fifteen that write and six that only read.
+Twenty-two operations — the whole set this build publishes: fifteen that write and seven that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -28,6 +28,7 @@ Twenty-one operations — the whole set this build publishes: fifteen that write
 | `contact.update` | Changes a person's fields — first name, last name, company, title — and custom fields on the contact Reply holds for them, each custom field named as the account names it. A null clears a field; one left out stays. A person Reply holds nobody for is created with those fields, as an add creates one. |
 | `contact.delete` | Deletes the contact Reply holds for a person, by the identifier Jason pinned, once a person approves it: they leave every sequence and list there. A person Reply holds as opted out is refused, and Jason's own record of the person and its register stay as they are. |
 | `sender.list` | Reads the mailboxes and LinkedIn accounts a send can go from, and says whose each one is: the caller's own alone, or the whole team's when that is asked for. |
+| `schedule.list` | Reads the account's sending schedules, ordered by Reply's identifier: each with its time zone, its windows by weekday as authored, the windows of later steps where Reply keeps them, and whether it is the caller's default. Reply holds a time zone as a Windows time zone identifier, and this package carries it as written under the scheme `windows`, always — never converted. No calendar is worked out from the windows. |
 | `social_invitation.send` | Invites one person to connect on LinkedIn from one of the account's LinkedIn accounts, with a note or without one, once a person approves it. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 | `message.send` | Sends one person one message outside any sequence, once a person approves it: an email, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the address or the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 
@@ -51,9 +52,10 @@ of a call is the command line, which carries only Reply's identifiers and flags,
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
-- **Version 0.15.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
-  the answer. 0.15.0 is the release whose direct sends and `reply contact update` take the person by their fields and
-  import one Reply holds nobody for. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
+- **Version 0.16.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+  the answer. 0.16.0 is the release with `reply schedule list`, which `schedule.list` answers from; 0.15.0 was the one
+  whose direct sends and `reply contact update` take the person by their fields and import one Reply holds nobody
+  for. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
   routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
   does not have, or answers differently.
 - **Jason 0.14.0 or newer.** The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, which a
@@ -303,6 +305,7 @@ route's binding names them.
 | `contact update <contact> --fields -` | write | Changes the fields and custom fields on stdin, by the contact's id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. Before a LinkedIn send it also gives a contact that carries no profile the one the send consumes, and nothing else. |
 | `auth whoami` | read | Who the credential signs in as: the Reply user whose accounts `sender.list` offers under `own`. Only the user's id is read; the login name beside it is the operator's and is not kept. |
 | `account list --channel` | read | The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what `sender.list` answers from, and the read a send makes of its sender. |
+| `schedule list` | read | Every sending schedule the team can use, in one answer, each with its Windows time zone and its windows by weekday: what `schedule.list` answers from. |
 | `contact linkedin-connect --contact-id --linkedin-account-id [--message -]` | write | Invites the contact to connect on LinkedIn from the account named, with the note on stdin, or with none when there is no `--message`. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `contact send-email --contact-id --email-account-id --message -` | write | Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `contact linkedin-message`, `contact linkedin-inmail`, `contact linkedin-voice`, each `--contact-id --linkedin-account-id --message -` | write | Sends the contact one LinkedIn message, InMail or voice message from the account named, outside any sequence, with the text on stdin — `{body}`, `{subject, body}`, or the `{script}` Reply speaks. A send that Reply keeps no key on, so a lost answer is never repeated. |
@@ -628,6 +631,20 @@ account is listed only when Reply names that user as its owner, so a teammate's 
 for, are never offered; under `team` every account is, marked `own`, `teammate` or `unknown`. A whoami that names
 nobody lists nothing, and the read is asked again.
 
+### `schedule.list`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The credential lacks Reply's sequences read scope, the one thing Reply refuses this read for (`access.feature_unavailable`). Nothing is listed. | `unauthorized` | permanent | A key with the sequences read scope. |
+| Reply's answer was longer than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`: Reply gives every schedule in one answer, so the same read is cut at the same place. |
+
+`reply schedule list` gives every schedule in one answer, in no order Reply states, so the package orders them by
+Reply's identifier, the lowest first, and cuts the page itself. A schedule Reply names with no time zone is left out,
+and so are a weekday that is none of the seven or named a second time, a range whose times are not times of day and a
+day's ranges past the twenty-fourth: what is listed is what Reply said. A list holding a schedule without a usable
+identifier is refused whole by reply-cli (`reply.unavailable`), which is `provider_unavailable` and asked again. A range
+may end at `24:00`, the end of the day, and never start there. The read pins nothing.
+
 ### `social_invitation.send`
 
 | When | Code | Class | What to do about it |
@@ -883,6 +900,8 @@ pinned.
   value Jason keys as nothing — not a link to a profile on linkedin.com, not a bare mailbox address with a dotted domain
   — matches nothing, so such an account is refused as `sender_mismatch` even when its address is copied from
   `sender.list`.
+- **`schedule.list` does not say which campaign runs on which schedule.** `campaign.get` names no schedule, so which one
+  a campaign sends on is read at Reply.
 - **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
   whole thread before every filing; the reads report a thread's category.
 - **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first

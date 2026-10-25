@@ -72,6 +72,7 @@ public sealed class ReplyAccount : IDisposable
     public const string ConnectionsFile = "connections.json";
     public const string FeaturesFile = "features.json";
     public const string SentFile = "sent.json";
+    public const string SchedulesFile = "schedules.json";
 
     /// <summary>The Reply user the stand-in's credential signs in as, unless a test plants another.</summary>
     public const int Caller = 501;
@@ -501,6 +502,54 @@ public sealed class ReplyAccount : IDisposable
     }
 
     /// <summary>
+    /// A sending schedule as Reply holds one: its name, its time zone as Reply spells it — a Windows time zone identifier —
+    /// whether it reads its windows in each person's own time zone, whether it skips holidays, whether it is the caller's
+    /// default, Reply's word for its state, its windows (<see cref="Day"/>) and, where it keeps them, the windows of the
+    /// later steps with whether they are in use.
+    /// </summary>
+    public ReplyAccount WithSchedule(
+        long id,
+        string? name,
+        JsonArray windows,
+        string? timeZone = "Eastern Standard Time",
+        bool isDefault = false,
+        string? status = "inCurrentUserSequence",
+        bool recipientTimeZone = false,
+        bool skipsHolidays = false,
+        JsonArray? followUp = null,
+        bool useFollowUp = false)
+    {
+        var schedules = ReadArray(SchedulesFile);
+        schedules.Add(new JsonObject
+        {
+            ["id"] = id,
+            ["name"] = name,
+            ["timezoneId"] = timeZone,
+            ["excludeHolidays"] = skipsHolidays,
+            ["useProspectTimezone"] = recipientTimeZone,
+            ["useFollowUpSchedule"] = useFollowUp,
+            ["mainTimings"] = windows,
+            ["followUpTimings"] = followUp,
+            ["isDefault"] = isDefault,
+            ["status"] = status,
+        });
+        Write(SchedulesFile, schedules);
+        return this;
+    }
+
+    /// <summary>One weekday of a schedule as Reply holds it: its name (<c>Monday</c>), whether it sends, and its ranges as hour and minute pairs.</summary>
+    public static JsonObject Day(string weekDay, bool active, params (int FromHour, int FromMinute, int ToHour, int ToMinute)[] ranges) => new()
+    {
+        ["weekDay"] = weekDay,
+        ["isActive"] = active,
+        ["timeRanges"] = new JsonArray([.. ranges.Select(range => (JsonNode)new JsonObject
+        {
+            ["fromTime"] = new JsonObject { ["hour"] = range.FromHour, ["minute"] = range.FromMinute },
+            ["toTime"] = new JsonObject { ["hour"] = range.ToHour, ["minute"] = range.ToMinute },
+        })]),
+    };
+
+    /// <summary>
     /// A contact on the account's blacklist, which Reply consults on a direct email and on no LinkedIn send. It is kept on
     /// the planted record and never answered by <c>contact get</c>, as Reply's contact read does not show it.
     /// </summary>
@@ -540,7 +589,9 @@ public sealed class ReplyAccount : IDisposable
 
     /// <summary>
     /// A feature the account's plan or role does not include: <c>emailAccounts</c> or <c>linkedInAccounts</c>, the two
-    /// lists <c>account list</c> reads, or <c>directLinkedIn</c>, the LinkedIn sends outside a sequence.
+    /// lists <c>account list</c> reads, or <c>directLinkedIn</c>, the LinkedIn sends outside a sequence. <c>schedules</c> is
+    /// the key's sequences read scope that <c>schedule list</c> needs: the stand-in words its refusal the way the CLI does,
+    /// <c>access.feature_unavailable</c> with the CLI's generic title, though no plan or role is the cause.
     /// </summary>
     public ReplyAccount Without(string feature)
     {

@@ -1,0 +1,28 @@
+{
+  "operation": "schedule.list",
+  "version": 1,
+  "case": "a schedule asked for by name: the read takes no filter and lists them all",
+  "input": {
+    "args": {
+      "name": "Business hours",
+      "limit": 20,
+      "offset": 0
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/args/name",
+        "reason": "additional_properties"
+      }
+    ]
+  }
+}

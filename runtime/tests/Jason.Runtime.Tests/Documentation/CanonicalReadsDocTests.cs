@@ -155,6 +155,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| A send that names its recipient |")]
     [InlineData("| An email's text is written as markup |")]
     [InlineData("| `not_connected` and `insufficient_credits` |")]
+    [InlineData("| Named schedules |")]
     public void The_divergence_file_has_a_row_for_it(string row) =>
         Assert.Contains(row, Source("docs/contracts/divergence-from-l1.md"), StringComparison.Ordinal);
 
@@ -173,6 +174,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("docs/contracts/divergence-from-l1.md", "Change these fields on these people")]
     [InlineData("docs/contracts/divergence-from-l1.md", "Take this person out of the working database")]
     [InlineData("docs/contracts/divergence-from-l1.md", "mailboxes, social accounts, numbers and business messaging identities in one list")]
+    [InlineData("docs/contracts/divergence-from-l1.md", "Show me the actual calendar")]
     [InlineData("docs/contracts/divergence-from-l1.md", "the invitation state for this pair: none / pending / accepted / withdrawn / declined.")]
     [InlineData("docs/contracts/README.md", "true when the value RAISES above the derivation table")]
     [InlineData("docs/contracts/README.md", "true for the one legitimate LOWERING: an operation whose non-performance is itself the harm")]
@@ -244,7 +246,7 @@ public sealed partial class CanonicalReadsDocTests
     private static readonly string[] NumberWords =
     [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two",
     ];
 
     [Fact]
@@ -486,7 +488,7 @@ public sealed partial class CanonicalReadsDocTests
     /// published" names a subset, and is not a count.
     /// </summary>
     [GeneratedRegex(
-        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-one|twenty)\b",
+        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-two|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-two|twenty-one|twenty)\b",
         RegexOptions.IgnoreCase)]
     private static partial Regex CountPhrase();
 
