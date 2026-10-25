@@ -119,6 +119,47 @@ public class ReplyScheduleListTests
     }
 
     /// <summary>
+    /// The short page. Schedules that each carry a full week of the most windows a day may hold are cut at the plugin's own
+    /// budget, which counts coarser than the runtime does (a quote at six bytes) and so stops short of the cap: the plugin
+    /// says there is more, and the page that follows, started at the offset plus what the first returned, carries on with
+    /// no schedule lost and none repeated.
+    /// </summary>
+    [Fact]
+    public async Task A_page_of_schedules_too_large_for_one_result_comes_back_short_and_the_next_one_carries_on()
+    {
+        const int Schedules = 80;
+        var week = new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
+        var ranges = Enumerable.Range(0, 24).Select(hour => (hour, 0, hour, 30)).ToArray();
+        using var account = new ReplyAccount();
+        for (var id = 1; id <= Schedules; id++)
+        {
+            account.WithSchedule(id, new string('Ж', 200), [.. week.Select(day => ReplyAccount.Day(day, true, ranges))]);
+        }
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var seen = new List<string>();
+        var pages = new List<int>();
+        var offset = 0;
+        var more = true;
+        while (more)
+        {
+            var result = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(offset, 100), Ct));
+            var items = result["items"]!.AsArray();
+            seen.AddRange(items.Select(item => (string)item!["external_id"]!));
+            pages.Add(items.Count);
+            more = (bool)result["has_more"]!;
+            offset += items.Count;
+            Assert.True(pages.Count <= 3, $"the pages never ended: {string.Join(",", pages)} so far");
+        }
+
+        Assert.True(pages[0] < Schedules, $"the first page held all {Schedules} schedules, so nothing was cut");
+        Assert.True(pages.Count > 1, $"the pages were {string.Join(",", pages)}");
+        Assert.Equal(Enumerable.Range(1, Schedules).Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)), seen);
+    }
+
+    /// <summary>
     /// What reply-cli prints of the CLI's own reading of a day: a weekday it could not read and a time that is no time of
     /// day come as null, and are left out as well.
     /// </summary>

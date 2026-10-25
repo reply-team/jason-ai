@@ -63,6 +63,48 @@ public class ReplySenderListTests
         Assert.Equal(("active", "dailyLimitReached"), ((string?)items[3]!["status"], (string?)items[3]!["vendor"]!["status"]));
     }
 
+    /// <summary>
+    /// The short page. Accounts whose names and addresses are as long as the document allows are cut at the plugin's own
+    /// budget, which counts coarser than the runtime does and so stops short of the cap: the plugin says there is more, and
+    /// the page that follows, started at the offset plus what the first returned, carries on with no account lost and none
+    /// repeated. The row passes the document's length bound because SchemaValidator.ApplyLength counts runes, as the
+    /// plugin's cut counts code points.
+    /// </summary>
+    [Fact]
+    public async Task A_page_of_accounts_too_large_for_one_result_comes_back_short_and_the_next_one_carries_on()
+    {
+        const int Accounts = 100;
+        var name = string.Concat(Enumerable.Repeat("\U0001F600", 200));
+        var address = string.Concat(Enumerable.Repeat("\U0001F600", 500));
+        using var account = new ReplyAccount();
+        for (var id = 1; id <= Accounts; id++)
+        {
+            account.WithSender(id, "email", name, address);
+        }
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var seen = new List<string>();
+        var pages = new List<int>();
+        var offset = 0;
+        var more = true;
+        while (more)
+        {
+            var result = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input("own", offset: offset, limit: 100), Ct));
+            var items = result["items"]!.AsArray();
+            seen.AddRange(items.Select(item => (string)item!["external_id"]!));
+            pages.Add(items.Count);
+            more = (bool)result["has_more"]!;
+            offset += items.Count;
+            Assert.True(pages.Count <= 3, $"the pages never ended: {string.Join(",", pages)} so far");
+        }
+
+        Assert.True(pages[0] < Accounts, $"the first page held all {Accounts} accounts, so nothing was cut");
+        Assert.True(pages.Count > 1, $"the pages were {string.Join(",", pages)}");
+        Assert.Equal(Enumerable.Range(1, Accounts).Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)), seen);
+    }
+
     /// <summary>A whoami that does not say who the caller is answers nothing an owner can be compared with, so nothing is listed.</summary>
     [Fact]
     public async Task A_caller_reply_does_not_name_lists_nothing_and_the_read_is_asked_again()
