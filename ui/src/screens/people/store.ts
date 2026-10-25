@@ -17,6 +17,8 @@ export const campaign = signal<{ id: string; name: string } | null>(null);
 const pageSize = 50;
 let generation = 0;
 let loadingMore = false;
+/** The request whose rows are on show: a failed read of that same list leaves them where they are. */
+let shown: string | null = null;
 
 export function listBody(filters: PeopleFilters): Record<string, unknown> {
     const body: Record<string, unknown> = { order: 'activity', limit: pageSize };
@@ -37,16 +39,29 @@ export function fail(error: unknown, into = failure): void {
 /** The first page for these filters; an answer to filters the person has already left is dropped. */
 export async function load(api: Api, filters: PeopleFilters): Promise<void> {
     const mine = ++generation;
+    const body = listBody(filters);
+    const asked = JSON.stringify(body);
+    const before = cursor.value;
     failure.value = null;
     cursor.value = null;
     try {
-        const page = await api.call<Page<Contact>>('contact.list', listBody(filters));
+        const page = await api.call<Page<Contact>>('contact.list', body);
         if (mine !== generation) return;
         people.value = page.items;
         cursor.value = page.next_cursor;
         loaded.value = true;
+        shown = asked;
     } catch (error) {
-        if (mine === generation) fail(error);
+        if (mine !== generation) return;
+        if (asked === shown) {
+            cursor.value = before;
+        } else {
+            // The rows on show belong to filters the person has left: the failure stands alone.
+            people.value = [];
+            loaded.value = false;
+            shown = null;
+        }
+        fail(error);
     }
 }
 
@@ -73,12 +88,6 @@ export async function refresh(api: Api, filters: PeopleFilters): Promise<void> {
     const floor = new Promise((resolve) => setTimeout(resolve, 500));
     await Promise.all([load(api, filters), floor]);
     refreshing.value = false;
-}
-
-/** The campaigns the picker offers: the first few, or the ones whose name holds what was typed. Archived ones are not offered. */
-export async function searchCampaigns(api: Api, query: string): Promise<CampaignSummary[]> {
-    const page = await api.call<Page<CampaignSummary>>('campaign.list', query ? { query, limit: 10 } : { limit: 10 });
-    return page.items;
 }
 
 /** The name of the campaign an address names; false when the runtime no longer knows it. */
@@ -129,6 +138,14 @@ export async function add(api: Api, id: string, campaignId: string, reason?: str
 
 export type Chip = 'all' | 'replies' | 'work' | 'decisions' | 'changes';
 
+/** Whose timeline it is: a person's lines and work, or a campaign's. */
+export type Subject = { contact_id: string } | { campaign_id: string };
+
+/** One string per subject, so a person and a campaign that happened to share an id could never be confused. */
+export function subjectKey(subject: Subject): string {
+    return 'contact_id' in subject ? `contact:${subject.contact_id}` : `campaign:${subject.campaign_id}`;
+}
+
 /** The journal kinds each chip asks for; All is every one of them, and nothing the journal keeps for itself. */
 export const chipKinds: Record<Exclude<Chip, 'all'>, string[]> = {
     replies: ['inbound_reply_observed', 'provider_event_observed'],
@@ -143,8 +160,19 @@ export const chipKinds: Record<Exclude<Chip, 'all'>, string[]> = {
     changes: ['contact_created', 'contact_updated', 'contact_archived'],
 };
 
-export function kindsOf(chip: Chip): string[] {
-    return chip === 'all' ? Object.values(chipKinds).flat() : chipKinds[chip];
+/** A campaign's changes are its own: its record, its context and who is in it. */
+const campaignChanges = [
+    'campaign_updated',
+    'campaign_started',
+    'campaign_paused',
+    'context_updated',
+    'contacts_added',
+    'contacts_removed',
+];
+
+export function kindsOf(chip: Chip, subject?: Subject): string[] {
+    const kinds = subject && 'campaign_id' in subject ? { ...chipKinds, changes: campaignChanges } : chipKinds;
+    return chip === 'all' ? Object.values(kinds).flat() : kinds[chip];
 }
 
 export const openStatuses = ['created', 'awaiting_approval', 'scheduled', 'processing'];
@@ -160,14 +188,18 @@ export const timelineFailure = signal<string | null>(null);
 let timelineGeneration = 0;
 let loadingLines = false;
 
-/** The open work and the first page of the chip's lines, together; an answer for another person or chip is dropped. */
-/** The person the timeline's rows belong to: another person's rows are never shown, even for the moment a read takes. */
+/** Whose timeline the rows belong to, as subjectKey says it: another subject's rows are never shown, even for the moment a read takes. */
 export const timelineOf = signal<string | null>(null);
 
-export async function loadTimeline(api: Api, id: string, which: Chip): Promise<void> {
+/**
+ * The open work and the first page of the chip's lines, together; an answer for another subject or chip is dropped. A
+ * campaign reads its planned and running work in reads of its own, so it asks for no open work here.
+ */
+export async function loadTimeline(api: Api, subject: Subject, which: Chip, withOpenWork = true): Promise<void> {
     const mine = ++timelineGeneration;
-    if (timelineOf.value !== id) {
-        timelineOf.value = id;
+    const key = subjectKey(subject);
+    if (timelineOf.value !== key) {
+        timelineOf.value = key;
         openWork.value = [];
         lines.value = [];
     }
@@ -177,17 +209,19 @@ export async function loadTimeline(api: Api, id: string, which: Chip): Promise<v
     linesCursor.value = null;
     try {
         const [work, page] = await Promise.all([
-            api.call<Page<WorkItemSummary>>('workitem.list', {
-                contact_id: id,
-                status: openStatuses,
-                order: 'due',
-                limit: 50,
-            }),
-            api.call<Page<JournalEntry>>('journal.list', { contact_id: id, kinds: kindsOf(which), limit: 50 }),
+            withOpenWork
+                ? api.call<Page<WorkItemSummary>>('workitem.list', {
+                      ...subject,
+                      status: openStatuses,
+                      order: 'due',
+                      limit: 50,
+                  })
+                : null,
+            api.call<Page<JournalEntry>>('journal.list', { ...subject, kinds: kindsOf(which, subject), limit: 50 }),
         ]);
         if (mine !== timelineGeneration) return;
-        openWork.value = work.items;
-        moreOpenWork.value = work.next_cursor !== null;
+        openWork.value = work?.items ?? [];
+        moreOpenWork.value = work !== null && work.next_cursor !== null;
         lines.value = page.items;
         linesCursor.value = page.next_cursor;
         linesLoaded.value = true;
@@ -196,15 +230,15 @@ export async function loadTimeline(api: Api, id: string, which: Chip): Promise<v
     }
 }
 
-export async function moreLines(api: Api, id: string): Promise<void> {
+export async function moreLines(api: Api, subject: Subject): Promise<void> {
     const after = linesCursor.value;
     if (!after || loadingLines) return;
     loadingLines = true;
     const mine = timelineGeneration;
     try {
         const page = await api.call<Page<JournalEntry>>('journal.list', {
-            contact_id: id,
-            kinds: kindsOf(chip.value),
+            ...subject,
+            kinds: kindsOf(chip.value, subject),
             limit: 50,
             cursor: after,
         });

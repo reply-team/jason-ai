@@ -1,0 +1,17 @@
+{
+  "operation": "workitem.count",
+  "case": "smb-now",
+  "request": {
+    "campaign_id": "cmp_2",
+    "status": [
+      "processing",
+      "scheduled",
+      "awaiting_approval"
+    ],
+    "order": "created"
+  },
+  "status": 200,
+  "response": {
+    "total": 0
+  }
+}

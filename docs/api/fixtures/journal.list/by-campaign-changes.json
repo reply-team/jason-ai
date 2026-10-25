@@ -1,0 +1,192 @@
+{
+  "operation": "journal.list",
+  "case": "by-campaign-changes",
+  "request": {
+    "campaign_id": "cmp_1",
+    "kinds": [
+      "campaign_updated",
+      "campaign_started",
+      "campaign_paused",
+      "context_updated",
+      "contacts_added",
+      "contacts_removed"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_10",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "contacts_added",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": null,
+        "old": null,
+        "new": {
+          "added": 1,
+          "already_member": 1,
+          "rejected": 0,
+          "contact_ids": [
+            "cnt_24"
+          ],
+          "created_contact_ids": []
+        },
+        "reason": "From the partner list.",
+        "contact_id": null,
+        "campaign_name": "Spring",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      },
+      {
+        "id": "jrn_11",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "campaign_started",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": "status",
+        "old": "paused",
+        "new": "active",
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      },
+      {
+        "id": "jrn_12",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "campaign_paused",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": "status",
+        "old": "active",
+        "new": "paused",
+        "reason": "Holding the sends over the holiday.",
+        "contact_id": null,
+        "campaign_name": "Spring",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      },
+      {
+        "id": "jrn_13",
+        "ts": "2026-10-14T10:00:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": null
+        },
+        "kind": "contacts_added",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": null,
+        "old": null,
+        "new": {
+          "added": 1,
+          "already_member": 0,
+          "rejected": 0,
+          "contact_ids": [
+            "cnt_18"
+          ],
+          "created_contact_ids": []
+        },
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      },
+      {
+        "id": "jrn_14",
+        "ts": "2026-10-02T10:00:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": null
+        },
+        "kind": "contacts_removed",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": null,
+        "old": null,
+        "new": {
+          "removed": 1,
+          "not_member": 0,
+          "already_excluded": 0,
+          "rejected": 0,
+          "contact_ids": [
+            "cnt_18"
+          ]
+        },
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      },
+      {
+        "id": "jrn_15",
+        "ts": "2026-10-13T10:00:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": null
+        },
+        "kind": "contacts_removed",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": null,
+        "old": null,
+        "new": {
+          "removed": 1,
+          "not_member": 0,
+          "already_excluded": 0,
+          "rejected": 0,
+          "contact_ids": [
+            "cnt_6"
+          ]
+        },
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

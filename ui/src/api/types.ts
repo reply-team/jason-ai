@@ -25,7 +25,13 @@ export type Approval = ApprovalSummary & {
     preview: Record<string, unknown>;
     decision_reason: string | null;
 };
-export type ApprovalListRequest = { status?: string; statuses?: string[]; limit?: number; cursor?: string };
+export type ApprovalListRequest = {
+    status?: string;
+    statuses?: string[];
+    campaign_id?: string;
+    limit?: number;
+    cursor?: string;
+};
 export type ApprovalDecisionRequest = { approval_id: string; actor: ActorRef; reason?: string };
 
 export type DecisionOption = { label: string; detail: string | null };
@@ -49,7 +55,13 @@ export type Decision = DecisionSummary & {
     answer: string | null;
     chosen_option: string | null;
 };
-export type DecisionListRequest = { status?: string; statuses?: string[]; limit?: number; cursor?: string };
+export type DecisionListRequest = {
+    status?: string;
+    statuses?: string[];
+    campaign_id?: string;
+    limit?: number;
+    cursor?: string;
+};
 export type DecisionAnswerRequest = {
     decision_id: string;
     actor: ActorRef;
@@ -212,6 +224,7 @@ export type JournalEntry = {
     actor_role: string | null;
 };
 export type JournalListRequest = {
+    campaign_id?: string;
     work_item_id?: string;
     contact_id?: string;
     kinds?: string[];
@@ -219,7 +232,94 @@ export type JournalListRequest = {
     cursor?: string;
 };
 export type CampaignSummary = { id: string; name: string; status: string };
-export type CampaignListRequest = { query?: string; limit?: number; cursor?: string };
+export type CampaignListRequest = { query?: string; include_archived?: boolean; limit?: number; cursor?: string };
+export type Campaign = CampaignSummary & {
+    context: Record<string, unknown>;
+    external_ids: ExternalId[];
+    execution_profile: string | null;
+    review_seconds?: number;
+    created_at: string;
+    updated_at: string;
+    archived_at: string | null;
+};
+export type CampaignTransitionRequest = { campaign_id: string; reason?: string; actor?: ActorRef };
+/** The most campaigns one read names in `campaign_ids`: the runtime refuses more. */
+export const campaignIdsLimit = 100;
+export type CampaignSummaryRequest = { campaign_ids?: string[] };
+export type CampaignSummaryRow = {
+    campaign_id: string;
+    people: number;
+    waiting: number;
+    failed: number;
+    working: number;
+    new: number;
+    idle: number;
+    sequence: number;
+    out: number;
+    removed: number;
+    sequence_linked: boolean;
+};
+/** The same counts across every campaign asked, each person counted once however many of them count the person. */
+export type CampaignSummaryTotal = Omit<CampaignSummaryRow, 'campaign_id' | 'sequence_linked'>;
+export type CampaignSummaryResponse = { campaigns: CampaignSummaryRow[]; total: CampaignSummaryTotal };
+export type CampaignActivityRequest = { campaign_ids?: string[]; since: string; until: string };
+export type CampaignActivityRow = {
+    campaign_id: string;
+    people: number;
+    added: number;
+    worked_on: number;
+    contacted: number;
+    replied: number;
+    opted_out: number;
+    removed: number;
+};
+export type CampaignActivityTotal = Omit<CampaignActivityRow, 'campaign_id'>;
+export type CampaignActivityResponse = { campaigns: CampaignActivityRow[]; total: CampaignActivityTotal };
+/** What each bucket of a series is: an hour, a day or a Monday-to-Sunday week of the zone. */
+export type ActivityPeriod = 'hour' | 'day' | 'week';
+export type CampaignActivityByPeriodRequest = {
+    campaign_ids?: string[];
+    count: string;
+    period: string;
+    since: string;
+    until: string;
+    zone?: string;
+};
+/** One count with the bucket as its period: people once within it, so buckets may add up to more than campaign.activity's total over the window. */
+export type ActivityBucket = { start: string; end: string; value: number };
+export type CampaignActivityByPeriodResponse = { period: string; zone: string; buckets: ActivityBucket[] };
+/** What a listed person is counted for: an approval or a question waiting, a failure, or what happened in the period. */
+export type MembershipWhy = {
+    kind: string;
+    text: string | null;
+    code: string | null;
+    at: string | null;
+    approval_id: string | null;
+    decision_id: string | null;
+};
+/** A campaign that lists the person, and what it counts them for when a count was asked. */
+export type CountedIn = { campaign_id: string; why?: MembershipWhy };
+/** A person listed once: the first of their memberships' state and why, and every campaign that lists them. */
+export type MembershipItem = {
+    contact: Contact;
+    state: string;
+    added_at: string;
+    updated_at: string;
+    why?: MembershipWhy;
+    counted: CountedIn[];
+};
+export type ListContactsRequest = {
+    campaign_id?: string;
+    campaign_ids?: string[];
+    state?: string;
+    summary?: string;
+    activity?: string;
+    since?: string;
+    until?: string;
+    query?: string;
+    limit?: number;
+    cursor?: string;
+};
 export type Role = { id: string; name: string; builtin: boolean };
 export type Channel = { channel: string; value: string; primary: boolean };
 export type ExternalId = {
@@ -227,6 +327,7 @@ export type ExternalId = {
     kind: string;
     value: string;
     recorded_at: string;
+    recorded_by_attempt_id?: string;
     diverged_value?: string | null;
     diverged_at?: string | null;
 };
@@ -249,7 +350,7 @@ export type Contact = {
     external_ids?: ExternalId[];
     created_at?: string;
     archived_at?: string | null;
-    /** Read beside the record by contact.get and contact.list only. */
+    /** Read beside the record by contact.get, contact.list and campaign.list_contacts only. */
     campaigns?: ContactCampaign[] | null;
     last_activity?: JournalEntry | null;
 };

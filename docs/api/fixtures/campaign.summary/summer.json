@@ -1,0 +1,38 @@
+{
+  "operation": "campaign.summary",
+  "case": "summer",
+  "request": {
+    "campaign_ids": [
+      "cmp_3"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_3",
+        "people": 2,
+        "waiting": 0,
+        "failed": 0,
+        "working": 0,
+        "new": 2,
+        "idle": 0,
+        "sequence": 0,
+        "out": 0,
+        "removed": 0,
+        "sequence_linked": false
+      }
+    ],
+    "total": {
+      "people": 2,
+      "waiting": 0,
+      "failed": 0,
+      "working": 0,
+      "new": 2,
+      "idle": 0,
+      "sequence": 0,
+      "out": 0,
+      "removed": 0
+    }
+  }
+}

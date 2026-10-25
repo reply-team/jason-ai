@@ -1,0 +1,47 @@
+{
+  "operation": "campaign.add_contacts",
+  "case": "several",
+  "request": {
+    "campaign_id": "cmp_1",
+    "contacts": [
+      {
+        "contact_id": "cnt_24"
+      },
+      {
+        "contact_id": "cnt_11"
+      }
+    ],
+    "reason": "From the partner list.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "summary": {
+      "added": 1,
+      "already_member": 1,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "added",
+        "contact_id": "cnt_24",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      },
+      {
+        "index": 1,
+        "status": "already_member",
+        "contact_id": "cnt_11",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      }
+    ]
+  }
+}

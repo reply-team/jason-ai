@@ -8,6 +8,9 @@ import { DecideDialog } from '../attention/decide-dialog';
 import { CancelDialog, type Ran } from './cancel-dialog';
 import { creator, mark, plannedNote, what } from './labels';
 import type { Patch } from './store';
+import { ActionsRow } from '../../layout/actions-row';
+import { PanelHeader } from '../../layout/panel-header';
+import { Notice } from '../../layout/notice';
 
 type Props = {
     item: WorkItem;
@@ -38,33 +41,31 @@ export function WorkItemPanel(props: Props) {
 
     return (
         <div class="panel">
-            <div class="panel-header">
-                <div class="heading">
-                    <h2>{heading}</h2>
-                    <div class="sub">
+            <PanelHeader
+                title={heading}
+                sub={
+                    <>
                         in {item.campaign_name} · <span class={`mark ${m.kind}`}>{m.glyph}</span>{' '}
                         {item.status.replace('_', ' ')}
-                    </div>
-                </div>
-                <button class="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
-                    ×
-                </button>
-            </div>
-            {open && (
-                <div class="panel-actions">
+                    </>
+                }
+                onClose={onClose}
+            />
+            <ActionsRow>
+                {open && (
                     <button class="btn danger" type="button" disabled={busy} onClick={() => setCancelling(true)}>
                         Cancel work
                     </button>
-                </div>
-            )}
+                )}
+            </ActionsRow>
             <div class="panel-body">
-                {notice && <div class="notice">{notice}</div>}
+                {notice && <Notice>{notice}</Notice>}
                 {item.status === 'awaiting_approval' && approvalId && (
                     <div class="section waiting">
                         <a class="notice" href={href({ screen: 'attention', kind: 'approvals', id: approvalId })}>
                             Waiting for your approval ›
                         </a>
-                        <div class="panel-actions">
+                        <ActionsRow>
                             <button
                                 class="btn primary"
                                 type="button"
@@ -76,7 +77,7 @@ export function WorkItemPanel(props: Props) {
                             <button class="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
                                 Reject
                             </button>
-                        </div>
+                        </ActionsRow>
                     </div>
                 )}
                 {item.status === 'failed' && <Failed item={item} now={now} zone={zone} />}

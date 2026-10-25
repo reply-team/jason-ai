@@ -1,0 +1,16 @@
+{
+  "operation": "workitem.count",
+  "case": "planned-on-17",
+  "request": {
+    "since": "2026-10-17T00:00:00.000Z",
+    "until": "2026-10-18T00:00:00.000Z",
+    "status": [
+      "created"
+    ],
+    "order": "due"
+  },
+  "status": 200,
+  "response": {
+    "total": 1
+  }
+}

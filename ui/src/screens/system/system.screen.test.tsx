@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/preact';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/preact';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
@@ -29,6 +29,30 @@ describe('System', () => {
         expect(screen.queryByText(/Autostart/)).toBeNull();
     });
 
+    it('the refresh button is held until the read answers, however long that takes', async () => {
+        const { fake } = systemFake();
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        const refresh = screen.getByTitle('Refresh') as HTMLButtonElement;
+        // Only timers are faked: the button turns for at least half a second, and this read takes longer.
+        vi.useFakeTimers({ toFake: ['setTimeout'] });
+        try {
+            const release = fake.hold('system.info');
+            await act(async () => {
+                fireEvent.click(refresh);
+                await vi.advanceTimersByTimeAsync(600);
+            });
+            expect(refresh.disabled).toBe(true);
+
+            await act(async () => {
+                release();
+                await vi.advanceTimersByTimeAsync(0);
+            });
+            expect(refresh.disabled).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('lists paired browsers, keeps this one, and revokes another with the recorded request', async () => {
         const { fake } = systemFake();
         await waitFor(() => expect(screen.getByText('Paired browsers')).toBeTruthy());
@@ -55,7 +79,7 @@ describe('System', () => {
             expect(rows.map((r) => r.classList.contains('stale'))).toEqual([false, false, true]);
             expect(rows[2]!.textContent).toContain('not used for a month');
 
-            fake.answer('ui.revoke', 'ui.revoke/one');
+            fake.answer('ui.revoke', 'ui.revoke/stale', 'ui.revoke/never-used');
             fireEvent.click(screen.getByRole('button', { name: 'Revoke all other browsers' }));
             await waitFor(() => expect(fake.calls.filter((c) => c.operation === 'ui.revoke')).toHaveLength(2));
             const others = fixtures['ui.tokens/aged'].response.items.map((t) => t.id).filter((id) => id !== 'uit_1');

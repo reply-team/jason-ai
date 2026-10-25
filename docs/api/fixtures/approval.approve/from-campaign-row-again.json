@@ -1,0 +1,19 @@
+{
+  "operation": "approval.approve",
+  "case": "from-campaign-row-again",
+  "request": {
+    "approval_id": "apr_1",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "approval_not_pending",
+      "message": "Approval 'apr_1' is approved; only a pending decision about work that is still waiting can be made.",
+      "retryable": false
+    }
+  }
+}

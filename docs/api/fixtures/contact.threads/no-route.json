@@ -3,6 +3,7 @@
   "case": "no-route",
   "request": {
     "contact_id": "cnt_3",
+    "plugin_id": "reply",
     "limit": 100
   },
   "status": 404,

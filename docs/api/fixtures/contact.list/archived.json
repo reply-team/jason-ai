@@ -223,7 +223,7 @@
         "last_name": "Hopper",
         "company": "Navy",
         "title": "Rear Admiral",
-        "time_zone": "America/New_York",
+        "time_zone": null,
         "channels": [
           {
             "channel": "email",

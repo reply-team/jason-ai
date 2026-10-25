@@ -1,0 +1,15 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "activity-replied-today",
+  "request": {
+    "activity": "replied",
+    "since": "2026-10-16T00:00:00.000Z",
+    "until": "2026-10-16T09:00:00.000Z",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

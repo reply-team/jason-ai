@@ -1,36 +1,16 @@
-import { useEffect, useState } from 'preact/hooks';
-import { ApiError, Unpaired } from '../../api/client';
+import { useEffect, useMemo, useState } from 'preact/hooks';
+import * as threadsStore from './threads-store';
+import type { Failure } from './threads-store';
 import { useApi } from '../../api/context';
-import { session } from '../../api/session';
-import type { Contact, ContactThread, ContactThreads, Message, Thread } from '../../api/types';
+import type { Contact } from '../../api/types';
 import { clock, when } from '../../time/format';
 import { channelName } from './labels';
 import { MessageBody } from './message-body';
-
-const threadsPage = 100;
-const messagesPage = 20;
-
-type Failure = { text: string; retry: boolean };
-
-/** What a failed read says, and whether trying again can help: a read no route can reach will not be helped by it. */
-function failureOf(error: unknown, pluginId: string): Failure | null {
-    if (error instanceof Unpaired) {
-        session.clear();
-        return null;
-    }
-    if (!(error instanceof ApiError)) return { text: String(error), retry: true };
-    if (error.code === 'no_route') {
-        return {
-            text: `These threads can't be read: no route reaches the ${pluginId} account this person was linked through.`,
-            retry: false,
-        };
-    }
-    return { text: error.message, retry: error.retryable };
-}
+import { Notice } from '../../layout/notice';
 
 function Failed({ failure, retry }: { failure: Failure; retry: () => void }) {
     return (
-        <div class="notice danger" role="alert">
+        <Notice danger>
             {failure.text}
             {failure.retry && (
                 <>
@@ -40,7 +20,7 @@ function Failed({ failure, retry }: { failure: Failure; retry: () => void }) {
                     </button>
                 </>
             )}
-        </div>
+        </Notice>
     );
 }
 
@@ -60,32 +40,14 @@ export function ThreadMessages({
     zone: string;
 }) {
     const api = useApi();
-    const [messages, setMessages] = useState<Message[] | null>(null);
-    const [next, setNext] = useState<number | null>(null);
-    const [failure, setFailure] = useState<Failure | null>(null);
+    const view = useMemo(() => threadsStore.messagesView(), [contactId, pluginId, threadId]);
+    const { messages, next, failure } = view.state.value;
     const now = new Date();
-
-    const read = async (offset: number) => {
-        setFailure(null);
-        const body: Record<string, unknown> = {
-            contact_id: contactId,
-            plugin_id: pluginId,
-            thread_id: threadId,
-            limit: messagesPage,
-        };
-        if (offset > 0) body['offset'] = offset;
-        try {
-            const page = await api.call<ContactThread>('contact.thread', body);
-            setMessages((before) => (offset > 0 ? [...(before ?? []), ...page.messages] : page.messages));
-            // The next page starts after what this one held, which a provider may make shorter than was asked.
-            setNext(page.has_more && page.messages.length > 0 ? offset + page.messages.length : null);
-        } catch (error) {
-            setFailure(failureOf(error, pluginId));
-        }
-    };
+    const read = (offset: number) => threadsStore.loadMessages(api, view, contactId, pluginId, threadId, offset);
     useEffect(() => {
         void read(0);
-    }, [contactId, pluginId, threadId]);
+        return () => threadsStore.closeView(view);
+    }, [view]);
 
     return (
         <div class="msgs">
@@ -121,35 +83,16 @@ export function ThreadMessages({
 /** The person's threads at one provider, read when they are shown and kept only while they are. */
 function Threads({ contactId, pluginId, zone }: { contactId: string; pluginId: string; zone: string }) {
     const api = useApi();
-    const [threads, setThreads] = useState<Thread[] | null>(null);
-    const [next, setNext] = useState<number | null>(null);
-    const [readAt, setReadAt] = useState<Date | null>(null);
-    const [failure, setFailure] = useState<Failure | null>(null);
+    const view = useMemo(() => threadsStore.threadsView(), [contactId, pluginId]);
+    const { threads, next, readAt, failure } = view.state.value;
     const [opened, setOpened] = useState<string | null>(null);
     const now = new Date();
-
-    const read = async (offset: number) => {
-        setFailure(null);
-        const body: Record<string, unknown> = { contact_id: contactId, plugin_id: pluginId, limit: threadsPage };
-        if (offset > 0) body['offset'] = offset;
-        try {
-            const page = await api.call<ContactThreads>('contact.threads', body);
-            setThreads((before) => {
-                const known = offset > 0 ? (before ?? []) : [];
-                const seen = new Set(known.map((t) => t.external_id));
-                return [...known, ...page.items.filter((t) => !seen.has(t.external_id))];
-            });
-            setNext(page.has_more && page.items.length > 0 ? offset + page.items.length : null);
-            setReadAt(new Date());
-        } catch (error) {
-            setFailure(failureOf(error, pluginId));
-        }
-    };
+    const read = (offset: number) => threadsStore.loadThreads(api, view, contactId, pluginId, offset);
     useEffect(() => {
-        setThreads(null);
         setOpened(null);
         void read(0);
-    }, [contactId, pluginId]);
+        return () => threadsStore.closeView(view);
+    }, [view]);
 
     return (
         <div class="section threads">

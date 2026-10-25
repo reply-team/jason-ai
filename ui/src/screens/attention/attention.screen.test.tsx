@@ -75,7 +75,9 @@ describe('Attention', () => {
     });
 
     it('rejects through the one dialog, with a reason, as recorded', async () => {
-        const fake = pendingFake().answer('approval.reject', 'approval.reject/rejected');
+        const fake = pendingFake()
+            .answer('approval.get', 'approval.get/other-pending')
+            .answer('approval.reject', 'approval.reject/rejected');
         renderApp(fake);
         await waitFor(() => screen.getByText('Enroll Grace Hopper'));
         fireEvent.click(screen.getByText('Enroll Grace Hopper'));
@@ -85,13 +87,8 @@ describe('Attention', () => {
         fireEvent.input(within(dialog).getByLabelText(/reason/i), { target: { value: 'not this quarter' } });
         fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }));
         await waitFor(() => expect(fake.sent('approval.reject')).toBeTruthy());
-        // The fake answers approval.get with one recorded item whatever the id, so the id is the opened item's; the
-        // rest of the request is the recorded one.
         const expected = fixtures['approval.reject/rejected'].request;
-        expect(fake.sent('approval.reject')).toEqual({
-            approval_id: fixtures['approval.get/pending-with-preview'].response.id,
-            reason: expected.reason,
-        });
+        expect(fake.sent('approval.reject')).toEqual({ approval_id: expected.approval_id, reason: expected.reason });
     });
 
     it('answers a question with an option and a reason, as recorded', async () => {
@@ -114,7 +111,9 @@ describe('Attention', () => {
     });
 
     it('switches the filter to decided ones, keeps it in the address, and sends the statuses', async () => {
-        const fake = pendingFake().answer('approval.list', 'approval.list/pending', 'approval.list/decided');
+        const fake = pendingFake()
+            .answer('approval.list', 'approval.list/pending', 'approval.list/decided')
+            .answer('decision.list', 'decision.list/pending', 'decision.list/decided');
         renderApp(fake);
         await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
         fireEvent.click(screen.getByRole('button', { name: 'Decided' }));

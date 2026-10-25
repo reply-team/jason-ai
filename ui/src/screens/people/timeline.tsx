@@ -9,6 +9,8 @@ import { plannedNote, what } from '../workitems/labels';
 import { displayName, entryLabel } from './labels';
 import { ThreadMessages } from './threads';
 import * as store from './store';
+import { Notice } from '../../layout/notice';
+import { Chips } from '../../layout/chips';
 
 type Props = { person: Contact; me: string; now: Date; zone: string };
 
@@ -76,6 +78,30 @@ function memberships(person: Contact): Happened[] {
     });
 }
 
+/**
+ * The kinds a provider's event is said by. An event that reaches several of the person's campaigns is said once in each,
+ * under one key, so it is one row naming them all.
+ */
+const saidPerCampaign = new Set(['inbound_reply_observed', 'provider_event_observed']);
+
+/** The person's lines, each event once where its newest line stands, with the campaigns it was said in. */
+function happenings(entries: JournalEntry[]): { entry: JournalEntry; campaigns: string[] }[] {
+    const rows: { entry: JournalEntry; campaigns: string[] }[] = [];
+    const said = new Map<string, string[]>();
+    for (const entry of entries) {
+        const key = saidPerCampaign.has(entry.kind) && entry.key ? `${entry.kind}/${entry.key}` : null;
+        const campaigns = key && entry.campaign_name ? [entry.campaign_name] : [];
+        const earlier = key ? said.get(key) : undefined;
+        if (earlier) {
+            earlier.push(...campaigns);
+            continue;
+        }
+        if (key) said.set(key, campaigns);
+        rows.push({ entry, campaigns });
+    }
+    return rows;
+}
+
 /** The thread a reply line names, as the reply's plugin calls it. */
 function threadOf(entry: JournalEntry): { pluginId: string; threadId: string } | null {
     if (entry.kind !== 'inbound_reply_observed') return null;
@@ -95,25 +121,27 @@ export function Timeline({ person, me, now, zone }: Props) {
     const chip = store.chip.value;
     const [expanded, setExpanded] = useState<string | null>(null);
     useEffect(() => {
-        void store.loadTimeline(api, person.id, 'all');
+        void store.loadTimeline(api, { contact_id: person.id }, 'all');
     }, [api, person.id]);
 
-    const mine = store.timelineOf.value === person.id;
-    const lines: Happened[] = (mine ? store.lines.value : []).map((entry) => {
+    const mine = store.timelineOf.value === store.subjectKey({ contact_id: person.id });
+    const entries = mine ? store.lines.value : [];
+    const lines: Happened[] = happenings(entries).map(({ entry, campaigns }) => {
         const label = entryLabel(entry, me);
         return {
             key: entry.id,
             at: new Date(entry.ts),
             mark: label.mark,
             title: label.title,
-            note: label.note,
+            note: [campaigns.join(', '), label.note].filter(Boolean).join(' · ') || null,
             link: linkOf(entry),
             thread: threadOf(entry),
         };
     });
     // A membership shows once the lines loaded reach its time, so it never sits above lines not yet read.
     const exhausted = store.linesCursor.value === null;
-    const oldest = lines.at(-1)?.at;
+    const last = entries.at(-1);
+    const oldest = last ? new Date(last.ts) : undefined;
     const placed =
         chip === 'all' || chip === 'changes'
             ? memberships(person).filter((m) => exhausted || (oldest !== undefined && m.at >= oldest))
@@ -124,24 +152,14 @@ export function Timeline({ person, me, now, zone }: Props) {
 
     return (
         <div class="timeline">
-            <div class="chips" role="group" aria-label="Show">
-                {chips.map(({ chip: each, label }) => (
-                    <button
-                        key={each}
-                        type="button"
-                        class={`chip${chip === each ? ' on' : ''}`}
-                        aria-pressed={chip === each}
-                        onClick={() => void store.loadTimeline(api, person.id, each)}
-                    >
-                        {label}
-                    </button>
-                ))}
-            </div>
-            {store.timelineFailure.value && (
-                <div class="notice danger" role="alert">
-                    {store.timelineFailure.value}
-                </div>
-            )}
+            <Chips
+                label="Show"
+                row="timeline"
+                chips={chips.map(({ chip: each, label }) => ({ key: each, label }))}
+                on={chip}
+                onChoose={(each) => void store.loadTimeline(api, { contact_id: person.id }, each)}
+            />
+            {store.timelineFailure.value && <Notice danger>{store.timelineFailure.value}</Notice>}
             <div class="rows">
                 {work.length > 0 && <div class="group first">Planned</div>}
                 {work.map((item) => (
@@ -226,7 +244,7 @@ export function Timeline({ person, me, now, zone }: Props) {
                         })}
                     </div>
                 ))}
-                <More more={store.linesCursor.value ? () => store.moreLines(api, person.id) : null} />
+                <More more={store.linesCursor.value ? () => store.moreLines(api, { contact_id: person.id }) : null} />
             </div>
         </div>
     );

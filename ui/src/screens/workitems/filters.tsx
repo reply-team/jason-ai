@@ -1,5 +1,8 @@
-import { useApi } from '../../api/context';
-import { Picker, SearchPicker } from '../../pickers/pickers';
+import { FiltersBar } from '../../layout/filters-bar';
+import { Segmented } from '../../layout/segmented';
+import { Picker } from '../../pickers/pickers';
+import { CampaignPicker } from '../../pickers/campaign-picker';
+import { PersonPicker } from '../../pickers/person-picker';
 import { replace, type Tab, type WorkItemFilters } from '../../router';
 import * as store from './store';
 
@@ -7,68 +10,41 @@ type Props = { tab: Tab; filters: WorkItemFilters };
 
 /** The filters every tab shares; a change narrows the same view, so it replaces the address rather than adding to history. */
 export function Filters({ tab, filters }: Props) {
-    const api = useApi();
     const set = (next: Loose) => replace({ screen: 'workitems', tab, filters: without(next) });
     const kind = filters.kind;
     const campaign = store.campaign.value?.id === filters.campaign ? store.campaign.value : null;
     const person = store.person.value?.id === filters.contact ? store.person.value : null;
 
     return (
-        <div class="filters">
-            <SearchPicker
+        <FiltersBar>
+            <CampaignPicker
                 label={filters.campaign ? (campaign?.name ?? '…') : 'All campaigns'}
-                clearLabel="All campaigns"
-                placeholder="Find a campaign"
-                search={async (query) =>
-                    (await store.searchCampaigns(api, query)).map((c) => ({
-                        value: c.id,
-                        label: c.name,
-                        hint: c.status === 'active' ? undefined : c.status,
-                    }))
-                }
+                none="All campaigns"
                 onPick={(picked) => {
-                    if (picked) store.campaign.value = { id: picked.value, name: picked.label };
-                    set({ ...filters, campaign: picked?.value });
+                    if (picked) store.campaign.value = picked;
+                    set({ ...filters, campaign: picked?.id });
                 }}
             />
-            <SearchPicker
+            <PersonPicker
                 label={filters.contact ? (person?.name ?? '…') : 'Everybody'}
-                clearLabel="Everybody"
-                placeholder="Find a person"
-                search={async (query) =>
-                    (await store.searchPeople(api, query)).map((c) => ({
-                        value: c.id,
-                        label: store.displayName(c),
-                        hint: [c.company, store.firstChannel(c)].filter((part) => part).join(' · ') || undefined,
-                    }))
-                }
+                none="Everybody"
                 onPick={(picked) => {
-                    if (picked) store.person.value = { id: picked.value, name: picked.label };
-                    set({ ...filters, contact: picked?.value });
+                    if (picked) store.person.value = picked;
+                    set({ ...filters, contact: picked?.id });
                 }}
             />
-            <div class="segmented" role="group" aria-label="Kind">
-                {(
-                    [
-                        [undefined, 'All'],
-                        ['ai_role', 'Role work'],
-                        ['provider_op', 'Provider operations'],
-                    ] as const
-                ).map(([value, label]) => (
-                    <button
-                        key={label}
-                        type="button"
-                        class={kind === value ? 'on' : ''}
-                        aria-pressed={kind === value}
-                        onClick={() => {
-                            if (kind === value) return;
-                            set({ ...filters, kind: value, role: value === 'provider_op' ? undefined : filters.role });
-                        }}
-                    >
-                        {label}
-                    </button>
-                ))}
-            </div>
+            <Segmented<WorkItemFilters['kind']>
+                label="Kind"
+                options={[
+                    { value: undefined, label: 'All' },
+                    { value: 'ai_role', label: 'Role work' },
+                    { value: 'provider_op', label: 'Provider operations' },
+                ]}
+                value={kind}
+                onChange={(value) =>
+                    set({ ...filters, kind: value, role: value === 'provider_op' ? undefined : filters.role })
+                }
+            />
             {kind !== 'provider_op' && (
                 <Picker
                     label={filters.role ?? 'Any role'}
@@ -96,7 +72,7 @@ export function Filters({ tab, filters }: Props) {
                     Failures
                 </button>
             )}
-        </div>
+        </FiltersBar>
     );
 }
 

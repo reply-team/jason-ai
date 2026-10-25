@@ -1,0 +1,51 @@
+{
+  "operation": "decision.list",
+  "case": "by-campaign-pending",
+  "request": {
+    "status": "pending",
+    "campaign_id": "cmp_1",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "dec_1",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_7",
+        "status": "pending",
+        "question": "Follow up on LinkedIn?",
+        "raised_at": "2026-10-13T10:00:00.000Z",
+        "answered_at": null,
+        "answered_by": null,
+        "campaign_name": "Spring",
+        "contact_name": null
+      },
+      {
+        "id": "dec_3",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_7",
+        "status": "pending",
+        "question": "Follow up on LinkedIn?",
+        "raised_at": "2026-10-13T10:00:00.000Z",
+        "answered_at": null,
+        "answered_by": null,
+        "campaign_name": "Spring",
+        "contact_name": null
+      },
+      {
+        "id": "dec_2",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_10",
+        "status": "pending",
+        "question": "Follow up on LinkedIn?",
+        "raised_at": "2026-10-13T10:00:00.000Z",
+        "answered_at": null,
+        "answered_by": null,
+        "campaign_name": "Spring",
+        "contact_name": "Pia Example"
+      }
+    ],
+    "next_cursor": null
+  }
+}

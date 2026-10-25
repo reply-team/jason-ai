@@ -1,18 +1,31 @@
 import { useState } from 'preact/hooks';
 import type { Decision } from '../../api/types';
 import { relative } from '../../time/format';
+import { ActionsRow } from '../../layout/actions-row';
+import { PanelHeader } from '../../layout/panel-header';
 
 type Props = {
     decision: Decision;
     now: Date;
     busy: boolean;
     remaining: string;
+    /** What the button that leaves this one says: the next waiting thing on Attention, the campaign elsewhere. */
+    skipLabel?: string;
     onAnswer: (choice: { option?: string; text?: string }, reason?: string) => void;
     onSkip: () => void;
     onClose: () => void;
 };
 
-export function QuestionPanel({ decision, now, busy, remaining, onAnswer, onSkip, onClose }: Props) {
+export function QuestionPanel({
+    decision,
+    now,
+    busy,
+    remaining,
+    skipLabel = 'Skip to next',
+    onAnswer,
+    onSkip,
+    onClose,
+}: Props) {
     const [option, setOption] = useState<string | null>(null);
     const [text, setText] = useState('');
     const [reason, setReason] = useState('');
@@ -20,17 +33,15 @@ export function QuestionPanel({ decision, now, busy, remaining, onAnswer, onSkip
     const canAnswer = pending && !busy && (option !== null || text.trim().length > 0);
     return (
         <div class="panel">
-            <div class="panel-header">
-                <div class="heading">
-                    <h2>{decision.question}</h2>
-                    <div class="sub">
+            <PanelHeader
+                title={decision.question}
+                sub={
+                    <>
                         {decision.campaign_name} · asked {relative(new Date(decision.raised_at), now)}
-                    </div>
-                </div>
-                <button class="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
-                    ×
-                </button>
-            </div>
+                    </>
+                }
+                onClose={onClose}
+            />
             <div class="panel-body">
                 {decision.options && decision.options.length > 0 && (
                     <div class="section">
@@ -99,8 +110,8 @@ export function QuestionPanel({ decision, now, busy, remaining, onAnswer, onSkip
                         />
                     </div>
                 )}
-                {pending && (
-                    <div class="panel-actions">
+                <ActionsRow>
+                    {pending && (
                         <button
                             class="btn primary"
                             type="button"
@@ -111,8 +122,8 @@ export function QuestionPanel({ decision, now, busy, remaining, onAnswer, onSkip
                         >
                             Answer
                         </button>
-                    </div>
-                )}
+                    )}
+                </ActionsRow>
                 {decision.references && decision.references.length > 0 && (
                     <div class="section">
                         <h3>Read before deciding</h3>
@@ -139,7 +150,7 @@ export function QuestionPanel({ decision, now, busy, remaining, onAnswer, onSkip
                     <span class="next">{remaining}</span>
                     <span class="spacer" />
                     <button class="btn ghost" type="button" onClick={onSkip}>
-                        Skip to next
+                        {skipLabel}
                     </button>
                 </div>
             )}

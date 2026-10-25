@@ -1,0 +1,12 @@
+{
+  "operation": "journal.list",
+  "case": "by-awaiting-item",
+  "request": {
+    "work_item_id": "wi_3"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

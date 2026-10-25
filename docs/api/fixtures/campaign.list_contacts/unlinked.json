@@ -1,0 +1,144 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "unlinked",
+  "request": {
+    "campaign_id": "cmp_2",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "contact": {
+          "id": "cnt_1",
+          "first_name": "Ada",
+          "last_name": "Example",
+          "company": "Ada Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "ada@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_2",
+              "campaign_name": "Autumn",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            },
+            {
+              "campaign_id": "cmp_3",
+              "campaign_name": "Summer referrals",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            },
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-12T09:00:00.000Z",
+              "updated_at": "2026-10-12T09:00:00.000Z"
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_1",
+            "ts": "2026-10-15T16:00:00.000Z",
+            "actor": {
+              "type": "system",
+              "id": "dispatcher"
+            },
+            "kind": "approval_requested",
+            "campaign_id": "cmp_1",
+            "work_item_id": "wi_1",
+            "attempt_id": null,
+            "key": "approval",
+            "old": null,
+            "new": {
+              "id": "apr_1",
+              "operation": "campaign.enroll"
+            },
+            "reason": null,
+            "contact_id": "cnt_1",
+            "campaign_name": "Spring",
+            "contact_name": "Ada Example",
+            "work_item_kind": "provider_op",
+            "work_item_role": null,
+            "work_item_operation": "campaign.enroll",
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_2"
+          }
+        ]
+      },
+      {
+        "contact": {
+          "id": "cnt_11",
+          "first_name": "Hal",
+          "last_name": "Example",
+          "company": "Hal Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "hal@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            },
+            {
+              "campaign_id": "cmp_2",
+              "campaign_name": "Autumn",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            }
+          ],
+          "last_activity": null
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_2"
+          }
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}

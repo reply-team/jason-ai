@@ -19,17 +19,24 @@ build, because every skill's do.
 records no open, click, reply or delivery of its own; the provider's counts reach it only as the result of a
 `provider_op` item naming `engagement.summarize`, with the envelope that says what each number counts. Ask for them
 over the campaign's window; the answer is a row per channel. Any other number about them would be invented. What you do have is
-three things, and it is worth saying which one each of your statements came from:
+four things, and it is worth saying which one each of your statements came from:
 
 ```
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-10-09T00:00:00Z --until now
 ```
 
 The work items say what was attempted and how it ended. The chronicle says what happened and when. The reports
 are somebody's word about effects produced outside Jason — an admission, not a measurement, and never evidence
-that something arrived.
+that something arrived. The campaign's activity is Jason's own count of people — added, worked on, contacted,
+replied for the first time, opted out, removed — each defined once in the runtime's own words, and one of those
+counts over time is a day or a week at a time:
+
+```
+jason campaign activity-by-period cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --count replied --period day --since 2026-10-09T00:00:00Z --until now
+```
 
 Say what you could not establish. An honest "nothing here shows whether anyone replied" is worth more than a
 number nobody can trace.

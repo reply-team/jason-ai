@@ -1,0 +1,24 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "query-too-long",
+  "request": {
+    "campaign_id": "cmp_1",
+    "query": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "limit": 50
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: query: too_long.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "query",
+          "code": "too_long",
+          "message": "query must be at most 200 characters."
+        }
+      ]
+    }
+  }
+}

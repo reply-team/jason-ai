@@ -1,0 +1,38 @@
+{
+  "operation": "campaign.summary",
+  "case": "some-after",
+  "request": {
+    "campaign_ids": [
+      "cmp_1"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 23,
+        "waiting": 2,
+        "failed": 3,
+        "working": 3,
+        "new": 3,
+        "idle": 6,
+        "sequence": 2,
+        "out": 6,
+        "removed": 1,
+        "sequence_linked": true
+      }
+    ],
+    "total": {
+      "people": 23,
+      "waiting": 2,
+      "failed": 3,
+      "working": 3,
+      "new": 3,
+      "idle": 6,
+      "sequence": 2,
+      "out": 6,
+      "removed": 1
+    }
+  }
+}

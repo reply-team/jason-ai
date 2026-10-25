@@ -1,0 +1,32 @@
+{
+  "operation": "contact.get",
+  "case": "imported",
+  "request": {
+    "contact_id": "cnt_4"
+  },
+  "status": 200,
+  "response": {
+    "id": "cnt_4",
+    "first_name": "Grace",
+    "last_name": "Hopper",
+    "company": "Navy",
+    "title": "Rear Admiral",
+    "time_zone": null,
+    "channels": [
+      {
+        "channel": "email",
+        "value": "grace@navy.example",
+        "label": null,
+        "primary": true,
+        "data": null
+      }
+    ],
+    "custom": {},
+    "external_ids": [],
+    "created_at": "2026-10-01T00:00:00.000Z",
+    "updated_at": "2026-10-01T00:00:00.000Z",
+    "archived_at": null,
+    "campaigns": [],
+    "last_activity": null
+  }
+}

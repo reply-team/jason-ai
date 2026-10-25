@@ -9,6 +9,8 @@ import { PairAgain } from './shell/pair-again';
 import { Sidebar } from './shell/sidebar';
 import * as shell from './shell/shell';
 import { AttentionScreen } from './screens/attention/screen';
+import { CampaignsScreen } from './screens/campaigns/screen';
+import { PerformanceScreen } from './screens/performance/screen';
 import { PeopleScreen } from './screens/people/screen';
 import { SystemScreen } from './screens/system/screen';
 import { WorkItemsScreen } from './screens/workitems/screen';
@@ -47,6 +49,10 @@ export function App({ api, uiApiVersion = API_VERSION }: { api?: Api; uiApiVersi
                         <WorkItemsScreen />
                     ) : route.value.screen === 'people' ? (
                         <PeopleScreen />
+                    ) : route.value.screen === 'campaigns' ? (
+                        <CampaignsScreen />
+                    ) : route.value.screen === 'performance' ? (
+                        <PerformanceScreen />
                     ) : (
                         <AttentionScreen />
                     )}

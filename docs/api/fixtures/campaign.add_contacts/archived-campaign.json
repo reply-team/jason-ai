@@ -2,10 +2,10 @@
   "operation": "campaign.add_contacts",
   "case": "archived-campaign",
   "request": {
-    "campaign_id": "cmp_3",
+    "campaign_id": "cmp_2",
     "contacts": [
       {
-        "contact_id": "cnt_4"
+        "contact_id": "cnt_1"
       }
     ],
     "actor": {
@@ -17,7 +17,7 @@
   "response": {
     "error": {
       "code": "campaign_archived",
-      "message": "Campaign 'cmp_3' is archived; only journal entries can still be appended.",
+      "message": "Campaign 'cmp_2' is archived; only journal entries can still be appended.",
       "retryable": false
     }
   }

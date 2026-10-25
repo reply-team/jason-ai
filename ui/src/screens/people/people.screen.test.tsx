@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/preact';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures, type FixtureName } from '../../test/fixtures';
@@ -44,7 +44,7 @@ const rowTitles = () =>
 
 describe('People', () => {
     it('lists people by what last happened to them, by day, the one with no first name by last name, nobody-yet last', async () => {
-        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity', 'contact.list/by-activity-next');
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity');
         open(api);
 
         await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
@@ -60,16 +60,43 @@ describe('People', () => {
         const paulaRow = screen.getByText('Paula Mendes').closest('a')!;
         expect(within(paulaRow).getByText('researcher started')).toBeTruthy();
         expect(screen.getByText('6 October')).toBeTruthy();
-
-        fireEvent.click(screen.getByRole('button', { name: /loading/ }));
-        await waitFor(() => expect(screen.getByText('Grace Hopper')).toBeTruthy());
-        expect(sentLists(api)[1]).toEqual({
-            order: 'activity',
-            limit: 50,
-            cursor: fixtures['contact.list/by-activity'].response.next_cursor,
-        });
-        const groups = Array.from(document.querySelectorAll('.rows .group')).map((g) => g.textContent);
+        const grace = screen.getByText('Grace Hopper').closest('.rows')!;
+        const groups = Array.from(grace.querySelectorAll('.group')).map((g) => g.textContent);
         expect(groups.at(-1)).toBe('No activity yet');
+    });
+
+    it('a list that fails to load keeps the rows of the same list, and drops the rows of a search the person has left', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity', 'contact.list/query-too-long');
+        open(api);
+        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
+
+        // The runtime does not answer a refresh: what the person was reading stays, under the failure.
+        const reachable = api.unreachable('contact.list');
+        fireEvent.click(screen.getByTitle('Refresh'));
+        expect((await screen.findByRole('alert')).textContent).toContain('Failed to fetch');
+        expect(screen.getByText('Mateo Ruiz')).toBeTruthy();
+        reachable();
+
+        // A search the runtime refuses: the rows belong to the list before it, and go.
+        fireEvent.input(screen.getByRole('searchbox', { name: 'Search people' }), {
+            target: { value: 'a'.repeat(201) },
+        });
+        await waitFor(() =>
+            expect(screen.getByRole('alert').textContent).toBe(
+                fixtures['contact.list/query-too-long'].response.error.message,
+            ),
+        );
+        expect(screen.queryByText('Mateo Ruiz')).toBeNull();
+    });
+
+    it('the list reads on from where a page ended', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/many', 'contact.list/many-next');
+        open(api);
+
+        await waitFor(() => expect(document.querySelectorAll('.list .rows .row')).toHaveLength(50));
+        fireEvent.click(screen.getByRole('button', { name: /loading/ }));
+        await waitFor(() => expect(screen.getByText('Person 51 Example')).toBeTruthy());
+        expect(sentLists(api)[1]).toEqual(fixtures['contact.list/many-next'].request);
     });
 
     it('search, campaign and archived start from the first page and live in the address', async () => {
@@ -78,8 +105,9 @@ describe('People', () => {
                 'contact.list',
                 'contact.list/by-activity',
                 'contact.list/by-activity-query',
-                'contact.list/by-campaign',
-                'contact.list/query-none',
+                'contact.list/by-campaign-query',
+                'contact.list/by-campaign-query-archived',
+                'contact.list/by-campaign-query-none',
             )
             .answer('campaign.list', 'campaign.list/for-picker');
         open(api);
@@ -92,6 +120,9 @@ describe('People', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /All campaigns/ }));
         const latAm = await screen.findByRole('option', { name: /LatAm pilot/ });
+        // A campaign that is not active says so beside its name, as in every campaign picker.
+        expect(screen.getByRole('option', { name: /Re-engage Q2 no-replies/ }).textContent).toContain('paused');
+        expect(latAm.textContent).not.toContain('active');
         fireEvent.click(latAm);
         await waitFor(() => expect(sentLists(api)).toHaveLength(3));
         const campaignId = fixtures['campaign.list/for-picker'].response.items.find(
@@ -103,13 +134,17 @@ describe('People', () => {
         await waitFor(() => expect(sentLists(api)).toHaveLength(4));
         expect(sentLists(api)[3]).toMatchObject({ include_archived: true, campaign_id: campaignId, query: 'mat' });
         expect(route.value).toMatchObject({ filters: { q: 'mat', campaign: campaignId, archived: true } });
+
+        fireEvent.input(screen.getByRole('searchbox', { name: 'Search people' }), { target: { value: 'zz' } });
         await waitFor(() => expect(screen.getByText('Nobody matches.')).toBeTruthy());
     });
 
     it('a row opens the person, keeping the list and its filters; a filter changed or another row keeps the tab', async () => {
-        const api = new FakeApi()
-            .answer('contact.list', 'contact.list/by-activity')
-            .answer('contact.get', 'contact.get/with-campaigns');
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity-query', 'contact.list/by-activity-query-aguilar')
+                .answer('contact.get', 'contact.get/with-campaigns', 'contact.get/no-first-name'),
+        );
         open(api, { q: 'mat' });
         await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
 
@@ -118,19 +153,23 @@ describe('People', () => {
         expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'timeline', filters: { q: 'mat' } });
         await waitFor(() => expect(screen.getByText('Mateo Ruiz').closest('a')!.className).toContain('selected'));
 
-        route.value = { screen: 'people', id: mateo.id, tab: 'details', filters: { q: 'mat' } };
-        fireEvent.input(screen.getByRole('searchbox', { name: 'Search people' }), { target: { value: 'mateo' } });
-        await waitFor(() => expect(route.value).toMatchObject({ filters: { q: 'mateo' } }));
-        expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'details', filters: { q: 'mateo' } });
+        const details = { screen: 'people' as const, id: mateo.id, tab: 'details' as const, filters: { q: 'mat' } };
+        location.hash = href(details);
+        route.value = details;
+        fireEvent.input(screen.getByRole('searchbox', { name: 'Search people' }), { target: { value: 'aguilar' } });
+        await waitFor(() => expect(route.value).toMatchObject({ filters: { q: 'aguilar' } }));
+        expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'details', filters: { q: 'aguilar' } });
 
-        const aguilar = fixtures['contact.list/by-activity'].response.items.find((c) => c.last_name === 'Aguilar')!;
-        fireEvent.click(screen.getByText('Aguilar').closest('a')!);
-        expect(route.value).toEqual({ screen: 'people', id: aguilar.id, tab: 'details', filters: { q: 'mateo' } });
+        const aguilar = fixtures['contact.list/by-activity-query-aguilar'].response.items[0]!;
+        fireEvent.click((await screen.findByText('Aguilar')).closest('a')!);
+        expect(route.value).toEqual({ screen: 'people', id: aguilar.id, tab: 'details', filters: { q: 'aguilar' } });
     });
     it("a person's card shows where they are, their local time and their campaigns, active first, excluded outlined; it closes as Work items' panel does", async () => {
-        const api = new FakeApi()
-            .answer('contact.list', 'contact.list/by-activity')
-            .answer('contact.get', 'contact.get/with-campaigns');
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity')
+                .answer('contact.get', 'contact.get/with-campaigns'),
+        );
         open(api, {}, mateo.id);
 
         const card = await screen.findByRole('heading', { level: 2, name: 'Mateo Ruiz' });
@@ -157,7 +196,7 @@ describe('People', () => {
                 .answer('contact.list', 'contact.list/by-activity')
                 .answer('contact.get', 'contact.get/no-first-name'),
             'journal.list/by-contact-failed',
-            'workitem.list/empty',
+            'workitem.list/by-contact-open-none',
         );
         open(api, {}, aguilar.id);
 
@@ -222,6 +261,31 @@ describe('People', () => {
         await screen.findByRole('heading', { level: 2, name: 'Mateo Ruiz' });
         expect(screen.queryByRole('dialog', { name: 'Add to campaign' })).toBeNull();
     });
+    it('Escape in the campaign list closes only the list, and a second Escape closes the dialog', async () => {
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity')
+                .answer('contact.get', 'contact.get/with-campaigns')
+                .answer('campaign.list', 'campaign.list/for-picker'),
+        );
+        open(api, {}, mateo.id);
+        // As the tests above: the page's own reads have gone out, so its first effects have run.
+        await waitFor(() => expect(api.sent('journal.list')).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Add to campaign' });
+        const choose = within(dialog).getByRole('button', { name: /Choose a campaign/ });
+        fireEvent.click(choose);
+        await within(dialog).findByRole('option', { name: /LatAm pilot/ });
+
+        fireEvent.keyDown(within(dialog).getByPlaceholderText('Find a campaign'), { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+        expect(screen.getByRole('dialog', { name: 'Add to campaign' })).toBe(dialog);
+        expect(document.activeElement).toBe(choose);
+
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add to campaign' })).toBeNull());
+    });
+
     it('open work sits above the now line, farthest first', async () => {
         const api = timeline(
             new FakeApi()
@@ -287,7 +351,7 @@ describe('People', () => {
             'journal.list/by-contact',
             'journal.list/by-contact-replies',
             'journal.list/by-contact-changes',
-            'journal.list/by-contact-empty',
+            'journal.list/by-contact-work',
         );
         open(api, {}, mateo.id);
         await waitFor(() => expect(api.sent('journal.list')).toBeTruthy());
@@ -313,7 +377,11 @@ describe('People', () => {
         await waitFor(() => expect(rowTitles()).toContain('Added to LatAm pilot'));
 
         fireEvent.click(screen.getByRole('button', { name: 'Work' }));
-        await waitFor(() => expect(screen.getByText('Nothing here yet.')).toBeTruthy());
+        await waitFor(() => expect(rowTitles()).not.toContain('Added to LatAm pilot'));
+        expect(rowTitles().filter((t) => t !== 'responder')).toEqual([
+            'Enrolled in LatAm pilot',
+            'Personalizer finished its work',
+        ]);
     });
 
     it('a row about work opens it in Work items, a failure says what was recorded, and nothing planned shows no Planned', async () => {
@@ -323,7 +391,7 @@ describe('People', () => {
                 .answer('contact.list', 'contact.list/by-activity')
                 .answer('contact.get', 'contact.get/no-first-name'),
             'journal.list/by-contact-failed',
-            'workitem.list/empty',
+            'workitem.list/by-contact-open-none',
         );
         open(api, {}, aguilar.id);
 
@@ -359,12 +427,15 @@ describe('People', () => {
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/by-activity')
             .answer('contact.get', 'contact.get/with-campaigns')
-            .answer('contact.threads', 'contact.threads/has-more', 'contact.threads/two-threads')
-            .answer('contact.thread', 'contact.thread/has-more', 'contact.thread/messages');
+            .answer('contact.threads', 'contact.threads/has-more', 'contact.threads/next')
+            .answer('contact.thread', 'contact.thread/has-more', 'contact.thread/next');
         open(api, {}, mateo.id, 'details');
         const tab = await screen.findByRole('tab', { name: 'Threads' });
         expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Timeline', 'Details', 'Threads']);
         expect(api.calls.some((c) => c.operation === 'contact.threads')).toBe(false);
+        // A click that asks for a new browser tab is left to the browser.
+        expect(fireEvent.click(tab, { ctrlKey: true })).toBe(true);
+        expect(fireEvent.click(tab, { metaKey: true })).toBe(true);
 
         fireEvent.click(tab);
         expect(route.value).toMatchObject({ id: mateo.id, tab: 'threads' });
@@ -372,14 +443,8 @@ describe('People', () => {
             expect(api.sent('contact.threads')).toEqual({ contact_id: mateo.id, plugin_id: 'reply', limit: 100 }),
         );
         fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
-        await waitFor(() =>
-            expect(api.sent('contact.threads')).toEqual({
-                contact_id: mateo.id,
-                plugin_id: 'reply',
-                limit: 100,
-                offset: 2,
-            }),
-        );
+        // The next page brings an older thread, and repeats one the page already shows.
+        expect(await screen.findByText(/Pricing for the pilot/)).toBeTruthy();
         expect(screen.getAllByText(/Happy to connect\./)).toHaveLength(1);
         const linkedIn = screen.getByText(/Happy to connect\./).closest('button')!;
         expect(within(linkedIn).getByText('LinkedIn')).toBeTruthy();
@@ -421,21 +486,14 @@ describe('People', () => {
         );
 
         fireEvent.click(screen.getAllByRole('button', { name: 'Load more' }).at(-1)!);
-        await waitFor(() =>
-            expect(api.sent('contact.thread')).toEqual({
-                contact_id: mateo.id,
-                plugin_id: 'reply',
-                thread_id: 't_501',
-                limit: 20,
-                offset: 3,
-            }),
-        );
+        await waitFor(() => expect(screen.getAllByTestId('message-body')).toHaveLength(4));
+        expect(screen.getAllByTestId('message-body').at(-1)!.textContent).toBe('Ten works. See you Thursday.');
     });
 
     it('a failed read shows in place, with Try again only when trying again can help', async () => {
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/by-activity')
-            .answer('contact.get', 'contact.get/with-campaigns')
+            .answer('contact.get', 'contact.get/with-campaigns', 'contact.get/unrouted')
             .answer(
                 'contact.threads',
                 'contact.threads/provider-failed',
@@ -449,12 +507,107 @@ describe('People', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(await screen.findByText(/Happy to connect\./)).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+        // Paula is known to the provider in an account no route reaches: trying again cannot help her.
+        const paula = {
+            screen: 'people' as const,
+            id: fixtures['contact.get/unrouted'].response.id,
+            tab: 'threads' as const,
+            filters: {},
+        };
+        location.hash = href(paula);
+        route.value = paula;
         const refused = await screen.findByRole('alert');
         expect(refused.textContent).toBe(
             "These threads can't be read: no route reaches the reply account this person was linked through.",
         );
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    });
+
+    it("a refresh's answer that arrives after a later read is dropped", async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity')
+            .answer('contact.get', 'contact.get/with-campaigns')
+            .answer('contact.threads', 'contact.threads/has-more', 'contact.threads/next');
+        open(api, {}, mateo.id, 'threads');
+        const more = await screen.findByRole('button', { name: 'Load more' });
+
+        const release = api.hold('contact.threads', (body) => !('offset' in body));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+        fireEvent.click(more);
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull());
+
+        // The refresh began first and answers last: what it read is older than what is shown.
+        await act(async () => {
+            release();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
+    });
+
+    it('a threads answer that arrives after another person was opened is dropped', async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity')
+            .answer('contact.get', 'contact.get/with-campaigns', 'contact.get/unrouted')
+            .answer('contact.threads', 'contact.threads/two-threads', 'contact.threads/no-route');
+        const release = api.hold('contact.threads', (body) => (body as { contact_id: string }).contact_id === mateo.id);
+        open(api, {}, mateo.id, 'threads');
+        // A held read shows nothing the page could be watched for; the test waits until it has been sent.
+        await waitFor(() => expect(api.sent('contact.threads')).toMatchObject({ contact_id: mateo.id }));
+
+        // Paula is linked at the same provider, so her Threads section takes the place of Mateo's.
+        const paula = fixtures['contact.get/unrouted'].response;
+        const to = { screen: 'people' as const, id: paula.id, tab: 'threads' as const, filters: {} };
+        location.hash = href(to);
+        route.value = to;
+        await screen.findByRole('heading', { level: 2, name: /Paula/ });
+        expect((await screen.findByRole('alert')).textContent).toContain('no route reaches');
+
+        // Mateo's answer arrives now; the page has moved on, and it is dropped.
+        await act(async () => {
+            release();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(screen.queryByText(/Happy to connect\./)).toBeNull();
+        expect(screen.getByRole('alert').textContent).toContain('no route reaches');
+    });
+
+    it('two reply rows of one thread each show the thread when opened, one after the other', async () => {
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity')
+                .answer('contact.get', 'contact.get/with-campaigns'),
+            'journal.list/by-contact-replied-twice',
+        ).answer('contact.thread', 'contact.thread/messages');
+        open(api, {}, mateo.id);
+        const [newer, older] = await screen.findAllByRole('button', { name: /show the thread/ });
+
+        // The older row's read is still on its way when the newer row takes its place.
+        const release = api.hold('contact.thread');
+        fireEvent.click(older!);
+        await screen.findByText('loading…');
+        fireEvent.click(newer!);
+        await act(async () => {
+            release();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(await screen.findAllByTestId('message-body')).toHaveLength(3);
+        expect(screen.queryByText('loading…')).toBeNull();
+    });
+
+    it('a reply said in two campaigns is one row that names both', async () => {
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity')
+                .answer('contact.get', 'contact.get/with-campaigns'),
+            'journal.list/by-contact-replied-twice',
+        );
+        open(api, {}, mateo.id);
+
+        const rows = await screen.findAllByRole('button', { name: /show the thread/ });
+        expect(rows.map((row) => row.querySelector('.in')?.textContent)).toEqual([
+            'LatAm pilot, Re-engage Q2 no-replies',
+            'LatAm pilot · mentions a meeting',
+        ]);
     });
 
     it("the timeline's reply row opens its thread in place", async () => {
@@ -482,5 +635,64 @@ describe('People', () => {
             }),
         );
         expect((await screen.findAllByTestId('message-body')).length).toBe(3);
+    });
+
+    it("a thread the provider says is not this person's shows the refusal, and the threads stay", async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity')
+            .answer('contact.get', 'contact.get/with-campaigns')
+            .answer('contact.threads', 'contact.threads/two-threads')
+            .answer('contact.thread', 'contact.thread/not-this-contact');
+        open(api, {}, mateo.id, 'threads');
+
+        fireEvent.click(await screen.findByText(/Re: Soluna's next quarter/));
+        const refused = await screen.findByRole('alert');
+        expect(refused.textContent).toBe(fixtures['contact.thread/not-this-contact'].response.error.message);
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.getByText(/Happy to connect\./)).toBeTruthy();
+    });
+
+    it('an address on Threads for a person linked nowhere shows their timeline', async () => {
+        const grace = fixtures['contact.get/imported'].response;
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity')
+                .answer('contact.get', 'contact.get/imported'),
+            'journal.list/by-contact-empty',
+            'workitem.list/by-contact-open-imported',
+        );
+        open(api, {}, grace.id, 'threads');
+
+        await screen.findByRole('heading', { level: 2, name: 'Grace Hopper' });
+        expect(screen.getByRole('tab', { name: 'Timeline' }).getAttribute('aria-selected')).toBe('true');
+        expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
+    });
+
+    it('a campaign filter the runtime no longer knows is dropped from the address, and the list is everyone', async () => {
+        const gone = fixtures['campaign.get/gone'].request.campaign_id;
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/gone-campaign', 'contact.list/by-activity')
+            .answer('campaign.get', 'campaign.get/gone');
+        open(api, { campaign: gone });
+
+        await waitFor(() => expect(route.value).toEqual({ screen: 'people', tab: 'timeline', filters: {} }));
+        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('a person with no time zone has no place and no clock on their card', async () => {
+        const grace = fixtures['contact.get/imported'].response;
+        const api = timeline(
+            new FakeApi()
+                .answer('contact.list', 'contact.list/by-activity')
+                .answer('contact.get', 'contact.get/imported'),
+            'journal.list/by-contact-empty',
+            'workitem.list/by-contact-open-imported',
+        );
+        open(api, {}, grace.id);
+
+        const card = await screen.findByRole('heading', { level: 2, name: 'Grace Hopper' });
+        const header = card.closest('.panel-header') as HTMLElement;
+        expect(header.querySelector('.sub')!.textContent).toBe('Rear Admiral at Navy');
     });
 });
