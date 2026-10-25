@@ -1,0 +1,17 @@
+{
+  "operation": "contact.list",
+  "case": "gone-campaign",
+  "request": {
+    "order": "activity",
+    "campaign_id": "cmp_3",
+    "limit": 50
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "campaign_not_found",
+      "message": "No campaign with id 'cmp_3'.",
+      "retryable": false
+    }
+  }
+}

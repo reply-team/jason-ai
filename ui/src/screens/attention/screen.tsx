@@ -1,10 +1,13 @@
 import { useEffect } from 'preact/hooks';
 import { useApi } from '../../api/context';
+import { Segmented } from '../../layout/segmented';
+import { Toolbar } from '../../layout/toolbar';
 import { navigate, route } from '../../router';
 import { ApprovalPanel } from './approval-panel';
 import { AttentionList } from './list';
 import { QuestionPanel } from './question-panel';
 import * as store from './store';
+import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -46,43 +49,23 @@ export function AttentionScreen() {
     return (
         <div class={`main${selected ? '' : ' single'}`}>
             <div class="list">
-                <div class="toolbar">
-                    <h1>Attention</h1>
-                    <div class="segmented" role="group" aria-label="Show">
-                        {(['pending', 'decided'] as const).map((f) => (
-                            <button
-                                key={f}
-                                type="button"
-                                class={decided === (f === 'decided') ? 'on' : ''}
-                                aria-pressed={decided === (f === 'decided')}
-                                onClick={() => {
-                                    if (decided === (f === 'decided')) return;
-                                    navigate(
-                                        f === 'decided'
-                                            ? { screen: 'attention', decided: true }
-                                            : { screen: 'attention' },
-                                    );
-                                }}
-                            >
-                                {f === 'pending' ? 'Pending' : 'Decided'}
-                            </button>
-                        ))}
-                    </div>
-                    <button
-                        class={`iconbtn${store.refreshing.value ? ' spin' : ''}`}
-                        type="button"
-                        title="Refresh"
-                        disabled={store.refreshing.value}
-                        onClick={() => void store.refresh(api, decided)}
-                    >
-                        <span class="glyph">⟳</span>
-                    </button>
-                </div>
-                {store.failure.value && (
-                    <div class="notice danger" role="alert">
-                        {store.failure.value}
-                    </div>
-                )}
+                <Toolbar
+                    title="Attention"
+                    refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api, decided) }}
+                >
+                    <Segmented
+                        label="Show"
+                        options={[
+                            { value: false, label: 'Pending' },
+                            { value: true, label: 'Decided' },
+                        ]}
+                        value={decided}
+                        onChange={(on) =>
+                            navigate(on ? { screen: 'attention', decided: true } : { screen: 'attention' })
+                        }
+                    />
+                </Toolbar>
+                {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && count === 0 ? (
                     <div class="empty">
                         <strong>Nothing needs you</strong>

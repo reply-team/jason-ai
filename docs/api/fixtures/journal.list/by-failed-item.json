@@ -1,9 +1,8 @@
 {
-  "operation": "contact.list",
-  "case": "query-none",
+  "operation": "journal.list",
+  "case": "by-failed-item",
   "request": {
-    "query": "zz",
-    "limit": 10
+    "work_item_id": "wi_11"
   },
   "status": 200,
   "response": {

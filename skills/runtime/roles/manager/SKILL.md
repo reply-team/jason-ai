@@ -45,6 +45,16 @@ a lead about what to check, not a fact about the campaign today.
 
 Read in this order, and do not skip a step because the cause seems to explain everything.
 
+**Where the campaign's people stand.** Before any one item, how many people are waiting on a person, failed,
+working, new, idle, in the provider's sequence or out of it, and what happened to them since your last review. The
+counts are of people, not work items, so one person may be in several; `list-contacts` names who is behind a number:
+
+```
+jason campaign summary cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-10-09T00:00:00Z --until now
+jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary failed
+```
+
 **Failed items are your inbox.** A failure nobody interprets is the campaign quietly stopping. Count them,
 then read them newest first:
 

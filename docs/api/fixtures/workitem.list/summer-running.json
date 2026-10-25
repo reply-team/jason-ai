@@ -1,0 +1,18 @@
+{
+  "operation": "workitem.list",
+  "case": "summer-running",
+  "request": {
+    "campaign_id": "cmp_3",
+    "status": [
+      "scheduled",
+      "processing"
+    ],
+    "order": "due",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

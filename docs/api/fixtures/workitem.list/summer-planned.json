@@ -1,0 +1,17 @@
+{
+  "operation": "workitem.list",
+  "case": "summer-planned",
+  "request": {
+    "campaign_id": "cmp_3",
+    "status": [
+      "created"
+    ],
+    "order": "due",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

@@ -72,7 +72,18 @@ describe('Work items', () => {
         ]);
     });
 
-    it('Planned groups by due day with undated work last, says when each runs, and scrolls with the cursor', async () => {
+    it('Planned groups by due day with undated work last, and says when each runs', async () => {
+        const api = fake().answer('workitem.list', 'workitem.list/planned');
+        open(api, 'planned');
+
+        await waitFor(() => expect(screen.getByText('Today')).toBeTruthy());
+        expect(screen.getByText(/retry after 12:15/)).toBeTruthy();
+        expect(screen.getByText(/not before 16:30/)).toBeTruthy();
+        const groups = [...document.querySelectorAll('.rows .group')].map((g) => g.textContent);
+        expect(groups).toEqual(['Today', 'Tomorrow', 'No date']);
+    });
+
+    it('Planned reads on from where a page ended as the list scrolls', async () => {
         // A browser's observer, which happy-dom lacks: the page must watch the sentinel that appears with the cursor.
         const watched: { node: Element; scrolledTo: () => void }[] = [];
         vi.stubGlobal(
@@ -86,23 +97,41 @@ describe('Work items', () => {
                 disconnect() {}
             },
         );
-        const api = fake().answer('workitem.list', 'workitem.list/planned', 'workitem.list/planned-next');
+        const api = fake('workitem.count/many-now', 'workitem.count/many-planned', 'workitem.count/many-done').answer(
+            'workitem.list',
+            'workitem.list/planned-many',
+            'workitem.list/planned-many-next',
+        );
         open(api, 'planned');
 
-        await waitFor(() => expect(screen.getByText('Today')).toBeTruthy());
-        expect(screen.getByText(/retry after 12:15/)).toBeTruthy();
+        await waitFor(() => expect(document.querySelectorAll('.rows .row')).toHaveLength(50));
+        expect(screen.getByRole('button', { name: /^Planned\s*51$/ })).toBeTruthy();
         const sentinel = screen.getByText('loading…');
         await waitFor(() => expect(watched.some((w) => w.node === sentinel)).toBe(true));
         watched.find((w) => w.node === sentinel)!.scrolledTo();
-        await waitFor(() => expect(screen.getByText('No date')).toBeTruthy());
-        expect(screen.getByText(/not before 16:30/)).toBeTruthy();
-        const groups = [...document.querySelectorAll('.rows .group')].map((g) => g.textContent);
-        expect(groups).toEqual(['Today', 'Tomorrow', 'No date']);
-        expect(sentLists(api)[1]).toMatchObject({ cursor: fixtures['workitem.list/planned-next'].request.cursor });
+        await waitFor(() => expect(document.querySelectorAll('.rows .row')).toHaveLength(51));
+        expect(sentLists(api)[1]).toMatchObject({
+            cursor: fixtures['workitem.list/planned-many'].response.next_cursor,
+        });
     });
 
     it('Done shows outcomes newest first, and the Failures chip asks for failed only', async () => {
-        const api = fake().answer('workitem.list', 'workitem.list/done', 'workitem.list/failed');
+        const api = fake(
+            'workitem.count/now',
+            'workitem.count/planned',
+            'workitem.count/done',
+            'workitem.count/failed',
+            'workitem.count/planned-on-16',
+            'workitem.count/failed-on-16',
+            'workitem.count/planned-on-17',
+            'workitem.count/failed-on-17',
+        ).answer(
+            'workitem.list',
+            'workitem.list/done',
+            'workitem.list/failed',
+            'workitem.list/failed-on-16',
+            'workitem.list/failed-on-17',
+        );
         open(api, 'done');
 
         await waitFor(() => expect(screen.getByText('failed: reply.refused')).toBeTruthy());
@@ -137,12 +166,31 @@ describe('Work items', () => {
 
     it('campaign, kind and role filters start from the first page, recount, and say when nothing matches', async () => {
         const api = fake(
-            'workitem.count/planned',
-            'workitem.count/planned',
-            'workitem.count/planned',
+            'workitem.count/many-now',
+            'workitem.count/many-planned',
+            'workitem.count/many-done',
+            'workitem.count/smb-now',
+            'workitem.count/smb-planned',
+            'workitem.count/smb-done',
+            'workitem.count/smb-roles-now',
+            'workitem.count/smb-roles-planned',
+            'workitem.count/smb-roles-done',
+            'workitem.count/smb-manager-now',
             'workitem.count/zero',
+            'workitem.count/smb-manager-done',
+            'workitem.count/smb-operations-now',
+            'workitem.count/smb-operations-planned',
+            'workitem.count/smb-operations-done',
         )
-            .answer('workitem.list', 'workitem.list/planned', 'workitem.list/planned-next', 'workitem.list/empty')
+            .answer(
+                'workitem.list',
+                'workitem.list/planned-many',
+                'workitem.list/planned-many-next',
+                'workitem.list/smb-planned',
+                'workitem.list/smb-roles-planned',
+                'workitem.list/empty',
+                'workitem.list/smb-operations-planned',
+            )
             .answer('campaign.list', 'campaign.list/first-page', 'campaign.list/query');
         open(api, 'planned');
         await waitFor(() => screen.getByText('loading…'));
@@ -183,8 +231,15 @@ describe('Work items', () => {
 
     it('the person filter searches, and the address carries every filter', async () => {
         const found = fixtures['contact.list/query-email'].response.items[0]!;
-        const api = fake()
-            .answer('workitem.list', 'workitem.list/now')
+        const api = fake(
+            'workitem.count/now',
+            'workitem.count/planned',
+            'workitem.count/done',
+            'workitem.count/tomas-now',
+            'workitem.count/tomas-planned',
+            'workitem.count/tomas-done',
+        )
+            .answer('workitem.list', 'workitem.list/now', 'workitem.list/tomas-now')
             .answer('contact.list', 'contact.list/first-page', 'contact.list/query-email');
         open(api, 'now');
         await waitFor(() => screen.getByText('Running'));
@@ -211,8 +266,15 @@ describe('Work items', () => {
     it('an address names its person and campaign with one read each, and drops a campaign that no longer exists', async () => {
         const ada = fixtures['contact.get/one'].response;
         const gone = fixtures['campaign.get/unknown'].request.campaign_id;
-        const api = fake()
-            .answer('workitem.list', 'workitem.list/now')
+        const api = fake(
+            'workitem.count/unknown-campaign-now',
+            'workitem.count/unknown-campaign-planned',
+            'workitem.count/unknown-campaign-done',
+            'workitem.count/ada-now',
+            'workitem.count/ada-planned',
+            'workitem.count/ada-done',
+        )
+            .answer('workitem.list', 'workitem.list/unknown-campaign', 'workitem.list/ada-now')
             .answer('contact.get', 'contact.get/one')
             .answer('campaign.get', 'campaign.get/unknown');
         open(api, 'now', { contact: ada.id, campaign: gone });
@@ -227,7 +289,9 @@ describe('Work items', () => {
 
     it('a campaign the address names is shown by its name', async () => {
         const smb = fixtures['campaign.get/one'].response;
-        const api = fake().answer('workitem.list', 'workitem.list/now').answer('campaign.get', 'campaign.get/one');
+        const api = fake('workitem.count/smb-now', 'workitem.count/smb-planned', 'workitem.count/smb-done')
+            .answer('workitem.list', 'workitem.list/smb-now')
+            .answer('campaign.get', 'campaign.get/one');
         open(api, 'now', { campaign: smb.id });
 
         await waitFor(() => expect(screen.getByRole('button', { name: 'SMB test' })).toBeTruthy());
@@ -248,7 +312,7 @@ describe('Work items: the panel', () => {
             .answer('workitem.list', 'workitem.list/planned')
             .answer('workitem.get', 'workitem.get/open')
             .answer('journal.list', 'journal.list/by-work-item')
-            .answer('workitem.update', 'workitem.update/dates', 'workitem.update/terminal');
+            .answer('workitem.update', 'workitem.update/dates', 'workitem.update/finished-meanwhile');
         open(api, 'planned', {}, item.id);
 
         await waitFor(() => screen.getByRole('button', { name: 'Save' }));
@@ -296,7 +360,7 @@ describe('Work items: the panel', () => {
         const api = fake()
             .answer('workitem.list', 'workitem.list/done')
             .answer('workitem.get', 'workitem.get/failed', 'workitem.get/succeeded')
-            .answer('journal.list', 'journal.list/by-work-item');
+            .answer('journal.list', 'journal.list/by-failed-item', 'journal.list/by-succeeded-item');
         open(api, 'done', {}, failed.id);
 
         await waitFor(() => expect(screen.getByText('2 failed attempts, limit 3')).toBeTruthy());
@@ -316,18 +380,12 @@ describe('Work items: the panel', () => {
         const awaiting = fixtures['workitem.get/awaiting'].response;
         const approval = fixtures['approval.list/by-work-item'].response.items[0]!;
         const api = fake()
-            .answer('workitem.list', 'workitem.list/now')
-            .answer(
-                'workitem.get',
-                'workitem.get/awaiting',
-                'workitem.get/awaiting',
-                'workitem.get/awaiting',
-                'workitem.get/expired',
-            )
-            .answer('journal.list', 'journal.list/by-work-item')
+            .answer('workitem.list', 'workitem.list/now', 'workitem.list/done')
+            .answer('workitem.get', 'workitem.get/awaiting', 'workitem.get/expired')
+            .answer('journal.list', 'journal.list/by-awaiting-item', 'journal.list/by-expired-item')
             .answer('approval.list', 'approval.list/by-work-item')
             .answer('approval.approve', 'approval.approve/approved')
-            .answer('approval.reject', 'approval.reject/rejected');
+            .answer('approval.reject', 'approval.reject/from-work-item');
         open(api, 'now', {}, awaiting.id);
 
         const link = await screen.findByRole('link', { name: /Waiting for your approval/ });

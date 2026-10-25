@@ -8,6 +8,7 @@ export const plugins = signal<Plugin[]>([]);
 export const routes = signal<Routes | null>(null);
 export const tokens = signal<UiTokens | null>(null);
 export const failure = signal<string | null>(null);
+export const refreshing = signal(false);
 
 function fail(error: unknown): void {
     if (error instanceof Unpaired) session.clear();
@@ -35,6 +36,16 @@ export async function load(api: Api): Promise<void> {
         tokens.value = t;
     } catch (error) {
         fail(error);
+    }
+}
+
+/** Everything read again, the button turning for at least half a second. */
+export async function refresh(api: Api): Promise<void> {
+    refreshing.value = true;
+    try {
+        await Promise.all([load(api), new Promise((resolve) => setTimeout(resolve, 500))]);
+    } finally {
+        refreshing.value = false;
     }
 }
 

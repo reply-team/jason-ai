@@ -1,0 +1,33 @@
+{
+  "operation": "journal.list",
+  "case": "summer",
+  "request": {
+    "campaign_id": "cmp_3",
+    "kinds": [
+      "inbound_reply_observed",
+      "provider_event_observed",
+      "workitem_succeeded",
+      "workitem_failed",
+      "workitem_cancelled",
+      "workitem_expired",
+      "external_effect_reported",
+      "approval_requested",
+      "approval_approved",
+      "approval_rejected",
+      "decision_raised",
+      "decision_answered",
+      "campaign_updated",
+      "campaign_started",
+      "campaign_paused",
+      "context_updated",
+      "contacts_added",
+      "contacts_removed"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "operation": "decision.list",
+  "case": "summer-pending",
+  "request": {
+    "status": "pending",
+    "campaign_id": "cmp_3",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

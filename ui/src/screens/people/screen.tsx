@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { useApi } from '../../api/context';
+import { FiltersBar } from '../../layout/filters-bar';
+import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
-import { SearchPicker } from '../../pickers/pickers';
+import { Search } from '../../lists/search';
+import { CampaignPicker } from '../../pickers/campaign-picker';
 import { href, navigate, replace, route, type PeopleFilters } from '../../router';
 import { AddDialog } from './add-dialog';
 import { PersonCard } from './card';
@@ -10,6 +13,7 @@ import { PeopleList } from './list';
 import { linked, ThreadsTab } from './threads';
 import { Timeline } from './timeline';
 import * as store from './store';
+import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -68,31 +72,23 @@ export function PeopleScreen() {
     return (
         <div class={`main${selected ? '' : ' single'}`}>
             <div class="list">
-                <div class="toolbar">
-                    <h1>People</h1>
-                    <span class="spacer" />
-                    <button
-                        class={`iconbtn${store.refreshing.value ? ' spin' : ''}`}
-                        type="button"
-                        title="Refresh"
-                        disabled={store.refreshing.value}
-                        onClick={() => void store.refresh(api, filters)}
-                    >
-                        <span class="glyph">⟳</span>
-                    </button>
-                </div>
-                <div class="filters">
-                    <Search value={filters.q ?? ''} onSearch={(q) => narrow(withValue(filters, 'q', q))} />
-                    <SearchPicker
+                <Toolbar
+                    title="People"
+                    refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api, filters) }}
+                />
+                <FiltersBar>
+                    <Search
+                        value={filters.q ?? ''}
+                        label="Search people"
+                        placeholder="Search name, company, email, phone, LinkedIn…"
+                        onSearch={(q) => narrow(withValue(filters, 'q', q))}
+                    />
+                    <CampaignPicker
                         label={campaignLabel}
-                        clearLabel="All campaigns"
-                        placeholder="Find a campaign"
-                        search={async (query) =>
-                            (await store.searchCampaigns(api, query)).map((c) => ({ value: c.id, label: c.name }))
-                        }
+                        none="All campaigns"
                         onPick={(picked) => {
-                            if (picked) store.campaign.value = { id: picked.value, name: picked.label };
-                            narrow(withValue(filters, 'campaign', picked?.value));
+                            if (picked) store.campaign.value = picked;
+                            narrow(withValue(filters, 'campaign', picked?.id));
                         }}
                     />
                     <label class="check">
@@ -107,12 +103,8 @@ export function PeopleScreen() {
                         />
                         Archived
                     </label>
-                </div>
-                {store.failure.value && (
-                    <div class="notice danger" role="alert">
-                        {store.failure.value}
-                    </div>
-                )}
+                </FiltersBar>
+                {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && people.length === 0 ? (
                     <div class="empty">{filtered ? 'Nobody matches.' : 'Nobody yet.'}</div>
                 ) : (
@@ -130,17 +122,13 @@ export function PeopleScreen() {
             </div>
             {selected && (
                 <div class="panel">
-                    {store.personFailure.value && (
-                        <div class="notice danger" role="alert">
-                            {store.personFailure.value}
-                        </div>
-                    )}
+                    {store.personFailure.value && <Notice danger>{store.personFailure.value}</Notice>}
                     {person && person.id === selected && (
                         <>
                             <PersonCard
                                 person={person}
                                 tab={tab}
-                                filters={filters}
+                                to={(next) => ({ screen: 'people', id: person.id, tab: next, filters })}
                                 now={now}
                                 zone={zone}
                                 onAdd={() => setAdding(true)}
@@ -170,32 +158,4 @@ function withValue<K extends keyof PeopleFilters>(
     if (value === undefined || value === '' || value === false) delete next[key];
     else next[key] = value;
     return next;
-}
-
-/** The search box: what is typed reaches the list once the person pauses, and only from two characters on. */
-function Search({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
-    const [text, setText] = useState(value);
-    // The address changed from outside (Back, a link): the box shows it. Not on mounting, which would erase what was
-    // typed before the first effects ran.
-    const mounted = useRef(false);
-    useEffect(() => {
-        if (mounted.current) setText(value);
-        mounted.current = true;
-    }, [value]);
-    useEffect(() => {
-        const query = text.trim();
-        if (query === value || (query.length > 0 && query.length < 2)) return;
-        const timer = setTimeout(() => onSearch(query), 250);
-        return () => clearTimeout(timer);
-    }, [text]);
-    return (
-        <input
-            class="search"
-            type="search"
-            aria-label="Search people"
-            placeholder="Search name, company, email, phone, LinkedIn…"
-            value={text}
-            onInput={(e) => setText((e.target as HTMLInputElement).value)}
-        />
-    );
 }

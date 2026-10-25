@@ -1,0 +1,35 @@
+{
+  "operation": "campaign.activity",
+  "case": "many-one",
+  "request": {
+    "campaign_ids": [
+      "cmp_1"
+    ],
+    "since": "2026-10-10T00:00:00.000Z",
+    "until": "2026-10-16T09:00:00.000Z"
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 51,
+        "added": 51,
+        "worked_on": 0,
+        "contacted": 0,
+        "replied": 0,
+        "opted_out": 0,
+        "removed": 0
+      }
+    ],
+    "total": {
+      "people": 51,
+      "added": 51,
+      "worked_on": 0,
+      "contacted": 0,
+      "replied": 0,
+      "opted_out": 0,
+      "removed": 0
+    }
+  }
+}

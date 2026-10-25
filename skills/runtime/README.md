@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.16.0**.
+this pack ships with Jason **0.17.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -108,9 +108,9 @@ for a role that sits with a person, the judgement it shares with its session fil
   next: the reply is in the brief, in the result of a provider operation that read it, or nowhere; the answer
   goes into the person's own thread as a reply a person approves, one approval for each send, and the thread is
   filed only under a category the campaign names as its own.
-- [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the three
-  things this runtime keeps — the work items, the chronicle and the reports — and honest about where the
-  record runs out.
+- [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the four things
+  this runtime keeps — the work items, the chronicle, the reports and the campaign's activity — and honest about
+  where the record runs out.
 - [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **draft.** What the
   do-not-contact register and the failed items say about whether anything is arriving, and what somebody
   would have to do outside Jason about it.

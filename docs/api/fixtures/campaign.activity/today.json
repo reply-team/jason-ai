@@ -1,0 +1,57 @@
+{
+  "operation": "campaign.activity",
+  "case": "today",
+  "request": {
+    "campaign_ids": [
+      "cmp_1",
+      "cmp_2",
+      "cmp_3"
+    ],
+    "since": "2026-10-16T00:00:00.000Z",
+    "until": "2026-10-16T09:00:00.000Z"
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 0,
+        "added": 0,
+        "worked_on": 0,
+        "contacted": 0,
+        "replied": 0,
+        "opted_out": 0,
+        "removed": 0
+      },
+      {
+        "campaign_id": "cmp_2",
+        "people": 0,
+        "added": 0,
+        "worked_on": 0,
+        "contacted": 0,
+        "replied": 0,
+        "opted_out": 0,
+        "removed": 0
+      },
+      {
+        "campaign_id": "cmp_3",
+        "people": 0,
+        "added": 0,
+        "worked_on": 0,
+        "contacted": 0,
+        "replied": 0,
+        "opted_out": 0,
+        "removed": 0
+      }
+    ],
+    "total": {
+      "people": 0,
+      "added": 0,
+      "worked_on": 0,
+      "contacted": 0,
+      "replied": 0,
+      "opted_out": 0,
+      "removed": 0
+    }
+  }
+}

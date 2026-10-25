@@ -44,8 +44,136 @@ describe('parseRoute', () => {
         ['#/people/cnt_7/threads', { screen: 'people', id: 'cnt_7', tab: 'threads', filters: {} }],
         ['#/people/cnt_7/elsewhere?archived=yes&x=1', { screen: 'people', id: 'cnt_7', tab: 'timeline', filters: {} }],
         ['#/people/%E0%A4%A/details', { screen: 'people', tab: 'timeline', filters: {} }],
+        ['#/campaigns', { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} }],
+        [
+            '#/campaigns?view=activity&period=30d&q=spr&archived=1&t=abc',
+            {
+                screen: 'campaigns',
+                tab: 'timeline',
+                view: 'activity',
+                period: '30d',
+                filters: { q: 'spr', archived: true },
+            },
+        ],
+        [
+            '#/campaigns?view=summary&period=today',
+            { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns?view=weekly&period=1y',
+            { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/cmp_1',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/cmp_1/people?filter=failed',
+            {
+                screen: 'campaigns',
+                id: 'cmp_1',
+                tab: 'people',
+                view: 'summary',
+                period: '7d',
+                filters: {},
+                filter: 'failed',
+            },
+        ],
+        [
+            '#/campaigns/cmp_1/people?view=activity&period=today&filter=worked_on',
+            {
+                screen: 'campaigns',
+                id: 'cmp_1',
+                tab: 'people',
+                view: 'activity',
+                period: 'today',
+                filters: {},
+                filter: 'worked_on',
+            },
+        ],
+        [
+            '#/campaigns/cmp_1/people?filter=replied',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'people', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/cmp_1/people?view=activity&filter=removed',
+            {
+                screen: 'campaigns',
+                id: 'cmp_1',
+                tab: 'people',
+                view: 'activity',
+                period: '7d',
+                filters: {},
+                filter: 'removed',
+            },
+        ],
+        [
+            '#/campaigns/cmp_1/details?filter=failed',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'details', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/cmp_1/elsewhere',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/%E0%A4%A/people',
+            { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns?view=activity&period=90d',
+            { screen: 'campaigns', tab: 'timeline', view: 'activity', period: '7d', filters: {} },
+        ],
+        ['#/performance', { screen: 'performance', tab: 'timeline', period: '7d', campaigns: [] }],
+        [
+            '#/performance?period=90d&campaign=cmp_1&campaign=cmp_2&campaign=cmp_1&count=replied',
+            { screen: 'performance', tab: 'timeline', period: '90d', campaigns: ['cmp_1', 'cmp_2'], count: 'replied' },
+        ],
+        [
+            '#/performance/cnt_1/details?count=people&from=2026-10-13T00%3A00%3A00.000Z&to=2026-10-14T00%3A00%3A00.000Z',
+            {
+                screen: 'performance',
+                id: 'cnt_1',
+                tab: 'details',
+                period: '7d',
+                campaigns: [],
+                count: 'people',
+                from: '2026-10-13T00:00:00.000Z',
+                to: '2026-10-14T00:00:00.000Z',
+            },
+        ],
+        [
+            '#/performance?count=nope&from=2026-10-13T00:00:00.000Z',
+            { screen: 'performance', tab: 'timeline', period: '7d', campaigns: [] },
+        ],
+        [
+            '#/performance?count=replied&from=2026-10-13T00:00:00.000Z',
+            { screen: 'performance', tab: 'timeline', period: '7d', campaigns: [], count: 'replied' },
+        ],
+        [
+            '#/performance?period=today&t=abc',
+            { screen: 'performance', tab: 'timeline', period: 'today', campaigns: [] },
+        ],
+        // A bar's window is two real instants, the first before the second.
+        [
+            '#/performance?count=replied&from=2026-13-45T00:00:00.000Z&to=2026-10-14T00:00:00.000Z',
+            { screen: 'performance', tab: 'timeline', period: '7d', campaigns: [], count: 'replied' },
+        ],
+        [
+            '#/performance?count=replied&from=2026-10-14T00:00:00.000Z&to=2026-10-13T00:00:00.000Z',
+            { screen: 'performance', tab: 'timeline', period: '7d', campaigns: [], count: 'replied' },
+        ],
     ])('%s is %o', (hash, route) => {
         expect(parseRoute(hash)).toEqual(route);
+    });
+
+    it('keeps the first hundred campaigns of a Performance address, as many as one read may name', () => {
+        const ids = (n: number) => Array.from({ length: n }, (_, i) => `cmp_${i}`);
+        const address = (n: number) =>
+            `#/performance?${ids(n)
+                .map((id) => `campaign=${id}`)
+                .join('&')}`;
+        expect(parseRoute(address(100))).toMatchObject({ campaigns: ids(100) });
+        expect(parseRoute(address(101))).toMatchObject({ campaigns: ids(100) });
     });
 });
 
@@ -85,6 +213,78 @@ describe('href', () => {
         [
             { screen: 'people' as const, id: 'cnt_7', tab: 'timeline' as const, filters: { campaign: 'cmp_1' } },
             '#/people/cnt_7?campaign=cmp_1',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                tab: 'timeline' as const,
+                view: 'summary' as const,
+                period: '7d' as const,
+                filters: {},
+            },
+            '#/campaigns',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                tab: 'timeline' as const,
+                view: 'activity' as const,
+                period: '30d' as const,
+                filters: { archived: true, q: 'a b' },
+            },
+            '#/campaigns?view=activity&period=30d&q=a%20b&archived=1',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp 1',
+                tab: 'people' as const,
+                view: 'activity' as const,
+                period: '7d' as const,
+                filters: {},
+                filter: 'worked_on',
+            },
+            '#/campaigns/cmp%201/people?view=activity&filter=worked_on',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp_1',
+                tab: 'people' as const,
+                view: 'summary' as const,
+                period: '7d' as const,
+                filters: { q: 'spr' },
+                filter: 'removed',
+            },
+            '#/campaigns/cmp_1/people?q=spr&filter=removed',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp_1',
+                tab: 'details' as const,
+                view: 'summary' as const,
+                period: '7d' as const,
+                filters: {},
+            },
+            '#/campaigns/cmp_1/details',
+        ],
+        [
+            { screen: 'performance' as const, tab: 'timeline' as const, period: '7d' as const, campaigns: [] },
+            '#/performance',
+        ],
+        [
+            {
+                screen: 'performance' as const,
+                id: 'cnt 1',
+                tab: 'threads' as const,
+                period: '30d' as const,
+                campaigns: ['cmp_1', 'cmp_2'],
+                count: 'opted_out' as const,
+                from: '2026-10-13T00:00:00.000Z',
+                to: '2026-10-14T00:00:00.000Z',
+            },
+            '#/performance/cnt%201/threads?period=30d&campaign=cmp_1&campaign=cmp_2&count=opted_out&from=2026-10-13T00%3A00%3A00.000Z&to=2026-10-14T00%3A00%3A00.000Z',
         ],
     ])('%o is %s', (route, hash) => {
         expect(href(route)).toBe(hash);

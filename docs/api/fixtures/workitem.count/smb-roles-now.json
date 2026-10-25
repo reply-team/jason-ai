@@ -1,0 +1,18 @@
+{
+  "operation": "workitem.count",
+  "case": "smb-roles-now",
+  "request": {
+    "campaign_id": "cmp_2",
+    "kind": "ai_role",
+    "status": [
+      "processing",
+      "scheduled",
+      "awaiting_approval"
+    ],
+    "order": "created"
+  },
+  "status": 200,
+  "response": {
+    "total": 0
+  }
+}

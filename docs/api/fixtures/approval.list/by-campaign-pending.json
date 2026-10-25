@@ -1,0 +1,45 @@
+{
+  "operation": "approval.list",
+  "case": "by-campaign-pending",
+  "request": {
+    "status": "pending",
+    "campaign_id": "cmp_1",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_1",
+        "work_item_id": "wi_1",
+        "campaign_id": "cmp_1",
+        "operation": "campaign.enroll",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-2",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-01T10:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring",
+        "contact_name": "Ada Example"
+      },
+      {
+        "id": "apr_2",
+        "work_item_id": "wi_9",
+        "campaign_id": "cmp_1",
+        "operation": "campaign.enroll",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-3",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-01T10:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring",
+        "contact_name": "Oli Example"
+      }
+    ],
+    "next_cursor": null
+  }
+}

@@ -1,55 +1,29 @@
 {
   "operation": "workitem.list",
-  "case": "planned-next",
+  "case": "ada-now",
   "request": {
+    "contact_id": "cnt_1",
     "status": [
-      "created"
+      "processing",
+      "scheduled",
+      "awaiting_approval"
     ],
-    "order": "due",
-    "limit": 3,
-    "cursor": "ZHVlfDIwMjYtMTAtMTZUMTQ6MDA6MDAuMDAwMDAwMFp8d2lfMDFLN1FOMDAwMDAwMDAwMDAwMDAwMDAwMDY"
+    "order": "created",
+    "limit": 50
   },
   "status": 200,
   "response": {
     "items": [
       {
-        "id": "wi_7",
-        "campaign_id": "cmp_2",
-        "contact_id": "cnt_3",
+        "id": "wi_1",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_1",
         "kind": "ai_role",
         "role": "researcher",
         "operation": null,
         "execution_profile": null,
-        "status": "created",
+        "status": "processing",
         "eligible": false,
-        "priority": 0,
-        "not_before": "2026-10-16T16:30:00.000Z",
-        "due_at": "2026-10-17T09:00:00.000Z",
-        "retry_after": null,
-        "created_by": {
-          "type": "human",
-          "id": null
-        },
-        "attempt_count": 0,
-        "current_attempt_id": null,
-        "last_error": null,
-        "created_at": "2026-10-16T08:00:00.000Z",
-        "updated_at": "2026-10-16T08:00:00.000Z",
-        "finished_at": null,
-        "campaign_name": "SMB test",
-        "contact_name": "Tomás Aguilar",
-        "running_since": null
-      },
-      {
-        "id": "wi_8",
-        "campaign_id": "cmp_1",
-        "contact_id": null,
-        "kind": "ai_role",
-        "role": "analyst",
-        "operation": null,
-        "execution_profile": null,
-        "status": "created",
-        "eligible": true,
         "priority": 0,
         "not_before": null,
         "due_at": null,
@@ -59,13 +33,41 @@
           "id": null
         },
         "attempt_count": 0,
-        "current_attempt_id": null,
+        "current_attempt_id": "att_1",
         "last_error": null,
         "created_at": "2026-10-16T08:00:00.000Z",
         "updated_at": "2026-10-16T08:00:00.000Z",
         "finished_at": null,
         "campaign_name": "Autumn outreach",
-        "contact_name": null,
+        "contact_name": "Ada Lovelace",
+        "running_since": "2026-10-16T08:55:00.000Z"
+      },
+      {
+        "id": "wi_2",
+        "campaign_id": "cmp_1",
+        "contact_id": "cnt_1",
+        "kind": "provider_op",
+        "role": null,
+        "operation": "campaign.enroll",
+        "execution_profile": null,
+        "status": "scheduled",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": "att_2",
+        "last_error": null,
+        "created_at": "2026-10-16T08:00:00.000Z",
+        "updated_at": "2026-10-16T08:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace",
         "running_since": null
       }
     ],

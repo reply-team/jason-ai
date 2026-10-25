@@ -1,0 +1,16 @@
+{
+  "operation": "contact.list",
+  "case": "by-campaign-query-none",
+  "request": {
+    "order": "activity",
+    "query": "zz",
+    "campaign_id": "cmp_2",
+    "include_archived": true,
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

@@ -98,3 +98,6 @@ export function when(at: Date, now: Date, zone: string): string {
     const time = clock(at, zone);
     return dayKey(at, zone) === dayKey(now, zone) ? time : `${shortDate(at, zone, now)}, ${time}`;
 }
+
+/** A count as the page shows it: grouped by thousands. */
+export const number = new Intl.NumberFormat('en-US');
