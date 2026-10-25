@@ -67,9 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet
 
       # Restore, build and the critical tier below run on Linux alone; the package action restores and builds what it
       # publishes on every platform by itself.

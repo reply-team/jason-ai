@@ -1,0 +1,67 @@
+# One .NET install for every job that builds: ci.yml and release.yml call it where they need the SDK.
+# It installs one exact SDK, the sdk-version input, from Microsoft's CDN, builds.dotnet.microsoft.com, through
+# Microsoft's own install scripts: given a version and a feed, the scripts ask nothing else. The SDK is pinned because
+# the two sides of an update, the executable installed and the one it updates to, must carry the same runtime patch
+# until the applier loads everything it needs before it swaps its own file; the pin moves when that lands. 10.0.402
+# carries runtime 10.0.13 and satisfies global.json's latestFeature roll forward. The scripts are fetched when the job
+# runs, from the addresses Microsoft publishes for them, rather than kept in this repository.
+name: Set up .NET
+description: Install one exact .NET SDK from Microsoft's CDN and say which SDK the tree resolves.
+
+inputs:
+  sdk-version:
+    description: The exact .NET SDK to install
+    default: '10.0.402'
+
+runs:
+  using: composite
+  steps:
+    - name: Install the .NET SDK
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+        SDK_VERSION: ${{ inputs.sdk-version }}
+      run: |
+        set -euo pipefail
+        [[ "$SDK_VERSION" =~ ^10\.0\.[0-9]+$ ]] || { echo "The sdk-version input reads '$SDK_VERSION', not a 10.0 release." >&2; exit 1; }
+        feed=https://builds.dotnet.microsoft.com/dotnet
+        install="$RUNNER_TEMP/dotnet"
+        script="$RUNNER_TEMP/dotnet-install.sh"
+        curl --fail --silent --show-error --location --retry 3 --output "$script" https://dot.net/v1/dotnet-install.sh
+        bash "$script" --version "$SDK_VERSION" --azure-feed "$feed" --install-dir "$install"
+        echo "DOTNET_ROOT=$install" >> "$GITHUB_ENV"
+        echo "DOTNET_CLI_TELEMETRY_OPTOUT=1" >> "$GITHUB_ENV"
+        echo "$install" >> "$GITHUB_PATH"
+
+    - name: Install the .NET SDK
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+        SDK_VERSION: ${{ inputs.sdk-version }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ($env:SDK_VERSION -cnotmatch '^10\.0\.[0-9]+\z') { throw "The sdk-version input reads '$env:SDK_VERSION', not a 10.0 release." }
+        $feed = 'https://builds.dotnet.microsoft.com/dotnet'
+        $install = Join-Path $env:RUNNER_TEMP dotnet
+        $script = Join-Path $env:RUNNER_TEMP dotnet-install.ps1
+        Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile $script -MaximumRetryCount 3
+        & $script -Version $env:SDK_VERSION -AzureFeed $feed -InstallDir $install
+        if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "dotnet-install.ps1 exited with $LASTEXITCODE" }
+        if (-not (Test-Path (Join-Path $install dotnet.exe))) { throw "dotnet-install.ps1 left no dotnet.exe in $install" }
+        "DOTNET_ROOT=$install" >> $env:GITHUB_ENV
+        "DOTNET_CLI_TELEMETRY_OPTOUT=1" >> $env:GITHUB_ENV
+        $install >> $env:GITHUB_PATH
+
+    # Read through the PATH the steps after this one see, from the repository root, so the version printed is the
+    # one global.json resolves for the build.
+    - name: Show the SDK the tree resolves
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        (Get-Command dotnet).Source
+        dotnet --version
+        if ($LASTEXITCODE -ne 0) { throw "dotnet --version exited with $LASTEXITCODE" }
+        dotnet --list-sdks
+        if ($LASTEXITCODE -ne 0) { throw "dotnet --list-sdks exited with $LASTEXITCODE" }

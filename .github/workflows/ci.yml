@@ -87,9 +87,7 @@ jobs:
         with:
           fetch-depth: 2
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet
 
       - id: version
         shell: pwsh
@@ -556,9 +554,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet
 
       - name: Restore
         run: dotnet restore runtime/Jason.slnx
@@ -593,9 +589,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet
 
       - name: Restore
         run: dotnet restore runtime/Jason.slnx
@@ -829,9 +823,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet
 
       # The version this tree carries, as the platform job already published it. Taking the artifact rather
       # than publishing it again is one whole publish saved per platform, and it is the same bytes a person
@@ -1425,9 +1417,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet
 
       - name: Build the runtime the smoke drives
         working-directory: .
