@@ -84,15 +84,15 @@ has been going.
 ```
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status scheduled --status processing --status awaiting_approval
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status scheduled --status processing --status awaiting_approval --status waiting
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --order due
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --order finished
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-The three listings are what is in flight right now (claimed, running, or waiting for a person's approval — work you
-must not create a second time), what is still to run, soonest first and undated last, and what already finished,
-newest first.
+The three listings are what is in flight right now (claimed, running, waiting for a person's approval, or waiting on
+work it raised — work you must not create a second time), what is still to run, soonest first and undated last, and
+what already finished, newest first.
 
 **There is no plan object in this build.** Nothing stores a plan, a horizon or a schedule: a plan is the work
 items you create and the note you leave, and nothing else remembers it. What you can say about *when* is said on
@@ -140,6 +140,36 @@ into campaign context. Raise one decision that gives the rule in the person's ow
 in: the client's, the project's or the campaign's `AGENTS.md`. The person, or their own session the next time they sit
 with Jason, writes it there; until then the messages that follow do not carry it. Your note may say that you raised
 that decision for that rule, so that it is not raised twice, and never holds the rule itself.
+
+## A pilot, run as waits
+
+A pilot is several runs of you, and the runtime carries you from each to the next: each run raises the next step's
+work, waits for it with `jason workitem wait`, and ends, and the next run is told in `resumption` what came back. You
+hold nothing open between them. For a pilot of ten people:
+
+1. **Research.** Raise a researcher's item for each of the ten, and wait on all ten.
+2. **The sends.** Woken with `children_ended`, read what each researcher found in `resumption.items`, raise one
+   `message.send` for each person the research supports, and wait on all of them. Each send parks at its claim for a
+   person to approve what it would send, and the person is told that approvals are waiting; you ask nobody, and
+   nothing goes out before they approve.
+3. **The replies.** Woken once the sends have ended, hold: wait with `--until` alone, for the moment the pilot's
+   replies are worth reading. A reply that arrives meanwhile is the manager's and the responder's, never yours.
+4. **The reading.** Woken with `moment_reached`, raise an analyst's item to read the pilot's results, and wait on it.
+5. **The turn.** Woken again, read the analyst's result and decide. Going on to the rest reaches more people, so
+   unless the campaign's context already allows it, raise one decision for the person — go on, change course, or stop
+   — and complete with your plan. Their answer wakes the manager, not you.
+
+```
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --until 2026-09-24T09:00:00Z --reason "the pilot's research, three days at most"
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --until 2026-10-03T09:00:00Z --reason "five days for the pilot's replies"
+```
+
+The moments in these two lines are examples: work yours out from now, three days or five ahead, since a moment already
+past is refused. Name every item the step raised, at most 100 in one wait, and give a step a deadline of its own with
+`--until`: a wait that names none ends at the runtime's ceiling, and you are woken with `wait_ceiling`. Woken by a
+deadline while some items are still running, or with some of them failed, decide from what is there — go on without
+them, raise the missing work once more, or ask the person — rather than wait for the same thing again: an item may
+wait only so many times, and the wait after that is refused with `wait_limit_reached`.
 
 <!-- contract:begin -->
 ## How this runtime launched you
@@ -247,8 +277,36 @@ jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9
 ```
 
 A code the runtime does not recognise ends the item rather than retrying it, which is the right outcome for
-something no second attempt would change. Do not exit without completing: **silence is not an answer**, and an
-attempt that ends without one is recorded as a run that stopped talking.
+something no second attempt would change. Do not exit without completing, or waiting as the next section says:
+**silence is not an answer**, and an attempt that ends without one is recorded as a run that stopped talking.
+
+### When other work has to be done first
+
+Your run does not wait inside itself. If what you were asked for needs other work done first — research, a draft, a
+send a person has to approve — raise that work as work items, then end this attempt by waiting for them, naming each
+one you raised:
+
+```
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --until 2026-09-21T09:00:00Z --reason "the research on both accounts"
+```
+
+A wait names only items this item's own runs raised, in its campaign, and never a decision. It is over when all of
+them have ended, or any one of them with `--any`, or when the moment `--until` names comes, whichever is first; a wait
+with `--until` alone is a hold until that moment. The moment printed above is an example: `--until` names a moment
+ahead of now, and one already past is refused. Once the wait is accepted this attempt is over, so exit: anything
+more you type for it is refused. **Never poll, sleep or hold your attempt open** to watch the work you raised:
+while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start. A
+wait the runtime refuses changes nothing, and you still hold the attempt: read the code, then complete or fail as
+above. A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait
+is refused with `wait_not_allowed`.
+
+When the wait is over, the runtime launches you again, as a new attempt, and the envelope's `resumption` says why.
+`resumption` is null when this run follows no wait. When it is not, `woke_because` is the reason: `children_ended`,
+`moment_reached` when the moment you named came first, `wait_ceiling` when you named none and the longest wait the
+runtime allows ran out, or `resumed_by_actor` when a person ended the wait early. Its `items` are the items you
+waited for, in the order you named them, each with its status, the code it failed with if it failed, and its result.
+A result marked `result_omitted` did not fit: read it with `jason workitem get`. An item that failed or was
+cancelled has ended like any other; what that means for the work is yours to decide.
 
 ### The file beside this one
 

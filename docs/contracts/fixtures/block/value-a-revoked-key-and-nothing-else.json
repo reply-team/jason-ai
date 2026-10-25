@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "the provider no longer accepts the key, and says neither where to go nor when it clears: both are optional",
+  "value": { "scope": "account", "reason": "credential" },
+  "expect": "valid"
+}

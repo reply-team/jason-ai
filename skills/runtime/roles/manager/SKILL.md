@@ -76,7 +76,14 @@ person. Read one to see which:
 ```
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --not-eligible --order due
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status awaiting_approval
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status waiting
 ```
+
+**A `waiting` item is not stale.** A run of it ended by waiting — for work it raised, for a moment, or both — and
+the runtime releases it when that has happened or its deadline comes, and tells its next run why. Do not create it,
+or the work it waits for, a second time, and do not cancel it to move things along: `workitem get` shows what it
+waits for and until when. A wait is ended early only by a person, who resumes it under their own name with
+`jason workitem resume`, never by you; where you think one should be, say so in your line, or ask, as below.
 
 **Pending approvals and pending decisions.** What is waiting on a person is not yours to hurry, but it is yours
 to know about — a second item that would park behind the same approval is noise, not progress, and a second
@@ -216,6 +223,29 @@ alone where the line says `attributed_by` `contact_pin`. A hard bounce is a pers
 work waiting to write to them there is work the campaign may no longer need. An accepted invitation is a channel that
 opened. Whatever you do or leave, say it in your note; where the next step is a person's to choose, raise one
 question.
+
+## When a provider block woke you
+
+`trigger` is `provider_blocked` when the provider refused the account, or one sending account under it, for its own
+state — money or a plan, an allowance it counts, a key it no longer accepts, a channel disconnected — and this
+campaign's work that would reach people, or protect them, now waits on that block. The line names the block by its
+id, with its `scope`, its `reason`, `clears_at` where the provider said, the item that parked first and, for a
+sender's block, the sender; it never carries the link. Read the block and what it holds before you decide anything:
+
+```
+jason block get blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason workitem list --block blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+`block get` says what is blocked and why, the link where a person clears it and how many items it holds, and
+`workitem list --block` names them; each item's `wait` names the block under `blocked_by`. `jason block list` shows
+every open block and how many items each holds. In your review, say what stopped and why, in the person's terms: which
+account or sender, and what the provider wants. Then decide with the person, by one question, whether to pause the
+campaign or wait for the block's trial, which lets one held item through and, once the provider takes it, releases the
+rest by itself. **You never clear a block yourself**: a clear is a person's word that the cause is gone, and it is
+theirs to give. Do not cancel or recreate the work it holds either; the block releases it. When the block clears, the
+campaign is told `provider_block_cleared`, and that line wakes nobody: the work runs again by itself.
 
 ## What you may decide yourself
 
@@ -475,8 +505,36 @@ jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9
 ```
 
 A code the runtime does not recognise ends the item rather than retrying it, which is the right outcome for
-something no second attempt would change. Do not exit without completing: **silence is not an answer**, and an
-attempt that ends without one is recorded as a run that stopped talking.
+something no second attempt would change. Do not exit without completing, or waiting as the next section says:
+**silence is not an answer**, and an attempt that ends without one is recorded as a run that stopped talking.
+
+### When other work has to be done first
+
+Your run does not wait inside itself. If what you were asked for needs other work done first — research, a draft, a
+send a person has to approve — raise that work as work items, then end this attempt by waiting for them, naming each
+one you raised:
+
+```
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --until 2026-09-21T09:00:00Z --reason "the research on both accounts"
+```
+
+A wait names only items this item's own runs raised, in its campaign, and never a decision. It is over when all of
+them have ended, or any one of them with `--any`, or when the moment `--until` names comes, whichever is first; a wait
+with `--until` alone is a hold until that moment. The moment printed above is an example: `--until` names a moment
+ahead of now, and one already past is refused. Once the wait is accepted this attempt is over, so exit: anything
+more you type for it is refused. **Never poll, sleep or hold your attempt open** to watch the work you raised:
+while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start. A
+wait the runtime refuses changes nothing, and you still hold the attempt: read the code, then complete or fail as
+above. A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait
+is refused with `wait_not_allowed`.
+
+When the wait is over, the runtime launches you again, as a new attempt, and the envelope's `resumption` says why.
+`resumption` is null when this run follows no wait. When it is not, `woke_because` is the reason: `children_ended`,
+`moment_reached` when the moment you named came first, `wait_ceiling` when you named none and the longest wait the
+runtime allows ran out, or `resumed_by_actor` when a person ended the wait early. Its `items` are the items you
+waited for, in the order you named them, each with its status, the code it failed with if it failed, and its result.
+A result marked `result_omitted` did not fit: read it with `jason workitem get`. An item that failed or was
+cancelled has ended like any other; what that means for the work is yours to decide.
 
 ### The file beside this one
 

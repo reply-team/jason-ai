@@ -1,0 +1,49 @@
+{
+  "id": "provider_block",
+  "version": 1,
+  "summary": "What a provider plugin says beside a failure of class `blocked`: the provider refused this call for a reason outside the work item and did nothing for it — money, a reached limit, a revoked credential or a broken channel — so a repeat once the block clears is a first act. The binding is the one the attempt ran under; the human-readable detail is the failure's own message.",
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["scope", "reason"],
+    "properties": {
+      "scope": {
+        "description": "What is blocked: `account`, every call through this binding; `sender`, one sending account under it, such as a mailbox that reached its daily limit.",
+        "enum": ["account", "sender"]
+      },
+      "sender_external_id": {
+        "description": "The provider's identifier of the sending account that is blocked, as the operation's arguments name a sender. Present exactly when the scope is `sender`.",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+      },
+      "reason": {
+        "description": "Why, in the contract's words: `billing` (credits, a plan, a subscription or a payment), `limit` (an allowance the provider counts), `credential` (a key or a sign-in the provider no longer accepts), `channel` (a mailbox or a social account disconnected or paused), `other` where none of these fits.",
+        "enum": ["billing", "limit", "credential", "channel", "other"]
+      },
+      "link": {
+        "description": "Where a person goes to clear it, as the provider gave it: an https address.",
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https://[^\\u0000-\\u0020\\u007F]+$"
+      },
+      "clears_at": {
+        "description": "When the provider says the block clears by itself, such as an allowance that renews. Absent where the provider did not say; a hint, never the only way the block is known to have cleared.",
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "anyOf": [
+      {
+        "properties": { "scope": { "const": "account" } },
+        "not": { "required": ["sender_external_id"] }
+      },
+      {
+        "properties": { "scope": { "const": "sender" } },
+        "required": ["sender_external_id"]
+      }
+    ]
+  }
+}

@@ -42,7 +42,7 @@ const PLACEHOLDER = "{{";
 // look like before there is anything worth asking about.
 const LARGEST_SENDER = { "email": Number.MAX_SAFE_INTEGER, "linkedin": 2147483647 };
 
-// An account Reply lists in a state no send can go from.
+// An account Reply lists in a state no send can go from: the sender's block, for its channel, until a trial gets past it.
 const UNAVAILABLE = ["inactive", "disconnected"];
 
 // Whether an answer carries a field at all, as a string or as null; an answer without it says nothing about it.
@@ -95,45 +95,47 @@ export function senderFor(operation, context, channel, sender) {
   }
 
   if (UNAVAILABLE.indexOf(account.status) >= 0) {
-    fail(operation, { call: SENDERS, row: "sender_unavailable", provider_code: describe(account.reply_status) }, undefined);
+    fail(operation, { call: SENDERS, row: "sender_blocked_channel", provider_code: describe(account.reply_status), sender: id }, undefined);
   }
 
   return id;
 }
 
 /**
- * Runs the send's one command for the person this send may reach, with `flags` after the person's own and `text` — the
- * command's own input, or none — on stdin, and answers `{ sent, learned }`: what the command answered, and what this
- * package knows Reply calls the person, which travels out with every failure from here on.
+ * Runs the send's one command for the person this send may reach, from `sender` — the account `senderFor` answered,
+ * which a block the command meets is said for — with `flags` after the person's own and `text` — the command's own
+ * input, or none — on stdin, and answers `{ sent, learned }`: what the command answered, and what this package knows
+ * Reply calls the person, which travels out with every failure from here on.
  *
  * A person found by the pin or by the consumed value is read first and named by Reply's identifier. A person Reply holds
  * nobody for is named by their fields, for the command to import; where the command answers that Reply already held
  * them, it sent nothing, and the contact it names is read exactly as a found one is and the send made to it by its
  * identifier — one more command in that case, never a send to a contact nobody read.
  */
-export function sendTo(operation, context, input, command, flags, text) {
+export function sendTo(operation, context, input, command, sender, flags, text) {
   const named = personFor(operation, context, input);
   if (named.stdin === undefined) {
-    return { sent: run(context, sendRequest(operation, command, named, flags, text)), learned: named.learned };
+    return { sent: run(context, sendRequest(operation, command, sender, named, flags, text)), learned: named.learned };
   }
 
-  const first = runOrHeld(context, sendRequest(operation, command, named, flags, text));
+  const first = runOrHeld(context, sendRequest(operation, command, sender, named, flags, text));
   if (first.held === undefined) {
     return { sent: first.result, learned: named.learned };
   }
 
   const held = read(operation, context, input, { flags: ["--contact-id", first.held], learned: { contact: first.held } });
-  return { sent: run(context, sendRequest(operation, command, held, flags, text)), learned: held.learned };
+  return { sent: run(context, sendRequest(operation, command, sender, held, flags, text)), learned: held.learned };
 }
 
 // One run of the send's command: the person as `named` gives them, then `flags`, and on stdin the command's own input
 // alone for a person named by Reply's identifier, or one object, the person under `contact` and the input under
 // `message`, for a person named by their fields — or the person alone where the command reads no input of its own.
-function sendRequest(operation, command, named, flags, text) {
+function sendRequest(operation, command, sender, named, flags, text) {
   const stdin = named.stdin === undefined ? text : text === undefined ? named.stdin : { contact: named.stdin, message: text };
   return {
     operation: operation,
     command: command,
+    sender: sender,
     operands: [],
     flags: named.flags.concat(flags),
     stdin: stdin,

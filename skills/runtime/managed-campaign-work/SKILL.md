@@ -178,6 +178,35 @@ jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+**An item that is `waiting` is neither stuck nor finished.** A run of it raised other work and ended by waiting for
+it, or for a moment, and the runtime starts it again, by itself, when that has happened. While it waits it holds no
+slot, and the work it waits for runs. When the person asks what it is waiting for, read them its `wait` block from
+`workitem get`: `on` is the items it waits for, each with its status now; `mode` is `all` or `any`, whether every one
+of them must end or the first is enough, and null for a wait on a moment alone; `until` is the moment it named, if it
+named one; `deadline` is when the wait ends whatever has happened; and `opened_at` is when it began. With `--human`
+the same block reads as "Waiting for:", "Wait opened:" and "Wait ends by:". A `workitem list` carries the block too,
+with `on_count` and `ended_count` — how many items it waits for, and how many of them have ended — in place of `on`;
+`get` has the items. Do not create its work a second time. Where the person decides it has waited enough — the replies
+that are in are enough to decide on — they end the wait, and the item is started again with what is there:
+
+```
+jason --actor human:ada workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "enough replies are in to decide"
+```
+
+**What is blocked.** An item can also wait on a provider block: its `wait` names the block under `blocked_by` and
+waits on no item and no moment, because the provider refused the account, or one sender under it, rather than the
+work. When the person asks what is blocked, `jason block list` shows each open block, the `held_count` of items it
+holds and the `link` where they clear it at the provider, and `workitem list --block` names the items one holds:
+
+```
+jason block list --human
+jason workitem list --block blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+The block releases its items by itself, so do not resume, cancel or create them again.
+
+Only a waiting item can be resumed; to stop it altogether is `jason workitem cancel`, below.
+
 What is planned, soonest first and undated work last, rather than a walk through every page; and how many items
 match, with any filter `list` takes, rather than paging to count them:
 

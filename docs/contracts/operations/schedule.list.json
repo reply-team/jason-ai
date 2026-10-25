@@ -1,0 +1,232 @@
+{
+  "id": "schedule.list",
+  "version": 1,
+  "l1": { "name": "schedule.resolve", "contract_version": "2.0.0", "family": 5, "core": false },
+  "intent": "\"Show me the actual calendar\" — day by day, for a campaign or one person's participation, including what a weekend, a holiday, a closed window or a deferral moved.",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": { "value": "required", "conditional": true, "detail": "when a collection of enrolments is given." },
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": [],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:schedule.list:1:input",
+    "title": "schedule.list input",
+    "description": "One page of the provider's named sending schedules, each with its windows as authored.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["limit", "offset"],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many schedules on the page. Required: absence is not a default, and a page may come back shorter."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Where the page starts in the order `vendor.ordering` names: 0 for the first page, then the previous page's `offset` plus the number of items it returned."
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. The list names no campaign: a schedule is the team's, and any campaign may run on it."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:schedule.list:1:output",
+    "title": "schedule.list result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items", "has_more", "vendor"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["external_id", "name", "time_zone", "in_recipient_time_zone", "skips_holidays", "default", "windows", "follow_up_windows", "vendor"],
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "description": "The provider's identifier for the schedule, written as a string. Reported, never pinned."
+            },
+            "name": {
+              "type": ["string", "null"],
+              "maxLength": 200,
+              "description": "The schedule's name, or null when the provider holds none."
+            },
+            "time_zone": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "scheme"],
+              "description": "The time zone the windows are read in, as the provider spells it under its scheme, never converted: one zone of one scheme can be several of the other.",
+              "properties": {
+                "id": { "type": "string", "minLength": 1, "maxLength": 64, "description": "The provider's own spelling of the zone under `scheme`." },
+                "scheme": {
+                  "type": "string",
+                  "enum": ["iana", "windows"],
+                  "description": "Which naming `id` is in: `iana`, the IANA time zone database's (`America/New_York`), or `windows`, the Windows time zone identifiers' (`Eastern Standard Time`)."
+                }
+              }
+            },
+            "in_recipient_time_zone": {
+              "type": "boolean",
+              "description": "Whether the provider reads the windows in each person's own time zone, where it knows one, rather than in `time_zone`."
+            },
+            "skips_holidays": {
+              "type": "boolean",
+              "description": "Whether the provider sends nothing on the holidays of the calendars linked to the schedule. The calendars themselves are not listed."
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether the schedule is the default of the user the plugin signs in as: the one that user's new campaigns start with."
+            },
+            "windows": { "$ref": "#/$defs/week" },
+            "follow_up_windows": {
+              "anyOf": [{ "$ref": "#/$defs/week" }, { "type": "null" }],
+              "description": "The windows the campaign's later steps send in, where the provider keeps a second set of windows for them, or null where the schedule's own `windows` serve every step."
+            },
+            "vendor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "description": "The provider's own word for the schedule's state, which publishes no vocabulary for it. A closed list, so nothing else travels here.",
+              "properties": { "status": { "type": ["string", "null"], "maxLength": 32 } }
+            }
+          }
+        }
+      },
+      "has_more": { "type": "boolean", "description": "Whether the provider holds more schedules after this page." },
+      "vendor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ordering"],
+        "properties": {
+          "ordering": {
+            "const": "id_asc",
+            "description": "The order `offset` counts in: by the provider's identifier, the lowest first, so a page asked for again starts where it did."
+          }
+        }
+      }
+    },
+    "$defs": {
+      "week": {
+        "type": "array",
+        "maxItems": 7,
+        "description": "The windows by weekday, as authored: each weekday the provider holds, at most once, in the provider's own order. A weekday the provider holds nothing for is absent.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["weekday", "active", "ranges"],
+          "properties": {
+            "weekday": { "type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] },
+            "active": { "type": "boolean", "description": "Whether the provider sends on this weekday at all." },
+            "ranges": {
+              "type": "array",
+              "maxItems": 24,
+              "description": "The windows of the day, from and to, in the schedule's time zone.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from", "to"],
+                "properties": {
+                  "from": { "$ref": "#/$defs/time" },
+                  "to": { "$ref": "#/$defs/end" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "time": {
+        "type": "string",
+        "maxLength": 5,
+        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+        "description": "A time of day, `HH:MM` on a 24-hour clock."
+      },
+      "end": {
+        "type": "string",
+        "maxLength": 5,
+        "pattern": "^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$",
+        "description": "Where a window ends: a time of day, `HH:MM` on a 24-hour clock, or `24:00`, which is the end of that same day and never where a window starts."
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or the role of the user the plugin signs in as does not include its schedules." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing could be listed. Repeating it runs the same call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read this account's schedules." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the read for now and it may be asked again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing and costs nothing, so the next attempt simply asks again." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "Every schedule the provider lists for the account is listed, except one the provider names no time zone for: the read takes no filter.",
+    "A page holds at most `limit` schedules, starting at `offset`, by the provider's identifier with the lowest first, and `has_more` says whether more follow; the next page starts at `offset` plus the number of items this page returned.",
+    "A page may come back short of `limit` with `has_more: true`: the plugin stops before the result would pass 768 KiB, counted as the runtime counts it.",
+    "The windows are the provider's as authored, by weekday, in the time zone the provider names, spelled as the provider spells it under the scheme that spelling belongs to; nothing is converted and no calendar is resolved.",
+    "A weekday the provider holds nothing for is absent, never invented as inactive.",
+    "`follow_up_windows` is null unless the provider keeps a second set of windows for the later steps and says it is in use.",
+    "A name the provider holds as empty is null, never an empty string.",
+    "A read pins nothing: the identifiers it lists are reported, never recorded by this one."
+  ]
+}

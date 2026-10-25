@@ -1,0 +1,22 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "the provider refused the send because the account has no credits left, and did nothing: the block is kept and the item ends without a retry",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "blocked",
+      "code": "provider_blocked",
+      "message": "The account has no credits left, so nothing was sent.",
+      "details": null,
+      "external_ids": null,
+      "block": { "scope": "account", "reason": "billing", "link": "https://app.example.com/billing" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "blocked", "retriable": false, "block": "kept" }
+}

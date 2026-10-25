@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "a sender is blocked, and the block does not say which one",
+  "value": { "scope": "sender", "reason": "channel" },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

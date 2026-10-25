@@ -34,7 +34,10 @@
         "20261020172838_JournalByPerson",
         "20261022011335_ProjectsAndPreferences",
         "20261023115917_CampaignPeopleIndexes",
-        "20261023172016_CampaignWorkByFinish"
+        "20261023172016_CampaignWorkByFinish",
+        "20261024123426_WorkItemWaits",
+        "20261024194108_ProviderBlocks",
+        "20261025010407_ProviderBlockClearedBy"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -59,7 +62,10 @@
         "20261020172838_JournalByPerson",
         "20261022011335_ProjectsAndPreferences",
         "20261023115917_CampaignPeopleIndexes",
-        "20261023172016_CampaignWorkByFinish"
+        "20261023172016_CampaignWorkByFinish",
+        "20261024123426_WorkItemWaits",
+        "20261024194108_ProviderBlocks",
+        "20261025010407_ProviderBlockClearedBy"
       ],
       "backup_file": null
     },
@@ -130,6 +136,17 @@
     "harness": {
       "root": "~/Jason",
       "root_state": "absent"
-    }
+    },
+    "released_plugins": [
+      {
+        "id": "reply",
+        "state": "not_installed",
+        "released": {
+          "version": "0.7.0",
+          "digest": "sha256:recorded-2"
+        },
+        "installed": null
+      }
+    ]
   }
 }

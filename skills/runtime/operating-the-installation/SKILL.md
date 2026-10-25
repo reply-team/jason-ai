@@ -159,11 +159,12 @@ the runtime by hand.
 ## Notifications
 
 When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a
-protective action fails, or when it finds a span of an account's events it will not read, it tells them once, with a
-pointer: how many, and where to look. A pointer that says an account has events Jason did not read sends you to
-`jason events sources`, as "The accounts whose events it reads" says. The toast, the operating system's own
-notification, is on by default and needs nothing set up; `jason runtime status --human` says on its `Notify:` line what
-each channel did last.
+protective action fails, when it finds a span of an account's events it will not read, or when a provider block is
+open, it tells them once, with a pointer: how many, and where to look. A pointer that says an account has events
+Jason did not read sends you to `jason events sources`, as "The accounts whose events it reads" says. One that says
+provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where the
+person clears it. The toast, the operating system's own notification, is on by default and needs nothing set up;
+`jason runtime status --human` says on its `Notify:` line what each channel did last.
 `Notifications:Enabled` set to `false` in `~/.jason/config/settings.json` turns all of it off, and
 `Notifications:Toast` set to `false` turns off the toast alone. `docs/notifications.md` says when a burst is said, and
 what a pointer never carries.
@@ -335,6 +336,11 @@ asked. **Never interrupt** the task the person actually came with in order to ta
 And **never run `jason update apply` unless the person asked for it**. It replaces the executable that is
 running and stops the runtime to do it, so work in flight is drained and everything pointing at Jason is briefly
 pointing at a file being swapped. Noticing an update is yours; deciding to take it is theirs.
+
+An update leaves the plugins under `~/.jason/plugins/` as they were, so afterwards `jason status`'s optional
+`plugin_package` check can fail: the package installed is an earlier release's. Its fact names the installed version,
+the version this release published, and the step of the wiring check that prints the lines placing it; replacing a
+package is a change to the installation, so ask first, then `jason plugin reload`.
 
 ## Installing it in the first place
 

@@ -4,8 +4,8 @@
 // runs: a lost answer to a read costs nothing to repeat, while a lost answer to a write may already have put a person
 // into a sequence. The second is which row each of the Reply CLI's own error codes is, operation by operation. The
 // third is the code and the failure class each row reports, which is what the runtime acts on — `transient` is
-// retried, `permanent` and `validation` are final, and `ambiguous` is repeated only where the operation's contract
-// says a repeat is safe.
+// retried, `permanent` and `validation` are final, `ambiguous` is repeated only where the operation's contract
+// says a repeat is safe, and `blocked` holds the work on the block the row's `block` names until a trial gets past it.
 //
 // The constants below are STRICT JSON: double-quoted keys and strings, no comments inside them, no trailing commas,
 // and each one ends with a closing brace at the start of a line followed by a semicolon. A test on the runtime side
@@ -111,6 +111,10 @@ export const COMMANDS = {
   "account list": {
     "kind": "read",
     "note": "The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what sender.list answers from."
+  },
+  "schedule list": {
+    "kind": "read",
+    "note": "Every sending schedule the team can use, in one answer, each with its Windows time zone and its windows by weekday: what schedule.list answers from."
   },
   "contact linkedin-connect": {
     "kind": "write",
@@ -272,6 +276,9 @@ export const CODES = {
       "account.list_incomplete": "list_not_finished",
       "network": "reply_not_reached"
     },
+    "schedule.list": {
+      "network": "reply_not_reached"
+    },
     "social_invitation.send": {
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
@@ -281,9 +288,9 @@ export const CODES = {
       "contact.no_linkedin_profile": "no_profile_at_reply",
       "account.list_incomplete": "list_not_finished",
       "linkedin.account_not_found": "sender_not_found",
-      "linkedin.account_inactive": "sender_unavailable",
-      "linkedin.invalid_cookie": "sender_unavailable",
-      "linkedin.limit_reached": "sender_allowance_spent",
+      "linkedin.account_inactive": "sender_blocked_channel",
+      "linkedin.invalid_cookie": "sender_blocked_channel",
+      "linkedin.limit_reached": "sender_blocked_limit",
       "linkedin.message_too_long": "note_too_long",
       "reply.invalid_request:message": "note_too_long",
       "linkedin.missing_variables": "text_would_render",
@@ -303,12 +310,12 @@ export const CODES = {
       "account.list_incomplete": "list_not_finished",
       "email_account.not_found": "sender_not_found",
       "linkedin.account_not_found": "sender_not_found",
-      "linkedin.account_inactive": "sender_unavailable",
-      "linkedin.invalid_cookie": "sender_unavailable",
+      "linkedin.account_inactive": "sender_blocked_channel",
+      "linkedin.invalid_cookie": "sender_blocked_channel",
       "linkedin.sales_navigator_required": "sender_unavailable",
       "linkedin.sales_navigator_disconnected": "sender_unavailable",
       "linkedin.voice_profile_missing": "sender_unavailable",
-      "linkedin.limit_reached": "sender_allowance_spent",
+      "linkedin.limit_reached": "sender_blocked_limit",
       "linkedin.not_connected": "not_a_connection",
       "linkedin.no_inmail_credits": "no_inmail_credits",
       "linkedin.message_too_long": "text_too_long",
@@ -380,6 +387,12 @@ export const ROWS = {
       "code": "provider_call_failed",
       "class": "permanent",
       "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
+    },
+    "account_or_sender_blocked": {
+      "when": "Not reported yet for the account. The CLI publishes no code that says Reply refused a call for the account's money or plan or a revoked key, and did nothing for it; this row is where such a code lands once it does (see the README, \"Endings every operation can meet\"). A sending account Reply refused for its own state is the sender's block, on the two sends' own rows.",
+      "code": "provider_blocked",
+      "class": "blocked",
+      "note": "Reply refused this call for a reason outside the work item and did nothing for it. Clear it at Reply where the block says; the work can be proposed again once it clears."
     }
   },
   "per_operation": {
@@ -979,6 +992,20 @@ export const ROWS = {
         "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated: name one channel with `sender_channel`, or raise `Plugins:Exec:OutputBytes`."
       }
     },
+    "schedule.list": {
+      "feature_not_included": {
+        "when": "Not reported by Reply. Reply refuses this read only for a key without its sequences read scope, which the CLI answers `access.feature_unavailable` and this package reports `unauthorized`; the code stays declared for a provider whose plan or role limits who may read its schedules.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "The provider's plan or the caller's role does not include its schedules, so the read lists nothing."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on `schedule list`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. Reply gives every schedule in one answer, so the same read would be cut at the same place and it is not repeated: raise `Plugins:Exec:OutputBytes`."
+      }
+    },
     "social_invitation.send": {
       "contact_not_found": {
         "when": "`reply contact get` or the invitation answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
@@ -1046,14 +1073,30 @@ export const ROWS = {
         "class": "validation",
         "note": "The account the arguments name is not held by Reply under the address they state, so the person approving read another account than the one the invitation would go from, and nothing was sent. Name the account by the identifier and the address sender.list returns."
       },
-      "sender_unavailable": {
+      "sender_blocked_channel": {
         "when": "Reply's list holds the sender's account as `inactive` or `disconnected`, or the CLI answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's own word travels in the trace.",
+        "code": "provider_blocked",
+        "class": "blocked",
+        "block": { "scope": "sender", "reason": "channel" },
+        "unnamed_sender": "sender_unavailable",
+        "note": "The LinkedIn account cannot send now — it is turned off, or its session at LinkedIn has to be connected again at Reply — so nothing was sent. Put the account right at Reply; the invitation waits on the sender's block and goes once a trial gets past it."
+      },
+      "sender_blocked_limit": {
+        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace. Where the CLI said how long to wait (`retry_after`), the block clears that long after the answer.",
+        "code": "provider_blocked",
+        "class": "blocked",
+        "block": { "scope": "sender", "reason": "limit" },
+        "unnamed_sender": "sender_allowance_spent",
+        "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. The invitation waits on the sender's block and goes once the allowance renews and a trial gets past it."
+      },
+      "sender_unavailable": {
+        "when": "Since 0.7.0, only where a command that ran from no sending account, such as a read on the way to the invitation, answered `linkedin.account_inactive` or `linkedin.invalid_cookie`: a block names the account it holds, and there is none to name. Every other such refusal is the sender's block (`sender_blocked_channel`).",
         "code": "sender_unavailable",
         "class": "permanent",
         "note": "The LinkedIn account cannot send now — it is turned off, or its session at LinkedIn has to be connected again at Reply — so nothing was sent. Put the account right at Reply, then propose the invitation again."
       },
       "sender_allowance_spent": {
-        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace.",
+        "when": "Since 0.7.0, only where a command that ran from no sending account, such as a read on the way to the send, answered `linkedin.limit_reached`: a block names the account it holds, and there is none to name. Every other such refusal is the sender's block (`sender_blocked_limit`).",
         "code": "sender_limit_reached",
         "class": "permanent",
         "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. Propose the invitation again once the allowance renews."
@@ -1186,14 +1229,36 @@ export const ROWS = {
         "class": "validation",
         "note": "The account the arguments name is not held by Reply under the address they state, so the person approving read another account than the one the message would go from, and nothing was sent. Name the account by the identifier and the address sender.list returns."
       },
-      "sender_unavailable": {
-        "when": "Reply's list holds the sender's account as `inactive` or `disconnected`, or the send answered `linkedin.account_inactive`, `linkedin.invalid_cookie`, `linkedin.sales_navigator_required`, `linkedin.sales_navigator_disconnected` or `linkedin.voice_profile_missing`; Reply's own word travels in the trace.",
+      "sender_blocked_channel": {
+        "when": "Reply's list holds the sender's account as `inactive` or `disconnected`, or the send answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's own word travels in the trace.",
+        "code": "provider_blocked",
+        "class": "blocked",
+        "block": { "scope": "sender", "reason": "channel" },
+        "unnamed_sender": "sender_turned_off",
+        "note": "The account cannot send now — it is turned off, or its connection at Reply has to be made again — so nothing was sent. Put the account right at Reply; the message waits on the sender's block and goes once a trial gets past it."
+      },
+      "sender_blocked_limit": {
+        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace. Where the CLI said how long to wait (`retry_after`), the block clears that long after the answer.",
+        "code": "provider_blocked",
+        "class": "blocked",
+        "block": { "scope": "sender", "reason": "limit" },
+        "unnamed_sender": "sender_allowance_spent",
+        "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. The message waits on the sender's block and goes once the allowance renews and a trial gets past it."
+      },
+      "sender_turned_off": {
+        "when": "Only where a command that ran from no sending account, such as a read on the way to the send, answered `linkedin.account_inactive` or `linkedin.invalid_cookie`: a block names the account it holds, and there is none to name. Every other such refusal is the sender's block (`sender_blocked_channel`).",
         "code": "sender_unavailable",
         "class": "permanent",
-        "note": "The account cannot send this message now — it is turned off, its connection at Reply has to be made again, or it lacks what the format needs: Sales Navigator for an InMail, a voice profile for a voice message — so nothing was sent. The attempt's trace says which; put the account right at Reply, then propose the message again."
+        "note": "The account cannot send now — it is turned off, or its connection at Reply has to be made again — so nothing was sent. Put the account right at Reply, then propose the message again."
+      },
+      "sender_unavailable": {
+        "when": "The send answered `linkedin.sales_navigator_required`, `linkedin.sales_navigator_disconnected` or `linkedin.voice_profile_missing`: the account lacks what the format needs, and still sends a plain message; Reply's own word travels in the trace.",
+        "code": "sender_unavailable",
+        "class": "permanent",
+        "note": "The account lacks what this format needs — Sales Navigator for an InMail, a voice profile for a voice message — so nothing was sent. The attempt's trace says which; give the account what the format needs at Reply, or send another format, then propose the message again."
       },
       "sender_allowance_spent": {
-        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace.",
+        "when": "Since 0.7.0, only where a command that ran from no sending account, such as a read on the way to the send, answered `linkedin.limit_reached`: a block names the account it holds, and there is none to name. Every other such refusal is the sender's block (`sender_blocked_limit`).",
         "code": "sender_limit_reached",
         "class": "permanent",
         "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. Propose the message again once the allowance renews."
@@ -1398,7 +1463,13 @@ export function evidence(result) {
 // names the row and what was seen; `learned` is what the package now knows Reply calls our entities, which travels
 // out with the failure because after a lost answer a pin is the only trace of what was done.
 export function fail(operation, observed, learned) {
-  const row = rowFor(operation, observed.row);
+  const named = rowFor(operation, observed.row);
+  // A sender's block names the sending account the call went from. A command that ran from none, such as a read on the
+  // way to the send, has none to name, and a block without it is one the runtime refuses: it ends in the row's own
+  // permanent word instead.
+  const row = named.block !== undefined && named.block.scope === "sender" && !(typeof observed.sender === "string" && observed.sender.length > 0)
+    ? rowFor(operation, named.unnamed_sender)
+    : named;
   const details = compact({
     call: observed.call,
     status: observed.status,
@@ -1428,7 +1499,28 @@ export function fail(operation, observed, learned) {
     message: row.note,
     details: Object.keys(details).length === 0 ? undefined : details,
     external_ids: learned,
+    block: row.block === undefined ? undefined : blockOf(row.block, observed),
   }));
+}
+
+// What a row of class `blocked` says is blocked: the scope and the reason the row names, the sending account the call
+// went from where the scope is a sender, and when it clears where the CLI said how long to wait — that long after this
+// answer, since Reply's wait counts from it. A wait that is not a number of seconds between none and a year is left out,
+// and the runtime tries the block on its own cadence: Reply's allowances renew by the day or the week, and a moment far
+// enough out would be written with a year the block contract does not take.
+const LONGEST_WAIT_SECONDS = 365 * 24 * 60 * 60;
+
+function blockOf(block, observed) {
+  const wait = observed.retry_after;
+  const clears = typeof wait === "number" && Number.isFinite(wait) && wait >= 0 && wait <= LONGEST_WAIT_SECONDS
+    ? new Date(Date.now() + wait * 1000).toISOString()
+    : undefined;
+  return compact({
+    scope: block.scope,
+    sender_external_id: block.scope === "sender" ? observed.sender : undefined,
+    reason: block.reason,
+    clears_at: clears,
+  });
 }
 
 function rowFor(operation, key) {

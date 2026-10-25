@@ -3,6 +3,39 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.8.0
+
+- `schedule.list` lists the account's sending schedules with `reply schedule list`, which gives every schedule the team
+  can use in one answer. The package orders them by Reply's identifier, the lowest first, and cuts the page itself, so a
+  page asked for again starts where it did. Each schedule carries its time zone as Reply holds it, a Windows time zone
+  identifier, under the scheme `windows` and never converted; whether its windows are read in each person's own time
+  zone; whether it skips holidays; whether it is the default of the user the credential signs in as; its windows by
+  weekday as authored; and the windows of a campaign's later steps where Reply's follow-up schedule is in use. The
+  windows are listed as written, a window that runs to the end of the day ending at `24:00`, and no calendar is worked
+  out from them. A credential without Reply's sequences read scope is
+  `unauthorized`. The package needs reply-cli 0.16.0 or newer, the first release with `reply schedule list`.
+
+## 0.7.0
+
+- `message.send` and `social_invitation.send` say a sending account Reply refused for its own state is that sender's
+  block: `provider_blocked`, class `blocked`, with the block's scope `sender` and the account's identifier. An account
+  Reply lists as `inactive` or `disconnected`, and the answers `linkedin.account_inactive` and
+  `linkedin.invalid_cookie`, are its `channel`; `linkedin.limit_reached` is its `limit`, and where reply-cli says how
+  long to wait (`retry_after`), the block's `clears_at` is that long after the answer; a wait longer than a year names
+  no moment, and the runtime tries the block on its own cadence. The runtime holds that sender's
+  work on the block and lets it through once a trial gets past it, rather than ending each item final.
+- The codes they replace, `sender_unavailable` and `sender_limit_reached`, stay declared. `sender_unavailable` is still
+  what `message.send` says for a format the account lacks what it needs for — Sales Navigator for an InMail, a voice
+  profile for a voice message — since the same account still sends a plain message; `no_inmail_credits` keeps its own
+  word, `insufficient_credits`. The two codes are also what a command that ran from no sending account, such as a read
+  on the way to the send, ends in when it meets one of these refusals, since a block names the account it holds.
+- The block travels on `host.fail`, which a runtime from 0.18.0 accepts. An older one ends these refusals
+  `plugin_exception`, permanent: as final as the codes they replace, and never a block mistaken for something else.
+
+## 0.6.1
+
+- the error table names `provider_blocked`, the runtime's class `blocked` from 0.18.0; no Reply answer reaches it until reply-cli reports a block; no behaviour change.
+
 ## 0.6.0
 
 - `message.send`, `social_invitation.send` and `contact.update` are `find_or_create` now, as their documents say: a

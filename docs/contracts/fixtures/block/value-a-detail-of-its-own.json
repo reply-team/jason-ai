@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "a detail beside the block: the words a person reads are the failure's own message, and the binding is the one the attempt ran under, so the block carries neither",
+  "value": { "scope": "account", "reason": "billing", "detail": "Your plan has run out." },
+  "expect": { "invalid": [{ "pointer": "/detail", "reason": "additional_properties" }] }
+}

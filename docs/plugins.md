@@ -170,6 +170,8 @@ with `JASON_DATA_DIR`). There are no install verbs in this version. The package 
 the Reply plugin, is also published with every release from 0.11.0 on as `jason-plugin-reply.zip`, its
 files at the archive's root: checked against that release's `checksums.txt` and unpacked into
 `~/.jason/plugins/reply`, it is installed. Step 3 of [the wiring check](golden-path.md) prints the lines.
+The runtime carries the package its own release publishes and says in `system.info`'s `released_plugins` whether the
+one installed is it, by content digest, so `jason status` names an earlier release's package left behind by an update.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/
@@ -312,6 +314,8 @@ export function invoke(operation, input, context) {
     }
 
     default:
+      // Unreachable by construction, not a pattern: the runtime invokes only the operations the manifest lists,
+      // and each has its case above. A code no operation declares is refused as result_invalid (section 8).
       throw host.fail({ class: "validation", code: "unknown_operation", message: "unknown operation " + operation });
   }
 }
@@ -325,7 +329,7 @@ carrying a control character — a newline, an escape sequence — is refused th
 is, and is never written down. Anything else — a bare value, `undefined`, an array, an object without
 `result` — fails `permanent` with `bad_return`.
 
-**Failing.** `throw host.fail({ class, code, message, details?, external_ids? })` is the only way to
+**Failing.** `throw host.fail({ class, code, message, details?, external_ids?, block? })` is the only way to
 report a business failure with its class. Anything else thrown fails `permanent` with
 `plugin_exception`, keeping the message and the JavaScript stack in `details.stack`. **Know where
 `details` ends up**: for a provider operation it is flattened into the attempt's free-text `trace`,
@@ -515,14 +519,27 @@ throw host.fail({ class: "transient", code: "rate_limited", message: "429 from t
                   details: { retry_after: 30 }, external_ids: { contact: "r_123" } });
 ```
 
-`class` is one of `transient`, `permanent`, `validation`, `ambiguous`. `code` is your own vocabulary,
+`class` is one of `transient`, `permanent`, `validation`, `ambiguous`, `blocked`. `code` is your own vocabulary,
 lower snake_case, at most 64 characters; `message` at most 2000 characters; `details` any JSON, which
 `host.fail` refuses with a `TypeError` over 64 KiB and the host drops to `null` if it is over the cap
 when the thrown failure is read back — losing the details is better than losing the failure.
 `external_ids` follows the same rule as on a success. The function returns an ordinary JavaScript
 `Error` for you to throw, so the failure travels the language's own way: out through `finally`
-blocks, and out of a rejected promise. The message and the details are redacted on the way out, the
-same way a log line is.
+blocks, and out of a rejected promise. The message, the details and the block are redacted on the way out,
+the same way a log line is.
+
+`block` goes with the class `blocked` and with no other: the class without a block, or a block beside another class,
+is a `TypeError`, and so is a block that is not an object or is over 8 KiB. It says what the provider refused this call
+for — the account or one sender, the reason, where a person clears it, and when it clears by itself if the provider
+says — in the fields the [provider block](contracts/block/provider_block.md) publishes; the runtime holds it to that
+page when it records the failure, not here (§8). A host from 0.18.0 accepts `block`; an older host answers
+`host.fail`'s `block` with a `TypeError`, which ends the invocation `plugin_exception`, `permanent`. That is a refusal
+the plugin can see, never a block mistaken for something else.
+
+```js
+throw host.fail({ class: "blocked", code: "provider_blocked", message: "the account is out of credits",
+                  block: { scope: "account", reason: "billing", link: "https://provider.example/billing" } });
+```
 
 ### The environment a child sees
 
@@ -741,8 +758,8 @@ nobody downstream reasons over a word you guessed.
 
 ### Pages
 
-A read that answers a page — `enrollment.list`, `conversation.list`, `conversation.get`, `sender.list` — is handed
-`args.limit` and `args.offset` and answers at most `limit` items from `offset`, with `has_more`. Ask the
+A read that answers a page — `enrollment.list`, `conversation.list`, `conversation.get`, `sender.list`,
+`schedule.list` — is handed `args.limit` and `args.offset` and answers at most `limit` items from `offset`, with `has_more`. Ask the
 provider for that page, map what comes back, and **stop adding items before the result would pass
 768 KiB**, counted the way the runtime counts a result: six bytes for DEL, for every character outside
 ASCII and for each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, twelve for one outside the Basic
@@ -807,8 +824,9 @@ every operation's plugin is held to, and the runtime enforces each of them:
    a word**: the host writes null there for a failure, so the identifier you meant to record is lost
    exactly where it matters most — after a lost answer, where the pin is the only trace that anything
    happened.
-3. **Answer in the operation's own vocabulary**, so that a result satisfies its output schema. An
-   answer that does not is `result_invalid`, is never repeated, and is kept on the attempt.
+3. **Answer in the operation's own vocabulary**, so that a result satisfies its output schema and a
+   failure carries a code the operation declares, under the class it declares it with. An answer that
+   does not is `result_invalid`, is never repeated, and is kept on the attempt.
 4. **Find the person as the contact proxy rule says**: work by a pin when you are given one, and otherwise find or
    create exactly as the document's `preflight.provider_contact` says.
 5. **Carry the provider's own refusal back, in the runtime's vocabulary.** A provider may know something
@@ -828,7 +846,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all twenty-one published
+`plugins/reply/` is the one to read: a marketplace package that implements all twenty-two published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -841,7 +859,7 @@ complete one, though it implements the delivery contract (§14) rather than an o
 
 ## 8. Failure classes
 
-Every failure carries one of four classes, and the class — not the code — is what the runtime reads.
+Every failure carries one of five classes: the class is what the runtime acts on; the code is held to the operation's list.
 
 | Class | Meaning | What the runtime does |
 |---|---|---|
@@ -849,9 +867,25 @@ Every failure carries one of four classes, and the class — not the code — is
 | `permanent` | it would fail the same way again: a bad request, a missing resource, a bug | final |
 | `validation` | the input was wrong | final |
 | `ambiguous` | **it may already have happened** at the provider | the operation decides |
+| `blocked` | the provider refused it for a reason outside the work item, and **did nothing** for it | work a block holds waits on the block; anything else is final, with the block kept |
 
 `ambiguous` is never repeated blindly: a blind repeat could send the same message twice, and that is
 the user's reputation rather than a retry budget.
+
+`blocked` is the provider saying no to the account or to one sender rather than to this item: the money or the plan,
+an allowance it counts, a credential it no longer accepts, a channel disconnected or paused. Report it only where the
+provider did nothing for the call; where you cannot tell, the class is `ambiguous`. Every published operation declares
+it under one code, `provider_blocked`, and the failure carries a `block` the
+[provider block](contracts/block/provider_block.md) page publishes. Where the provider refused for a block and did
+nothing, say `provider_blocked` with the block even where the operation also declares an older code for the condition
+(`sender_limit_reached`, `insufficient_credits`, `sender_unavailable`, `unauthorized`); those codes stand for an answer
+you cannot read as a block. The block is kept on the attempt and on the item's `last_error`, where a person reads what
+to clear. Where the operation is one a block holds — `reach: act` work and the protective operations — the attempt
+ends `blocked`, never counted, and the item waits on the block until it clears or a trial gets past it; any other
+operation ends there, final. So report `blocked` only for a refusal that concerns the account or the sender rather
+than the call: work waits on it. A block outside that page is recorded `permanent`, with what is wrong with it named
+beside the failure. The events and delivery families declare no
+block, so a `blocked` answer there is an answer outside the contract, `result_invalid`.
 
 What may be done about an ambiguous end is a property of the operation, and every published contract
 states it as `repeat_after_ambiguous`: `safe` for a read, which may simply be asked again, and for a
@@ -866,9 +900,17 @@ the operation's output schema is `result_invalid`, which is ambiguous and never 
 document allows, because the next attempt would run the same code over the same answer.
 
 A contract also names the **codes** an operation may report and the class each carries, so that two
-plugins for two providers answer the same situation with the same word. Nothing checks a code against
-that list — the class is what the runtime reads — but a code outside it is a code no planner was
-written for.
+plugins for two providers answer the same situation with the same word. The runtime holds a failure to
+that list: a code the operation does not declare, or a declared code under a class the operation does
+not give it, is an answer outside the contract — `result_invalid`, ambiguous and never repeated, with the
+failure's detail pointing at `/error/code` or `/error/class`. The class is what everything after the
+attempt reads, and a code outside the list is a code no planner was written for. Such a failure keeps
+no block and pins nothing; what you reported — code, class, message and details — is kept on the
+attempt's trace. A read made on a person's request outside any work item is held to the list by the same
+check, and answered `result_invalid` the same way. The host's own codes below belong to no operation, and
+pass beside every one under the class the host writes them with; the same code under another class is
+yours, and is refused like any other code the operation does not declare. The events family is the one
+exception: its reads refuse every code the events contract does not declare, the host's included (§15).
 
 **Protocol failures** mean the runtime never got an answer at all. They are classified by how much
 may already have run.
@@ -908,7 +950,8 @@ are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missin
 `plugin_syntax_error`, `plugin_memory_exceeded`, `plugin_statement_limit`, `plugin_recursion_limit`,
 `capability_not_granted`, `executable_not_allowed`, `exec_limit`, `http_host_not_allowed`,
 `http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit` and
-`module_not_allowed`. All of them are `permanent`.
+`module_not_allowed`. All of them are `permanent`, and every operation's check passes them but the events
+family's (§15).
 
 ## 9. Capabilities and grants
 
@@ -1025,7 +1068,8 @@ channel. The runtime re-validates the outcome after the child exits: exactly one
 invocation's id, `protocol_version` 1, a known status, an error exactly when the status is `failed`,
 a result of at most 1 MiB, `details` of at most 64 KiB, a lower snake_case code of at most 64
 characters, a message of at most 2000 characters, `external_ids` of at most 64 string values of at
-most 256 characters. Anything else is `plugin_malformed_outcome`. The operation's own `output_schema`
+most 256 characters, and `error.block` exactly when the class is `blocked`, an object of at most 8 KiB.
+Anything else is `plugin_malformed_outcome`. The operation's own `output_schema`
 is **not** applied here — this check is about the envelope. The runtime applies it a moment later, when
 it turns the answer into the work item's outcome: a result that does not satisfy the schema, or an
 identifier of a kind the operation never declared or carrying a control character, ends the item with
@@ -1188,7 +1232,8 @@ not published, and this guide and those documents are the whole of what a plugin
 ## 14. Writing a notification plugin
 
 A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective
-actions failed, and where to look — to a service a person reads. It is invoked for one thing, the delivery contract
+actions failed, accounts have events Jason did not read or provider blocks are open, and where to look — to a service
+a person reads. It is invoked for one thing, the delivery contract
 [`notification.send`](contracts/notifications/notification.send.md), by the runtime's own notifier, and only when an
 operator has named it under `Notifications:Plugins:<id>`. No work item
 names it and no route reaches it. [`plugins/ntfy`](../plugins/ntfy/README.md) is the reference.
@@ -1290,7 +1335,7 @@ answer what a provider holds when it holds less.
 
 **Failures,** thrown with `host.fail`: `events_unreachable` (transient), `events_unauthorized`, `events_unsupported`
 and `events_cursor_unknown` (permanent) — the last for a cursor your plugin can no longer read, after which the runtime
-reads by date.
+reads by date. Any other failure, the host's own codes of §8 included, is answered `result_invalid`.
 
 **How the runtime reads.** Every account a route binds at a provider that declares the contract is read on the
 installation's cadence, `Dispatcher:EventsCadenceSeconds` — ten minutes unless set otherwise — and at once when the

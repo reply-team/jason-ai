@@ -1,6 +1,6 @@
 ---
 name: troubleshooting-jason
-description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the ten states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
+description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the eleven states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
 metadata:
   status: draft
 ---
@@ -66,10 +66,10 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
 ```
 
-## The ten states
+## The eleven states
 
-Ten things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
-anybody: four of them are not failures at all, four of them nobody can fix from a session, and only two are
+Eleven things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
+anybody: five of them are not failures at all, four of them nobody can fix from a session, and only two are
 about the work you asked for.
 
 **The codes named below are the common ones, not all of them.** The runtime publishes more than two dozen
@@ -173,6 +173,15 @@ fail in the same way. The operation's own document is what the runtime enforces,
 project's source under `docs/contracts/operations/`; **no verb prints one**, so on a machine with no copy of
 the source, ask the operator for it rather than guessing at the correction.
 
+**A failure classed `blocked` is final too, and its repair is elsewhere.** Its code is `provider_blocked`: the
+provider refused the account, or one sender under it, rather than this item's arguments — money or a plan, an
+allowance it counts, a key it no longer accepts, a channel disconnected or paused — and did nothing for the call.
+`last_error.block` on the item says what is blocked (`scope`, and `sender_external_id` when it is one sender), why
+(`reason`), where a person goes to clear it (`link`), and, where the provider said, when it may clear by itself
+(`clears_at`). Read those to the person. The repair is theirs, at the provider — topping up, reconnecting, renewing a
+key, or waiting for an allowance to renew — and never an edit of the item; once the block has cleared, the work is
+proposed again. Work a block holds does not end here: it waits on the block, which is state 11.
+
 ### 8. An attempt that was interrupted
 
 **How you recognise it.** The failure was recorded as `ambiguous`.
@@ -206,6 +215,53 @@ jason plugin list --human
 version that does not answer. Such a plugin loads as unavailable rather than rejecting the whole snapshot, so
 everything else keeps working and only its operations stop. The listed problem names what is wrong on the
 machine.
+
+### 11. Waiting
+
+**How you recognise it.** The status is `waiting`: a run of the item raised other work and ended by waiting for
+it, for a moment, or both. Its `wait` block says on which items, whether all of them or any one, and until when.
+A park on a provider block reads as this same `waiting` state with its block named, not as a twelfth.
+
+```
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status waiting --human
+```
+
+**What it means.** Nothing is wrong, and the item is not holding anything up: while it waits it holds no slot,
+and the work it waits for is claimed like any other. The runtime starts it again by itself when that work has
+ended, when the moment it named comes, or when the wait's deadline does, whichever is first. If it seems to
+wait too long, look at what it waits for — an item there may itself be in one of the states above. There is no
+repair while the wait holds: do not cancel it to unstick it, and do not create its work again. Where the person
+decides it has waited enough, they end the wait themselves, and the item is started again with what is there:
+
+```
+jason --actor human:ada workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the replies in are enough to decide"
+```
+
+**A park on a provider block has a repair, and it is the person's.** Its `wait` names the block under `blocked_by` —
+`provider_block_id`, `scope` and `reason` — and waits on no item and no moment, and its `last_error` is
+`provider_blocked`, whose `block` says what is blocked, why, the `link` where a person clears it and, where the
+provider said, `clears_at`. `jason block list` shows every open block, how many items each holds and its link;
+`block get` reads one block, and `workitem list --block` names the items it holds:
+
+```
+jason block list --human
+jason block get blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+jason workitem list --block blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+```
+
+The provider refused the account, or one sender under it, and not this item, so the person repairs it: they fix the
+cause at the provider, through the link, and the block's trial then lets one item through; once the provider takes it,
+the block clears and releases everything it held. Where the person knows the cause is gone, they clear the block
+themselves, under their own name, and the next scan releases what it held:
+
+```
+jason --actor human:ada block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the card on the account was renewed"
+```
+
+A clear is their word that the cause is gone, not a mute, and where the provider still refuses, the next call opens a
+new block. Do not cancel, recreate or resume a parked item: the block releases it by itself, and the same work, asked
+again or resumed, parks on the same block.
 
 ## The repairs that are safe
 
@@ -261,7 +317,7 @@ over, and a package whose contents no longer match its digest stops running rath
 
 ## What a useful report carries when it is none of these
 
-When the ten states do not explain it, the useful thing to produce is a description somebody else can act
+When the eleven states do not explain it, the useful thing to produce is a description somebody else can act
 on, not a theory — and `jason doctor` collects the installation's half of it into one file, whether or not
 the runtime answers.
 
