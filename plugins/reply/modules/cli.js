@@ -198,6 +198,8 @@ function ended(answer, request) {
   const operation = request.operation;
   const lost = typeof request.lost === "string" ? request.lost : lostAnswerRow(command);
   const observed = failIfUnread(answer, command, operation, request.learned, lost);
+  // The sending account a send went from, which a block the command meets is said for.
+  observed.sender = request.sender;
 
   if (answer.exit_code === DONE) {
     const result = resultOf(answer.stdout);

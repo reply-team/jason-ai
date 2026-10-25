@@ -1,0 +1,36 @@
+{
+  "operation": "block.list",
+  "case": "cleared",
+  "request": {
+    "statuses": [
+      "cleared"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "blk_2",
+        "plugin_id": "reply",
+        "binding_identity": "sha256:recorded-2",
+        "scope": "sender",
+        "sender_external_id": "snd_1",
+        "reason": "billing",
+        "link": "https://provider.example.com/billing",
+        "clears_at": "2026-10-16T12:00:00.000Z",
+        "status": "cleared",
+        "opened_at": "2026-10-15T12:00:00.000Z",
+        "last_seen_at": "2026-10-15T12:30:00.000Z",
+        "seen_count": 2,
+        "next_trial_at": "2026-10-15T13:00:00.000Z",
+        "trial_work_item_id": null,
+        "opened_by_attempt_id": "att_2",
+        "held_count": 0,
+        "cleared_at": "2026-10-15T13:00:00.000Z",
+        "cleared_by_attempt_id": "att_3",
+        "cleared_by_actor": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

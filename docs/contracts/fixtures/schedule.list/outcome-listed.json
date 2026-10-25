@@ -1,0 +1,144 @@
+{
+  "operation": "schedule.list",
+  "version": 1,
+  "case": "two schedules by identifier, the lowest first: one the caller's default in a Windows time zone, one read in each person's own zone with windows of its own for the later steps",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "external_id": "41",
+          "name": "Business hours",
+          "time_zone": {
+            "id": "Eastern Standard Time",
+            "scheme": "windows"
+          },
+          "in_recipient_time_zone": false,
+          "skips_holidays": true,
+          "default": true,
+          "windows": [
+            {
+              "weekday": "monday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "tuesday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "friday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "09:00",
+                  "to": "17:00"
+                }
+              ]
+            },
+            {
+              "weekday": "saturday",
+              "active": false,
+              "ranges": []
+            }
+          ],
+          "follow_up_windows": null,
+          "vendor": {
+            "status": "isDefaultForCurrentUser"
+          }
+        },
+        {
+          "external_id": "57",
+          "name": "Mornings, follow-ups after lunch",
+          "time_zone": {
+            "id": "Europe/Madrid",
+            "scheme": "iana"
+          },
+          "in_recipient_time_zone": true,
+          "skips_holidays": false,
+          "default": false,
+          "windows": [
+            {
+              "weekday": "monday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "08:30",
+                  "to": "11:00"
+                },
+                {
+                  "from": "16:00",
+                  "to": "18:30"
+                }
+              ]
+            }
+          ],
+          "follow_up_windows": [
+            {
+              "weekday": "monday",
+              "active": true,
+              "ranges": [
+                {
+                  "from": "13:00",
+                  "to": "15:00"
+                }
+              ]
+            }
+          ],
+          "vendor": {
+            "status": null
+          }
+        }
+      ],
+      "has_more": false,
+      "vendor": {
+        "ordering": "id_asc"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 700,
+      "exec_calls": 1,
+      "http_calls": 0,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

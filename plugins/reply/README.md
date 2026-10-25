@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Twenty-one operations — the whole set this build publishes: fifteen that write and six that only read.
+Twenty-two operations — the whole set this build publishes: fifteen that write and seven that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -28,6 +28,7 @@ Twenty-one operations — the whole set this build publishes: fifteen that write
 | `contact.update` | Changes a person's fields — first name, last name, company, title — and custom fields on the contact Reply holds for them, each custom field named as the account names it. A null clears a field; one left out stays. A person Reply holds nobody for is created with those fields, as an add creates one. |
 | `contact.delete` | Deletes the contact Reply holds for a person, by the identifier Jason pinned, once a person approves it: they leave every sequence and list there. A person Reply holds as opted out is refused, and Jason's own record of the person and its register stay as they are. |
 | `sender.list` | Reads the mailboxes and LinkedIn accounts a send can go from, and says whose each one is: the caller's own alone, or the whole team's when that is asked for. |
+| `schedule.list` | Reads the account's sending schedules, ordered by Reply's identifier: each with its time zone, its windows by weekday as authored, the windows of later steps where Reply keeps them, and whether it is the caller's default. Reply holds a time zone as a Windows time zone identifier, and this package carries it as written under the scheme `windows`, always — never converted. No calendar is worked out from the windows. |
 | `social_invitation.send` | Invites one person to connect on LinkedIn from one of the account's LinkedIn accounts, with a note or without one, once a person approves it. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 | `message.send` | Sends one person one message outside any sequence, once a person approves it: an email, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the address or the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 
@@ -51,9 +52,10 @@ of a call is the command line, which carries only Reply's identifiers and flags,
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
-- **Version 0.15.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
-  the answer. 0.15.0 is the release whose direct sends and `reply contact update` take the person by their fields and
-  import one Reply holds nobody for. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
+- **Version 0.16.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+  the answer. 0.16.0 is the release with `reply schedule list`, which `schedule.list` answers from; 0.15.0 was the one
+  whose direct sends and `reply contact update` take the person by their fields and import one Reply holds nobody
+  for. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
   routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
   does not have, or answers differently.
 - **Jason 0.14.0 or newer.** The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, which a
@@ -259,8 +261,10 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
 ## What can go wrong
 
 Every failure carries a code the operation's own contract publishes and a class the runtime acts on:
-`transient` is retried inside the work item's budget, `permanent` and `validation` are final, and
-`ambiguous` stops the item for a person, because Reply may already have acted. The tables below are
+`transient` is retried inside the work item's budget, `permanent` and `validation` are final,
+`ambiguous` stops the item for a person, because Reply may already have acted, and `blocked` says Reply refused the
+call for a reason outside the work item and did nothing for it, so the runtime holds the work that block concerns until
+a trial gets past it. The tables below are
 [`modules/errors.js`](modules/errors.js), which is their single source — a test reads that file and holds
 every code in it to the operation's published contract, the same code under the same class.
 
@@ -301,6 +305,7 @@ route's binding names them.
 | `contact update <contact> --fields -` | write | Changes the fields and custom fields on stdin, by the contact's id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. Before a LinkedIn send it also gives a contact that carries no profile the one the send consumes, and nothing else. |
 | `auth whoami` | read | Who the credential signs in as: the Reply user whose accounts `sender.list` offers under `own`. Only the user's id is read; the login name beside it is the operator's and is not kept. |
 | `account list --channel` | read | The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what `sender.list` answers from, and the read a send makes of its sender. |
+| `schedule list` | read | Every sending schedule the team can use, in one answer, each with its Windows time zone and its windows by weekday: what `schedule.list` answers from. |
 | `contact linkedin-connect --contact-id --linkedin-account-id [--message -]` | write | Invites the contact to connect on LinkedIn from the account named, with the note on stdin, or with none when there is no `--message`. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `contact send-email --contact-id --email-account-id --message -` | write | Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `contact linkedin-message`, `contact linkedin-inmail`, `contact linkedin-voice`, each `--contact-id --linkedin-account-id --message -` | write | Sends the contact one LinkedIn message, InMail or voice message from the account named, outside any sequence, with the text on stdin — `{body}`, `{subject, body}`, or the `{script}` Reply speaks. A send that Reply keeps no key on, so a lost answer is never repeated. |
@@ -318,6 +323,7 @@ route's binding names them.
 | The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
 | Reply asked to wait longer than the CLI waits on its own (`rate_limited`). | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt; the wait Reply asked for is in the trace. |
 | Reply refused the call (`reply.refused`), refused a field no row below names (`reply.invalid_request`), or the CLI answered a code this version does not know. | `provider_call_failed` | permanent | The CLI's code, Reply's own code and its sentence are in the trace. A refusal that recurs belongs in the table. |
+| Not reported yet for the account: Reply refused the call for the account's money or plan or a revoked key, and did nothing for it. | `provider_blocked` | blocked | Clear it at Reply where the block says. Pending: the CLI publishes no code for this today, so nothing reaches the row `account_or_sender_blocked` in the table; when the CLI publishes one, its mapping in `rowOf` is where the switch lands, and the failure then carries the block. Until then such a refusal arrives as one of the rows above or below, under the class that row gives it. A sending account Reply refused for its own state is the sender's block, in the two sends' tables. |
 
 A call that runs out of time is the package's to answer, so each call is given what is left of the invocation's
 budget less five seconds (never more than half of what is left) rather than all of it. A call given everything
@@ -625,6 +631,20 @@ account is listed only when Reply names that user as its owner, so a teammate's 
 for, are never offered; under `team` every account is, marked `own`, `teammate` or `unknown`. A whoami that names
 nobody lists nothing, and the read is asked again.
 
+### `schedule.list`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The credential lacks Reply's sequences read scope, the one thing Reply refuses this read for (`access.feature_unavailable`). Nothing is listed. | `unauthorized` | permanent | A key with the sequences read scope. |
+| Reply's answer was longer than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`: Reply gives every schedule in one answer, so the same read is cut at the same place. |
+
+`reply schedule list` gives every schedule in one answer, in no order Reply states, so the package orders them by
+Reply's identifier, the lowest first, and cuts the page itself. A schedule Reply names with no time zone is left out,
+and so are a weekday that is none of the seven or named a second time, a range whose times are not times of day and a
+day's ranges past the twenty-fourth: what is listed is what Reply said. A list holding a schedule without a usable
+identifier is refused whole by reply-cli (`reply.unavailable`), which is `provider_unavailable` and asked again. A range
+may end at `24:00`, the end of the day, and never start there. The read pins nothing.
+
 ### `social_invitation.send`
 
 | When | Code | Class | What to do about it |
@@ -633,8 +653,8 @@ nobody lists nothing, and the read is asked again.
 | Reply found the note too long (`linkedin.message_too_long`, or `reply.invalid_request` naming the `message` field). Nothing is sent. | `message_too_long` | validation | Reply refuses notes over 200 characters; the document holds a note to that, so this comes back only if Reply's own bound moves. Write a shorter note. |
 | The sender's identifier is not a Reply number, Reply's list holds no LinkedIn account under it, or the invitation answered `linkedin.account_not_found`. | `sender_not_found` | permanent | Name an account `sender.list` returns. |
 | Reply holds the sender's account under another address than the arguments state, under one where they state none, or under none where they state one. Nothing is sent. | `sender_mismatch` | validation | Name the account by the identifier and the address `sender.list` returns. |
-| The sender's account is turned off or disconnected in Reply's list, or the invitation answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's word is in the trace. | `sender_unavailable` | permanent | Put the account right at Reply, then propose the invitation again. |
-| The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`); which one is under `limit` in the trace. | `sender_limit_reached` | permanent | Propose the invitation again once the allowance renews. |
+| The sender's account is turned off or disconnected in Reply's list, or the invitation answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's word is in the trace. The block is the sender's, for its `channel`; met by a command that ran from no sending account, such as a read on the way to the send, it is `sender_unavailable`, permanent, since a block names the account it holds. | `provider_blocked` | blocked | Put the account right at Reply. The invitation waits on the block, with the rest of that sender's work, and goes once a trial gets past it. |
+| The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`); which one is under `limit` in the trace. The block is the sender's, for its `limit`, and clears at `clears_at` where the CLI said how long to wait, up to a year; met by a command that ran from no sending account, it is `sender_limit_reached`, permanent. | `provider_blocked` | blocked | Nothing. The invitation waits on the block and goes once the allowance renews and a trial gets past it. |
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
 | More than one contact is held under the profile (`contact.not_unique`). | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the invitation again. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name the channel they have a profile on. |
@@ -672,8 +692,9 @@ the item stops for a person, with the contact pinned.
 | The account has no InMail credits left (`linkedin.no_inmail_credits`). Nothing is sent. | `insufficient_credits` | permanent | Propose the InMail again once the account has credits. |
 | The sender's identifier is not a Reply number of the channel's size, Reply's list holds no account of the channel under it, or the send answered `email_account.not_found` or `linkedin.account_not_found`. | `sender_not_found` | permanent | Name an account `sender.list` returns. |
 | Reply holds the sender's account under another address than the arguments state, under one where they state none, or under none where they state one; an address Jason would not key matches nothing. Nothing is sent. | `sender_mismatch` | validation | Name the account by the identifier and the address `sender.list` returns. |
-| The sender's account is turned off or disconnected in Reply's list, or the send answered `linkedin.account_inactive`, `linkedin.invalid_cookie`, `linkedin.sales_navigator_required`, `linkedin.sales_navigator_disconnected` or `linkedin.voice_profile_missing`; Reply's word is in the trace. | `sender_unavailable` | permanent | Put the account right at Reply — connect it again, or give it Sales Navigator or a voice profile — then propose the message again. |
-| The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`); which one is under `limit` in the trace. | `sender_limit_reached` | permanent | Propose the message again once the allowance renews. |
+| The sender's account is turned off or disconnected in Reply's list, or the send answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's word is in the trace. The block is the sender's, for its `channel`; met by a command that ran from no sending account, such as a read on the way to the send, it is `sender_unavailable`, permanent, since a block names the account it holds. | `provider_blocked` | blocked | Put the account right at Reply — connect it again. The message waits on the block, with the rest of that sender's work, and goes once a trial gets past it. |
+| The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`); which one is under `limit` in the trace. The block is the sender's, for its `limit`, and clears at `clears_at` where the CLI said how long to wait, up to a year; met by a command that ran from no sending account, it is `sender_limit_reached`, permanent. | `provider_blocked` | blocked | Nothing. The message waits on the block and goes once the allowance renews and a trial gets past it. |
+| The account lacks what the format needs (`linkedin.sales_navigator_required`, `linkedin.sales_navigator_disconnected`, `linkedin.voice_profile_missing`); Reply's word is in the trace. The same account still sends a plain message, so nothing is held. | `sender_unavailable` | permanent | Give the account Sales Navigator or a voice profile at Reply, or send another format, then propose the message again. |
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
 | More than one contact is held under the address or the profile (`contact.not_unique`). | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the message again. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name the channel they have. |
@@ -879,6 +900,8 @@ pinned.
   value Jason keys as nothing — not a link to a profile on linkedin.com, not a bare mailbox address with a dotted domain
   — matches nothing, so such an account is refused as `sender_mismatch` even when its address is copied from
   `sender.list`.
+- **`schedule.list` does not say which campaign runs on which schedule.** `campaign.get` names no schedule, so which one
+  a campaign sends on is read at Reply.
 - **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
   whole thread before every filing; the reads report a thread's category.
 - **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first

@@ -136,14 +136,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.17.0/install.sh | sh -s -- --version 0.17.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.18.0/install.sh | sh -s -- --version 0.18.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.17.0/install.ps1))) -Version 0.17.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.18.0/install.ps1))) -Version 0.18.0
 ```
 
-These install 0.17.0 with 0.17.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.18.0 with 0.18.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -335,11 +335,12 @@ otherwise: half of what it reports is not the runtime's to know.
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
 | the runtime answers | a provider plugin is installed |
-| the running runtime is the build this CLI is | a route is configured |
-| migrations are applied | a binding names an account |
-| the plugin registry is alive (zero plugins is alive) | a provider CLI **you name** answers |
-| role skills are present, named after their directories and within the runtime's live cap | the skill packs are deployed to an agent harness |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
+| the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
+| migrations are applied | a route is configured |
+| the plugin registry is alive (zero plugins is alive) | a binding names an account |
+| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
+| | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
 | | the harness root can take the first project or campaign |
@@ -373,6 +374,16 @@ A fresh installation that has done §2 through §4 but has not yet started the r
 was left running across an upgrade that replaced the executable — a package manager's, or a file copied over by
 hand — because that runtime is still the old build and starts its plugin hosts from the old image. Its repair is
 `jason runtime restart`.
+
+`plugin_package` compares each plugin package the release you run publishes — today the Reply plugin — with the
+package of that id installed, by content digest, offline: the runtime carries its release's package and asks no
+network. An earlier release's package fails it, an upgrade having replaced the executable and left
+`~/.jason/plugins/reply` as it was. No command installs a package, so its fact carries the repair in words: the
+installed version, the version this release published, and that step 3 of [the wiring check](golden-path.md) prints
+the two lines — the checksum match and the unpack into `~/.jason/plugins/reply`, once the old package is moved away
+— then `jason plugin reload`. A package with the same version or a later one passes, and the fact says it is a
+later release's package or one built or edited on this machine; no package of that id is absent. A development
+build compares with its own tree, and the fact names the build it compared with.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 

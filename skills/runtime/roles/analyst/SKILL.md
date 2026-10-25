@@ -151,8 +151,36 @@ jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9
 ```
 
 A code the runtime does not recognise ends the item rather than retrying it, which is the right outcome for
-something no second attempt would change. Do not exit without completing: **silence is not an answer**, and an
-attempt that ends without one is recorded as a run that stopped talking.
+something no second attempt would change. Do not exit without completing, or waiting as the next section says:
+**silence is not an answer**, and an attempt that ends without one is recorded as a run that stopped talking.
+
+### When other work has to be done first
+
+Your run does not wait inside itself. If what you were asked for needs other work done first — research, a draft, a
+send a person has to approve — raise that work as work items, then end this attempt by waiting for them, naming each
+one you raised:
+
+```
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --until 2026-09-21T09:00:00Z --reason "the research on both accounts"
+```
+
+A wait names only items this item's own runs raised, in its campaign, and never a decision. It is over when all of
+them have ended, or any one of them with `--any`, or when the moment `--until` names comes, whichever is first; a wait
+with `--until` alone is a hold until that moment. The moment printed above is an example: `--until` names a moment
+ahead of now, and one already past is refused. Once the wait is accepted this attempt is over, so exit: anything
+more you type for it is refused. **Never poll, sleep or hold your attempt open** to watch the work you raised:
+while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start. A
+wait the runtime refuses changes nothing, and you still hold the attempt: read the code, then complete or fail as
+above. A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait
+is refused with `wait_not_allowed`.
+
+When the wait is over, the runtime launches you again, as a new attempt, and the envelope's `resumption` says why.
+`resumption` is null when this run follows no wait. When it is not, `woke_because` is the reason: `children_ended`,
+`moment_reached` when the moment you named came first, `wait_ceiling` when you named none and the longest wait the
+runtime allows ran out, or `resumed_by_actor` when a person ended the wait early. Its `items` are the items you
+waited for, in the order you named them, each with its status, the code it failed with if it failed, and its result.
+A result marked `result_omitted` did not fit: read it with `jason workitem get`. An item that failed or was
+cancelled has ended like any other; what that means for the work is yours to decide.
 
 ### The file beside this one
 

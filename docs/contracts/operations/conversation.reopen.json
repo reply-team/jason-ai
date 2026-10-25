@@ -128,7 +128,8 @@
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it change this account's threads." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
     { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
-    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the thread may already be open again. Reopening an open thread changes nothing, so the next attempt simply asks again." }
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the thread may already be open again. Reopening an open thread changes nothing, so the next attempt simply asks again." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
   ],
 
   "timeout_ms": 60000,

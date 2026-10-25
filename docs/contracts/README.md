@@ -43,6 +43,9 @@ docs/contracts/
   preferences/<key>.json           a named preference of the client, a fourth family, embedded the same way
   preferences/<key>.md             the same preference explained, with a generated block
   fixtures/preferences/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
+  block/provider_block.json        the provider block a blocked failure carries, written once for every operation
+  block/provider_block.md          the same block explained
+  fixtures/block/value-*.json      blocks, accepted and refused, with the pointer and reason of each refusal
 ```
 
 ## The published operations
@@ -75,6 +78,7 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
 | [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
+| [`schedule.list`](operations/schedule.list.md) | `schedule.resolve` | `read` | `auto` | `safe` | `not_used` | the provider's sending schedules, with the windows each one sets |
 | [`sender.list`](operations/sender.list.md) | `sender.list` | `read` | `auto` | `safe` | `not_used` | the provider's accounts a send can go from |
 | [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_or_create` | invite a person to connect, from one of the provider's accounts |
 
@@ -85,7 +89,7 @@ a condition beside it — and the last column is the line the operation's own pa
 One more document is published here, and it is not a canonical operation:
 [`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked
 for — put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed,
-and where to look. It is a family of
+accounts have events Jason did not read or provider blocks are open, and where to look. It is a family of
 its own, under `notifications/` rather than `operations/`, read by its own catalog. The operation catalog has no notion
 of kind: a document dropped among the operations would become a provider operation a work item could name, a route
 could carry and a lease would be sized for. So it has none of an operation's level-one fields — no reach, no approval,
@@ -105,6 +109,17 @@ result, four failure codes, its timeout and its conformance list. What it return
 provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
 identifiers operations pinned and writes none. Its fixtures live beside the others' under
 [`fixtures/events.read/`](fixtures/events.read) and are run by the same tests.
+
+## The provider block
+
+A failure of the class `blocked` says the provider refused the call for a reason outside the work item — the account's
+money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did
+nothing for it. Every published operation declares it under one code, `provider_blocked`, and the failure carries a
+block: what is blocked, the account or one sender; why, from a closed list; where a person clears it; and, where the
+provider says, when it clears by itself. The block is written once, for every operation, in
+[`block/provider_block.json`](block/provider_block.json), explained on [its page](block/provider_block.md), embedded
+into the runtime the same way, and its value fixtures under [`fixtures/block/`](fixtures/block) are run by the same
+tests. The events and delivery families declare no block.
 
 ## The named preferences
 
@@ -169,7 +184,7 @@ The second group is Jason's own, and it is about execution:
 | `external_ids` | the kinds of provider identifier the operation may return, and what each identifies |
 | `recovery_read` | what to read before repeating after a lost answer, and why the reading is worth the round trip |
 | `repeat_after_ambiguous` | `safe`, `after_recovery_read` or `never` — what may be done when an attempt ends without a usable answer |
-| `failure_codes` | the codes a plugin may report, each under one of the four classes, with the moment it applies |
+| `failure_codes` | the codes a plugin may report, each under one of the five classes, with the moment it applies |
 | `timeout_ms` | the child's budget for this operation |
 | `conformance` | what a conforming plugin must be able to demonstrate |
 
@@ -243,7 +258,7 @@ declares `preview: null`, and every `auto` operation does.
 ## Pages
 
 A read that can answer more items than one result may hold — `enrollment.list`, `conversation.list`,
-`conversation.get` and `sender.list` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
+`conversation.get`, `sender.list` and `schedule.list` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
 at most a row per channel and is not paged.
 
 - `args.limit` — at least 1, at most what the operation states — and `args.offset` — 0 to 1 000 000 — are both
@@ -401,7 +416,10 @@ lists.
 - **Additive** — a new optional input field, a required input field made optional, a new optional output field, a new
   failure code, a new external-id kind — keeps the version. A required input field made optional is additive only where
   the runtime supplies the field's former value to the plugin's input, or the operation's document says the plugin must
-  take its absence; otherwise it is a breaking change of the operation's version.
+  take its absence; otherwise it is a breaking change of the operation's version. A new failure class with its
+  payload, and the new optional protocol field that carries it, keep the version too: a host that predates them
+  refuses them at `host.fail`, and the invocation ends `plugin_exception`, `permanent`, so a newer plugin on an older
+  host fails where it can be seen rather than being read as something else.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,
@@ -426,15 +444,17 @@ runtime released with it agrees with. Read them as worked examples of the contra
 
 An **input fixture** is `{operation, version, case, input, expect}`, where `expect` is either the string `"valid"`
 or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case, outcome, expect}`, where `outcome`
-is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?, pinned?}`.
+is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?, pinned?, block?}`.
 `status` is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the
-output schema, or which pins an identifier of a kind the operation never declared. `pinned` is what the runtime
+output schema, which pins an identifier of a kind the operation never declared, or whose failure carries a code the
+operation does not declare under that class. `pinned` is what the runtime
 writes into its record of provider identifiers from that answer, as `{kind: value}`. A **preview fixture** is
 `{operation, version, case, input, expect}`, where `input` is a composed input the operation's schema accepts and
 `expect` is `{summary, highlights}`: the line the template renders and the values it highlights, both compared
 whole. An operation has preview fixtures exactly when it declares a preview. A **value fixture** of a named preference
 is `{key, version, case, value, expect}`, with `expect` written as an input fixture's, and it lives in the directory
-named for its key; every key has at least one value it accepts and one it refuses.
+named for its key; every key has at least one value it accepts and one it refuses. A **value fixture** of the provider
+block is `{contract, version, case, value, expect}`, written the same way, under `fixtures/block/`.
 
 An `invalid` list names exactly what is wrong with the document, and it is written the same way in an input fixture
 and an outcome fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means
@@ -446,6 +466,10 @@ passing while it no longer demonstrates what the case is named for.
 A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
 document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
 operation accepts, nor the same code under a class that would have the runtime repeat what the document calls final.
+The runtime holds every failed answer to the same list: a code the document does not declare, or a declared code under
+another class, is `result_invalid`, with the detail at `/error/code` or `/error/class` — except the plugin host's own
+codes, which belong to no operation and pass under the class the host writes them with
+([the plugin guide, section 8](../plugins.md#8-failure-classes)); the events family alone refuses those as well.
 
 **A failure may still pin.** A failed outcome carries its identifiers on the error — `error.external_ids`, which is
 where `host.fail` puts them and the only place the runtime reads them — and a declared kind there is written down by
@@ -456,11 +480,18 @@ the failure the plugin reported with a shape error would hide the reason the ope
 plugin's own failure and names the refused identifier beside it. The two fixtures named `outcome-answer-lost` and
 `outcome-answer-lost-with-an-undeclared-identifier` are that asymmetry, executed.
 
+**A block is kept or refused.** A `blocked` fixture states `block`: the string `"kept"` where the block satisfies the
+published one and is kept on the attempt, or `{"invalid": [ … ]}`, written as above, where it does not. A block outside
+the published one is refused the way an undeclared identifier on a failure is: the plugin's failure stands, recorded
+`permanent`, with what is wrong with the block named beside it, so the fixture's `class` is `permanent`. A fixture of
+any other class states no `block`.
+
 Retriability in an outcome fixture is stated per the operation's own rule, so that a plugin author reading the
 fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent` and `validation` are
-final; `ambiguous` is repeated only where the operation says `safe` or `after_recovery_read`; and `result_invalid`
-is always final, because a shape error is deterministic and the next attempt would run the same code over the same
-answer.
+final; `blocked` is never repeated as a retry — work a block holds waits on the block, and anything else ends there;
+`ambiguous` is repeated only where the operation says `safe` or `after_recovery_read`; and `result_invalid`
+is always final, because a shape error, or a failure outside the declared codes, is deterministic and the next attempt
+would run the same code over the same answer.
 
 ## Where these come from
 

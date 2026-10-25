@@ -48,7 +48,7 @@ export function messageSend(input, context) {
 
   refusePlaceholders(OPERATION, [message.subject, message.body]);
   const sender = senderFor(OPERATION, context, args.channel, args.sender);
-  const done = sendTo(OPERATION, context, input, format.command, [format.account, sender, "--message", "-"], format.text(message));
+  const done = sendTo(OPERATION, context, input, format.command, sender, [format.account, sender, "--message", "-"], format.text(message));
   const sent = done.sent;
   const learned = done.learned;
 

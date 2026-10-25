@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.6.0
+version: 0.8.0
 kind: provider
 name: Reply
 description: >-
@@ -10,7 +10,7 @@ homepage: https://reply.io
 contracts:
   protocol: [1]
   operations: [1]
-operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, social_invitation.send, message.send]
+operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, schedule.list, social_invitation.send, message.send]
 entry:
   module: main.js
   function: invoke
@@ -26,9 +26,9 @@ capabilities:
         # `reply contact linkedin-connect`, `reply contact send-email` and the rest — with the results and the error
         # codes this package reads, a LinkedIn URL matched by its lowercased slug, a start that says the state it left,
         # the Reply user whose each account is, and the contact options on the direct sends and on `reply contact
-        # update`, which import a person Reply holds nobody for. This package makes no raw call. A reload runs the version
-        # command and refuses an older one.
-        min_version: 0.15.0
+        # update`, which import a person Reply holds nobody for, and `reply schedule list`, the account's sending schedules
+        # with their windows. This package makes no raw call. A reload runs the version command and refuses an older one.
+        min_version: 0.16.0
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak

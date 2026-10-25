@@ -19,6 +19,7 @@ import { conversationClassify, conversationClose, conversationReopen } from "./m
 import { contactDelete } from "./modules/delete.js";
 import { contactUpdate } from "./modules/update.js";
 import { senderList } from "./modules/senders.js";
+import { scheduleList } from "./modules/schedules.js";
 import { socialInvitationSend } from "./modules/invite.js";
 import { messageSend } from "./modules/message.js";
 
@@ -80,6 +81,9 @@ export function invoke(operation, input, context) {
 
     case "sender.list":
       return senderList(input, context);
+
+    case "schedule.list":
+      return scheduleList(input, context);
 
     case "social_invitation.send":
       return socialInvitationSend(input, context);

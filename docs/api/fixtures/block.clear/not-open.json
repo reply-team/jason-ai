@@ -1,0 +1,19 @@
+{
+  "operation": "block.clear",
+  "case": "not-open",
+  "request": {
+    "block_id": "blk_1",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "block_not_open",
+      "message": "Provider block 'blk_1' is cleared already; only an open block can be cleared.",
+      "retryable": false
+    }
+  }
+}

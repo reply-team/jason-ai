@@ -131,10 +131,12 @@ the package's line from a file of its own, `jason-plugin-reply.zip.sha256` besid
 `sha256sum` macOS carries reads a file and not a pipe. A macOS older than 14 has no `sha256sum`; `shasum -a 256 -c`
 in its place reads the same file.
 
-So the package is the one released with your runtime, file for file: what you unpacked has the content digest of
-the release's own tree. Where the release cannot be reached, or is older than 0.11.0 and does not carry the package,
-the tree `jason skills install` fetched when the installation was taught — this repository at the tag of the release
-you run, kept in Jason's data directory — holds the same package, and copying it is the same install:
+So the package is the one released with your runtime, file for file: what you unpacked has the content digest of the
+release's own tree, and once it is loaded `jason status` says so in its `plugin_package` check, which fails when the
+package installed is an earlier release's. Where the release cannot be reached, or is older than 0.11.0 and does not
+carry the package, the tree `jason skills install` fetched when the installation was taught — this repository at the
+tag of the release you run, kept in Jason's data directory — holds the same package, and copying it is the same
+install:
 
 ```
 cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply
