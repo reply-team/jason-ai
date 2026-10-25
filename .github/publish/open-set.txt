@@ -11,8 +11,10 @@ docs/INSTALL.md
 docs/api/
 docs/contracts/
 docs/golden-path.md
+docs/philosophy.md
 docs/plugins.md
 docs/ui.md
+examples/
 install/
 plugins/
 skills/

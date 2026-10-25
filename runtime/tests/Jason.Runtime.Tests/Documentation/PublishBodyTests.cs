@@ -71,7 +71,7 @@ public sealed class PublishBodyTests
             | Skills (`skills/`, `.claude-plugin/`) | 1 | 0 | 0 |
             | Plugins (`plugins/`) | 0 | 1 | 0 |
             | Contracts (`docs/contracts/`) | 2 | 1 | 1 |
-            | Documentation (`README.md`, `docs/`) | 0 | 1 | 0 |
+            | Documentation (`README.md`, `docs/`, `examples/`) | 0 | 1 | 0 |
             | Install path (`install/`) | 0 | 1 | 0 |
             | The UI (`ui/`) | 0 | 0 | 0 |
             | Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`, `TRADEMARKS.md`) | 0 | 0 | 0 |

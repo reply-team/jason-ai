@@ -41,7 +41,7 @@ $areas = @(
     [pscustomobject]@{ Name = 'Skills (`skills/`, `.claude-plugin/`)'; Paths = @('skills/', '.claude-plugin/') }
     [pscustomobject]@{ Name = 'Plugins (`plugins/`)'; Paths = @('plugins/') }
     [pscustomobject]@{ Name = 'Contracts (`docs/contracts/`)'; Paths = @('docs/contracts/') }
-    [pscustomobject]@{ Name = 'Documentation (`README.md`, `docs/`)'; Paths = @('README.md', 'docs/') }
+    [pscustomobject]@{ Name = 'Documentation (`README.md`, `docs/`, `examples/`)'; Paths = @('README.md', 'docs/', 'examples/') }
     [pscustomobject]@{ Name = 'Install path (`install/`)'; Paths = @('install/') }
     [pscustomobject]@{ Name = 'The UI (`ui/`)'; Paths = @('ui/') }
     # A row of its own, so that a change to the terms, to the notices or to the note on the marks reads as something

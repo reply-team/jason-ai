@@ -220,8 +220,7 @@ machine.
 
 **How you recognise it.** The status is `waiting`: a run of the item raised other work and ended by waiting for
 it, for a moment, or both. Its `wait` block says on which items, whether all of them or any one, and until when.
-A park on a provider block, once the runtime makes one, reads as this same `waiting` state with its block named,
-not as a twelfth.
+A park on a provider block reads as this same `waiting` state with its block named, not as a twelfth.
 
 ```
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human

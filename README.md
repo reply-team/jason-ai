@@ -21,6 +21,8 @@ and memory; Jason stands on those conventions, so most of the work happens insid
 makers take forward strengthens it. Nothing reaches a real person without your approval, and the skills, contracts and
 plugins are open, so the harness grows the way agent tooling does: by people adding what they need.
 
+The reasoning behind this, and who Jason is for and who it is not for, is in [docs/philosophy.md](docs/philosophy.md).
+
 > **Alpha.** Jason is early software: it does what this page says, and what it does changes from one release to the
 > next.
 >
@@ -93,6 +95,9 @@ and what it changed. If it can, ask me once whether I want a synthetic walk to m
 my real work at once.
 ```
 
+Once it runs, [examples/](examples/README.md) is where cases of Jason applied to outbound work are collected, with a
+template for sending your own.
+
 ## What this is
 
 A generic LLM or coding agent can *discuss* an outbound goal, but it does not automatically
@@ -160,7 +165,8 @@ One executable, three modes: the runtime service, which owns campaign and work s
 that writes it; the CLI, a pure client of the runtime's loopback API; and the plugin host, a short-lived process in
 which a plugin's JavaScript runs, so that it never runs inside the long-lived runtime. What a person, an agent or a
 plugin author needs is here:
-[docs/INSTALL.md](docs/INSTALL.md), [docs/plugins.md](docs/plugins.md), [docs/ui.md](docs/ui.md) for the browser UI, the contracts under
+[docs/philosophy.md](docs/philosophy.md) for what Jason is and who it is for, [docs/INSTALL.md](docs/INSTALL.md),
+[docs/plugins.md](docs/plugins.md), [docs/ui.md](docs/ui.md) for the browser UI, the contracts under
 [docs/contracts/](docs/contracts/README.md), and the skills under [`skills/`](skills).
 
 ## Repository layout
@@ -171,7 +177,8 @@ plugin author needs is here:
 | `skills/runtime/` | Skills that teach an agent to operate Jason: the interactive ones, and one per launched role |
 | `skills/business/` | Skills that teach an agent the SDR profession, independently of any provider or runtime |
 | `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
-| `docs/` | The install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
+| `docs/` | What Jason is and who it is for, the install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
+| `examples/` | Cases of Jason applied to outbound work, one folder each, and the template a case is written from |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
 | `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
 | `VERSION` | The runtime version this tree describes |
@@ -377,7 +384,8 @@ attempt at a time, and whatever performs it reports what happened through the sa
 <id> --human` shows its attempts and how each ended.
 
 Which agent host runs a piece of AI work is named by an **execution profile**, and each attempt keeps the
-revision of the profile it ran under; when no profile can run a piece of AI work it waits, blocked, and
+revision of the profile it ran under. In this release the host a profile can name is Claude Code; a profile naming
+another is refused when it is written. When no profile can run a piece of AI work it waits, blocked, and
 everything else keeps running:
 
 ```sh

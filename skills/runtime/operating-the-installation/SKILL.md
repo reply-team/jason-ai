@@ -339,8 +339,8 @@ pointing at a file being swapped. Noticing an update is yours; deciding to take 
 
 An update leaves the plugins under `~/.jason/plugins/` as they were, so afterwards `jason status`'s optional
 `plugin_package` check can fail: the package installed is an earlier release's. Its fact names the installed version,
-the version this release published, and the lines that place it; replacing a package is a change to the installation,
-so ask first, then `jason plugin reload`.
+the version this release published, and the step of the wiring check that prints the lines placing it; replacing a
+package is a change to the installation, so ask first, then `jason plugin reload`.
 
 ## Installing it in the first place
 
