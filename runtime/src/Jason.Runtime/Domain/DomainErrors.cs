@@ -176,6 +176,29 @@ public static class DomainErrors
 
     public static NotFoundException ApprovalNotFound(string id) => new("approval_not_found", $"No approval with id '{id}'.");
 
+    /// <summary>No provider block has this id. Nothing deletes a block, so this is a wrong id.</summary>
+    public static NotFoundException BlockNotFound(string id) => new("block_not_found", $"No provider block with id '{id}'.");
+
+    /// <summary>
+    /// The block is cleared already: by an attempt that got past it, perhaps a moment earlier, or by a person. Its work is
+    /// released by the next scan either way.
+    /// </summary>
+    public static ConflictException BlockNotOpen(string id) =>
+        new("block_not_open", $"Provider block '{id}' is cleared already; only an open block can be cleared.");
+
+    /// <summary>
+    /// A clear is a person's word that the cause is gone — the invoice paid, the account reconnected — and only an attempt
+    /// that gets past the block can say so for the runtime: a role or a run that clears one is deciding it for them.
+    /// </summary>
+    public static InvalidRequestException BlockNotHuman(ActorType type) =>
+        new(
+            "block_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot clear a provider block; a clear is a person's word that the cause is gone.");
+
+    /// <summary>The same code a decision without a named person is refused with: a clear records whose word it is.</summary>
+    public static InvalidRequestException BlockActorRequired() =>
+        new("actor_required", "actor.id is required on a block clear: what is recorded has to name the person whose word it is.");
+
     /// <summary>
     /// The decision has already been made, or the work it was about has moved on without it. Either way there is
     /// nothing here to decide, and the row says which of the two happened.

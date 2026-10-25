@@ -1,0 +1,65 @@
+{
+  "operation": "workitem.list",
+  "case": "by-block",
+  "request": {
+    "provider_block_id": "blk_1"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "wi_1",
+        "campaign_id": "cmp_1",
+        "contact_id": null,
+        "kind": "provider_op",
+        "role": null,
+        "operation": "message.send",
+        "execution_profile": null,
+        "status": "waiting",
+        "eligible": false,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": {
+          "code": "provider_blocked",
+          "message": "The account is out of credit.",
+          "retriable": true,
+          "class": "blocked",
+          "block": {
+            "scope": "account",
+            "reason": "billing",
+            "link": "https://provider.example.com/billing"
+          }
+        },
+        "created_at": "2026-10-15T12:00:00.000Z",
+        "updated_at": "2026-10-15T12:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": null,
+        "running_since": null,
+        "wait": {
+          "attempt_id": "att_1",
+          "mode": null,
+          "until": null,
+          "deadline": null,
+          "opened_at": "2026-10-15T12:00:00.000Z",
+          "on_count": 0,
+          "ended_count": 0,
+          "blocked_by": {
+            "provider_block_id": "blk_1",
+            "scope": "account",
+            "reason": "billing"
+          }
+        }
+      }
+    ],
+    "next_cursor": null
+  }
+}

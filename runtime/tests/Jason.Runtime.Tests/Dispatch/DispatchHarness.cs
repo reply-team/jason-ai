@@ -220,6 +220,9 @@ internal sealed class DispatchHarness : IDisposable
 
     public JasonDbContext Open() => _database.Open();
 
+    /// <summary>The file the harness's database lives in, for a context a test composes with interceptors of its own.</summary>
+    public string DatabaseFile => _database.File;
+
     /// <summary>
     /// Wedges another writer into the next save one of these services makes, which is how a test reproduces a
     /// race it could otherwise only hope for. Fires once, on the next save, and only for contexts the harness

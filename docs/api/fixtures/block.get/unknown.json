@@ -1,0 +1,15 @@
+{
+  "operation": "block.get",
+  "case": "unknown",
+  "request": {
+    "block_id": "blk_3"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "block_not_found",
+      "message": "No provider block with id 'blk_3'.",
+      "retryable": false
+    }
+  }
+}

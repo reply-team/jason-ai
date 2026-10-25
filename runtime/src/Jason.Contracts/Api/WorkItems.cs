@@ -283,7 +283,10 @@ public sealed record WorkItemListRequest(
 
     /// <summary>The end of the window, exclusive, on the same time.</summary>
     DateTimeOffset? Until = null,
-    WorkItemListOrder? Order = null);
+    WorkItemListOrder? Order = null,
+
+    /// <summary>The items parked on this provider block: those whose open wait names it.</summary>
+    string? ProviderBlockId = null);
 
 /// <summary>
 /// How many rows the same listing would walk through to its end: the list's filters, its window and its order (which
@@ -298,7 +301,10 @@ public sealed record WorkItemCountRequest(
     bool? Eligible,
     DateTimeOffset? Since,
     DateTimeOffset? Until,
-    WorkItemListOrder? Order);
+    WorkItemListOrder? Order,
+
+    /// <summary>The items parked on this provider block: those whose open wait names it.</summary>
+    string? ProviderBlockId = null);
 
 public sealed record WorkItemCountResponse(int Total);
 

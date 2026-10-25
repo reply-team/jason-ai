@@ -460,6 +460,18 @@ jason decision get <decision-id> --human
 jason decision answer <decision-id> --answer "pause it" --actor human:you@example.com
 ```
 
+When the provider refuses an account, or one sending account under it, for something the work cannot change, such as
+billing, a plan's allowance or a disconnected channel, the runtime keeps that as a **block** and holds the work it
+concerns until a call gets past it. A person who has removed the cause says so under their name, and the next scan lets
+the work go; an agent cannot clear a block:
+
+```sh
+jason block list --human
+jason block get <block-id> --human
+jason workitem list --block <block-id>
+jason block clear <block-id> --actor human:you@example.com --reason "the invoice is paid"
+```
+
 Effects that never went through Jason at all — something a person or an agent did with its own CLI, an
 MCP tool or by hand — are told to Jason afterwards and kept as the reporter's assertion, never as work
 Jason performed. They are read back like this:

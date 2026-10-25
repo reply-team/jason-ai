@@ -1436,6 +1436,16 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("cleared_by_attempt_id");
 
+                    b.Property<string>("ClearedById")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cleared_by_id");
+
+                    b.Property<string>("ClearedByType")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cleared_by_type");
+
                     b.Property<DateTime?>("ClearsAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("clears_at");

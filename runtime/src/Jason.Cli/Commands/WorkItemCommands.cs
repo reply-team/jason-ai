@@ -199,6 +199,7 @@ public static class WorkItemCommands
         private readonly Option<string?> _since = VerbOptions.Moment("--since", "Only items whose ordered time (created, due or finished, as --order says) is at or after this moment, as ISO-8601 UTC, or now. An item without that time is left out.");
         private readonly Option<string?> _until = VerbOptions.Moment("--until", "Only items whose ordered time is before this moment, as ISO-8601 UTC, or now.");
         private readonly Option<string?> _order = new("--order") { Description = "created (the default, oldest first), due (soonest first, undated last) or finished (newest first; open items are left out)." };
+        private readonly Option<string?> _block = new("--block") { Description = "Only the items this provider block holds, as blk_…: those whose open wait names it." };
 
         public ListingFilter(Command command)
         {
@@ -212,6 +213,7 @@ public static class WorkItemCommands
             command.Options.Add(_since);
             command.Options.Add(_until);
             command.Options.Add(_order);
+            command.Options.Add(_block);
         }
 
         public JsonObject Body(ParseResult parseResult) =>
@@ -224,7 +226,8 @@ public static class WorkItemCommands
                 .Set("eligible", Eligibility(parseResult.GetValue(_eligible), parseResult.GetValue(_notEligible)))
                 .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(_since), TimeProvider.System))
                 .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(_until), TimeProvider.System))
-                .Set("order", parseResult.GetValue(_order));
+                .Set("order", parseResult.GetValue(_order))
+                .Set("provider_block_id", parseResult.GetValue(_block));
     }
 
     private static Command Update(CliEnvironment env, Option<string?> actor)

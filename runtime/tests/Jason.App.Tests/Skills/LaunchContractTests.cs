@@ -168,7 +168,7 @@ public partial class LaunchContractTests
     /// A run that needs other work done first ends by waiting for it, and its next run is told why it woke: said once, in
     /// the block every role carries, because a role that held its attempt open to watch would keep its own campaign busy,
     /// and the work it watched would never be claimed. The reasons are the ones the runtime records, read from the
-    /// enumeration rather than typed here, less the one a role's wait never has.
+    /// enumeration rather than typed here, less the two a role's wait never has.
     /// </summary>
     [Fact]
     public void The_launch_contract_teaches_a_run_to_end_by_waiting_and_to_read_why_it_woke()
@@ -194,7 +194,7 @@ public partial class LaunchContractTests
         Assert.Contains("the envelope's `resumption` says why", contract, StringComparison.Ordinal);
         Assert.Contains("`resumption` is null when this run follows no wait", contract, StringComparison.Ordinal);
         Assert.Contains("`woke_because`", contract, StringComparison.Ordinal);
-        foreach (var reason in Enum.GetValues<WaitReleaseReason>().Where(reason => reason != WaitReleaseReason.BlockCleared))
+        foreach (var reason in Enum.GetValues<WaitReleaseReason>().Where(reason => reason is not (WaitReleaseReason.BlockCleared or WaitReleaseReason.BlockTrial)))
         {
             var word = $"`{JsonNamingPolicy.SnakeCaseLower.ConvertName(reason.ToString())}`";
             Assert.True(
@@ -203,6 +203,7 @@ public partial class LaunchContractTests
         }
 
         Assert.DoesNotContain("block_cleared", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("block_trial", contract, StringComparison.Ordinal);
         Assert.Contains("A result marked `result_omitted` did not fit: read it with `jason workitem get`.", contract, StringComparison.Ordinal);
         Assert.Contains("what that means for the work is yours to decide", contract, StringComparison.Ordinal);
     }

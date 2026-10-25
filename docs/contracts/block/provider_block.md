@@ -85,8 +85,9 @@ the account's, or one sender's under it — and holds the work it concerns: `rea
 operations wait on the block, as `waiting` with a `wait.blocked_by` naming it, until a call gets past it — one of
 them let through as the block's trial at the moment the provider said it clears by itself where that is ahead, a day
 at most; otherwise at the cadence. Every other operation's item ends final, and reads run through an open block. The
-`link` stays on the block and the error, where a person reads it: never in a log, a journal line, a notification or a
-`wait` block.
+`link` stays on the block, which `block.get` and `block.list` answer, and on the error, where a person reads it: never
+in a log, a journal line, a notification or a `wait` block. A person who has removed the cause clears the block with
+`block.clear`, under their name, and the next scan lets what it held go; a provider that refuses again opens a new block.
 A block that does not satisfy the schema is recorded `permanent`, with what is
 wrong with it named beside the error, so a malformed block never stands for a real one. A read made on request outside
 any work item, such as `contact.threads`, answers a blocked failure as an API error carrying the plugin's code with

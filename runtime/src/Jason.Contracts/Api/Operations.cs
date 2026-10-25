@@ -73,6 +73,10 @@ public static class Operations
     public const string ApprovalApprove = "approval.approve";
     public const string ApprovalReject = "approval.reject";
 
+    public const string BlockList = "block.list";
+    public const string BlockGet = "block.get";
+    public const string BlockClear = "block.clear";
+
     public const string DecisionRaise = "decision.raise";
     public const string DecisionAnswer = "decision.answer";
     public const string DecisionGet = "decision.get";

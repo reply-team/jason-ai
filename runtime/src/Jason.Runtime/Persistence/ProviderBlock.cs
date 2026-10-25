@@ -5,8 +5,8 @@ namespace Jason.Runtime.Persistence;
 /// <summary>
 /// One block a provider said it holds: a plugin and the identity of the binding the attempt ran under, the account as a
 /// whole or one sending account under it, why in the contract's words, and where a person goes to clear it. Opened by the
-/// attempt that met it, seen again by every later answer that names it, and cleared by the first call that gets past it.
-/// While it is open, the work it holds waits on it, and one item at a time is let through as its trial.
+/// attempt that met it, seen again by every later answer that names it, and cleared by the first call that gets past it
+/// or by a person who says the cause is gone. While it is open, the work it holds waits on it, and one item at a time is let through as its trial.
 /// </summary>
 /// <remarks>
 /// The account itself is never named: the binding identity is the <c>sha256:</c> of the binding's canonical form, or
@@ -64,8 +64,13 @@ public sealed class ProviderBlock
 
     public DateTime? ClearedAt { get; set; }
 
-    /// <summary>The attempt that got past the block; null while it is open.</summary>
+    /// <summary>The attempt that got past the block; null while it is open, and when a person cleared it.</summary>
     public int? ClearedByAttemptId { get; set; }
 
     public Attempt? ClearedByAttempt { get; set; }
+
+    /// <summary>Who cleared the block on their word, with <see cref="ClearedById"/>; null while it is open, and when an attempt got past it.</summary>
+    public ActorType? ClearedByType { get; set; }
+
+    public string? ClearedById { get; set; }
 }

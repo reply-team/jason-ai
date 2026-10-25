@@ -545,6 +545,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             block.Property(b => b.SenderExternalId).HasMaxLength(256);
             block.Property(b => b.Reason).HasMaxLength(32);
             block.Property(b => b.Link).HasMaxLength(2048);
+            block.Property(b => b.ClearedById).HasMaxLength(100);
 
             // The two halves of one rule, one open block per binding, scope and sender: SQLite holds nulls distinct, so
             // an account block, which names no sender, is held unique by an index of its own.

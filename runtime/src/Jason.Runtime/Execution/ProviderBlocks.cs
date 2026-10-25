@@ -211,6 +211,22 @@ public static class ProviderBlocks
     }
 
     /// <summary>
+    /// The block is cleared on a person's word that the cause is gone; the work it holds is released by the next scan, as
+    /// it is for a block an attempt got past. Not a mute: where the provider still enforces it, the next call that meets it
+    /// opens a new block.
+    /// </summary>
+    public static void ClearedBy(ProviderBlock block, ActorRef actor, DateTime now)
+    {
+        ArgumentNullException.ThrowIfNull(block);
+        ArgumentNullException.ThrowIfNull(actor);
+        block.Status = ProviderBlockStatus.Cleared;
+        block.ClearedAt = now;
+        block.ClearedByType = actor.Type;
+        block.ClearedById = actor.Id;
+        block.TrialWorkItemId = null;
+    }
+
+    /// <summary>
     /// Says, once per campaign, that a block holds its work: a reserved <c>provider_blocked</c> line under the block's
     /// public id, a default manager trigger. The block's link is never in it; the sender's identifier is, where the block
     /// is a sender's. A campaign that has already been told about this block is not told again, whichever of its items
@@ -263,7 +279,16 @@ public static class ProviderBlocks
     /// <c>provider_block_cleared</c> line under the block's public id. Not a trigger: what the block held runs again by
     /// itself, and the manager was told when it began.
     /// </summary>
-    public static async Task SayClearedAsync(JasonDbContext db, JournalWriter journal, ProviderBlock block, Attempt attempt, CancellationToken ct)
+    public static Task SayClearedAsync(JasonDbContext db, JournalWriter journal, ProviderBlock block, Attempt attempt, CancellationToken ct) =>
+        SayClearedAsync(db, journal, block, Actors.Dispatcher, attempt, reason: null, ct);
+
+    /// <summary>
+    /// The same line for a block a person cleared: under their name, with the reason they gave, and no attempt.
+    /// </summary>
+    public static Task SayClearedAsync(JasonDbContext db, JournalWriter journal, ProviderBlock block, ActorRef actor, string? reason, CancellationToken ct) =>
+        SayClearedAsync(db, journal, block, actor, attempt: null, reason, ct);
+
+    private static async Task SayClearedAsync(JasonDbContext db, JournalWriter journal, ProviderBlock block, ActorRef actor, Attempt? attempt, string? reason, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(journal);
@@ -283,11 +308,12 @@ public static class ProviderBlocks
             var campaign = await db.Campaigns.FirstAsync(c => c.Id == campaignId, ct).ConfigureAwait(false);
             journal.Append(
                 db,
-                Actors.Dispatcher,
+                actor,
                 JournalKinds.ProviderBlockCleared,
                 campaign,
                 key: block.PublicId,
                 updated: new JsonObject { ["provider_block_id"] = block.PublicId },
+                reason: reason,
                 attempt: attempt);
         }
     }

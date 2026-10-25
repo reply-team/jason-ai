@@ -150,11 +150,11 @@ public class ProviderBlockRaceTests
         Assert.False(ProviderBlocks.OpenedFirstElsewhere(refused), $"A refusal of another constraint was taken for a block opened elsewhere: {refused.InnerException?.Message}");
     }
 
-    private static Task RunAsync(DispatchHarness harness, ClaimedWork work) =>
+    internal static Task RunAsync(DispatchHarness harness, ClaimedWork work) =>
         AttemptHandler.RunAsync(harness.Scopes, work, harness.Registry, NullLogger.Instance);
 
     /// <summary>Two pauses on one account, each claimed, in one campaign or in two.</summary>
-    private static async Task<(ClaimedWork First, ClaimedWork Second)> SeedTwoClaimedAsync(DispatchHarness harness, bool oneCampaign)
+    internal static async Task<(ClaimedWork First, ClaimedWork Second)> SeedTwoClaimedAsync(DispatchHarness harness, bool oneCampaign)
     {
         await using var db = harness.Open();
         var first = WorkItemFactory.NewCampaign(now: Noon);
@@ -199,7 +199,7 @@ public class ProviderBlockRaceTests
         Launch: null);
 
     /// <summary>The account refused the call for its billing.</summary>
-    private static PluginInvocationResult Blocked() => new(
+    internal static PluginInvocationResult Blocked() => new(
         new InvocationOutcome.Failed(
             new OutcomeError(FailureClass.Blocked, "provider_blocked", "the plan has lapsed", null, null, new JsonObject { ["scope"] = "account", ["reason"] = "billing" }),
             new OutcomeDiagnostics(12, 1, 0, 1)),

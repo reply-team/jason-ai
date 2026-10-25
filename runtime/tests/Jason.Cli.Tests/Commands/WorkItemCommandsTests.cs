@@ -358,6 +358,18 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    public async Task List_and_count_ask_for_the_items_a_block_holds_by_its_id()
+    {
+        using var list = new CliRun();
+        Assert.Equal(ExitCodes.Success, await list.RunAsync("workitem", "list", "--block", "blk_7"));
+        list.AssertPosted(Operations.WorkItemList, "{\"provider_block_id\":\"blk_7\"}");
+
+        using var count = new CliRun("{\"total\":2}");
+        Assert.Equal(ExitCodes.Success, await count.RunAsync("workitem", "count", "--block", "blk_7"));
+        count.AssertPosted(Operations.WorkItemCount, "{\"provider_block_id\":\"blk_7\"}");
+    }
+
+    [Fact]
     public async Task Asking_for_both_eligibilities_is_a_usage_error()
     {
         using var cli = new CliRun();

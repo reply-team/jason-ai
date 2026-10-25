@@ -54,7 +54,7 @@ public class ProviderBlocksSchemaTests
             [
                 "public_id|1", "plugin_id|1", "binding_identity|1", "scope|1", "sender_external_id|0", "reason|1", "link|0", "clears_at|0",
                 "status|1", "opened_at|1", "opened_by_attempt_id|1", "last_seen_at|1", "seen_count|1", "next_trial_at|1",
-                "trial_work_item_id|0", "cleared_at|0", "cleared_by_attempt_id|0",
+                "trial_work_item_id|0", "cleared_at|0", "cleared_by_attempt_id|0", "cleared_by_id|0", "cleared_by_type|0",
             ],
             Rows(dir.Paths.DatabaseFile, "SELECT name, \"notnull\" FROM pragma_table_info('provider_blocks') WHERE name <> 'id' ORDER BY cid"));
         Assert.Equal(["0"], Rows(dir.Paths.DatabaseFile, "SELECT COUNT(*) FROM provider_blocks"));

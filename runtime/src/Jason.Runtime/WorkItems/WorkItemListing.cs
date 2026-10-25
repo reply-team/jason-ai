@@ -5,6 +5,7 @@ using Jason.Runtime.Campaigns;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.WorkItems;
 
@@ -18,18 +19,19 @@ internal sealed record WorkItemFilter(
     bool? Eligible,
     DateTimeOffset? Since,
     DateTimeOffset? Until,
-    WorkItemListOrder Order)
+    WorkItemListOrder Order,
+    string? ProviderBlockId = null)
 {
     public static WorkItemFilter From(WorkItemListRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return new(request.CampaignId, request.ContactId, request.Status, request.Kind, request.Role, request.Eligible, request.Since, request.Until, request.Order ?? WorkItemListOrder.Created);
+        return new(request.CampaignId, request.ContactId, request.Status, request.Kind, request.Role, request.Eligible, request.Since, request.Until, request.Order ?? WorkItemListOrder.Created, request.ProviderBlockId);
     }
 
     public static WorkItemFilter From(WorkItemCountRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return new(request.CampaignId, request.ContactId, request.Status, request.Kind, request.Role, request.Eligible, request.Since, request.Until, request.Order ?? WorkItemListOrder.Created);
+        return new(request.CampaignId, request.ContactId, request.Status, request.Kind, request.Role, request.Eligible, request.Since, request.Until, request.Order ?? WorkItemListOrder.Created, request.ProviderBlockId);
     }
 }
 
@@ -67,6 +69,17 @@ internal static class WorkItemListing
         {
             var contact = await ContactService.LoadAsync(db, filter.ContactId, cancellationToken).ConfigureAwait(false);
             query = query.Where(w => w.ContactId == contact.Id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.ProviderBlockId))
+        {
+            // The items a block holds are those whose open wait names it. Asked as a set of item ids, so the waits are read
+            // through their (provider_block_id, status) index and the items by their key, never by scanning either table.
+            var publicId = filter.ProviderBlockId.Trim();
+            var block = await db.ProviderBlocks.Where(b => b.PublicId == publicId).Select(b => (int?)b.Id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw DomainErrors.BlockNotFound(publicId);
+            var held = db.WorkItemWaits.Where(x => x.ProviderBlockId == block && x.Status == WaitStatus.Open).Select(x => x.WorkItemId);
+            query = query.Where(w => held.Contains(w.Id));
         }
 
         if (filter.Status is { Count: > 0 } wanted)

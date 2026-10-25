@@ -315,6 +315,59 @@ public class CliAgainstRuntimeTests
         Assert.Equal("actor_required", (string?)refused["error"]!["code"]);
     }
 
+    /// <summary>
+    /// A person reads what the provider blocks, finds the work it holds, reads where it is cleared, and clears it on their
+    /// own word: refused without one, cleared with one, and told plainly when it is cleared already or never existed.
+    /// </summary>
+    [Fact]
+    public async Task A_person_reads_a_block_finds_what_it_holds_and_clears_it_once()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        string block;
+        string held;
+        await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(fixture.Paths.DatabaseFile)))
+        {
+            var campaign = WorkItemFactory.NewCampaign("Autumn outreach");
+            var opener = WorkItemFactory.NewProviderOp(campaign, "message.send");
+            opener.Status = WorkItemStatus.Failed;
+            var row = Dispatch.BlockRows.Block(opener, DateTime.UtcNow, DateTime.UtcNow.AddHours(1));
+            row.Link = "https://provider.example.com/billing";
+            db.AddRange(campaign, opener, row);
+            held = Dispatch.BlockRows.Parked(db, campaign, row, DateTime.UtcNow).PublicId;
+            await db.SaveChangesAsync(Ct);
+            block = row.PublicId;
+        }
+
+        Assert.Equal(block, (string?)Assert.Single((await OkAsync(fixture, "block", "list"))["items"]!.AsArray())!["id"]);
+        var read = await OkAsync(fixture, "block", "get", block);
+        Assert.True(
+            (string?)read["link"] == "https://provider.example.com/billing" && (int?)read["held_count"] == 1,
+            $"The block read: {read.ToJsonString()}");
+        Assert.Equal(held, (string?)Assert.Single((await OkAsync(fixture, "workitem", "list", "--block", block))["items"]!.AsArray())!["id"]);
+
+        var (human, words, _) = await RunAsync(fixture, ["block", "get", block, "--human"]);
+        Assert.True(human == ExitCodes.Success && words.Contains("https://provider.example.com/billing", StringComparison.Ordinal), $"Exit {human}, the block said:{Environment.NewLine}{words}");
+
+        var (anonymous, _, said) = await RunAsync(fixture, ["block", "clear", block]);
+        Assert.True(anonymous == ExitCodes.Usage, $"A clear naming nobody exited {anonymous}: {said}");
+        var unnamed = await ErrorAsync(fixture, "--actor", "human", "block", "clear", block);
+        Assert.Equal("actor_required", (string?)unnamed["error"]!["code"]);
+        var agent = await ErrorAsync(fixture, "--actor", "role:planner", "block", "clear", block);
+        Assert.Equal("block_not_human", (string?)agent["error"]!["code"]);
+
+        var cleared = await OkAsync(fixture, "--actor", "human:ada@example.test", "block", "clear", block, "--reason", "the invoice is paid");
+        Assert.True(
+            (string?)cleared["status"] == "cleared" && (string?)cleared["cleared_by_actor"]!["id"] == "ada@example.test" && cleared["cleared_by_attempt_id"] is null,
+            $"The clear answered: {cleared.ToJsonString()}");
+        Assert.Empty((await OkAsync(fixture, "block", "list"))["items"]!.AsArray());
+        Assert.Single((await OkAsync(fixture, "block", "list", "--status", "cleared"))["items"]!.AsArray());
+
+        var again = await ErrorAsync(fixture, "--actor", "human:ada@example.test", "block", "clear", block);
+        Assert.Equal("block_not_open", (string?)again["error"]!["code"]);
+        var unknown = await ErrorAsync(fixture, "block", "get", "blk_01K52JR0000000000000000099");
+        Assert.Equal("block_not_found", (string?)unknown["error"]!["code"]);
+    }
+
     private static async Task<JsonObject> OkAsync(RuntimeApiFixture fixture, params string[] args)
     {
         var (exit, output, error) = await RunAsync(fixture, args);

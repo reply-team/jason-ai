@@ -176,7 +176,8 @@ public static partial class JournalKinds
 
     /// <summary>
     /// A provider block that held work of the campaign has cleared: keyed by the block's public id, in every campaign it
-    /// was said in. Not a trigger by default: the work it held runs again by itself.
+    /// was said in, by the dispatcher with the attempt that got past it, or by the person who cleared it with the reason
+    /// they gave and no attempt. Not a trigger by default: the work it held runs again by itself.
     /// </summary>
     public const string ProviderBlockCleared = "provider_block_cleared";
 

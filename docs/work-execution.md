@@ -347,7 +347,8 @@ what is still to run), `--order finished` lists newest first and leaves open wor
 (`jason workitem list --order finished --since 2026-10-16T00:00:00Z` is what finished since that moment), and
 `--since` and `--until` (`now` is the command line's own clock) keep the items whose ordered time falls inside, an item
 without that time left out. `jason workitem count` takes the same filters and answers how many items the listing would
-return, without paging through them.
+return, without paging through them. `--block blk_…` (`provider_block_id`) keeps the items a provider block holds: those
+whose open wait names it (§Provider blocks).
 
 ## A campaign's people, counted
 
@@ -715,6 +716,10 @@ settings at all and are never refused for this reason.
 | `wait_too_long` | 400 | the moment is later than `Dispatcher:AiRole:MaxWaitSeconds` from now |
 | `wait_limit_reached` | 409 | the item has already waited `Dispatcher:AiRole:MaxWaits` times; finish instead |
 | `workitem_not_waiting` | 409 | only a waiting item can be resumed; the message says where the item is |
+| `block_not_found` | 404 | no provider block with that id |
+| `block_not_open` | 409 | only an open block can be cleared; this one was cleared already, by a person or by a call that got past it |
+| `block_not_human` | 400 | a block is cleared on a person's word; a role or an attempt cannot clear one |
+| `actor_required` | 400 | the actor names no person: a block clear, like a decision, records whose word it is |
 | `settings_unreadable` | 503 | the settings are invalid and none have validated since the runtime started; repair the file and call again |
 | `internal_error` | 500 | the runtime failed to perform the operation, and `retryable: true` — except where what failed is a value stored in the database that this runtime cannot read, written by another version of Jason or changed outside it: then the message names its column, never its value, and `retryable: false`, since every read of it fails the same way until it is restored or repaired |
 | `validation_timed_out` | 503, and attempt | a pattern a value is measured against did not finish matching in time, twice, so nothing was decided and nothing changed: send the request again. At the claim the attempt ends `transient`; over a plugin's answer, `ambiguous` |
@@ -847,11 +852,38 @@ first of its items parks on that block — the block's id, scope, reason and `cl
 a sender's block the sender's identifier. It is a default manager trigger ([campaign manager](campaign-manager.md)):
 what reaches people has stopped, and whether to tell somebody or change course is the manager's. When the block
 clears, every campaign that was told is told so, once, `provider_block_cleared`, naming the attempt that got past it —
-the first, where two got past it at once; that line is not a trigger, since the work runs again by itself. Each parked
+the first, where two got past it at once — or, where a person cleared it, written as theirs, with their reason and no
+attempt; that line is not a trigger, since the work runs again by itself. Each parked
 item writes its own `workitem_waiting`, whose `blocked_by` names the block, and its release writes `workitem_resumed`
-with `block_cleared` or `block_trial`. The link where a person clears a block is kept on the block and on the
+with `block_cleared` or `block_trial`. The link where a person clears a block is kept on the block, which `block.get` and `block.list` answer, and on the
 `last_error.block` of every item it parks, where a person reads it, and nowhere else: never in a log, a journal line,
 a notification or a `wait` block.
+
+**A person's clear.** A block also clears on a person's word. A clear is a person's statement that the cause is gone,
+not a mute: `block.clear` clears an open block now, under the actor named and by no attempt, and tells every campaign
+that was told, once, as above. The actor is a person with a name, as for an approval: a role or an attempt is refused
+with `block_not_human` — an agent cannot clear a block — and an absent actor, or one with no id, with `actor_required`.
+The block's read, the campaigns told and the write are one transaction that holds the write lock from the read, so no
+campaign is told the block holds its work, and no trial is set on it, between what the clear reads and what it writes.
+It releases nothing itself: the next resume step releases every wait on the block with `block_cleared`, as it does
+after a call got past it, at most 500 a scan. Where the provider refuses again, the account or sender is
+blocked again as a new block with a new id, its campaigns are told again and the manager looks again. Clearing an
+account's block while a sender's block under it stays open follows the rule above: what names that sender parks again
+at its next claim, on the sender's block, which gets its own trial from then on. A block cleared already — by a person,
+or by a call that got past it first — is refused with `block_not_open`, and that clear stands; a call that read the block
+open before a person's clear and writes after it writes nothing, and the person's clear stands.
+
+| Operation | Request | Answers |
+|---|---|---|
+| `block.list` | `statuses?: [open\|cleared]` (`[open]` when absent), `plugin_id?`, `limit?`, `cursor?` | a page of blocks, newest opened first |
+| `block.get` | `block_id` | the block, or `block_not_found` |
+| `block.clear` | `block_id`, `actor`, `reason?` | the block, `cleared`, or `block_not_found`, `block_not_open`, `block_not_human` or `actor_required` |
+
+A block answers its id, `plugin_id`, `binding_identity`, `scope`, `sender_external_id`, `reason`, `link`, `clears_at`,
+`status`, `opened_at`, `last_seen_at`, `seen_count`, `next_trial_at`, `trial_work_item_id`, `opened_by_attempt_id`,
+`held_count` — the open waits parked on this block itself; an account's count leaves out what its senders' blocks
+hold — and `cleared_at` with `cleared_by_attempt_id` or `cleared_by_actor`.
+`jason workitem list --block <id>` names the items it holds.
 
 ## Roles
 

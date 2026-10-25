@@ -38,6 +38,8 @@ public class RecordedExchangesTests
     private const string ApprovalD = "apr_01K7QN0000000000000000000D";
     private const string DecisionA = "dec_01K7QN0000000000000000000A";
     private const string DecisionB = "dec_01K7QN0000000000000000000B";
+    private const string BlockA = "blk_01K7QN0000000000000000000A";
+    private const string BlockB = "blk_01K7QN0000000000000000000B";
 
     [Fact]
     public async Task Approval_list_pending_and_empty_and_decided()
@@ -94,6 +96,35 @@ public class RecordedExchangesTests
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
         await api.RecordUnauthorizedAsync(Operations.ApprovalList, "unauthorized", Ct);
+    }
+
+    /// <summary>
+    /// What the blocks screen reads and writes: what is blocked now and what was, one block with the link a person clears
+    /// it at, the work it holds, a person's clear, and the refusals a clear and a read can meet.
+    /// </summary>
+    [Fact]
+    public async Task Block_list_get_and_clear()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        await Seed.BlockAsync(api, BlockA, ProviderBlockScope.Account, sender: null, cleared: false);
+        await Seed.BlockAsync(api, BlockB, ProviderBlockScope.Sender, sender: "snd_01K7QN0000000000000000000B", cleared: true);
+
+        var open = await api.RecordAsync<Page<ProviderBlockDto>>(Operations.BlockList, "open", null, Ct);
+        Assert.Equal([BlockA], open.Items.Select(b => b.Id));
+        var history = await api.RecordAsync<Page<ProviderBlockDto>>(Operations.BlockList, "cleared", new { statuses = new[] { "cleared" } }, Ct);
+        Assert.Equal([BlockB], history.Items.Select(b => b.Id));
+
+        var one = await api.RecordAsync<ProviderBlockDto>(Operations.BlockGet, "one", new { block_id = BlockA }, Ct);
+        Assert.True(one is { HeldCount: 1, Link: "https://provider.example.com/billing" }, $"The block read held {one.HeldCount}, link {one.Link}.");
+        Assert.Equal("block_not_found", (await api.RecordErrorAsync(Operations.BlockGet, "unknown", new { block_id = "blk_01K7QN00000000000000000099" }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Single((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-block", new { provider_block_id = BlockA }, Ct)).Items);
+
+        var ada = new { type = "human", id = "ada" };
+        var cleared = await api.RecordAsync<ProviderBlockDto>(Operations.BlockClear, "cleared", new { block_id = BlockA, reason = "The invoice is paid.", actor = ada }, Ct);
+        Assert.True(
+            cleared is { Status: ProviderBlockStatus.Cleared, ClearedByAttemptId: null } && cleared.ClearedByActor == new ActorRef(ActorType.Human, "ada"),
+            $"The clear answered {cleared.Status}, by attempt {cleared.ClearedByAttemptId} and {cleared.ClearedByActor}.");
+        Assert.Equal("block_not_open", (await api.RecordErrorAsync(Operations.BlockClear, "not-open", new { block_id = BlockA, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
     }
 
     [Fact]
@@ -1253,6 +1284,74 @@ public class RecordedExchangesTests
             return new CampaignIds(
                 world.Spring.PublicId, world.Autumn.PublicId, world.Winter.PublicId, summer.PublicId, world.People["Hal"].PublicId, zoe.PublicId, adaApproval.PublicId, benQuestion.PublicId,
                 world.People["Oli"].PublicId);
+        }
+
+        /// <summary>
+        /// A block met by an attempt in the campaign, with the link where it is cleared; an open one holds one item, a
+        /// cleared one was got past by a later attempt and holds none. The attempt that met it is parked as the runtime
+        /// parks one: it ended blocked and was not counted, and its error, the block included, is the item's last error.
+        /// </summary>
+        public static async Task BlockAsync(RuntimeApiFixture api, string id, ProviderBlockScope scope, string? sender, bool cleared)
+        {
+            using var scopes = api.Resolve<IServiceScopeFactory>().CreateScope();
+            var db = scopes.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var campaign = await CampaignAsync(db);
+
+            var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+            opener.PublicId = "wi_" + id[4..];
+            opener.Status = cleared ? WorkItemStatus.Succeeded : WorkItemStatus.Waiting;
+            var met = WorkItemFactory.NewAttempt(opener, 1, AttemptStatus.Blocked, Noon);
+            met.PublicId = "att_" + id[4..];
+            met.FinishedAt = Noon;
+            var said = new JsonObject { ["scope"] = scope == ProviderBlockScope.Account ? "account" : "sender", ["reason"] = "billing" };
+            if (sender is not null)
+            {
+                said["sender_external_id"] = sender;
+            }
+
+            said["link"] = "https://provider.example.com/billing";
+            met.Error = new AttemptErrorDto(
+                Jason.Runtime.Execution.AttemptErrors.ProviderBlocked,
+                "The account is out of credit.",
+                true,
+                Class: FailureClass.Blocked,
+                Block: said);
+            opener.LastError = met.Error with { Block = said.DeepClone().AsObject() };
+            var block = new ProviderBlock
+            {
+                PublicId = id,
+                PluginId = "reply",
+                BindingIdentity = "sha256:" + new string('b', 64),
+                Scope = scope,
+                SenderExternalId = sender,
+                Reason = "billing",
+                Link = "https://provider.example.com/billing",
+                ClearsAt = Noon.AddDays(1),
+                OpenedAt = Noon,
+                OpenedByAttempt = met,
+                LastSeenAt = Noon.AddMinutes(30),
+                SeenCount = 2,
+                NextTrialAt = Noon.AddHours(1),
+            };
+            db.WorkItems.Add(opener);
+            db.Attempts.Add(met);
+            db.ProviderBlocks.Add(block);
+            if (cleared)
+            {
+                var past = WorkItemFactory.NewAttempt(opener, 2, AttemptStatus.Succeeded, Noon.AddHours(1));
+                past.PublicId = "att_" + id[4..^1] + "C";
+                past.FinishedAt = Noon.AddHours(1);
+                db.Attempts.Add(past);
+                block.Status = ProviderBlockStatus.Cleared;
+                block.ClearedAt = Noon.AddHours(1);
+                block.ClearedByAttempt = past;
+            }
+            else
+            {
+                db.WorkItemWaits.Add(new WorkItemWait { WorkItem = opener, Attempt = met, ProviderBlock = block, OpenedAt = Noon });
+            }
+
+            await db.SaveChangesAsync(Ct);
         }
 
         private static async Task<Campaign> CampaignAsync(JasonDbContext db)
