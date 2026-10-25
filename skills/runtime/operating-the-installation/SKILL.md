@@ -159,11 +159,12 @@ the runtime by hand.
 ## Notifications
 
 When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a
-protective action fails, or when it finds a span of an account's events it will not read, it tells them once, with a
-pointer: how many, and where to look. A pointer that says an account has events Jason did not read sends you to
-`jason events sources`, as "The accounts whose events it reads" says. The toast, the operating system's own
-notification, is on by default and needs nothing set up; `jason runtime status --human` says on its `Notify:` line what
-each channel did last.
+protective action fails, when it finds a span of an account's events it will not read, or when a provider block is
+open, it tells them once, with a pointer: how many, and where to look. A pointer that says an account has events
+Jason did not read sends you to `jason events sources`, as "The accounts whose events it reads" says. One that says
+provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where the
+person clears it. The toast, the operating system's own notification, is on by default and needs nothing set up;
+`jason runtime status --human` says on its `Notify:` line what each channel did last.
 `Notifications:Enabled` set to `false` in `~/.jason/config/settings.json` turns all of it off, and
 `Notifications:Toast` set to `false` turns off the toast alone. `docs/notifications.md` says when a burst is said, and
 what a pointer never carries.

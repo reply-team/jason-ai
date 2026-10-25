@@ -28,7 +28,7 @@ export function socialInvitationSend(input, context) {
 
   const withNote = args.note !== null;
   const done = sendTo(
-    OPERATION, context, input, COMMAND,
+    OPERATION, context, input, COMMAND, sender,
     ["--linkedin-account-id", sender].concat(withNote ? ["--message", "-"] : []),
     withNote ? { note: args.note } : undefined);
   const sent = done.sent;

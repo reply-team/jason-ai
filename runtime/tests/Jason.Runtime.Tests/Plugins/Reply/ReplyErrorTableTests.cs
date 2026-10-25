@@ -317,16 +317,53 @@ public partial class ReplyErrorTableTests
     }
 
     /// <summary>
-    /// Every operation declares the provider block, so the table has its row; but reply-cli publishes no code that says
-    /// Reply refused a call for money, an allowance, a key or a channel and did nothing for it, so no code maps to the row
-    /// and nothing reaches it. Mapping one of today's codes there would assert that Reply did nothing where the CLI never
-    /// said so. The README names the row as the place the switch lands.
+    /// A row of class <c>blocked</c> is the only kind that says what is blocked, and says it in the block contract's own
+    /// words: the scope and the reason travel from the row, so a row that named a scope or a reason the contract does not
+    /// publish would make every failure through it one the runtime refuses. The shared row carries none: every operation
+    /// declares the block, so the table has the row, but the only refusals reply-cli has a code for that say Reply did
+    /// nothing for a reason outside the work are a sending account's, and those land on the sends' own rows. Nothing maps
+    /// to the shared row, and the README names it as the place a code for the account's money, plan or key lands once
+    /// the CLI publishes one.
     /// </summary>
     [Fact]
-    public void The_block_has_a_row_that_nothing_reaches_until_the_cli_says_so()
+    public void Every_row_of_class_blocked_says_what_is_blocked_in_the_contract_s_words()
     {
-        var row = ReplyErrorTable.Shared["account_or_sender_blocked"]!.AsObject();
-        Assert.Equal(("provider_blocked", "blocked"), (Text(row, "code"), Text(row, "class")));
+        var properties = ProviderBlockContract.Published.Schema["properties"]!;
+        var scopes = properties["scope"]!["enum"]!.AsArray().Select(value => value!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        var reasons = properties["reason"]!["enum"]!.AsArray().Select(value => value!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        var blocked = 0;
+
+        foreach (var (where, key, row) in ReplyErrorTable.AllRows())
+        {
+            if (Text(row, "class") != "blocked" || where == "shared")
+            {
+                Assert.True(row["block"] is null, $"{where} row '{key}' of class '{Text(row, "class")}' carries a block: {row["block"]?.ToJsonString()}.");
+                continue;
+            }
+
+            blocked++;
+            var block = Assert.IsType<JsonObject>(row["block"]);
+            Assert.True(
+                block.Select(member => member.Key).Order(StringComparer.Ordinal).SequenceEqual(["reason", "scope"]),
+                $"{where} row '{key}' says {block.ToJsonString()}; a row says the scope and the reason, and the rest comes from the answer.");
+            Assert.True(scopes.Contains(Text(block, "scope")), $"{where} row '{key}' names the scope '{Text(block, "scope")}', which the contract does not publish.");
+            Assert.True(reasons.Contains(Text(block, "reason")), $"{where} row '{key}' names the reason '{Text(block, "reason")}', which the contract does not publish.");
+
+            // A command that ran from no sending account has no sender to name, so a sender's block names the permanent
+            // row such a command ends in instead.
+            if (Text(block, "scope") == "sender")
+            {
+                var unnamed = row["unnamed_sender"]?.GetValue<string>();
+                Assert.True(
+                    unnamed is not null && ReplyErrorTable.Own(where)[unnamed] is JsonObject fallback && Text(fallback, "class") == "permanent",
+                    $"{where} row '{key}' names no permanent row for a command that ran from no sending account: '{unnamed}'.");
+            }
+        }
+
+        Assert.True(blocked == 4, $"the table has {blocked} rows that say a block; the two sends have two each.");
+
+        var shared = ReplyErrorTable.Shared["account_or_sender_blocked"]!.AsObject();
+        Assert.Equal(("provider_blocked", "blocked"), (Text(shared, "code"), Text(shared, "class")));
 
         var mapped = ReplyErrorTable.Codes["shared"]!.AsObject().Select(entry => entry.Value!.GetValue<string>())
             .Concat(ReplyErrorTable.Codes["per_operation"]!.AsObject().SelectMany(operation => operation.Value!.AsObject().Select(entry => entry.Value!.GetValue<string>())));
@@ -335,6 +372,80 @@ public partial class ReplyErrorTableTests
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
         Assert.Contains("| `provider_blocked` | blocked |", readme, StringComparison.Ordinal);
         Assert.Contains("`account_or_sender_blocked`", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The two sends report a sending account Reply refused for its own state as that sender's block: turned off or
+    /// disconnected is its channel, a spent daily or weekly allowance its limit. What a format needs and the account
+    /// lacks — Sales Navigator for an InMail, a voice profile for a voice message — is about the format, since the same
+    /// account still sends a plain message, and InMail credits keep their own word; neither holds anything.
+    /// </summary>
+    [Theory]
+    [InlineData("social_invitation.send")]
+    [InlineData("message.send")]
+    public void The_sends_say_the_sender_s_block_for_the_codes_reply_cli_has_for_one(string operation)
+    {
+        var codes = ReplyErrorTable.Codes["per_operation"]![operation]!.AsObject();
+        var rows = ReplyErrorTable.Own(operation);
+
+        Assert.Equal(
+            ["sender_blocked_channel", "sender_blocked_channel", "sender_blocked_limit"],
+            new[] { "linkedin.account_inactive", "linkedin.invalid_cookie", "linkedin.limit_reached" }.Select(code => (string?)codes[code]));
+        Assert.Equal("""{"scope":"sender","reason":"channel"}""", rows["sender_blocked_channel"]!["block"]!.ToJsonString());
+        Assert.Equal("""{"scope":"sender","reason":"limit"}""", rows["sender_blocked_limit"]!["block"]!.ToJsonString());
+
+        if (operation == "message.send")
+        {
+            Assert.Equal(
+                ["sender_unavailable", "sender_unavailable", "sender_unavailable", "no_inmail_credits"],
+                new[] { "linkedin.sales_navigator_required", "linkedin.sales_navigator_disconnected", "linkedin.voice_profile_missing", "linkedin.no_inmail_credits" }
+                    .Select(code => (string?)codes[code]));
+        }
+
+        // The account Reply's own list shows turned off or disconnected is refused by name before the send, from send.js.
+        var send = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "modules", "send.js"));
+        Assert.Contains("row: \"sender_blocked_channel\"", send, StringComparison.Ordinal);
+        Assert.DoesNotContain("row: \"sender_unavailable\"", send, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The README's table for each send says the same as the error table about the block: every reply-cli code the table
+    /// maps to a row of class <c>blocked</c> is named in a README row whose code is <c>provider_blocked</c>, and in no
+    /// other row of that table, so a person reading why their invitation is held reads what the package does.
+    /// </summary>
+    [Theory]
+    [InlineData("social_invitation.send")]
+    [InlineData("message.send")]
+    public void The_readme_says_the_sender_s_block_where_the_table_does(string operation)
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var heading = $"\n### `{operation}`\n";
+        var start = readme.IndexOf(heading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"The README has no section for {operation}.");
+        var end = readme.IndexOf("\n#", start + heading.Length, StringComparison.Ordinal);
+        var rows = readme[start..(end < 0 ? readme.Length : end)].Split('\n')
+            .Where(line => line.StartsWith("| ", StringComparison.Ordinal) && !line.StartsWith("| When ", StringComparison.Ordinal))
+            .Select(line => line.Split('|'))
+            .ToList();
+        Assert.NotEmpty(rows);
+
+        var own = ReplyErrorTable.Own(operation);
+        var blocking = ReplyErrorTable.Codes["per_operation"]![operation]!.AsObject()
+            .Where(entry => own[entry.Value!.GetValue<string>()] is JsonObject row && Text(row, "class") == "blocked")
+            .Select(entry => entry.Key)
+            .ToList();
+        Assert.NotEmpty(blocking);
+
+        foreach (var code in blocking)
+        {
+            var naming = rows.Where(columns => columns[1].Contains($"`{code}`", StringComparison.Ordinal)).ToList();
+            Assert.True(naming.Count > 0, $"The README's {operation} table names '{code}' nowhere.");
+            Assert.All(
+                naming,
+                columns => Assert.True(
+                    columns[2].Trim() == "`provider_blocked`" && columns[3].Trim() == "blocked",
+                    $"The README's {operation} table names '{code}' under {columns[2].Trim()} {columns[3].Trim()}; the error table makes it the sender's block."));
+        }
     }
 
     /// <summary>

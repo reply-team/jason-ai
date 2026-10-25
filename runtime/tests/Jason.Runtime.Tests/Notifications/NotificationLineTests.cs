@@ -28,7 +28,8 @@ public sealed class NotificationLineTests
         At,
         2,
         "jrn_delivered",
-        1);
+        1,
+        4);
 
     [Fact]
     public void The_line_is_the_published_shape()
@@ -36,7 +37,7 @@ public sealed class NotificationLineTests
         var expected = JsonNode.Parse("""
             {
               "notification_id": "ntf_one",
-              "counts": { "approvals": 3, "decisions": 1, "protective_failures": 2, "event_gaps": 1 },
+              "counts": { "approvals": 3, "decisions": 1, "protective_failures": 2, "event_gaps": 1, "blocks": 4 },
               "covered_through": "jrn_covered",
               "channels": [
                 { "channel": "toast", "kind": "toast", "outcome": "delivered", "attempts": 1 },

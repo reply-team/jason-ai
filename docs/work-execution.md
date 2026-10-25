@@ -857,7 +857,8 @@ attempt; that line is not a trigger, since the work runs again by itself. Each p
 item writes its own `workitem_waiting`, whose `blocked_by` names the block, and its release writes `workitem_resumed`
 with `block_cleared` or `block_trial`. The link where a person clears a block is kept on the block, which `block.get` and `block.list` answer, and on the
 `last_error.block` of every item it parks, where a person reads it, and nowhere else: never in a log, a journal line,
-a notification or a `wait` block.
+a notification or a `wait` block. A person is pointed at the block too, once, by the notification that counts it
+([notifications.md](notifications.md)): how many blocks are open and how many work items they hold, and nothing else.
 
 **A person's clear.** A block also clears on a person's word. A clear is a person's statement that the cause is gone,
 not a mute: `block.clear` clears an open block now, under the actor named and by no attempt, and tells every campaign

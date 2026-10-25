@@ -199,4 +199,28 @@ public partial class RoleSkillTests
             "jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status waiting",
             SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("manager").File)));
     }
+
+    /// <summary>
+    /// A block summons the manager because what reaches people stopped: it says what stopped and why, and decides with the
+    /// person whether to pause or wait for the trial. Clearing the block is the person's word that the cause is gone, never
+    /// the manager's; and the line that says it cleared wakes nobody, because the work runs again by itself.
+    /// </summary>
+    [Fact]
+    public void The_manager_woken_by_a_block_says_what_stopped_and_never_clears_it()
+    {
+        var skill = Flattened("manager");
+
+        var events = skill.IndexOf("## When a provider event woke you", StringComparison.Ordinal);
+        var block = skill.IndexOf("## When a provider block woke you", StringComparison.Ordinal);
+        var boundary = skill.IndexOf("## What you may decide yourself", StringComparison.Ordinal);
+        Assert.True(
+            events >= 0 && block > events && boundary > block,
+            $"Provider events open at {events}, the block at {block} and the boundary at {boundary}: the block comes between them.");
+        Assert.Contains("`trigger` is `provider_blocked` when the provider refused the account, or one sending account under it", skill, StringComparison.Ordinal);
+        Assert.Contains("it never carries the link", skill, StringComparison.Ordinal);
+        Assert.Contains("In your review, say what stopped and why", skill, StringComparison.Ordinal);
+        Assert.Contains("decide with the person, by one question, whether to pause the campaign or wait for the block's trial", skill, StringComparison.Ordinal);
+        Assert.Contains("**You never clear a block yourself**: a clear is a person's word that the cause is gone, and it is theirs to give.", skill, StringComparison.Ordinal);
+        Assert.Contains("the campaign is told `provider_block_cleared`, and that line wakes nobody", skill, StringComparison.Ordinal);
+    }
 }

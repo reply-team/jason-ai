@@ -7,7 +7,7 @@ the contract for the `Notifications` section of the settings, the toast, notific
 
 ## 1. What notifies, and what does not
 
-Four things, and only these:
+Five things, and only these:
 
 - **an approval parked at a claim** — a provider operation that needs a person's yes before it runs
   ([work-execution.md](work-execution.md));
@@ -18,16 +18,25 @@ Four things, and only these:
   summoned ([campaign-manager.md](campaign-manager.md)), so a pointer is how such a failure reaches a person;
 - **an account whose events were not read** — a span older than the 30 days a read of an account's events reaches back,
   said once as an `events_gap_observed` line ([events.md](events.md) §5). It concerns no campaign, so no manager is
-  woken by it.
+  woken by it;
+- **an open provider block** — the provider refused a call for the account, or for one sending account under it, rather
+  than for the work, and the runtime holds the work that block concerns until a trial gets past it
+  ([work-execution.md](work-execution.md) §Provider blocks). It is said once, by block, from the first
+  `provider_blocked` line it writes; a block cleared before the pointer is sent is not said. A protective action a block
+  holds is parked, not failed, so it is said here and never as a protective action that failed. A block is said while it
+  is open, whatever it holds, because it is still the person's to fix and the next item parks on it. The work items it
+  holds are the work items parked on it, as `block.get`'s `held_count` counts them, so a pointer's count,
+  `jason block get` and `jason workitem list --block` agree. Whether a block is the account's or one sending account's,
+  and what lifts it, is read at `jason block list`; the pointer says only how many.
 
 Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work
-that failed, and not a protective action somebody cancelled — a cancellation is a decision. A person who answers a
-question is not told that they answered it.
+that failed, not a block that cleared, and not a protective action somebody cancelled — a cancellation is a decision. A
+person who answers a question is not told that they answered it.
 
 A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how many
-accounts have events Jason did not read, and where to look. It decides nothing, and nothing is approved by reacting to
-it. An approval is a person's decision, recorded as theirs, made where they read what they are approving — through
-their agent, or `jason approval list` and `jason approval approve`.
+accounts have events Jason did not read, how many provider blocks hold how many work items, and where to look. It
+decides nothing, and nothing is approved by reacting to it. An approval is a person's decision, recorded as theirs, made
+where they read what they are approving — through their agent, or `jason approval list` and `jason approval approve`.
 
 ## 2. When
 
@@ -76,24 +85,35 @@ Jason
 Ask your agent what Jason did not read, or run jason events sources.
 ```
 
-The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
-answered before it was said says nothing at all; how many protective actions failed, and how many accounts have events
-Jason did not read, **since the last notification that reached anybody** — counted from that one's line, so a
-notification that reached nobody leaves them for the next; and where to look. Said beside anything else, an account
-whose events were not read makes where to look the commands of each thing alone, the record of the accounts last — "Ask
-your agent, or run jason approval list, jason decision list, jason workitem list --status failed --status expired and
-jason events sources." — so that four things said at once still fit the message the delivery contract takes. Past three
+And where a provider block holds work:
+
+```text
+Jason
+1 provider block holds 4 work items in Jason.
+Ask your agent what is blocked, or run jason block list.
+```
+
+The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst answered
+before it was said says nothing at all; how many protective actions failed, how many accounts have events Jason did not
+read, and how many provider blocks opened, **since the last notification that reached anybody** — counted from that
+one's line, so a notification that reached nobody leaves them for the next; of those blocks, only the ones still open
+when it is sent, with the work items they hold then; and where to look. Said beside anything else, a provider block or
+an account whose events were not read makes where to look the commands of each thing alone, in the order they are said —
+"Ask your agent, or run jason approval list, jason decision list, jason workitem list --status failed --status expired,
+jason block list and jason events sources." — so that five things said at once still fit the message the delivery
+contract takes; beside a provider block, failed protective work names one campaign and counts the rest. Past three
 campaigns, the rest are counted: "… in cmp_…, cmp_…, cmp_… and 2 more." A count past 9999 is said as "10k+", so the
 longest pointer fits whatever the counts are; the line keeps the counts themselves. That is every field.
 
 **What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a
 question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a
 work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three
-of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not
-read, nothing travels but how many such accounts there are. The pointer is made from four counts, those ids, and nothing
-else. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written
-by the person for themselves, and a notification is read by whoever can see the screen, the phone or, on a public
-ntfy server, the topic.
+of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read,
+nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are
+and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign.
+The pointer is made from five counts, those ids, and nothing else. A campaign's name is the plainest example of why: it
+is often a customer's name or a deal, written by the person for themselves, and a notification is read by whoever can
+see the screen, the phone or, on a public ntfy server, the topic.
 
 ## 4. Where it can appear
 
@@ -134,7 +154,7 @@ wakes a manager:
 ```json
 {
   "notification_id": "ntf_01K…",
-  "counts": { "approvals": 3, "decisions": 1, "protective_failures": 0, "event_gaps": 0 },
+  "counts": { "approvals": 3, "decisions": 1, "protective_failures": 0, "event_gaps": 0, "blocks": 0 },
   "covered_through": "jrn_01K…",
   "channels": [
     { "channel": "toast", "kind": "toast", "outcome": "delivered", "attempts": 1 },
@@ -156,6 +176,11 @@ start that ever wrote a line is not counted by a pointer — the work-item list 
 `counts.event_gaps` is how many accounts had events Jason did not read in the same window, counted by account however
 many gap lines one has, carried forward by a notification that reached nobody the same way, and sent to a channel only
 as words.
+
+`counts.blocks` is how many provider blocks were first said in the same window — a block whose first `provider_blocked`
+line came before it was counted by an earlier pointer — and were still open when this notification was sent, counted by
+block however many campaigns were told about one. It is carried forward by a notification that reached nobody the same
+way, and sent to a channel only as words, beside the work items those blocks held then, which the line does not keep.
 
 A notification is a pointer. Each channel's outcome is one of `delivered`; `failed`, with its code and class — a
 server still unreachable after its one retry is failed, and so is a delivery whose input the runtime's own half of the

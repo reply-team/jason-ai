@@ -218,9 +218,9 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// When the pointer is sent: a person waited for, a protective action that failed, and a span of an account's events
-    /// Jason will not read. A skill that named fewer would have a session tell a person that a notification about the
-    /// others cannot have come from Jason.
+    /// When the pointer is sent: a person waited for, a protective action that failed, a span of an account's events Jason
+    /// will not read, and an open provider block. A skill that named fewer would have a session tell a person that a
+    /// notification about the others cannot have come from Jason.
     /// </summary>
     [Fact]
     public void The_operating_skill_says_a_failed_protective_action_and_a_span_not_read_are_told_as_well()
@@ -228,7 +228,7 @@ public partial class InteractiveSkillTests
         var skill = Flattened("operating-the-installation");
 
         Assert.Contains(
-            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, or when it finds a span of an account's events it will not read, it tells them once, with a pointer: how many, and where to look.",
+            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, when it finds a span of an account's events it will not read, or when a provider block is open, it tells them once, with a pointer: how many, and where to look.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -480,5 +480,15 @@ public partial class InteractiveSkillTests
         // A session asked for one plugin by name in both gated runs, and both times typed `plugin get`, which
         // does not exist. The skill names the whole plugin vocabulary rather than leaving the gap to a guess.
         Assert.Contains("there is no `jason plugin get`", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>The list of what a notification says names a provider block, and where its pointer sends the person.</summary>
+    [Fact]
+    public void The_operating_skill_says_a_notification_points_at_a_provider_block()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains("when it finds a span of an account's events it will not read, or when a provider block is open, it tells them once", skill, StringComparison.Ordinal);
+        Assert.Contains("One that says provider blocks hold work items sends you to `jason block list`", skill, StringComparison.Ordinal);
     }
 }

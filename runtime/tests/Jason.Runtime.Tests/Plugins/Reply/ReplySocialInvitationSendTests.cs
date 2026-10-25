@@ -606,10 +606,14 @@ public class ReplySocialInvitationSendTests
         Assert.Empty(account.Sent);
     }
 
+    /// <summary>
+    /// A sender Reply lists as turned off or disconnected is the sender's block, decided before the invitation: the
+    /// runtime holds the work that sender sends until a trial gets past it, rather than ending each item final.
+    /// </summary>
     [Theory]
     [InlineData("disabled")]
     [InlineData("cookieInvalid")]
-    public async Task A_sender_that_cannot_send_now_is_refused_before_the_invitation(string status)
+    public async Task A_sender_that_cannot_send_now_is_the_sender_s_block_before_the_invitation(string status)
     {
         using var account = Planted().WithSender(34, "linkedin", "Ann Owner", SenderProfile, status: status);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -617,11 +621,37 @@ public class ReplySocialInvitationSendTests
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
 
-        Assert.Equal(("sender_unavailable", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"channel"}""", ReplyOperations.Blocked(error));
         Assert.Equal(status, (string?)error.Details!["provider_code"]);
         Assert.Equal(["account list"], Lines(account));
     }
 
+    /// <summary>The same two states, where Reply's list still showed the account on and the invitation itself was refused.</summary>
+    [Theory]
+    [InlineData("linkedin.account_inactive", "directLinkedIn.linkedInAccountInactive")]
+    [InlineData("linkedin.invalid_cookie", "directLinkedIn.invalidCookie")]
+    public async Task A_sender_the_invitation_finds_turned_off_or_disconnected_is_the_sender_s_block(string cliCode, string replyCode)
+    {
+        using var account = Planted();
+        account.Refuses(
+            "contact linkedin-connect", cliCode, status: 409, replyCode: replyCode,
+            ids: new JsonObject { ["contact_id"] = 1001, ["linkedin_account_id"] = 34 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"channel"}""", ReplyOperations.Blocked(error));
+        Assert.Equal(replyCode, (string?)error.Details!["provider_code"]);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A spent allowance is the sender's block for a limit. reply-cli says no wait on it here, so the block names no
+    /// moment it clears, and the runtime tries it on its own cadence.
+    /// </summary>
     [Theory]
     [InlineData("daily")]
     [InlineData("weekly")]
@@ -633,8 +663,57 @@ public class ReplySocialInvitationSendTests
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
 
-        Assert.Equal(("sender_limit_reached", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"limit"}""", ReplyOperations.Blocked(error));
         Assert.Equal(limit, (string?)error.Details!["limit"]);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>Where reply-cli says how long to wait, the block says when it clears: that long after the answer.</summary>
+    [Fact]
+    public async Task A_spent_allowance_with_a_wait_says_when_the_block_clears()
+    {
+        const int Wait = 3600;
+        using var account = Planted();
+        account.Refuses(
+            "contact linkedin-connect", "linkedin.limit_reached", status: 429, replyCode: "directLinkedIn.weeklyLimitReached",
+            ids: new JsonObject { ["contact_id"] = 1001, ["linkedin_account_id"] = 34 },
+            details: new JsonObject { ["limit"] = "weekly" }, retryAfter: Wait);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var before = DateTimeOffset.UtcNow;
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
+        var after = DateTimeOffset.UtcNow;
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        ReplyOperations.Blocked(error);
+        Assert.Equal(("sender", "34", "limit"), ((string?)error.Block!["scope"], (string?)error.Block["sender_external_id"], (string?)error.Block["reason"]));
+        ReplyOperations.ClearsAfter(error, before, after, Wait);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A sender's refusal answered by a command that ran from no sending account — here the read of the pinned contact,
+    /// before the invitation — has no account a block could name: it ends in the operation's own permanent word for that
+    /// refusal, and holds nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin.account_inactive", "directLinkedIn.linkedInAccountInactive", "sender_unavailable")]
+    [InlineData("linkedin.invalid_cookie", "directLinkedIn.invalidCookie", "sender_unavailable")]
+    [InlineData("linkedin.limit_reached", "directLinkedIn.dailyLimitReached", "sender_limit_reached")]
+    public async Task A_sender_s_refusal_from_a_command_run_from_no_sender_is_no_block(string cliCode, string replyCode, string code)
+    {
+        using var account = Planted();
+        account.Refuses("contact get", cliCode, status: 409, replyCode: replyCode);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
+
+        Assert.Equal((code, FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Null(error.Block);
+        Assert.Equal(["account list", "contact get 1001"], Lines(account));
         Assert.Empty(account.Sent);
     }
 

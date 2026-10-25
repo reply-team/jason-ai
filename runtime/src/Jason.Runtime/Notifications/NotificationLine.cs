@@ -11,7 +11,7 @@ namespace Jason.Runtime.Notifications;
 /// it carries forward.
 /// </summary>
 /// <remarks>
-/// It names no campaign, work item or attempt, so it never wakes a manager; and it holds three counts, two journal
+/// It names no campaign, work item or attempt, so it never wakes a manager; and it holds five counts, two journal
 /// positions and the channels' outcomes, never what the notification said.
 /// </remarks>
 public sealed record NotificationLine(
@@ -23,7 +23,8 @@ public sealed record NotificationLine(
     DateTime? LastDeliveredAt,
     int ProtectiveFailures = 0,
     string? DeliveredThrough = null,
-    int EventGaps = 0)
+    int EventGaps = 0,
+    int Blocks = 0)
 {
     public const string CoveredThroughKey = "covered_through";
 
@@ -69,7 +70,7 @@ public sealed record NotificationLine(
         return new JsonObject
         {
             ["notification_id"] = NotificationId,
-            ["counts"] = new JsonObject { ["approvals"] = Approvals, ["decisions"] = Decisions, ["protective_failures"] = ProtectiveFailures, ["event_gaps"] = EventGaps },
+            ["counts"] = new JsonObject { ["approvals"] = Approvals, ["decisions"] = Decisions, ["protective_failures"] = ProtectiveFailures, ["event_gaps"] = EventGaps, ["blocks"] = Blocks },
             [CoveredThroughKey] = CoveredThrough,
             ["channels"] = channels,
             [LastDeliveredAtKey] = LastDeliveredAt is { } at ? Format(at) : null,
@@ -121,7 +122,8 @@ public sealed record NotificationLine(
             lastDeliveredAt,
             Number(counts["protective_failures"]),
             ReadDeliveredThrough(line),
-            Number(counts["event_gaps"]));
+            Number(counts["event_gaps"]),
+            Number(counts["blocks"]));
     }
 
     /// <summary>

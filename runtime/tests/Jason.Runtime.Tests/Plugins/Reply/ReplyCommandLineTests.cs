@@ -429,6 +429,39 @@ internal static class ReplyOperations
         return failed.Error;
     }
 
+    /// <summary>
+    /// The block a failure carries, held to the published block contract first, as compact JSON for a test to compare
+    /// with the block it expects.
+    /// </summary>
+    public static string Blocked(OutcomeError error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        Assert.True(error.Block is not null, $"The failure '{error.Code}' carries no block.");
+        var problems = ProviderBlockContract.Published.Check(error.Block);
+        Assert.True(
+            problems.Count == 0,
+            $"The block {error.Block.ToJsonString()} breaks its contract: {string.Join("; ", problems.Select(problem => $"{problem.Pointer} {problem.Message}"))}");
+        return error.Block.ToJsonString();
+    }
+
+    /// <summary>
+    /// That a block clears <paramref name="seconds"/> after the answer that carried it: no earlier than that long after
+    /// <paramref name="before"/>, read to the millisecond a plugin's clock gives, and no later than that long after
+    /// <paramref name="after"/>.
+    /// </summary>
+    public static void ClearsAfter(OutcomeError error, DateTimeOffset before, DateTimeOffset after, int seconds)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        var written = (string?)error.Block?["clears_at"];
+        Assert.True(written is not null, $"The block {error.Block?.ToJsonString()} says no moment it clears.");
+        var clears = DateTimeOffset.Parse(written, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        var earliest = before.AddTicks(-(before.Ticks % TimeSpan.TicksPerMillisecond)).AddSeconds(seconds);
+        var latest = after.AddSeconds(seconds);
+        Assert.True(
+            clears >= earliest && clears <= latest,
+            $"The block clears at {written}, outside {earliest:O} .. {latest:O}.");
+    }
+
     private static JsonObject Contact(string? pinned) => new()
     {
         ["id"] = ContactId,

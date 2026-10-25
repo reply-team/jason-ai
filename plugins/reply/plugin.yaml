@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.6.1
+version: 0.7.0
 kind: provider
 name: Reply
 description: >-

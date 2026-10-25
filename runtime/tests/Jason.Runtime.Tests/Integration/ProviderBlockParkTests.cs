@@ -4,9 +4,13 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Notifications;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Notifications;
+using Jason.Runtime.Notifications.Desktop;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Tests.Notifications;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,8 +21,8 @@ namespace Jason.Runtime.Tests.Integration;
 /// A provider block end to end: a real runtime on a held clock, a real plugin host for every provider call, a stand-in
 /// agent host for the manager, and a stand-in account at the other end. The account refuses an enrolment for a reason
 /// outside the work — the account's billing — and what is proven is what that does to the rest of the campaign: the
-/// work the block holds waits on it without reaching the account, a read still runs, the manager hears of it once, and
-/// when the block's trial gets past it everything it held runs by itself.
+/// work the block holds waits on it without reaching the account, a read still runs, the manager hears of it once, a
+/// person is pointed at it once, and when the block's trial gets past it everything it held runs by itself.
 /// </summary>
 [Collection(ProcessEnvironmentCollection.Name)]
 public class ProviderBlockParkTests
@@ -46,10 +50,18 @@ public class ProviderBlockParkTests
             + $"\"Manager\":{{\"ReviewSeconds\":86400,\"TimeoutSeconds\":60}}}}");
     }
 
+    /// <summary>Nothing reaches a desktop here; a launch would be a toast shown by a test.</summary>
+    private sealed class NoLaunch : IToastLauncher
+    {
+        public Task<LaunchResult> LaunchAsync(ToastLaunch launch, TimeSpan bound, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("This runtime has no desktop, so nothing may be launched.");
+    }
+
     [Fact]
     public async Task Work_an_account_block_holds_waits_on_it_a_read_runs_and_a_trial_that_gets_past_it_runs_the_rest()
     {
         using var workspace = new TestWorkspace();
+        var person = FakeChannel.Delivering();
         workspace.WithCampaign(ProviderCampaign, "Autumn outreach", "Active");
         await using var host = await FakeHostRuntime.StartAsync(
             Ct,
@@ -66,6 +78,10 @@ public class ProviderBlockParkTests
             {
                 services.AddSingleton<IPluginHostLocator>(new JasonDllLocator());
                 services.AddSingleton(TestPlugins.SearchPath);
+                services.PostConfigure<NotificationsOptions>(notifications => notifications.Enabled = true);
+                services.AddSingleton(Presence.NoDesktop(ChannelPresence.SessionZero));
+                services.AddSingleton<IToastLauncher>(new NoLaunch());
+                services.AddSingleton<INotificationChannels>(new FakeChannels(person));
             });
         var campaign = await host.CampaignAsync(Ct, "Autumn outreach");
         var marta = await host.ContactAsync(campaign, "marta@example.test", Ct);
@@ -115,9 +131,20 @@ public class ProviderBlockParkTests
         //    calls Marta, so what would run is no longer the document the person approved, and they decide once more —
         //    the rule every repeat of approved work is held to. The account takes it, and the block clears; the next
         //    scan releases the other one, whose document did not change, and it runs once and is taken too.
-        host.Clock.Advance(TimeSpan.FromSeconds(901));
+        //    The same scans point a person at the block, once: the first notification of this runtime, which the moment
+        //    makes due, says the block is open and holds work, and nothing of it but the counts. The moment is two hours
+        //    on, past the trial and past the quiet window a notification waits out after a start: two of this runtime's
+        //    hour-long scans.
+        host.Clock.Advance(TimeSpan.FromSeconds(7_201));
         await SettleAsync(host, campaign, () => AllAsync(host, WorkItemStatus.AwaitingApproval, first));
         Assert.Equal(WorkItemStatus.Waiting, (await host.GetAsync(second, Ct)).Status);
+        var pointed = Assert.Single(await PointersAsync(host, 1));
+        Assert.Equal(1, (int)pointed.New!["counts"]!["blocks"]!);
+        var said = Assert.Single(person.Messages).Text;
+        Assert.Contains("1 provider block holds ", said, StringComparison.Ordinal);
+        Assert.Contains("jason block list", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider.example", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("billing", said, StringComparison.Ordinal);
         await ApproveAsync(host);
         await SettleAsync(host, campaign, () => AllAsync(host, WorkItemStatus.Succeeded, first, second));
         Assert.Equal([AttemptStatus.Blocked, AttemptStatus.Succeeded], [.. (await host.GetAsync(first, Ct)).Attempts!.OrderBy(a => a.Number).Select(a => a.Status)]);
@@ -127,9 +154,37 @@ public class ProviderBlockParkTests
         Assert.Equal(["block_cleared"], await BecauseAsync(host, second));
         Assert.Equal(blockedBy.ProviderBlockId, Assert.Single(await LinesAsync(host, campaign, JournalKinds.ProviderBlockCleared)).Key);
 
-        // 5. The clear woke nobody: the manager was summoned once, by the block.
+        // 5. The clear woke nobody: the manager was summoned once, by the block; and once the floor between two
+        //    notifications has passed, no pointer says the block again.
         await host.ScanAsync(Ct);
         Assert.Single(await CheckInsAsync(host, campaign));
+        host.Clock.Advance(TimeSpan.FromMinutes(31));
+        await host.ScanAsync(Ct);
+        await host.ScanAsync(Ct);
+        Assert.Single(await PointersAsync(host, 1));
+        Assert.Single(person.Messages);
+    }
+
+    /// <summary>
+    /// The notifications written so far, once at least <paramref name="count"/> are: one is delivered off the scan, so
+    /// its line is written a moment after the scan returns.
+    /// </summary>
+    private static async Task<IReadOnlyList<JournalEntryDto>> PointersAsync(FakeHostRuntime host, int count)
+    {
+        IReadOnlyList<JournalEntryDto> lines = [];
+        Assert.True(
+            await FakeHostRuntime.EventuallyAsync(
+                async () =>
+                {
+                    lines = (await host.Fixture.PostOkAsync<Page<JournalEntryDto>>(
+                        Operations.JournalList,
+                        new { kind = JournalKinds.NotificationSent, limit = 100 },
+                        Ct)).Items;
+                    return lines.Count >= count;
+                },
+                Ct),
+            $"{lines.Count} notification_sent lines, {count} expected at least.");
+        return lines;
     }
 
     private static async Task<string> ReadAsync(FakeHostRuntime host, string campaign) =>

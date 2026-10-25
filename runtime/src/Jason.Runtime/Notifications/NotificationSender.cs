@@ -148,13 +148,14 @@ public sealed class NotificationSender(
         var (approvals, decisions) = await PendingAsync(ct).ConfigureAwait(false);
         var failedWork = await FailedAsync(request, ct).ConfigureAwait(false);
         var gaps = await GapsAsync(request, ct).ConfigureAwait(false);
-        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0)
+        var blocks = await BlocksAsync(request, ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0)
         {
             status.NothingWaited(clock.GetUtcNow());
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
@@ -178,7 +179,8 @@ public sealed class NotificationSender(
             reached ? now.UtcDateTime : request.LastDeliveredAt,
             failedWork.Count,
             reached ? request.CoveredThrough : request.DeliveredThrough,
-            gaps);
+            gaps,
+            blocks.Blocks);
 
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -260,6 +262,63 @@ public sealed class NotificationSender(
 
         var gaps = await EventGapLines.Of(db).Where(e => e.Id > after && e.Id <= upTo).Select(e => e.New).ToListAsync(ct).ConfigureAwait(false);
         return gaps.Select(EventGapLines.Source).Distinct(StringComparer.Ordinal).Count();
+    }
+
+    /// <summary>
+    /// The provider blocks opened in the same window — said first after the line the last notification that reached
+    /// anybody covered, through the line this one covers — and still open as this one is sent, counted by block, with the
+    /// work items their open waits hold now. A block cleared before the send is not said: nothing waits on it any more.
+    /// </summary>
+    private async Task<HeldByBlocks> BlocksAsync(NotificationRequest request, CancellationToken ct)
+    {
+        var none = new HeldByBlocks(0, 0);
+        if (request.CoveredThrough is null)
+        {
+            return none;
+        }
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var upTo = await IdOfAsync(db, request.CoveredThrough, ct).ConfigureAwait(false);
+        int? after = request.DeliveredThrough is null ? 0 : await IdOfAsync(db, request.DeliveredThrough, ct).ConfigureAwait(false);
+        if (upTo is null || after is null)
+        {
+            return none;
+        }
+
+        var said = await ProviderBlockLines.Of(db)
+            .Where(e => e.Id > after && e.Id <= upTo && e.Key != null)
+            .Select(e => e.Key!)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (said.Count == 0)
+        {
+            return none;
+        }
+
+        // A block a campaign was told about before the window opened was said then, whichever campaign it reaches now.
+        var earlier = await ProviderBlockLines.Of(db)
+            .Where(e => e.Id <= after && said.Contains(e.Key!))
+            .Select(e => e.Key!)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var opened = said.Except(earlier, StringComparer.Ordinal).ToList();
+        var open = await db.ProviderBlocks.AsNoTracking()
+            .Where(block => opened.Contains(block.PublicId) && block.Status == ProviderBlockStatus.Open)
+            .Select(block => block.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (open.Count == 0)
+        {
+            return none;
+        }
+
+        var held = await db.WorkItemWaits.AsNoTracking()
+            .CountAsync(wait => wait.Status == WaitStatus.Open && wait.ProviderBlockId != null && open.Contains(wait.ProviderBlockId.Value), ct)
+            .ConfigureAwait(false);
+        return new HeldByBlocks(open.Count, held);
     }
 
     private static Task<int?> IdOfAsync(JasonDbContext db, string publicId, CancellationToken ct) =>

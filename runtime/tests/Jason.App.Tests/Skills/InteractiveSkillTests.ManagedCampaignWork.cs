@@ -694,4 +694,26 @@ public partial class InteractiveSkillTests
 
     [GeneratedRegex(@"`docs/contracts/operations/([a-z_]+\.[a-z_]+)\.md`")]
     private static partial Regex OperationDocument();
+
+    /// <summary>
+    /// "What is blocked" is answered where a waiting item is explained: a parked item is a waiting one, and the block, not
+    /// the session, releases it.
+    /// </summary>
+    [Fact]
+    public void The_managed_campaign_work_skill_says_what_is_blocked_where_waiting_is_explained()
+    {
+        var skill = Flattened("managed-campaign-work");
+
+        var waiting = skill.IndexOf("**An item that is `waiting` is neither stuck nor finished.**", StringComparison.Ordinal);
+        var blocked = skill.IndexOf("**What is blocked.**", StringComparison.Ordinal);
+        var resumable = skill.IndexOf("Only a waiting item can be resumed", StringComparison.Ordinal);
+        Assert.True(
+            waiting >= 0 && blocked > waiting && resumable > blocked,
+            $"The waiting item opens at {waiting}, what is blocked at {blocked} and the resume rule at {resumable}: what is blocked belongs between them.");
+        Assert.Contains(
+            "When the person asks what is blocked, `jason block list` shows each open block, the `held_count` of items it holds and the `link` where they clear it at the provider",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("The block releases its items by itself, so do not resume, cancel or create them again.", skill, StringComparison.Ordinal);
+    }
 }

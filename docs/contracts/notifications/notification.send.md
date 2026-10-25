@@ -12,12 +12,14 @@ it. Where the two seem to differ, the document is right and this page is a bug.
 
 When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — or a protective
 action fails, the person should find out without asking. The runtime's notifier waits for a burst of these to settle and
-then sends **one pointer**: how many approvals and questions are waiting, whether protective actions failed, and where
-to look. A notification plugin carries that pointer to a service the person reads, such as an ntfy topic on their phone.
+then sends **one pointer**: how many approvals and questions are waiting, whether protective actions failed, accounts
+have events Jason did not read or provider blocks are open, and where to look. A notification plugin carries that
+pointer to a service the person reads, such as an ntfy topic on their phone.
 
 What the plugin receives is `title`, `message` and the two counts, `approvals` and `decisions`. The message may also say
 that protective actions failed, and name up to three campaigns by public id — an opaque `cmp_…` that names nothing by
-itself. Nothing else about the work travels: no campaign's name, no contact, no subject, no question's words, no error.
+itself — and count the accounts whose events Jason did not read and the open provider blocks, with the work items they
+hold. Nothing else about the work travels: no campaign's name, no contact, no subject, no question's words, no error.
 The person reads what waits in their own session, through their agent or `jason approval list` and
 `jason decision list`.
 

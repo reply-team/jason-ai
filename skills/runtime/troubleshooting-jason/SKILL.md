@@ -180,7 +180,7 @@ allowance it counts, a key it no longer accepts, a channel disconnected or pause
 (`reason`), where a person goes to clear it (`link`), and, where the provider said, when it may clear by itself
 (`clears_at`). Read those to the person. The repair is theirs, at the provider — topping up, reconnecting, renewing a
 key, or waiting for an allowance to renew — and never an edit of the item; once the block has cleared, the work is
-proposed again.
+proposed again. Work a block holds does not end here: it waits on the block, which is state 11.
 
 ### 8. An attempt that was interrupted
 
@@ -238,6 +238,31 @@ decides it has waited enough, they end the wait themselves, and the item is star
 ```
 jason --actor human:ada workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the replies in are enough to decide"
 ```
+
+**A park on a provider block has a repair, and it is the person's.** Its `wait` names the block under `blocked_by` —
+`provider_block_id`, `scope` and `reason` — and waits on no item and no moment, and its `last_error` is
+`provider_blocked`, whose `block` says what is blocked, why, the `link` where a person clears it and, where the
+provider said, `clears_at`. `jason block list` shows every open block, how many items each holds and its link;
+`block get` reads one block, and `workitem list --block` names the items it holds:
+
+```
+jason block list --human
+jason block get blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+jason workitem list --block blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+```
+
+The provider refused the account, or one sender under it, and not this item, so the person repairs it: they fix the
+cause at the provider, through the link, and the block's trial then lets one item through; once the provider takes it,
+the block clears and releases everything it held. Where the person knows the cause is gone, they clear the block
+themselves, under their own name, and the next scan releases what it held:
+
+```
+jason --actor human:ada block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the card on the account was renewed"
+```
+
+A clear is their word that the cause is gone, not a mute, and where the provider still refuses, the next call opens a
+new block. Do not cancel, recreate or resume a parked item: the block releases it by itself, and the same work, asked
+again or resumed, parks on the same block.
 
 ## The repairs that are safe
 

@@ -271,8 +271,9 @@ public class ReplyMessageSendTests
         Assert.Empty(account.Sent);
     }
 
+    /// <summary>A mailbox Reply lists as disconnected is the sender's block for its channel, decided before the email.</summary>
     [Fact]
-    public async Task A_disconnected_mailbox_is_refused_before_the_email()
+    public async Task A_disconnected_mailbox_is_the_sender_s_block_before_the_email()
     {
         using var account = new ReplyAccount().WithContact(1001, Address, "Marta").WithSender(12, "email", "Ann Owner", Mailbox, status: "disconnected");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -280,7 +281,8 @@ public class ReplyMessageSendTests
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001")));
 
-        Assert.Equal(("sender_unavailable", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"12","reason":"channel"}""", ReplyOperations.Blocked(error));
         Assert.Equal(["account list"], Lines(account));
     }
 
@@ -768,7 +770,6 @@ public class ReplyMessageSendTests
     [InlineData("linkedin_voice", "linkedin.voice_too_long", 400, "directLinkedIn.voiceTooLong", null, "message_too_long", "validation")]
     [InlineData("linkedin_message", "linkedin.message_too_long", 400, "directLinkedIn.messageTooLong", null, "message_too_long", "validation")]
     [InlineData("linkedin_message", "linkedin.missing_variables", 400, "directLinkedIn.missingVariables", null, "message_invalid", "validation")]
-    [InlineData("linkedin_message", "linkedin.account_inactive", 409, "directLinkedIn.linkedInAccountInactive", null, "sender_unavailable", "permanent")]
     [InlineData("linkedin_message", "linkedin.feature_disabled", 403, "directLinkedIn.featureDisabled", null, "feature_unavailable", "permanent")]
     [InlineData("linkedin_message", "contact.no_linkedin_profile", 404, "directLinkedIn.noLinkedInProfile", null, "contact_channel_conflict", "permanent")]
     [InlineData("email", "email_account.not_found", 400, "contact.emailAccountNotFound", null, "sender_not_found", "permanent")]
@@ -796,6 +797,35 @@ public class ReplyMessageSendTests
         Assert.Empty(account.Sent);
     }
 
+    /// <summary>
+    /// A LinkedIn account the send finds turned off, or whose session has to be connected again, is the sender's block
+    /// for its channel, whatever the format: the runtime holds the work it sends until a trial gets past it.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin_message", "linkedin.account_inactive", "directLinkedIn.linkedInAccountInactive")]
+    [InlineData("linkedin_inmail", "linkedin.invalid_cookie", "directLinkedIn.invalidCookie")]
+    [InlineData("linkedin_voice", "linkedin.account_inactive", "directLinkedIn.linkedInAccountInactive")]
+    public async Task A_sender_the_send_finds_turned_off_or_disconnected_is_the_sender_s_block(string format, string cliCode, string replyCode)
+    {
+        using var account = OnLinkedIn();
+        account.Refuses(
+            FormatCommand(format), cliCode, status: 409, replyCode: replyCode,
+            ids: new JsonObject { ["contact_id"] = 1001, ["linkedin_account_id"] = 34 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(format, pinned: "1001")));
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"channel"}""", ReplyOperations.Blocked(error));
+        Assert.Equal(replyCode, (string?)error.Details!["provider_code"]);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A spent allowance is the sender's block for a limit. reply-cli says no wait on it here, so the block names no
+    /// moment it clears, and the runtime tries it on its own cadence.
+    /// </summary>
     [Theory]
     [InlineData("daily")]
     [InlineData("weekly")]
@@ -807,9 +837,103 @@ public class ReplyMessageSendTests
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("linkedin_message", pinned: "1001")));
 
-        Assert.Equal(("sender_limit_reached", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"limit"}""", ReplyOperations.Blocked(error));
         Assert.Equal(limit, (string?)error.Details!["limit"]);
         Assert.Empty(account.Sent);
+    }
+
+    /// <summary>Where reply-cli says how long to wait, the block says when it clears: that long after the answer.</summary>
+    [Fact]
+    public async Task A_spent_allowance_with_a_wait_says_when_the_block_clears()
+    {
+        const int Wait = 86400;
+        using var account = OnLinkedIn();
+        account.Refuses(
+            FormatCommand("linkedin_message"), "linkedin.limit_reached", status: 429, replyCode: "directLinkedIn.dailyLimitReached",
+            ids: new JsonObject { ["contact_id"] = 1001, ["linkedin_account_id"] = 34 },
+            details: new JsonObject { ["limit"] = "daily" }, retryAfter: Wait);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var before = DateTimeOffset.UtcNow;
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("linkedin_message", pinned: "1001")));
+        var after = DateTimeOffset.UtcNow;
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        ReplyOperations.Blocked(error);
+        Assert.Equal(("sender", "34", "limit"), ((string?)error.Block!["scope"], (string?)error.Block["sender_external_id"], (string?)error.Block["reason"]));
+        ReplyOperations.ClearsAfter(error, before, after, Wait);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A wait past a year is no moment the block can say: Reply's allowances renew by the day or the week, and one far
+    /// enough out would be written with a year the block contract refuses. The block is still the sender's, and the
+    /// runtime tries it on its own cadence.
+    /// </summary>
+    [Fact]
+    public async Task A_wait_past_a_year_leaves_the_block_without_a_moment_it_clears()
+    {
+        using var account = OnLinkedIn();
+        account.Refuses(
+            FormatCommand("linkedin_message"), "linkedin.limit_reached", status: 429, replyCode: "directLinkedIn.dailyLimitReached",
+            ids: new JsonObject { ["contact_id"] = 1001, ["linkedin_account_id"] = 34 },
+            details: new JsonObject { ["limit"] = "daily" }, retryAfter: int.MaxValue);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("linkedin_message", pinned: "1001")));
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"limit"}""", ReplyOperations.Blocked(error));
+    }
+
+    /// <summary>
+    /// A sender's refusal answered by a command that ran from no sending account — here the read of the pinned contact,
+    /// before the send — has no account a block could name: it ends in the operation's own permanent word for that
+    /// refusal, and holds nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin.account_inactive", "directLinkedIn.linkedInAccountInactive", "sender_unavailable")]
+    [InlineData("linkedin.limit_reached", "directLinkedIn.dailyLimitReached", "sender_limit_reached")]
+    public async Task A_sender_s_refusal_from_a_command_run_from_no_sender_is_no_block(string cliCode, string replyCode, string code)
+    {
+        using var account = OnLinkedIn();
+        account.Refuses("contact get", cliCode, status: 409, replyCode: replyCode);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("linkedin_message", pinned: "1001")));
+
+        Assert.Equal((code, FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Null(error.Block);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// What an InMail or a voice message needs and the account lacks is about the format, not the sender: the same
+    /// account still sends a plain message, so it stays the operation's own refusal and holds nothing. Running out of
+    /// InMail credits stays its own word too.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin_inmail", "linkedin.sales_navigator_required", "directLinkedIn.salesNavRequired", "sender_unavailable")]
+    [InlineData("linkedin_inmail", "linkedin.sales_navigator_disconnected", "directLinkedIn.salesNavDisconnected", "sender_unavailable")]
+    [InlineData("linkedin_voice", "linkedin.voice_profile_missing", "directLinkedIn.voiceProfileMissing", "sender_unavailable")]
+    [InlineData("linkedin_inmail", "linkedin.no_inmail_credits", "directLinkedIn.noInMailCredits", "insufficient_credits")]
+    public async Task What_a_format_needs_is_no_block(string format, string cliCode, string replyCode, string code)
+    {
+        using var account = OnLinkedIn();
+        account.Refuses(
+            FormatCommand(format), cliCode, status: 400, replyCode: replyCode,
+            ids: new JsonObject { ["contact_id"] = 1001, ["linkedin_account_id"] = 34 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(format, pinned: "1001")));
+
+        Assert.Equal((code, FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Null(error.Block);
     }
 
     // -------------------------------------------------------------------------------------------------------

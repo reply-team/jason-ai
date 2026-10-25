@@ -298,4 +298,34 @@ public partial class InteractiveSkillTests
 
     [GeneratedRegex(@"\bthe (one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) states\b", RegexOptions.IgnoreCase)]
     private static partial Regex StateCount();
+
+    /// <summary>
+    /// A park on a provider block is state 11 with a block named, and its repair is the person's at the provider: a session
+    /// that cancelled, recreated or resumed the parked items would only park the same work again, and one that cleared the
+    /// block on its own judgement would be saying the cause is gone when nobody had looked.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_reads_a_park_on_a_block_and_leaves_its_repair_to_the_person()
+    {
+        var skill = Flattened("troubleshooting-jason");
+
+        var waiting = skill.IndexOf("### 11. Waiting", StringComparison.Ordinal);
+        var park = skill.IndexOf("**A park on a provider block has a repair, and it is the person's.**", StringComparison.Ordinal);
+        var repairs = skill.IndexOf("## The repairs that are safe", StringComparison.Ordinal);
+        Assert.True(
+            waiting >= 0 && park > waiting && repairs > park,
+            $"State 11 opens at {waiting}, the park on a block at {park} and the safe repairs at {repairs}: the park belongs inside state 11.");
+        Assert.Contains("Its `wait` names the block under `blocked_by`", skill, StringComparison.Ordinal);
+        Assert.Contains("its `last_error` is `provider_blocked`", skill, StringComparison.Ordinal);
+        Assert.Contains("`jason block list` shows every open block, how many items each holds and its link", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "they fix the cause at the provider, through the link, and the block's trial then lets one item through; once the provider takes it, the block clears and releases everything it held.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("jason workitem list --block blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human", skill, StringComparison.Ordinal);
+        Assert.Contains("jason --actor human:ada block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason", skill, StringComparison.Ordinal);
+        Assert.Contains("A clear is their word that the cause is gone, not a mute, and where the provider still refuses, the next call opens a new block.", skill, StringComparison.Ordinal);
+        Assert.Contains("Do not cancel, recreate or resume a parked item", skill, StringComparison.Ordinal);
+        Assert.Contains("Work a block holds does not end here: it waits on the block, which is state 11.", skill, StringComparison.Ordinal);
+    }
 }
