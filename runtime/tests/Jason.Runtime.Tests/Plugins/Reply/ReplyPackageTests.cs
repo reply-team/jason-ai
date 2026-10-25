@@ -444,7 +444,7 @@ public class ReplyPackageTests
 
         Assert.StartsWith(" ## 0.6.1 ", section, StringComparison.Ordinal);
         Assert.Contains(
-            "## 0.6.1 - the error table names `provider_blocked`, the runtime's class `blocked` from 0.17.0; no Reply answer reaches it until reply-cli reports a block; no behaviour change.",
+            "## 0.6.1 - the error table names `provider_blocked`, the runtime's class `blocked` from 0.18.0; no Reply answer reaches it until reply-cli reports a block; no behaviour change.",
             section,
             StringComparison.Ordinal);
     }

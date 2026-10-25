@@ -532,7 +532,7 @@ the same way a log line is.
 is a `TypeError`, and so is a block that is not an object or is over 8 KiB. It says what the provider refused this call
 for — the account or one sender, the reason, where a person clears it, and when it clears by itself if the provider
 says — in the fields the [provider block](contracts/block/provider_block.md) publishes; the runtime holds it to that
-page when it records the failure, not here (§8). A host from 0.17.0 accepts `block`; an older host answers
+page when it records the failure, not here (§8). A host from 0.18.0 accepts `block`; an older host answers
 `host.fail`'s `block` with a `TypeError`, which ends the invocation `plugin_exception`, `permanent`. That is a refusal
 the plugin can see, never a block mistaken for something else.
 

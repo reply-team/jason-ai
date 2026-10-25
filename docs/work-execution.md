@@ -862,7 +862,7 @@ a notification or a `wait` block. A person is pointed at the block too, once, by
 
 **A person's clear.** A block also clears on a person's word. A clear is a person's statement that the cause is gone,
 not a mute: `block.clear` clears an open block now, under the actor named and by no attempt, and tells every campaign
-that was told, once, as above. The actor is a person with a name, as for an approval: a role or an attempt is refused
+that was told, once, as above. The actor is a person with an id, as for an approval: a role or an attempt is refused
 with `block_not_human` — an agent cannot clear a block — and an absent actor, or one with no id, with `actor_required`.
 The block's read, the campaigns told and the write are one transaction that holds the write lock from the read, so no
 campaign is told the block holds its work, and no trial is set on it, between what the clear reads and what it writes.

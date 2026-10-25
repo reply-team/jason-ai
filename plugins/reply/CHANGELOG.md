@@ -34,7 +34,7 @@ absorbed by a release of this package alone.
 
 ## 0.6.1
 
-- the error table names `provider_blocked`, the runtime's class `blocked` from 0.17.0; no Reply answer reaches it until reply-cli reports a block; no behaviour change.
+- the error table names `provider_blocked`, the runtime's class `blocked` from 0.18.0; no Reply answer reaches it until reply-cli reports a block; no behaviour change.
 
 ## 0.6.0
 
