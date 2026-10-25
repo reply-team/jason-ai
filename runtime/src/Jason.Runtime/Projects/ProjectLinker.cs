@@ -192,7 +192,7 @@ public sealed class ProjectLinker(JasonDbContext db, JournalWriter journal, Harn
         }
 
         var path = FolderPaths.Normal(FolderPaths.Undevice(written));
-        if (!Directory.Exists(path) && !File.Exists(path))
+        if (!Directory.Exists(path))
         {
             errors.Add("path", "not_found", "path names no folder; a link records a folder that is there.");
             return null;

@@ -487,6 +487,30 @@ public sealed class ProjectLinkTests
 
         Assert.Equal("validation_failed", refused.Code);
         Assert.True(refused.Details?.Any(detail => detail.Field == field) == true, $"'{asked}' was refused without a detail on {field}: {refused.Message}");
+        if (asked == "absent")
+        {
+            Assert.Contains(refused.Details!, detail => detail is { Field: "path", Code: "not_found" });
+        }
+
+        Assert.DoesNotContain(JournalKinds.ProjectLinked, await KindsAsync(api));
+    }
+
+    /// <summary>A file at the path is no folder: the link is refused by the field, and nothing is written.</summary>
+    [Fact]
+    public async Task A_file_at_the_path_is_refused_as_no_folder()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var acme = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Acme Corp" }, Ct);
+        var file = Path.Combine(Outside(api), "acme-notes.txt");
+        File.WriteAllText(file, "not a folder");
+
+        var refused = await api.PostErrorAsync(Operations.ProjectLink, new { project_id = acme.Id, path = file }, HttpStatusCode.BadRequest, Ct);
+
+        Assert.Equal("validation_failed", refused.Code);
+        var detail = Assert.Single(refused.Details!, detail => detail.Field == "path");
+        Assert.Equal("not_found", detail.Code);
+        Assert.Equal("path names no folder; a link records a folder that is there.", detail.Message);
+        Assert.Equal("not a folder", File.ReadAllText(file));
         Assert.DoesNotContain(JournalKinds.ProjectLinked, await KindsAsync(api));
     }
 
