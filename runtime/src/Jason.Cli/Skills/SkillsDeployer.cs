@@ -1,4 +1,5 @@
 using System.Globalization;
+using Jason.Cli.Files;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Skills;
 
@@ -271,7 +272,7 @@ public static class SkillsDeployer
             {
                 try
                 {
-                    Directory.Delete(staged, recursive: true);
+                    DirectoryTrees.Delete(staged);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {

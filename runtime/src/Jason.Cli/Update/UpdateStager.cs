@@ -1,6 +1,7 @@
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using Jason.Cli.Files;
 using Jason.Contracts.Update;
 
 namespace Jason.Cli.Update;
@@ -253,7 +254,7 @@ public sealed class UpdateStager(HttpClient client)
     {
         if (Directory.Exists(directory))
         {
-            Directory.Delete(directory, recursive: true);
+            DirectoryTrees.Delete(directory);
         }
     }
 }

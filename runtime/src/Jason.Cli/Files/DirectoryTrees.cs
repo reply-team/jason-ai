@@ -1,8 +1,10 @@
 namespace Jason.Cli.Files;
 
 /// <summary>
-/// The tree delete for a tree that may hold git's read-only files or a link: the uninstall's purge, and a skills fetch that
-/// was staged and not finished.
+/// The tree delete for a tree that may hold git's read-only files or a link: the uninstall's purge, a skills fetch that was
+/// staged and not finished, a skill a deployment staged and the one a swap replaced, the UI's staging directory and the
+/// build it set aside, and the update's staging directory. A tree this client made is its own to delete whole, and a link
+/// somebody put in one goes as itself rather than stopping the delete; it is the one recursive delete in the client.
 /// </summary>
 internal static class DirectoryTrees
 {

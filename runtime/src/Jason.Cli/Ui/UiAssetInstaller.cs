@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using Jason.Cli.Files;
 using Jason.Cli.Skills;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
@@ -51,7 +52,7 @@ public static class UiAssetInstaller
         }
         finally
         {
-            Discard(() => Directory.Delete(staging, recursive: true), staging);
+            Discard(() => DirectoryTrees.Delete(staging), staging);
         }
     }
 
@@ -221,7 +222,7 @@ public static class UiAssetInstaller
             throw;
         }
 
-        Discard(() => Directory.Delete(aside, recursive: true), aside);
+        Discard(() => DirectoryTrees.Delete(aside), aside);
     }
 
     private static void Move(string from, string to, TimeProvider clock) =>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Jason.Cli.Files;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Skills;
 
@@ -156,7 +157,7 @@ public static class SkillsSwap
         {
             if (Directory.Exists(directory))
             {
-                Directory.Delete(directory, recursive: true);
+                DirectoryTrees.Delete(directory);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

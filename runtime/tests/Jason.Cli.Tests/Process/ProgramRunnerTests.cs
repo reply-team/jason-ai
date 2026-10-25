@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Jason.Cli.Process;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Integration;
 using OperatingSystemProcess = System.Diagnostics.Process;
 
 namespace Jason.Cli.Tests.Process;
@@ -67,6 +68,12 @@ public class ProgramRunnerTests
     /// that the next run would find and trust. The child here starts a grandchild of its own, the way git does, and
     /// both must be gone.
     /// </summary>
+    /// <remarks>
+    /// The grandchild is known only by the number the program wrote, and on a shared machine that number may belong to
+    /// another process by the time it is read. So the grandchild is opened through the proof, a process of its name that
+    /// had started by the moment the number was read, and ended only through it; a number the proof does not hold fails
+    /// the row, and its process is left alone.
+    /// </remarks>
     [Fact]
     public async Task A_caller_that_cancels_stops_the_whole_tree_of_the_program()
     {
@@ -83,27 +90,78 @@ public class ProgramRunnerTests
                 cancel.Token),
             Ct);
 
-        var grandchild = await ChildThatStartsAGrandchild.WaitForGrandchildAsync(pidFile, Ct);
+        OwnedChild.Held? grandchild = null;
         try
         {
+            var (number, read) = await ChildThatStartsAGrandchild.WaitForGrandchildAsync(pidFile, Ct);
+            grandchild = Proven(number, read);
+            Assert.True(
+                grandchild is not null,
+                $"Process {number}, the number the program wrote, is not a {ChildThatStartsAGrandchild.GrandchildName} that had started by {read:O}, when it was read: it is gone or another process's, and is left alone.");
+
             await cancel.CancelAsync();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
 
             Assert.True(
-                await HasExitedAsync(grandchild, Ct),
+                await HasExitedAsync(grandchild.Process, Ct),
                 $"The caller cancelled and the program's own child, process {grandchild.Id}, was still running {TimeSpan.FromSeconds(20)} later.");
         }
         finally
         {
-            if (!grandchild.HasExited)
+            // The program is the runner's own child and goes with the cancel; the grandchild is ended only as proven.
+            await cancel.CancelAsync();
+            if (grandchild is not null)
             {
-                grandchild.Kill(entireProcessTree: true);
+                OwnedChild.End(grandchild);
+                grandchild.Dispose();
             }
-
-            grandchild.Dispose();
         }
     }
+
+    /// <summary>
+    /// The proof the row above ends its grandchild by refuses a number that changed hands. A process under a number the
+    /// test read is not one the test can start, so the row starts a process of the grandchild's name itself and hands it
+    /// to the proof twice: read after it began, it is held; read a minute before it began, as a reused number would be,
+    /// it is refused, and it is still running afterwards.
+    /// </summary>
+    [Fact]
+    public void A_number_that_changed_hands_is_refused_and_its_process_left_alone()
+    {
+        var start = new ProcessStartInfo(Sleeper.Program) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
+        foreach (var argument in Sleeper.ArgumentsFor(seconds: 60))
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var standIn = OperatingSystemProcess.Start(start)!;
+        try
+        {
+            using (var held = Proven(standIn.Id, DateTimeOffset.UtcNow))
+            {
+                Assert.True(held is not null, $"Process {standIn.Id}, read after it began, is not held: the proof refuses the process it means.");
+            }
+
+            var before = new DateTimeOffset(standIn.StartTime.ToUniversalTime(), TimeSpan.Zero) - TimeSpan.FromMinutes(1);
+            using (var refused = Proven(standIn.Id, before))
+            {
+                Assert.True(refused is null, $"Process {standIn.Id}, read a minute before it began, is held: the proof takes a reused number for the grandchild.");
+            }
+
+            Assert.False(standIn.HasExited, $"Process {standIn.Id}, which the proof refused, is no longer running.");
+        }
+        finally
+        {
+            OwnedChild.End(standIn);
+        }
+    }
+
+    /// <summary>
+    /// The grandchild by the number it wrote, if the process that has that number is one of its name and had started by
+    /// the moment the number was read; null, with the process left alone, otherwise.
+    /// </summary>
+    private static OwnedChild.Held? Proven(int number, DateTimeOffset read) =>
+        OwnedChild.Open(number, read, ChildThatStartsAGrandchild.GrandchildName);
 
     /// <summary>
     /// A kill of the tree that fails part way — the operating system raises every descendant it could not end as one
@@ -200,6 +258,9 @@ public class ProgramRunnerTests
     {
         public static string Program => OperatingSystem.IsWindows() ? "powershell" : "sh";
 
+        /// <summary>The name of the process the program starts, as the system reports it.</summary>
+        public static string GrandchildName => OperatingSystem.IsWindows() ? "PING" : "sleep";
+
         public static IReadOnlyList<string> ArgumentsFor(string pidFile) =>
             OperatingSystem.IsWindows()
                 ? [
@@ -212,7 +273,8 @@ public class ProgramRunnerTests
                 ]
                 : ["-c", "sleep 60 & echo $! > \"$1\"; wait", "sh", pidFile];
 
-        public static async Task<OperatingSystemProcess> WaitForGrandchildAsync(string pidFile, CancellationToken cancellationToken)
+        /// <summary>The number the program wrote, and the moment it was read, which the grandchild had started by.</summary>
+        public static async Task<(int Number, DateTimeOffset Read)> WaitForGrandchildAsync(string pidFile, CancellationToken cancellationToken)
         {
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
             while (DateTime.UtcNow < deadline)
@@ -231,7 +293,7 @@ public class ProgramRunnerTests
 
                     if (int.TryParse(text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var id))
                     {
-                        return OperatingSystemProcess.GetProcessById(id);
+                        return (id, DateTimeOffset.UtcNow);
                     }
                 }
 
