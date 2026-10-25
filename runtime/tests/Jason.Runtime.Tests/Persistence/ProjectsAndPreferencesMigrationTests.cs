@@ -27,6 +27,8 @@ public class ProjectsAndPreferencesMigrationTests
 {
     private const string PreviousMigration = "20261020172838_JournalByPerson";
 
+    private const string BeforePreviousMigration = "20261020050039_LinkedInOneKey";
+
     private const string ThisMigration = "ProjectsAndPreferences";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -493,13 +495,294 @@ public class ProjectsAndPreferencesMigrationTests
 
     /// <summary>
     /// A start stopped part way by something no code survives — a power cut, a process ended — leaves the database part
-    /// migrated, and nothing could put it back then. The next start fails on it and keeps the backup the stopped start
-    /// took, the copy of the installation as it stood before the upgrade, and the refusal says where it is kept.
+    /// migrated, and nothing could put it back then. The next start fails on it, finds the record the stopped start wrote,
+    /// and, the chronicle standing where it stood when that start took its copy, puts that copy back: the installation as
+    /// it stood before the upgrade. Both copies are kept, the record is gone, and the start after migrates from there.
     /// </summary>
     [Fact]
-    public void A_start_that_fails_on_what_a_stopped_start_left_keeps_the_backup_that_start_took()
+    [Critical(Family.P2, "a stopped start is put back")]
+    public void A_start_that_fails_on_what_a_stopped_start_left_puts_back_the_copy_that_start_took()
     {
         using var dir = Seeded();
+        var (before, clean) = StoppedPartWay(dir);
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths).Migrate());
+
+        Assert.True(failed.StoppedStart == StoppedStart.PutBack && failed.Restored, $"The stopped start's copy was not put back ({failed.StoppedStart}): {failed.Message}");
+        Assert.Equal(clean, failed.Backup);
+        foreach (var said in new[] { "did not start", "stopped while it migrated", Applied(dir, ThisMigration), "already exists", clean, "nothing has been recorded since", "Start the runtime again" })
+        {
+            Assert.True(failed.Message.Contains(said, StringComparison.Ordinal), $"The refusal does not say '{said}': {failed.Message}");
+        }
+
+        AssertAsItStood(dir, dir.Paths.DatabaseFile, before);
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dir.Paths.DatabaseFile, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            Assert.Equal(["0"], Rows(connection, "SELECT count(*) FROM \"__EFMigrationsLock\""));
+        }
+
+        var kept = Directory.GetFiles(dir.Paths.BackupsDirectory).Order(StringComparer.Ordinal).ToList();
+        Assert.True(kept.Count == 2 && kept.Contains(clean), $"The backups kept are {string.Join(", ", kept)}, not the stopped start's and this start's.");
+        AssertAsItStood(dir, clean, before);
+        Assert.False(File.Exists(MarkerOf(dir)), "The record of the stopped start is still there after its copy was put back.");
+
+        var report = new DatabaseMigrator(dir.Paths).Migrate();
+
+        Assert.Equal(AppliedFrom(dir, ThisMigration), report.NewlyApplied);
+    }
+
+    /// <summary>
+    /// A line recorded after the stopped start took its copy is work that copy does not hold: the start does not put it
+    /// back. The database is as this start found it, the record stays, and the refusal names the copy and how to put it
+    /// back by hand, for a person who decides that losing the line is what they want.
+    /// </summary>
+    [Fact]
+    [Critical(Family.P2, "a moved chronicle is never put back over")]
+    public void A_stopped_start_is_not_put_back_once_the_chronicle_has_moved()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir);
+        using (var connection = Open(dir.Paths.DatabaseFile))
+        {
+            Execute(connection, "INSERT INTO journal (public_id, ts, actor_type, kind) VALUES ('jrn_after', '2026-10-21 01:00:00', 'human', 'suppression_added')");
+        }
+
+        AssertRefusedAndUntouched(dir, clean);
+    }
+
+    /// <summary>A line that cannot be read is not a line that stands still: the copy is not put back.</summary>
+    [Fact]
+    public void A_stopped_start_is_not_put_back_when_the_chronicle_cannot_be_read()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir);
+        using (var connection = Open(dir.Paths.DatabaseFile))
+        {
+            Execute(connection, "ALTER TABLE journal RENAME TO journal_elsewhere");
+        }
+
+        AssertRefusedAndUntouched(dir, clean);
+    }
+
+    /// <summary>
+    /// Whatever reading the chronicle's line throws, the line is not known to stand still: the copy is not put back.
+    /// </summary>
+    [Fact]
+    public void A_stopped_start_is_not_put_back_when_reading_the_chronicle_throws_anything()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir);
+
+        AssertRefusedAndUntouched(dir, clean, new LineUnreadable());
+    }
+
+    /// <summary>
+    /// The copy the stopped start took is gone, so there is nothing from before the upgrade to put back: the database is as
+    /// this start found it, the record stays, and the refusal says the copy is no longer there, that this runtime cannot put
+    /// the installation back as it stood, and where the backups that are left are kept.
+    /// </summary>
+    [Fact]
+    public void A_stopped_start_whose_copy_is_gone_is_not_put_back_and_says_where_the_backups_are()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir);
+        File.Delete(clean);
+        var found = Everything(dir.Paths.DatabaseFile);
+        var record = File.ReadAllText(MarkerOf(dir));
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths).Migrate());
+
+        Assert.True(failed.StoppedStart == StoppedStart.BackupGone && failed.Restored, $"The stopped start's copy was {failed.StoppedStart}, restored {failed.Restored}: {failed.Message}");
+        foreach (var said in new[] { "did not start", clean, "no longer there", "cannot put back the installation as it stood", dir.Paths.BackupsDirectory })
+        {
+            Assert.True(failed.Message.Contains(said, StringComparison.Ordinal), $"The refusal does not say '{said}': {failed.Message}");
+        }
+
+        var now = Everything(dir.Paths.DatabaseFile);
+        Assert.True(
+            now.SequenceEqual(found),
+            $"The database is not as this start found it:{Environment.NewLine}lost: {string.Join("; ", found.Except(now))}{Environment.NewLine}gained: {string.Join("; ", now.Except(found))}");
+        Assert.Equal(WithoutMoment(record), WithoutMoment(File.ReadAllText(MarkerOf(dir))));
+    }
+
+    /// <summary>
+    /// A record whose copy is not in this installation's backups is not one this runtime wrote: it reads as unreadable, is
+    /// left exactly as it is, and the file it names is never copied over the database.
+    /// </summary>
+    [Fact]
+    public void A_record_naming_a_copy_outside_the_backups_is_never_put_back()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir);
+        var elsewhere = Path.Combine(dir.Paths.Root, "elsewhere.db");
+        File.Copy(clean, elsewhere);
+        var record = JsonNode.Parse(File.ReadAllText(MarkerOf(dir)))!.AsObject();
+        record["clean_backup"] = elsewhere;
+        File.WriteAllText(MarkerOf(dir), record.ToJsonString());
+        var written = File.ReadAllText(MarkerOf(dir));
+        var found = Everything(dir.Paths.DatabaseFile);
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths).Migrate());
+
+        Assert.True(failed.StoppedStart == StoppedStart.None && failed.Backup != elsewhere, $"The copy outside the backups was {failed.StoppedStart}, put back from {failed.Backup}: {failed.Message}");
+        Assert.True(Everything(dir.Paths.DatabaseFile).SequenceEqual(found), "The database is not as this start found it.");
+        Assert.Equal(written, File.ReadAllText(MarkerOf(dir)));
+    }
+
+    /// <summary>
+    /// A second start stopped while migrating must not take the place of the first one's copy, the only copy of the
+    /// installation as it stood: the record it writes before it begins carries the first copy and the first line forward.
+    /// </summary>
+    [Fact]
+    public void A_second_stopped_start_carries_the_first_copy_and_line_forward()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir, highWaterShift: 1000, lastPending: "20991231000000_FromALaterVersion");
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths).Migrate());
+
+        Assert.Equal(StoppedStart.ChronicleMoved, failed.StoppedStart);
+        var record = JsonNode.Parse(File.ReadAllText(MarkerOf(dir)))!;
+        Assert.Equal(clean, record["clean_backup"]!.GetValue<string>());
+        Assert.Equal(HighWater(dir.Paths.DatabaseFile) + 1000, record["journal_high_water"]!.GetValue<long>());
+        Assert.Equal("20991231000000_FromALaterVersion", record["last_pending"]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// A start that applies two migrations and is stopped inside the second leaves the first in the history: the record it
+    /// wrote names a migration that is applied, and the database is part migrated all the same. The next start fails on the
+    /// second and puts back the copy taken before the first, not its own copy of what the stopped start left.
+    /// </summary>
+    [Fact]
+    public void A_start_stopped_inside_its_second_migration_is_put_back_from_before_its_first()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.StateDirectory);
+        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(BeforePreviousMigration);
+        }
+
+        using (var connection = Open(dir.Paths.DatabaseFile))
+        {
+            Execute(connection, "INSERT INTO journal (public_id, ts, actor_type, kind) VALUES ('jrn_1', '2026-09-01 00:00:00', 'human', 'suppression_added')");
+        }
+
+        Directory.CreateDirectory(dir.Paths.BackupsDirectory);
+        var clean = Path.Combine(dir.Paths.BackupsDirectory, $"jason-20261021T000000Z-before-{PreviousMigration}.db");
+        using (var source = Open(dir.Paths.DatabaseFile))
+        using (var copy = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = clean, Pooling = false }.ToString()))
+        {
+            copy.Open();
+            source.BackupDatabase(copy);
+        }
+
+        File.WriteAllText(
+            MarkerOf(dir),
+            new JsonObject
+            {
+                ["clean_backup"] = clean,
+                ["first_pending"] = PreviousMigration,
+                ["last_pending"] = LastOf(dir),
+                ["journal_high_water"] = HighWater(dir.Paths.DatabaseFile),
+                ["written_at"] = "2026-10-21T00:00:00Z",
+            }.ToJsonString());
+
+        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(PreviousMigration);
+        }
+
+        var script = Script(dir);
+        var commit = script.IndexOf("COMMIT;", StringComparison.Ordinal) + "COMMIT;".Length;
+        using (var connection = Open(dir.Paths.DatabaseFile))
+        {
+            Execute(connection, script[..commit]);
+            Execute(connection, "INSERT INTO \"__EFMigrationsLock\" (\"Id\", \"Timestamp\") VALUES (1, '2026-10-21 00:00:00+00:00')");
+        }
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths).Migrate());
+
+        Assert.True(failed.StoppedStart == StoppedStart.PutBack && failed.Backup == clean, $"The copy from before the first migration was not put back ({failed.StoppedStart}, {failed.Backup}): {failed.Message}");
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dir.Paths.DatabaseFile, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            Assert.Equal(["0"], Rows(connection, $"SELECT count(*) FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" IN ('{PreviousMigration}', '{Applied(dir, ThisMigration)}')"));
+            Assert.Empty(Rows(connection, "SELECT name FROM sqlite_master WHERE name = 'projects'"));
+        }
+
+        Assert.False(File.Exists(MarkerOf(dir)), "The record is still there after its copy was put back.");
+        var report = new DatabaseMigrator(dir.Paths).Migrate();
+        Assert.Contains(PreviousMigration, report.NewlyApplied);
+    }
+
+    /// <summary>
+    /// The log of a start whose migration failed on what a stopped start left names the migration and which copy was put
+    /// back, and carries none of the failure's own words; the refusal is said where the start was asked for.
+    /// </summary>
+    [Fact]
+    public async Task The_log_of_a_put_back_stopped_start_names_the_migration_and_never_the_cause()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir);
+        using var refusals = new StringWriter();
+
+        // Bounded, because a runtime that migrated after all would start and run until it was stopped.
+        using var bound = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        bound.CancelAfter(TimeSpan.FromSeconds(30));
+        var exit = await Jason.Runtime.Hosting.RuntimeHost.RunAsync(dir.Paths, TestRuntimeOptions.Quiet with { Refusals = refusals }, bound.Token);
+
+        var said = refusals.ToString().Trim();
+        Assert.True(exit == 1, $"The start answered {exit}: {said}");
+        Assert.StartsWith("The runtime did not start:", said, StringComparison.Ordinal);
+        Assert.Contains(clean, said, StringComparison.Ordinal);
+
+        var logs = string.Concat(Directory.GetFiles(dir.Paths.LogsDirectory).Select(File.ReadAllText));
+        Assert.True(logs.Contains($"\"Migration\":\"{Applied(dir, ThisMigration)}\"", StringComparison.Ordinal), $"The log does not name the migration:{Environment.NewLine}{logs}");
+        Assert.True(logs.Contains("A start stopped while migrating was found; its backup {Backup} was put back", StringComparison.Ordinal), $"The log does not say the stopped start's copy was put back:{Environment.NewLine}{logs}");
+        Assert.False(logs.Contains("already exists", StringComparison.Ordinal), $"The log carries the failure's own words:{Environment.NewLine}{logs}");
+    }
+
+    /// <summary>
+    /// The put-back restores the database alone. An update's record is left exactly as it was, so a rollback after it still
+    /// finds its record whole, and the chronicle line the record holds is the one the put-back database stands at: the two
+    /// restore to the same line.
+    /// </summary>
+    [Fact]
+    public void A_stopped_start_put_back_leaves_an_update_record_as_it_was_at_the_same_line()
+    {
+        using var dir = Seeded();
+        var (_, clean) = StoppedPartWay(dir);
+        var ledger = new Jason.Cli.Update.UpdatePaths(dir.Paths).Ledger;
+        Directory.CreateDirectory(Path.GetDirectoryName(ledger)!);
+        new Jason.Contracts.Update.UpdateLedger(
+            Jason.Contracts.Update.SemanticVersion.Parse("0.18.0"),
+            Jason.Contracts.Update.SemanticVersion.Parse("0.19.0"),
+            Jason.Contracts.Update.UpdateStep.Complete,
+            new DateTimeOffset(2026, 10, 21, 0, 0, 0, TimeSpan.Zero),
+            Path.Combine(dir.Paths.Root, "bin", "jason"),
+            Path.Combine(dir.Paths.Root, "update", "staged", "jason"),
+            Path.Combine(dir.Paths.Root, "update", "previous", "jason"),
+            BackupFile: clean,
+            NewlyApplied: [Applied(dir, ThisMigration)],
+            ChronicleId: NewestEntry(clean)).Write(ledger);
+        var written = File.ReadAllBytes(ledger);
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths).Migrate());
+
+        Assert.Equal(StoppedStart.PutBack, failed.StoppedStart);
+        Assert.Equal(written, File.ReadAllBytes(ledger));
+        Assert.Equal(Jason.Contracts.Update.UpdateLedger.ReadFile(ledger)!.ChronicleId, NewestEntry(dir.Paths.DatabaseFile));
+    }
+
+    /// <summary>
+    /// What a start stopped after the migration's first commit leaves, by hand: the copy it took and the record it wrote
+    /// before it began, then the migration run to its first commit with EF Core's lock still taken. The record's line is
+    /// shifted by the number given, for a row that must tell the line written from the line read.
+    /// </summary>
+    private static (State Before, string Clean) StoppedPartWay(TempDataDir dir, long highWaterShift = 0, string? lastPending = null)
+    {
         var before = Snapshot(dir.Paths.DatabaseFile);
         Directory.CreateDirectory(dir.Paths.BackupsDirectory);
         var clean = Path.Combine(dir.Paths.BackupsDirectory, $"jason-20261021T000000Z-before-{Applied(dir, ThisMigration)}.db");
@@ -510,21 +793,103 @@ public class ProjectsAndPreferencesMigrationTests
             source.BackupDatabase(copy);
         }
 
+        File.WriteAllText(
+            MarkerOf(dir),
+            new JsonObject
+            {
+                ["clean_backup"] = clean,
+                ["first_pending"] = Applied(dir, ThisMigration),
+                ["last_pending"] = lastPending ?? LastOf(dir),
+                ["journal_high_water"] = HighWater(dir.Paths.DatabaseFile) + highWaterShift,
+                ["written_at"] = "2026-10-21T00:00:00Z",
+            }.ToJsonString());
+
         var script = Script(dir);
         var commit = script.IndexOf("COMMIT;", StringComparison.Ordinal) + "COMMIT;".Length;
         using (var connection = Open(dir.Paths.DatabaseFile))
         {
             Execute(connection, script[..commit]);
+            Execute(connection, "INSERT INTO \"__EFMigrationsLock\" (\"Id\", \"Timestamp\") VALUES (1, '2026-10-21 00:00:00+00:00')");
         }
 
-        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths).Migrate());
+        return (before, clean);
+    }
 
-        Assert.True(failed.Message.Contains("already exists", StringComparison.Ordinal), $"The refusal does not say why the migration failed: {failed.Message}");
-        Assert.True(failed.Message.Contains(dir.Paths.BackupsDirectory, StringComparison.Ordinal), $"The refusal does not say where the backups are kept: {failed.Message}");
-        Assert.Equal(
-            new[] { clean, failed.Backup }.Order(StringComparer.Ordinal),
-            Directory.GetFiles(dir.Paths.BackupsDirectory).Order(StringComparer.Ordinal));
-        AssertAsItStood(dir, clean, before);
+    /// <summary>Refused: the stopped start's copy not put back, the database exactly as this start found it, the record kept, the copy named.</summary>
+    private static void AssertRefusedAndUntouched(TempDataDir dir, string clean, params IInterceptor[] interceptors)
+    {
+        var found = Everything(dir.Paths.DatabaseFile);
+        var record = File.ReadAllText(MarkerOf(dir));
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths) { Interceptors = interceptors }.Migrate());
+
+        Assert.True(failed.StoppedStart == StoppedStart.ChronicleMoved, $"The stopped start's copy was {failed.StoppedStart}: {failed.Message}");
+        foreach (var said in new[] { "did not start", "stopped while it migrated", clean, "Nothing was put back", "chronicle has moved", dir.Paths.DatabaseFile + "-wal" })
+        {
+            Assert.True(failed.Message.Contains(said, StringComparison.Ordinal), $"The refusal does not say '{said}': {failed.Message}");
+        }
+
+        var now = Everything(dir.Paths.DatabaseFile);
+        Assert.True(
+            now.SequenceEqual(found),
+            $"The database is not as this start found it:{Environment.NewLine}lost: {string.Join("; ", found.Except(now))}{Environment.NewLine}gained: {string.Join("; ", now.Except(found))}");
+        Assert.True(File.Exists(clean), "The stopped start's copy is gone.");
+        Assert.Equal(WithoutMoment(record), WithoutMoment(File.ReadAllText(MarkerOf(dir))));
+    }
+
+    /// <summary>Every table's every row and the shape, of a database in any state, a migration's own tables included.</summary>
+    private static List<string> Everything(string file)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Pooling = false }.ToString());
+        connection.Open();
+        var everything = Rows(connection, "SELECT type || ' ' || name || ' | ' || coalesce(sql, '') FROM sqlite_master ORDER BY type, name");
+        foreach (var table in Rows(connection, "SELECT name FROM sqlite_master WHERE type = 'table' AND substr(name, 1, 7) <> 'sqlite_' ORDER BY name"))
+        {
+            everything.AddRange(Dump(connection, table, Rows(connection, $"SELECT name FROM pragma_table_info('{table}') ORDER BY cid")));
+        }
+
+        return everything;
+    }
+
+    /// <summary>A record with its moment taken out, since a start writes its own moment and carries the rest.</summary>
+    private static string WithoutMoment(string record)
+    {
+        var node = JsonNode.Parse(record)!.AsObject();
+        node.Remove("written_at");
+        return node.ToJsonString();
+    }
+
+    private static string MarkerOf(TempDataDir dir) => new DatabaseMigrator(dir.Paths).MarkerFile;
+
+    /// <summary>The last migration this build has.</summary>
+    private static string LastOf(TempDataDir dir)
+    {
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        return db.Database.GetMigrations().Last();
+    }
+
+    /// <summary>Throws something other than SQLite's own failure where the chronicle's line is read.</summary>
+    private sealed class LineUnreadable : DbCommandInterceptor
+    {
+        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result) =>
+            command.CommandText.Contains("max(id)", StringComparison.Ordinal) && command.CommandText.Contains("journal", StringComparison.Ordinal)
+                ? throw new InvalidOperationException("The line could not be read.")
+                : result;
+    }
+
+    private static long HighWater(string file)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Pooling = false }.ToString());
+        connection.Open();
+        return long.Parse(Assert.Single(Rows(connection, DatabaseMigrator.JournalHighWaterQuery)), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The newest chronicle entry's public id, the line an update's record holds.</summary>
+    private static string NewestEntry(string file)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Pooling = false }.ToString());
+        connection.Open();
+        return Assert.Single(Rows(connection, "SELECT public_id FROM journal ORDER BY id DESC LIMIT 1"));
     }
 
     /// <summary>

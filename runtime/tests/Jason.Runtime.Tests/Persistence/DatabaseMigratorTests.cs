@@ -2,6 +2,7 @@ using System.Data.Common;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -95,6 +96,7 @@ public class DatabaseMigratorTests
     /// runs on it. A table the first migration makes being there already is the cheapest failure that is certain.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, "a failed migration is put back")]
     public void A_migration_that_fails_puts_the_database_back_from_the_backup_this_start_took()
     {
         using var dir = new TempDataDir();
@@ -251,6 +253,223 @@ public class DatabaseMigratorTests
         Assert.Equal(0, commands.Count(DatabaseMigrator.ClearMigrationLock));
     }
 
+    /// <summary>
+    /// A start that migrates writes down, before it begins, which copy it took — and deletes the record once its migration
+    /// has succeeded, so the next start does not read it as a start stopped part way.
+    /// </summary>
+    [Fact]
+    public async Task The_record_a_start_writes_before_it_migrates_is_gone_once_it_has_succeeded()
+    {
+        using var dir = new TempDataDir();
+        await AtAsync(dir, "20260914051837_CampaignsContactsJournal");
+        var watch = new MarkerWatch(dir);
+
+        var report = new DatabaseMigrator(dir.Paths) { Interceptors = [watch] }.Migrate();
+
+        Assert.True(CleanOf(watch.Seen) == report.BackupFile, $"While it migrated, the record was: {watch.Seen ?? "not there"}");
+        Assert.False(File.Exists(MarkerOf(dir)), "The record is still there after the migration succeeded.");
+    }
+
+    /// <summary>A start that put its own copy back is done with its record: the database is as it found it.</summary>
+    [Fact]
+    public async Task The_record_is_gone_once_a_start_has_put_its_own_copy_back()
+    {
+        using var dir = new TempDataDir();
+        await AtAsync(dir, "20260914051837_CampaignsContactsJournal");
+        var watch = new MarkerWatch(dir, stopAt: "DROP TABLE \"role_notes\"");
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths) { Interceptors = [watch] }.Migrate());
+
+        Assert.True(failed.Restored && failed.StoppedStart == StoppedStart.None, $"The start did not put its own copy back: {failed.Message}");
+        Assert.True(CleanOf(watch.Seen) == failed.Backup, $"While it migrated, the record was: {watch.Seen ?? "not there"}");
+        Assert.False(File.Exists(MarkerOf(dir)), "The record is still there after the start put its own copy back.");
+    }
+
+    /// <summary>A record found where this start made the database from nothing points at a copy of a database that is gone.</summary>
+    [Fact]
+    public void A_record_found_by_a_start_that_made_the_database_is_deleted()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.StateDirectory);
+        File.WriteAllText(MarkerOf(dir), Marker(Path.Combine(dir.Paths.BackupsDirectory, "jason-20261021T000000Z-before-x.db"), First(dir), Last(dir), 4));
+        var interruption = new Interruption("DROP TABLE \"role_notes\"");
+
+        var failed = Assert.Throws<MigrationFailedException>(() => new DatabaseMigrator(dir.Paths) { Interceptors = [interruption] }.Migrate());
+
+        Assert.True(failed.Created, $"The start did not say it made the database: {failed.Message}");
+        Assert.False(File.Exists(MarkerOf(dir)), "The record is still there after a start that made the database.");
+    }
+
+    /// <summary>
+    /// A start that finds nothing to migrate, and a record whose migration the history holds, finds a start stopped after it
+    /// had migrated: the database is at this version's head, there is nothing of it to put back, and the record is deleted.
+    /// With anything still to migrate the record stays, since that start may have been stopped inside a later migration.
+    /// </summary>
+    [Fact]
+    public void A_start_with_nothing_to_migrate_deletes_a_record_whose_migration_the_history_holds()
+    {
+        using var dir = new TempDataDir();
+        new DatabaseMigrator(dir.Paths).Migrate();
+        File.WriteAllText(MarkerOf(dir), Marker(Path.Combine(dir.Paths.BackupsDirectory, "jason-20261021T000000Z-before-x.db"), First(dir), Last(dir), 0));
+
+        var report = new DatabaseMigrator(dir.Paths).Migrate();
+
+        Assert.Empty(report.NewlyApplied);
+        Assert.False(File.Exists(MarkerOf(dir)), "The record of a migration the history holds is still there.");
+    }
+
+    /// <summary>
+    /// A record that names a migration this executable does not have was written by a newer one, and may be the only pointer
+    /// to the copy of the installation as it stood: an older executable leaves it where it is, writes none of its own over
+    /// it, and says so once in the log, without what the record holds.
+    /// </summary>
+    [Fact]
+    public async Task A_record_naming_a_migration_this_version_does_not_know_is_left_and_said_once()
+    {
+        using var dir = new TempDataDir();
+        await AtAsync(dir, "20260914051837_CampaignsContactsJournal");
+        var written = Marker(Path.Combine(dir.Paths.BackupsDirectory, "jason-20991231T000000Z-before-later.db"), "20991231000000_FromALaterVersion", "20991231000000_FromALaterVersion", 3);
+        File.WriteAllText(MarkerOf(dir), written);
+        var said = new Said();
+        using var log = new Serilog.LoggerConfiguration().WriteTo.Sink(said).CreateLogger();
+
+        var report = new DatabaseMigrator(dir.Paths) { Log = log }.Migrate();
+
+        Assert.NotEmpty(report.NewlyApplied);
+        Assert.Equal(written, File.ReadAllText(MarkerOf(dir)));
+        var line = Assert.Single(said.Lines);
+        Assert.Contains("does not know", line, StringComparison.Ordinal);
+        Assert.False(line.Contains("2099", StringComparison.Ordinal) || line.Contains("FromALaterVersion", StringComparison.Ordinal), $"The line says what the record holds: {line}");
+    }
+
+    /// <summary>
+    /// A record that cannot be written leaves this start migrating as starts did before there was one, and the log says so
+    /// once, without the reason the file system gave.
+    /// </summary>
+    [Fact]
+    public async Task A_record_that_cannot_be_written_is_said_once_and_the_start_migrates()
+    {
+        using var dir = new TempDataDir();
+        await AtAsync(dir, "20260914051837_CampaignsContactsJournal");
+        Directory.CreateDirectory(MarkerOf(dir) + ".writing");
+        var said = new Said();
+        using var log = new Serilog.LoggerConfiguration().WriteTo.Sink(said).CreateLogger();
+
+        var report = new DatabaseMigrator(dir.Paths) { Log = log }.Migrate();
+
+        Assert.NotEmpty(report.NewlyApplied);
+        Assert.False(File.Exists(MarkerOf(dir)), "A record was written after all.");
+        var line = Assert.Single(said.Lines);
+        Assert.Contains("could not be written", line, StringComparison.Ordinal);
+        Assert.False(line.Contains("denied", StringComparison.OrdinalIgnoreCase) || line.Contains(dir.Paths.Root, StringComparison.Ordinal), $"The line carries the cause: {line}");
+    }
+
+    /// <summary>
+    /// A record that cannot be read names no copy anybody can act on, and may still be what a newer start meant to leave: it
+    /// is left exactly as it is, never written over, and the log says once that it could not be read, without its text.
+    /// </summary>
+    [Fact]
+    public async Task A_record_that_cannot_be_read_is_left_as_it_is_and_said_once()
+    {
+        using var dir = new TempDataDir();
+        await AtAsync(dir, "20260914051837_CampaignsContactsJournal");
+        var whole = Marker(Path.Combine(dir.Paths.BackupsDirectory, "jason-20261021T000000Z-before-x.db"), First(dir), Last(dir), 4);
+        var truncated = whole[..(whole.Length / 2)];
+        File.WriteAllText(MarkerOf(dir), truncated);
+        var said = new Said();
+        using var log = new Serilog.LoggerConfiguration().WriteTo.Sink(said).CreateLogger();
+
+        var report = new DatabaseMigrator(dir.Paths) { Log = log }.Migrate();
+
+        Assert.NotEmpty(report.NewlyApplied);
+        Assert.Equal(truncated, File.ReadAllText(MarkerOf(dir)));
+        var line = Assert.Single(said.Lines);
+        Assert.Contains("could not be read", line, StringComparison.Ordinal);
+        Assert.False(line.Contains("jason-2026", StringComparison.Ordinal) || line.Contains("clean_backup", StringComparison.Ordinal), $"The line says what the record holds: {line}");
+    }
+
+    /// <summary>
+    /// A record names the last migration its start meant to apply as well as the first. A start with nothing to migrate
+    /// whose history holds the first, but which does not know the last, may be standing on a database a newer start was
+    /// stopped inside: the record stays, the pointer to the copy from before that start with it.
+    /// </summary>
+    [Fact]
+    public void A_record_whose_last_migration_this_version_does_not_know_survives_a_start_with_nothing_to_migrate()
+    {
+        using var dir = new TempDataDir();
+        new DatabaseMigrator(dir.Paths).Migrate();
+        var written = Marker(Path.Combine(dir.Paths.BackupsDirectory, "jason-20261021T000000Z-before-x.db"), First(dir), "20991231000000_FromALaterVersion", 0);
+        File.WriteAllText(MarkerOf(dir), written);
+
+        var report = new DatabaseMigrator(dir.Paths).Migrate();
+
+        Assert.Empty(report.NewlyApplied);
+        Assert.Equal(written, File.ReadAllText(MarkerOf(dir)));
+    }
+
+    /// <summary>
+    /// A record that could not be deleted after its migration succeeded is said once in the log, without its text, and the
+    /// copy it names is not let go of with the older backups: a record still on disk keeps the copy it points to.
+    /// </summary>
+    [Fact]
+    public async Task A_record_that_cannot_be_deleted_after_a_success_is_said_and_its_copy_kept()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A file held open without leave to delete it refuses its delete on Windows alone; elsewhere the delete goes through.");
+        using var dir = new TempDataDir();
+        await AtAsync(dir, "20260914051837_CampaignsContactsJournal");
+        Directory.CreateDirectory(dir.Paths.BackupsDirectory);
+        var clean = Path.Combine(dir.Paths.BackupsDirectory, "jason-20200101T000000Z-before-x.db");
+        File.WriteAllText(clean, "the copy the record names");
+        string pending;
+        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            pending = db.Database.GetPendingMigrations().First();
+        }
+
+        File.WriteAllText(MarkerOf(dir), Marker(clean, pending, Last(dir), long.Parse(Scalar(dir.Paths.DatabaseFile, DatabaseMigrator.JournalHighWaterQuery), System.Globalization.CultureInfo.InvariantCulture)));
+        var said = new Said();
+        using var log = new Serilog.LoggerConfiguration().WriteTo.Sink(said).CreateLogger();
+        using var held = new MarkerHeld(dir);
+
+        var report = new DatabaseMigrator(dir.Paths) { Log = log, Interceptors = [held] }.Migrate();
+
+        Assert.NotEmpty(report.NewlyApplied);
+        var line = Assert.Single(said.Lines);
+        Assert.Contains("could not be deleted", line, StringComparison.Ordinal);
+        Assert.False(line.Contains("jason-2020", StringComparison.Ordinal), $"The line says what the record holds: {line}");
+        Assert.True(File.Exists(clean), "The copy a record still on disk names was let go of.");
+    }
+
+    /// <summary>
+    /// While a record that cannot be read is on disk, nobody can tell which backup it pointed to, so a start whose migration
+    /// succeeds lets go of none of them: every backup is kept and the record is left as it is until a person looks.
+    /// </summary>
+    [Fact]
+    public async Task No_backup_is_let_go_of_while_a_record_that_cannot_be_read_is_on_disk()
+    {
+        using var dir = new TempDataDir();
+        await AtAsync(dir, "20260914051837_CampaignsContactsJournal");
+        Directory.CreateDirectory(dir.Paths.BackupsDirectory);
+        var older = new[] { "jason-20200101T000000Z-before-0_Old.db", "jason-20210101T000000Z-before-0_Old.db" }
+            .Select(name => Path.Combine(dir.Paths.BackupsDirectory, name)).ToList();
+        foreach (var file in older)
+        {
+            File.WriteAllText(file, "an older backup");
+        }
+
+        var whole = Marker(older[0], First(dir), Last(dir), 4);
+        var truncated = whole[..(whole.Length / 2)];
+        File.WriteAllText(MarkerOf(dir), truncated);
+
+        var report = new DatabaseMigrator(dir.Paths).Migrate();
+
+        Assert.NotEmpty(report.NewlyApplied);
+        Assert.Equal(
+            older.Append(report.BackupFile!).Order(StringComparer.Ordinal),
+            Directory.GetFiles(dir.Paths.BackupsDirectory).Order(StringComparer.Ordinal));
+        Assert.Equal(truncated, File.ReadAllText(MarkerOf(dir)));
+    }
+
     [Fact]
     [Critical(Family.P2, "the oldest database reaches head")]
     public async Task A_wave_two_database_migrates_to_head_without_losing_its_chronicle()
@@ -290,6 +509,85 @@ public class DatabaseMigratorTests
             command.CommandText.Contains(words, StringComparison.Ordinal)
                 ? throw new InvalidOperationException("Interrupted where the test stops the migration.")
                 : result;
+    }
+
+    /// <summary>
+    /// What the record held when the migration ran its first command that changes something, and optionally the migration
+    /// stopped where a command's text holds the words.
+    /// </summary>
+    private sealed class MarkerWatch(TempDataDir dir, string? stopAt = null) : DbCommandInterceptor
+    {
+        public string? Seen { get; private set; }
+
+        private bool _read;
+
+        public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+        {
+            if (!_read)
+            {
+                _read = true;
+                Seen = File.Exists(MarkerOf(dir)) ? File.ReadAllText(MarkerOf(dir)) : null;
+            }
+
+            return stopAt is not null && command.CommandText.Contains(stopAt, StringComparison.Ordinal)
+                ? throw new InvalidOperationException("Interrupted where the test stops the migration.")
+                : result;
+        }
+    }
+
+    /// <summary>Every line the migrator logged, rendered.</summary>
+    private sealed class Said : Serilog.Core.ILogEventSink
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _lines = new();
+
+        public IReadOnlyList<string> Lines => [.. _lines];
+
+        public void Emit(Serilog.Events.LogEvent logEvent) => _lines.Enqueue(logEvent.RenderMessage(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static string MarkerOf(TempDataDir dir) => new DatabaseMigrator(dir.Paths).MarkerFile;
+
+    /// <summary>A record as a start that migrates writes it, by hand.</summary>
+    private static string Marker(string clean, string firstPending, string lastPending, long highWater) =>
+        new System.Text.Json.Nodes.JsonObject
+        {
+            ["clean_backup"] = clean,
+            ["first_pending"] = firstPending,
+            ["last_pending"] = lastPending,
+            ["journal_high_water"] = highWater,
+            ["written_at"] = "2026-10-21T00:00:00Z",
+        }.ToJsonString();
+
+    /// <summary>The copy a record names, or null where there is no record.</summary>
+    private static string? CleanOf(string? record) =>
+        record is null ? null : System.Text.Json.Nodes.JsonNode.Parse(record)!["clean_backup"]!.GetValue<string>();
+
+    /// <summary>The last migration this build has.</summary>
+    private static string Last(TempDataDir dir)
+    {
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        return db.Database.GetMigrations().Last();
+    }
+
+    /// <summary>Holds the record open from the migration's first command on, without leave to delete it, until disposed.</summary>
+    private sealed class MarkerHeld(TempDataDir dir) : DbCommandInterceptor, IDisposable
+    {
+        private FileStream? _held;
+
+        public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+        {
+            _held ??= new FileStream(MarkerOf(dir), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return result;
+        }
+
+        public void Dispose() => _held?.Dispose();
+    }
+
+    /// <summary>The first migration this build has.</summary>
+    private static string First(TempDataDir dir)
+    {
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        return db.Database.GetMigrations().First();
     }
 
     /// <summary>Every command the migrator's context ran that changes something, by its text.</summary>

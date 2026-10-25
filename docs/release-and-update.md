@@ -537,9 +537,24 @@ database since that start took its backup, so it puts that copy back, does not s
 that failed, the backup, and that the version you ran before still runs on the database. A migration SQLite cannot
 make in one transaction would otherwise leave a database part migrated, which no later start can migrate. What no
 code survives — a power cut, a process ended while it migrated — still leaves one part migrated, and the next start
-then fails on it; so older backups are let go of only once a migration has succeeded, and the backup the stopped start
-took is still there for the steps above. Such a start also leaves the migration lock taken, which would hold every later
-start waiting; the runtime migrates only while it holds its instance lock, so the next start clears that lock, says so
+then fails on it. So a start that migrates first writes down, in `~/.jason/state/migration.json`, which backup it took
+and the line the chronicle stood at, and deletes that record once it is done. The next start finds the record, and when
+its own migration fails too it puts back the stopped start's backup — the installation as it stood before the upgrade
+— keeps both backups, says so, and the start after it migrates from there. It does that only while the chronicle stands
+at the line written down: if anything has been recorded since, putting the backup back would lose it, so the database
+is left as this start found it and the message names the stopped start's backup for the steps above, for you to decide.
+A migration that itself writes lines to the chronicle moves that line too, so a start stopped part way through one is
+never put back this way: by design, the backup is named instead. The record names the migration the stopped start began
+at, and while anything is left to migrate it stays even when that migration is in the history, since the start may have
+been stopped inside a later one; only a start with nothing left to migrate deletes it. A second start stopped the same
+way carries the first one's backup and line forward rather than its own. Older backups
+are let go of only once a migration has succeeded, and never the one a record still names. This put-back restores the
+database alone: it leaves an update's backup and its ledger exactly as they were, and a `jason update rollback` after it
+still finds its ledger whole and still puts the previous executable back. The database it would restore is already the
+one the start put back, the copy from before the upgrade; and since an update whose new version was stopped while it
+migrated never reached a healthy runtime, its ledger holds no chronicle line, so the rollback answers from the executable
+alone and leaves the database as it stands. Such a start also leaves the migration lock taken, which would hold every
+later start waiting; the runtime migrates only while it holds its instance lock, so the next start clears that lock, says so
 in the log, and migrates. A start in the same second as one before it names its backup `-2`, `-3` and
 on, rather than write over one. A start that made the database itself, on a new installation, has nothing to take a backup of: if its migration fails it deletes the half-made file, says that the file held nothing and no data is lost, and the next start begins from nothing.
 

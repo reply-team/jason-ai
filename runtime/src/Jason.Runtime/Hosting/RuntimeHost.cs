@@ -112,23 +112,39 @@ public static class RuntimeHost
             MigrationReport migration;
             try
             {
-                migration = new DatabaseMigrator(paths).Migrate();
+                migration = new DatabaseMigrator(paths) { Log = logger }.Migrate();
             }
             catch (MigrationFailedException failed)
             {
-                // Its sentence is said where the start was asked for. The log keeps what kind of failure it was and where the
-                // copy is, never the failure's own words.
+                // Its sentence is said where the start was asked for. The log keeps which migration failed, what kind of
+                // failure it was and where the copy is, never the failure's own words.
                 if (failed.Created)
                 {
-                    logger.Error("The runtime did not start: a migration failed ({ExceptionType}) on a database this start made", failed.InnerException?.GetType().Name);
+                    logger.Error("The runtime did not start: migration {Migration} failed ({ExceptionType}) on a database this start made", failed.Migration, failed.InnerException?.GetType().Name);
                 }
                 else if (failed.Restored)
                 {
-                    logger.Error("The runtime did not start: a migration failed ({ExceptionType}), and the database was put back from {Backup}", failed.InnerException?.GetType().Name, failed.Backup);
+                    logger.Error("The runtime did not start: migration {Migration} failed ({ExceptionType}), and the database was put back from {Backup}", failed.Migration, failed.InnerException?.GetType().Name, failed.Backup);
                 }
                 else
                 {
-                    logger.Error("The runtime did not start: a migration failed ({ExceptionType}), and the database could not be put back from {Backup}", failed.InnerException?.GetType().Name, failed.Backup);
+                    logger.Error("The runtime did not start: migration {Migration} failed ({ExceptionType}), and the database could not be put back from {Backup}", failed.Migration, failed.InnerException?.GetType().Name, failed.Backup);
+                }
+
+                switch (failed.StoppedStart)
+                {
+                    case StoppedStart.PutBack:
+                        logger.Warning("A start stopped while migrating was found; its backup {Backup} was put back", failed.StoppedStartBackup);
+                        break;
+                    case StoppedStart.NotPutBack:
+                        logger.Warning("A start stopped while migrating was found; its backup {Backup} could not be put back", failed.StoppedStartBackup);
+                        break;
+                    case StoppedStart.ChronicleMoved:
+                        logger.Warning("A start stopped while migrating was found; its backup {Backup} was not put back: the chronicle moved", failed.StoppedStartBackup);
+                        break;
+                    case StoppedStart.BackupGone:
+                        logger.Warning("A start stopped while migrating was found; its backup {Backup} was not put back: it is not there", failed.StoppedStartBackup);
+                        break;
                 }
 
                 throw;

@@ -67,6 +67,10 @@ internal static class ReviewedLogProperties
         // Versions and digests.
         "Version", "Digest",
 
+        // A migration that failed as the start began, by the id the history names it by: one of the build's own migrations
+        // (RuntimeHost).
+        "Migration",
+
         // The loopback address the API listens on.
         "BaseUrl", "address",
 
