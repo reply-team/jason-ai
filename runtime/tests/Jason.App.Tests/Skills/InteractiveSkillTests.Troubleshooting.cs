@@ -274,7 +274,7 @@ public partial class InteractiveSkillTests
             headings is ["### 11. Waiting"],
             $"The troubleshooting skill heads state 11 as [{string.Join(" | ", headings)}]; it is headed '### 11. Waiting'.");
         Assert.Contains(
-            "A park on a provider block, once the runtime makes one, reads as this same `waiting` state with its block named, not as a twelfth.",
+            "A park on a provider block reads as this same `waiting` state with its block named, not as a twelfth.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("**How you recognise it.** The status is `waiting`", skill, StringComparison.Ordinal);
