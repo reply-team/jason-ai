@@ -59,7 +59,7 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
             ProgramLookupOutcome.ShellOnly => new ManifestProblem(
                 ProblemCodes.ExecutableNotRunnable,
                 path,
-                $"'{request.Name}' resolves only to a script a shell would have to interpret; a plugin may start programs, never shells."),
+                $"'{request.Name}' resolves only to {ProgramLookup.ShellScript}; a plugin may start programs, never shells."),
             _ => new ManifestProblem(
                 ProblemCodes.ExecutableMissing,
                 path,

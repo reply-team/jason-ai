@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using Jason.Contracts.Api;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Profiles;
 
 namespace Jason.Runtime.Tests.Profiles;
@@ -363,6 +364,60 @@ public class ProfileHostileInputTests
 
         Assert.Equal("validation_failed", error.Code);
         Assert.Contains(error.Details!, d => d.Field == "program");
+    }
+
+    /// <summary>
+    /// A program that is a script would be started through a shell, which is the one thing the program lookup refuses
+    /// everywhere else: such a profile could only ever fail at the claim, so it is refused where it is written, on a
+    /// creation and on a patch alike, in the lookup's own words, whatever the case of its extension.
+    /// </summary>
+    [Theory]
+    [InlineData("claude.cmd")]
+    [InlineData(@"C:\tools\claude.BAT")]
+    [InlineData("/opt/tools/claude.Ps1")]
+    public async Task A_program_that_is_a_shell_script_is_refused_on_creation_and_on_a_patch(string program)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate, new { name = "scripted", host = "claude_code", program }, HttpStatusCode.BadRequest, Ct);
+        AssertShellScript(created, program);
+
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, ProfileRevisionTests.Minimal("patched"), Ct);
+        var patched = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "patched", program }, HttpStatusCode.BadRequest, Ct);
+        AssertShellScript(patched, program);
+
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "patched" }, Ct);
+        Assert.Equal(1, read.CurrentRevision);
+    }
+
+    /// <summary>
+    /// Windows trims the dots and spaces that end a path, so <c>claude.cmd.</c> starts the script <c>claude.cmd</c> while
+    /// its extension, read as written, is none. The rule reads the path the way the operating system will.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\tools\claude.cmd.")]
+    [InlineData(@"C:\tools\claude.bat. .")]
+    public async Task A_script_path_that_Windows_trims_back_to_a_script_is_refused_on_creation(string program)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Trimming the dots and spaces that end a path is Windows' own.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate, new { name = "trimmed", host = "claude_code", program }, HttpStatusCode.BadRequest, Ct);
+
+        AssertShellScript(created, program);
+    }
+
+    private static void AssertShellScript(ErrorBody error, string program)
+    {
+        Assert.Equal("validation_failed", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("program", detail.Field);
+        Assert.Equal("shell_script", detail.Code);
+        Assert.DoesNotContain(program, detail.Message, StringComparison.Ordinal);
+        Assert.Contains(ProgramLookup.ShellScript, detail.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

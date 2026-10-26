@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
@@ -326,6 +327,36 @@ public class AgentPreflightTests
     }
 
     /// <summary>
+    /// A profile stored before its program was held to the rule keeps that program, so the claim holds it there too: a
+    /// path to a script would be started through cmd.exe, and the claim refuses it before a child exists, naming the
+    /// script rather than calling it missing.
+    /// </summary>
+    [Fact]
+    public async Task A_stored_program_that_is_a_shell_script_is_refused_at_the_claim_before_a_child_exists()
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var script = harness.Script("claude.cmd");
+        await SeedProfileAsync(db, "stored-before", script);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "stored-before");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains(script, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains(ProgramLookup.ShellScript, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not on this machine", stored.LastError.Message, StringComparison.Ordinal);
+
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(AttemptStatus.Failed, attempt.Status);
+        Assert.Null(attempt.Launch);
+    }
+
+    /// <summary>
     /// Where the person's memory files are is decided once, at the claim, beside the command that may read them: the
     /// files the claim hands on to the envelope and the files the read rules on the recorded command name are the same
     /// three, so a role is given leave to read no file it was not told of — and here, where every path can be written
@@ -571,6 +602,24 @@ public class AgentPreflightTests
         }
 
         public Claimer Claimer { get; }
+
+        /// <summary>
+        /// A script this machine would start from where it lies, outside the search path: on Windows a <c>.cmd</c> that
+        /// exists is all CreateProcess asks, and elsewhere it carries an execute bit.
+        /// </summary>
+        public string Script(string name)
+        {
+            var directory = System.IO.Path.Combine(_dir.Paths.Root, "scripts");
+            Directory.CreateDirectory(directory);
+            var file = System.IO.Path.Combine(directory, name);
+            File.WriteAllText(file, "@echo off\r\nexit /b 0\r\n");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            }
+
+            return file;
+        }
 
         /// <summary>The folders the claim finds the memory files by: a root of this test's own, made only where a test makes it.</summary>
         public HarnessFolders Folders { get; }

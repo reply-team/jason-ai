@@ -1070,11 +1070,11 @@ internal static class StatusChecks
     private static string NotRun(FoundProgram found, string providerCli, string? directory, string? script, string command) => found.Outcome switch
     {
         ProgramLookupOutcome.ShellOnly =>
-            $"'{providerCli}' resolves only to {Listed(found.File!)}, a script a shell would have to interpret, so '{command}' was not run: Jason starts programs, never shells; {Instead(found.Name)}",
+            $"'{providerCli}' resolves only to {Listed(found.File!)}, {ProgramLookup.ShellScript}, so '{command}' was not run: {ProgramLookup.ProgramsNotShells}; {Instead(found.Name)}",
         ProgramLookupOutcome.RefusedShim =>
             $"'{providerCli}' resolves only to {Listed(found.File!)}, which {found.Refusal}, so '{command}' was not run: starting it would mean cmd.exe interprets the arguments; {Instead(found.Name)}",
         _ when script is not null =>
-            $"'{providerCli}' resolves only to {Listed(script)}, a script a shell would have to interpret, so '{command}' was not run: Jason starts programs, never shells; give '{providerCli[..^System.IO.Path.GetExtension(providerCli).Length]}', the name without its extension, and Jason looks for an .exe, a .com or npm's own shim for it.",
+            $"'{providerCli}' resolves only to {Listed(script)}, {ProgramLookup.ShellScript}, so '{command}' was not run: {ProgramLookup.ProgramsNotShells}; give '{providerCli[..^System.IO.Path.GetExtension(providerCli).Length]}', the name without its extension, and Jason looks for an .exe, a .com or npm's own shim for it.",
         _ when directory is not null => $"'{found.Name}' was not found in {directory}, so '{command}' was not run.",
         _ => $"'{providerCli}' was not found on the search path, so '{command}' was not run.",
     };

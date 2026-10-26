@@ -22,20 +22,37 @@ public class AttemptHandlerTests
     /// <summary>
     /// The project a role is told its notes are kept under is the project at the claim, where the person's memory files
     /// were decided: a campaign moved to another project before the attempt starts does not give the role the old
-    /// project's read rule with the new project's note pointer.
+    /// project's read rule with the new project's note pointer. Claimed, moved and started as the scan does it, with
+    /// nothing handed to the handler but what the claim produced, so both halves are held in one row.
     /// </summary>
     [Fact]
     public async Task The_command_is_told_the_project_the_claim_found_and_not_the_one_the_campaign_has_by_then()
     {
         var command = FakeCommand.Returning(new CommandOutcome.Completed(null));
         using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0, commands: command);
-        var item = await harness.SeedClaimableAsync(Ct);
-        var claimed = Assert.Single(await harness.ClaimAsync(Ct));
+        var first = Path.Combine(harness.Paths.Root, "projects", "first");
         string atTheClaim;
         await using (var db = harness.Open())
         {
-            atTheClaim = (await db.Projects.SingleAsync(p => p.Id == DefaultProject.Id, Ct)).PublicId;
-            var moved = new Project { PublicId = "prj_movedAfterTheClaim", Name = "Moved", Slug = "moved", CreatedAt = Noon, UpdatedAt = Noon };
+            var project = await db.Projects.SingleAsync(p => p.Id == DefaultProject.Id, Ct);
+            project.FolderPath = first;
+            await db.SaveChangesAsync(Ct);
+            atTheClaim = project.PublicId;
+        }
+
+        var item = await harness.SeedClaimableAsync(Ct);
+        var claimed = Assert.Single(await harness.ClaimAsync(Ct));
+        await using (var db = harness.Open())
+        {
+            var moved = new Project
+            {
+                PublicId = "prj_movedAfterTheClaim",
+                Name = "Moved",
+                Slug = "moved",
+                FolderPath = Path.Combine(harness.Paths.Root, "projects", "moved"),
+                CreatedAt = Noon,
+                UpdatedAt = Noon,
+            };
             db.Projects.Add(moved);
             await db.SaveChangesAsync(Ct);
             var campaign = await db.Campaigns.SingleAsync(c => c.Id == item.CampaignId, Ct);
@@ -43,9 +60,11 @@ public class AttemptHandlerTests
             await db.SaveChangesAsync(Ct);
         }
 
-        await RunAsync(harness, claimed with { ProjectPublicId = atTheClaim });
+        await RunAsync(harness, claimed);
 
-        Assert.Equal(atTheClaim, Assert.Single(command.Contexts).ProjectId);
+        var context = Assert.Single(command.Contexts);
+        Assert.Equal(atTheClaim, context.ProjectId);
+        Assert.Equal(Path.Combine(first, "AGENTS.md"), context.MemoryFiles?.Project);
     }
 
     [Fact]

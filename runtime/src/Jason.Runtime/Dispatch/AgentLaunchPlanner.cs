@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Harness;
@@ -122,11 +123,16 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
 
         // A machine fact, decided here rather than by a child that fails to start: the profile names a program,
         // and either this machine has it or the work cannot run and says which program was missing.
+        // A script is the other way to have no program: a profile stored before the rule keeps its program, and the
+        // refusal names what it is rather than calling it missing.
         if (programs.Resolve(revision.Program) is not { Count: > 0 } startedAs)
         {
             return new AgentLaunchDecision.Refused(
                 AttemptErrors.HostNotAvailable,
-                $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', which is not on this machine.",
+                ProgramResolver.NamesShellScript(revision.Program)
+                    ? $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', {ProgramLookup.ShellScript}: {ProgramLookup.ProgramsNotShells}. "
+                      + "Name the program itself in the profile, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim)."
+                    : $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', which is not on this machine.",
                 Chosen(launch));
         }
 

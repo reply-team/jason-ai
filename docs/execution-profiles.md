@@ -31,7 +31,7 @@ A revision holds:
 | Field | Meaning |
 |---|---|
 | `host` | which host this describes. A closed vocabulary — `claude_code` in this version. An unknown value is refused when the profile is written, never discovered at launch |
-| `program` | what to start: an absolute path, or a name resolved on `PATH` |
+| `program` | what to start: an absolute path, or a name resolved on `PATH`. A `.cmd`, `.bat` or `.ps1`, in any case, is a script a shell would have to interpret and is refused when the profile is written with `shell_script`: Jason starts programs, never shells. The path is read as the operating system reads it, so a name Windows trims back to a script, such as `claude.cmd.`, is refused too. A profile stored before the rule keeps its program, and the claim refuses such a program with `host_not_available` before a child exists. A bare name without the extension is looked up on the search path (on Windows as an `.exe`, a `.com` or npm's own shim) |
 | `args` | what this profile adds after the arguments the runtime composes |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
 | `cli_command` | the bare command word the agent calls home with; defaults to the runtime's own executable name |
@@ -394,7 +394,7 @@ profile, so there is no level to name.
 | `lineage_resolution_unsupported` | a run caused this work and no profile can be inherited (§4) |
 | `profile_not_found` | the profile named does not exist |
 | `profile_disabled` | it exists and is out of service |
-| `host_not_available` | its program is not on this machine |
+| `host_not_available` | its program is not on this machine, or is a script a shell would have to interpret |
 | `role_skill_invalid` | the role's skill could not be given to it |
 | `role_skill_unreadable` | the role's skill was being replaced while this launch tried to read it |
 | `role_not_launchable` | no profile at any level, and the role has no entry command either |

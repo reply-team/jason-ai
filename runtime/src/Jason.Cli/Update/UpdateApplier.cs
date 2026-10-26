@@ -349,6 +349,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     {
         var manifest = await ReadFeedAsync(request, cancellationToken).ConfigureAwait(false);
 
+        // First, before anything the manifest says is believed: a manifest read for a named version that names another is
+        // not that release, so its floor and its artifacts are another release's, and saying so is the one true refusal.
+        if (request.Version is { } wanted && manifest.Version != wanted)
+        {
+            throw new UpdateException(
+                UpdateCodes.ArtifactUnexpected,
+                $"The manifest at {Address(request)} names {manifest.Version}, and the version asked for is {wanted}: nothing was applied.");
+        }
+
         if (!manifest.IsNewerThan(SemanticVersion.Current) && request.Version is null)
         {
             throw new UpdateException(

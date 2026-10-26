@@ -42,6 +42,11 @@ public sealed class ProgramResolver(ISearchPath searchPath)
     /// its entry script: reading the shim is how a command stays an argument array instead of becoming a line
     /// for <c>cmd.exe</c> to interpret.
     /// </para>
+    /// <para>
+    /// A path to a script is answered with null even where the file exists: CreateProcess would start it through
+    /// <c>cmd.exe</c>. A profile stored before its program was held to that rule keeps its program, so the rule is
+    /// held here as well, and <see cref="NamesShellScript"/> says why there was no answer.
+    /// </para>
     /// </summary>
     public IReadOnlyList<string>? Resolve(string program)
     {
@@ -50,7 +55,7 @@ public sealed class ProgramResolver(ISearchPath searchPath)
         if (program.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
             || program.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
         {
-            return Runnable(program) && Full(program) is { } path ? [path] : null;
+            return Full(program) is { } path && !ProgramLookup.IsShellScript(path) && Runnable(program) ? [path] : null;
         }
 
         // The same walk, the same order and the same reading of a shim that a plugin's declared program gets.
@@ -58,6 +63,19 @@ public sealed class ProgramResolver(ISearchPath searchPath)
         var onPath = new ProgramSearchPath(searchPath.Path, searchPath.PathExt);
         var found = ProgramLookup.Find(program, onPath, onPath);
         return found is { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } started } ? [started, .. found.Launch] : null;
+    }
+
+    /// <summary>
+    /// Whether a program names a file only a shell could start, read both as written and as this operating system
+    /// reads the path: Windows trims the dots and spaces that end one, so <c>claude.cmd.</c> is the script
+    /// <c>claude.cmd</c> although its extension, as written, is none.
+    /// </summary>
+    public static bool NamesShellScript(string program)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+
+        return ProgramLookup.IsShellScript(program)
+            || (!string.IsNullOrWhiteSpace(program) && Full(program.Trim()) is { } path && ProgramLookup.IsShellScript(path));
     }
 
     /// <summary>A file that exists and that this operating system would start; a directory is neither.</summary>

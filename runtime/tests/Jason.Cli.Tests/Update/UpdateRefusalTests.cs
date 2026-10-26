@@ -150,6 +150,40 @@ public class UpdateRefusalTests
         Assert.Equal(installation.To.ToString(), installation.Installed());
     }
 
+    /// <summary>
+    /// An apply that names a version reads that release's manifest, and a manifest that names another version is not
+    /// the release asked for: it is refused as such, before its floor is read, so a feed of another shape is never
+    /// reported as a version that cannot be reached directly. A feed of GitHub's shape is asked for the release's own
+    /// manifest; a feed served from a directory says nothing about where older releases live, so the address it was
+    /// given is the one read, and the version that document names is what tells the two apart.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_named_version_whose_manifest_names_another_is_refused_before_its_floor_is_read(bool fromADirectory)
+    {
+        using var installation = fromADirectory ? new FakeInstallation().ServedFromADirectory() : new FakeInstallation();
+        var other = SemanticVersion.Parse("9.9.8");
+        installation.Release.Says(Floored(installation, "9.0.0").Replace(
+            $"\"version\": \"{installation.To}\"",
+            $"\"version\": \"{other}\"",
+            StringComparison.Ordinal));
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, installation.To, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.ArtifactUnexpected, refused.Code);
+        Assert.False(refused.Retryable, "the release will name the same version next time");
+        var manifest = fromADirectory
+            ? "http://127.0.0.1:8099/manifest.json"
+            : $"https://127.0.0.1/releases/download/v{installation.To}/manifest.json";
+        Assert.Equal(
+            $"The manifest at {manifest} names {other}, and the version asked for is {installation.To}: nothing was applied.",
+            refused.Message);
+        Assert.Equal([new Uri(manifest).AbsolutePath], installation.Fetched);
+        Assert.Null(installation.Ledger());
+    }
+
     /// <summary>The installation's release, saying that nothing older than <paramref name="floor"/> updates to it in one apply.</summary>
     internal static string Floored(FakeInstallation installation, string floor) =>
         installation.Release.Manifest().Replace(

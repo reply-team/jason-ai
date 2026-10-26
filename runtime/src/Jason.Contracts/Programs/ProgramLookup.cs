@@ -63,6 +63,27 @@ public static partial class ProgramLookup
     private static readonly string[] WindowsRefusedExtensions = [".cmd", ".bat", ".ps1"];
 
     /// <summary>
+    /// What a file only a shell could start is, in the words every refusal of one uses — a plugin's declared program, the
+    /// provider CLI <c>jason status</c> checks, and a profile's program — so the three cannot describe it three ways.
+    /// </summary>
+    public const string ShellScript = "a script a shell would have to interpret";
+
+    /// <summary>Why such a file is refused, where the refusal is Jason's rather than one program's.</summary>
+    public const string ProgramsNotShells = "Jason starts programs, never shells";
+
+    /// <summary>
+    /// Whether a program as written names a file only a shell could start: a <c>.cmd</c>, a <c>.bat</c> or a <c>.ps1</c>,
+    /// in any case. Read from the name alone, on every platform.
+    /// </summary>
+    public static bool IsShellScript(string program)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+
+        var extension = Path.GetExtension(program.Trim());
+        return WindowsRefusedExtensions.Any(refused => refused.Equals(extension, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Walks the search path in order. On Windows a name resolves to an <c>.exe</c> or a <c>.com</c>, or — only
     /// when the whole path yielded neither — to the cmd shim npm writes, which is read rather than started:
     /// starting a <c>.cmd</c> or a <c>.bat</c> means <c>cmd.exe</c> interprets the arguments, which is the shell

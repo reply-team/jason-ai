@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Profiles;
@@ -179,6 +181,19 @@ internal static partial class ProfileValidation
         if (program.Any(char.IsControl))
         {
             errors.Add("program", "invalid", "program must not contain control characters.");
+        }
+
+        // A script is started through a shell, which the program lookup refuses for every program Jason starts, so such a
+        // profile could only ever fail at the claim. Refused here in the lookup's words; a bare name without the
+        // extension is looked up on the search path (on Windows as an .exe, a .com or npm's own shim). Read as the operating system reads the path too, so
+        // a script whose name Windows trims back to one is refused here and not started at the claim.
+        if (ProgramResolver.NamesShellScript(program))
+        {
+            errors.Add(
+                "program",
+                "shell_script",
+                "program must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
+                + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).");
         }
     }
 

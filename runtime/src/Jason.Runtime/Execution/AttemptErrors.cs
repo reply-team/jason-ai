@@ -34,7 +34,10 @@ public static class AttemptErrors
     /// <summary>The resolved profile has been taken out of service.</summary>
     public const string ProfileDisabled = "profile_disabled";
 
-    /// <summary>The resolved profile's program is not on this machine, so no host can be started.</summary>
+    /// <summary>
+    /// The resolved profile's program is not on this machine, or is a script only a shell could start, so no host can be
+    /// started.
+    /// </summary>
     public const string HostNotAvailable = "host_not_available";
 
     /// <summary>

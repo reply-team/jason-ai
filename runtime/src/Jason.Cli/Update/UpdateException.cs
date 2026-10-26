@@ -12,7 +12,10 @@ public static class UpdateCodes
     /// <summary>The download did not arrive, or the archive could not be read.</summary>
     public const string ArtifactUnreachable = "update_artifact_unreachable";
 
-    /// <summary>The archive does not carry the one file this platform's release is supposed to contain.</summary>
+    /// <summary>
+    /// The archive does not carry the one file this platform's release is supposed to contain, the release publishes nothing
+    /// for this platform, or the manifest read for a named version names another.
+    /// </summary>
     public const string ArtifactUnexpected = "update_artifact_unexpected";
 
     /// <summary>A different version is already in flight. The same one is resumed rather than refused.</summary>
