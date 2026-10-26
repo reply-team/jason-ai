@@ -11,8 +11,8 @@ operation and in which account is [docs/routing.md](routing.md); what a canonica
 
 Jason ships no AI client, no model account and no credentials. Background AI work runs on an agent
 host the user installed and authenticated themselves. An **execution profile** is Jason's non-secret
-description of one such host: which program to start, what the launched agent may not do, and the
-word it calls home by.
+description of one such host: which program to start, what the launched agent may not do, the tools
+the person grants it by name, and the word it calls home by.
 
 A profile has two halves, and the split is the point.
 
@@ -34,6 +34,7 @@ A revision holds:
 | `program` | what to start: an absolute path, or a name resolved on `PATH`. A `.cmd`, `.bat` or `.ps1`, in any case, is a script a shell would have to interpret and is refused when the profile is written with `shell_script`: Jason starts programs, never shells. The path is read as the operating system reads it, so a name Windows trims back to a script, such as `claude.cmd.`, is refused too. A profile stored before the rule keeps its program, and the claim refuses such a program with `host_not_available` before a child exists. A bare name without the extension is looked up on the search path (on Windows as an `.exe`, a `.com` or npm's own shim) |
 | `args` | what this profile adds after the arguments the runtime composes |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
+| `tools` | the tools the person grants the launched agent, by name: `web_search`, `web_fetch`, each at most once. A closed vocabulary — any other word is refused when the profile is written, and so is a word named twice, or one the revision's `deny` takes away by the host's name for it. Empty unless somebody names one (§7) |
 | `cli_command` | the bare command word the agent calls home with; defaults to the runtime's own executable name |
 | `host_version_verified` | the host version this profile was proven against, as a version such as `2.1.289`: three numbers, and a pre-release after `-` if any. Recorded and reported; not enforced. A profile stored before the version shape was required keeps what it has; a write that names the field is held to it |
 
@@ -55,7 +56,9 @@ attempt records the whole argument list as launched.
 ```sh
 jason profile create local-claude --host claude_code --program claude \
   --arg --model --arg sonnet --deny Write --host-version-verified 2.1.275
-jason profile update local-claude --deny Write --deny WebFetch --reason "no fetching"
+jason profile update local-claude --deny Write --deny "Bash(curl *)" --reason "no fetching through the shell"
+jason profile update local-claude --deny Write --deny "Bash(curl *)" --tool web_search --tool web_fetch \
+  --reason "the person said the roles may search the web"
 jason profile get local-claude --revision 1
 jason profile list --human
 jason profile disable local-claude --reason "host being upgraded"
@@ -134,7 +137,10 @@ against an attempt the runtime knows.
 Written at the claim, completed at the end, never rewritten: the profile's id, name and **revision**,
 which level chose it, the revision it inherited where lineage chose, the host, the program as this
 machine resolved it, **the whole argument list as launched**, the version the profile was verified
-against, and the session id minted for that attempt alone.
+against, the session id minted for that attempt alone, and **the tools the revision granted** — in the
+API's words, `web_search` and `web_fetch`, and empty where it granted none; where a launch was made, the
+host's names for them are in the argument list. A record whose claim never read a revision — a role's own
+entry command, a refusal made before the revision was read, an attempt from before grants — has no `tools`.
 
 An edit to the profile after the launch leaves all of it exactly as it stands. Inherited work runs
 the profile as it stands **now** rather than as it stood when the ancestor ran — otherwise a repaired
@@ -146,7 +152,8 @@ can be read rather than guessed.
 The per-attempt work directory is the per-item half of the launch. The runtime writes, before the
 child starts:
 
-- `.claude/settings.json` holding the revision's **deny** rules and three exclusions,
+- `.claude/settings.json` holding the revision's **deny** rules, a deny of each web tool the revision does not
+  grant (§7), each rule once, and three exclusions,
   `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]` (§7), and nothing else;
 - `.claude/skills/<role>/` copied from `<data>/skills/roles/<role>/`, files only, no link followed.
 
@@ -215,7 +222,8 @@ instead, which the role reads through its read rules and never through this list
 `CLAUDE.md` cannot be excluded, by the host's own rule.
 
 **The tools are all still listed; the mode and the allow rules decide what runs.** Every built-in tool the host
-has appears to the session, and the allow rules name two things: the callback, and the memory files. Of the tools
+has appears to the session, and the allow rules name two things: the callback, and the memory files — and a third
+only where the person granted it, the tools below. Of the tools
 a role reached for, the host let `Read` through on its own inside the work directory, while `Glob`, `Write`,
 `Edit` and a state-changing PowerShell command were **refused by the mode**, and so was a `Read` anywhere outside
 the work directory that no rule names. Through either shell the rules grant the callback and nothing else; any
@@ -253,6 +261,41 @@ role's read is refused in the host's usual words, and the role reports the refus
 Nothing the role sees says that the folder's name is the cause: the claim's warning does, one line naming the
 attempt and the level — `client`, `project` or `campaign` — and never the path. Renaming the folder fixes it, once
 Jason has the new path (`jason project link` records a project's and its campaigns').
+
+**What a grant of tools adds.** A revision's `tools` are the person's word that the roles it launches may search
+and read the web, and the web is closed without it: **without the grant the tool is not there; with it, the role
+reads the web within what the person's own deny rules leave.** Each tool granted is one more allow rule, in the
+host's own name for it and nothing around it — `web_search` becomes `WebSearch` and `web_fetch` becomes `WebFetch`,
+after the callback and the read rules — and each tool not granted is a deny of that same bare name, written into the
+work directory beside the person's own deny rules. The two never name the same tool. A profile's own `args` cannot
+add either, because `--allowed-tools` is a flag a profile may not carry, nor take one away: `--disallowed-tools` is
+one too. An ungranted tool is denied rather than left unlisted because, run with neither an allow rule nor a deny,
+the same host fetched a page of its own documentation list without asking, while it refused an ordinary page. Run
+against Claude Code 2.1.310 on Windows, in a work directory prepared as the runtime prepares one: with the two allow
+rules a role searched the web and fetched an ordinary page; with the two denies it was not offered either tool, and
+asked for a page of that documentation list it fetched nothing, the run still ending as a success. Both tools are
+loaded on demand, and the role was seen to reach them through the host's tool search, which no rule named.
+
+What a grant does not do:
+
+- **It grants nothing else.** No other tool, no file-writing tool, and no network through a shell: a command that
+  fetches a page is any other shell command, and falls to the host's own floor.
+- **It names no site.** A grant of `web_fetch` reaches every address the host will fetch. A restriction to some
+  domains would be a field of its own, and this version has none.
+- **It does not outrank a deny.** The profile's `deny` is written into the work directory, and the host's deny wins
+  over the grant. Run against the same host: with `WebFetch` granted and denied by that bare name, the role was not
+  offered the tool at all; with it granted and `WebFetch(domain:example.com)` denied, the tool was offered, a fetch
+  of that one site was refused, and a page of another site was fetched. So a profile that grants a tool and denies it
+  by the host's own name for it, spelled as the host spells it, is refused when it is written — the refusal is on the
+  grant, `tools[i]` with the code `denied`, and names the deny it meets — while a deny that is a pattern is not
+  refused and is written beside the grant; how much of the grant it leaves is the host's to decide, and that one
+  pattern is the only one run. A patch is held to the pair as it would be launched: one that names only `tools`
+  meets the profile's `deny` as it stands, and the other way round, and the refusal says which index is the
+  profile's. A grant is withdrawn by an update that names an empty `tools` (the CLI's `--file`), never by a deny of
+  the tool.
+
+A grant is part of the revision like every other field, so changing it appends a revision, an attempt keeps the
+grant it ran under, and an edit made while it runs changes nothing it says.
 
 The mode's rule — as the mode states it, not as a measurement here — is that anything needing permission is
 refused. What was seen is narrower: nothing outside the callback was seen to change anything, and nothing

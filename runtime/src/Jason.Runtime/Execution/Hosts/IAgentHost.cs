@@ -25,6 +25,13 @@ public interface IAgentHost
     IReadOnlySet<string> ReservedFlags { get; }
 
     /// <summary>
+    /// The host's own name for a tool: the allow rule a launch adds for a tool the person granted, and the deny it
+    /// writes for one the revision does not grant. A profile that grants a tool and denies it by this name is refused
+    /// where it is written.
+    /// </summary>
+    string ToolRule(AgentTool tool);
+
+    /// <summary>
     /// The command one attempt of <paramref name="revision"/> is started with. Called once per attempt: the
     /// session it names is minted here and belongs to that attempt alone.
     /// </summary>

@@ -87,6 +87,8 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             CreatedAt = now,
         };
 
+        RefuseDeniedGrant(revision);
+
         var profile = new ExecutionProfile
         {
             PublicId = PublicId.New(IdPrefix),
@@ -200,6 +202,8 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             CreatedAt = now,
         };
 
+        RefuseDeniedGrant(next, request.Tools.IsSet, request.Deny.IsSet);
+
         db.ExecutionProfileRevisions.Add(next);
         profile.CurrentRevision = next.Number;
         profile.UpdatedAt = now;
@@ -237,6 +241,24 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
     /// </summary>
     private static bool Conflicts(DbUpdateException exception) =>
         exception.InnerException is SqliteException { SqliteErrorCode: 19 };
+
+    /// <summary>
+    /// The grant held against the deny of the revision as it would be launched: a patch naming one of the two meets the
+    /// other as the profile already has it, and the refusal says which list was the profile's. Checked on the whole
+    /// revision, so the host it names is the one whose words count.
+    /// </summary>
+    private void RefuseDeniedGrant(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true)
+    {
+        if (hosts.LastOrDefault(candidate => candidate.Kind == revision.Host) is not { } host)
+        {
+            return;
+        }
+
+        var errors = new ValidationErrors();
+        ProfileValidation.ValidateGrantBesideDeny(
+            revision.Tools, revision.Deny, host.ToolRule, errors, toolsNamed, denyNamed);
+        errors.ThrowIfAny();
+    }
 
     /// <summary>
     /// The flags the host of this profile composes for itself, which the profile therefore may not carry. An

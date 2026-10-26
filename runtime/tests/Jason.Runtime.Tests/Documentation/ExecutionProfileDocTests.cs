@@ -260,6 +260,81 @@ public partial class ExecutionProfileDocTests
             || name.Contains("Key", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// A grant and a deny meet in one place, the host, and the host's deny wins. The page says so, and says what a
+    /// profile that names both by the same word gets instead: a refusal when it is written, on the grant, with its
+    /// code. A pattern is only written beside the grant, and the page claims for it no more than the one pattern run
+    /// showed; the host's deny flag is reserved, so no deny arrives where that check cannot see it.
+    /// </summary>
+    [Fact]
+    public void The_profile_contract_says_the_hosts_deny_wins_over_the_grant()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains("the host's deny wins over the grant", contract, StringComparison.Ordinal);
+        Assert.Contains("`tools[i]` with the code `denied`", contract, StringComparison.Ordinal);
+        Assert.Contains("`WebFetch(domain:example.com)`", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            "a deny that is a pattern is not refused and is written beside the grant; how much of the grant it leaves is the host's to decide",
+            contract,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("narrows the grant", contract, StringComparison.Ordinal);
+        Assert.Contains("nor take one away: `--disallowed-tools` is one too", contract, StringComparison.Ordinal);
+        Assert.Contains("the refusal says which index is the profile's", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The example that opens the web keeps the shell deny the line before it set, because a named deny list replaces
+    /// the stored one whole; and the page says the way a grant is taken back, now that a deny of the tool is refused.
+    /// </summary>
+    [Fact]
+    public void The_profile_contract_grants_beside_the_shell_deny_and_says_how_a_grant_is_withdrawn()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains(
+            "jason profile update local-claude --deny Write --deny \"Bash(curl *)\" --tool web_search --tool web_fetch",
+            contract,
+            StringComparison.Ordinal);
+        Assert.Contains("A grant is withdrawn by an update that names an empty `tools` (the CLI's `--file`)", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Both pages that list the work directory's settings file name the deny of each ungranted web tool, so neither
+    /// says the file holds the profile's rules and nothing else; and the record's <c>tools</c> is said to be absent
+    /// where no revision was read, and to have host names beside it only where a launch was made.
+    /// </summary>
+    [Fact]
+    public void The_pages_list_the_deny_of_each_ungranted_web_tool_and_when_a_record_has_tools()
+    {
+        var execution = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains("a deny of each web tool its revision does not grant", execution, StringComparison.Ordinal);
+        Assert.Contains("a deny of each web tool the revision does not grant (§7), each rule once", contract, StringComparison.Ordinal);
+        Assert.Contains("where a launch was made, the host's names for them are in the argument list", contract, StringComparison.Ordinal);
+        Assert.Contains("A record whose claim never read a revision", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The grant is closed by default, and the page says it as a promise, with the one reason an ungranted tool is
+    /// denied rather than left unlisted, given as the run that showed it rather than as a rule of the host. A page that
+    /// still said a profile without a grant was "not a promise" would describe a launch that no longer exists.
+    /// </summary>
+    [Fact]
+    public void The_profile_contract_promises_that_an_ungranted_web_tool_is_not_there()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains("without the grant the tool is not there", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            "run with neither an allow rule nor a deny, the same host fetched a page of its own documentation list without asking, while it refused an ordinary page",
+            contract,
+            StringComparison.Ordinal);
+        Assert.Contains("the role was seen to reach them through the host's tool search, which no rule named", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("not a promise", contract, StringComparison.Ordinal);
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 

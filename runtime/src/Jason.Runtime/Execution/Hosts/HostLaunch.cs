@@ -16,4 +16,9 @@ namespace Jason.Runtime.Execution.Hosts;
 /// named and the host could not write as a rule for one file, so the session cannot read it. A level that was null is
 /// not here: nothing was named.
 /// </param>
-public sealed record HostLaunch(IReadOnlyList<string> Command, string SessionId, IReadOnlyList<string> Unreadable);
+/// <param name="Deny">
+/// What the host denies on the revision's account, beside the profile's own deny rules and in the same place: each tool
+/// of the vocabulary the revision does not grant, by the host's own name for it. Empty where it grants them all.
+/// </param>
+public sealed record HostLaunch(
+    IReadOnlyList<string> Command, string SessionId, IReadOnlyList<string> Unreadable, IReadOnlyList<string> Deny);

@@ -161,11 +161,13 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             startedAs[0],
             composed.Command,
             revision.HostVersionVerified,
-            composed.SessionId);
+            composed.SessionId,
+            revision.Tools);
 
+        // The person's deny rules first, then what the host denies on the revision's account, each rule once.
         return new AgentLaunchDecision.Ready(new AgentPlan(
             composed.Command,
-            revision.Deny,
+            [.. revision.Deny.Concat(composed.Deny).Distinct(StringComparer.Ordinal)],
             ProgramResolver.CliCommandFor(revision.CliCommand),
             provenance,
             memoryFiles,
@@ -181,7 +183,7 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
 
     /// <summary>
     /// The same for a refusal of this class: the profile resolved and the machine or the build refused it, so
-    /// everything but the launch itself is known and worth keeping.
+    /// everything but the launch itself is known and worth keeping, the tools the revision granted among it.
     /// </summary>
     private static AgentProvenanceDto Chosen(AgentVerdict.Launch launch) =>
         new(
@@ -191,5 +193,6 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             launch.Revision.Number,
             launch.LineageRevision,
             launch.Revision.Host,
-            launch.Revision.Program);
+            launch.Revision.Program,
+            Tools: launch.Revision.Tools);
 }

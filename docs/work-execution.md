@@ -426,6 +426,13 @@ role's own `entry_command` if it has one, otherwise `Roles:DefaultEntryCommand` 
 otherwise the attempt fails with `role_not_launchable`. The attempt records which of the two
 happened, so an absent profile name is a fact rather than an inference.
 
+An agent attempt's `provenance.agent` is written at the claim and never rewritten: the level that chose the
+profile, its id, name and revision, the revision it inherited where lineage chose, the host, the program, the
+whole argument list as launched, the host version the profile was verified against, the session id, and
+`tools` — the tools that revision granted, in the API's words and empty where it granted none, beside the
+revision they came from. A launch the machine refused keeps as much of it as the claim had decided, the grant
+included. An attempt run by a role's own entry command names no profile and no grant.
+
 ### The agent pre-flight, in the order it is checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one
@@ -462,7 +469,8 @@ and `workitem.complete`.
 
 The launcher puts two things in that directory before the child starts:
 
-- `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt
+- `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt,
+  a deny of each web tool its revision does not grant ([execution-profiles.md](execution-profiles.md) §7),
   and three exclusions, `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]`,
   and nothing else: **a launched role loads no `CLAUDE.md`, no rules file and no `AGENTS.md` of the
   host's own accord** — not the operator's own user-level ones, which reach a session whatever its

@@ -203,4 +203,155 @@ public class ProfileToolsTests
         Assert.Equal(1, read.CurrentRevision);
         Assert.Empty(read.Revision.Tools);
     }
+
+    /// <summary>
+    /// A grant and a deny that name the same tool by the host's own name are refused as a pair: the host's deny wins
+    /// over the grant, so the revision would say a tool was granted that no launch of it can use. The refusal is on the
+    /// grant, and its message names the deny it collides with.
+    /// </summary>
+    [Theory]
+    [InlineData("web_fetch", "WebFetch")]
+    [InlineData("web_search", "WebSearch")]
+    public async Task A_grant_of_a_tool_the_deny_names_is_refused_as_a_pair(string tool, string rule)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "contradicting", host = "claude_code", program = "claude", deny = new[] { "Write", rule }, tools = new[] { tool } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal("validation_failed", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("tools[0]", detail.Field);
+        Assert.Equal("denied", detail.Code);
+        Assert.Contains("deny[1]", detail.Message, StringComparison.Ordinal);
+        Assert.Contains($"'{rule}'", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An edit is held to the pair as it would be launched: a patch that names only one of the two fields meets the
+    /// other as the profile already has it, the message says which index is the profile's rather than the request's,
+    /// and a refused patch writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_that_makes_the_grant_and_the_deny_collide_is_refused()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "denies-fetch", host = "claude_code", program = "claude", deny = new[] { "WebFetch" } },
+            Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "grants-search", host = "claude_code", program = "claude", tools = new[] { "web_search" } },
+            Ct);
+
+        var granting = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "denies-fetch", tools = new[] { "web_search", "web_fetch" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        var denying = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "grants-search", deny = new[] { "WebSearch" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal(("tools[1]", "denied"), (Assert.Single(granting.Details!).Field, granting.Details![0].Code));
+        Assert.Equal(("tools[0]", "denied"), (Assert.Single(denying.Details!).Field, denying.Details![0].Code));
+        Assert.StartsWith("tools[1] grants web_fetch, which the profile's deny[0] ", granting.Details[0].Message, StringComparison.Ordinal);
+        Assert.StartsWith("the profile's tools[0] grants web_search, which deny[0] ", denying.Details[0].Message, StringComparison.Ordinal);
+        var fetchRead = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "denies-fetch" }, Ct);
+        var searchRead = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "grants-search" }, Ct);
+        Assert.Equal((1, 1), (fetchRead.CurrentRevision, searchRead.CurrentRevision));
+    }
+
+    /// <summary>
+    /// Only the host's bare name for a granted tool collides. A deny that is a pattern is not refused and is written
+    /// beside the grant — how much of the grant it leaves is the host's to decide — and so is the bare name of a tool
+    /// the profile does not grant.
+    /// </summary>
+    [Theory]
+    [InlineData("WebFetch(domain:example.com)")]
+    [InlineData("WebSearch")]
+    public async Task A_pattern_deny_or_another_tools_name_is_written_beside_the_grant(string rule)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "beside", host = "claude_code", program = "claude", deny = new[] { rule }, tools = new[] { "web_fetch" } },
+            Ct);
+
+        Assert.Equal([AgentTool.WebFetch], created.Revision.Tools);
+        Assert.Equal([rule], created.Revision.Deny);
+    }
+
+    /// <summary>
+    /// The pair is the revision as it would be launched, so one patch that grants a tool and clears the deny that
+    /// named it is a revision with no collision, and it is written.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_that_grants_a_tool_and_clears_its_deny_together_is_written()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "opening", host = "claude_code", program = "claude", deny = new[] { "WebFetch" } },
+            Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate,
+            new { name = "opening", tools = new[] { "web_fetch" }, deny = Array.Empty<string>() },
+            Ct);
+
+        Assert.Equal(2, updated.CurrentRevision);
+        Assert.Equal([AgentTool.WebFetch], updated.Revision.Tools);
+        Assert.Empty(updated.Revision.Deny);
+    }
+
+    /// <summary>
+    /// The match is the host's name exactly as the host spells it. A deny spelled another way is not refused and is
+    /// written beside the grant; what the host makes of that spelling is the host's, and nothing here says.
+    /// </summary>
+    [Fact]
+    public async Task A_deny_that_spells_the_name_in_another_case_is_written_beside_the_grant()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "lower-case", host = "claude_code", program = "claude", deny = new[] { "webfetch" }, tools = new[] { "web_fetch" } },
+            Ct);
+
+        Assert.Equal([AgentTool.WebFetch], created.Revision.Tools);
+        Assert.Equal(["webfetch"], created.Revision.Deny);
+    }
+
+    /// <summary>
+    /// A disabled profile is edited like any other, so an edit of one is held to the same pair: it is refused on the
+    /// grant and writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task An_edit_of_a_disabled_profile_is_held_to_the_same_pair()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "resting", host = "claude_code", program = "claude", tools = new[] { "web_fetch" } },
+            Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileDisable, new { name = "resting", reason = "The host is being upgraded." }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "resting", deny = new[] { "WebFetch" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal(("tools[0]", "denied"), (Assert.Single(error.Details!).Field, error.Details![0].Code));
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "resting" }, Ct);
+        Assert.Equal(1, read.CurrentRevision);
+    }
 }

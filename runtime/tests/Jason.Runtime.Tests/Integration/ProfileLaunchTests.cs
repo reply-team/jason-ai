@@ -82,6 +82,126 @@ public class ProfileLaunchTests
     }
 
     /// <summary>
+    /// The tools the revision granted are recorded beside it, in the API's words, and the command the attempt
+    /// records is the one that carried them in the host's. A profile that granted none records an empty grant, which
+    /// says "none" where an attempt from before grants existed says nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_launch_records_the_tools_its_revision_granted_beside_the_revision()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        await ProfileAsync(host, "researching", ProfileFixture.Program, "web_search", "web_fetch");
+        await ProfileAsync(host, "ungranted", ProfileFixture.Program);
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("profiled", Ct, "silent");
+
+        var granted = await host.CreateAsync(
+            new { campaign_id = campaign, kind = "ai_role", role = "profiled", execution_profile = "researching", context = new { behaviour = "succeed" } },
+            Ct);
+        var other = await host.CampaignAsync(Ct, "Ungranted work");
+        var ungranted = await host.CreateAsync(
+            new { campaign_id = other, kind = "ai_role", role = "profiled", execution_profile = "ungranted", context = new { behaviour = "succeed" } },
+            Ct);
+
+        await host.ScanAsync(Ct);
+        var done = await host.WaitForStatusAsync(granted.Id, WorkItemStatus.Succeeded, Ct);
+        var plain = await host.WaitForStatusAsync(ungranted.Id, WorkItemStatus.Succeeded, Ct);
+
+        var agent = done.Attempts![0].Provenance!.Agent!;
+        Assert.Equal(1, agent.ProfileRevision);
+        Assert.Equal([AgentTool.WebSearch, AgentTool.WebFetch], agent.Tools);
+        Assert.Contains("WebSearch", agent.Args!);
+        Assert.Contains("WebFetch", agent.Args!);
+
+        var (_, body) = await host.Fixture.PostRawAsync(Operations.WorkItemGet, $$"""{"work_item_id":"{{granted.Id}}"}""", Ct);
+        var recorded = JsonNode.Parse(body)!["attempts"]![0]!["provenance"]!["agent"]!;
+        Assert.Equal(["web_search", "web_fetch"], recorded["tools"]!.AsArray().Select(tool => (string?)tool));
+
+        var none = plain.Attempts![0].Provenance!.Agent!;
+        Assert.NotNull(none.Tools);
+        Assert.Empty(none.Tools);
+        Assert.DoesNotContain("WebSearch", none.Args!);
+        Assert.DoesNotContain("WebFetch", none.Args!);
+    }
+
+    /// <summary>
+    /// A deny that is a pattern travels beside the grant: the command carries the grant in the host's name, and the
+    /// work directory the role starts in carries the pattern, where the host decides how much of the grant it leaves.
+    /// </summary>
+    [Fact]
+    public async Task A_launch_carries_the_grant_and_a_pattern_deny_written_beside_it()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        await host.Fixture.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new
+            {
+                name = "beside",
+                host = "claude_code",
+                program = ProfileFixture.Program,
+                deny = new[] { "Write", "WebFetch(domain:example.com)" },
+                tools = new[] { "web_fetch" },
+                host_version_verified = "0.0.0-stand-in",
+            },
+            Ct);
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("profiled", Ct, "silent");
+        var item = await host.CreateAsync(
+            new { campaign_id = campaign, kind = "ai_role", role = "profiled", execution_profile = "beside", context = new { behaviour = "succeed" } },
+            Ct);
+
+        await host.ScanAsync(Ct);
+        var done = await host.WaitForStatusAsync(item.Id, WorkItemStatus.Succeeded, Ct);
+
+        var attempt = done.Attempts![0];
+        Assert.Contains("WebFetch", attempt.Provenance!.Agent!.Args!);
+        var settings = JsonNode.Parse(FakeHostRuntime.ReadShared(
+            Path.Combine(host.Paths.AttemptWorkDirectory(item.Id, attempt.Id), ".claude", "settings.json")))!;
+        Assert.Equal(
+            ["Write", "WebFetch(domain:example.com)", "WebSearch"],
+            settings["permissions"]!["deny"]!.AsArray().Select(rule => (string?)rule));
+    }
+
+    /// <summary>
+    /// A profile that grants no web tool starts its role in a directory that denies both by the host's own names, after
+    /// the person's own deny rules, and a tool the person denied already is named once.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S6, "the work directory of a profile with no grant denies both web tools by name")]
+    public async Task A_launch_without_a_grant_starts_where_both_web_tools_are_denied()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        await host.Fixture.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new
+            {
+                name = "closed",
+                host = "claude_code",
+                program = ProfileFixture.Program,
+                deny = new[] { "Write", "WebFetch" },
+                host_version_verified = "0.0.0-stand-in",
+            },
+            Ct);
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("profiled", Ct, "silent");
+        var item = await host.CreateAsync(
+            new { campaign_id = campaign, kind = "ai_role", role = "profiled", execution_profile = "closed", context = new { behaviour = "succeed" } },
+            Ct);
+
+        await host.ScanAsync(Ct);
+        var done = await host.WaitForStatusAsync(item.Id, WorkItemStatus.Succeeded, Ct);
+
+        var attempt = done.Attempts![0];
+        var settings = JsonNode.Parse(FakeHostRuntime.ReadShared(
+            Path.Combine(host.Paths.AttemptWorkDirectory(item.Id, attempt.Id), ".claude", "settings.json")))!;
+        Assert.Equal(
+            ["Write", "WebFetch", "WebSearch"],
+            settings["permissions"]!["deny"]!.AsArray().Select(rule => (string?)rule));
+        Assert.DoesNotContain("WebSearch", attempt.Provenance!.Agent!.Args!);
+        Assert.DoesNotContain("WebFetch", attempt.Provenance!.Agent!.Args!);
+    }
+
+    /// <summary>
     /// An attempt is a record of what happened. A profile edited while the work is still running has to leave it
     /// exactly as it stands, or "this attempt ran revision 1" would mean whatever the profile says today.
     /// </summary>
@@ -110,7 +230,7 @@ public class ProfileLaunchTests
         // The edit lands while the child is still running, and appends a second revision.
         var edited = await host.Fixture.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileUpdate,
-            new { name = "moving-target", deny = new[] { "Write", "WebFetch" } },
+            new { name = "moving-target", deny = new[] { "Write", "WebFetch" }, tools = new[] { "web_search" } },
             Ct);
         Assert.Equal(2, edited.CurrentRevision);
 
@@ -118,6 +238,8 @@ public class ProfileLaunchTests
         var agent = running.Attempts![0].Provenance!.Agent!;
         Assert.Equal(1, agent.ProfileRevision);
         Assert.DoesNotContain("WebFetch", string.Join(' ', agent.Args!), StringComparison.Ordinal);
+        Assert.DoesNotContain("WebSearch", string.Join(' ', agent.Args!), StringComparison.Ordinal);
+        Assert.Empty(agent.Tools!);
     }
 
     /// <summary>
@@ -158,6 +280,31 @@ public class ProfileLaunchTests
         Assert.Null(failed.Attempts![0].Launch);
 
         await host.WaitForStatusAsync(carries.Id, WorkItemStatus.Succeeded, Ct);
+    }
+
+    /// <summary>
+    /// A launch the machine refused still says what it would have run with: the profile, its revision and the grant,
+    /// since "the host was missing" is read beside what the person had allowed it.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_launch_records_the_grant_it_would_have_run_with()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        await ProfileAsync(host, "absent-researcher", "a-host-nobody-installed", "web_fetch");
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("profiled", Ct, "silent");
+
+        var item = await host.CreateAsync(
+            new { campaign_id = campaign, kind = "ai_role", role = "profiled", execution_profile = "absent-researcher", context = new { brief = "needs a host" } },
+            Ct);
+
+        await host.ScanAsync(Ct);
+
+        var failed = await host.WaitForStatusAsync(item.Id, WorkItemStatus.Failed, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, failed.LastError!.Code);
+        var agent = failed.Attempts![0].Provenance!.Agent!;
+        Assert.Equal(1, agent.ProfileRevision);
+        Assert.Equal([AgentTool.WebFetch], agent.Tools);
     }
 
     /// <summary>
@@ -276,9 +423,9 @@ public class ProfileLaunchTests
         await db.SaveChangesAsync(Ct);
     }
 
-    private static async Task ProfileAsync(FakeHostRuntime host, string name, string program) =>
+    private static async Task ProfileAsync(FakeHostRuntime host, string name, string program, params string[] tools) =>
         await host.Fixture.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileCreate,
-            new { name, host = "claude_code", program, deny = new[] { "Write" }, host_version_verified = "0.0.0-stand-in" },
+            new { name, host = "claude_code", program, deny = new[] { "Write" }, tools, host_version_verified = "0.0.0-stand-in" },
             Ct);
 }

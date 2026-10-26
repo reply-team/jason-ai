@@ -106,6 +106,8 @@ public class AttemptProvenanceTests
         var agent = provenance.Agent;
         Assert.Equal(ProfileResolutionSource.RoleEntryCommand, agent.ResolutionSource);
         Assert.Null(agent.ProfileName);
+        // No revision was read, so no grant is recorded: absent, never an empty list that would claim one was read.
+        Assert.Null(agent.Tools);
     }
 
     /// <summary>

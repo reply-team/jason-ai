@@ -261,6 +261,54 @@ internal static partial class ProfileValidation
         }
     }
 
+    /// <summary>
+    /// A grant the revision's own deny takes away. The host's deny wins over an allow rule, so a tool granted and
+    /// denied by the host's own name for it would be a grant no launch can use; the pair is refused on the grant,
+    /// naming the deny. Only the bare name, spelled as the host spells it, collides: a deny that is a pattern, such as
+    /// <c>WebFetch(domain:example.com)</c>, is not refused and is written beside the grant, and how much of the grant
+    /// it leaves is the host's to decide. Where a patch did not name one of the two lists, the message says that
+    /// index is the profile's, since the request carried no such list.
+    /// </summary>
+    public static void ValidateGrantBesideDeny(
+        IReadOnlyList<AgentTool> tools,
+        IReadOnlyList<string> deny,
+        Func<AgentTool, string> rule,
+        ValidationErrors errors,
+        bool toolsNamed = true,
+        bool denyNamed = true)
+    {
+        ArgumentNullException.ThrowIfNull(tools);
+        ArgumentNullException.ThrowIfNull(deny);
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        var toolsOwner = toolsNamed ? "" : "the profile's ";
+        var denyOwner = denyNamed ? "" : "the profile's ";
+        for (var index = 0; index < tools.Count; index++)
+        {
+            var name = rule(tools[index]);
+            var denied = -1;
+            for (var entry = 0; entry < deny.Count; entry++)
+            {
+                if (string.Equals(deny[entry], name, StringComparison.Ordinal))
+                {
+                    denied = entry;
+                    break;
+                }
+            }
+
+            if (denied >= 0)
+            {
+                errors.Add(
+                    string.Create(CultureInfo.InvariantCulture, $"tools[{index}]"),
+                    "denied",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{toolsOwner}tools[{index}] grants {SnakeCaseEnumConverter<AgentTool>.Format(tools[index])}, which {denyOwner}deny[{denied}] takes away by the host's name for it, '{name}'; the host's deny wins over the grant, so name it in one of the two."));
+            }
+        }
+    }
+
     private static void ValidateDeny(IReadOnlyList<JsonNode?>? deny, ValidationErrors errors) =>
         ValidateStrings(deny, "deny", ProfileService.MaxDenyEntries, ProfileService.MaxDenyEntryLength, errors);
 

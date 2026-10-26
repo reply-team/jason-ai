@@ -63,6 +63,11 @@ public sealed record RoleSkillDto(bool Copied, string Name, long Bytes);
 /// numbers are kept so that difference can be read rather than guessed.
 /// </param>
 /// <param name="Args">The whole argument list as launched: the runtime's own, then the profile's.</param>
+/// <param name="Tools">
+/// The tools the revision granted, in the API's words; where a launch was made, the host's own names for them are in
+/// <paramref name="Args"/>. Empty where the revision granted none, and absent where the claim never read the revision:
+/// an entry-command attempt, a refusal made before the revision was read, an attempt from before grants.
+/// </param>
 public sealed record AgentProvenanceDto(
     ProfileResolutionSource ResolutionSource,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProfileId = null,
@@ -73,7 +78,8 @@ public sealed record AgentProvenanceDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Program = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Args = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HostVersionVerified = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SessionId = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SessionId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AgentTool>? Tools = null);
 
 /// <summary>
 /// Where a work item's execution profile comes from when nothing more specific says. Materialized once, when the

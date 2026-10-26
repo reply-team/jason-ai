@@ -124,6 +124,108 @@ public class ClaudeCodeHostTests
     }
 
     /// <summary>
+    /// The tools a person granted on the profile join the allow list in the host's own names — the bare words
+    /// <c>WebSearch</c> and <c>WebFetch</c> — after the callback and the reads, which they never displace. Run against
+    /// Claude Code 2.1.310 on Windows, in a work directory prepared as the runtime prepares one: with the two words both
+    /// tools ran, and without them the mode refused both, but for a fetch of a page the host lets through on its own.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S6, "the granted tools join the allow list in the host's names, after the callback and the reads")]
+    public void The_tools_a_profile_grants_join_the_allow_list_in_the_hosts_own_names()
+    {
+        var files = new MemoryFileLocations(@"C:\Users\Marta\Jason\AGENTS.md", null, null);
+        var revision = Revision();
+        revision.Tools = [AgentTool.WebSearch, AgentTool.WebFetch];
+
+        var launch = new ClaudeCodeHost(windows: true).Compose(revision, ["claude"], files);
+
+        string[] expected =
+            [
+                $"Bash({ProgramResolver.DefaultCliCommand} *)",
+                $"PowerShell({ProgramResolver.DefaultCliCommand} *)",
+                "Read(//c/Users/Marta/Jason/AGENTS.md)",
+                "WebSearch",
+                "WebFetch",
+            ];
+        Assert.Equal(expected, AllowList(launch));
+    }
+
+    /// <summary>
+    /// The grant is closed by default: a web tool the revision does not grant is denied by the host's own bare name for
+    /// it, so the host does not offer it at all — without the deny it fetched pages of its own documentation list
+    /// unasked — and the allow list names neither.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S6, "a web tool the revision does not grant is denied by name, so the host never offers it")]
+    public void A_profile_that_grants_no_web_tool_denies_both_by_the_hosts_own_names()
+    {
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"], NoFiles);
+
+        Assert.Equal(["WebSearch", "WebFetch"], launch.Deny);
+        Assert.DoesNotContain("WebSearch", AllowList(launch));
+        Assert.DoesNotContain("WebFetch", AllowList(launch));
+    }
+
+    /// <summary>One grant is that tool's allow and the other's deny: the two lists never name the same tool.</summary>
+    [Theory]
+    [InlineData(AgentTool.WebSearch, "WebSearch", "WebFetch")]
+    [InlineData(AgentTool.WebFetch, "WebFetch", "WebSearch")]
+    public void One_grant_is_its_allow_and_the_other_tools_deny(AgentTool tool, string allowed, string denied)
+    {
+        var revision = Revision();
+        revision.Tools = [tool];
+
+        var launch = new ClaudeCodeHost().Compose(revision, ["claude"], NoFiles);
+
+        Assert.Equal(allowed, AllowList(launch)[^1]);
+        Assert.Equal([denied], launch.Deny);
+        Assert.Empty(AllowList(launch).Intersect(launch.Deny, StringComparer.Ordinal));
+    }
+
+    /// <summary>A revision that grants both tools leaves nothing for the host to deny on its account.</summary>
+    [Fact]
+    public void A_revision_that_grants_both_tools_composes_no_deny()
+    {
+        var revision = Revision();
+        revision.Tools = [AgentTool.WebSearch, AgentTool.WebFetch];
+
+        var launch = new ClaudeCodeHost().Compose(revision, ["claude"], NoFiles);
+
+        Assert.Empty(launch.Deny);
+    }
+
+    /// <summary>Each tool is granted alone: naming one never brings the other with it.</summary>
+    [Theory]
+    [InlineData(AgentTool.WebSearch, "WebSearch")]
+    [InlineData(AgentTool.WebFetch, "WebFetch")]
+    public void One_granted_tool_is_one_rule(AgentTool tool, string rule)
+    {
+        var revision = Revision();
+        revision.Tools = [tool];
+
+        var launch = new ClaudeCodeHost().Compose(revision, ["claude"], NoFiles);
+
+        Assert.Equal(rule, AllowList(launch)[^1]);
+        Assert.Equal(3, AllowList(launch).Count);
+    }
+
+    /// <summary>
+    /// A grant is part of the allow list the runtime composes, never a second one: the flag appears once, and the
+    /// profile's own arguments still come last with nothing after them.
+    /// </summary>
+    [Fact]
+    public void A_grant_adds_to_the_one_allow_list_and_the_profiles_arguments_still_come_last()
+    {
+        var revision = Revision("--model", "sonnet");
+        revision.Tools = [AgentTool.WebFetch];
+
+        var launch = new ClaudeCodeHost().Compose(revision, ["claude"], SomeFiles);
+
+        Assert.Contains("WebFetch", AllowList(launch));
+        Assert.Equal(["--model", "sonnet"], launch.Command.TakeLast(2));
+    }
+
+    /// <summary>
     /// Off Windows the form is the host's documented one for an absolute path, two slashes and then the path below the
     /// root. Measured on Windows only: on Linux and macOS this is the host's documentation, not a run.
     /// </summary>
@@ -397,7 +499,9 @@ public class ClaudeCodeHostTests
     /// The confinement is only as good as the flags a profile cannot undo. Composing project-only settings and a
     /// strict MCP configuration means nothing if a profile may add a settings file, a plugin directory, another
     /// MCP configuration or a second working directory after them, so each of those is refused as well —
-    /// verified against Claude Code 2.1.275, where every one of them widens what a session can reach.
+    /// verified against Claude Code 2.1.275, where every one of them widens what a session can reach. The host's own
+    /// deny flag is refused beside them: a deny carried in the arguments would take away a grant where the check made
+    /// when a profile is written never sees it, so the profile's <c>deny</c> is the one way a deny arrives.
     /// </summary>
     [Theory]
     // Critical: a profile cannot widen the agent's permissions.
@@ -410,6 +514,8 @@ public class ClaudeCodeHostTests
     [InlineData("--settings")]
     [InlineData("--add-dir")]
     [InlineData("--disable-slash-commands")]
+    [InlineData("--disallowed-tools")]
+    [InlineData("--disallowedTools")]
     public void A_profile_may_not_widen_what_a_launched_session_can_reach(string flag)
     {
         Assert.Contains(flag, new ClaudeCodeHost().ReservedFlags);

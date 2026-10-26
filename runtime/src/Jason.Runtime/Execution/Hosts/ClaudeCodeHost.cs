@@ -8,7 +8,8 @@ namespace Jason.Runtime.Execution.Hosts;
 /// One headless Claude Code session, started for one attempt. The runtime composes the whole of the session's
 /// shape and leaves a profile only the program and whatever it wants to add at the end, so no profile can take
 /// away the three things every attempt depends on: the session is non-interactive, it says what it is doing
-/// while it does it, and it may call the runtime back, read the person's memory files, and nothing else.
+/// while it does it, and it may call the runtime back, read the person's memory files, use the tools the person
+/// granted by name, and nothing else; a web tool not granted is denied by name.
 /// <para>
 /// The allow rules were measured against Claude Code 2.1.309 on Windows. The callback as a bare command word runs
 /// through the host's Bash tool and through its PowerShell tool alike. A rule naming one file by its absolute path,
@@ -20,6 +21,13 @@ namespace Jason.Runtime.Execution.Hosts;
 /// <c>)</c>, or off Windows a backslash, and on Windows a path that does not start at a drive letter, gets no rule:
 /// the envelope still names it, the role's read is refused, and the role reports the refusal as it reports any
 /// refused tool. Off Windows the form is the host's documented one for an absolute path, not measured there.
+/// </para>
+/// <para>
+/// A granted tool is a rule in the host's own name for it, the bare word: <c>WebSearch</c> and <c>WebFetch</c>, and a
+/// tool not granted is a deny of that same word. Run against Claude Code 2.1.310 on Windows, in a work directory
+/// prepared as the runtime prepares one, both ran with the two allow words. Without them and without a deny, the mode
+/// refused a search and a fetch of an ordinary page, but let through a fetch of a page on a documentation list of its
+/// own; with the bare deny in the work directory the host did not offer the tool at all.
 /// </para>
 /// <para>
 /// The version a profile was checked against is recorded on the revision and reported, never enforced: a host is
@@ -62,6 +70,9 @@ public sealed class ClaudeCodeHost(bool windows) : IAgentHost
         "--include-partial-messages",
         "--verbose",
         "--allowed-tools", "--allowedTools",
+        // The host's own deny flag: a deny in the arguments would take a grant away where the check made when a
+        // profile is written never sees it, so the profile's deny is the one way a deny arrives.
+        "--disallowed-tools", "--disallowedTools",
         "--permission-mode",
         "--session-id",
         "--restricted",
@@ -110,10 +121,17 @@ public sealed class ClaudeCodeHost(bool windows) : IAgentHost
         // person's memory files the launch names, one rule per file. It travels on the command line because a work
         // directory the runtime created is not a workspace the host trusts, and an allow rule written into an
         // untrusted directory is ignored without being reported. What the agent may not do travels the other way,
-        // in that same directory — see WorkDirectory.
+        // in that same directory — see WorkDirectory. Last come the tools the person granted on the revision, one
+        // bare word each in the host's own name, and only those.
         var word = ProgramResolver.CliCommandFor(revision.CliCommand);
         var (reads, unreadable) = ReadRules(memoryFiles);
-        string[] allow = [$"Bash({word} *)", $"PowerShell({word} *)", .. reads];
+        string[] allow = [$"Bash({word} *)", $"PowerShell({word} *)", .. reads, .. revision.Tools.Select(ToolRule)];
+
+        // The grant is closed by default: a tool of the vocabulary the revision does not grant is denied by the same
+        // bare name, which the host reads as not offering the tool at all. Leaving it unlisted is not enough — the
+        // mode still let a fetch of the host's own documentation list through without a rule. The deny travels with
+        // the profile's own, in the work directory, where a bare name was seen to take the tool away.
+        string[] deny = [.. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule)];
 
         // Two flags are deliberately absent. --restricted would make the per-attempt work directory inert: it
         // reads no project settings file and loads no project skill, so neither the deny rules nor the role's
@@ -156,8 +174,20 @@ public sealed class ClaudeCodeHost(bool windows) : IAgentHost
                 .. revision.Args,
             ],
             session,
-            unreadable);
+            unreadable,
+            deny);
     }
+
+    /// <summary>
+    /// The host's own name for a tool, which is the whole rule and carries no pattern: the allow of a granted tool and
+    /// the deny of one the revision does not grant.
+    /// </summary>
+    public string ToolRule(AgentTool tool) => tool switch
+    {
+        AgentTool.WebSearch => "WebSearch",
+        AgentTool.WebFetch => "WebFetch",
+        _ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "A tool outside the vocabulary has no rule."),
+    };
 
     /// <summary>
     /// One rule for each memory file the launch names, in the order of the levels, and one only for a file named
