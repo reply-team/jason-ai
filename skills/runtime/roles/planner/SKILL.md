@@ -103,7 +103,9 @@ the items themselves — `--not-before`, `--due-at` and `--priority` — and the
 repeats on its own.
 
 **What the provider holds is a read away.** A `provider_op` item naming `enrollment.list` answers who the provider's
-campaign holds, with its `total`; plan the horizon from that rather than from Jason's list of contacts alone.
+campaign holds, with its `total`; plan the horizon from that rather than from Jason's list of contacts alone. The
+`enrolled` state in `campaign list-contacts` is Jason's own membership, not enrolment at the provider: a campaign with no
+provider sequence has members and no enrolments, and only a succeeded `campaign.enroll` or this read says otherwise.
 
 **Starting a campaign is a person's decision over a population.** Prepare it as a `provider_op` item naming
 `campaign.activate`, with `expected.enrolled` set to the `total` you read: the item waits for a person, who is shown

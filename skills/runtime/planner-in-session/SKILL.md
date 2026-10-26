@@ -195,6 +195,15 @@ jason rolenote get --role planner --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 
 The note is a lead, not the truth, as `managed-campaign-work` says. You read it and you do not write it.
 
+An answer to a question a launched role raised is not yours to carry out. Record it as the person's
+(`approvals-and-questions`); the campaign manager's next check-in creates the work it implies, and making that work too
+leaves the campaign holding it twice. It runs only for an active campaign, at the next scan, so where nothing has
+appeared yet, say that it has not run yet and make nothing in its place. Look at what it created before you offer
+anything of your own.
+
+When you tell the person who is on the campaign, take care with the word `enrolled` that `campaign list-contacts` prints:
+it is Jason's own membership, and `managed-campaign-work` says what it does not mean.
+
 ## What this file does not cover
 
 The commands that create a campaign, add its people and create its work, and the keys they carry, are

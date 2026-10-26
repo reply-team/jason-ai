@@ -53,7 +53,7 @@ SHA-256 matched its source — and four things were then changed in the open, ea
 - **Pointers to packs this repository does not ship were re-pointed**, not deleted: sentences that explained
   where plans and work items live now say that this runtime owns them, and that where no runtime is installed
   the plan lives wherever the user keeps it.
-- **The boundary above was written into the six skills** that name an operation this runtime enforces.
+- **The boundary above was written into the skills** that name an operation this runtime enforces.
 - **This catalog** replaced the pack's own.
 
 Rewriting the knowledge itself is deliberately not part of that list. Where these texts and this runtime

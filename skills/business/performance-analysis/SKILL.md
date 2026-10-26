@@ -107,7 +107,33 @@ is a drop rather than a routine read.
    worst. Per-channel and per-step are the same call again with a different key.
 4. **Check the denominator and the volume flag before diagnosing anything** (`M4`). This step
    ends more investigations than any other, and ending one honestly is a result.
-5. **Diagnose.** Heuristic bands for cold outbound — TODO(expert): validate every number
+5. **Read what is current before you name anything that failed.** A failure is a fact about a
+   moment, and "what is wrong now" is a claim about today. Read where the campaign's sends are
+   routed now and the latest outcomes of its work, newest first, and date every failure you
+   mean to report against them. A failure from before the sends had a route, one a later
+   success has superseded, and a role whose agent program was not installed yet
+   (`host_not_available`) are history: say so as history, with its date, and leave it out of
+   what is wrong. Only a failure that is still the latest outcome, where the sends still have
+   no route, is current. A figure the reads give you stands as given. If `campaign activity`
+   says one person was contacted, the summary does not open with "nothing has gone out yet";
+   if its sends succeeded after the failure, a line that says nothing can be sent is wrong
+   whatever the older item says.
+
+   With Jason, the same reads are:
+
+   ```
+   jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --human
+   jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed --status expired --order finished --limit 20
+   jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --kind provider_op --order finished --limit 20
+   jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-10-01T00:00:00Z --until now
+   ```
+
+   A plain `workitem list` is oldest first and stops at a hundred, so a long campaign would
+   show only its oldest items; `--order finished` puts the newest first, twenty from each list.
+   The succeeded items are provider operations of every kind, so the latest finished send is
+   the newest `message.send` among them. Compare each failed item's `finished_at` with it: a
+   failed item older than a later success on the same route is not what is wrong now.
+6. **Diagnose.** Heuristic bands for cold outbound — TODO(expert): validate every number
    here: delivered ≥ ~95%, opened ~40–60%, replied ~2–8%, interested ~10–30% of replies.
    - **Deliverability problem** — bounces above ~3%, or delivered below ~95%. The cause is
      list quality or sender health, not the message. Check `sender.health` and
@@ -134,20 +160,20 @@ is a drop rather than a routine read.
      - TODO(expert): how much to discount open rate, and whether to report it at all.
    - Correlation is not causation. When the data is thin, say so — an honest "we cannot tell
      yet" is worth more than a confident wrong answer.
-6. **Widen only if the question asks for it.** `funnel.summarize` when the question is where
+7. **Widen only if the question asks for it.** `funnel.summarize` when the question is where
    the ladder leaks rather than how one campaign is doing; `opportunity.summarize` when it is
    what the outreach was actually worth, with `attribution.explain` for why an outcome was
    credited where it was; `response_time.summarize` when the loss is speed of follow-up, which
    no copy fix reaches. Where the user wants the rows behind a number, that is
    `engagement_event.list`.
-7. **Comparing two arms is `metric.compare`.** It returns the counts, the interval around each
+8. **Comparing two arms is `metric.compare`.** It returns the counts, the interval around each
    rate, the sample size the comparison needs, an underpowered flag and the number of reads
    taken — and it never names a winner (`M7`). Report it that way. Re-reading until a difference
    appears is exactly the failure an agent on an hourly schedule will produce.
-8. **Recommend one or two actions**, highest impact first: pause the worst performer
+9. **Recommend one or two actions**, highest impact first: pause the worst performer
    (reversible, cheap), rewrite an opener modelled on a campaign that is working, clean the
    bad addresses out of a list, spread volume across another sender.
-9. **Only on explicit approval, act** — with one deliberate exception. Stopping is protective:
+10. **Only on explicit approval, act** — with one deliberate exception. Stopping is protective:
    `campaign.pause` and `sender.pause` derive `auto` and never wait for permission, because
    waiting is the destructive choice when something is actively going wrong. Restarting is not
    symmetric: `campaign.resume` and `sender.resume` are `confirm_once`, and that asymmetry is
@@ -193,6 +219,9 @@ extract moves personal data out of the system that enforces its handling rules.
 - **Hunting for an operation per question.** The retired `metrics.*` family had one name per
   grouping; this contract has one read and a grouping argument. Looking for the missing name
   and inventing it is worse than asking `metric.describe` what the grouping keys are.
+- **Reporting an old failure as current.** A send that failed before its route was set, or
+  before a later one succeeded, is history; naming it as the problem, or letting it outweigh a
+  figure the reads gave, sends the user to repair something that already works.
 - **Reading a drop in reply count as a drop in reply rate** without checking the
   did-not-happen counts first (`M5`).
 - **Naming a winning variant** because one arm is ahead on the screen (`M7`).

@@ -110,6 +110,16 @@ sets it. Read it before asserting any number.
 5. **Draft with the user** (`message.draft`). Ground the draft in the actual thread and in the
    user's stored preferences — tone, sign-off, hard constraints — if those are available.
    Iterate. Then show the **final rendered text**, which is what the approval binds to.
+   - **Greet the person by the name you hold for them**, from their own contact record
+     (`contact.get`; in Jason, `jason contact get`), never from the name the thread carries. A
+     provider that already held a contact for the address keeps its own name for it, so the
+     thread can name the person differently from the record the campaign was built on, and a
+     draft that opens with the thread's name greets somebody the user never chose. Compare the
+     two before drafting. Where they match, say nothing. Where they differ, greet by the
+     record's name and tell the user, beside the draft and before they approve it — "the
+     thread calls them B; our record says A; I greeted them as A" — so that the choice is
+     theirs and not made silently. Where the record holds no first name, leave the name out of
+     the greeting and say so.
    - TODO(expert): response patterns for the recurring cases — not interested, wrong person,
      not now, price objection, "send me info".
 6. **Confirm and send** (`message.send`). The user approves the literal rendered text, to this
@@ -176,6 +186,8 @@ interested people with no meeting yet, and the follow-up that should exist for t
   nothing (`H9`).
 - **Re-sorting the queue by timestamp** and burying the interested reply under twenty automated
   bounces — or re-ranking it by hand and losing the waiting time that made a thread urgent.
+- **Greeting by the provider's name for the thread's contact** instead of the person's own
+  record, or choosing between the two without saying that they differ.
 - **Losing thread context** by summarising away the specific thing the prospect asked.
 
 ## Safety

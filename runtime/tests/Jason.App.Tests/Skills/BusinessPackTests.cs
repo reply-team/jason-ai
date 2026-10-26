@@ -219,10 +219,9 @@ public class BusinessPackTests
     }
 
     /// <summary>
-    /// This pack prints no <c>jason</c> commands: it teaches provider-neutral operations, and its nine skills
-    /// carry no fenced block at all. The guard is here for the day one appears — if a text prints a command,
-    /// the command has to be real — and it is proven by a probe, because a guard over an empty set proves
-    /// nothing by passing.
+    /// This pack teaches provider-neutral operations, and prints only the reads of this runtime that a job step
+    /// needs, in a block opened as the runtime's own. If a text prints a command, the command has to be real: the
+    /// guard types every printed line through the runtime pack's own path.
     /// </summary>
     /// <remarks>
     /// The line is typed through the runtime pack's own path, which holds four seams: its own data directory,
