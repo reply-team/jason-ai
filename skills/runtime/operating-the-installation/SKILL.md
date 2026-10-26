@@ -346,7 +346,11 @@ pointing at a file being swapped. Noticing an update is yours; deciding to take 
 An update leaves the plugins under `~/.jason/plugins/` as they were, so afterwards `jason status`'s optional
 `plugin_package` check can fail: the package installed is an earlier release's. Its fact names the installed version,
 the version this release published, and the step of the wiring check that prints the lines placing it; replacing a
-package is a change to the installation, so ask first, then `jason plugin reload`.
+package is a change to the installation, so ask first, then `jason plugin reload`. `jason update check` says it before
+the update: its `plugin_updates` names each package installed here that the newer release publishes a later version of,
+with both versions, and is `[]` when nothing installed here that the record holds is behind. It never names a package
+the list does not know: built or edited on that machine, or a version before the list's first line, 0.3.2; whether that
+one is behind is `jason status`'s to say, by its version.
 
 ## Installing it in the first place
 

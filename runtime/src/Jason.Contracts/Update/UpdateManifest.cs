@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Update;
 
@@ -7,9 +8,38 @@ namespace Jason.Contracts.Update;
 public sealed record UpdateArtifact(string Asset, string Sha256, long Size);
 
 /// <summary>
+/// A plugin package a release publishes beside its archives: its version, the file it is published as, its content
+/// digest as the runtime computes it (<c>sha256:</c> and 64 lowercase hexadecimal characters), and the digest of every
+/// version of the package on record, its own among them.
+/// </summary>
+public sealed record UpdatePluginPackage(
+    SemanticVersion Version,
+    string Asset,
+    string Digest,
+    IReadOnlyDictionary<SemanticVersion, string> Recorded)
+{
+    /// <summary>
+    /// The recorded version whose content has <paramref name="digest"/>, or null when no version on record has it — a
+    /// package the list does not know: built or edited on that machine, or a version before the list's first line, 0.3.2.
+    /// </summary>
+    public SemanticVersion? VersionOf(string digest)
+    {
+        foreach (var (version, recorded) in Recorded)
+        {
+            if (string.Equals(recorded, digest, StringComparison.Ordinal))
+            {
+                return version;
+            }
+        }
+
+        return null;
+    }
+}
+
+/// <summary>
 /// What a release says about itself, as the updater reads it: the version, when it was published, one artifact
-/// per platform with its digest, where the notes are, and — where a release needs one — the oldest version that
-/// may upgrade to it directly.
+/// per platform with its digest, where the notes are, where a release needs one the oldest version that may
+/// upgrade to it directly, and the plugin packages it publishes with their content digests.
 /// </summary>
 /// <remarks>
 /// Read by hand rather than deserialized. Every field has a rule (a version that parses, a digest that is a
@@ -24,7 +54,8 @@ public sealed record UpdateManifest(
     DateTimeOffset PublishedAt,
     IReadOnlyDictionary<string, UpdateArtifact> Artifacts,
     string? ReleaseNotesUrl,
-    SemanticVersion? MinUpgradeFrom)
+    SemanticVersion? MinUpgradeFrom,
+    IReadOnlyDictionary<string, UpdatePluginPackage> Plugins)
 {
     /// <summary>The shape this build knows. A document that says more than this is one it must not guess at.</summary>
     public const int CurrentSchema = 1;
@@ -72,8 +103,9 @@ public sealed record UpdateManifest(
         var artifacts = ReadArtifacts(root);
         var notes = Url(root, "release_notes_url");
         var minimum = ReadVersion(root, "min_upgrade_from", required: false);
+        var plugins = ReadPlugins(root);
 
-        return new UpdateManifest(schema, version, publishedAt, artifacts, notes, minimum);
+        return new UpdateManifest(schema, version, publishedAt, artifacts, notes, minimum, plugins);
     }
 
     private static JsonDocument Parse(string json)
@@ -144,6 +176,132 @@ public sealed record UpdateManifest(
 
         return new UpdateArtifact(asset, digest, bytes);
     }
+
+    private static readonly IReadOnlyDictionary<string, UpdatePluginPackage> NoPlugins =
+        new Dictionary<string, UpdatePluginPackage>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The packages, by plugin id. A release before 0.20.0 names none and a feed with no package names <c>null</c>; both
+    /// are an empty set rather than a refusal.
+    /// </summary>
+    private static IReadOnlyDictionary<string, UpdatePluginPackage> ReadPlugins(JsonElement root)
+    {
+        if (!root.TryGetProperty("plugins", out var element) || element.ValueKind == JsonValueKind.Null)
+        {
+            return NoPlugins;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid("the feed's 'plugins' is not an object.");
+        }
+
+        var plugins = new Dictionary<string, UpdatePluginPackage>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!PluginIds.IsWellFormed(property.Name))
+            {
+                throw Invalid($"the feed names a plugin package '{property.Name}', which is not a plugin's id.");
+            }
+
+            plugins[property.Name] = ReadPlugin(property.Name, property.Value);
+        }
+
+        return plugins;
+    }
+
+    /// <remarks>
+    /// <c>recorded</c> is read both ways: from a version to its digest, and from an installed copy's digest back to its
+    /// version (<see cref="UpdatePluginPackage.VersionOf"/>). The reverse is sound because the package's own version line
+    /// is one of the files the digest covers, so two versions of one package cannot share a digest. A record that has
+    /// them share one is not a record this project wrote, and it is refused with the rest.
+    /// </remarks>
+    private static UpdatePluginPackage ReadPlugin(string id, JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid($"the plugin package '{id}' is not an object.");
+        }
+
+        if (!element.TryGetProperty("version", out var named) || named.ValueKind == JsonValueKind.Null)
+        {
+            throw Invalid($"the plugin package '{id}' carries no version.");
+        }
+
+        if (named.ValueKind != JsonValueKind.String || !SemanticVersion.TryParse(named.GetString(), out var version))
+        {
+            throw Invalid($"the plugin package '{id}' carries a version that is not one.");
+        }
+
+        var asset = PackageText(id, element, "asset");
+        if (!ReleaseAssets.IsWellFormedAssetName(asset))
+        {
+            throw Invalid($"the plugin package '{id}' names '{asset}', which is not a file name.");
+        }
+
+        var digest = PluginDigest(PackageText(id, element, "digest"), $"the plugin package '{id}' carries a digest");
+
+        if (!element.TryGetProperty("recorded", out var lines) || lines.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid($"the plugin package '{id}' records no versions.");
+        }
+
+        // Build metadata takes no part in a version's identity, so 0.9.0 and 0.9.0+b are one key, and the second is a
+        // version recorded twice rather than a line that quietly replaces the first.
+        var recorded = new Dictionary<SemanticVersion, string>();
+        foreach (var line in lines.EnumerateObject())
+        {
+            if (!SemanticVersion.TryParse(line.Name, out var recordedVersion))
+            {
+                throw Invalid($"the plugin package '{id}' records '{line.Name}', which is not a version.");
+            }
+
+            var lineDigest = PluginDigest(
+                line.Value.ValueKind == JsonValueKind.String ? line.Value.GetString()! : string.Empty,
+                $"the plugin package '{id}' records {recordedVersion} with a digest");
+
+            if (!recorded.TryAdd(recordedVersion, lineDigest))
+            {
+                throw Invalid($"the plugin package '{id}' records {recordedVersion} twice.");
+            }
+        }
+
+        if (!recorded.TryGetValue(version, out var own) || own != digest)
+        {
+            throw Invalid($"the plugin package '{id}' is {version}, and its record of {version} is not its digest.");
+        }
+
+        if (recorded.Values.Distinct(StringComparer.Ordinal).Count() != recorded.Count)
+        {
+            throw Invalid($"the plugin package '{id}' records one digest under two versions.");
+        }
+
+        return new UpdatePluginPackage(version, asset, digest, recorded);
+    }
+
+    /// <summary>
+    /// A package's digest as the runtime writes one: <c>sha256:</c> and 64 hexadecimal characters, the hexadecimal read
+    /// in either case and kept in lower case, as an artifact's is. <paramref name="holder"/> says whose digest it is, the
+    /// package's own or a line of its record, and opens the refusal.
+    /// </summary>
+    private static string PluginDigest(string text, string holder)
+    {
+        const string Prefix = "sha256:";
+        if (!text.StartsWith(Prefix, StringComparison.Ordinal)
+            || text.Length != Prefix.Length + DigestLength
+            || !text[Prefix.Length..].All(char.IsAsciiHexDigit))
+        {
+            throw Invalid($"{holder} that is not '{Prefix}' and {DigestLength} hexadecimal characters.");
+        }
+
+        return Prefix + text[Prefix.Length..].ToLowerInvariant();
+    }
+
+    /// <summary>A text field of the plugin package <paramref name="id"/>, refused by the package's id when it is absent.</summary>
+    private static string PackageText(string id, JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()!
+            : throw Invalid($"the plugin package '{id}' carries no '{name}'.");
 
     private static string Text(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

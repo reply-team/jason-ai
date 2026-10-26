@@ -17,6 +17,14 @@ namespace Jason.Contracts.Api;
 /// installation, the installation is Jason's own and its version is below the floor. Null otherwise — and always null
 /// under a package manager, which replaces the file whole with no applier of this build's in between.
 /// </param>
+/// <param name="PluginUpdates">
+/// The plugin packages installed here that the newest release publishes a later version of, by id. Null when the newest
+/// release is not newer than this installation or names no package; empty when it is newer and nothing installed here
+/// that the record holds is behind. A package the release's record does not hold is a package the list does not know:
+/// built or edited on that machine, or a version before the list's first line, 0.3.2. The check never names it — whether
+/// it is behind is <c>jason status</c>'s to say, by its version — and never names one that cannot be read. Read from the
+/// plugins directory and the feed alone, under a package manager as well.
+/// </param>
 public sealed record UpdateCheckResponse(
     string Current,
     string Latest,
@@ -24,7 +32,14 @@ public sealed record UpdateCheckResponse(
     DateTimeOffset CheckedAt,
     string? ReleaseNotesUrl,
     string UpgradeCommand,
-    string? InstallFirst);
+    string? InstallFirst,
+    IReadOnlyList<PluginUpdate>? PluginUpdates);
+
+/// <summary>
+/// A plugin package installed here, by <paramref name="Id"/>, that is behind the newest release's: the version installed
+/// and the version the release publishes.
+/// </summary>
+public sealed record PluginUpdate(string Id, string Installed, string Latest);
 
 /// <summary>
 /// What an update did: the version it came from, the version it installed, the step it reached, and the steps

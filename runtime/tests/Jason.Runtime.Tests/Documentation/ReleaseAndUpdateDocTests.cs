@@ -65,7 +65,7 @@ public class ReleaseAndUpdateDocTests
     {
         var page = Read();
 
-        foreach (var field in (string[])["schema", "version", "published_at", "release_notes_url", "min_upgrade_from", "artifacts", "asset", "sha256", "size"])
+        foreach (var field in (string[])["schema", "version", "published_at", "release_notes_url", "min_upgrade_from", "artifacts", "asset", "sha256", "size", "plugins", "digest", "recorded"])
         {
             Assert.Contains($"`{field}`", page, StringComparison.Ordinal);
         }

@@ -94,12 +94,11 @@ public class ReplyPackageTests
                 continue;
             }
 
-            var parts = entry.Split(' ');
             Assert.True(
-                parts is [var listedVersion, var recorded]
-                    && ManifestRules.IsSemanticVersion(listedVersion)
-                    && Regex.IsMatch(recorded, "^sha256:[0-9a-f]{64}$"),
-                $"Not a line of {DigestList}: '{entry}'. A line is a version as plugin.yaml writes one, a space and the package's sha256:digest.");
+                IsListLine(entry),
+                $"Not a line of {DigestList}: '{entry}'. A line is a bare version, X.Y.Z with no pre-release or build metadata, a "
+                + "space and the package's sha256:digest.");
+            var parts = entry.Split(' ');
             listed.Add((parts[0], parts[1]));
         }
 
@@ -113,7 +112,13 @@ public class ReplyPackageTests
         }
 
         var own = listed.Where(entry => entry.Version == version).ToList();
-        if (own.Count == 0)
+        if (!IsListLine(line))
+        {
+            problems.Add(
+                $"plugin.yaml says version {version}, and a version on {DigestList} is a bare X.Y.Z, as the release's manifest writer "
+                + "reads one: give the package a version with no pre-release or build metadata.");
+        }
+        else if (own.Count == 0)
         {
             problems.Add(
                 $"plugin.yaml says version {version} and {DigestList} has no line for it. A version is its content, recorded once: "
@@ -143,6 +148,22 @@ public class ReplyPackageTests
 
         Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
     }
+
+    /// <summary>
+    /// A pre-release or a build's metadata is no line of the list: the release's manifest writer takes a bare X.Y.Z, so the
+    /// list is read by one rule on both sides, and this test never prints a line the release would refuse.
+    /// </summary>
+    [Theory]
+    [InlineData("0.9.1-beta.1")]
+    [InlineData("0.9.1+b")]
+    public void A_line_of_the_list_is_a_bare_version_as_the_release_reads_one(string version)
+    {
+        Assert.False(IsListLine($"{version} sha256:{new string('b', 64)}"));
+    }
+
+    /// <summary>A line of the list by the rule <c>.github/scripts/Write-Manifest.ps1</c> reads it with, character for character.</summary>
+    private static bool IsListLine(string entry) =>
+        Regex.IsMatch(entry, "^((0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)) (sha256:[0-9a-f]{64})$", RegexOptions.CultureInvariant);
 
     [Fact]
     public async Task The_program_it_declares_resolves_to_the_stand_in_and_answers_the_version_it_asks_for()

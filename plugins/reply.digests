@@ -1,7 +1,8 @@
 # The digest of each version of the Reply plugin package, plugins/reply: one line per version, the version, a space, and
 # the sha256 of the whole package as the runtime computes it — the number `jason plugin list` shows for an installed copy.
 # It is the digest of the package a release publishes, which that release's runtime reports in `system.info`'s
-# `released_plugins`; it is not the archive's checksum in `checksums.txt`.
+# `released_plugins`; it is not the archive's checksum in `checksums.txt`. From 0.20.0 on, each release's manifest carries
+# the whole list as plugins.reply.recorded, from which `jason update check` reads an installed copy's version by digest.
 # The list starts with 0.3.2, the package of the first release that published it as an asset (v0.11.0), and holds the
 # versions a release published after it. From 0.9.0 on it holds every version the package has had, published or not,
 # because every bump appends a line.

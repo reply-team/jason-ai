@@ -41,8 +41,9 @@ public static class ReleaseAssets
     /// unpacked into the plugins directory it has the content digest the tag's package has.
     /// </summary>
     /// <remarks>
-    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, whose artifacts are platforms. The name
-    /// carries no version, as the archives' do not; the plugin's version is inside its <c>plugin.yaml</c>.
+    /// Listed in <see cref="Checksums"/>, and named in the <see cref="Manifest"/> under its <c>plugins</c> rather than its
+    /// artifacts, which are platforms. The name carries no version, as the archives' do not; the plugin's version is
+    /// inside its <c>plugin.yaml</c>, and the manifest says it beside the package's content digest.
     /// </remarks>
     public const string ReplyPlugin = "jason-plugin-reply.zip";
 
@@ -51,8 +52,8 @@ public static class ReleaseAssets
     /// version in its <c>manifest.json</c>. <c>jason ui install</c> places it as the default UI.
     /// </summary>
     /// <remarks>
-    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, as the plugin's package is. Built at the
-    /// tag rather than taken from CI, whose zip carries a development version and expires.
+    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, which names platforms and plugins. Built
+    /// at the tag rather than taken from CI, whose zip carries a development version and expires.
     /// </remarks>
     public const string Ui = UiAssetLayout.AssetName;
 

@@ -18,7 +18,7 @@ namespace Jason.Cli.Doctor;
 public static class InstalledPlugins
 {
     /// <summary>The file whose presence makes a directory a package, as the runtime's plugin loader names it.</summary>
-    private const string ManifestFileName = "plugin.yaml";
+    internal const string ManifestFileName = "plugin.yaml";
 
     private static readonly IReadOnlySet<string> None = FrozenSet<string>.Empty;
 

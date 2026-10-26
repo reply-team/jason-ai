@@ -269,8 +269,8 @@ public sealed class PluginAssetTests
     }
 
     /// <summary>
-    /// The architecture's register of accepted decisions records that the Reply plugin ships as a release asset, word for
-    /// word as it was accepted, beside the row that says both installation paths are legitimate.
+    /// The architecture's register of accepted decisions records that the Reply plugin ships as a release asset, as it
+    /// stands, beside the row that says both installation paths are legitimate.
     /// </summary>
     [Fact]
     public void The_decision_register_records_that_the_plugin_ships_as_a_release_asset()
@@ -286,10 +286,11 @@ public sealed class PluginAssetTests
         Assert.Equal(PluginAssetDecision, rows[paths + 1]);
     }
 
-    /// <summary>The register's row for the plugin as a release asset, as it was accepted.</summary>
+    /// <summary>The register's row for the plugin as a release asset, as it stands.</summary>
     private const string PluginAssetDecision =
         "| DEC-INSTALL-002 | The Reply plugin ships as a release asset: every release publishes `jason-plugin-reply.zip`, the files of `plugins/reply` at the tag at the archive's root, "
-        + "built once and listed in `checksums.txt`, never in the manifest, whose artifacts are platforms. "
+        + "built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, "
+        + "never among the manifest's artifacts, which are platforms. "
         + "Installing it is download, verify against `checksums.txt`, unpack into the plugins directory, with no verb; "
         + "the package's content digest is its identity, and both installation paths of §15.5 rest on that asset. |";
 

@@ -5,7 +5,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using Jason.Contracts.Plugins;
 using Jason.Contracts.Update;
+using Jason.Runtime.Plugins.Registry;
 using YamlDotNet.RepresentationModel;
 using static Jason.Runtime.Tests.Documentation.Workflows;
 
@@ -1381,6 +1383,15 @@ public class ReleaseWorkflowTests
         // manifest to learn which executable to take, and the package is not one.
         Assert.DoesNotContain(manifest.Artifacts.Values, artifact => artifact.Asset == ReleaseAssets.ReplyPlugin);
 
+        // Given no digest list, the script names no package: the field is there, last, and null.
+        Assert.Empty(manifest.Plugins);
+        using (var written = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, ReleaseAssets.Manifest))))
+        {
+            var last = written.RootElement.EnumerateObject().Last();
+            Assert.Equal("plugins", last.Name);
+            Assert.Equal(JsonValueKind.Null, last.Value.ValueKind);
+        }
+
         // sha256sum's own format — the digest, two spaces, the name — one per line, Unix newlines, so that
         // `sha256sum -c checksums.txt` works wherever the archives were downloaded to. The plugin's package has its
         // line after the archives', which is where a person checks it from.
@@ -1473,6 +1484,81 @@ public class ReleaseWorkflowTests
         Assert.Contains($"-MinUpgradeFrom must be a version like 0.19.0, not '{floor}'", stderr, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Manifest)));
         Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Checksums)));
+    }
+
+    /// <summary>
+    /// A digest list names its package in the manifest: the last line's version and digest, the asset the release
+    /// carries it as, and every line as recorded — under <c>plugins</c>, the manifest's last field, so the first
+    /// <c>"version":</c> line of the document is still the release's own, which is the line install.sh reads.
+    /// </summary>
+    [Fact]
+    public void A_digest_list_names_its_last_line_as_the_package_the_release_publishes()
+    {
+        using var tree = new TempTree();
+        var directory = Staged(tree);
+        var list = DigestList(tree, ("0.8.0", OlderPackage), ("0.9.0", NewerPackage));
+
+        var (exit, _, stderr) = Workflows.Script(NoEnvironment, Path.Combine(RepositoryRoot(), Path.Combine(Script)), "-Version", "0.2.0", "-Directory", directory, "-Require", string.Join(',', ReleaseAssets.Rids), "-Plugins", ReleaseAssets.ReplyPlugin, "-PluginDigests", list);
+        Assert.True(exit == 0, stderr);
+
+        var text = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Manifest));
+        var reply = UpdateManifest.Read(text).Plugins["reply"];
+        Assert.Equal(SemanticVersion.Parse("0.9.0"), reply.Version);
+        Assert.Equal(ReleaseAssets.ReplyPlugin, reply.Asset);
+        Assert.Equal(NewerPackage, reply.Digest);
+        Assert.Equal(OlderPackage, reply.Recorded[SemanticVersion.Parse("0.8.0")]);
+        Assert.Equal(2, reply.Recorded.Count);
+
+        Assert.Equal("\"version\": \"0.2.0\",", text.Split('\n').Select(line => line.Trim()).First(line => line.StartsWith("\"version\":", StringComparison.Ordinal)));
+        using var written = JsonDocument.Parse(text);
+        Assert.Equal("plugins", written.RootElement.EnumerateObject().Last().Name);
+    }
+
+    /// <summary>
+    /// A list the script cannot read as the package's record is refused, and so is one for a package the release does not
+    /// carry: either would put in the manifest a package nobody can fetch or a record no reader can trust, and a reader
+    /// refuses a manifest with either whole. Nothing is written.
+    /// </summary>
+    [Theory]
+    [InlineData("no such file", "is not a file")]
+    [InlineData("a line that is not a version and a digest", "which is not a version like 0.9.0")]
+    [InlineData("a version twice", "names 0.9.0 twice")]
+    [InlineData("a digest twice", "under another version too")]
+    [InlineData("no line", "names no version")]
+    [InlineData("a package the release does not carry", "which is not among -Plugins")]
+    public void A_digest_list_that_is_not_the_package_s_record_is_refused_before_anything_is_written(string what, string expected)
+    {
+        using var tree = new TempTree();
+        var directory = Staged(tree);
+        var list = what switch
+        {
+            "no such file" => Path.Combine(tree.Root, "reply.digests"),
+            "a line that is not a version and a digest" => DigestList(tree, ("0.9", NewerPackage)),
+            "a version twice" => DigestList(tree, ("0.9.0", OlderPackage), ("0.9.0", NewerPackage)),
+            "a digest twice" => DigestList(tree, ("0.8.0", NewerPackage), ("0.9.0", NewerPackage)),
+            "no line" => DigestList(tree),
+            _ => DigestList(tree, ("0.9.0", NewerPackage)),
+        };
+        var plugins = what == "a package the release does not carry" ? ReleaseAssets.Ui : ReleaseAssets.ReplyPlugin;
+
+        var (exit, _, stderr) = Workflows.Script(NoEnvironment, Path.Combine(RepositoryRoot(), Path.Combine(Script)), "-Version", "0.2.0", "-Directory", directory, "-Require", string.Join(',', ReleaseAssets.Rids), "-Plugins", plugins, "-PluginDigests", list);
+
+        Assert.True(exit != 0, $"{what} was not refused");
+        Assert.Contains(expected, stderr, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Manifest)));
+        Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Checksums)));
+    }
+
+    private static readonly string OlderPackage = "sha256:" + new string('a', 64);
+
+    private static readonly string NewerPackage = "sha256:" + new string('b', 64);
+
+    /// <summary>A Reply digest list as the repository keeps one: a comment, a blank line, then a line per version.</summary>
+    private static string DigestList(TempTree tree, params (string Version, string Digest)[] lines)
+    {
+        var path = Path.Combine(tree.Root, "reply.digests");
+        File.WriteAllText(path, string.Join('\n', ["# The digest of each version of the package.", string.Empty, .. lines.Select(line => $"{line.Version} {line.Digest}")]) + "\n");
+        return path;
     }
 
     /// <summary>
@@ -1665,14 +1751,51 @@ public class ReleaseWorkflowTests
                     checksums.Split('\n').Contains($"{package}  {carried}"),
                     $"{workflow} runs `{invocation}`, and the checksums it wrote carry no line for {carried}:\n{checksums}");
             }
+
+            // The plugin's package is named from the tag's digest list: its last line is the package the release publishes,
+            // the one a runtime built from the same tag carries, and every line is recorded for a reader holding an
+            // installed copy's digest. The release's version stays the first "version" line, the one install.sh reads.
+            var reply = manifest.Plugins[ReplyId];
+            var released = Assert.Single(ReleasedPlugins.Embedded().Packages, plugin => plugin.Id == ReplyId);
+            Assert.Equal(ReleaseAssets.ReplyPlugin, reply.Asset);
+            Assert.Equal(PackageDigest.Compute(Path.Combine(RepositoryRoot(), "plugins", ReplyId)).Digest, reply.Digest);
+            Assert.Equal(released.Digest, reply.Digest);
+            Assert.Equal(SemanticVersion.Parse(released.Version), reply.Version);
+            Assert.Equal(
+                File.ReadAllLines(Path.Combine(RepositoryRoot(), ReplyDigests)).Where(line => line.Length > 0 && !line.StartsWith('#')),
+                reply.Recorded.OrderBy(entry => entry.Key).Select(entry => $"{entry.Key} {entry.Value}"));
+            Assert.Equal(
+                "\"version\": \"0.2.0\",",
+                File.ReadAllLines(Path.Combine(directory, ReleaseAssets.Manifest)).Select(line => line.Trim()).First(line => line.StartsWith("\"version\":", StringComparison.Ordinal)));
         }
         else
         {
             // The floor is a published release's word about the appliers below it. A run's feed is one machine's, and
             // the side it updates from is this tree, so a floor there would say nothing about any applier.
             Assert.Null(manifest.MinUpgradeFrom);
+
+            // Nor does a run's feed carry the plugin's package, so it names none.
+            Assert.Empty(manifest.Plugins);
         }
     }
+
+    /// <summary>
+    /// The release names its plugin's package from the tag's own digest list, the file the package's test holds to the
+    /// package: the job that writes the manifest builds nothing and hashes nothing to say which package it publishes.
+    /// </summary>
+    [Fact]
+    public void The_release_names_its_plugin_s_package_from_the_tag_s_digest_list()
+    {
+        var line = Assert.Single(Read(Release).Split('\n'), line => line.Contains("./.github/scripts/Write-Manifest.ps1", StringComparison.Ordinal));
+
+        Assert.Contains($"-PluginDigests {ReplyDigests}", line, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ReplyDigests)), $"{ReplyDigests} is not in the repository.");
+    }
+
+    /// <summary>The Reply plugin's id, and its digest list, beside the package and outside it.</summary>
+    private const string ReplyId = "reply";
+
+    private const string ReplyDigests = "plugins/reply.digests";
 
     public static TheoryData<string, string> ManifestInvocations()
     {
@@ -1708,7 +1831,8 @@ public class ReleaseWorkflowTests
 
     /// <summary>
     /// The runner's own substitutions, and nothing else: the workflow expressions that carry the version and a full
-    /// run's platforms, the environment variables the jobs export, and the directory the artifacts arrive in.
+    /// run's platforms, the environment variables the jobs export, the directory the artifacts arrive in, and the
+    /// checkout a path in the repository is read from.
     /// </summary>
     private static string ExpandForThisMachine(string invocation, string directory)
     {
@@ -1720,6 +1844,12 @@ public class ReleaseWorkflowTests
             .Replace("$env:VERSION", "0.2.0", StringComparison.Ordinal)
             .Replace("$env:NEXT", "0.2.1", StringComparison.Ordinal)
             .Replace("$env:RID", ReleaseAssets.Rids[0], StringComparison.Ordinal);
+
+        // -PluginDigests names a path in the checkout the job runs in; here that is this repository.
+        expanded = System.Text.RegularExpressions.Regex.Replace(
+            expanded,
+            @"-PluginDigests (\S+)",
+            list => $"-PluginDigests '{Path.Combine(RepositoryRoot(), list.Groups[1].Value)}'");
 
         // -Directory names where a runner downloaded the artifacts to; here it is the staged tree this test made.
         return System.Text.RegularExpressions.Regex.Replace(

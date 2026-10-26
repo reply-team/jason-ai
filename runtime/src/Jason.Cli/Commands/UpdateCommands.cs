@@ -498,17 +498,33 @@ public static class UpdateCommands
             DateTimeOffset.UtcNow,
             manifest.ReleaseNotesUrl,
             owner?.UpgradeCommand ?? (first is { } through ? UpdateApplier.ApplyOf(through) : OwnUpgrade),
-            first?.ToString());
+            first?.ToString(),
+            PluginUpdates.Behind(manifest, available, env.Paths));
 
         var passThrough = first is { } version ? UpdateApplier.PassThrough(manifest.Version, running, version, pinned: false) : null;
         env.Out.WriteLine(human ? Sentence(answer, owner, passThrough) : JsonSerializer.Serialize(answer, JasonJson.Options));
         return ExitCodes.Success;
     }
 
+    /// <summary>
+    /// What a person is told about Jason itself, then a line per plugin package behind the release, after every line
+    /// about Jason: the update comes first, and step 3 of the wiring check places the package after it. The line ends in
+    /// the words <c>jason status</c> says for the same package, since step 3 unpacks into a directory that is not there yet.
+    /// </summary>
+    private static string Sentence(UpdateCheckResponse answer, PackageOwner? owner, string? passThrough) =>
+        string.Join(
+            Environment.NewLine,
+            [
+                AboutJason(answer, owner, passThrough),
+                .. (answer.PluginUpdates ?? []).Select(plugin =>
+                    $"Plugin package {plugin.Id} {plugin.Installed} is installed, and Jason {answer.Latest} publishes {plugin.Id} {plugin.Latest}: "
+                    + "after the update, step 3 of the wiring check places it once the package there is moved away, then `jason plugin reload`."),
+            ]);
+
     /// <summary>What updates an installation that is Jason's own.</summary>
     private const string OwnUpgrade = "jason update apply";
 
-    private static string Sentence(UpdateCheckResponse answer, PackageOwner? owner, string? passThrough)
+    private static string AboutJason(UpdateCheckResponse answer, PackageOwner? owner, string? passThrough)
     {
         if (!answer.Available)
         {

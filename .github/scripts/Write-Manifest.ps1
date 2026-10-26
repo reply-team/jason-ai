@@ -26,14 +26,24 @@ is kept after them.
 .PARAMETER Plugins
 The packages the release carries beside its archives (the plugin's, the UI's), by file name, as a list or
 comma-separated. Each must be in the directory; it is hashed here and listed in checksums.txt after the archives, and
-never in the manifest, whose artifacts are platforms.
+never among the manifest's artifacts, which are platforms. A plugin's package is named in the manifest only through
+-PluginDigests.
 
 .PARAMETER ReleaseNotesUrl
 The page the release notes are on, or nothing: a release with no notes is a release.
 
 .PARAMETER MinUpgradeFrom
-The oldest version that updates to this one in one apply, or nothing. A bare version, X.Y.Z, the version of a published release: a pre-release, build metadata, or anything that does not
-parse is refused before either file is written.
+The oldest version that updates to this one in one apply, or nothing. A bare version, X.Y.Z, the version of a
+published release: a pre-release, build metadata, or anything that does not parse is refused before either file is
+written.
+
+.PARAMETER PluginDigests
+The digest list of each plugin package the release carries, by path (plugins/<id>.digests), as a list or
+comma-separated, or nothing. A list holds a line per version, the version, a space and the package's content digest,
+and its last line is the package the release publishes. The manifest names each package under its last field,
+plugins.<id>: the last line's version and digest, the asset jason-plugin-<id>.zip, which must be among -Plugins, and
+every line as recorded. With no list, plugins is null. A list that is not a file or holds no version, a line that is
+not a version and a digest, and a version or a digest named twice are refused before either file is written.
 #>
 [CmdletBinding()]
 param(
@@ -42,7 +52,8 @@ param(
     [Parameter(Mandatory)] [string[]] $Require,
     [string[]] $Plugins = @(),
     [string] $ReleaseNotesUrl,
-    [string] $MinUpgradeFrom
+    [string] $MinUpgradeFrom,
+    [string[]] $PluginDigests = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -85,11 +96,41 @@ foreach ($rid in $required) {
 
 # The packages: hashed before anything is written, so a package the release promises and the download did not
 # bring stops the release here, with the manifest and the checksums unwritten.
-$packages = foreach ($name in @($Plugins | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+$carried = @($Plugins | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$packages = foreach ($name in $carried) {
     if ($name -ne (Split-Path -Leaf $name)) { throw "$name is not a file name; a package is named as the release publishes it." }
     $package = Join-Path $Directory $name
     if (-not (Test-Path -Path $package -PathType Leaf)) { throw "The release carries the package $name, and it is not in $Directory." }
     [ordered]@{ asset = $name; sha256 = (Get-FileHash -Path $package -Algorithm SHA256).Hash.ToLowerInvariant() }
+}
+
+# The plugin packages the manifest names, read before anything is written. A list's last line is the package the
+# release publishes, as the package's own test holds it; every line is how a reader holding an installed copy's digest
+# says which version that copy is. Nothing is built or hashed here: the list is the tag's own record.
+$named = [ordered]@{}
+foreach ($list in @($PluginDigests | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+    if (-not (Test-Path -Path $list -PathType Leaf)) { throw "The digest list $list is not a file." }
+    $id = [IO.Path]::GetFileNameWithoutExtension($list)
+    $asset = "jason-plugin-$id.zip"
+    if ($asset -cnotin $carried) { throw "$list is the digest list of $asset, which is not among -Plugins; a manifest names only a package the release carries." }
+
+    $recorded = [ordered]@{}
+    $latest = $null
+    foreach ($line in Get-Content -Path $list) {
+        if (-not $line.Trim() -or $line.StartsWith('#')) { continue }
+        if ($line -cnotmatch '^((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)) (sha256:[0-9a-f]{64})$') {
+            throw "$list holds '$line', which is not a version like 0.9.0, a space and a sha256: digest."
+        }
+
+        $listed, $digest = $Matches[1], $Matches[5]
+        if ($recorded.Contains($listed)) { throw "$list names $listed twice." }
+        if ($recorded.Values -contains $digest) { throw "$list names the digest of $listed under another version too." }
+        $recorded[$listed] = $digest
+        $latest = $listed
+    }
+
+    if (-not $latest) { throw "$list names no version." }
+    $named[$id] = [ordered]@{ version = $latest; asset = $asset; digest = $recorded[$latest]; recorded = $recorded }
 }
 
 $artifacts = [ordered]@{}
@@ -104,11 +145,12 @@ $manifest = [ordered]@{
     release_notes_url = if ($ReleaseNotesUrl) { $ReleaseNotesUrl } else { $null }
     min_upgrade_from  = if ($MinUpgradeFrom) { $MinUpgradeFrom } else { $null }
     artifacts         = $artifacts
+    plugins           = if ($named.Count) { $named } else { $null }
 }
 
 # Unix newlines whatever this runs on: checksums.txt is read by sha256sum on machines that are not this one,
 # and the manifest is diffed by people.
-$json = ($manifest | ConvertTo-Json -Depth 4) -replace "`r`n", "`n"
+$json = ($manifest | ConvertTo-Json -Depth 5) -replace "`r`n", "`n"
 Set-Content -Path (Join-Path $Directory 'manifest.json') -Value ($json + "`n") -NoNewline
 
 $lines = @(foreach ($rid in $artifacts.Keys) { "$($artifacts[$rid].sha256)  $($artifacts[$rid].asset)" }) + @(foreach ($package in $packages) { "$($package.sha256)  $($package.asset)" })

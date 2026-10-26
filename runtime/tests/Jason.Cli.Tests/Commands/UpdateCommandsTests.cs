@@ -7,7 +7,9 @@ using Jason.Cli.Tests.Process;
 using Jason.Cli.Tests.Update;
 using Jason.Cli.Update;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
 
@@ -368,6 +370,234 @@ public class UpdateCommandsTests
         Assert.DoesNotContain("jason update apply", stdout.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A plugin package installed here that the newer release publishes a later version of is named: its id, the version
+    /// installed, read from the release's record of each version's digest, and the version the release publishes. The
+    /// package is read from the plugins directory, and still nothing but the feed is asked.
+    /// </summary>
+    [Fact]
+    public async Task Check_names_a_plugin_package_the_newer_release_publishes_a_later_version_of()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var installed = Install(dir.Paths, "reply");
+        var asked = new List<Uri>();
+        var (env, stdout, stderr) = RuntimeVerbs.Environment(dir, FeedOnly(asked, () => Ok(Manifest(Newer, plugins: Reply(("0.8.0", installed), ("0.9.0", Later))))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+
+        Assert.Equal(string.Empty, stderr.ToString());
+        Assert.Equal([UpdateFeed.Default], asked);
+        var answer = JsonSerializer.Deserialize<UpdateCheckResponse>(stdout.ToString(), JasonJson.Options)!;
+        Assert.Equal(new PluginUpdate("reply", "0.8.0", "0.9.0"), Assert.Single(answer.PluginUpdates!));
+        Assert.Contains("\"plugin_updates\":[{\"id\":\"reply\",\"installed\":\"0.8.0\",\"latest\":\"0.9.0\"}]", stdout.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Nothing installed here that the record holds is behind, so the list is there, and empty: the package installed is
+    /// the one the release publishes, or one the release's record does not hold — a package the list does not know: built
+    /// or edited on that machine, or a version before the list's first line, 0.3.2, which <c>jason status</c> judges by
+    /// its version — or none is installed at all.
+    /// </summary>
+    [Theory]
+    [InlineData("the package the release publishes")]
+    [InlineData("a package edited here")]
+    [InlineData("no plugins directory")]
+    [InlineData("a directory with no manifest")]
+    public async Task Check_names_no_plugin_package_when_nothing_installed_is_behind(string installed)
+    {
+        using var dir = new TempPaths();
+        var plugins = installed switch
+        {
+            "the package the release publishes" => Reply(("0.8.0", Earlier), ("0.9.0", Install(dir.Paths, "reply"))),
+            "a package edited here" => Reply(("0.8.0", Edited(Install(dir.Paths, "reply"), dir.Paths)), ("0.9.0", Later)),
+            "no plugins directory" => Reply(("0.8.0", Earlier), ("0.9.0", Later)),
+            _ => Reply(("0.8.0", Install(dir.Paths, "reply", manifest: false)), ("0.9.0", Later)),
+        };
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer, plugins: plugins))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+
+        Assert.Contains("\"plugin_updates\":[]", stdout.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A release that is not newer, or that names no package, says nothing about plugins: the field is there, and null.
+    /// Null and empty are two answers — no package named or nothing newer, and nothing installed here that the record
+    /// holds behind.
+    /// </summary>
+    [Theory]
+    [InlineData("not newer")]
+    [InlineData("no package named")]
+    public async Task Check_says_nothing_about_plugins_when_the_release_is_not_newer_or_names_no_package(string release)
+    {
+        using var dir = new TempPaths();
+        var installed = Install(dir.Paths, "reply");
+        var manifest = release == "not newer"
+            ? Manifest(SemanticVersion.Current.ToString(), plugins: Reply(("0.8.0", installed), ("0.9.0", Later)))
+            : Manifest(Newer);
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(manifest)), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+
+        var answer = JsonNode.Parse(stdout.ToString())!.AsObject();
+        Assert.True(answer.ContainsKey("plugin_updates"), stdout.ToString());
+        Assert.Null(answer["plugin_updates"]);
+    }
+
+    /// <summary>
+    /// A package manager places no plugin, and its upgrade leaves the plugins directory as the apply does, so the package
+    /// is named under one as well — and a person reads it after the three lines they type.
+    /// </summary>
+    [Theory]
+    [InlineData("Homebrew", "brew upgrade jason")]
+    [InlineData("winget", "winget upgrade Reply.Jason")]
+    public async Task Under_a_manager_a_plugin_package_behind_is_named_after_the_three_lines(string manager, string upgrade)
+    {
+        using var dir = new TempPaths();
+        using var layouts = new ManagedLayouts();
+        var installed = Install(dir.Paths, "reply");
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer, plugins: Reply(("0.8.0", installed), ("0.9.0", Later))))), new FakeProcessControl());
+        var managed = Managed(env, layouts, manager);
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], managed, Ct));
+        var answer = JsonSerializer.Deserialize<UpdateCheckResponse>(stdout.ToString(), JasonJson.Options)!;
+        Assert.Equal(new PluginUpdate("reply", "0.8.0", "0.9.0"), Assert.Single(answer.PluginUpdates!));
+
+        stdout.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--human"], managed, Ct));
+        var lines = stdout.ToString().TrimEnd().Split(Environment.NewLine);
+        Assert.Equal(["  jason runtime stop", $"  {upgrade}", "  jason runtime start"], lines[^4..^1]);
+        Assert.Equal($"Plugin package reply 0.8.0 is installed, and Jason {Newer} publishes reply 0.9.0: after the update, step 3 of the wiring check places it once the package there is moved away, then `jason plugin reload`.", lines[^1]);
+    }
+
+    /// <summary>
+    /// A person is told in one line per package, after every line about Jason itself: below the release's floor, after the
+    /// two applies the refusal names.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_names_a_plugin_package_behind_after_the_lines_about_jason()
+    {
+        using var installation = new FakeInstallation();
+        var installed = Install(installation.Paths, "reply");
+        var floored = UpdateRefusalTests.Floored(installation, "9.0.0");
+        installation.Release.Says(floored[..floored.LastIndexOf('}')] + ", \"plugins\": " + Reply(("0.8.0", installed), ("0.9.0", Later)) + "}");
+
+        var exit = await CliApp.RunAsync(["update", "check", "--human", "--feed", installation.Feed.ToString()], installation.Env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = installation.Out.ToString().TrimEnd().Split(Environment.NewLine);
+        Assert.Equal(3, lines.Length);
+        Assert.StartsWith($"{installation.To} cannot be applied to {SemanticVersion.Current} directly", lines[1], StringComparison.Ordinal);
+        Assert.Equal($"Plugin package reply 0.8.0 is installed, and Jason {installation.To} publishes reply 0.9.0: after the update, step 3 of the wiring check places it once the package there is moved away, then `jason plugin reload`.", lines[2]);
+    }
+
+    /// <summary>
+    /// A package too large to be a plugin is not read, and the check answers as if none were installed: what is wrong on
+    /// the installed side is <c>jason status</c>'s to say, and nothing reaches stderr.
+    /// </summary>
+    [Fact]
+    public async Task A_package_too_large_to_read_is_passed_over_in_silence()
+    {
+        using var dir = new TempPaths();
+        var installed = Install(dir.Paths, "reply");
+        for (var file = 0; file < PackageDigest.MaxFiles; file++)
+        {
+            File.WriteAllText(Path.Combine(dir.Paths.PluginPackageDirectory("reply"), $"extra-{file}.js"), string.Empty);
+        }
+
+        var (env, stdout, stderr) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer, plugins: Reply(("0.8.0", installed), ("0.9.0", Later))))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+
+        Assert.Equal(string.Empty, stderr.ToString());
+        Assert.Contains("\"plugin_updates\":[]", stdout.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A package with a file that cannot be read while the check runs is passed over in silence, as one too large is. The
+    /// file is held open with no sharing: Windows refuses every other open of it, and .NET on Linux and macOS refuses one
+    /// through the advisory lock it takes for that sharing. The package is one the release calls behind once it is read.
+    /// </summary>
+    [Fact]
+    public async Task A_package_that_cannot_be_read_is_passed_over_in_silence()
+    {
+        using var dir = new TempPaths();
+        var installed = Install(dir.Paths, "reply");
+        var main = Path.Combine(dir.Paths.PluginPackageDirectory("reply"), "main.js");
+        var (env, stdout, stderr) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer, plugins: Reply(("0.8.0", installed), ("0.9.0", Later))))), new FakeProcessControl());
+
+        using (new FileStream(main, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Throws<IOException>(() => File.OpenRead(main).Dispose());
+            Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+        }
+
+        Assert.Equal(string.Empty, stderr.ToString());
+        Assert.Contains("\"plugin_updates\":[]", stdout.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// When nothing installed here that the record holds is behind, a person reads the lines about Jason and nothing else:
+    /// the words a release that names no package gets.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_only_the_lines_about_jason_when_no_package_is_behind()
+    {
+        using var dir = new TempPaths();
+        var release = Manifest(Newer, plugins: Reply(("0.8.0", Earlier), ("0.9.0", Install(dir.Paths, "reply"))));
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(release)), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+        Assert.Contains("\"plugin_updates\":[]", stdout.ToString(), StringComparison.Ordinal);
+
+        stdout.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--human"], env, Ct));
+        var none = stdout.ToString();
+
+        release = Manifest(Newer);
+        stdout.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--human"], env, Ct));
+
+        Assert.Equal(stdout.ToString(), none);
+    }
+
+    private static readonly string Earlier = "sha256:" + new string('a', 64);
+
+    private static readonly string Later = "sha256:" + new string('b', 64);
+
+    /// <summary>
+    /// A package installed in <paramref name="paths"/>' plugins directory, with its manifest unless told otherwise, and the
+    /// digest the runtime computes for it.
+    /// </summary>
+    private static string Install(JasonPaths paths, string id, bool manifest = true)
+    {
+        var directory = paths.PluginPackageDirectory(id);
+        Directory.CreateDirectory(directory);
+        if (manifest)
+        {
+            File.WriteAllText(Path.Combine(directory, "plugin.yaml"), $"id: {id}\nversion: 0.8.0\n");
+        }
+
+        File.WriteAllText(Path.Combine(directory, "main.js"), "export default {};\n");
+        return PackageDigest.Compute(directory).Digest;
+    }
+
+    /// <summary>The digest a package had before somebody edited a file of it here.</summary>
+    private static string Edited(string digest, JasonPaths paths)
+    {
+        File.AppendAllText(Path.Combine(paths.PluginPackageDirectory("reply"), "main.js"), "// edited here\n");
+        return digest;
+    }
+
+    /// <summary>The release's Reply package, 0.9.0, and its record of each version's digest.</summary>
+    private static string Reply(params (string Version, string Digest)[] recorded) =>
+        "{\"reply\":{\"version\":\"0.9.0\",\"asset\":\"jason-plugin-reply.zip\",\"digest\":\""
+        + recorded.Single(line => line.Version == "0.9.0").Digest
+        + "\",\"recorded\":{"
+        + string.Join(",", recorded.Select(line => $"\"{line.Version}\":\"{line.Digest}\""))
+        + "}}}";
+
     /// <summary>The environment, naming a planted installation that <paramref name="manager"/> owns, with its record.</summary>
     private static CliEnvironment Managed(CliEnvironment env, ManagedLayouts layouts, string manager)
     {
@@ -399,11 +629,12 @@ public class UpdateCommandsTests
     private static HttpResponseMessage Ok(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-    private static string Manifest(string version, string? floor = null) =>
+    private static string Manifest(string version, string? floor = null, string? plugins = null) =>
         $$$"""
         {"schema":1,"version":"{{{version}}}","published_at":"2026-09-19T08:00:00Z",
          "artifacts":{"win-x64":{"asset":"jason-win-x64.zip","sha256":"{{{new string('a', 64)}}}","size":1}},
          "release_notes_url":"https://example.test/notes",
-         "min_upgrade_from":{{{(floor is null ? "null" : $"\"{floor}\"")}}}}
+         "min_upgrade_from":{{{(floor is null ? "null" : $"\"{floor}\"")}}},
+         "plugins":{{{plugins ?? "null"}}}}
         """;
 }
