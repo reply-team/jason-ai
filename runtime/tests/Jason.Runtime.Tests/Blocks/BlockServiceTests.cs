@@ -199,6 +199,28 @@ public partial class BlockServiceTests
     }
 
     /// <summary>
+    /// And the runtime's own actor never reaches that rule at all: every caller is refused the system actor before any verb
+    /// reads it, as a request that is wrong rather than as work only a person may do, so the block stays open.
+    /// </summary>
+    [Fact]
+    public async Task The_runtimes_own_actor_is_refused_before_a_block_is_cleared()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness);
+        var block = await BlockAsync(harness, campaign, openedAt: Noon, parked: 1);
+
+        await using var db = harness.Open();
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => NewService(db, Noon).ClearAsync(new BlockClearRequest(block, new ActorRef(ActorType.System, "dispatcher"), "paid"), Ct));
+
+        Assert.Equal("actor.type", error.Details![0].Field);
+        Assert.Equal("not_allowed", error.Details[0].Code);
+        await using var check = harness.Open();
+        Assert.Equal(ProviderBlockStatus.Open, (await check.ProviderBlocks.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Empty(await check.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ProviderBlockCleared).ToListAsync(Ct));
+    }
+
+    /// <summary>
     /// A person's clear: the block is cleared now, by them and by no attempt, and every campaign that was told the block
     /// held its work is told once that it cleared, under their name and with their reason — a campaign never told is not.
     /// </summary>
