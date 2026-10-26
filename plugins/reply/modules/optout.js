@@ -15,7 +15,7 @@
 // Reply, which holds a yes or a no.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, toEnsure } from "./contacts.js";
+import { contactNumber, toEnsure, withOrigin } from "./contacts.js";
 
 const OPERATION = "optout.record";
 const COMMAND = "contact opt-out";
@@ -38,8 +38,8 @@ export function optoutRecord(input, context) {
     fail(OPERATION, { call: COMMAND, row: lostAnswerRow(COMMAND), provider_item: evidence(done) }, named.learned);
   }
 
-  return {
+  return withOrigin({
     result: { items: [{ contact_id: contact.id, status: "recorded", external_ids: { contact: provider } }] },
     external_ids: { contact: provider },
-  };
+  }, done);
 }

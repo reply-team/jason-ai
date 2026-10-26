@@ -14,7 +14,7 @@
 // The values are the planner's, and they travel on stdin and nowhere else: no field value ever sits in an argument.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, refuseUnprojected, toEnsure } from "./contacts.js";
+import { contactNumber, refuseUnprojected, toEnsure, withOrigin } from "./contacts.js";
 
 const OPERATION = "contact.update";
 const COMMAND = "contact update";
@@ -44,10 +44,10 @@ export function contactUpdate(input, context) {
     fail(OPERATION, { call: COMMAND, row: lostAnswerRow(COMMAND), provider_item: evidence(done) }, named.learned);
   }
 
-  return {
+  return withOrigin({
     result: { items: [{ contact_id: contact.id, status: "updated", external_ids: { contact: provider } }] },
     external_ids: { contact: provider },
-  };
+  }, done);
 }
 
 // What the CLI is given on stdin: the arguments' fields, each as written, and their custom fields. reply-cli refuses a

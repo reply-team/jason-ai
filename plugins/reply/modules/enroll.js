@@ -9,7 +9,7 @@
 // be meeting its own lost write, answers `already_enrolled` whatever the policy.
 import { run } from "./cli.js";
 import { describe, evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, toEnsure } from "./contacts.js";
+import { contactNumber, toEnsure, withOrigin } from "./contacts.js";
 
 const OPERATION = "campaign.enroll";
 const COMMAND = "sequence add-contact";
@@ -71,7 +71,7 @@ export function campaignEnroll(input, context) {
 
   const learned = { contact: provider, campaign: sequence };
   if (added.status === "added") {
-    return enrollment(contact.id, "enrolled", added.sequence_active, learned);
+    return withOrigin(enrollment(contact.id, "enrolled", added.sequence_active, learned), added);
   }
 
   if (added.status === "already_in_sequence") {
@@ -79,7 +79,7 @@ export function campaignEnroll(input, context) {
     // `already_enrolled` whatever the policy. On a first attempt it existed before the call, and the policy decides.
     const repeated = Boolean(context && context.attempt_number > 1);
     if (repeated || input.args.collision === "skip") {
-      return enrollment(contact.id, "already_enrolled", added.sequence_active, learned);
+      return withOrigin(enrollment(contact.id, "already_enrolled", added.sequence_active, learned), added);
     }
 
     fail(OPERATION, {
