@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Tests.Installation;
 using Jason.Cli.Tests.Process;
+using Jason.Cli.Tests.Update;
+using Jason.Cli.Update;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Update;
@@ -263,6 +265,109 @@ public class UpdateCommandsTests
         Assert.DoesNotContain("jason update apply", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Below the newest release's floor, what updates this installation is first the apply of the floor itself: the
+    /// answer names that version as <c>install_first</c> and its apply as the one command, while the release stays
+    /// available and the check still exits 0.
+    /// </summary>
+    [Fact]
+    public async Task Below_the_release_s_floor_check_names_the_version_to_install_first()
+    {
+        using var dir = new TempPaths();
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer, floor: "9.0.0"))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+
+        var answer = JsonNode.Parse(stdout.ToString())!.AsObject();
+        Assert.True((bool?)answer["available"]);
+        Assert.Equal("9.0.0", (string?)answer["install_first"]);
+        Assert.Equal("jason update apply --version 9.0.0", (string?)answer["upgrade_command"]);
+    }
+
+    /// <summary>
+    /// And a person reading the sentence is given the apply's own words: the line under it is the refusal
+    /// <c>jason update apply</c> prints for the same release, taken from the applier rather than written here again.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_below_the_floor_prints_the_refusal_the_apply_would()
+    {
+        using var installation = new FakeInstallation();
+        installation.Release.Says(UpdateRefusalTests.Floored(installation, "9.0.0"));
+
+        var exit = await CliApp.RunAsync(["update", "check", "--human", "--feed", installation.Feed.ToString()], installation.Env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = installation.Out.ToString().TrimEnd().Split(Environment.NewLine);
+        Assert.Equal(2, lines.Length);
+        Assert.Equal($"A newer version is available: {installation.To} (this is {SemanticVersion.Current}).", lines[0]);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+        Assert.Equal(refused.Message, lines[1]);
+    }
+
+    /// <summary>
+    /// At the floor the release is one apply away, so nothing is named to install first: the field is there, and null.
+    /// </summary>
+    [Fact]
+    public async Task At_the_release_s_floor_check_names_the_apply_alone()
+    {
+        using var dir = new TempPaths();
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer, floor: SemanticVersion.Current.ToString()))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+
+        var answer = JsonNode.Parse(stdout.ToString())!.AsObject();
+        Assert.True(answer.ContainsKey("install_first"), stdout.ToString());
+        Assert.Null(answer["install_first"]);
+        Assert.Equal("jason update apply", (string?)answer["upgrade_command"]);
+    }
+
+    /// <summary>
+    /// A floor on a release that is not newer names nothing to install first: the release is not available, so the
+    /// field is there, and null, and the command stays the plain apply.
+    /// </summary>
+    [Fact]
+    public async Task A_floor_on_a_release_that_is_not_newer_names_nothing_to_install_first()
+    {
+        using var dir = new TempPaths();
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(SemanticVersion.Current.ToString(), floor: "9.0.0"))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+
+        var answer = JsonNode.Parse(stdout.ToString())!.AsObject();
+        Assert.False((bool?)answer["available"]);
+        Assert.True(answer.ContainsKey("install_first"), stdout.ToString());
+        Assert.Null(answer["install_first"]);
+        Assert.Equal("jason update apply", (string?)answer["upgrade_command"]);
+    }
+
+    /// <summary>
+    /// A package manager replaces the file whole, with no applier of this build's in between, so a floor says nothing
+    /// about it: the manager's own upgrade is the command, and nothing is named to install first.
+    /// </summary>
+    [Theory]
+    [InlineData("Homebrew", "brew upgrade jason")]
+    [InlineData("winget", "winget upgrade Reply.Jason")]
+    public async Task Under_a_manager_the_floor_names_nothing_to_install_first(string manager, string upgrade)
+    {
+        using var dir = new TempPaths();
+        using var layouts = new ManagedLayouts();
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer, floor: "9.0.0"))), new FakeProcessControl());
+        var managed = Managed(env, layouts, manager);
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], managed, Ct));
+        var answer = JsonNode.Parse(stdout.ToString())!.AsObject();
+        Assert.True(answer.ContainsKey("install_first"), stdout.ToString());
+        Assert.Null(answer["install_first"]);
+        Assert.Equal(upgrade, (string?)answer["upgrade_command"]);
+
+        stdout.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--human"], managed, Ct));
+        Assert.DoesNotContain("9.0.0", stdout.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("jason update apply", stdout.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>The environment, naming a planted installation that <paramref name="manager"/> owns, with its record.</summary>
     private static CliEnvironment Managed(CliEnvironment env, ManagedLayouts layouts, string manager)
     {
@@ -294,10 +399,11 @@ public class UpdateCommandsTests
     private static HttpResponseMessage Ok(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-    private static string Manifest(string version) =>
+    private static string Manifest(string version, string? floor = null) =>
         $$$"""
         {"schema":1,"version":"{{{version}}}","published_at":"2026-09-19T08:00:00Z",
          "artifacts":{"win-x64":{"asset":"jason-win-x64.zip","sha256":"{{{new string('a', 64)}}}","size":1}},
-         "release_notes_url":"https://example.test/notes"}
+         "release_notes_url":"https://example.test/notes",
+         "min_upgrade_from":{{{(floor is null ? "null" : $"\"{floor}\"")}}}}
         """;
 }

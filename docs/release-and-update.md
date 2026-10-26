@@ -100,7 +100,7 @@ nothing to break when an API version retires.
 | `version` | the release's version, SemVer. A version that does not parse makes the whole feed invalid. |
 | `published_at` | an ISO-8601 UTC timestamp. |
 | `release_notes_url` | where a person reads what changed, or `null`. An `http`/`https` address or nothing. |
-| `min_upgrade_from` | the oldest version that may upgrade to this one directly, or `null`. Read by the applier, not by the advertisement. |
+| `min_upgrade_from` | the oldest version that may update to this one in one apply, or `null`. Every release from 0.20.0 names `0.19.0`, until an applier change raises it, the first build whose apply loads what it needs and hands over to the new executable (§7), so from it any release lands in one apply whatever .NET patch either side carries; an older build goes through 0.19.0 first. Read by the applier and by `jason update check`, not by the advertisement. |
 | `artifacts` | one entry per platform. A release that names no artifact for your platform is still a valid release — it just has nothing for you. |
 | `asset` (in `artifacts.<rid>`) | a file name, and only a file name: letters, digits, dot, dash, underscore. Never a path and never a URL. |
 | `sha256` (in `artifacts.<rid>`) | 64 lowercase hexadecimal characters, with no `sha256:` prefix. |
@@ -259,6 +259,10 @@ installed it (§6). Under a manager `--human` prints the three lines to type, th
 upgrade and started after it, because winget cannot replace the executable a running runtime holds and Homebrew
 replaces the image a running runtime starts its plugin hosts from (§7); the field stays one command.
 
+On Jason's own installation, when the newest release is newer and this version is below its `min_upgrade_from`,
+`install_first` names that version and `upgrade_command` is `jason update apply --version` with it; otherwise
+`install_first` is null, and always under a manager. `--human` prints the refusal's line in place of the install clause.
+
 ## 6. Installing
 
 ```sh
@@ -393,9 +397,10 @@ update stands at: typing `jason update apply` again runs the new build, which fi
 puts the old one back. An apply that resumes past `swapped`, typed into the new executable, has nothing to hand over
 and carries on itself. A rollback loads the same before it moves the executable aside.
 
-An update from a build older than 0.19.0 is performed by that build, which does neither, so when the two builds carry
-different .NET patches it can stop at `started` with a failure to load a library. Typing `jason update apply` again
-runs the new build, which finishes it.
+Every release from 0.20.0 names 0.19.0 as its `min_upgrade_from`, so a build older than 0.19.0 updates to 0.19.0 first;
+that update is performed by the older build, which does neither, so when the two builds carry different .NET patches
+it can stop at `started` with a failure to load a library. Typing `jason update apply` again runs the new build, which
+finishes it; one more `jason update apply` then takes the newest release.
 
 **An update leaves a runtime running.** It stops the old one itself and starts the new one from the install
 path, so a machine that had a runtime up before the update has one up after it. So does a machine that did
@@ -588,7 +593,7 @@ a code on its own tells nobody what to do next.
 | `update_artifact_unreachable` | the download did not arrive, or the archive could not be read. Worth trying again |
 | `update_artifact_unexpected` | the archive does not hold the executable a release for this platform is supposed to hold, or the release publishes nothing for this platform. Its notice files are taken where the archive holds them, and an archive without one is not refused |
 | `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move |
-| `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed. The message names the version to pass through first |
+| `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; nothing is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |

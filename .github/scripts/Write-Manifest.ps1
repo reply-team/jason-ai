@@ -30,6 +30,10 @@ never in the manifest, whose artifacts are platforms.
 
 .PARAMETER ReleaseNotesUrl
 The page the release notes are on, or nothing: a release with no notes is a release.
+
+.PARAMETER MinUpgradeFrom
+The oldest version that updates to this one in one apply, or nothing. A bare version, X.Y.Z, the version of a published release: a pre-release, build metadata, or anything that does not
+parse is refused before either file is written.
 #>
 [CmdletBinding()]
 param(
@@ -37,11 +41,18 @@ param(
     [Parameter(Mandatory)] [string] $Directory,
     [Parameter(Mandatory)] [string[]] $Require,
     [string[]] $Plugins = @(),
-    [string] $ReleaseNotesUrl
+    [string] $ReleaseNotesUrl,
+    [string] $MinUpgradeFrom
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# A bare version, X.Y.Z, the version of a published release: a pre-release, build metadata, or anything that does not
+# parse is refused before either file is written. Digits without a leading zero, as the runtime reads a version.
+if ($MinUpgradeFrom -and $MinUpgradeFrom -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+    throw "-MinUpgradeFrom must be a version like 0.19.0, not '$MinUpgradeFrom'."
+}
 
 # A list either way it is written. A workflow writes its invocation inline, where PowerShell parses
 # `-Require win-x64,linux-x64,osx-arm64` as three arguments; a caller handing the same text over as one argv
@@ -91,7 +102,7 @@ $manifest = [ordered]@{
     version           = $Version
     published_at      = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
     release_notes_url = if ($ReleaseNotesUrl) { $ReleaseNotesUrl } else { $null }
-    min_upgrade_from  = $null
+    min_upgrade_from  = if ($MinUpgradeFrom) { $MinUpgradeFrom } else { $null }
     artifacts         = $artifacts
 }
 

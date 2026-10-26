@@ -1454,6 +1454,28 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// A bare version, X.Y.Z, the version of a published release: a pre-release, build metadata, or anything that does
+    /// not parse is refused before either file is written, and the message names what it was given.
+    /// </summary>
+    [Theory]
+    [InlineData("0.19")]
+    [InlineData("v0.19.0")]
+    [InlineData("0.19.0-rc.1")]
+    [InlineData("01.19.0")]
+    public void A_floor_that_is_not_a_bare_version_is_refused_before_anything_is_written(string floor)
+    {
+        using var tree = new TempTree();
+        var directory = Staged(tree);
+
+        var (exit, _, stderr) = Workflows.Script(NoEnvironment, Path.Combine(RepositoryRoot(), Path.Combine(Script)), "-Version", "0.2.0", "-Directory", directory, "-Require", string.Join(',', ReleaseAssets.Rids), "-MinUpgradeFrom", floor);
+
+        Assert.NotEqual(0, exit);
+        Assert.Contains($"-MinUpgradeFrom must be a version like 0.19.0, not '{floor}'", stderr, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Manifest)));
+        Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Checksums)));
+    }
+
+    /// <summary>
     /// A directory the way the assembling job sees it after the download: one stand-in archive per platform and
     /// the fragment the packaging action wrote for it, hashed the way the action hashes, and the plugin's package.
     /// </summary>
@@ -1631,6 +1653,10 @@ public class ReleaseWorkflowTests
         {
             Assert.Equal("https://jasonharness.ai/releases/tag/v0.2.0", manifest.ReleaseNotesUrl);
 
+            // Every release from 0.20.0 names 0.19.0, the first applier that hands over to the new executable; it moves
+            // only when an applier change raises it.
+            Assert.Equal(SemanticVersion.Parse("0.19.0"), manifest.MinUpgradeFrom);
+
             var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
             foreach (var carried in (string[])[ReleaseAssets.ReplyPlugin, ReleaseAssets.Ui])
             {
@@ -1639,6 +1665,12 @@ public class ReleaseWorkflowTests
                     checksums.Split('\n').Contains($"{package}  {carried}"),
                     $"{workflow} runs `{invocation}`, and the checksums it wrote carry no line for {carried}:\n{checksums}");
             }
+        }
+        else
+        {
+            // The floor is a published release's word about the appliers below it. A run's feed is one machine's, and
+            // the side it updates from is this tree, so a floor there would say nothing about any applier.
+            Assert.Null(manifest.MinUpgradeFrom);
         }
     }
 

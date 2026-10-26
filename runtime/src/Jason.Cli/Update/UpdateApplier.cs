@@ -314,6 +314,18 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
               + $"then run `jason update apply` again from {applierCopy}, because `jason` itself is not there to run."
             : $"Make sure {root} is a directory this account can write to, then run `jason update apply` again.";
 
+    /// <summary>
+    /// What reaches a release whose <c>min_upgrade_from</c> is above the version installed: the apply of that floor
+    /// first, then the apply that was asked for — with the version it named, when it named one. The refusal says it, and
+    /// <c>jason update check</c> says it before anybody types the apply, so the two cannot name different commands.
+    /// </summary>
+    internal static string PassThrough(SemanticVersion to, SemanticVersion installed, SemanticVersion floor, bool pinned) =>
+        $"{to} cannot be applied to {installed} directly: install {floor} first with `{ApplyOf(floor)}`, "
+        + $"then run `{(pinned ? ApplyOf(to) : "jason update apply")}`.";
+
+    /// <summary>The apply that installs one named release.</summary>
+    internal static string ApplyOf(SemanticVersion version) => $"jason update apply --version {version}";
+
     /// <summary>The steps still to take, beginning with the one the ledger names: it was begun, not finished.</summary>
     private static IEnumerable<UpdateStep> Remaining(UpdateStep from) =>
         Enum.GetValues<UpdateStep>().Where(step => step >= from);
@@ -348,7 +360,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         {
             throw new UpdateException(
                 UpdateCodes.NotDirectlyApplicable,
-                $"{manifest.Version} cannot be applied to {SemanticVersion.Current} directly: install {floor} first.");
+                PassThrough(manifest.Version, SemanticVersion.Current, floor, pinned: request.Version is not null));
         }
 
         var rid = ReleaseAssets.CurrentRid

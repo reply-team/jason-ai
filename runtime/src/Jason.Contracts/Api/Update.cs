@@ -9,9 +9,22 @@ namespace Jason.Contracts.Api;
 /// <param name="UpgradeCommand">
 /// The one command that updates this installation: <c>jason update apply</c> on Jason's own, and the package manager's
 /// upgrade where one installed it. One command and never the sequence around it: the runtime is stopped before a
-/// manager's upgrade and started after, and the operating skill says so.
+/// manager's upgrade and started after, and the operating skill says so. Below the newest release's floor it is the
+/// apply of <paramref name="InstallFirst"/>, the first of the two that reach that release.
 /// </param>
-public sealed record UpdateCheckResponse(string Current, string Latest, bool Available, DateTimeOffset CheckedAt, string? ReleaseNotesUrl, string UpgradeCommand);
+/// <param name="InstallFirst">
+/// The version to install first: the newest release's <c>min_upgrade_from</c>, when that release is newer than this
+/// installation, the installation is Jason's own and its version is below the floor. Null otherwise — and always null
+/// under a package manager, which replaces the file whole with no applier of this build's in between.
+/// </param>
+public sealed record UpdateCheckResponse(
+    string Current,
+    string Latest,
+    bool Available,
+    DateTimeOffset CheckedAt,
+    string? ReleaseNotesUrl,
+    string UpgradeCommand,
+    string? InstallFirst);
 
 /// <summary>
 /// What an update did: the version it came from, the version it installed, the step it reached, and the steps

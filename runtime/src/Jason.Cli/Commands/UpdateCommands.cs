@@ -483,22 +483,32 @@ public static class UpdateCommands
 
         var running = SemanticVersion.Current;
         var owner = PackageOwner.Of(env);
+        var available = manifest.IsNewerThan(running);
+
+        // Below the release's floor, Jason's own installation reaches it through the floor's apply first: the two commands
+        // the apply's refusal names, said before anybody types it. A manager replaces the file whole, with no applier of
+        // this build's in between, so the floor says nothing to it.
+        var first = owner is null && available && manifest.MinUpgradeFrom is { } floor && running < floor
+            ? floor
+            : (SemanticVersion?)null;
         var answer = new UpdateCheckResponse(
             running.ToString(),
             manifest.Version.ToString(),
-            manifest.IsNewerThan(running),
+            available,
             DateTimeOffset.UtcNow,
             manifest.ReleaseNotesUrl,
-            owner?.UpgradeCommand ?? OwnUpgrade);
+            owner?.UpgradeCommand ?? (first is { } through ? UpdateApplier.ApplyOf(through) : OwnUpgrade),
+            first?.ToString());
 
-        env.Out.WriteLine(human ? Sentence(answer, owner) : JsonSerializer.Serialize(answer, JasonJson.Options));
+        var passThrough = first is { } version ? UpdateApplier.PassThrough(manifest.Version, running, version, pinned: false) : null;
+        env.Out.WriteLine(human ? Sentence(answer, owner, passThrough) : JsonSerializer.Serialize(answer, JasonJson.Options));
         return ExitCodes.Success;
     }
 
     /// <summary>What updates an installation that is Jason's own.</summary>
     private const string OwnUpgrade = "jason update apply";
 
-    private static string Sentence(UpdateCheckResponse answer, PackageOwner? owner)
+    private static string Sentence(UpdateCheckResponse answer, PackageOwner? owner, string? passThrough)
     {
         if (!answer.Available)
         {
@@ -508,7 +518,10 @@ public static class UpdateCommands
         var notes = answer.ReleaseNotesUrl is null ? string.Empty : $" Release notes: {answer.ReleaseNotesUrl}";
         if (owner is null)
         {
-            return $"A newer version is available: {answer.Latest} (this is {answer.Current}). Install it with `{OwnUpgrade}`.{notes}";
+            // Below the floor, the words the apply would refuse with, on a line of their own: the two commands to type.
+            return passThrough is null
+                ? $"A newer version is available: {answer.Latest} (this is {answer.Current}). Install it with `{OwnUpgrade}`.{notes}"
+                : string.Join(Environment.NewLine, $"A newer version is available: {answer.Latest} (this is {answer.Current}).{notes}", passThrough);
         }
 
         // Three lines a person types, never the one: the manager replaces the image the running runtime starts its

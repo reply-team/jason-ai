@@ -254,8 +254,11 @@ jobs:
           # and checksums.txt, which lists the plugin's and the UI's packages after the archives; the manifest does not,
           # its artifacts being platforms. A platform or a package missing from the download, or an archive that no
           # longer hashes to what its fragment says, stops the release here. The notes are read where the release is
-          # published, which is the public repository whichever repository built it.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-ui.zip -ReleaseNotesUrl "https://jasonharness.ai/releases/tag/v$env:VERSION"
+          # published, which is the public repository whichever repository built it. Every release from 0.20.0 names
+          # 0.19.0 as the oldest version that updates to it in one apply: 0.19.0 is the first applier that loads what it
+          # needs and hands over to the new executable, so an older build goes through it first. The floor moves only
+          # when an applier change raises it.
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-ui.zip -ReleaseNotesUrl "https://jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 

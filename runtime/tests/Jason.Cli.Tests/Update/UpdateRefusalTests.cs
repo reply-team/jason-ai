@@ -102,31 +102,60 @@ public class UpdateRefusalTests
     }
 
     /// <summary>
-    /// A release may say it cannot be reached from any version, and the refusal names the one to install
-    /// first — the whole purpose of the field, which until now was parsed and read by nothing.
+    /// A release may say it cannot be reached from the version installed, and the refusal names the two commands
+    /// that reach it: the apply of the version to install first, and then the apply that was asked for — with the
+    /// version it named, when it named one.
     /// </summary>
-    [Fact]
-    public async Task A_release_that_cannot_be_applied_directly_names_the_version_to_pass_through()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_release_that_cannot_be_applied_directly_names_the_two_commands_that_reach_it(bool named)
     {
         using var installation = new FakeInstallation();
-        installation.Release.Says(installation.Release.Manifest().Replace(
-            "\"min_upgrade_from\": null",
-            "\"min_upgrade_from\": \"9.0.0\"",
-            StringComparison.Ordinal));
+        installation.Release.Says(Floored(installation, "9.0.0"));
+        var wanted = named ? installation.To : (SemanticVersion?)null;
 
         var refused = await Assert.ThrowsAsync<UpdateException>(
-            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, wanted, TimeSpan.Zero), Ct));
 
         Assert.Equal(UpdateCodes.NotDirectlyApplicable, refused.Code);
         Assert.False(refused.Retryable, "the release will say the same thing next time");
-        Assert.Contains(installation.To.ToString(), refused.Message, StringComparison.Ordinal);
-        Assert.Contains(SemanticVersion.Current.ToString(), refused.Message, StringComparison.Ordinal);
-        Assert.Contains("9.0.0", refused.Message, StringComparison.Ordinal);
+        var then = named ? $"jason update apply --version {installation.To}" : "jason update apply";
+        Assert.Equal(
+            $"{installation.To} cannot be applied to {SemanticVersion.Current} directly: install 9.0.0 first with "
+            + $"`jason update apply --version 9.0.0`, then run `{then}`.",
+            refused.Message);
 
-        // Refused before anything was downloaded, and before an update existed to finish.
-        Assert.Equal(["/releases/latest/download/" + ReleaseAssets.Manifest], installation.Fetched);
+        // Refused before anything was downloaded, and before an update existed to finish: the one address asked is the
+        // manifest's, the release's own when a version was named.
+        var manifest = named ? UpdateFeed.PinnedFor(installation.Feed, installation.To) : installation.Feed;
+        Assert.Equal([manifest.AbsolutePath], installation.Fetched);
         Assert.Null(installation.Ledger());
     }
+
+    /// <summary>
+    /// The floor is the oldest version that updates in one apply, so an installation at the floor itself is one of
+    /// them, and its update goes ahead.
+    /// </summary>
+    [Fact]
+    public async Task An_installation_at_the_release_s_floor_updates_in_one_apply()
+    {
+        using var installation = new FakeInstallation();
+        installation.Release.Says(Floored(installation, SemanticVersion.Current.ToString()));
+
+        var ledger = await installation.Applier()
+            .ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+    }
+
+    /// <summary>The installation's release, saying that nothing older than <paramref name="floor"/> updates to it in one apply.</summary>
+    internal static string Floored(FakeInstallation installation, string floor) =>
+        installation.Release.Manifest().Replace(
+            "\"min_upgrade_from\": null",
+            $"\"min_upgrade_from\": \"{floor}\"",
+            StringComparison.Ordinal);
 
     /// <summary>
     /// Nothing newer is nothing to do — unless a person asked for a particular version by name, which is how
