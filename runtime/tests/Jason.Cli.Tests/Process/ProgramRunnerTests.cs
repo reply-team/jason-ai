@@ -24,12 +24,14 @@ public class ProgramRunnerTests
 
         Assert.Equal(0, result.ExitCode);
         Assert.False(result.TimedOut);
+        Assert.False(result.NotStarted);
         Assert.Contains("git version", result.StandardOutput, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// A program that is not there is an answer, not an exception. Every caller of this is reporting on an
-    /// installation, and "the thing you asked about is not installed" is the most ordinary answer there is.
+    /// installation, and "the thing you asked about is not installed" is the most ordinary answer there is. It says
+    /// that the program was never started, so no caller reads the runner's -1 as a code the program returned.
     /// </summary>
     [Fact]
     public async Task A_program_that_is_not_there_answers_rather_than_throwing()
@@ -39,6 +41,7 @@ public class ProgramRunnerTests
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.False(result.TimedOut);
+        Assert.True(result.NotStarted);
         Assert.NotEqual(string.Empty, result.StandardError);
     }
 

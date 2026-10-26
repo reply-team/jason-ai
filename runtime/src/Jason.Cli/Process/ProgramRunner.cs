@@ -10,7 +10,11 @@ namespace Jason.Cli.Process;
 /// True when the bound expired and the child was killed. The exit code is then whatever killing it produced
 /// and means nothing, so a caller reads this first.
 /// </param>
-public sealed record ProgramResult(int ExitCode, string StandardOutput, string StandardError, bool TimedOut);
+/// <param name="NotStarted">
+/// True when the program could not be started at all. The exit code is then -1, which no program returned, and the
+/// standard error is the reason the start failed, so a caller reads this first as well.
+/// </param>
+public sealed record ProgramResult(int ExitCode, string StandardOutput, string StandardError, bool TimedOut, bool NotStarted = false);
 
 /// <summary>
 /// The one place the CLI runs a program that is not a Jason runtime: <c>git</c> for a skills source, and the
@@ -118,7 +122,7 @@ public static class ProgramRunners
             {
                 // Not there, or not runnable. Every caller of this is reporting on an installation, and "that
                 // program is not installed" is an answer rather than a failure of this call.
-                return new ProgramResult(-1, string.Empty, exception.Message, false);
+                return new ProgramResult(-1, string.Empty, exception.Message, false, NotStarted: true);
             }
 
             var output = new StringBuilder();

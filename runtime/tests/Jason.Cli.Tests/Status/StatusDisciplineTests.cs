@@ -8,6 +8,7 @@ using Jason.Cli.Tests.Process;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Plugins;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -25,7 +26,8 @@ namespace Jason.Cli.Tests.Status;
 /// The rule is stated the way the code can keep it. "No check runs a probe of its own" would already have been
 /// false the day it was written, because one check runs a provider CLI; a rule a reader can see is broken
 /// teaches them the rule is decorative. What is true, and worth holding, is that the only program any check
-/// runs is the one the caller named, with one argument, through the one declared runner.
+/// runs is the file the name the caller gave resolves to or, for npm's shim, the interpreter it names with the
+/// entry script before --version, through the one declared runner.
 /// </para>
 /// </remarks>
 public partial class StatusDisciplineTests
@@ -57,24 +59,27 @@ public partial class StatusDisciplineTests
     }
 
     /// <summary>
-    /// And exactly one program is ever asked for — the one the caller named — with exactly one argument. The
-    /// scan above cannot see this: a second probe added behind the same runner would pass it silently, which
-    /// is precisely how a status verb grows into a diagnostics one.
+    /// And exactly one program is ever asked for — the file the name the caller gave resolves to or, for npm's shim,
+    /// the interpreter it names with the entry script before --version. The scan above cannot see this: a second probe
+    /// added behind the same runner would pass it silently, which is precisely how a status verb grows into a
+    /// diagnostics one.
     /// </summary>
     [Fact]
     public async Task The_only_program_any_check_runs_is_the_one_the_documentation_publishes()
     {
         using var dir = new TempPaths();
+        using var programs = new TestPrograms();
+        var program = programs.AddProgram("acme-sdr");
         var runner = new FakeProgramRunner(_ => new ProgramResult(1, string.Empty, "not found", false));
 
-        await CliApp.RunAsync(["status", "--provider-cli", "acme-sdr"], Machine(dir, runner), Ct);
+        await CliApp.RunAsync(["status", "--provider-cli", "acme-sdr"], Machine(dir, runner) with { SearchPath = programs.Root }, Ct);
 
         var asked = Assert.Single(runner.Requested);
         Assert.True(
-            asked is { Program: "acme-sdr", Arguments: ["--version"] },
+            asked.Program == program && asked.Arguments is ["--version"],
             $"A check ran '{asked.Program} {string.Join(' ', asked.Arguments)}'. The only program this verb may "
-            + "run is the one the caller named, with --version; anything else is a probe, and a probe is a "
-            + "diagnostics verb.");
+            + "run is the file the name the caller gave resolves to, with --version; anything else is a probe, and a "
+            + "probe is a diagnostics verb.");
     }
 
     /// <summary>

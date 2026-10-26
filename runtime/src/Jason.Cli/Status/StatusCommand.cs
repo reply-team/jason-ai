@@ -82,8 +82,10 @@ public static class StatusCommand
         it is repaired.
 
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
-        with a ten-second bound and reports whether it answered. Which provider you use is yours, so this build
-        knows no vendor's command by heart.
+        with a ten-second bound and reports whether it answered. The name is found the way Jason finds every
+        program it starts by name: on Windows an .exe or a .com first, else npm's .cmd shim, run as the
+        interpreter and script it names, and never a script only a shell could run. The check says which file
+        it resolved to. Which provider you use is yours, so this build knows no vendor's command by heart.
 
         Exit codes: 0 when every required check passed, 1 when one did not. Never 3: "the runtime did not
         answer" is this command's answer rather than a reason it has none.
@@ -101,7 +103,7 @@ public static class StatusCommand
         var human = VerbOptions.Human();
         var providerCli = new Option<string?>("--provider-cli")
         {
-            Description = "A provider CLI to check for, run as '<program> --version'. Named by you: this build knows no vendor's command.",
+            Description = "A provider CLI to check for, found the way Jason finds every program it starts by name and run as '<program> --version'; on Windows an npm-installed CLI runs as the interpreter and entry script its shim names, then --version. Named by you: this build knows no vendor's command.",
         };
 
         command.Options.Add(human);

@@ -12,6 +12,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Programs;
 using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
 
@@ -920,8 +921,9 @@ internal static class StatusChecks
     }
 
     /// <summary>
-    /// Whether the provider's own CLI is on this machine and answering. It names the command it runs, it is
-    /// bounded, and it prints no credential: not the key, not a prefix of it, not its length.
+    /// Whether the provider's own CLI is on this machine and answering. It names the command it runs and the file
+    /// that command resolved to, it is bounded, and it prints no credential: not the key, not a prefix of it, not
+    /// its length. A name that resolves to nothing a program may be started through is not run at all.
     /// </summary>
     /// <remarks>
     /// The program is named by the caller, never by this build. Which provider somebody uses is theirs, and a
@@ -946,16 +948,140 @@ internal static class StatusChecks
             return new StatusCheck("provider_cli", false, CheckState.Unknown, $"This environment cannot run programs, so '{command}' was not run.", null);
         }
 
-        var result = await runner.RunAsync(providerCli, ProviderArguments, null, ProviderTimeout, cancellationToken).ConfigureAwait(false);
+        var (found, directory) = FindProvider(providerCli, env.SearchPath);
+        if (found is not { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } program })
+        {
+            var script = found.Outcome == ProgramLookupOutcome.NotFound ? ScriptNamed(providerCli, env.SearchPath) : null;
+            return new StatusCheck("provider_cli", false, CheckState.Absent, NotRun(found, providerCli, directory, script, command), null);
+        }
+
+        // What the name came to is said first: a person reading "did not answer" has to know which file did not, and
+        // on Windows that is often not the file the name suggests.
+        var resolved = found.Outcome == ProgramLookupOutcome.NpmShim
+            ? $"'{providerCli}' resolves to {Listed(found.File!)}, npm's shim, which runs {found.Launch[0]} with {program}."
+            : $"'{providerCli}' resolves to {Listed(found.File!)}.";
+
+        var result = await runner.RunAsync(program, [.. found.Launch, .. ProviderArguments], null, ProviderTimeout, cancellationToken).ConfigureAwait(false);
+        if (result.NotStarted)
+        {
+            return new StatusCheck("provider_cli", false, CheckState.Absent, $"{resolved} '{command}' could not be started.", null);
+        }
+
         if (result.TimedOut)
         {
-            return new StatusCheck("provider_cli", false, CheckState.Absent, $"'{command}' did not answer in {ProviderTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} seconds.", null);
+            return new StatusCheck("provider_cli", false, CheckState.Absent, $"{resolved} '{command}' did not answer in {ProviderTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} seconds.", null);
         }
 
         return result.ExitCode == 0
-            ? new StatusCheck("provider_cli", false, CheckState.Ok, $"'{command}' answered.", null)
-            : new StatusCheck("provider_cli", false, CheckState.Absent, $"'{command}' is not on this machine, or did not answer.", null);
+            ? new StatusCheck("provider_cli", false, CheckState.Ok, $"{resolved} '{command}' answered.", null)
+            : new StatusCheck("provider_cli", false, CheckState.Absent, string.Create(CultureInfo.InvariantCulture, $"{resolved} '{command}' did not answer: exit code {result.ExitCode}."), null);
     }
+
+    /// <summary>
+    /// The provider CLI as Jason finds every program it starts by name (<see cref="ProgramLookup"/>): on Windows an
+    /// <c>.exe</c> or a <c>.com</c>, or npm's shim read for the interpreter and entry script it names, and never a script
+    /// a shell would have to interpret. A value with a directory in it is a path, looked up in that directory alone by
+    /// the same rule; the directory comes back with the answer, so a name not found there says where it was looked for.
+    /// A shim found there takes its interpreter from the search path, as the shim itself would when it runs.
+    /// </summary>
+    private static (FoundProgram Found, string? Directory) FindProvider(string providerCli, string? searchPath)
+    {
+        // Read from this process, as the path check reads it: it only widens what is refused, and never what is found.
+        var pathExt = OperatingSystem.IsWindows() ? Environment.GetEnvironmentVariable("PATHEXT") : null;
+        var onPath = new ProgramSearchPath(searchPath ?? Environment.GetEnvironmentVariable("PATH"), pathExt);
+        if (!IsPath(providerCli))
+        {
+            return (ProgramLookup.Find(providerCli, onPath, onPath), null);
+        }
+
+        var full = System.IO.Path.GetFullPath(providerCli);
+        var name = System.IO.Path.GetFileName(full);
+        var directory = System.IO.Path.GetDirectoryName(full);
+        return name.Length == 0 || directory is null
+            ? (new FoundProgram(providerCli, ProgramLookupOutcome.NotFound, null, [], null, null), directory ?? full)
+            : (ProgramLookup.Find(name, new ProgramSearchPath(directory, pathExt), onPath), directory);
+    }
+
+    private static bool IsPath(string providerCli) =>
+        providerCli.Contains(System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal)
+        || providerCli.Contains(System.IO.Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+
+    /// <summary>The extensions a value may carry that name a script only a shell could run.</summary>
+    private static readonly string[] ScriptExtensions = [".cmd", ".bat", ".ps1"];
+
+    /// <summary>
+    /// The script a value names by its own extension, when nothing answered for it. On Windows the lookup adds the
+    /// extension itself, so <c>acme-sdr.cmd</c> is a name it never finds while the file is there, and "not found" would
+    /// be false. Null where the value names no such script, or that script is neither on the search path nor in the
+    /// directory given.
+    /// </summary>
+    private static string? ScriptNamed(string providerCli, string? searchPath)
+    {
+        if (!OperatingSystem.IsWindows()
+            || !ScriptExtensions.Contains(System.IO.Path.GetExtension(providerCli), StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!IsPath(providerCli))
+        {
+            return Executables.OnPath(providerCli, searchPath);
+        }
+
+        var full = System.IO.Path.GetFullPath(providerCli);
+        return File.Exists(full) ? full : null;
+    }
+
+    /// <summary>
+    /// A file as its directory lists it. The lookup spells a file it reached through <c>PATHEXT</c> with that
+    /// variable's case, <c>acme-sdr.CMD</c>, which is not the name a person finds in the listing.
+    /// </summary>
+    private static string Listed(string file)
+    {
+        var directory = System.IO.Path.GetDirectoryName(file);
+        if (!OperatingSystem.IsWindows() || directory is null)
+        {
+            return file;
+        }
+
+        var name = System.IO.Path.GetFileName(file);
+        try
+        {
+            foreach (var entry in Directory.EnumerateFiles(directory, name))
+            {
+                if (string.Equals(System.IO.Path.GetFileName(entry), name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return System.IO.Path.Combine(directory, System.IO.Path.GetFileName(entry));
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Gone or unreadable since the lookup saw it: the lookup's spelling still names it.
+        }
+
+        return file;
+    }
+
+    /// <summary>
+    /// Why nothing was run: nothing answered for the name, or only a file that no program may be started through. A
+    /// refusal says what Jason can run instead, since the person reading it has a CLI to put right.
+    /// </summary>
+    private static string NotRun(FoundProgram found, string providerCli, string? directory, string? script, string command) => found.Outcome switch
+    {
+        ProgramLookupOutcome.ShellOnly =>
+            $"'{providerCli}' resolves only to {Listed(found.File!)}, a script a shell would have to interpret, so '{command}' was not run: Jason starts programs, never shells; {Instead(found.Name)}",
+        ProgramLookupOutcome.RefusedShim =>
+            $"'{providerCli}' resolves only to {Listed(found.File!)}, which {found.Refusal}, so '{command}' was not run: starting it would mean cmd.exe interprets the arguments; {Instead(found.Name)}",
+        _ when script is not null =>
+            $"'{providerCli}' resolves only to {Listed(script)}, a script a shell would have to interpret, so '{command}' was not run: Jason starts programs, never shells; give '{providerCli[..^System.IO.Path.GetExtension(providerCli).Length]}', the name without its extension, and Jason looks for an .exe, a .com or npm's own shim for it.",
+        _ when directory is not null => $"'{found.Name}' was not found in {directory}, so '{command}' was not run.",
+        _ => $"'{providerCli}' was not found on the search path, so '{command}' was not run.",
+    };
+
+    /// <summary>What Jason can run in place of a refused file: the clause that ends a refusal.</summary>
+    private static string Instead(string name) =>
+        $"it can run an .exe, a .com or npm's own shim for '{name}', or the CLI's own executable given by path.";
 
     private static StatusCheck Harnesses(CliEnvironment env)
     {

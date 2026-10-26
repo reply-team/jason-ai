@@ -15,6 +15,7 @@ using Jason.Contracts.Plugins;
 using Jason.Cli.Tests.Uninstall;
 using Jason.Cli.Uninstall;
 using Jason.Runtime.Tests;
+using Jason.Runtime.Tests.Plugins;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -231,11 +232,16 @@ public class StatusCommandTests
     {
         const string Secret = "rk_live_do_not_print_me";
         using var dir = new TempPaths();
+        using var programs = new TestPrograms();
+        programs.AddProgram("acme-sdr");
         var output = new StringWriter();
         Running(dir);
         var runner = new FakeProgramRunner(_ => new ProgramResult(-1, Secret, Secret, TimedOut: true));
+        var machine = Machine(dir, output, runner);
 
-        var exit = await CliApp.RunAsync(["status", "--provider-cli", "acme-sdr"], Machine(dir, output, runner), Ct);
+        // On the search path, because a name nothing answers for is not run at all.
+        var exit = await CliApp.RunAsync(
+            ["status", "--provider-cli", "acme-sdr"], machine with { SearchPath = string.Join(Path.PathSeparator, programs.Root, machine.SearchPath) }, Ct);
 
         var provider = Assert.Single(Read(output).Checks, check => check.Name == "provider_cli");
         Assert.Equal(ExitCodes.Success, exit);

@@ -260,10 +260,12 @@ than on the code. A check reports a fact and, where there is one, the command th
 a log and never explains a failure, which is what keeps it from growing into a diagnostics verb.
 
 The provider check runs only a program **you** name — `jason status --provider-cli <program>`, run as
-`<program> --version` with a ten-second bound. Which provider you use is yours, and a readiness check that knew
-one vendor's command by heart would be this product naming a vendor in its own sources, which it does not. It
-names the exact command it ran in its own output, and prints no credential — not the key, not a prefix of it,
-not its length.
+`<program> --version` with a ten-second bound. The program is found the way Jason finds every program it starts
+by name, and on Windows an npm-installed CLI runs as the interpreter and entry script its shim names, then
+`--version`. Which provider you use is yours, and a readiness check that knew one vendor's command by heart would
+be this product naming a vendor in its own sources, which it does not. In its own output it names the file the
+name resolved to and, for npm's shim, what that runs, and it prints no credential — not the key, not a prefix of
+it, not its length.
 
 ### When something is wrong
 

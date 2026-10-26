@@ -81,7 +81,7 @@ public sealed class PatternAnchorGuardTests
         AssertFound(literals, "PluginIds.cs", @"^[a-z][a-z0-9-]{1,63}\z");
         AssertFound(literals, "OutcomeValidator.cs", @"^[a-z][a-z0-9_]{0,63}\z");
         AssertFound(literals, "SnakeCase.cs", "([a-z0-9])([A-Z])");
-        AssertFound(literals, "ExecutableResolver.cs", "^endLocal & goto #_undefined_# 2>NUL");
+        AssertFound(literals, "ProgramLookup.cs", "^endLocal & goto #_undefined_# 2>NUL");
 
         var problems = new List<string>();
         var unread = found

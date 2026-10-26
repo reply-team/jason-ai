@@ -7,6 +7,11 @@ namespace Jason.Cli.Status;
 /// Reading PATH rather than starting anything. "Is <c>jason</c> reachable by name?" is a question about a
 /// directory listing, and answering it by running the program would be a probe — which is the line between a
 /// readiness check and a diagnostics tool.
+/// <para>
+/// It is not the lookup Jason starts a program by (<c>ProgramLookup</c>), and it stays apart on purpose: that one
+/// answers what Jason may start, an <c>.exe</c> or a <c>.com</c> before npm's shim and every other script refused,
+/// while this one answers what typing the name in a shell reaches, a <c>.cmd</c> or a <c>.bat</c> included.
+/// </para>
 /// </remarks>
 internal static class Executables
 {

@@ -1,10 +1,10 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Channels;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Manifest;
-using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Profiles;
 using Jason.Runtime.Roles;
 using Jason.Runtime.WorkItems;
@@ -36,8 +36,8 @@ public sealed class PatternEndTests
     [InlineData("ChannelRules.HostName", typeof(ChannelRules), "HostName", "www.linkedin.com")]
     [InlineData("MatchKey.CustomFieldName", typeof(MatchKey), "CustomFieldName", "crm_id")]
     [InlineData("ExecutorService.ErrorCode", typeof(ExecutorService), "ErrorCode", "rate_limited")]
-    [InlineData("ExecutableResolver.NpmShimCall", typeof(ExecutableResolver), "NpmShimCall", NpmShimLastLine)]
-    [InlineData("ExecutableResolver.PackageName", typeof(ExecutableResolver), "PackageName", "vendor-cli")]
+    [InlineData("ProgramLookup.NpmShimCall", typeof(ProgramLookup), "NpmShimCall", NpmShimLastLine)]
+    [InlineData("ProgramLookup.PackageName", typeof(ProgramLookup), "PackageName", "vendor-cli")]
     [InlineData("YamlToJson.Decimal", typeof(YamlToJson), "Decimal", "42")]
     [InlineData("YamlToJson.Hexadecimal", typeof(YamlToJson), "Hexadecimal", "0x1F")]
     [InlineData("YamlToJson.Octal", typeof(YamlToJson), "Octal", "0o17")]

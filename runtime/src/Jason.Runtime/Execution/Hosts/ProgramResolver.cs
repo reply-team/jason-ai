@@ -1,5 +1,5 @@
 using Jason.Contracts.Discovery;
-using Jason.Runtime.Plugins.Manifest;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Plugins.Registry;
 
 namespace Jason.Runtime.Execution.Hosts;
@@ -55,8 +55,9 @@ public sealed class ProgramResolver(ISearchPath searchPath)
 
         // The same walk, the same order and the same reading of a shim that a plugin's declared program gets.
         // Two answers to "where is this program" would be one answer too many.
-        var resolved = new ExecutableResolver(searchPath).Resolve(new ExecutableRequest(program, null, null), 0);
-        return resolved is { Problem: null, Path: { } found } ? [found, .. resolved.Launch] : null;
+        var onPath = new ProgramSearchPath(searchPath.Path, searchPath.PathExt);
+        var found = ProgramLookup.Find(program, onPath, onPath);
+        return found is { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } started } ? [started, .. found.Launch] : null;
     }
 
     /// <summary>A file that exists and that this operating system would start; a directory is neither.</summary>
