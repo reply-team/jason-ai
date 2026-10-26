@@ -36,7 +36,7 @@ internal static partial class CriticalTier
         [Family.B1] =  [  7,   2,   4,   2,   5],
         [Family.B2] =  [  4,   2,   0,   0,   6],
         [Family.B3] =  [  0,   0,   3,   1,  29],
-        [Family.B4] =  [  0,   0,   0,   0,  11],
+        [Family.B4] =  [  0,   0,   0,   0,  12],
         [Family.B5] =  [  0,   0,   0,   0,   2],
         [Family.B6] =  [  0,   1,   2,   0,   3],
         [Family.B7] =  [  3,   3,   3,   3,  13],

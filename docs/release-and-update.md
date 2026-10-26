@@ -340,6 +340,10 @@ registers the manager's own entry, which stays put across its upgrades, rather t
 `jason uninstall` takes off the logon registration, the skills and, on the word, the data directory, and leaves the
 rest to the manager (§9).
 
+Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`, whose formula
+follows the latest release. Publishing a release asks the tap to bump it at once; the bump reads the latest release
+itself, and the tap also looks every six hours, so a request that fails delays the formula and never the release.
+
 ## 7. Updating
 
 ```sh
