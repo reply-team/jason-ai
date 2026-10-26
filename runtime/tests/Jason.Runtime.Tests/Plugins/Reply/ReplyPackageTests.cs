@@ -7,7 +7,9 @@ using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.ReplyCliStub;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Documentation;
 using Jason.Runtime.Tests.Plugins.Invocation;
 using Jason.Runtime.Tests.Routing;
 
@@ -20,6 +22,9 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// </summary>
 public class ReplyPackageTests
 {
+    /// <summary>The list of the package's versions and the digest each was recorded with, beside the package and outside it.</summary>
+    private const string DigestList = "plugins/reply.digests";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -48,6 +53,95 @@ public class ReplyPackageTests
         Assert.Equal([ReplyPlugins.ExecutableName], plugin.Capabilities.Exec.Granted);
         Assert.Null(plugin.Capabilities.Env);
         Assert.Null(plugin.Capabilities.Http);
+    }
+
+    /// <summary>
+    /// A package's version is its content. The digest of the whole package — the number <c>plugin list</c> shows, and the
+    /// digest of the package a release publishes, which that release's runtime reports in <c>system.info</c>'s
+    /// <c>released_plugins</c>; it is not the archive's checksum in <c>checksums.txt</c> — has one line on the list beside the
+    /// package, <c>plugins/reply.digests</c>, for the version the manifest names, and that line is the last. Content changed
+    /// without a new version is the digest of a version no longer being what the list says; a new version without its line is
+    /// the list not yet saying what the version is; a version on the list twice is the content of a version given a second
+    /// line; the version's line above a later one is the list out of order. Each failure says what to do.
+    /// </summary>
+    /// <remarks>
+    /// A line that changes or disappears in a diff is what this test cannot see, since the list it reads is the changed list:
+    /// a line already on it is refused in review, as a line of MigrationDigests.txt is.
+    /// </remarks>
+    [Fact]
+    [Critical(Family.R1, "a package's version is its content")]
+    public void The_package_is_the_digest_its_version_has_on_the_list()
+    {
+        var root = Publication.RepositoryRoot();
+        var package = Path.Combine(root, "plugins", ReplyPlugins.PluginId);
+        var version = YamlToJson.Convert(File.ReadAllText(Path.Combine(package, "plugin.yaml")))!["version"]!.GetValue<string>();
+        var digest = PackageDigest.Compute(package).Digest;
+        var line = $"{version} {digest}";
+
+        var path = Path.Combine(root, DigestList);
+        Assert.True(
+            File.Exists(path),
+            $"{DigestList} is missing. It records the digest of each version of the package, one line per version, beside the "
+            + "package and outside it: create it with a header comment and this line, the manifest's version and the package's digest:"
+            + Environment.NewLine
+            + line);
+
+        var listed = new List<(string Version, string Digest)>();
+        foreach (var entry in File.ReadAllLines(path))
+        {
+            if (entry.Length == 0 || entry.StartsWith('#'))
+            {
+                continue;
+            }
+
+            var parts = entry.Split(' ');
+            Assert.True(
+                parts is [var listedVersion, var recorded]
+                    && ManifestRules.IsSemanticVersion(listedVersion)
+                    && Regex.IsMatch(recorded, "^sha256:[0-9a-f]{64}$"),
+                $"Not a line of {DigestList}: '{entry}'. A line is a version as plugin.yaml writes one, a space and the package's sha256:digest.");
+            listed.Add((parts[0], parts[1]));
+        }
+
+        var problems = new List<string>();
+        foreach (var twice in listed.GroupBy(entry => entry.Version, StringComparer.Ordinal).Where(group => group.Count() > 1))
+        {
+            problems.Add(
+                $"{DigestList} names version {twice.Key} {twice.Count()} times. A version has one line and a line is never changed: "
+                + "delete the line that was added or edited, put the package's content under a new version in plugin.yaml, and append "
+                + "the line for that version.");
+        }
+
+        var own = listed.Where(entry => entry.Version == version).ToList();
+        if (own.Count == 0)
+        {
+            problems.Add(
+                $"plugin.yaml says version {version} and {DigestList} has no line for it. A version is its content, recorded once: "
+                + $"append this line to the end of {DigestList}, after the edits to the package are done, since every edit changes it:"
+                + Environment.NewLine
+                + line);
+        }
+        else if (own.Count == 1)
+        {
+            if (own[0].Digest != digest)
+            {
+                problems.Add(
+                    $"The package is not the content version {version} was recorded with: {DigestList} says {own[0].Digest}, the package "
+                    + $"is {digest}. A version is its content, so the version changes whenever any file of plugins/{ReplyPlugins.PluginId} does: "
+                    + "bump the version in plugin.yaml and write the changelog entry, then run this test again, which prints the line "
+                    + $"to append to the end of {DigestList}. The line already there is left as it is.");
+            }
+
+            if (listed[^1].Version != version)
+            {
+                problems.Add(
+                    $"The last line of {DigestList} is for version {listed[^1].Version} and plugin.yaml says version {version}. A line is "
+                    + "appended at the end of the list, after the lines already there: put the line for version "
+                    + $"{version} at the end of {DigestList}.");
+            }
+        }
+
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
     }
 
     [Fact]

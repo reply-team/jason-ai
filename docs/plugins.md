@@ -52,6 +52,13 @@ endings are not normalised — the bytes that will run are the bytes that are ha
 the identity of *this* package on *this* machine. It is shown by `plugin list`, carried in every
 invocation, and recomputed by the child before it runs a line of JavaScript.
 
+**A package's version is its content:** change any file of a package, its README and its changelog included, and the
+version changes with it, because the runtime compares an installed package's digest with the package its own release
+carries, and reads the versions only when the two differ; two packages under one version would make an earlier release's
+package look like one edited here, so `jason status` would not say it was left behind. The marketplace records the digest
+of each version the Reply package has had from 0.9.0 on, and of the earlier versions a release published, in
+[`plugins/reply.digests`](../plugins/reply.digests).
+
 ## 3. The manifest
 
 `plugin.yaml` is read as one YAML 1.2 document by the core schema: `yes` is the string "yes", and a

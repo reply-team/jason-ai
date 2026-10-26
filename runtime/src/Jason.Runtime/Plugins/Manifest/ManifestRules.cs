@@ -239,7 +239,7 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             return null;
         }
 
-        if (!TryText(root["version"], out var version) || !SemanticVersion().IsMatch(version))
+        if (!TryText(root["version"], out var version) || !IsSemanticVersion(version))
         {
             Add(ProblemCodes.VersionInvalid, "version", "version is SemVer 2 (major.minor.patch with an optional prerelease), without build metadata.");
             return null;
@@ -875,6 +875,13 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     /// sentence.
     /// </summary>
     internal static bool IsPluginId(string? text) => PluginIds.IsWellFormed(text);
+
+    /// <summary>
+    /// Whether text is a version as a manifest's own <c>version</c> is held to it — spelled once, so that whoever else reads
+    /// a package's version against the manifest's rule, such as the list that records each version's digest, asks this and
+    /// not a second pattern.
+    /// </summary>
+    internal static bool IsSemanticVersion(string text) => SemanticVersion().IsMatch(text);
 
     // Every name rule below ends at `\z` rather than `$`. `$` also matches immediately before a trailing line
     // break, so "NODE_OPTIONS\n" satisfied the name rule — and then missed a denylist that compares whole names,
