@@ -280,14 +280,22 @@ public static class WorkItemRenderers
         ran.PluginSnapshotId is null ? null : "plugins " + ran.PluginSnapshotId,
         ran.RoutingSnapshotId is null ? null : "routes " + ran.RoutingSnapshotId);
 
-    /// <summary>The invocation and what it cost, which is the line an operator reads when something was slow.</summary>
+    /// <summary>
+    /// The invocation and what it cost, which is the line an operator reads when something was slow, and whether the
+    /// provider found or created what the plugin identified, where it said: <c>contact created</c>.
+    /// </summary>
     private static string? Invocation(AttemptProvenanceDto ran) => Parts(
         ran.InvocationId,
         ran.Diagnostics is { } cost
             ? string.Create(
                 CultureInfo.InvariantCulture,
                 $"{cost.DurationMs} ms · exec {cost.ExecCalls} · http {cost.HttpCalls} · log {cost.LogLines}")
-            : null);
+            : null,
+        Origins(ran.ExternalIdOrigins));
+
+    private static string? Origins(IReadOnlyDictionary<string, string>? origins) => origins is null || origins.Count == 0
+        ? null
+        : string.Join(" · ", origins.OrderBy(origin => origin.Key, StringComparer.Ordinal).Select(origin => origin.Key + " " + origin.Value));
 
     private static string? Parts(params string?[] parts)
     {

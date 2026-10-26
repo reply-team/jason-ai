@@ -27,7 +27,7 @@ public static class ManagerTriggerKinds
         "role_added", "role_updated", "role_note_set",
         "profile_created", "profile_revised", "profile_disabled", "profile_enabled",
         "plugins_reloaded", "routes_updated",
-        "external_id_pinned", "external_id_diverged", "external_effect_reported",
+        "external_id_pinned", "external_id_diverged", "external_id_origin", "external_effect_reported",
         "decision_raised", "decision_answered", "decision_cancelled",
         "notification_sent",
         "inbound_reply_observed", "provider_event_observed",

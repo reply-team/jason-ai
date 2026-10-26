@@ -14,7 +14,7 @@
 // stay as written, and a mail program shows a run of them as one, as HTML does. The subject is a header, and goes as
 // written. A message that may have gone is never sent again: the document says `never`.
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, refuseUnprojected } from "./contacts.js";
+import { contactNumber, refuseUnprojected, withOrigin } from "./contacts.js";
 import { refusePlaceholders, senderFor, sendTo } from "./send.js";
 import { lookup, text } from "./reading.js";
 
@@ -64,7 +64,7 @@ export function messageSend(input, context) {
   // answers a direct email with no moment, and a LinkedIn send with one it gives as Reply gives it, which nothing has
   // shown to be UTC, so neither is passed on: `sent_at` is null until one is.
   const answered = { contact: provider };
-  return {
+  return withOrigin({
     result: {
       items: [{
         contact_id: person.id,
@@ -77,7 +77,7 @@ export function messageSend(input, context) {
       }],
     },
     external_ids: answered,
-  };
+  }, sent);
 }
 
 // The text as HTML that shows exactly it: the characters HTML reads as markup escaped, and each line break — a carriage

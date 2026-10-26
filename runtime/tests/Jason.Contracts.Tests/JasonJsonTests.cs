@@ -86,11 +86,16 @@ public class JasonJsonTests
     {
         var provenance = new AttemptProvenanceDto(
             null, null, null, null, null, null, null, null, null, null, null,
-            ExternalIdsReturned: new Dictionary<string, string>(StringComparer.Ordinal) { ["contactId"] = "p_1001" });
+            ExternalIdsReturned: new Dictionary<string, string>(StringComparer.Ordinal) { ["contactId"] = "p_1001" },
+            ExternalIdOrigins: new Dictionary<string, string>(StringComparer.Ordinal) { ["contactId"] = "created" });
 
         var json = JsonSerializer.Serialize(provenance, JasonJson.Options);
 
         Assert.Contains("\"external_ids_returned\":{\"contactId\":\"p_1001\"}", json, StringComparison.Ordinal);
+        Assert.Contains("\"external_id_origins\":{\"contactId\":\"created\"}", json, StringComparison.Ordinal);
+        Assert.Equal(
+            "contactId",
+            Assert.Single(JsonSerializer.Deserialize<AttemptProvenanceDto>(json, JasonJson.Options)!.ExternalIdOrigins!).Key);
         Assert.Equal(
             "contactId",
             Assert.Single(JsonSerializer.Deserialize<AttemptProvenanceDto>(json, JasonJson.Options)!.ExternalIdsReturned!).Key);

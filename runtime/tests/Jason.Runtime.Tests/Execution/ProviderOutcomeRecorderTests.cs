@@ -228,6 +228,121 @@ public class ProviderOutcomeRecorderTests
         Assert.Equal(second.Attempt.PublicId, pin.DivergedByAttemptId);
     }
 
+    /// <summary>
+    /// The plugin says the provider created the person: the pin is written, and right after it a line saying so, under the
+    /// pin's key, work item and attempt, by the attempt — and the attempt's record keeps what the plugin said.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W10, "the origin follows the pin")]
+    public async Task A_contact_the_provider_created_is_said_to_be_created_right_after_its_pin()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        await scene.RecordAsync(db, Add, Succeeded(Added(scene.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }, Origins("created")));
+
+        var lines = await IdentifierLinesAsync(db);
+        Assert.Equal([JournalKinds.ExternalIdPinned, JournalKinds.ExternalIdOrigin], lines.Select(line => line.Kind));
+        var origin = lines[1];
+        Assert.Equal("created", (string?)origin.New);
+        Assert.Null(origin.Old);
+        Assert.Equal(lines[0].Key, origin.Key);
+        Assert.Equal((scene.Item.PublicId, scene.Attempt.PublicId), (origin.WorkItemId, origin.AttemptId));
+        Assert.Equal((ActorType.Attempt, scene.Attempt.PublicId), (origin.ActorType, origin.ActorId));
+
+        var provenance = await scene.ProvenanceAsync(db);
+        Assert.Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "created" }, provenance.ExternalIdOrigins);
+    }
+
+    [Fact]
+    public async Task A_contact_the_provider_already_held_is_said_to_be_found()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        await scene.RecordAsync(db, Add, Succeeded(Added(scene.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }, Origins("found")));
+
+        var origin = Assert.Single(await IdentifierLinesAsync(db), line => line.Kind == JournalKinds.ExternalIdOrigin);
+        Assert.Equal("found", (string?)origin.New);
+    }
+
+    /// <summary>
+    /// The plugin says nothing about how the provider came to hold the person: that is unknown, and it stays unknown —
+    /// no line says found or created, and the attempt's record names no origin.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W10, "an unsaid origin is never guessed")]
+    public async Task A_plugin_that_says_nothing_about_the_origin_leaves_it_unknown()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        await scene.RecordAsync(db, Add, Succeeded(Added(scene.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }));
+
+        Assert.Equal([JournalKinds.ExternalIdPinned], (await IdentifierLinesAsync(db)).Select(line => line.Kind));
+        Assert.Null((await scene.ProvenanceAsync(db)).ExternalIdOrigins);
+    }
+
+    /// <summary>
+    /// An answer naming a kind the operation never declared is refused whole, so an origin beside it is written nowhere:
+    /// no pin, and no line saying how the provider came to hold anything.
+    /// </summary>
+    [Fact]
+    public async Task An_origin_beside_an_undeclared_kind_leaves_no_line()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        await scene.RecordAsync(db, Add, Succeeded(
+            Added(scene.Contact.PublicId),
+            new JsonObject { ["contact"] = "p_1001", ["mystery"] = "m_1" },
+            new JsonObject { ["contact"] = "created", ["mystery"] = "created" }));
+
+        Assert.Equal(AttemptErrors.ResultInvalid, scene.Attempt.Error!.Code);
+        Assert.Empty(await IdentifierLinesAsync(db));
+    }
+
+    [Fact]
+    public async Task An_unchanged_pin_says_nothing_about_its_origin()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var first = await SeedAsync(db);
+        await first.RecordAsync(db, Add, Succeeded(Added(first.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }));
+
+        var second = await SeedAsync(db, after: first);
+        await second.RecordAsync(db, Add, Succeeded(Added(second.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }, Origins("created")));
+
+        Assert.Equal([JournalKinds.ExternalIdPinned], (await IdentifierLinesAsync(db)).Select(line => line.Kind));
+    }
+
+    /// <summary>
+    /// A divergence the provider says it created is a second record of one person made at the provider — the line saying
+    /// so follows the divergence, under the same key, by the attempt that returned the value it is about.
+    /// </summary>
+    [Fact]
+    public async Task A_divergence_the_provider_created_is_said_to_be_created_right_after_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var first = await SeedAsync(db);
+        await first.RecordAsync(db, Add, Succeeded(Added(first.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }));
+
+        var second = await SeedAsync(db, after: first);
+        await second.RecordAsync(db, Add, Succeeded(Added(second.Contact.PublicId), new JsonObject { ["contact"] = "p_2002" }, Origins("created")));
+
+        var lines = await IdentifierLinesAsync(db);
+        Assert.Equal(
+            [JournalKinds.ExternalIdPinned, JournalKinds.ExternalIdDiverged, JournalKinds.ExternalIdOrigin],
+            lines.Select(line => line.Kind));
+        Assert.Equal(("created", lines[1].Key, second.Attempt.PublicId), ((string?)lines[2].New, lines[2].Key, lines[2].AttemptId));
+        Assert.Equal("p_2002", (string?)lines[1].New);
+    }
+
     [Fact]
     public async Task An_identifier_of_a_kind_the_operation_never_declared_refuses_the_whole_answer()
     {
@@ -727,10 +842,19 @@ public class ProviderOutcomeRecorderTests
         "att_01K5B7Q2WE5X3M9T0YH4C6RDNB",
         PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC");
 
-    private static PluginInvocationResult Succeeded(JsonNode? result, JsonObject? externalIds) => new(
-        new InvocationOutcome.Succeeded(result, externalIds, new OutcomeDiagnostics(12, 2, 0, 1)),
+    private static PluginInvocationResult Succeeded(JsonNode? result, JsonObject? externalIds, JsonObject? origins = null) => new(
+        new InvocationOutcome.Succeeded(result, externalIds, new OutcomeDiagnostics(12, 2, 0, 1), origins),
         Provenance,
         Launch: null);
+
+    private static JsonObject Origins(string contact) => new() { ["contact"] = contact };
+
+    /// <summary>The chronicle's lines about identifiers, in the order they were written.</summary>
+    private static async Task<List<JournalEntry>> IdentifierLinesAsync(JasonDbContext db) =>
+        await db.Journal.AsNoTracking()
+            .Where(entry => entry.Kind.StartsWith("external_id_"))
+            .OrderBy(entry => entry.Id)
+            .ToListAsync(Ct);
 
     private static PluginInvocationResult Failed(OutcomeError error) => new(
         new InvocationOutcome.Failed(error, new OutcomeDiagnostics(12, 1, 0, 1)),

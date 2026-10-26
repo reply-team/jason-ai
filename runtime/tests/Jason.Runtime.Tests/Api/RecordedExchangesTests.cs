@@ -283,7 +283,9 @@ public class RecordedExchangesTests
         Assert.Equal(WorkItemStatus.AwaitingApproval, (await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "awaiting", new { work_item_id = seed.Awaiting }, Ct)).Status);
         Assert.Equal(2, (await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "failed", new { work_item_id = seed.Failed }, Ct)).Attempts!.Count);
         Assert.Equal(WorkItemStatus.Expired, (await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "expired", new { work_item_id = seed.Expired }, Ct)).Status);
-        Assert.Equal(WorkItemStatus.Succeeded, (await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "succeeded", new { work_item_id = seed.Succeeded }, Ct)).Status);
+        var finished = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "succeeded", new { work_item_id = seed.Succeeded }, Ct);
+        Assert.Equal(WorkItemStatus.Succeeded, finished.Status);
+        Assert.Equal("created", Assert.Single(finished.Attempts!).Provenance!.ExternalIdOrigins!["contact"]);
         var waitingFor = Assert.Single((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "by-work-item", new { work_item_id = seed.Awaiting, statuses = new[] { "pending" } }, Ct)).Items);
 
         Assert.Equal(2, (await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "first-page", new { limit = 10 }, Ct)).Items.Count);
@@ -1109,9 +1111,18 @@ public class RecordedExchangesTests
                 Role(7, smb, "researcher", tomas, WorkItemStatus.Created, w => { w.DueAt = At(33); w.NotBefore = At(16, 30); });
                 Role(8, autumn, "analyst", null, WorkItemStatus.Created);
 
+                var provenance = new AttemptProvenanceDto("reply", "0.3.1", null, 1, 1, "campaign.enroll", 1, null, null, RouteScope.GlobalDefault, null);
                 var succeeded = Enroll(9, ada, WorkItemStatus.Succeeded);
                 succeeded.FinishedAt = At(8, 41);
-                Ran(succeeded, 9, 1, AttemptStatus.Succeeded, At(8, 40), At(8, 41));
+
+                // What the plugin returned, and that the provider created the person for this call rather than finding them:
+                // said by a release of the package that says it.
+                Ran(succeeded, 9, 1, AttemptStatus.Succeeded, At(8, 40), At(8, 41)).Provenance = provenance with
+                {
+                    PluginVersion = "0.9.0",
+                    ExternalIdsReturned = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "1001", ["campaign"] = "7" },
+                    ExternalIdOrigins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "created" },
+                };
 
                 var refused = new AttemptErrorDto("reply.refused", "Invalid data: first name is required", false, Class: FailureClass.Permanent);
                 var failed = Enroll(10, tomas, WorkItemStatus.Failed);
@@ -1119,7 +1130,6 @@ public class RecordedExchangesTests
                 failed.MaxAttempts = 3;
                 failed.AttemptCount = 2;
                 failed.LastError = refused;
-                var provenance = new AttemptProvenanceDto("reply", "0.3.1", null, 1, 1, "campaign.enroll", 1, null, null, RouteScope.GlobalDefault, null);
                 Ran(failed, 10, 1, AttemptStatus.Failed, At(7, 50), At(7, 51), new AttemptErrorDto("provider_unavailable", "Reply did not answer in time", true, Class: FailureClass.Transient)).Provenance = provenance;
                 Ran(failed, 11, 2, AttemptStatus.Failed, At(7, 57), At(7, 58), refused).Provenance = provenance;
 

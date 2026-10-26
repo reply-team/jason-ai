@@ -11,8 +11,15 @@ namespace Jason.Runtime.Plugins.Invocation;
 /// </summary>
 public abstract record InvocationOutcome
 {
-    /// <summary>The plugin ran and answered.</summary>
-    public sealed record Succeeded(JsonNode? Result, JsonObject? ExternalIds, OutcomeDiagnostics Diagnostics) : InvocationOutcome;
+    /// <summary>
+    /// The plugin ran and answered. <c>ExternalIdOrigins</c> is what it said about whether the provider found or created
+    /// the entities some of those identifiers name, and null where it said nothing.
+    /// </summary>
+    public sealed record Succeeded(
+        JsonNode? Result,
+        JsonObject? ExternalIds,
+        OutcomeDiagnostics Diagnostics,
+        JsonObject? ExternalIdOrigins = null) : InvocationOutcome;
 
     /// <summary>The plugin ran and said why it could not do the work. The class is what the runtime reads.</summary>
     public sealed record Failed(OutcomeError Error, OutcomeDiagnostics Diagnostics) : InvocationOutcome;

@@ -108,6 +108,13 @@ public static partial class JournalKinds
     /// <summary>A plugin answered with a different identifier than the one already pinned; both are kept.</summary>
     public const string ExternalIdDiverged = "external_id_diverged";
 
+    /// <summary>
+    /// Whether the provider found the entity a pin or a divergence just named, or created it: <c>found</c> or
+    /// <c>created</c>, written right after that line under its key, work item and attempt, and only where the plugin
+    /// said which. A plugin that says nothing leaves no line, so the absence of one means unknown.
+    /// </summary>
+    public const string ExternalIdOrigin = "external_id_origin";
+
     /// <summary>Somebody reported an effect they performed outside Jason. The line carries the report's id, the effect,
     /// tool and operation as they wrote them, and what it is about; the report holds the rest of what they said.</summary>
     public const string ExternalEffectReported = "external_effect_reported";
@@ -252,6 +259,7 @@ public static partial class JournalKinds
         RoutesUpdated,
         ExternalIdPinned,
         ExternalIdDiverged,
+        ExternalIdOrigin,
         ExternalEffectReported,
         DecisionRaised,
         DecisionAnswered,

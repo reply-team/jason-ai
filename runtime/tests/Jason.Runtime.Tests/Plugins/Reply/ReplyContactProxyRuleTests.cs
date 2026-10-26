@@ -135,6 +135,33 @@ public class ReplyContactProxyRuleTests
 
     public static TheoryData<string> FindingOnly => Of(ProviderContact.FindOnly);
 
+    /// <summary>
+    /// Every write that may create the person, against each thing reply-cli's <c>contact_created</c> can say: true, false,
+    /// or nothing — and, for one of them, a value that is not a boolean.
+    /// </summary>
+    public static TheoryData<string, string> CreatingByWhatTheCliSays
+    {
+        get
+        {
+            var data = new TheoryData<string, string>();
+            foreach (var operation in Ids(ProviderContact.FindOrCreate))
+            {
+                foreach (var said in new[] { "true", "false", "absent" })
+                {
+                    data.Add(operation, said);
+                }
+            }
+
+            // A word that is not a boolean says nothing either, whatever it looks like.
+            data.Add("campaign.enroll", "the string true");
+            return data;
+        }
+    }
+
+    // Critical: an origin the CLI did not say is never guessed.
+    public static TheoryData<string, string> CriticalCreatingByWhatTheCliSays =>
+        CriticalRows.Mark(CreatingByWhatTheCliSays, Family.W10, data => data is ["campaign.enroll", "absent"]);
+
     /// <summary>The ways that find the person by the consumed value itself, every one but the reply, which finds them through its thread.</summary>
     public static TheoryData<string> ByTheValue => Data(Ids(ProviderContact.FindOrCreate, ProviderContact.FindOnly).Where(id => !Drivers[id].ThroughTheThread));
 
@@ -282,6 +309,45 @@ public class ReplyContactProxyRuleTests
         var command = account.Calls[^1];
         Assert.Equal(driver.Command, command.Line);
         AssertNamedByTheIdentifier(driver, command, "1001");
+    }
+
+    /// <summary>
+    /// Whether Reply found the person or created them is what reply-cli's <c>contact_created</c> says, for every write that
+    /// may create the person: true is <c>created</c>, false is <c>found</c>, and an answer without it says nothing — no
+    /// origin, never a guess. Driven by the pin, so the command's own answer is the one thing that varies.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CriticalCreatingByWhatTheCliSays))]
+    public async Task A_write_that_may_create_the_person_says_whether_reply_found_or_created_them_as_the_cli_says(string operation, string said)
+    {
+        var driver = Drivers[operation];
+        using var account = Person(driver, driver.Plant(new ReplyAccount()), firstName: "Marta");
+        var answer = driver.AnsweredAs!(1001);
+        if (said == "absent")
+        {
+            answer.Remove("contact_created");
+        }
+        else if (said == "the string true")
+        {
+            answer["contact_created"] = "true";
+        }
+        else
+        {
+            answer["contact_created"] = said == "true";
+        }
+
+        account.Returns(driver.Command.Split(' ')[0] + " " + driver.Command.Split(' ')[1], answer);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, driver.Channel, Value(driver), pin: "1001"), Ct, attempt: 2);
+
+        ReplyOperations.Succeeded(operation, result);
+        Assert.Equal("1001", PinnedContact(result));
+        var origins = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIdOrigins;
+        Assert.Equal(
+            said switch { "true" => """{"contact":"created"}""", "false" => """{"contact":"found"}""", _ => "null" },
+            origins?.ToJsonString() ?? "null");
     }
 
     /// <summary>

@@ -18,7 +18,7 @@ public static class HostOutcomeCodes
     /// <summary>The plugin threw something that was not a declared failure.</summary>
     public const string PluginException = "plugin_exception";
 
-    /// <summary>The entry function answered with something that is not <c>{ result, external_ids? }</c>.</summary>
+    /// <summary>The entry function answered with something that is not <c>{ result, external_ids?, external_id_origins? }</c>.</summary>
     public const string BadReturn = "bad_return";
 
     public const string ResultTooLarge = "result_too_large";

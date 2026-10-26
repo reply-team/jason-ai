@@ -107,6 +107,68 @@ public sealed class InvocationRunnerTests
     }
 
     [Fact]
+    public void Whether_the_provider_found_or_created_what_an_identifier_names_travels_beside_it()
+    {
+        var outcome = Run("""
+            export function invoke() {
+              return { result: 1, external_ids: { contact: "r_123", campaign: "c_9" }, external_id_origins: { contact: "created" } };
+            }
+            """);
+
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Equal("created", outcome.ExternalIdOrigins!["contact"]!.GetValue<string>());
+        Assert.False(outcome.ExternalIdOrigins.ContainsKey("campaign"));
+    }
+
+    [Fact]
+    public void An_origin_beside_no_identifier_is_a_bad_return()
+    {
+        var outcome = Run("export function invoke() { return { result: 1, external_id_origins: { contact: \"created\" } }; }");
+
+        Assert.Equal(HostOutcomeCodes.BadReturn, Error(outcome).Code);
+    }
+
+    /// <summary>An empty object says nothing, so the outcome carries no origins at all, exactly as when the key is left out.</summary>
+    [Fact]
+    public void An_empty_object_of_origins_says_nothing()
+    {
+        var outcome = Run("export function invoke() { return { result: 1, external_ids: { contact: \"r_123\" }, external_id_origins: {} }; }");
+
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Null(outcome.ExternalIdOrigins);
+    }
+
+    [Fact]
+    public void A_plugin_that_says_nothing_about_an_origin_leaves_none()
+    {
+        var outcome = Run("export function invoke() { return { result: 1, external_ids: { contact: \"r_123\" } }; }");
+
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Null(outcome.ExternalIdOrigins);
+    }
+
+    /// <summary>
+    /// An origin is <c>found</c> or <c>created</c>, about a kind the same answer identifies, in an object: a third word, a
+    /// list, or a kind it returned no identifier for says nothing anybody can read, so the answer is a bad return.
+    /// </summary>
+    [Theory]
+    [InlineData("{ contact: \"maybe\" }")]
+    [InlineData("[\"created\"]")]
+    [InlineData("{ campaign: \"found\" }")]
+    [InlineData("\"created\"")]
+    [InlineData("{ Contact: \"created\" }")]
+    [InlineData("{ contact: null }")]
+    public void An_origin_outside_the_rule_is_a_bad_return(string origins)
+    {
+        var outcome = Run("export function invoke() { return { result: 1, external_ids: { contact: \"r_123\" }, external_id_origins: " + origins + " }; }");
+
+        var error = Error(outcome);
+        Assert.Equal(HostOutcomeCodes.BadReturn, error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Contains("external_id_origins", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void An_error_the_plugin_did_not_mean_to_throw_is_a_plugin_exception()
     {
         var outcome = Run("export function invoke() { throw new Error(\"boom\"); }");

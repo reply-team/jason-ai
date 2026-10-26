@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -35,6 +36,11 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
     /// Applies a plugin's returned identifiers, mapped through the kinds the operation's own contract declares:
     /// the declared entity decides whether a value pins the work item's contact or its campaign.
     /// </summary>
+    /// <param name="origins">
+    /// What the plugin said about whether the provider found or created the entity each kind names, where it said
+    /// anything. A pin or a divergence of a kind it said it for is followed by a line saying which; an unchanged pin
+    /// writes nothing, and a kind it said nothing about is unknown and stays so.
+    /// </param>
     public PinOutcome Apply(
         JasonDbContext db,
         OperationContract contract,
@@ -43,7 +49,8 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
         Campaign campaign,
         Contact? contact,
         Attempt attempt,
-        JsonObject? externalIds)
+        JsonObject? externalIds,
+        JsonObject? origins = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(contract);
@@ -82,7 +89,7 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
                 continue;
             }
 
-            switch (Record(db, pins, pluginId, kind, value, declared.Entity, item, campaign, attempt))
+            switch (Record(db, pins, pluginId, kind, value, Origin(origins, kind), declared.Entity, item, campaign, attempt))
             {
                 case Applied.Pinned:
                     pinned = true;
@@ -163,6 +170,7 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
         string pluginId,
         string kind,
         string value,
+        string? origin,
         PinnedEntity entity,
         WorkItem item,
         Campaign campaign,
@@ -186,6 +194,7 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
             });
 
             journal.Append(db, actor, JournalKinds.ExternalIdPinned, campaign, key, updated: JsonValue.Create(value), workItem: item, attempt: attempt);
+            Said(db, actor, campaign, key, origin, item, attempt);
             return Applied.Pinned;
         }
 
@@ -211,8 +220,31 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
             updated: JsonValue.Create(value),
             workItem: item,
             attempt: attempt);
+        Said(db, actor, campaign, key, origin, item, attempt);
         return Applied.Diverged;
     }
+
+    /// <summary>
+    /// The line that follows a pin or a divergence when the plugin said how the provider came to hold the entity: under
+    /// the same key, work item and attempt, so a reader knows which identifier it is about — after a divergence, the
+    /// value the attempt returned.
+    /// </summary>
+    private void Said(JasonDbContext db, ActorRef actor, Campaign campaign, string key, string? origin, WorkItem item, Attempt attempt)
+    {
+        if (origin is null)
+        {
+            return;
+        }
+
+        journal.Append(db, actor, JournalKinds.ExternalIdOrigin, campaign, key, updated: JsonValue.Create(origin), workItem: item, attempt: attempt);
+    }
+
+    /// <summary>
+    /// What the plugin said for one kind, spelled exactly as the kind: <c>found</c>, <c>created</c>, or null where it said
+    /// nothing or something else. The host and the outcome's own check refuse anything else long before here; this is
+    /// the last check before the record, and it reads the rule they read.
+    /// </summary>
+    private static string? Origin(JsonObject? origins, string kind) => ExternalIdOrigins.For(origins, kind);
 
     private static string Key(PinnedEntity entity, string pluginId, string kind) =>
         (entity == PinnedEntity.Contact ? "contact/" : "campaign/") + pluginId + "/" + kind;

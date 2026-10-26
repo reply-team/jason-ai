@@ -47,6 +47,8 @@ public sealed class JournalKindInventoryTests
     /// preferences — whose values the chronicle never holds.
     /// </summary>
     /// <remarks>
+    /// <c>external_id_origin</c> is keyed like the pin it follows, by plugin and kind, and its value is one of two words,
+    /// <c>found</c> or <c>created</c>: a vocabulary, never an identifier or anything about a person.
     /// <c>profile_created</c> also carries two strings its author wrote. <c>program</c> is a path: machine configuration
     /// rather than anything about a person, covered by the bundle's rewrites of the home directory and the account's names
     /// where it lies under home, and accepted as it is where it does not. <c>host_version_verified</c> is a version, held to
@@ -86,6 +88,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.ProfileDisabled,
         JournalKinds.ProfileEnabled,
         JournalKinds.PluginsReloaded,
+        JournalKinds.ExternalIdOrigin,
         JournalKinds.DecisionRaised,
         JournalKinds.DecisionCancelled,
         JournalKinds.EventsRead,

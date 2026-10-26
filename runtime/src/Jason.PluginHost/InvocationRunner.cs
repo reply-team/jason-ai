@@ -22,6 +22,7 @@ public sealed class InvocationRunner : IInvocationRunner
 {
     private const string ResultProperty = "result";
     private const string ExternalIdsProperty = "external_ids";
+    private const string ExternalIdOriginsProperty = "external_id_origins";
     /// <summary>How a moment of the invocation's time is written: the plugin's deadline, and the host's lines that name it.</summary>
     internal const string DeadlineFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
 
@@ -146,7 +147,7 @@ public sealed class InvocationRunner : IInvocationRunner
 
     private static PluginOutcome Answer(Engine engine, Ending end, JsValue returned)
     {
-        const string Contract = "invoke must return { result, external_ids? }";
+        const string Contract = "invoke must return { result, external_ids?, external_id_origins? }";
 
         if (returned is not ObjectInstance answer || returned.IsArray() || returned.IsCallable() || !answer.HasOwnProperty(ResultProperty))
         {
@@ -170,7 +171,15 @@ public sealed class InvocationRunner : IInvocationRunner
                 Contract + ", where external_ids is an object of short strings.");
         }
 
-        return end.Succeeded(result, externalIds);
+        if (!ExternalIdOrigins.TryRead(JsJson.ToJson(engine, answer.Get(ExternalIdOriginsProperty)), externalIds, out var origins))
+        {
+            return end.Failed(
+                FailureClass.Permanent,
+                HostOutcomeCodes.BadReturn,
+                Contract + ", where external_id_origins names only kinds external_ids names, each \"found\" or \"created\".");
+        }
+
+        return end.Succeeded(result, externalIds, origins);
     }
 
     /// <summary>
@@ -224,8 +233,8 @@ public sealed class InvocationRunner : IInvocationRunner
     /// <summary>Everything an outcome needs whichever way the invocation ended, in one place.</summary>
     private sealed class Ending(PluginInvocation invocation, HostDiagnostics diagnostics, Stopwatch watch, CallBudget budget)
     {
-        public PluginOutcome Succeeded(JsonNode? result, JsonObject? externalIds) =>
-            new(PluginProtocol.CurrentVersion, invocation.InvocationId, OutcomeStatus.Succeeded, result, externalIds, null, Cost());
+        public PluginOutcome Succeeded(JsonNode? result, JsonObject? externalIds, JsonObject? origins) =>
+            new(PluginProtocol.CurrentVersion, invocation.InvocationId, OutcomeStatus.Succeeded, result, externalIds, null, Cost(), origins);
 
         public PluginOutcome Failed(FailureClass failureClass, string code, string message, JsonNode? details = null) =>
             Failed(new OutcomeError(failureClass, code, message, details, null));

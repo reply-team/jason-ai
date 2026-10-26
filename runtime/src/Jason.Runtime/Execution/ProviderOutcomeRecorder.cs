@@ -125,7 +125,8 @@ public sealed class ProviderOutcomeRecorder(
                 break;
 
             case InvocationOutcome.Succeeded succeeded:
-                await PinAsync(db, contract, pluginId, item, attempt, succeeded.ExternalIds, cancellationToken).ConfigureAwait(false);
+                await PinAsync(db, contract, pluginId, item, attempt, succeeded.ExternalIds, succeeded.ExternalIdOrigins, cancellationToken)
+                    .ConfigureAwait(false);
                 outcomes.Succeed(db, item, attempt, succeeded.Result, Actors.Dispatcher);
                 answer = BlockAnswer.GotPast;
                 break;
@@ -157,7 +158,7 @@ public sealed class ProviderOutcomeRecorder(
                 // most: the effect happened, the answer did not come back, and the identifier is the only trace.
                 // An undeclared kind is refused rather than recorded, but it does not replace the failure the
                 // plugin reported — hiding the reason an operation failed behind a shape error helps nobody.
-                await PinAsync(db, contract, pluginId, item, attempt, failed.Error.ExternalIds, cancellationToken).ConfigureAwait(false);
+                await PinAsync(db, contract, pluginId, item, attempt, failed.Error.ExternalIds, origins: null, cancellationToken).ConfigureAwait(false);
 
                 // A block outside its contract is refused the same way an undeclared identifier is: the failure the
                 // plugin reported stands, recorded permanent, with what is wrong with the block named beside it, and
@@ -233,7 +234,7 @@ public sealed class ProviderOutcomeRecorder(
         _ = await AttemptProvenance.CompleteAsync(
                 db,
                 attempt.PublicId,
-                new InvocationRecord(ExternalIdsReturned: returned, RejectedResult: rejected),
+                new InvocationRecord(ExternalIdsReturned: returned, RejectedResult: rejected, ExternalIdOrigins: Origins(result.Outcome)),
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -294,6 +295,29 @@ public sealed class ProviderOutcomeRecorder(
     }
 
     /// <summary>
+    /// What the plugin said about whether the provider found or created what it identified, as it said it. Only a
+    /// succeeded answer carries it; a plugin that said nothing leaves nothing here, and nothing is guessed in its place.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string>? Origins(InvocationOutcome outcome)
+    {
+        if (outcome is not InvocationOutcome.Succeeded { ExternalIdOrigins: { Count: > 0 } origins })
+        {
+            return null;
+        }
+
+        var said = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (kind, node) in origins)
+        {
+            if (node is JsonValue value && value.TryGetValue(out string? origin) && origin is not null)
+            {
+                said[kind] = origin;
+            }
+        }
+
+        return said.Count == 0 ? null : said;
+    }
+
+    /// <summary>
     /// What a plugin said in a failure the contract refuses, in the words of its own outcome. It arrived inside an
     /// outcome the invoker already bounded, so it needs no bound of its own; its identifiers are not repeated here,
     /// because the attempt's record already says what was returned.
@@ -342,6 +366,7 @@ public sealed class ProviderOutcomeRecorder(
         WorkItem item,
         Attempt attempt,
         JsonObject? externalIds,
+        JsonObject? origins,
         CancellationToken cancellationToken)
     {
         if (externalIds is null || externalIds.Count == 0)
@@ -359,7 +384,7 @@ public sealed class ProviderOutcomeRecorder(
             await PinsAsync(db, contact, pluginId, cancellationToken).ConfigureAwait(false);
         }
 
-        identifiers.Apply(db, contract, pluginId, item, item.Campaign!, item.Contact, attempt, externalIds);
+        identifiers.Apply(db, contract, pluginId, item, item.Campaign!, item.Contact, attempt, externalIds, origins);
     }
 
     private static Task PinsAsync(JasonDbContext db, Campaign campaign, string pluginId, CancellationToken cancellationToken) =>

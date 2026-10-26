@@ -164,6 +164,21 @@ public class ProviderOperationE2ETests
             Assert.Contains(PluginId, pinned, StringComparison.Ordinal);
             Assert.Contains("p_1001", pinned, StringComparison.Ordinal);
 
+            // And how the provider came to hold the person: it held nobody under the address, so the call created them.
+            // The attempt keeps what the plugin said, the invocation line ends with it, and the chronicle says it right
+            // after the pin, under the pin's key and by the same attempt.
+            var ran = Assert.Single(Json(await Ok(JasonAsync(root, "workitem", "get", first)))["attempts"]!.AsArray())!;
+            Assert.Equal("created", (string?)ran["provenance"]!["external_id_origins"]!["contact"]);
+            Assert.Contains("contact created", human, StringComparison.Ordinal);
+            var chronicle = Json(await Ok(JasonAsync(root, "journal", "list", "--work-item", first)))["items"]!.AsArray()
+                .Where(line => ((string?)line!["kind"])!.StartsWith("external_id_", StringComparison.Ordinal))
+                .Reverse()
+                .ToList();
+            Assert.Equal(["external_id_pinned", "external_id_origin"], chronicle.Select(line => (string?)line!["kind"]));
+            Assert.Equal("created", (string?)chronicle[1]!["new"]);
+            Assert.Equal((string?)chronicle[0]!["key"], (string?)chronicle[1]!["key"]);
+            Assert.Equal((string?)ran["id"], (string?)chronicle[1]!["attempt_id"]);
+
             // 5. An answer the operation's own schema refuses is not a result. The item ends, the pointers say
             //    where, and what was actually sent is kept on the attempt so its author can see it — under
             //    `--snapshots`, with the other evidence too large to ride on every read.

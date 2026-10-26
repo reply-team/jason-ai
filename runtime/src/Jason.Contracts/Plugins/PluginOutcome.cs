@@ -29,6 +29,11 @@ public sealed record OutcomeDiagnostics(long DurationMs, int ExecCalls, int Http
 /// The one JSON object the child writes to stdout. Stdout belongs to the host alone — a plugin has no
 /// <c>console</c> — so plugin text can never corrupt the channel.
 /// </summary>
+/// <remarks>
+/// <c>ExternalIdOrigins</c> says, for some of the identifiers in <c>ExternalIds</c>, whether the provider found the entity
+/// or created it (<see cref="Plugins.ExternalIdOrigins"/>). It travels on a succeeded outcome only and is left out where
+/// the plugin said nothing, so an outcome without it reads exactly as it did before the key existed.
+/// </remarks>
 public sealed record PluginOutcome(
     int ProtocolVersion,
     string InvocationId,
@@ -36,4 +41,5 @@ public sealed record PluginOutcome(
     JsonNode? Result,
     JsonObject? ExternalIds,
     OutcomeError? Error,
-    OutcomeDiagnostics Diagnostics);
+    OutcomeDiagnostics Diagnostics,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonObject? ExternalIdOrigins = null);

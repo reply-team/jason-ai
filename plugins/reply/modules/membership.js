@@ -11,7 +11,7 @@
 // never answered: the effect at Reply is the same either way.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, toEnsure } from "./contacts.js";
+import { contactNumber, toEnsure, withOrigin } from "./contacts.js";
 
 const OPERATION = "list_membership.add";
 const COMMAND = "contact-list add-contact";
@@ -41,7 +41,7 @@ export function listMembershipAdd(input, context) {
     fail(OPERATION, { call: COMMAND, row: lostAnswerRow(COMMAND), provider_item: evidence(added) }, named.learned);
   }
 
-  return membership(contact.id, "added", provider);
+  return withOrigin(membership(contact.id, "added", provider), added);
 }
 
 // Which list this call is about. Reply numbers its lists, so a value that is not a list number names nothing this

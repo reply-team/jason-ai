@@ -240,6 +240,51 @@ public class OutcomeValidatorTests
         Assert.Contains("external_ids.contact is at most 256 characters", problem, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Whether the provider found or created what an identifier names travels beside that identifier, and is read back
+    /// as the plugin said it.
+    /// </summary>
+    [Fact]
+    public void The_origin_of_an_identifier_travels_beside_it()
+    {
+        var document = Document(origins: new JsonObject { ["contact"] = "created" });
+
+        Assert.True(OutcomeValidator.TryValidate(document, Expected, out var outcome, out var problem), problem);
+        Assert.Equal("created", outcome!.ExternalIdOrigins!["contact"]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// An origin is one of two words about an identifier the same answer returned, and only a succeeded answer says one:
+    /// anything else is an outcome nothing can read, whichever program wrote it.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"contact":"maybe"}""", "succeeded")]
+    [InlineData("""{"contact":true}""", "succeeded")]
+    [InlineData("""{"campaign":"found"}""", "succeeded")]
+    [InlineData("""{"Contact":"created"}""", "succeeded")]
+    [InlineData("""{"contact":null}""", "succeeded")]
+    [InlineData("""{"contact":"created"}""", "failed")]
+    public void An_origin_outside_the_rule_is_refused(string origins, string status)
+    {
+        var document = status == "failed"
+            ? Document(status: "failed", error: Error(), result: null, externalIds: new JsonObject { ["contact"] = "r_123" }, origins: JsonNode.Parse(origins)!.AsObject())
+            : Document(origins: JsonNode.Parse(origins)!.AsObject());
+
+        Assert.False(OutcomeValidator.TryValidate(document, Expected, out _, out var problem));
+        Assert.Contains("external_id_origins", problem, StringComparison.Ordinal);
+    }
+
+    /// <summary>An origin speaks of an identifier the same answer returned, so beside no identifier at all it speaks of nothing.</summary>
+    [Fact]
+    public void An_origin_beside_no_identifier_is_refused()
+    {
+        var document = JsonNode.Parse(Document(origins: new JsonObject { ["contact"] = "created" }))!.AsObject();
+        document["external_ids"] = null;
+
+        Assert.False(OutcomeValidator.TryValidate(document.ToJsonString(), Expected, out _, out var problem));
+        Assert.Contains("external_id_origins", problem, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void An_outcome_without_diagnostics_is_refused()
     {
@@ -270,7 +315,8 @@ public class OutcomeValidatorTests
         JsonNode? result = null,
         JsonObject? externalIds = null,
         JsonObject? error = null,
-        bool withDiagnostics = true)
+        bool withDiagnostics = true,
+        JsonObject? origins = null)
     {
         var document = new JsonObject
         {
@@ -281,6 +327,11 @@ public class OutcomeValidatorTests
             ["external_ids"] = externalIds ?? (status == "succeeded" && error is null ? new JsonObject { ["contact"] = "r_123" } : null),
             ["error"] = error,
         };
+
+        if (origins is not null)
+        {
+            document["external_id_origins"] = origins;
+        }
 
         if (withDiagnostics)
         {

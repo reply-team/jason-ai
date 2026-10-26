@@ -787,7 +787,8 @@ kept on the attempt's trace for a person, and nothing in it is pinned.
 the claim from the decision that was just made and completed when the invocation ends: the plugin, its
 version and content digest, the operation and contract version, the plugin and route snapshot ids, the
 route scope, the binding's identity (a hash, never the value), the invocation id, what the run cost,
-the identifiers the plugin returned, and — after a `result_invalid` — the answer that was refused.
+the identifiers the plugin returned, whether the provider found or created what they name where the plugin said
+(`external_id_origins`), and — after a `result_invalid` — the answer that was refused.
 Nothing rewrites it afterwards. `jason workitem get <id> --human` prints it as a block per attempt.
 
 ## Provider blocks

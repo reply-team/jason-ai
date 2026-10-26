@@ -987,6 +987,29 @@ public class WorkItemCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Whether the provider found or created what the plugin identified ends the invocation line, kind by kind, where the
+    /// plugin said; where it said nothing, the line is what it always was.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_on_the_invocation_line_whether_the_provider_found_or_created_the_contact()
+    {
+        var provenance = new AttemptProvenanceDto(
+            "fake-provider", "1.2.0", null, 1, 1, "list_membership.add", 1, null, null, RouteScope.GlobalDefault, null,
+            "pin_01K5B7Q2WE5X3M9T0YH4C6RDNC",
+            "att_A",
+            new OutcomeDiagnostics(412, 0, 2, 7),
+            ExternalIdsReturned: new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "p_1001", ["campaign"] = "c_7" },
+            ExternalIdOrigins: new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "created" });
+        using var cli = new CliRun(Serialize(Item([Attempt(provenance)])));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Invocation:   pin_01K5B7Q2WE5X3M9T0YH4C6RDNC · 412 ms · exec 0 · http 2 · log 7 · contact created", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("campaign found", cli.Text, StringComparison.Ordinal);
+    }
+
     /// <summary>An attempt with no record of what ran prints what it always printed, and no empty block.</summary>
     [Fact]
     public async Task Human_mode_adds_nothing_for_an_attempt_that_ran_no_plugin()

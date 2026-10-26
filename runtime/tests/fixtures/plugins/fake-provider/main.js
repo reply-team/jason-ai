@@ -248,6 +248,16 @@ function recoverEnrollment(context, input, key) {
   return recorded ? { contact_id: recorded.contact_id, live: live } : null;
 }
 
+// Whether the provider found the contact or created it, as its own answer to `contact ensure` says. An answer that does
+// not say leaves the origin unsaid: the runtime records none, and never guesses one.
+function withOrigin(answer, ensured) {
+  if (!ensured || typeof ensured.created !== "boolean") {
+    return answer;
+  }
+
+  return Object.assign({}, answer, { external_id_origins: { contact: ensured.created ? "created" : "found" } });
+}
+
 function membershipResult(contactId, status, providerContact) {
   return {
     result: { items: [{ contact_id: contactId, status: status, external_ids: { contact: providerContact } }] },
@@ -299,7 +309,7 @@ function listMembershipAdd(input, context) {
     key: key,
   }, { contact: ensured.id });
 
-  return membershipResult(contact.id, added.status, ensured.id);
+  return withOrigin(membershipResult(contact.id, added.status, ensured.id), ensured);
 }
 
 function campaignEnroll(input, context) {
@@ -323,7 +333,7 @@ function campaignEnroll(input, context) {
     first_touch: input.args.first_touch,
   }, { contact: ensured.id, campaign: campaign });
 
-  return enrollmentResult(contact.id, enrolled.status, ensured.id, campaign, enrolled.live);
+  return withOrigin(enrollmentResult(contact.id, enrolled.status, ensured.id, campaign, enrolled.live), ensured);
 }
 
 export function invoke(operation, input, context) {

@@ -177,6 +177,16 @@ public class ManagerOptionsTests
         Assert.Equal(ManagerOptions.Default, options.Triggers);
     }
 
+    /// <summary>
+    /// Whether the provider found or created a person is a fact about an identifier, not something gone wrong with the
+    /// campaign: a setting may name it, and the defaults never do.
+    /// </summary>
+    [Fact]
+    public void The_defaults_never_summon_a_manager_for_an_identifier_s_origin()
+    {
+        Assert.DoesNotContain(JournalKinds.ExternalIdOrigin, ManagerOptions.Default);
+    }
+
     /// <summary>The section binds from the operator's own file like every other one.</summary>
     [Fact]
     public void The_manager_section_binds_from_the_user_file()

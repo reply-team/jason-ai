@@ -104,6 +104,11 @@ public sealed record LineageDto(
 /// and can be read from the entity; this is the only place an undeclared one survives at all, so its spelling is
 /// kept out of the dialect's naming policy — the key here matches the pointer that refused it.
 /// </param>
+/// <param name="ExternalIdOrigins">
+/// Whether the provider found the entity each of those identifiers names or created it — <c>found</c> or
+/// <c>created</c> — keyed as they are, for the kinds the plugin said it for. Absent where it said nothing, which means
+/// unknown, never one or the other.
+/// </param>
 /// <param name="RejectedResult">
 /// The answer a shape error refused, so a plugin author can see what was actually sent. Present only where an
 /// otherwise well-formed answer failed the operation's own schema, and only where the read asked for snapshots:
@@ -127,6 +132,9 @@ public sealed record AttemptProvenanceDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonConverter(typeof(VerbatimKeysConverter))]
     IReadOnlyDictionary<string, string>? ExternalIdsReturned = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [property: JsonConverter(typeof(VerbatimKeysConverter))]
+    IReadOnlyDictionary<string, string>? ExternalIdOrigins = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonNode? RejectedResult = null,
 
     /// <summary>The decision this attempt ran under, where a person had to make one.</summary>

@@ -232,7 +232,8 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
   it is given a LinkedIn URL: an add given an email imports straight away, and Reply's import matches the email.
   `enrollment.stop`
   creates nobody: a person Reply does not hold takes part in nothing. `conversation.reply` finds the person through its
-  thread, and creates nobody either.
+  thread, and creates nobody either. Each of the six says whether Reply found the contact or created it for that call, as reply-cli's
+  `contact_created` says — `found` or `created` under `external_id_origins` — and says nothing where the CLI does not.
 - **A delete works by the pin alone.** `contact.delete` names the contact by the identifier Jason pinned and by nothing
   else, reads it with `reply contact get` before anything is deleted, and refuses one Reply holds as opted out, because
   Reply keeps that stop on the contact itself. It pins nothing.

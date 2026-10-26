@@ -497,13 +497,15 @@ Plugin:       fake-provider 1.0.0 · 9a357c7bfe4e
 Operation:    list_membership.add v1
 Route:        global_default · binding a728b92b6cdc
 Snapshots:    plugins snp_01M2M7H79JANSWPE9EFGTGG7DH · routes rts_01M2M7H79NXYND9TAPQFDEQTHY
-Invocation:   pin_01M2M7H97ED18X6V82B19FA85A · 478 ms · exec 2 · http 0 · log 0
+Invocation:   pin_01M2M7H97ED18X6V82B19FA85A · 478 ms · exec 2 · http 0 · log 0 · contact created
 ```
 
 Read it as: which package and at which content digest, which operation at which contract version, which
 level of routing chose it and **which account by identity**, the two snapshots the decision was made
 against, and what the run cost. `jason workitem get <id>` has all of it as JSON, including the
-identifiers the plugin returned and — after a `result_invalid` — the answer that was refused.
+identifiers the plugin returned, `external_id_origins` — whether the provider found or created what they name, where
+the plugin said — and, after a `result_invalid`, the answer that was refused. The invocation line ends with the
+origins, as `contact created`.
 
 **The binding travels as a hash, not as a value.** `binding a728b92b6cdc` is the head of a SHA-256 over
 the binding's canonical JSON, which is what makes "was this retried against a different account?"
@@ -538,8 +540,14 @@ fake-provider  contact  p_1001  -         -
   silently overwriting would destroy the only evidence that two records disagree.
 - A plugin only ever sees **its own** pins. What another provider calls the same person is never its
   business.
-- The journal carries both events: `external_id_pinned` and `external_id_diverged`, keyed
-  `contact/<plugin>/<kind>` or `campaign/<plugin>/<kind>`.
+- The journal carries three events: `external_id_pinned`, `external_id_diverged` and `external_id_origin`, keyed
+  `contact/<plugin>/<kind>` or `campaign/<plugin>/<kind>`. An `external_id_origin` line follows a pin or a divergence
+  in the same change set, under the same key, work item and attempt, by the same actor, and its `new` is `"found"` or
+  `"created"`, nothing else: whether the provider held the entity before the call or the call created it — after a
+  divergence, the one the attempt returned. It is written only where the plugin said which; a plugin that says nothing
+  leaves no line, which means unknown, and an unchanged pin writes none. The word is about that attempt's own call: an
+  attempt after a lost answer may find what an earlier attempt of the same item created, and its line then says
+  `found`.
 
 **Resolving a divergence is deliberately not implemented.** Deciding which record is right is
 reconciliation — matching a person again, against two providers' answers — and this version has none

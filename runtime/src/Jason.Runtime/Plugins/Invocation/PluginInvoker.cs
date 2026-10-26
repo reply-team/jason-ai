@@ -530,7 +530,7 @@ public sealed partial class PluginInvoker(
         }
 
         return outcome!.Status == OutcomeStatus.Succeeded
-            ? new InvocationOutcome.Succeeded(outcome.Result, outcome.ExternalIds, outcome.Diagnostics)
+            ? new InvocationOutcome.Succeeded(outcome.Result, outcome.ExternalIds, outcome.Diagnostics, outcome.ExternalIdOrigins)
             : new InvocationOutcome.Failed(outcome.Error!, outcome.Diagnostics);
     }
 

@@ -65,6 +65,7 @@ public class JournalServiceTests
     [InlineData(JournalKinds.RoutesUpdated)]
     [InlineData(JournalKinds.ExternalIdPinned)]
     [InlineData(JournalKinds.ExternalIdDiverged)]
+    [InlineData(JournalKinds.ExternalIdOrigin)]
     [InlineData("notification_sent")]
     [InlineData("inbound_reply_observed")]
     public async Task A_kind_the_runtime_writes_itself_cannot_be_appended_by_a_caller(string kind)

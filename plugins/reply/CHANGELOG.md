@@ -3,6 +3,15 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.9.0
+
+- The six writes that may create the person — `list_membership.add`, `campaign.enroll`, `optout.record`,
+  `contact.update`, `social_invitation.send` and `message.send` — now report whether the contact was found or created:
+  reply-cli's `contact_created` true is `created`, false is `found`, under `external_id_origins.contact` beside the
+  identifier they return. Where the CLI's answer carries no `contact_created`, or one that is not a boolean, nothing is
+  said, and nothing is guessed. A runtime from 0.19.0 writes it to the chronicle after the pin as an
+  `external_id_origin` line, and keeps it on the attempt; an earlier runtime ignores it.
+
 ## 0.8.1
 
 - No behaviour changes. The list of the person's own fields a write that may create somebody carries, which every

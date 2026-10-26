@@ -17,11 +17,13 @@ namespace Jason.Runtime.Execution;
 /// <param name="Diagnostics">What the run cost: how long it took and how much of each capability it used.</param>
 /// <param name="ExternalIdsReturned">The identifiers the plugin answered with, as it returned them.</param>
 /// <param name="RejectedResult">An answer the operation's schema refused, kept so its author can see it.</param>
+/// <param name="ExternalIdOrigins">Whether the provider found or created what those identifiers name, where the plugin said.</param>
 public sealed record InvocationRecord(
     string? InvocationId = null,
     OutcomeDiagnostics? Diagnostics = null,
     IReadOnlyDictionary<string, string>? ExternalIdsReturned = null,
-    JsonNode? RejectedResult = null);
+    JsonNode? RejectedResult = null,
+    IReadOnlyDictionary<string, string>? ExternalIdOrigins = null);
 
 /// <summary>
 /// The provenance of one attempt: written at claim from the decision that was just made, and completed once the
@@ -132,6 +134,7 @@ public static class AttemptProvenance
                 InvocationId = invocation.InvocationId,
                 Diagnostics = invocation.Diagnostics,
                 ExternalIdsReturned = invocation.ExternalIdsReturned,
+                ExternalIdOrigins = invocation.ExternalIdOrigins,
             },
             OnlyWhatIsKnown);
 

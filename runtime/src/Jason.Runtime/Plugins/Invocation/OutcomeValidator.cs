@@ -108,6 +108,18 @@ public static partial class OutcomeValidator
             return false;
         }
 
+        if (read.ExternalIdOrigins is not null && read.Status != OutcomeStatus.Succeeded)
+        {
+            problem = "external_id_origins travels only on a succeeded outcome.";
+            return false;
+        }
+
+        if (!ExternalIdOrigins.TryRead(read.ExternalIdOrigins, read.ExternalIds, out _))
+        {
+            problem = "external_id_origins names only kinds external_ids names, each 'found' or 'created'.";
+            return false;
+        }
+
         return read.Error is null || Error(read.Error, out problem);
     }
 

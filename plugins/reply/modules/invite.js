@@ -9,7 +9,7 @@
 // nowhere else, and an invitation without one sends no `--message` at all. Reply answers a person who is already a
 // connection without sending anything. An invitation that may have gone is never sent again: the document says `never`.
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, refuseUnprojected } from "./contacts.js";
+import { contactNumber, refuseUnprojected, withOrigin } from "./contacts.js";
 import { refusePlaceholders, senderFor, sendTo } from "./send.js";
 
 const OPERATION = "social_invitation.send";
@@ -46,7 +46,7 @@ export function socialInvitationSend(input, context) {
   // Reply's moment for a LinkedIn send is given as Reply gives it, and nothing has shown it to be UTC, so it is not
   // passed on: `sent_at` is null until it is.
   const answered = { contact: provider };
-  return {
+  return withOrigin({
     result: {
       items: [{
         contact_id: person.id,
@@ -57,5 +57,5 @@ export function socialInvitationSend(input, context) {
       }],
     },
     external_ids: answered,
-  };
+  }, sent);
 }

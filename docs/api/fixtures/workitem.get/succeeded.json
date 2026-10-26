@@ -45,7 +45,28 @@
         "started_at": "2026-10-16T08:40:00.000Z",
         "finished_at": "2026-10-16T08:41:00.000Z",
         "last_heartbeat_at": null,
-        "lock_until": "2026-10-16T09:40:00.000Z"
+        "lock_until": "2026-10-16T09:40:00.000Z",
+        "provenance": {
+          "plugin_id": "reply",
+          "plugin_version": "0.9.0",
+          "plugin_digest": null,
+          "protocol_version": 1,
+          "operation_contract_version": 1,
+          "operation": "campaign.enroll",
+          "operation_version": 1,
+          "plugin_snapshot_id": null,
+          "routing_snapshot_id": null,
+          "route_scope": "global_default",
+          "binding_identity": null,
+          "correlation_id": null,
+          "external_ids_returned": {
+            "contact": "1001",
+            "campaign": "7"
+          },
+          "external_id_origins": {
+            "contact": "created"
+          }
+        }
       }
     ],
     "external_reports": [],
