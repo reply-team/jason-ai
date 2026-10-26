@@ -129,6 +129,19 @@ public sealed class PublishedLinksTests : IDisposable
             Found());
     }
 
+    /// <summary>And so are the release's own notes, which the release puts into that body beside the template's text.</summary>
+    [Fact]
+    public void The_release_s_own_notes_are_read_as_the_release_notes_are()
+    {
+        var bare = "jason-" + "internal";
+        Write("README.md", "# Readme\n");
+        Write(Links.ReleaseNotes, $"# Jason 0.2.0\n\n## Known issues\n\n[this](docs/public.md), and the source in {bare}.\n");
+
+        Assert.Equal(
+            ["RELEASE-NOTES.md [a] (a relative link in the release notes) docs/public.md", $"RELEASE-NOTES.md [b] {bare}"],
+            Found());
+    }
+
     /// <summary>A page named on purpose is excused exactly as often as it is listed, and no more.</summary>
     [Fact]
     public void A_path_named_on_purpose_is_excused_by_its_exact_count()

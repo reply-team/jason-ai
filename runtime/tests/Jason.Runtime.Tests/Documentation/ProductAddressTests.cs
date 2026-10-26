@@ -50,9 +50,18 @@ public sealed partial class ProductAddressTests : IDisposable
     private static readonly string[] BaseHolders =
         ["runtime/src/Jason.Contracts/Update/ProductAddress.cs", "install/install.sh", "install/install.ps1"];
 
-    /// <summary>What is read besides what a release publishes: what writes a release, and what describes one.</summary>
+    /// <summary>
+    /// What is read besides what a release publishes: what writes a release, and what describes one. The release's own
+    /// notes are read with the template, since the two are one release's body.
+    /// </summary>
     private static readonly string[] AlsoRead =
-        [Links.NotesTemplate, ".github/workflows/release.yml", "docs/release-and-update.md", "docs/architecture.md"];
+        [Links.NotesTemplate, Links.ReleaseNotes, ".github/workflows/release.yml", "docs/release-and-update.md", "docs/architecture.md"];
+
+    /// <summary>
+    /// What is read when it is there: a tree may hold no notes of a release's own, and the release's version job, not
+    /// this guard, is what asks for them on a tag.
+    /// </summary>
+    private static readonly string[] ReadWhenThere = [Links.ReleaseNotes];
 
     /// <summary>
     /// The only places a release is still fetched from GitHub by name, how many times, and why. Each count is exact,
@@ -120,7 +129,7 @@ public sealed partial class ProductAddressTests : IDisposable
     {
         var root = Publication.RepositoryRoot();
 
-        Assert.All(AlsoRead.Concat(BaseHolders), file => Assert.True(File.Exists(Path.Combine(root, file)), $"{file} is not there."));
+        Assert.All(AlsoRead.Except(ReadWhenThere).Concat(BaseHolders), file => Assert.True(File.Exists(Path.Combine(root, file)), $"{file} is not there."));
     }
 
     /// <summary>
@@ -197,6 +206,17 @@ public sealed partial class ProductAddressTests : IDisposable
 
         string[] named = expected is null ? [] : [expected];
         Assert.Equal(named, Unanswered(_root).Select(finding => finding.ToString()));
+    }
+
+    /// <summary>(a) on a tree: the release's own notes are read, as the body of a public release.</summary>
+    [Fact]
+    public void An_address_of_no_shape_in_the_release_s_own_notes_is_named()
+    {
+        Write(".github/publish/open-set.txt", "README.md\n");
+        Write("README.md", "# Readme\n");
+        Write(Links.ReleaseNotes, "# Jason 0.2.0\n\n## Known issues\n\nSee https://jasonharness.ai/download/manifest.json.\n");
+
+        Assert.Equal(["RELEASE-NOTES.md:5 https://jasonharness.ai/download/manifest.json"], Unanswered(_root).Select(finding => finding.ToString()));
     }
 
     /// <summary>

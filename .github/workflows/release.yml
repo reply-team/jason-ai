@@ -5,8 +5,14 @@
 # reply-team/jason-ai, and opens the pull request that brings that repository to this version. Merging that pull request
 # is what tags the release there and publishes it.
 #
-# The button (workflow_dispatch) builds the same draft, for a dry run, and stops there: nothing is tagged and no
-# pull request is opened, so a dry run leaves nothing behind once its draft is deleted.
+# The button (workflow_dispatch) builds the same draft, the button's draft, and stops there: nothing is tagged and no
+# pull request is opened, so it leaves nothing behind once its draft is deleted. With dry_run it does not make the draft
+# either: every job runs, the release is assembled and the pull request's body written, and both are handed back as an
+# artifact of the run, while the publishing job holds this run's own read-only token in place of the publication token.
+#
+# A release's own notes are RELEASE-NOTES.md at the root, written for the release they name. The version job reads
+# the file before anything is built: a tag whose file is missing, untitled or names another version stops there, and
+# the button's run then carries the template alone.
 name: Release
 
 on:
@@ -15,9 +21,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'The version to build, without the v (0.2.0, 1.0.0-rc.1). The result is a draft in reply-team/jason-ai: nothing is tagged and no pull request is opened.'
+        description: 'The version to build, without the v (0.2.0, 1.0.0-rc.1). Nothing is tagged and no pull request is opened; the result is a draft in reply-team/jason-ai unless dry_run is set.'
         required: true
         type: string
+      dry_run:
+        description: 'Build and assemble everything, make no draft, and hand the assembled release and the pull request''s body back as an artifact of this run.'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -28,6 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      notes: ${{ steps.notes.outputs.notes }}
       sdk: ${{ steps.dotnet.outputs.sdk-version }}
     steps:
       - id: version
@@ -56,6 +68,42 @@ jobs:
       # place that says what the newest is, and it resolves the SDK by installing it, so this job checks the tree out and
       # installs .NET, which it builds nothing with.
       - uses: actions/checkout@v7
+
+      - id: notes
+        shell: pwsh
+        env:
+          EVENT: ${{ github.event_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # A release's own notes, read before anything is built. The file opens with a comment to whoever writes it,
+          # then `# Jason <version>`. The version after a release leaves it naming the release it was written for, so
+          # a tag whose file is missing, untitled or names another version stops here: a stale file can never ship.
+          # The button's run carries the template alone instead and says why. The notes output tells the publishing
+          # job whether to put the file into the body. Get-Content gives nothing at all for an empty file, not even
+          # a string, so `?? ''` makes it the empty text it is.
+          $why = $null
+          if (-not (Test-Path -LiteralPath RELEASE-NOTES.md)) {
+            $why = 'There is no RELEASE-NOTES.md'
+          } else {
+            $text = [regex]::Replace(((Get-Content -LiteralPath RELEASE-NOTES.md -Raw) ?? '').ReplaceLineEndings("`n"), '(?s)^\s*<!--.*?-->', '').TrimStart()
+            $title = $text.Split("`n")[0]
+            if ($title -cmatch '^# Jason (\S+)$') {
+              if ($Matches[1] -cne $env:VERSION) { $why = "RELEASE-NOTES.md names $($Matches[1])" }
+            } else {
+              $why = "RELEASE-NOTES.md does not open with '# Jason <version>'"
+            }
+          }
+
+          if ($null -eq $why) {
+            Write-Host "RELEASE-NOTES.md names ${env:VERSION}: the release carries its own notes."
+            "notes=true" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          if ($env:EVENT -eq 'push') { throw "$why; this tag is v$env:VERSION, and a tag ships its own notes." }
+
+          Write-Host "::warning title=Release notes::$why; this run is v$env:VERSION, so it carries the template alone."
+          "notes=false" >> $env:GITHUB_OUTPUT
 
       - id: dotnet
         uses: ./.github/actions/setup-dotnet
@@ -230,12 +278,15 @@ jobs:
     runs-on: ubuntu-latest
     # The only job that holds the publication token, which reaches the public repository and nothing else. It builds
     # and runs nothing that was built, so a test on a matrix runner cannot publish anything, and nothing is published
-    # when a matrix leg or the plugin's job failed. It writes nothing here: the draft release, the branch and the pull
-    # request are all in reply-team/jason-ai.
+    # when a matrix leg or the plugin's job failed. It writes nothing here but a dry run's artifact: the draft release,
+    # the branch and the pull request are all in reply-team/jason-ai. Under a dry run it holds this run's own read-only
+    # token in place of the publication token: the job's token and the public checkout's are this run's own, which
+    # reads reply-team/jason-ai because that repository is public and can write nothing there, so a step that forgot
+    # its condition still could not publish.
     permissions:
       contents: read
     env:
-      GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+      GH_TOKEN: ${{ inputs.dry_run && github.token || secrets.PUBLISH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -267,12 +318,24 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
         run: |
           # The template opens with a comment addressed to whoever edits the template. Markdown hides an HTML
           # comment when a page is rendered, but a release body is read raw as well - by the API, by
           # `gh release view`, in the notification mail - so what ships carries none of them.
-          $notes = (Get-Content .github/release-notes-template.md -Raw).Replace('{{version}}', $env:VERSION)
+          $notes = (Get-Content .github/release-notes-template.md -Raw).ReplaceLineEndings("`n").Replace('{{version}}', $env:VERSION)
           $notes = [regex]::Replace($notes, '(?s)<!--.*?-->', '').TrimStart()
+
+          # The release's own notes stand where the template says {{notes}}, after its opening paragraph, without their
+          # comments and without their first line, `# Jason <version>`, which the release's title says already, and
+          # with {{version}} filled in as the template's is. The version job decided whether they are this version's;
+          # when they are not, the template stands alone.
+          $own = ''
+          if ($env:NOTES -eq 'true') {
+            $own = [regex]::Replace(((Get-Content -LiteralPath RELEASE-NOTES.md -Raw) ?? '').ReplaceLineEndings("`n"), '(?s)<!--.*?-->', '').TrimStart()
+            $own = ($own -replace '^[^\n]*\n?', '').Trim().Replace('{{version}}', $env:VERSION)
+          }
+          $notes = if ($own) { $notes.Replace('{{notes}}', $own) } else { [regex]::Replace($notes, '\{\{notes\}\}\n+', '') }
           Set-Content artifacts/release/notes.md -Value $notes -NoNewline
 
       - name: Check out the public repository
@@ -280,7 +343,7 @@ jobs:
         with:
           repository: reply-team/jason-ai
           path: public
-          token: ${{ secrets.PUBLISH_TOKEN }}
+          token: ${{ inputs.dry_run && github.token || secrets.PUBLISH_TOKEN }}
 
       - name: Make it what this release publishes
         shell: pwsh
@@ -304,7 +367,22 @@ jobs:
           ./.github/scripts/Write-PublishBody.ps1 -Target public -Version $env:VERSION -Body artifacts/publish/body.md
           Get-Content artifacts/publish/body.md
 
+      # What a dry run hands back to read: the archives, the packages, the manifest, the checksums and the notes as the
+      # draft would have carried them, and the pull request's body a tag would have opened. Kept for a week: the
+      # archives and packages are this run's other artifacts as well.
+      - name: Keep what a dry run assembled
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: dry-run-v${{ needs.version.outputs.version }}
+          path: |
+            artifacts/release
+            artifacts/publish/body.md
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Create the draft release
+        if: ${{ !inputs.dry_run }}
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -324,7 +402,7 @@ jobs:
           # is the version's, not the event's: a candidate is a candidate however it arrived.
           if ($env:VERSION -clike '*-*') { $how += '--prerelease' }
 
-          # A draft this version left behind - an earlier dry run of the same number, inspected and pressed
+          # A draft this version left behind - an earlier button's draft of the same number, inspected and pressed
           # again - holds the name that is about to be created, so it is deleted first, and only if it really is
           # a draft. A published release of this version is somebody's installed software: the job stops before it
           # creates anything. No --cleanup-tag; a draft has no tag to clean up.
@@ -358,7 +436,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           LABEL: ${{ steps.body.outputs.label }}
         run: |
-          # Only a tag opens the pull request; the button's draft is a dry run and leaves the public repository's
+          # Only a tag opens the pull request; the button makes its draft at most and leaves the public repository's
           # branches alone. The commit holds what the projection staged, and the branch is this version's alone,
           # replaced whole when the job runs again.
           $repository = 'reply-team/jason-ai'

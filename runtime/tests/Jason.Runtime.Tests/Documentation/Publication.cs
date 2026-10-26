@@ -55,7 +55,7 @@ internal static class OpenSet
     /// </summary>
     public static readonly string[] Licences = ["LICENSE", "LICENSE-RUNTIME.md", "THIRD-PARTY-NOTICES", "TRADEMARKS.md"];
 
-    private static readonly string[] NeverPublished = ["CLAUDE.md", "DEVELOPMENT.md", "global.json", "dotnet-tools.json", "TestResults"];
+    private static readonly string[] NeverPublished = ["CLAUDE.md", "DEVELOPMENT.md", "RELEASE-NOTES.md", "global.json", "dotnet-tools.json", "TestResults"];
 
     /// <summary>
     /// The files under a directory entry as a release publishes them: what git holds and does not ignore, when the root

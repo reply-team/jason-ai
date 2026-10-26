@@ -521,6 +521,7 @@ public class CiRunsTests
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "100644", false, true)]
     [InlineData("ui/README.md", "100644", false, true)]
     [InlineData("docs/a-new-page.md", "100644", false, true)]
+    [InlineData("RELEASE-NOTES.md", "100644", false, true)]
     [InlineData("docs/plugins.md", "100644", true, true)]
     [InlineData("docs/golden-path.md", "100644", false, false)]
     [InlineData("LICENSE-RUNTIME.md", "100644", false, false)]

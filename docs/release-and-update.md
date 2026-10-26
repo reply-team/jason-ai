@@ -316,11 +316,21 @@ They resolve to the latest release, so where none has been published they answer
 install from — build from source until one has. [`docs/INSTALL.md`](INSTALL.md) is the whole path either way,
 in the order a stranger reads it.
 
-The workflow that builds a release has a button — a `workflow_dispatch` that produces a draft, for a dry run
+The workflow that builds a release has a button — a `workflow_dispatch` that produces a draft, the button's draft,
 before any tag exists. GitHub offers that button only for a workflow that is already on the **default branch**;
 once it is, a branch's own version can be run from it (`gh workflow run release.yml --ref <branch>`), which is how a
-change to the pipeline is rehearsed before it merges. The dry run builds the draft in `reply-team/jason-ai` and opens
-no pull request.
+change to the pipeline is rehearsed before it merges. The button builds the draft in `reply-team/jason-ai` and opens
+no pull request. With `dry_run` it makes no draft either: every job runs, and the assembled release — archives,
+packages, manifest, checksums and notes — and the pull request's body come back as one artifact of the run, while the
+publishing job holds this run's own read-only token in place of the publication token.
+
+A release's notes are the template `.github/release-notes-template.md` and what that release says of itself,
+`RELEASE-NOTES.md` at the root: its first line is `# Jason <version>`, and the rest goes into the body after the
+template's opening paragraph, with `{{version}}` filled in. The version job reads it before anything is built: on a
+tag, a file that is missing, untitled or names another version stops the release there, so the file the version pull
+request leaves naming the last release can never ship with the next one; the button's run carries the template alone
+instead, with a warning. A candidate's tag needs the file to name the candidate, and notes not yet written name their
+version with `-unwritten`, which no tag carries.
 
 ### Through a package manager
 

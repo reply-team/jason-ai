@@ -1,14 +1,19 @@
 <!--
 The body of every release. release.yml fills in {{version}} and hands the result to `gh release create`; edit
-this file rather than the release page, so that the next release says the same things.
+this file rather than the release page, so that the next release says the same things. What one release says
+of itself is RELEASE-NOTES.md at the root, which release.yml puts where {{notes}} stands, without its comments
+and its first line; a draft made without it carries this file alone.
 
-The button (workflow_dispatch) creates a draft. A draft's tag does not exist until the draft is published:
-deleting the draft leaves nothing behind, and publishing it is what creates the tag. So a dry run's draft is
-deleted after inspection, unless it is meant as the release.
+The button (workflow_dispatch) creates a draft, the button's draft. A draft's tag
+does not exist until the draft is published: deleting the draft leaves nothing behind, and publishing it is what
+creates the tag. So the button's draft is deleted after inspection, unless it is meant as the release. With
+dry_run the button makes no draft at all.
 -->
 
 Jason {{version}}: the runtime, the CLI and the plugin host, one self-contained executable per platform, built
 at this version and released only after its tests passed.
+
+{{notes}}
 
 ## Assets
 

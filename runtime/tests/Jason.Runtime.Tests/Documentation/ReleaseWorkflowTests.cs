@@ -30,7 +30,7 @@ namespace Jason.Runtime.Tests.Documentation;
 /// half is not, until a tag exists.
 /// </para>
 /// </summary>
-public class ReleaseWorkflowTests
+public partial class ReleaseWorkflowTests
 {
     private static readonly string[] Action = [".github", "actions", "package", "action.yml"];
     private static readonly string[] Ci = [".github", "workflows", "ci.yml"];
@@ -618,16 +618,71 @@ public class ReleaseWorkflowTests
         Assert.Contains("version", Mapping(Mapping(triggers, "workflow_dispatch"), "inputs").Children.Keys.Select(key => key.ToString()));
 
         // Both build the draft in the public repository; only a tag goes on to open the pull request whose merge
-        // publishes it, so the button is a dry run that leaves no branch and no pull request behind.
+        // publishes it, so the button leaves no branch and no pull request behind. Its dry run makes no draft either.
         Assert.Equal("github.event_name == 'push'", Scalar(PublishingStep("Open the pull request"), "if"));
-        Assert.Null(Scalar(PublishingStep("Create the draft release"), "if"));
+        Assert.Equal("${{ !inputs.dry_run }}", Scalar(PublishingStep("Create the draft release"), "if"));
     }
+
+    /// <summary>
+    /// The button's dry run builds and assembles everything a release would — the three platforms, the plugin, the UI,
+    /// the manifest, the notes, the projection and the pull request's body — and hands it back as one artifact to read,
+    /// creating nothing in the public repository. The publishing job holds this run's own read-only token in place of
+    /// the publication token: the job's token and the public checkout's are this run's own under a dry run, so a step
+    /// that forgot its condition could still publish nothing. And every step that would publish carries exactly the
+    /// condition, or the tag's.
+    /// </summary>
+    [Fact]
+    public void A_dry_run_holds_its_own_token_in_place_of_the_publication_token_and_publishes_nothing()
+    {
+        var release = Parse(Read(Release));
+        var inputs = Mapping(Mapping(Mapping(release, "on"), "workflow_dispatch"), "inputs");
+        var input = Mapping(inputs, "dry_run");
+        Assert.Equal("boolean", Scalar(input, "type"));
+        Assert.Equal("false", Scalar(input, "default"));
+        Assert.NotEqual("true", Scalar(input, "required"));
+        Assert.EndsWith("unless dry_run is set.", Scalar(Mapping(inputs, "version"), "description"), StringComparison.Ordinal);
+
+        Assert.Equal(DryRunToken, Scalar(Mapping(PublishingJob(), "env"), "GH_TOKEN"));
+        Assert.Equal(DryRunToken, Scalar(Mapping(PublishingStep("Check out the public repository"), "with"), "token"));
+
+        var publishing = PublishingSteps().Where(step => Scalar(step, "run") is { } run && Publishes().IsMatch(Code(run))).ToList();
+        Assert.Equal(["Create the draft release", "Open the pull request"], publishing.Select(step => Scalar(step, "name")));
+        Assert.All(publishing, step =>
+        {
+            var condition = Scalar(step, "if") ?? string.Empty;
+            Assert.True(
+                condition is "${{ !inputs.dry_run }}" or "github.event_name == 'push'",
+                $"'{Scalar(step, "name")}' publishes, and its condition '{condition}' lets a dry run reach it.");
+        });
+
+        // What a dry run hands back: the assembled release and the body, as one artifact, after the body is written.
+        var steps = PublishingSteps();
+        var upload = Assert.Single(steps, step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true);
+        Assert.Equal("${{ inputs.dry_run }}", Scalar(upload, "if"));
+        var paths = (Scalar(Mapping(upload, "with"), "path") ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["artifacts/release", "artifacts/publish/body.md"], paths);
+        Assert.Equal("error", Scalar(Mapping(upload, "with"), "if-no-files-found"));
+        Assert.Equal("7", Scalar(Mapping(upload, "with"), "retention-days"));
+        var body = steps.ToList().FindIndex(step => Scalar(step, "name") == "Write the pull request's body");
+        Assert.True(body >= 0 && body < steps.ToList().IndexOf(upload), "The dry run's artifact is uploaded before the body it carries is written.");
+    }
+
+    /// <summary>The token the publishing job holds: this run's own under a dry run, the publication token otherwise.</summary>
+    private const string DryRunToken = "${{ inputs.dry_run && github.token || secrets.PUBLISH_TOKEN }}";
+
+    /// <summary>A step's script without its comment lines, so that what it says about publishing is not read as doing it.</summary>
+    private static string Code(string run) =>
+        string.Join('\n', run.Split('\n').Where(line => !line.TrimStart().StartsWith('#')));
+
+    /// <summary>A call that publishes or writes in the public repository: a release made, removed or changed, a pull request, a commit or a push.</summary>
+    [GeneratedRegex(@"\bgh\s+release\s+(?:create|delete|edit|upload)\b|\bgh\s+pr\b|\bgit\b[^\n]*\s(?:commit|push)\b")]
+    private static partial Regex Publishes();
 
     /// <summary>
     /// The token that can publish is handed to the one job that publishes, and to nothing that builds or tests: a
     /// compromised test on a matrix runner must not be able to create a release or push to the public repository.
-    /// That job writes nothing here either — the draft, the branch and the pull request are all in the public
-    /// repository, reached with that token alone — so no permission anywhere grants a write.
+    /// That job writes nothing here either but a dry run's artifact — the draft, the branch and the pull request are all
+    /// in the public repository, reached with that token alone — so no permission anywhere grants a write.
     /// </summary>
     [Fact]
     [Critical(Family.B4, "the publication token's scope")]
@@ -636,7 +691,11 @@ public class ReleaseWorkflowTests
         var text = Read(Release);
         var release = Parse(text);
         Assert.Equal("read", Scalar(Mapping(release, "permissions"), "contents"));
-        Assert.DoesNotContain("github.token", text, StringComparison.Ordinal);
+
+        // This run's own token stands only where a dry run takes it in place of the publication token, twice: the job's
+        // and the public checkout's.
+        Assert.Equal(2, Regex.Matches(text, Regex.Escape("github.token")).Count);
+        Assert.Equal(2, Regex.Matches(text, Regex.Escape(DryRunToken)).Count);
 
         var jobs = Mapping(release, "jobs");
         foreach (var (name, job) in jobs.Children.Select(job => (job.Key.ToString(), (YamlMappingNode)job.Value)))
@@ -647,10 +706,14 @@ public class ReleaseWorkflowTests
             }
         }
 
-        // Every mention of a secret is the publication token's, and every one of them lies inside the publishing job.
+        // Every mention of a secret is the publication token's, every one of them stands inside the expression that
+        // gives a dry run this run's own token instead, and every one of them lies inside the publishing job.
         var everywhere = Scalars(release).Where(scalar => scalar.Contains("secrets.", StringComparison.Ordinal)).ToList();
         Assert.NotEmpty(everywhere);
-        Assert.All(everywhere, scalar => Assert.Contains("secrets.PUBLISH_TOKEN", scalar, StringComparison.Ordinal));
+        Assert.All(everywhere, scalar => Assert.Equal(DryRunToken, scalar));
+        Assert.Equal(
+            Regex.Matches(text, Regex.Escape(DryRunToken)).Count,
+            Regex.Matches(text, Regex.Escape("secrets.PUBLISH_TOKEN")).Count);
         var holders = jobs.Children.Where(job => Scalars(job.Value).Any(scalar => scalar.Contains("secrets.", StringComparison.Ordinal))).ToList();
         var holder = Assert.Single(holders);
         Assert.Equal(everywhere.Count, Scalars(holder.Value).Count(scalar => scalar.Contains("secrets.", StringComparison.Ordinal)));
@@ -1284,22 +1347,29 @@ public class ReleaseWorkflowTests
 
     /// <summary>
     /// The release's "Write the notes" step, run the way the publishing job runs it: this template, this
-    /// version, in a tree of the test's own — and what it wrote.
+    /// version, in a tree of the test's own — and what it wrote. With <paramref name="own"/>, the tree holds that
+    /// <c>RELEASE-NOTES.md</c> and the version job has said it belongs to this version; without, it has said there are
+    /// none to carry.
     /// </summary>
-    private static string WriteTheNotes(string template)
+    private static string WriteTheNotes(string template, string? own = null)
     {
         var writing = PublishingStep("Write the notes");
+        Assert.Equal("${{ needs.version.outputs.notes }}", Scalar(Mapping(writing, "env"), "NOTES"));
 
         using var tree = new TempTree();
         Directory.CreateDirectory(Path.Combine(tree.Root, ".github"));
         Directory.CreateDirectory(Path.Combine(tree.Root, "artifacts", "release"));
         File.WriteAllText(Path.Combine(tree.Root, ".github", "release-notes-template.md"), template);
+        if (own is not null)
+        {
+            File.WriteAllText(Path.Combine(tree.Root, "RELEASE-NOTES.md"), own);
+        }
 
         var step = Path.Combine(tree.Root, "write-the-notes.ps1");
         File.WriteAllText(step, Scalar(writing, "run"));
 
         var (exit, _, stderr) = Pwsh(
-            new Dictionary<string, string> { ["VERSION"] = "0.2.0" },
+            new Dictionary<string, string> { ["VERSION"] = "0.2.0", ["NOTES"] = own is null ? "false" : "true" },
             "-Command", $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{step}'");
 
         Assert.True(exit == 0, stderr);
@@ -1342,6 +1412,347 @@ public class ReleaseWorkflowTests
 
         Assert.Contains("{{version}}", notes, StringComparison.Ordinal);
     }
+
+    // --- the release's own notes ------------------------------------------------------------------------
+
+    /// <summary>
+    /// A release's own notes, <c>RELEASE-NOTES.md</c>, go into its body after the template's opening paragraph,
+    /// where the template says <c>{{notes}}</c>: without their header comment, which is addressed to whoever writes
+    /// them, and without their first line, <c># Jason &lt;version&gt;</c>, which the release's title already says.
+    /// </summary>
+    [Fact]
+    public void A_release_s_own_notes_follow_the_opening_paragraph_without_their_header_or_their_title()
+    {
+        const string Own = "<!--\nA note to whoever writes the next one.\n-->\n\n# Jason 0.2.0\n\n## What is new since 0.1.0\n\nA thing that is new.\n\n## Known issues\n\nNone.\n";
+
+        var shipped = WriteTheNotes(Read(Notes), Own);
+
+        Assert.StartsWith("Jason 0.2.0: ", shipped, StringComparison.Ordinal);
+        Assert.Contains("passed.\n\n## What is new since 0.1.0\n\nA thing that is new.\n\n## Known issues\n\nNone.\n\n## Assets\n", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("# Jason 0.2.0", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("A note to whoever writes", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("<!--", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{notes}}", shipped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Without notes of its own — only the button gets this far without them — the body is the template alone, with
+    /// no placeholder and no gap where the notes would have stood.
+    /// </summary>
+    [Fact]
+    public void Without_notes_of_its_own_the_body_is_the_template_alone()
+    {
+        Assert.Contains("\n\n{{notes}}\n\n## Assets\n", Read(Notes).ReplaceLineEndings("\n"), StringComparison.Ordinal);
+
+        var shipped = WriteTheNotes(Read(Notes));
+
+        Assert.DoesNotContain("{{notes}}", shipped, StringComparison.Ordinal);
+        Assert.Contains("passed.\n\n## Assets\n", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n\n\n", shipped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The release's own notes fill in <c>{{version}}</c> as the template does, so an address copied from the template
+    /// into them names this release rather than shipping with the braces in it.
+    /// </summary>
+    [Fact]
+    public void The_release_s_own_notes_fill_in_the_version_as_the_template_does()
+    {
+        const string Own = "# Jason 0.2.0\n\n## Upgrading from 0.1.0\n\nRead https://jasonharness.ai/releases/tag/v{{version}} first.\n";
+
+        var shipped = WriteTheNotes(Read(Notes), Own);
+
+        Assert.Contains("Read https://jasonharness.ai/releases/tag/v0.2.0 first.\n", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{version}}", shipped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The version job reads <c>RELEASE-NOTES.md</c> before anything is built. A tag ships its own notes, so on a tag a
+    /// file that is not there, or that names another version — the last release's, which the version after a release
+    /// leaves in place until this one rewrites it — stops the release there. The button's draft carries the template
+    /// alone in either case, and says so in a warning. Run, not read: the step's own PowerShell in a tree of the test's own.
+    /// </summary>
+    [Theory]
+    [InlineData("push", "0.21.0", null, 1, "There is no RELEASE-NOTES.md; this tag is v0.21.0, and a tag ships its own notes.")]
+    [InlineData("push", "0.21.0", "# Jason 0.20.0\n\n## Known issues\n\nNone.\n", 1, "RELEASE-NOTES.md names 0.20.0; this tag is v0.21.0")]
+    [InlineData("push", "0.21.0", "# Jason 0.21.0-rc.1\n\n## Known issues\n\nNone.\n", 1, "RELEASE-NOTES.md names 0.21.0-rc.1; this tag is v0.21.0")]
+    [InlineData("push", "0.21.0", "Jason 0.21.0\n\n## Known issues\n\nNone.\n", 1, "RELEASE-NOTES.md does not open with '# Jason <version>'; this tag is v0.21.0")]
+    [InlineData("push", "0.21.0", "# Jason 0.21.0\n\n## Known issues\n\nNone.\n", 0, "notes=true")]
+    [InlineData("push", "0.21.0", "<!--\nThe header.\n# Jason 0.20.0\n-->\n\n# Jason 0.21.0\n\n## Known issues\n\nNone.\n", 0, "notes=true")]
+    [InlineData("push", "1.0.0-rc.1", "# Jason 1.0.0-rc.1\n\n## Known issues\n\nNone.\n", 0, "notes=true")]
+    [InlineData("workflow_dispatch", "0.21.0", null, 0, "notes=false")]
+    [InlineData("workflow_dispatch", "0.21.0", "# Jason 0.20.0\n\n## Known issues\n\nNone.\n", 0, "notes=false")]
+    [InlineData("workflow_dispatch", "0.21.0", "# Jason 0.21.0\n\n## Known issues\n\nNone.\n", 0, "notes=true")]
+    [InlineData("push", "0.21.0", "# Jason 0.21.0-unwritten\n\n## What is new since 0.20.0\n\nNot yet.\n", 1, "RELEASE-NOTES.md names 0.21.0-unwritten; this tag is v0.21.0")]
+    [InlineData("workflow_dispatch", "0.21.0", "# Jason 0.21.0-unwritten\n\n## What is new since 0.20.0\n\nNot yet.\n", 0, "notes=false")]
+    [InlineData("push", "0.21.0-rc.1", "# Jason 0.21.0\n\n## Known issues\n\nNone.\n", 1, "RELEASE-NOTES.md names 0.21.0; this tag is v0.21.0-rc.1")]
+    [InlineData("push", "0.21.0", "# Jason 0.21.0\r\n\r\n## Known issues\r\n\r\nNone.\r\n", 0, "notes=true")]
+    [InlineData("push", "0.21.0", "\uFEFF# Jason 0.21.0\n\n## Known issues\n\nNone.\n", 0, "notes=true")]
+    [InlineData("push", "0.21.0", "# Jason 0.21.0 \n\n## Known issues\n\nNone.\n", 1, "RELEASE-NOTES.md does not open with '# Jason <version>'; this tag is v0.21.0")]
+    [InlineData("push", "0.21.0", "\n\n# Jason 0.21.0\n\n## Known issues\n\nNone.\n", 0, "notes=true")]
+    [InlineData("workflow_dispatch", "0.21.0", "Jason 0.21.0\n\n## Known issues\n\nNone.\n", 0, "notes=false")]
+    [InlineData("push", "0.21.0", "", 1, "RELEASE-NOTES.md does not open with '# Jason <version>'; this tag is v0.21.0")]
+    [InlineData("workflow_dispatch", "0.21.0", "", 0, "notes=false")]
+    public void A_tag_without_its_own_notes_stops_before_anything_is_built(string eventName, string version, string? own, int exit, string said)
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var steps = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "version"), "steps")).Children.Cast<YamlMappingNode>().ToList();
+        var check = Assert.Single(steps, step => Scalar(step, "id") == "notes");
+        Assert.Equal("${{ steps.notes.outputs.notes }}", Scalar(Mapping(Mapping(jobs, "version"), "outputs"), "notes"));
+        Assert.Equal("${{ steps.version.outputs.version }}", Scalar(Mapping(check, "env"), "VERSION"));
+        Assert.True(
+            steps.IndexOf(check) < steps.FindIndex(step => Scalar(step, "id") == "dotnet"),
+            "The notes are read after .NET is set up; saying no to a tag needs nothing that comes after them.");
+        Assert.Equal("${{ needs.version.outputs.notes }}", Scalar(Mapping(PublishingStep("Write the notes"), "env"), "NOTES"));
+
+        using var tree = new TempTree();
+        var output = Path.Combine(tree.Root, "output.txt");
+        File.WriteAllText(output, string.Empty);
+        if (own is not null)
+        {
+            File.WriteAllText(Path.Combine(tree.Root, "RELEASE-NOTES.md"), own);
+        }
+
+        var script = Path.Combine(tree.Root, "check-the-notes.ps1");
+        File.WriteAllText(script, Scalar(check, "run"));
+
+        var (code, stdout, stderr) = Pwsh(
+            new Dictionary<string, string> { ["EVENT"] = eventName, ["VERSION"] = version, ["GITHUB_OUTPUT"] = output },
+            "-Command", $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{script}'");
+
+        if (exit != 0)
+        {
+            Assert.NotEqual(0, code);
+            Assert.Contains(said, stderr, StringComparison.Ordinal);
+            Assert.Equal(string.Empty, File.ReadAllText(output));
+            return;
+        }
+
+        Assert.True(code == 0, stderr);
+        Assert.Equal(said, File.ReadAllText(output).Trim());
+
+        // The button says why this run carries the template alone, as a warning on the run; otherwise the log names
+        // the version the notes were written for. `$env:VERSION:` would be read as a variable of its own, so braces.
+        Assert.Equal(said == "notes=false", stdout.Contains("::warning", StringComparison.Ordinal));
+        if (said == "notes=false")
+        {
+            Assert.Contains($"; this run is v{version}, so it carries the template alone.", stdout, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("${env:VERSION}", Scalar(check, "run"), StringComparison.Ordinal);
+            Assert.Contains($"RELEASE-NOTES.md names {version}: the release carries its own notes.", stdout, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The shape the release reads its own notes in: an optional header comment, addressed to whoever writes them and
+    /// dropped; a first line <c># Jason &lt;version&gt;</c>, which the version job compares with the tag; then only the
+    /// release's own sections, each once — what is new, what is fixed, how to upgrade, what is known not to work — and no
+    /// comment in what ships. Read only when the file is there, and never against the version this tree builds: the
+    /// version after a release leaves the file naming the release it was written for, and the next release rewrites it.
+    /// </summary>
+    [Fact]
+    [Critical(Family.B4, "a release's own notes")]
+    public void The_release_s_own_notes_have_the_shape_the_release_reads()
+    {
+        // The template is the other half of a public release's body, so it is read for the same pointers.
+        var pointers = PublicPointers(Read(Notes));
+        Assert.True(pointers.Count == 0, ".github/release-notes-template.md:\n" + string.Join('\n', pointers));
+
+        var path = Path.Combine(RepositoryRoot(), "RELEASE-NOTES.md");
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var problems = OwnNotesProblems(File.ReadAllText(path));
+        Assert.True(problems.Count == 0, "RELEASE-NOTES.md:\n" + string.Join('\n', problems));
+    }
+
+    /// <summary>
+    /// What ships in a release's body is read publicly, so what the public repository's check refuses in a pull request
+    /// is refused in the notes and in the template too: each kind of pointer, spelled here in pieces so that this file
+    /// is not one.
+    /// </summary>
+    [Theory]
+    [InlineData("A fix (" + "REPLY" + "-4242).", "a tracker key")]
+    [InlineData("See https://example." + "Atlassian" + ".net/browse/X-1.", "an Atlassian address")]
+    [InlineData("Co-Authored-" + "By: Someone <someone@example.invalid>", "an attribution trailer")]
+    [InlineData("Claude-" + "Session: https://example.invalid/x", "an attribution trailer")]
+    [InlineData("Generated with [" + "Claude Code](https://example.invalid)", "the generated-with footer")]
+    public void A_pointer_is_named_in_the_notes_and_in_the_template(string pointer, string expected)
+    {
+        Assert.Contains(expected, OwnNotesProblems("# Jason 0.21.0\n\n## Fixed since 0.20.0\n\n" + pointer + "\n"));
+        Assert.Contains(expected, PublicPointers(Read(Notes) + "\n" + pointer + "\n"));
+    }
+
+    /// <summary>The shape's reader, on texts before the file: each way out of it is named.</summary>
+    [Theory]
+    [InlineData("# Notes for 0.21.0\n\n## Known issues\n\nNone.\n", "the first line is '# Notes for 0.21.0', not '# Jason <version>'")]
+    [InlineData("<!--\nThe header.\n-->\nJason 0.21.0\n\n## Known issues\n\nNone.\n", "the first line is 'Jason 0.21.0', not '# Jason <version>'")]
+    [InlineData("# Jason 0.21.0\n\n## Highlights\n\nA thing.\n", "'## Highlights' is not one of the release's own sections")]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\n### On Windows\n\nA thing.\n", "'### On Windows' is not one of the release's own sections")]
+    [InlineData("# Jason 0.21.0\n\n## What is new since the last one\n\nA thing.\n", "'## What is new since the last one' is not one of the release's own sections")]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\n<!-- remember the migration -->\nNone.\n", "an HTML comment in the body, which never ships")]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\nNone.\n\n## Known issues\n\nStill none.\n", "'## Known issues' twice")]
+    [InlineData("# Jason 0.21.0\n\nA paragraph and no section.\n", "no section")]
+    [InlineData("# Jason 0.21.0 \n\n## Known issues\n\nNone.\n", "the first line is '# Jason 0.21.0 ', not '# Jason <version>'")]
+    [InlineData("<!--\nThe header, never closed.\n\n# Jason 0.21.0\n\n## Known issues\n\nNone.\n", "the header comment is never closed")]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\nOne step --> the next.\n", "an HTML comment in the body, which never ships")]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\nHighlights\n----------\n\nNone.\n", "'Highlights' underlined with '-' is a heading, not one of the release's own sections")]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\nHighlights\n===\n\nNone.\n", "'Highlights' underlined with '=' is a heading, not one of the release's own sections")]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\n  ## Highlights\n\nNone.\n", "'  ## Highlights' is an indented heading, not one of the release's own sections")]
+    public void Notes_out_of_that_shape_are_named(string text, string expected)
+    {
+        var problems = OwnNotesProblems(text);
+
+        Assert.Contains(expected, problems);
+    }
+
+    [Theory]
+    [InlineData("# Jason 0.21.0\n\n## Known issues\n\nNone.\n")]
+    [InlineData("<!--\nThe header, which may say # Jason 0.20.0 and ## Anything.\n-->\n\n# Jason 0.21.0\n\n## What is new since 0.20.0\n\nA.\n\n## Fixed since 0.20.0\n\nB.\n\n## Upgrading from 0.20.0\n\nC.\n\n## Known issues\n\nD.\n")]
+    [InlineData("# Jason 1.0.0-rc.1\n\n## Upgrading from 0.1.0\n\nRun this:\n\n```sh\n# a comment, not a heading\njason runtime stop\n```\n")]
+    [InlineData("# Jason 0.21.0\r\n\r\n## Known issues\r\n\r\nNone.\r\n")]
+    [InlineData("\uFEFF# Jason 0.21.0\n\n## Known issues\n\nNone.\n")]
+    [InlineData("# Jason 0.21.0-unwritten\n\n## What is new since 0.20.0\n\nA list:\n\n- one\n- two\n\nA rule after a blank line:\n\n---\n\nNone.\n")]
+    public void Notes_in_that_shape_are_not(string text) =>
+        Assert.Empty(OwnNotesProblems(text));
+
+    /// <summary>What is out of shape in a release's own notes; nothing when they are in it.</summary>
+    private static List<string> OwnNotesProblems(string text)
+    {
+        var problems = PublicPointers(text);
+        var body = text.TrimStart('\uFEFF').ReplaceLineEndings("\n").TrimStart();
+        if (body.StartsWith("<!--", StringComparison.Ordinal))
+        {
+            var end = body.IndexOf("-->", StringComparison.Ordinal);
+            if (end < 0)
+            {
+                problems.Add("the header comment is never closed");
+            }
+
+            body = end < 0 ? string.Empty : body[(end + "-->".Length)..].TrimStart();
+        }
+
+        var lines = body.Split('\n');
+        if (!OwnNotesTitle().IsMatch(lines[0]))
+        {
+            problems.Add($"the first line is '{lines[0]}', not '# Jason <version>'");
+        }
+
+        if (body.Contains("<!--", StringComparison.Ordinal) || body.Contains("-->", StringComparison.Ordinal))
+        {
+            problems.Add("an HTML comment in the body, which never ships");
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var fenced = false;
+        for (var at = 1; at < lines.Length; at++)
+        {
+            var line = lines[at];
+            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal) || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal))
+            {
+                fenced = !fenced;
+                continue;
+            }
+
+            if (fenced)
+            {
+                continue;
+            }
+
+            // A heading the release page renders that is not written as `## ` at the start of a line: a text line
+            // underlined with `=` or `-`, or a `#` heading indented by up to three spaces.
+            var before = lines[at - 1];
+            if (SetextUnderline().IsMatch(line) && before.Trim().Length > 0 && !before.TrimStart().StartsWith('#'))
+            {
+                problems.Add($"'{before.Trim()}' underlined with '{line.Trim()[0]}' is a heading, not one of the release's own sections");
+                continue;
+            }
+
+            if (IndentedHeading().IsMatch(line))
+            {
+                problems.Add($"'{line}' is an indented heading, not one of the release's own sections");
+                continue;
+            }
+
+            if (!line.StartsWith('#'))
+            {
+                continue;
+            }
+
+            if (!OwnNotesSection().IsMatch(line))
+            {
+                problems.Add($"'{line}' is not one of the release's own sections");
+            }
+            else if (!seen.Add(line))
+            {
+                problems.Add($"'{line}' twice");
+            }
+        }
+
+        if (seen.Count == 0)
+        {
+            problems.Add("no section");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// What the public repository's check refuses in a pull request, read in a text that ships in a release's body:
+    /// a tracker key, an Atlassian address in any case, an attribution trailer and the generated-with footer.
+    /// </summary>
+    private static List<string> PublicPointers(string text)
+    {
+        var pointers = new List<string>();
+        if (TrackerKey().IsMatch(text))
+        {
+            pointers.Add("a tracker key");
+        }
+
+        if (text.Contains("atlas" + "sian", StringComparison.OrdinalIgnoreCase))
+        {
+            pointers.Add("an Atlassian address");
+        }
+
+        if (AttributionTrailer().IsMatch(text))
+        {
+            pointers.Add("an attribution trailer");
+        }
+
+        if (GeneratedWithFooter().IsMatch(text))
+        {
+            pointers.Add("the generated-with footer");
+        }
+
+        return pointers;
+    }
+
+    [GeneratedRegex(@"\b" + "REP" + "LY" + "-[0-9]+")]
+    private static partial Regex TrackerKey();
+
+    [GeneratedRegex("Co-Authored-" + "By:|Claude-" + "Session:", RegexOptions.IgnoreCase)]
+    private static partial Regex AttributionTrailer();
+
+    [GeneratedRegex(@"Generated with \[" + "Claude", RegexOptions.IgnoreCase)]
+    private static partial Regex GeneratedWithFooter();
+
+    [GeneratedRegex(@"^ {0,3}(?:=+|-+)[ \t]*$")]
+    private static partial Regex SetextUnderline();
+
+    [GeneratedRegex(@"^ {1,3}#{1,6}(?:[ \t]|$)")]
+    private static partial Regex IndentedHeading();
+
+    private const string AVersion = @"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?";
+
+    [GeneratedRegex(@"^# Jason " + AVersion + "$")]
+    private static partial Regex OwnNotesTitle();
+
+    [GeneratedRegex(@"^## (?:(?:What is new since|Fixed since|Upgrading from) " + AVersion + "|Known issues)$")]
+    private static partial Regex OwnNotesSection();
 
     // --- Write-Manifest.ps1 ----------------------------------------------------------------------------
 

@@ -18,8 +18,8 @@ internal sealed record LinkViolation(string File, int Line, string Rule, string 
 
 /// <summary>
 /// The rules every published text is held to. Everything the open set publishes, the public repository's own files
-/// (read as they are at that repository's root, where they land) and the release notes (the body of every public
-/// release) are read; a reader of any of them can open only what is published, so:
+/// (read as they are at that repository's root, where they land) and the release notes — the template and a release's
+/// own notes, together the body of every public release — are read; a reader of any of them can open only what is published, so:
 /// <list type="bullet">
 /// <item>(a) a relative link resolves to a published path that exists — a link inside fenced code is not a link;</item>
 /// <item>(b) nothing names a <c>reply-team/jason-*</c> repository other than <c>jason-ai</c>, nor the private repository
@@ -33,6 +33,9 @@ internal sealed record LinkViolation(string File, int Line, string Rule, string 
 internal static partial class Links
 {
     public const string NotesTemplate = ".github/release-notes-template.md";
+
+    /// <summary>A release's own notes, which the release puts into the template's body; a tree may hold none.</summary>
+    public const string ReleaseNotes = "RELEASE-NOTES.md";
 
     /// <summary>
     /// Published text that names an unpublished page on purpose, and how many times: a verified skill, whose text
@@ -323,6 +326,11 @@ internal static partial class Links
             if (File.Exists(Path.Combine(root, NotesTemplate)))
             {
                 yield return (NotesTemplate, null);
+            }
+
+            if (File.Exists(Path.Combine(root, ReleaseNotes)))
+            {
+                yield return (ReleaseNotes, null);
             }
         }
 

@@ -32,6 +32,7 @@ public sealed partial class PublicationTests
     [InlineData("DEVELOPMENT.md", "DEVELOPMENT.md is never published")]
     [InlineData("global.json", "global.json is never published")]
     [InlineData("dotnet-tools.json", "dotnet-tools.json is never published")]
+    [InlineData("RELEASE-NOTES.md", "RELEASE-NOTES.md is never published")]
     [InlineData("plugins/TestResults/", "TestResults is never published")]
     [InlineData("docs/", "docs/ is published only as")]
     [InlineData("docs/routing.md", "docs/ is published only as")]
