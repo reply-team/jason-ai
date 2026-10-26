@@ -129,6 +129,28 @@ public sealed class DoctorComposerTests
         Assert.Empty(programs.Requested);
     }
 
+    /// <summary>
+    /// The status section names the plugin the runtime holds back by the words the runtime section already carries — its id
+    /// and its codes — and never by its problem's message, the place in its manifest, or where its package lies.
+    /// </summary>
+    [Fact]
+    public async Task Status_names_an_unavailable_plugin_by_the_words_the_runtime_section_carries_and_no_more()
+    {
+        using var dir = new TempPaths();
+
+        var bundle = await ComposeAsync(dir, Running(dir));
+
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "plugin_availability")!;
+        Assert.Equal("failed", Text(check["state"]));
+        Assert.False(check["required"]!.GetValue<bool>());
+        Assert.StartsWith("notifier is unavailable; its problems: executable_missing. ", Text(check["fact"]), StringComparison.Ordinal);
+        Assert.DoesNotContain("fake-provider", Text(check["fact"]), StringComparison.Ordinal);
+
+        var notifier = Section(bundle, "runtime")["plugins"]!.AsArray().Single(plugin => Text(plugin!["id"]) == "notifier")!;
+        Assert.Equal(["executable_missing"], Strings(notifier["problem_codes"]));
+        AssertAbsent(bundle, "SENTINEL_PROBLEM_MESSAGE", "capabilities.exec.executables", "/plugins/notifier");
+    }
+
     [Fact]
     public async Task The_runtime_section_has_system_info_plugins_by_their_codes_and_whether_the_data_directory_agrees()
     {
@@ -791,7 +813,10 @@ public sealed class DoctorComposerTests
         Assert.NotEmpty(Section(bundle, "status")["checks"]!.AsArray());
         Assert.Equal(["settings_file", "environment"], Keys(Section(bundle, "config")));
         Assert.Equal(Path.Combine("<data>", "logs"), Text(Section(bundle, "logs")["directory"]));
-        Assert.DoesNotContain(runtime.Requests, request => request.Operation is Operations.JournalList or Operations.WorkItemList or Operations.PluginList);
+        // The status checks read what they read of a runtime that answered them; past the system.info that says it did not
+        // answer the bundle, the composer asks nothing.
+        Assert.DoesNotContain(runtime.Requests, request => request.Operation is Operations.JournalList or Operations.WorkItemList);
+        Assert.Equal(Operations.SystemInfo, runtime.Requests.Select(request => request.Operation).LastOrDefault(Operations.SystemInfo));
     }
 
     /// <summary>The runtime stops answering on the journal's third page: the section says how far it got, and nothing else is lost.</summary>
@@ -832,7 +857,10 @@ public sealed class DoctorComposerTests
     {
         using var dir = new TempPaths();
         var clock = new PassingClock();
-        var hangs = new HangsAfter(Running(dir), clock, Timeout, Operations.SystemInfo, Operations.RoleList, Operations.RouteList);
+        var hangs = new HangsAfter(Running(dir), clock, Timeout, Operations.SystemInfo, Operations.RoleList, Operations.RouteList)
+        {
+            AnsweredOnce = [Operations.PluginList],
+        };
 
         var bundle = await ComposeAsync(dir, hangs, includeJournal: true);
 
@@ -861,8 +889,8 @@ public sealed class DoctorComposerTests
         var bundle = await ComposeAsync(dir, hangs);
 
         Assert.Equal([Timeout], clock.Waits);
-        Assert.Equal([Operations.RouteList], hangs.Hung);
-        Assert.Equal([Operations.SystemInfo, Operations.RouteList], hangs.Seen);
+        Assert.Equal([Operations.PluginList], hangs.Hung);
+        Assert.Equal([Operations.SystemInfo, Operations.PluginList], hangs.Seen);
 
         var runtime = Section(bundle, "runtime");
         Assert.False(runtime["answered"]!.GetValue<bool>());
@@ -896,7 +924,8 @@ public sealed class DoctorComposerTests
     {
         using var dir = new TempPaths();
         var runtime = Running(dir);
-        runtime.Fails = (operation, _) => operation == Operations.PluginList ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StallingContent(TimeSpan.Zero) } : null;
+        // The composer's own read, the second: the status checks read the plugins first.
+        runtime.Fails = (operation, call) => operation == Operations.PluginList && call == 2 ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StallingContent(TimeSpan.Zero) } : null;
 
         var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
 
@@ -1402,26 +1431,23 @@ public sealed class DoctorComposerTests
         using var dir = new TempPaths();
         var runtime = Running(dir);
         var problems = new JsonArray([.. Enumerable.Range(0, 50).Select(n => (JsonNode)new JsonObject { ["code"] = $"problem_{n:D2}", ["path"] = "p", ["message"] = "m" })]);
-        runtime.Fails = (operation, _) => operation == Operations.PluginList
-            ? Respond(
-                HttpStatusCode.OK,
-                new JsonObject
-                {
-                    ["snapshot"] = new JsonObject { ["id"] = "snp_1", ["loaded_at"] = "2026-10-04T11:00:00.000Z", ["source"] = "startup", ["plugin_count"] = 1 },
-                    ["routing_snapshot_id"] = "rts_1",
-                    ["plugins"] = new JsonArray(new JsonObject
-                    {
-                        ["id"] = "p" + new string('i', 200),
-                        ["version"] = "1." + new string('9', 200),
-                        ["digest"] = "sha256:" + new string('d', 300),
-                        ["kind"] = "provider",
-                        ["status"] = "unavailable",
-                        ["problems"] = problems,
-                    }),
-                    ["last_reload"] = null,
-                    ["activated"] = true,
-                }.ToJsonString())
-            : null;
+        var listing = new JsonObject
+        {
+            ["snapshot"] = new JsonObject { ["id"] = "snp_1", ["loaded_at"] = "2026-10-04T11:00:00.000Z", ["source"] = "startup", ["plugin_count"] = 1 },
+            ["routing_snapshot_id"] = "rts_1",
+            ["plugins"] = new JsonArray(new JsonObject
+            {
+                ["id"] = "p" + new string('i', 200),
+                ["version"] = "1." + new string('9', 200),
+                ["digest"] = "sha256:" + new string('d', 300),
+                ["kind"] = "provider",
+                ["status"] = "unavailable",
+                ["problems"] = problems,
+            }),
+            ["last_reload"] = null,
+            ["activated"] = true,
+        }.ToJsonString();
+        runtime.Fails = (operation, _) => operation == Operations.PluginList ? Respond(HttpStatusCode.OK, listing) : null;
 
         var section = Section(await ComposeAsync(dir, runtime), "runtime");
 
@@ -2471,15 +2497,20 @@ internal sealed class HangsAfter(StubRuntime inner, TimeProvider clock, TimeSpan
 
     public List<string> Hung { get; } = [];
 
+    /// <summary>Operations answered the first time they are asked and held every time after: a reader that comes later hangs.</summary>
+    public IReadOnlyList<string> AnsweredOnce { get; init; } = [];
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
+        bool first;
         lock (Seen)
         {
+            first = !Seen.Contains(operation);
             Seen.Add(operation);
         }
 
-        if (answered.Contains(operation))
+        if (answered.Contains(operation) || (first && AnsweredOnce.Contains(operation)))
         {
             return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }

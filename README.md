@@ -243,10 +243,11 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 |---|---|
 | the runtime answers | a provider plugin is installed |
 | the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
-| migrations are applied | a route is configured |
-| the plugin registry is alive (zero plugins is alive) | a binding names an account |
-| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
+| migrations are applied | every plugin installed is available |
+| the plugin registry is alive (zero plugins is alive) | a route is configured |
+| role skills are present, named after their directories and within the runtime's live cap | a binding names an account |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a provider CLI **you name** answers |
+| | the skill packs are deployed to an agent harness |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |

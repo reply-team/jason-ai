@@ -11,6 +11,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
+using Jason.Contracts.Plugins;
 using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
 
@@ -67,6 +68,12 @@ internal static class StatusChecks
         public const string Restart = "jason runtime restart";
 
         public const string ReloadPlugins = "jason plugin reload";
+
+        /// <summary>
+        /// Printed in a fact, not as a repair: where an unavailable plugin's problems are read whole, the program each one
+        /// is about among them, since the fact quotes their codes alone.
+        /// </summary>
+        public const string ListPlugins = "jason plugin list";
 
         public const string EnableAutostart = "jason runtime autostart enable";
 
@@ -208,6 +215,7 @@ internal static class StatusChecks
 
             checks.Add(ProviderPlugin(info));
             checks.Add(PluginPackage(info));
+            checks.Add(await PluginAvailabilityAsync(client, info, cancellationToken).ConfigureAwait(false));
             var routes = client is null ? null : await ReadAsync<RoutesDto>(client, Operations.RouteList, cancellationToken).ConfigureAwait(false);
             checks.Add(Route(routes));
             checks.Add(Binding(routes));
@@ -762,6 +770,93 @@ internal static class StatusChecks
             _ => throw new ArgumentOutOfRangeException(nameof(package), package.State, "There is no such package state."),
         };
     }
+
+    /// <summary>The most unavailable plugins the availability fact names, and the most codes it names for one: past them it counts.</summary>
+    private const int MostNamed = 10;
+
+    /// <summary>
+    /// Whether every plugin in the active snapshot can run, read from <c>plugin.list</c>: each one this machine holds back
+    /// — <c>unavailable</c>, which only an environmental problem makes a plugin — named with its problem codes. Optional:
+    /// work routed to an unavailable plugin fails at the claim, which refuses it with <c>plugin_unavailable</c> before a
+    /// child exists, and an unavailable notification plugin delivers nothing; nothing else stops. And an installation
+    /// with no plugin, or no route, is ready while no provider work can run at all, so a plugin's availability never
+    /// decides readiness.
+    /// </summary>
+    /// <remarks>
+    /// Only the runtime's own words are quoted: an id a package can have, and codes that are words. A problem's message is
+    /// a sentence about this machine — a path, a program, a version a vendor's tool printed — and a manifest's name is
+    /// its author's text, so neither is, and the fact names the listing that has them. A bundle carries this fact as it
+    /// is, beside its own plugin list, which keeps words of the same two kinds and never a message.
+    /// </remarks>
+    private static async Task<StatusCheck> PluginAvailabilityAsync(RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
+    {
+        const string Name = "plugin_availability";
+        if (client is null || info is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so whether its plugins are available was not asked.", null);
+        }
+
+        var registry = await ReadAsync<PluginRegistryDto>(client, Operations.PluginList, cancellationToken).ConfigureAwait(false);
+        if (registry?.Plugins is not { } listed)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "plugin.list did not answer, so whether each plugin is available is not known.", null);
+        }
+
+        var plugins = listed.Where(plugin => plugin is not null).ToList();
+        if (plugins.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "No plugin is installed, so none is unavailable.", null);
+        }
+
+        var unavailable = plugins.Where(plugin => plugin.Status == PluginStatus.Unavailable).ToList();
+        if (unavailable.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, string.Create(CultureInfo.InvariantCulture, $"Every plugin installed is available ({plugins.Count})."), null);
+        }
+
+        var named = string.Join(" ", unavailable.Take(MostNamed).Select(UnavailableLine));
+        var more = unavailable.Count - MostNamed;
+        if (more > 0)
+        {
+            named += string.Create(CultureInfo.InvariantCulture, $" {more} more {(more == 1 ? "plugin is" : "plugins are")} unavailable.");
+        }
+
+        return new StatusCheck(
+            Name,
+            false,
+            CheckState.Failed,
+            named
+                + " This machine holds an unavailable plugin back, not its package. Work routed to such a plugin fails at the claim, "
+                + "and a notification plugin delivers nothing; nothing else stops, so this check never decides readiness. "
+                + $"`{Repair.ListPlugins}` says what each problem is, and `{Repair.ReloadPlugins}` reads the plugins again once it is repaired.",
+            null);
+    }
+
+    private static string UnavailableLine(PluginDto plugin)
+    {
+        var who = PluginIds.IsWellFormed(plugin.Id) ? plugin.Id : "A plugin whose id no package can have";
+        var codes = (plugin.Problems ?? [])
+            .Select(problem => problem?.Code)
+            .OfType<string>()
+            .Where(IsWord)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (codes.Count == 0)
+        {
+            return $"{who} is unavailable.";
+        }
+
+        var more = codes.Count > MostNamed ? string.Create(CultureInfo.InvariantCulture, $", and {codes.Count - MostNamed} more") : string.Empty;
+        // "its problems", never "unavailable:": the loader lists a plugin's warnings before its environmental problems, and
+        // which code is a warning is the runtime's vocabulary, so a colon would read the first code as the cause.
+        return $"{who} is unavailable; its problems: {string.Join(", ", codes.Take(MostNamed))}{more}.";
+    }
+
+    /// <summary>A code as the runtime spells one: a lowercase letter, then lowercase letters, digits and underscores, 64 at most.</summary>
+    private static bool IsWord(string code) =>
+        code.Length is > 0 and <= 64
+        && char.IsAsciiLetterLower(code[0])
+        && code.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_');
 
     private static StatusCheck Route(RoutesDto? routes)
     {

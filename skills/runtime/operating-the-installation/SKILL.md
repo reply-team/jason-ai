@@ -215,7 +215,10 @@ jason plugin reload --reason "installed my plugin"
 `jason plugin list` prints the active snapshot: every plugin with its digest, the capabilities it was granted,
 and any problems that make it unavailable. A plugin reported `unavailable` is usually environmental — the
 program it needs is not on the `PATH` this runtime started with, which is why a plugin that works from your
-terminal can be unavailable to a runtime that started at logon.
+terminal can be unavailable to a runtime that started at logon. `jason status` names each unavailable plugin
+with its problem codes in its optional `plugin_availability` check, which never makes the installation not
+ready: work routed to such a plugin fails at the claim, and a notification plugin delivers nothing; nothing
+else stops.
 
 `jason plugin reload` reads every package again and swaps the snapshot, or keeps the old one and says what is
 wrong. It is all or nothing: a package problem rejects the whole reload, and the runtime carries on with the

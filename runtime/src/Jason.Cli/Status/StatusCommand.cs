@@ -38,12 +38,12 @@ public static class StatusCommand
                                         within the runtime's live cap · 'jason' resolves on PATH, in this shell
                                         or in every shell started from now on
         Optional — absent never fails:  a provider plugin is installed · each plugin package this release
-                                        publishes is the one installed · a route is configured · a binding
-                                        names an account · a provider CLI you name answers · the skill packs
-                                        are deployed to an agent harness · autostart is registered ·
-                                        notifications reach you · a UI is installed, and the default one is
-                                        this release's · the harness root can take the first project or
-                                        campaign
+                                        publishes is the one installed · every plugin installed is available ·
+                                        a route is configured · a binding names an account · a provider CLI
+                                        you name answers · the skill packs are deployed to an agent harness ·
+                                        autostart is registered · notifications reach you · a UI is installed,
+                                        and the default one is this release's · the harness root can take the
+                                        first project or campaign
 
         The path check is ok in two cases. 'jason' resolves in this shell; or it does not, and this account
         keeps its directory for shells not yet started — its Path value on Windows, on macOS and Linux the one
@@ -73,6 +73,13 @@ public static class StatusCommand
         that id installed, by content digest. An earlier release's package fails it, and since no command
         installs a package, the fact names the lines that place this release's; one built or edited here
         passes, and says so. A development build compares with its own tree, and the fact names the build.
+
+        The availability check names each plugin 'jason plugin list' reports unavailable, with its problem codes
+        and never their text. Each is about this machine rather than the package — most often a program the
+        plugin runs is not where the runtime looks. Work routed to such a plugin fails at the claim, and a
+        notification plugin delivers nothing; nothing else stops, so the check never decides readiness.
+        'jason plugin list' says what each problem is, and 'jason plugin reload' reads the plugins again once
+        it is repaired.
 
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. Which provider you use is yours, so this build

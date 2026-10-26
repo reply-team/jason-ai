@@ -336,10 +336,11 @@ otherwise: half of what it reports is not the runtime's to know.
 |---|---|
 | the runtime answers | a provider plugin is installed |
 | the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
-| migrations are applied | a route is configured |
-| the plugin registry is alive (zero plugins is alive) | a binding names an account |
-| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
+| migrations are applied | every plugin installed is available |
+| the plugin registry is alive (zero plugins is alive) | a route is configured |
+| role skills are present, named after their directories and within the runtime's live cap | a binding names an account |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a provider CLI **you name** answers |
+| | the skill packs are deployed to an agent harness |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
@@ -384,6 +385,13 @@ the two lines — the checksum match and the unpack into `~/.jason/plugins/reply
 — then `jason plugin reload`. A package with the same version or a later one passes, and the fact says it is a
 later release's package or one built or edited on this machine; no package of that id is absent. A development
 build compares with its own tree, and the fact names the build it compared with.
+
+`plugin_availability` names each plugin `jason plugin list` reports `unavailable`, with its problem codes and never
+their text — `reply is unavailable; its problems: executable_missing.` Such a problem is about this machine rather than
+the package, most often a program the plugin runs that is not on the PATH the runtime started with. Work routed to such
+a plugin fails at the claim, and a notification plugin delivers nothing; nothing else stops, so the check never decides
+`ready`. `jason plugin list` says what each problem is, and once it is repaired `jason plugin reload` reads the plugins
+again.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 
