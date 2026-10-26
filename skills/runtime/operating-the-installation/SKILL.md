@@ -302,9 +302,9 @@ will not start.
 runtime, replaces the executable and starts it again. `jason update rollback` puts back the version the update
 replaced. `jason update status` says where an in-flight update stands, or what the last completed one recorded; it
 needs no runtime either. From 0.20.0, Jason's own installation on 0.18.x or earlier updates through 0.19.0:
-`jason update apply --version 0.19.0`, then `jason update apply`. Its own `jason update check` still names
-`jason update apply`, and that apply refuses with `update_not_directly_applicable`, naming 0.19.0. A package manager's
-upgrade goes straight to the newest release.
+`jason update apply --version 0.19.0`, then `jason update apply`. Its own `jason update check` names 0.19.0 as
+`install_first` and its apply as `upgrade_command`, and a plain `jason update apply` refuses with
+`update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
 
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the

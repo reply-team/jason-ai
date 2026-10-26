@@ -303,8 +303,9 @@ made with `--ref` stays at its ref, a directory is read where it stands, and a d
 record names, because the tag its own version names is not published yet.
 
 From 0.20.0, Jason's own installation on 0.18.x or earlier updates through 0.19.0: `jason update apply --version 0.19.0`,
-then `jason update apply`. Its own `jason update check` still names `jason update apply`, and that apply refuses with
-`update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
+then `jason update apply`. Its own `jason update check` names 0.19.0 as `install_first` and its apply as
+`upgrade_command`, and a plain `jason update apply` refuses with `update_not_directly_applicable`, naming 0.19.0. A
+package manager's upgrade goes straight to the newest release.
 
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,

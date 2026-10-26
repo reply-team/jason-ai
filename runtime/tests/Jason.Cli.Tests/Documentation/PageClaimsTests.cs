@@ -1,7 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Cli.Doctor;
+using Jason.Cli.Tests.Status;
+using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
@@ -1993,6 +1998,80 @@ public partial class PageClaimsTests
             "The folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — is never touched, `--purge-data` included: it is yours.",
             Flat(Page("README.md")),
             StringComparison.Ordinal);
+
+    /// <summary>
+    /// The four names the pages give for what an installation reports about its plugins are the names the code writes:
+    /// <c>jason status</c> names the one check, <c>jason update check</c> the three fields of its answer. A name the code
+    /// does not write is a name no agent will find in an answer.
+    /// </summary>
+    [Theory]
+    [InlineData("plugin_availability")]
+    [InlineData("plugin_updates")]
+    [InlineData("install_first")]
+    [InlineData("upgrade_command")]
+    public async Task The_code_writes_the_names_the_pages_give_for_what_is_reported_about_plugins(string name)
+    {
+        using var dir = new TempPaths();
+        StatusCommandTests.Running(dir);
+        var output = new StringWriter();
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output), TestContext.Current.CancellationToken);
+        var written = StatusCommandTests.Read(output).Checks.Select(check => check.Name)
+            .Concat(JsonNode.Parse(JsonSerializer.Serialize(
+                new UpdateCheckResponse("0.1.0", "0.2.0", true, DateTimeOffset.UnixEpoch, null, "jason update apply", null, null),
+                JasonJson.Options))!.AsObject().Select(field => field.Key))
+            .ToList();
+
+        Assert.Contains(name, written);
+    }
+
+    /// <summary>
+    /// And the pages that say them say them as written. The install page names the check and the fields that send an
+    /// installation below the floor through the release that reaches it; the operating skill names all four, since it is
+    /// the page that reads the answers out; the troubleshooting skill names the check an unavailable plugin is read from.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/INSTALL.md", "plugin_availability")]
+    [InlineData("docs/INSTALL.md", "install_first")]
+    [InlineData("docs/INSTALL.md", "upgrade_command")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "plugin_availability")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "plugin_updates")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "install_first")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "upgrade_command")]
+    [InlineData("skills/runtime/troubleshooting-jason/SKILL.md", "plugin_availability")]
+    public void The_pages_name_what_is_reported_about_plugins_as_the_code_writes_it(string page, string name) =>
+        Assert.Contains($"`{name}`", Page(page.Split('/')), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The golden path says the check names a plugin's problem codes, as the check does and as the install page says: the
+    /// text of a problem is a sentence about this machine, and the check never quotes it.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_says_the_check_names_problem_codes()
+    {
+        var text = Flat(Page("docs", "golden-path.md"));
+
+        Assert.Contains("unavailable, with its problem codes, in its `plugin_availability` check.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("with its problems, in its `plugin_availability` check", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An installation below the newest release's floor is told the version to install first. Its own
+    /// <c>jason update check</c> names that version as <c>install_first</c> and its apply as <c>upgrade_command</c>; the
+    /// pages once said the check still named a plain <c>jason update apply</c>, which sent the reader into the refusal.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/INSTALL.md")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md")]
+    public void The_pages_say_the_check_names_the_version_to_install_first_below_the_floor(string page)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains(
+            "Its own `jason update check` names 0.19.0 as `install_first` and its apply as `upgrade_command`, and a plain `jason update apply` refuses with `update_not_directly_applicable`, naming 0.19.0.",
+            text,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("still names `jason update apply`", text, StringComparison.Ordinal);
+    }
 
     /// <summary>The digest of the README's prompt.</summary>
     private const string PromptDigest = "sha256:177e63a43f8718c03aa20301d3c8fb7ca3c515b902fe71cbf232080256012720";

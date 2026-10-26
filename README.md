@@ -474,7 +474,7 @@ jason decision answer <decision-id> --answer "pause it" --actor human:you@exampl
 When the provider refuses an account, or one sending account under it, for something the work cannot change, such as
 billing, a plan's allowance or a disconnected channel, the runtime keeps that as a **block** and holds the work it
 concerns until a call gets past it. A person who has removed the cause says so under their name, and the next scan lets
-the work go; an agent cannot clear a block:
+the work go; a clear that comes from a role or from a run is refused, and so is one that names no person:
 
 ```sh
 jason block list --human

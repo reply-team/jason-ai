@@ -75,6 +75,24 @@ public sealed class ThirdPartyNoticesTests
         Assert.Contains(problems, problem => problem.Contains("Microsoft.NETCore.App.Runtime", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A runtime pack is named to the major and minor the executable carries. The patch is the SDK's choice on the machine
+    /// that wrote the file and the runtime the executable is published with may not be that one, so a heading that names
+    /// one claims a patch nothing here holds to.
+    /// </summary>
+    [Fact]
+    public void A_runtime_pack_named_to_a_patch_is_refused()
+    {
+        var closure = ThirdPartyNotices.Closure.Of(Read(ThirdPartyNotices.Assets));
+        var notices = Notices();
+        var doctored = Regex.Replace(notices, @"^(Runtime pack: Microsoft\.NETCore\.App\.Runtime\.[a-z0-9-]+ \d+\.\d+)$", "$1.12", RegexOptions.Multiline);
+        Assert.NotEqual(notices, doctored);
+
+        var problems = ThirdPartyNotices.Problems(doctored, closure);
+
+        Assert.Contains(problems, problem => problem.Contains("No section for the runtime pack Microsoft.NETCore.App.Runtime", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void A_runtime_section_holding_no_licence_or_notices_is_refused()
     {
@@ -210,7 +228,7 @@ internal static partial class ThirdPartyNotices
 
         foreach (var framework in closure.Frameworks)
         {
-            var heading = new Regex($@"^Runtime pack: {Regex.Escape(framework)}\.Runtime\.[a-z0-9-]+ {closure.Major}\.{closure.Minor}\.\d+$", RegexOptions.Multiline).Match(notices);
+            var heading = new Regex($@"^Runtime pack: {Regex.Escape(framework)}\.Runtime\.[a-z0-9-]+ {closure.Major}\.{closure.Minor}$", RegexOptions.Multiline).Match(notices);
             if (!heading.Success)
             {
                 problems.Add($"No section for the runtime pack {framework}.Runtime of {closure.Major}.{closure.Minor}, which the executable carries.");

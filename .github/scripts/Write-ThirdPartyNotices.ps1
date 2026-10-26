@@ -164,7 +164,10 @@ foreach ($name in $shared) {
     foreach ($group in $groups.Values) {
         $first = $group.Packs[0]
         Add-Line
-        Add-Heading "Runtime pack: $($first.Id) $($first.Version)" '-'
+        # To major.minor: the patch is the SDK's on the machine that runs this, and the executable is published with
+        # whatever runtime pack the publishing machine's SDK carries, so a patch here would claim one nothing holds to.
+        $majorMinor = ($first.Version -split '\.')[0..1] -join '.'
+        Add-Heading "Runtime pack: $($first.Id) $majorMinor" '-'
         $others = @($group.Packs | Select-Object -Skip 1 | ForEach-Object Rid)
         if ($others.Count -gt 0) {
             Add-Line "The packs for $($others -join ' and ') hold the same two texts."
@@ -174,7 +177,7 @@ foreach ($name in $shared) {
         Add-Line
         Add-Line $group.Texts[1]
         Add-Line
-        $packNotices[$group.Texts[1]] = "$($first.Id) $($first.Version)"
+        $packNotices[$group.Texts[1]] = "$($first.Id) $($majorMinor)"
     }
 }
 

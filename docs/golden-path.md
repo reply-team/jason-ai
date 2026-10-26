@@ -188,7 +188,7 @@ The reload reads every package, recomputes each content digest, freezes the rout
 snapshots together — or refuses the lot and keeps what was working. `plugin list` shows the package as `valid`
 with its digest and what it was granted; `route resolve` says which plugin would perform one operation for one
 campaign, and why it could not. After a reload, `jason status` also names a plugin that is installed but
-unavailable, with its problems, in its `plugin_availability` check.
+unavailable, with its problem codes, in its `plugin_availability` check.
 
 ## 6. Create the work
 
