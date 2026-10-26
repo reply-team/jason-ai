@@ -94,8 +94,8 @@ public class UpdateApplierTests
         await applier.ApplyAsync(Request(installation), Ct);
 
         Assert.Equal(
-            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy"],
-            applier.Steps.Select(step => step.Split(' ', ':')[0]).Take(7));
+            ["staged", "drained", "stopped", "kept", "swapped", "plugins", "started", "healthy"],
+            applier.Steps.Select(step => step.Split(' ', ':')[0]).Take(8));
     }
 
     /// <summary>The swap moves files: the staged file becomes the installed one, and nothing is copied.</summary>
@@ -247,6 +247,10 @@ public class UpdateApplierTests
         Assert.Contains("/checksums.txt", installation.Release.Requested);
         Assert.Contains("/jason-ui.zip", installation.Release.Requested);
         Assert.All(installation.Release.Requested, address => Assert.DoesNotContain("/v", address, StringComparison.Ordinal));
+
+        // And so does the plugins step, which reads the release once more.
+        Assert.NotEmpty(installation.FetchedForPlugins);
+        Assert.All(installation.FetchedForPlugins, fetched => Assert.DoesNotContain("/v", fetched.Path, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -269,7 +273,7 @@ public class UpdateApplierTests
 
         // No runtime was ever started here, so the drain and the stop are the sentences that used to hide.
         Assert.Equal(
-            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete", "skills", "ui"],
+            ["staged", "drained", "stopped", "kept", "swapped", "plugins", "started", "healthy", "complete", "skills", "ui"],
             applier.Steps.Select(step => step.Split(':')[0]));
         Assert.All(applier.Steps, step => Assert.Contains(": ", step, StringComparison.Ordinal));
     }

@@ -52,14 +52,21 @@ public sealed class FakeRelease : HttpMessageHandler
     /// A plugin package the release publishes beside its archives: the file, named in the manifest's <c>plugins</c> with its
     /// version and content digest, and listed in checksums.txt after what is listed there already. <paramref name="checksum"/>
     /// is what that line says, the package's own hash when not given; <paramref name="contentDigest"/> is what the manifest
-    /// says the unpacked tree hashes to.
+    /// says the unpacked tree hashes to. <paramref name="earlier"/> are the earlier versions the record holds beside it.
     /// </summary>
-    public FakeRelease WithPlugin(string id, SemanticVersion version, byte[] zip, string contentDigest, string? checksum = null)
+    public FakeRelease WithPlugin(
+        string id,
+        SemanticVersion version,
+        byte[] zip,
+        string contentDigest,
+        string? checksum = null,
+        IEnumerable<(SemanticVersion Version, string Digest)>? earlier = null)
     {
         var asset = $"jason-plugin-{id}.zip";
         _files[asset] = zip;
+        var recorded = string.Join(", ", (earlier ?? []).Append((version, contentDigest)).Select(entry => $"\"{entry.Item1}\": \"{entry.Item2}\""));
         _plugins[id] = $$"""
-            "{{id}}": { "version": "{{version}}", "asset": "{{asset}}", "digest": "{{contentDigest}}", "recorded": { "{{version}}": "{{contentDigest}}" } }
+            "{{id}}": { "version": "{{version}}", "asset": "{{asset}}", "digest": "{{contentDigest}}", "recorded": { {{recorded}} } }
             """;
         _files[ReleaseAssets.Manifest] = Encoding.UTF8.GetBytes(Manifest());
         var listed = Encoding.UTF8.GetString(_files[ReleaseAssets.Checksums]);

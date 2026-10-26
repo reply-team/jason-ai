@@ -63,6 +63,7 @@ public class UpdateLedgerTests
     [InlineData(UpdateStep.Stopped, "stopped")]
     [InlineData(UpdateStep.Kept, "kept")]
     [InlineData(UpdateStep.Swapped, "swapped")]
+    [InlineData(UpdateStep.Plugins, "plugins")]
     [InlineData(UpdateStep.Started, "started")]
     [InlineData(UpdateStep.Healthy, "healthy")]
     [InlineData(UpdateStep.Complete, "complete")]
@@ -74,6 +75,45 @@ public class UpdateLedgerTests
         Assert.Equal(step, UpdateLedger.Read(json).Step);
     }
 
+    /// <summary>
+    /// The packages the plugins step replaces are read back as they were written, each with both versions and both
+    /// digests: what is in place after a kill is compared with them, so a field lost here is a package moved twice.
+    /// </summary>
+    [Fact]
+    public void The_plugin_packages_a_ledger_names_are_read_back_as_they_were_written()
+    {
+        var written = Ledger() with
+        {
+            Step = UpdateStep.Plugins,
+            Plugins = [new UpdatePluginReplacement("example", SemanticVersion.Parse("1.1.0"), Digest('1'), SemanticVersion.Parse("1.2.0"), Digest('2'))],
+        };
+
+        var read = UpdateLedger.Read(written.ToJson());
+
+        var plugin = Assert.Single(read.Plugins);
+        Assert.Equal(written.Plugins[0], plugin);
+        Assert.Equal(written.ToJson(), read.ToJson());
+        Assert.Contains("\"from_digest\": \"" + Digest('1') + "\"", written.ToJson(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A ledger written by a build before the plugins step, as one handed over at <c>swapped</c> is, carries no
+    /// <c>plugins</c>: it reads as none, and the step decides for itself.
+    /// </summary>
+    [Fact]
+    public void A_ledger_with_no_plugins_reads_as_naming_none()
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse((Ledger() with { Step = UpdateStep.Swapped }).ToJson())!.AsObject();
+        Assert.True(node.Remove("plugins"));
+
+        var read = UpdateLedger.Read(node.ToJsonString());
+
+        Assert.Empty(read.Plugins);
+        Assert.Equal(UpdateStep.Swapped, read.Step);
+    }
+
+    private static string Digest(char fill) => "sha256:" + new string(fill, 64);
+
     [Theory]
     [MemberData(nameof(NotLedgers))]
     public void A_document_that_is_not_a_ledger_is_refused_rather_than_half_read(string what, string json)
@@ -83,6 +123,19 @@ public class UpdateLedgerTests
         Assert.Equal(UpdateLedgerException.Invalid, refused.Code);
         Assert.False(string.IsNullOrWhiteSpace(refused.Message), $"{what} was refused without saying why");
     }
+
+    private static string Plugins(string id, string fromDigest) =>
+        $$"""
+        "plugins": [ { "id": "{{id}}", "from": "1.1.0", "from_digest": "{{fromDigest}}", "to": "1.2.0", "to_digest": "{{Digest('2')}}" } ]
+        """;
+
+    private static string PluginNamedTwice(string id) =>
+        $$"""
+        "plugins": [
+          { "id": "{{id}}", "from": "1.1.0", "from_digest": "{{Digest('1')}}", "to": "1.2.0", "to_digest": "{{Digest('2')}}" },
+          { "id": "{{id}}", "from": "1.1.0", "from_digest": "{{Digest('1')}}", "to": "1.2.0", "to_digest": "{{Digest('2')}}" }
+        ]
+        """;
 
     public static TheoryData<string, string> NotLedgers()
     {
@@ -97,6 +150,10 @@ public class UpdateLedgerTests
             { "no install path", good.Replace("\"install_path\"", "\"install\"", StringComparison.Ordinal) },
             { "a moment with no zone", good.Replace("2026-09-19T12:00:00.000Z", "2026-09-19T12:00:00.000", StringComparison.Ordinal) },
             { "a truncated document", good[..(good.Length / 2)] },
+            { "plugins that are not a list", good.Replace("\"plugins\": []", "\"plugins\": {}", StringComparison.Ordinal) },
+            { "a plugin id that walks", good.Replace("\"plugins\": []", Plugins("../x", Digest('1')), StringComparison.Ordinal) },
+            { "a plugin digest that is not one", good.Replace("\"plugins\": []", Plugins("example", "sha256:abc"), StringComparison.Ordinal) },
+            { "a plugin named twice", good.Replace("\"plugins\": []", PluginNamedTwice("example"), StringComparison.Ordinal) },
         };
     }
 

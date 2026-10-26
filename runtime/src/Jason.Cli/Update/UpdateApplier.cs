@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
+using Jason.Cli.Files;
+using Jason.Cli.Plugins;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Ui;
@@ -25,7 +27,7 @@ public sealed record UpdateRequest(Uri Feed, SemanticVersion? Version, TimeSpan 
 /// </summary>
 /// <remarks>
 /// <para>
-/// The order is staged, drained, stopped, kept, swapped, started, healthy, complete — and then the skills and the UI,
+/// The order is staged, drained, stopped, kept, swapped, plugins, started, healthy, complete — and then the skills and the UI,
 /// which are no steps of the ledger (<see cref="RedeploySkillsAsync"/>, <see cref="PlaceUiAsync"/>). Between <c>kept</c> and
 /// <c>swapped</c> the install path is <b>empty</b> — the old executable has been moved aside, its notices after it,
 /// and the new one is not in place yet — and that window is a few renames wide. It is also the one window a person
@@ -69,8 +71,20 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// </summary>
     internal HeldFileRule HeldFiles { get; init; } = InstallationRemovers.HeldFiles;
 
+    /// <summary>
+    /// The same rule for a rename of a plugin package's directory, with access denied counted as a hold: Windows refuses
+    /// a directory whose file is held open that way, as the plugin installer's own moves count it.
+    /// </summary>
+    private HeldFileRule PackageMoves => HeldFiles with { AccessDeniedCounts = true };
+
     /// <summary>How a pause between two tries is taken: <see cref="HeldFileRetry.Sleep"/> outside a test, which counts them.</summary>
     internal Action<TimeSpan, CancellationToken> Pause { get; init; } = HeldFileRetry.Sleep;
+
+    /// <summary>
+    /// How a plugin package kept aside is renamed back into its empty place after a refused replacement:
+    /// <see cref="Directory.Move"/> outside a test.
+    /// </summary>
+    internal Action<string, string> MovePackageBack { get; init; } = Directory.Move;
 
     /// <summary>
     /// What loads every assembly this process may still need, before <c>kept</c> renames the file it may be running as:
@@ -273,11 +287,12 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     }
 
     /// <summary>
-    /// Why something was not updated, as one line. A deployment that gave no words — an exception with an empty message,
-    /// a refusal that wrote nothing — is said to have given none, so the line never reads "not updated — ;".
+    /// Why something was not updated, as one line before <c>; run:</c>, without the full stop that ends its own sentence.
+    /// A deployment that gave no words — an exception with an empty message, a refusal that wrote nothing — is said to
+    /// have given none, so the line never reads "not updated — ;".
     /// </summary>
     private static string ReasonSaid(string said) =>
-        OneLine(said) is { Length: > 0 } reason ? reason : "no reason was given";
+        OneLine(said).TrimEnd('.') is { Length: > 0 } reason ? reason : "no reason was given";
 
     /// <summary>What a deployment said across lines, as one line: a step's line is one line.</summary>
     private static string OneLine(string text) =>
@@ -453,6 +468,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         UpdateStep.Stopped => await StopAsync(ledger, cancellationToken).ConfigureAwait(false),
         UpdateStep.Kept => Keep(ledger),
         UpdateStep.Swapped => Swap(ledger),
+        UpdateStep.Plugins => await ReplacePluginsAsync(ledger, request, cancellationToken).ConfigureAwait(false),
         UpdateStep.Started => await StartAsync(ledger, cancellationToken).ConfigureAwait(false),
         UpdateStep.Healthy => await HealthyAsync(ledger, cancellationToken).ConfigureAwait(false),
         UpdateStep.Complete => Done(ledger),
@@ -723,6 +739,225 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
         return ledger;
     }
+
+    /// <summary>
+    /// Each plugin package installed as an earlier version the release records is replaced by the release's own, and the
+    /// one it replaced is kept under <c>update/previous/plugins/</c> for a rollback. A package the record does not know —
+    /// built or edited here — is left as it is, and so is one that is current, later, unreadable or not installed; each
+    /// says so on a line of its own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After <c>swapped</c>, so the step is always the new build's: the build that put the executable in place hands the
+    /// rest over there. Before <c>started</c>, because no runtime runs between the two: the new runtime's first load reads
+    /// the new package.
+    /// </para>
+    /// <para>
+    /// It never fails the update. The executable is swapped and the runtime stopped, so a download must not hold that
+    /// hostage: a package that could not be fetched, checked or moved is left as it was — the kept copy put back where it
+    /// had gone aside — and its line says why and names the command that places it. A person's interrupt is not such a
+    /// refusal: it stops the apply here, and the next one carries on from the ledger.
+    /// </para>
+    /// <para>
+    /// The packages it replaces are written to the ledger before the first of them moves. Taken again after a kill, it
+    /// reads each one's place: the release's digest is done, the earlier one's is still to do, nothing there beside a
+    /// kept copy is a move half made, and anything else is somebody's since and is left.
+    /// </para>
+    /// </remarks>
+    private async Task<UpdateLedger> ReplacePluginsAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
+    {
+        var pinned = request with { Version = ledger.ToVersion };
+        UpdateManifest? manifest = null;
+        string? unread = null;
+        try
+        {
+            manifest = await ReadFeedAsync(pinned, cancellationToken).ConfigureAwait(false);
+            if (manifest.Version != ledger.ToVersion)
+            {
+                unread = $"The release at {Address(pinned)} is {manifest.Version}, and this update is to {ledger.ToVersion}.";
+                manifest = null;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            // Everything, as the skills catch everything: an update refused over a plugin package is the one outcome this
+            // step must never have.
+            unread = error.Message;
+        }
+
+        if (ledger.Plugins.Count > 0)
+        {
+            foreach (var plugin in ledger.Plugins)
+            {
+                await ReplaceAsync(plugin, manifest, unread, Address(pinned), cancellationToken).ConfigureAwait(false);
+            }
+
+            return ledger;
+        }
+
+        if (manifest is null)
+        {
+            env.Error.WriteLine(unread);
+            Say(UpdateStep.Plugins, $"not checked — {ReasonSaid(unread ?? string.Empty)}; run: jason status");
+            return ledger;
+        }
+
+        if (manifest.Plugins.Count == 0)
+        {
+            Say(UpdateStep.Plugins, $"{ledger.ToVersion} publishes no plugin package");
+            return ledger;
+        }
+
+        var plan = PluginUpdates.Plan(manifest, env.Paths);
+        var behind = plan
+            .Where(plugin => plugin.State == PluginPlanState.Behind)
+            .Select(plugin => new UpdatePluginReplacement(plugin.Id, plugin.Installed!.Value, plugin.InstalledDigest!, plugin.Package.Version, plugin.Package.Digest))
+            .ToList();
+
+        string? unrecorded = null;
+        if (behind.Count > 0)
+        {
+            try
+            {
+                // What an earlier update kept goes before this one keeps anything: a rollback of this update puts back this
+                // update's packages, and nothing of this update's is kept yet, since nothing below has moved.
+                DirectoryTrees.Delete(update.PreviousPlugins);
+                ledger = ledger with { Plugins = behind };
+                Record(ledger, UpdateStep.Plugins);
+            }
+            catch (Exception error) when (error is UpdateException or IOException or UnauthorizedAccessException)
+            {
+                // Nothing moves that the ledger does not name, so a package that cannot be named there is not moved.
+                unrecorded = error.Message;
+                ledger = ledger with { Plugins = [] };
+            }
+        }
+
+        foreach (var plugin in plan)
+        {
+            if (plugin.State != PluginPlanState.Behind)
+            {
+                Say(UpdateStep.Plugins, Left(plugin));
+            }
+            else if (unrecorded is not null)
+            {
+                NotReplaced(plugin.Id, plugin.Installed!.Value, unrecorded);
+            }
+            else
+            {
+                await ReplaceAsync(behind.Single(entry => entry.Id == plugin.Id), manifest, unread, Address(pinned), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return ledger;
+    }
+
+    /// <summary>What a package the step leaves as it is says about itself.</summary>
+    private static string Left(PluginPlan plugin) => plugin.State switch
+    {
+        PluginPlanState.NotInstalled => $"{plugin.Id} is not installed, so none was placed; run: jason plugin install {plugin.Id}",
+        PluginPlanState.Unreadable => $"{plugin.Id} could not be read as a package, so it was left as it is",
+        PluginPlanState.Differs => $"{plugin.Id} differs from every package a release published, so it was left as it is",
+        PluginPlanState.Current => $"{plugin.Id} {plugin.Installed} is current",
+        PluginPlanState.Later => $"{plugin.Id} {plugin.Installed} is later than the {plugin.Package.Version} this release publishes, so it was left as it is",
+        _ => throw new ArgumentOutOfRangeException(nameof(plugin), plugin.State, "There is no such package state."),
+    };
+
+    /// <summary>
+    /// One package the ledger names: replaced, or found replaced already, or left as it was with the reason and the command
+    /// that places it.
+    /// </summary>
+    private async Task ReplaceAsync(UpdatePluginReplacement plugin, UpdateManifest? manifest, string? unread, Uri release, CancellationToken cancellationToken)
+    {
+        var target = env.Paths.PluginPackageDirectory(plugin.Id);
+        var kept = update.PreviousPlugin(plugin.Id);
+        var installed = PluginUpdates.InstalledDigest(target);
+        if (string.Equals(installed, plugin.ToDigest, StringComparison.Ordinal))
+        {
+            Say(UpdateStep.Plugins, Replaced(plugin));
+            return;
+        }
+
+        PluginInPlace expected;
+        string? keep;
+        if (string.Equals(installed, plugin.FromDigest, StringComparison.Ordinal))
+        {
+            expected = PluginInPlace.Digest(plugin.FromDigest);
+            keep = kept;
+        }
+        else if (!Path.Exists(target) && Directory.Exists(kept))
+        {
+            // Moved aside, and the release's not yet in: a kill between the two moves. The one replaced is already kept.
+            expected = PluginInPlace.Nothing;
+            keep = null;
+        }
+        else
+        {
+            Say(UpdateStep.Plugins, $"{plugin.Id} changed since this update read it, so it was left as it is");
+            return;
+        }
+
+        string cause;
+        try
+        {
+            if (manifest is null)
+            {
+                throw new PluginInstallException(unread ?? string.Empty);
+            }
+
+            if (!manifest.Plugins.TryGetValue(plugin.Id, out var package) || !string.Equals(package.Digest, plugin.ToDigest, StringComparison.Ordinal))
+            {
+                throw new PluginInstallException($"The release no longer publishes {plugin.Id} {plugin.To} as this update read it. Nothing was changed.");
+            }
+
+            await PluginInstaller.PlaceAsync(env, release, plugin.Id, package, expected, keep, PackageMoves, clock, Pause, cancellationToken).ConfigureAwait(false);
+            Say(UpdateStep.Plugins, Replaced(plugin));
+            return;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            cause = error.Message;
+        }
+
+        // Left as it was: a kept copy whose place is empty goes back into it. A rename that fails is said with the refusal,
+        // as the installer's own move back is: it must not fail the update either. Nor is it cancelled, for the same reason
+        // the installer's is not: a package left aside is worse than the wait.
+        if (!Path.Exists(target) && Directory.Exists(kept))
+        {
+            string? stuck;
+            try
+            {
+                stuck = HeldFileRetry.Run(() => MovePackageBack(kept, target), PackageMoves, clock, Pause, CancellationToken.None)?.Message;
+            }
+            catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+            {
+                stuck = failure.Message;
+            }
+
+            if (stuck is not null)
+            {
+                cause = $"{cause} {kept} could not be put back as {target} either: {stuck}";
+            }
+        }
+
+        NotReplaced(plugin.Id, plugin.From, cause);
+    }
+
+    private void NotReplaced(string id, SemanticVersion installed, string cause)
+    {
+        env.Error.WriteLine(cause);
+        Say(UpdateStep.Plugins, $"{id} {installed} not replaced — {ReasonSaid(cause)}; run: jason plugin install {id} --replace");
+    }
+
+    private static string Replaced(UpdatePluginReplacement plugin) => $"{plugin.Id} {plugin.From} -> {plugin.To}";
 
     private async Task<UpdateLedger> StartAsync(UpdateLedger ledger, CancellationToken cancellationToken)
     {

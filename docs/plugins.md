@@ -188,11 +188,13 @@ packages is what an interrupted install left: the runtime never reads it, and an
 the install replaced. Every other package is installed by copying its directory in.
 Step 3 of [the wiring check](golden-path.md) runs the verb.
 The runtime carries the package its own release publishes and says in `system.info`'s `released_plugins` whether the
-one installed is it, by content digest, so `jason status` names an earlier release's package left behind by an update.
-Before the update, `jason update check` names it from the other side: the newer release's manifest records the digest of
-each version on the package's list, so the check says which version is installed and which one that release publishes.
-It never names a package the list does not know: built or edited on that machine, or a version before the list's first
-line, 0.3.2. Whether that one is behind is `jason status`'s to say, by its version.
+one installed is it, by content digest, so `jason status` names an earlier release's package left behind by a package
+manager's upgrade, or by an update that could not replace it. Before the update, `jason update check` names it from the
+other side: the newer release's manifest records the digest of each version on the package's list, so the check says
+which version is installed and which one that release publishes. It never names a package the list does not know: built
+or edited on that machine, or a version before the list's first line, 0.3.2. Whether that one is behind is
+`jason status`'s to say, by its version. `jason update apply` replaces exactly the packages the check names with the new
+release's, held to the same two checks before anything moves, and leaves every other package as it is.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/

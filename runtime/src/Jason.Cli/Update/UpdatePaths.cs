@@ -48,4 +48,13 @@ public sealed class UpdatePaths(JasonPaths paths)
 
     /// <summary>The kept executable, under the name it will be put back as.</summary>
     public string PreviousExecutable => Path.Combine(Previous, ReleaseAssets.ExecutableName);
+
+    /// <summary>Where the plugin packages an update replaced are kept, beside the executable it replaced.</summary>
+    public string PreviousPlugins => Path.Combine(Previous, "plugins");
+
+    /// <summary>
+    /// The kept copy of the plugin package <paramref name="id"/>. The id is held to the plugin id rule by whoever read it,
+    /// a manifest or the ledger, so the name cannot walk anywhere.
+    /// </summary>
+    public string PreviousPlugin(string id) => Path.Combine(PreviousPlugins, id);
 }

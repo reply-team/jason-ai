@@ -114,7 +114,7 @@ nothing to break when an API version retires.
 | `asset` (in `artifacts.<rid>`) | a file name, and only a file name: letters, digits, dot, dash, underscore. Never a path and never a URL. |
 | `sha256` (in `artifacts.<rid>`) | 64 lowercase hexadecimal characters, with no `sha256:` prefix. |
 | `size` (in `artifacts.<rid>`) | the archive's size in bytes, a positive number. |
-| `plugins` | the plugin packages the release publishes beside its archives, by plugin id, or `null`: every release from 0.20.0 names the Reply plugin's, and a release with no list names none. The last field, after `artifacts`. A reader before 0.20.0 skips it, as it skips every root field it does not read. Read by `jason update check` (§5), not by the applier or the advertisement. A malformed `plugins` is refused with the whole feed by every reader from 0.20.0 on, the applier included, so its shape changes only with the schema. |
+| `plugins` | the plugin packages the release publishes beside its archives, by plugin id, or `null`: every release from 0.20.0 names the Reply plugin's, and a release with no list names none. The last field, after `artifacts`. A reader before 0.20.0 skips it, as it skips every root field it does not read. Read by `jason update check` (§5) and by the applier's `plugins` step (§7), not by the advertisement. A malformed `plugins` is refused with the whole feed by every reader from 0.20.0 on, the applier included, so its shape changes only with the schema. |
 | `version` (in `plugins.<id>`) | the version of the package the release publishes, SemVer. |
 | `asset` (in `plugins.<id>`) | the package's file name beside the archives, under the rule an archive's `asset` follows; its line in `checksums.txt` is the one the package is checked against. |
 | `digest` (in `plugins.<id>`) | the package's content digest, `sha256:` and 64 hexadecimal characters: what the runtime computes over the unpacked files, and what `jason plugin list` shows for an installed copy. |
@@ -289,7 +289,9 @@ package the list does not know: built or edited on that machine, or a version be
 The check never names it, since whether it is behind is `jason status`'s to say, by its version; and a package that
 cannot be read is passed over in silence, since what is wrong there is `jason status`'s to say as well. Beside
 `install_first`'s null, `plugin_updates` is null where no package is named or the release is not newer, and `[]`
-where the release is newer and nothing installed here that the record holds is behind.
+where the release is newer and nothing installed here that the record holds is behind. The list and the `plugins` step
+of `jason update apply` (§7) read one plan, so it names exactly the packages the apply replaces; a manager's upgrade
+runs no apply, so after one `jason plugin install <id> --replace` places each.
 
 ## 6. Installing
 
@@ -387,7 +389,7 @@ one-liner in §6 until it is on a build that does; after that, `jason update app
 
 ### The steps, and the ledger that names them
 
-An update is eight steps, and every one of them is written to `~/.jason/update/ledger.json` **before** it is
+An update is nine steps, and every one of them is written to `~/.jason/update/ledger.json` **before** it is
 taken. That file is the update's **ledger**, and it is never called a journal: the journal is the runtime's own
 append-only chronicle inside the database, and this is a single file that one process writes, the next one
 reads, and the update after this one overwrites.
@@ -399,6 +401,7 @@ reads, and the update after this one overwrites.
 | `stopped` | the runtime has been asked to stop, and its process is gone |
 | `kept` | the installed executable has been moved to `~/.jason/update/previous/`, its notice files after it, and the install path is empty |
 | `swapped` | the staged executable has been moved onto the install path, its notice files after it |
+| `plugins` | each plugin package installed as an earlier version the new release records has been replaced by the release's own, and the one it replaced moved to `~/.jason/update/previous/plugins/<id>/` |
 | `started` | a runtime has been started from the new executable |
 | `healthy` | that runtime answers, says it is the version this update installed, and has its migrations applied |
 | `complete` | the update is over, and the ledger stays behind as the record of it |
@@ -416,18 +419,20 @@ picks the sequence up at the step it names, and carries it through.
 all. Either way the applier says what it left behind: work still running keeps its lease, and the runtime that
 comes up next finishes it or its enforcer takes it back.
 
-**The new executable finishes the update.** `jason update apply` runs from the install path, which is the file
-it replaces. The executable is a single file that reads the .NET libraries inside it as it first needs them, and from
+**The new executable finishes the update.** `jason update apply` runs from the install path, which is the file it
+replaces. The executable is a single file that reads the .NET libraries inside it as it first needs them, and from
 `kept` on the file at its own path is no longer the one it is running, so a library first needed after that would be
-read out of another build. So the apply loads every library it can reach before it renames anything, and once
-`swapped` has put the new executable in place it runs `jason update apply` from that executable: the new build reads
-the ledger at `swapped` and takes `started`, `healthy` and `complete`, the skills and the UI, from a file that is its
-own. What it says on standard error is passed on. When it completes, its answer carries every step's line, the ones
-taken before it first; when it refuses, its refusal and its exit code are the apply's. A new executable that cannot be
-run, or that ends any other way — a crash, a kill, an answer cut short — is `update_not_healthy`, naming the step the
-update stands at: typing `jason update apply` again runs the new build, which finishes it, and `jason update rollback`
-puts the old one back. An apply that resumes past `swapped`, typed into the new executable, has nothing to hand over
-and carries on itself. A rollback loads the same before it moves the executable aside.
+read out of another build. So the apply loads every library it can reach before it renames anything, and once `swapped`
+has put the new executable in place it runs `jason update apply` from that executable: the new build reads the ledger at
+`swapped` and takes `plugins`, `started`, `healthy` and `complete`, the skills and the UI, from a file that is its own.
+What it says on standard error is passed on. When it completes, its answer carries every step's line, the ones taken
+before it first; when it refuses, its refusal and its exit code are the apply's. A new executable that cannot be run, or
+that ends any other way — a crash, a kill, an answer cut short — is `update_not_healthy`, naming the step the update
+stands at: typing `jason update apply` again runs the new build, which finishes it, and `jason update rollback` puts the
+old one back. An apply that resumes past `swapped`, typed into the new executable, has nothing to hand over and carries
+on itself. A rollback loads the same before it moves the executable aside. Because the hand-over comes at `swapped`, the
+`plugins` step is always the new build's, whichever build began the update, so it raises no floor: `min_upgrade_from`
+stays 0.19.0.
 
 Every release from 0.20.0 names 0.19.0 as its `min_upgrade_from`, so a build older than 0.19.0 updates to 0.19.0 first;
 that update is performed by the older build, which does neither, so when the two builds carry different .NET patches
@@ -461,19 +466,35 @@ than half-read.
 
 ### What an update does not touch
 
-An update replaces the executable and its two notice files, writes under `~/.jason/update/`, redeploys the
-skills this installation recorded, and places the new release's UI as `ui/default/`. It does not touch the rest of the data directory: not the database, not
-`~/.jason/config/settings.json`, not the plugins under `~/.jason/plugins/`, not the logs, not the
-work directories. Nor does it touch anything you registered with the machine to start Jason — a systemd unit,
+An update replaces the executable and its two notice files, replaces each plugin package installed as an earlier
+release's, writes under `~/.jason/update/`, redeploys the skills this installation recorded, and places the new
+release's UI as `ui/default/`. It does not touch the rest of the data directory: not the database, not
+`~/.jason/config/settings.json` and the grants in it, not any other package under `~/.jason/plugins/`, not the logs,
+not the work directories. Nor does it touch anything you registered with the machine to start Jason — a systemd unit,
 a scheduled task, a login item — because the file at the install path is replaced in place rather than moved
 elsewhere, so whatever points at that path still points at Jason.
 
-So after an update the plugin packages installed are the earlier release's, until you install the new release's.
-Before the update, `jason update check` names each one whose digest the new release's record holds under an earlier
-version (§5), and never a package the list does not know: built or edited on that machine, or a version before the
-list's first line, 0.3.2. After it, `jason status` fails its optional `plugin_package` check and names the installed
-version and the version this release published, and `jason plugin install <id> --replace` places the package, as
-step 3 of [the wiring check](golden-path.md) does.
+Its `plugins` step, between `swapped` and `started`, replaces each plugin package installed as an earlier version the
+new release records — the packages `jason update check` named (§5) — with the release's own. The archive is fetched from
+the release's own directory and held to its line in `checksums.txt`, and the tree it unpacks to to the digest the
+manifest names, before anything moves; the package it replaces is moved to `~/.jason/update/previous/plugins/<id>/`. It
+comes before `started` because no runtime is running there, so no package moves under a runtime and the new runtime's
+first load reads the new package. The packages it replaces are written to the ledger before the first of them moves, so
+a kill anywhere in the step is finished by the next `jason update apply`. A package the record does not know — built or
+edited on that machine, or a version before the list's first line, 0.3.2 — is left byte for byte, and so is one that is
+current, later than the release's, or cannot be read; a plugin that is not installed is not placed. The apply prints one
+`plugins:` line for each package the release publishes: `plugins: reply 0.8.0 -> 0.9.0`,
+`plugins: reply 0.9.0 is current`, or why it was left as it is. A step resumed after a kill prints lines only for the
+packages its ledger names. A release the step cannot read again — the network gone after the swap — gives one line,
+`plugins: not checked — …; run: jason status`, and every package stays as it was. A package that cannot be fetched,
+checked or moved — a download that breaks off, a digest that does not match, a file held open past the wait — is left
+as it was, and the update still stands:
+its line says why and ends `run: jason plugin install <id> --replace`, and until that has run `jason status` fails its
+optional `plugin_package` check, naming the installed version and the version this release published. A release that
+publishes no plugin package says so and names nothing to run. A newer package may request a capability you have not
+granted; the apply grants nothing, and `jason plugin list` shows what each package requests beside what is granted. A
+package manager's upgrade runs no `jason update apply`, so after it `jason plugin install <id> --replace` places the
+package, as step 3 of [the wiring check](golden-path.md) does.
 
 Its last step, after `complete`, is the skills: exactly what `jason skills update` does, at the new release's tag.
 The runtime's own role skills, and each agent harness this machine detects, are redeployed wherever a deployment
@@ -544,8 +565,12 @@ went back to then fails `role_skills`, because its role skills belong to a relea
 until `jason skills update` — or `jason skills install --roles-only`, for the role skills alone — brings them to the
 tag of the version you are on. It leaves the UI where the update put it too, and `jason status` names
 `jason ui install` for the default UI from the newer release, which places the one of the version you are on.
-A rollback leaves the plugins as the update left them as well, and a package the newer release published then reads
-`differs` in `system.info` and passes `plugin_package`.
+A rollback does put back each plugin package the update replaced, from `~/.jason/update/previous/plugins/<id>/`, where
+the package installed is still the one the update placed, or where nothing is installed beside the kept copy — the
+ledger names that package, so an empty place there is the update's own move left half made — and leaves one that
+differs, with the earlier package kept there: the runtime you went back to cannot run without packages it loads, as it
+can without the skills and the UI, and a package changed since the update is somebody's later install, which a rollback
+does not undo.
 
 **The database is restored only while it is certain that nothing has happened since.** That is decided from the
 chronicle: the line it stood at when the new version was declared healthy, against the line it stands at now. If
@@ -917,7 +942,8 @@ the step machine and the only code that renames anything, `UpdatePaths` composes
 `~/.jason/update/`, and `UpdateCodes` holds the refusals above — the table in §7 is read out of it by a test, so
 a code renamed in the code turns this page red rather than quietly disagreeing with it. None of the applier
 opens the database: it renames files, asks the runtime questions and reads the backups directory. `PluginUpdates`,
-beside them, answers the check's `plugin_updates` from the manifest and the plugins directory alone (§5).
+beside them, answers the check's `plugin_updates` from the manifest and the plugins directory alone (§5), and the
+`plugins` step reads the same plan, placing each package through the installer `jason plugin install` uses.
 
 Autostart is the CLI's too, under `Jason.Cli/Autostart/`. `AutostartArtifacts` composes each platform's document
 and reads a command line back out of one, both as pure functions of what they are given; `WindowsTasks` decides,

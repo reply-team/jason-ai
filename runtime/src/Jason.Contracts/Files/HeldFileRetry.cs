@@ -10,9 +10,10 @@ namespace Jason.Contracts.Files;
 /// waits on an open file, so nothing counts as held and the call is tried once.
 /// </para>
 /// <para>
-/// A hold is a sharing violation or a lock violation, read from the exception's HResult, and an access-denied only where
-/// the rule says so. Any other failure is thrown at once, because waiting does not change a permission, a missing
-/// directory or a full disk.
+/// A hold is a sharing violation or a lock violation, read from the exception's HResult, and an access-denied only
+/// where the rule says so, in either form .NET gives it: its own exception, or an IOException carrying
+/// ERROR_ACCESS_DENIED, which is how Windows refuses to rename a directory with a file in it held open. Any other
+/// failure is thrown at once, because waiting does not change a permission, a missing directory or a full disk.
 /// </para>
 /// <para>
 /// The uninstall's remover and the runtime's endpoint descriptor both go through it, so the two agree on what a held file
@@ -80,9 +81,12 @@ public static class HeldFileRetry
     /// <summary>ERROR_LOCK_VIOLATION, as .NET carries it in an exception's HResult.</summary>
     private const int LockViolation = unchecked((int)0x80070021);
 
+    /// <summary>ERROR_ACCESS_DENIED, as .NET carries it in an exception's HResult.</summary>
+    private const int AccessDenied = unchecked((int)0x80070005);
+
     private static bool IsHold(Exception refusal, HeldFileRule rule) =>
         refusal is IOException { HResult: SharingViolation or LockViolation }
-        || (rule.AccessDeniedCounts && refusal is UnauthorizedAccessException);
+        || (rule.AccessDeniedCounts && refusal is UnauthorizedAccessException or IOException { HResult: AccessDenied });
 
     /// <summary>
     /// A pause outside a test: the delay in real time, ended early by a cancellation, which it then throws.

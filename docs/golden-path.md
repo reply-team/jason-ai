@@ -124,9 +124,11 @@ placed, and the verb exits 1 with `load: rejected` in its body and the runtime's
 
 So the package is the one released with your runtime, file for file: it has the content digest of the release's own
 tree, and `jason status` says so in its `plugin_package` check, which fails when the package installed is an earlier
-release's. Where the release cannot be reached, the tree `jason skills install` fetched when the installation was
-taught — this repository at the tag of the release you run, kept in Jason's data directory — holds the same package,
-and copying it into a `~/.jason/plugins/reply` that is not there yet, then `jason plugin reload`, is the same install;
+release's. `jason update apply` keeps it so: it replaces an earlier release's package with the new release's, and
+leaves one edited or built on this machine as it is. Where the release cannot be reached, the tree
+`jason skills install` fetched when the installation was taught — this repository at the tag of the release you run,
+kept in Jason's data directory — holds the same package, and copying it into a `~/.jason/plugins/reply` that is not
+there yet, then `jason plugin reload`, is the same install;
 `<version>` is what `jason --version` prints, up to any `+`:
 
 ```

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Update;
 
@@ -25,6 +26,13 @@ public enum UpdateStep
 
     /// <summary>The staged executable has been moved onto the install path.</summary>
     Swapped,
+
+    /// <summary>
+    /// Each plugin package installed as an earlier version the release records has been replaced by the release's own, the
+    /// one it replaced kept beside the kept executable. The new build's step, before any runtime of it starts, so the
+    /// runtime's first load reads the new package.
+    /// </summary>
+    Plugins,
 
     /// <summary>A runtime has been started from the new executable.</summary>
     Started,
@@ -73,7 +81,8 @@ public sealed record UpdateLedger(
     DateTimeOffset? StoppedAt = null,
     string? BackupFile = null,
     IReadOnlyList<string>? NewlyApplied = null,
-    string? ChronicleId = null)
+    string? ChronicleId = null,
+    IReadOnlyList<UpdatePluginReplacement>? Plugins = null)
 {
     /// <summary>The file's name under the update directory, so nothing composes it from a string twice.</summary>
     public const string FileName = "ledger.json";
@@ -97,6 +106,12 @@ public sealed record UpdateLedger(
     /// <summary>What the new runtime's first start applied, empty where it applied nothing.</summary>
     public IReadOnlyList<string> NewlyApplied { get; init; } = NewlyApplied ?? [];
 
+    /// <summary>
+    /// The plugin packages the <c>plugins</c> step replaces, written before the first of them moves; empty until the step
+    /// has decided, and where it decided there were none.
+    /// </summary>
+    public IReadOnlyList<UpdatePluginReplacement> Plugins { get; init; } = Plugins ?? [];
+
     /// <summary>The same update, one step further on. Nothing else about it changes.</summary>
     public UpdateLedger At(UpdateStep step) => this with { Step = step };
 
@@ -116,6 +131,14 @@ public sealed record UpdateLedger(
             ["backup_file"] = BackupFile,
             ["newly_applied"] = new JsonArray([.. NewlyApplied.Select(m => (JsonNode)JsonValue.Create(m)!)]),
             ["chronicle_id"] = ChronicleId,
+            ["plugins"] = new JsonArray([.. Plugins.Select(plugin => (JsonNode)new JsonObject
+            {
+                ["id"] = plugin.Id,
+                ["from"] = plugin.From.ToString(),
+                ["from_digest"] = plugin.FromDigest,
+                ["to"] = plugin.To.ToString(),
+                ["to_digest"] = plugin.ToDigest,
+            })]),
         };
 
         return document.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
@@ -156,7 +179,8 @@ public sealed record UpdateLedger(
             StoppedAt: Moment(document, "stopped_at", required: false),
             BackupFile: OptionalText(document, "backup_file"),
             NewlyApplied: Migrations(document),
-            ChronicleId: OptionalText(document, "chronicle_id"));
+            ChronicleId: OptionalText(document, "chronicle_id"),
+            Plugins: Replacements(document));
     }
 
     /// <summary>The ledger at this path, or null where there is none: nothing in flight is not a failure.</summary>
@@ -279,6 +303,7 @@ public sealed record UpdateLedger(
         UpdateStep.Stopped => "stopped",
         UpdateStep.Kept => "kept",
         UpdateStep.Swapped => "swapped",
+        UpdateStep.Plugins => "plugins",
         UpdateStep.Started => "started",
         UpdateStep.Healthy => "healthy",
         UpdateStep.Complete => "complete",
@@ -363,7 +388,59 @@ public sealed record UpdateLedger(
 
         return migrations;
     }
+
+    /// <summary>
+    /// The packages the <c>plugins</c> step replaces. Absent in a ledger written before the step existed, or before it
+    /// decided, and read as none: the step then decides. An entry's id becomes a directory's name, so it is held to the id
+    /// rule here, before anything composes a path from it.
+    /// </summary>
+    private static IReadOnlyList<UpdatePluginReplacement> Replacements(JsonObject document)
+    {
+        if (document["plugins"] is null)
+        {
+            return [];
+        }
+
+        if (document["plugins"] is not JsonArray array)
+        {
+            throw new UpdateLedgerException("the ledger's 'plugins' is not a list.");
+        }
+
+        var plugins = new List<UpdatePluginReplacement>(array.Count);
+        foreach (var element in array)
+        {
+            if (element is not JsonObject entry)
+            {
+                throw new UpdateLedgerException("the ledger's 'plugins' holds something that is not a package.");
+            }
+
+            var id = Text(entry, "id");
+            if (!PluginIds.IsWellFormed(id) || plugins.Any(plugin => plugin.Id == id))
+            {
+                throw new UpdateLedgerException($"the ledger's 'plugins' names '{id}', which is not a plugin's id or is named twice.");
+            }
+
+            plugins.Add(new UpdatePluginReplacement(id, Version(entry, "from"), PackageDigestOf(entry, "from_digest"), Version(entry, "to"), PackageDigestOf(entry, "to_digest")));
+        }
+
+        return plugins;
+    }
+
+    private static string PackageDigestOf(JsonObject entry, string name)
+    {
+        var text = Text(entry, name);
+        return UpdateManifest.IsPackageDigest(text)
+            ? text
+            : throw new UpdateLedgerException($"the ledger's '{name}' is not a package's digest.");
+    }
 }
+
+/// <summary>
+/// A plugin package the <c>plugins</c> step replaces: the one installed, by the version the release's record gives its
+/// digest, and the release's own. What is in place says how far the step got: <see cref="ToDigest"/> is done,
+/// <see cref="FromDigest"/> is still to do, and anything else is somebody's since.
+/// </summary>
+public sealed record UpdatePluginReplacement(string Id, SemanticVersion From, string FromDigest, SemanticVersion To, string ToDigest);
 
 /// <summary>
 /// The ledger could not be read. One code, because there is one thing a caller can do about any of them: say

@@ -508,8 +508,8 @@ public static class UpdateCommands
 
     /// <summary>
     /// What a person is told about Jason itself, then a line per plugin package behind the release, after every line
-    /// about Jason: the update comes first, and step 3 of the wiring check places the package after it. The line ends in
-    /// the words <c>jason status</c> says for the same package, since step 3 unpacks into a directory that is not there yet.
+    /// about Jason: the update comes first, and its <c>plugins</c> step replaces the package. A package manager's upgrade
+    /// has no such step, so under one the line names the install that replaces it once the upgrade is done.
     /// </summary>
     private static string Sentence(UpdateCheckResponse answer, PackageOwner? owner, string? passThrough) =>
         string.Join(
@@ -518,7 +518,9 @@ public static class UpdateCommands
                 AboutJason(answer, owner, passThrough),
                 .. (answer.PluginUpdates ?? []).Select(plugin =>
                     $"Plugin package {plugin.Id} {plugin.Installed} is installed, and Jason {answer.Latest} publishes {plugin.Id} {plugin.Latest}: "
-                    + "after the update, step 3 of the wiring check places it once the package there is moved away, then `jason plugin reload`."),
+                    + (owner is null
+                        ? $"`{OwnUpgrade}` replaces it."
+                        : $"after the upgrade, `jason plugin install {plugin.Id} --replace` replaces it.")),
             ]);
 
     /// <summary>What updates an installation that is Jason's own.</summary>

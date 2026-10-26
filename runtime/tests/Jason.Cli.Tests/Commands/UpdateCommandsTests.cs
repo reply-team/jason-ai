@@ -446,8 +446,8 @@ public class UpdateCommandsTests
     }
 
     /// <summary>
-    /// A package manager places no plugin, and its upgrade leaves the plugins directory as the apply does, so the package
-    /// is named under one as well — and a person reads it after the three lines they type.
+    /// A package manager places no plugin, and its upgrade leaves the plugins directory as it was, so the package is named
+    /// under one as well — and a person reads it after the three lines they type, with the install that replaces it.
     /// </summary>
     [Theory]
     [InlineData("Homebrew", "brew upgrade jason")]
@@ -468,7 +468,7 @@ public class UpdateCommandsTests
         Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--human"], managed, Ct));
         var lines = stdout.ToString().TrimEnd().Split(Environment.NewLine);
         Assert.Equal(["  jason runtime stop", $"  {upgrade}", "  jason runtime start"], lines[^4..^1]);
-        Assert.Equal($"Plugin package reply 0.8.0 is installed, and Jason {Newer} publishes reply 0.9.0: after the update, step 3 of the wiring check places it once the package there is moved away, then `jason plugin reload`.", lines[^1]);
+        Assert.Equal($"Plugin package reply 0.8.0 is installed, and Jason {Newer} publishes reply 0.9.0: after the upgrade, `jason plugin install reply --replace` replaces it.", lines[^1]);
     }
 
     /// <summary>
@@ -496,7 +496,7 @@ public class UpdateCommandsTests
         var lines = installation.Out.ToString().TrimEnd().Split(Environment.NewLine);
         Assert.Equal(3, lines.Length);
         Assert.StartsWith($"{installation.To} cannot be applied to {SemanticVersion.Current} directly", lines[1], StringComparison.Ordinal);
-        Assert.Equal($"Plugin package reply 0.8.0 is installed, and Jason {installation.To} publishes reply 0.9.0: after the update, step 3 of the wiring check places it once the package there is moved away, then `jason plugin reload`.", lines[2]);
+        Assert.Equal($"Plugin package reply 0.8.0 is installed, and Jason {installation.To} publishes reply 0.9.0: `jason update apply` replaces it.", lines[2]);
     }
 
     /// <summary>

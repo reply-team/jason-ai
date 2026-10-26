@@ -286,16 +286,23 @@ public sealed record UpdateManifest(
     /// </summary>
     private static string PluginDigest(string text, string holder)
     {
-        const string Prefix = "sha256:";
-        if (!text.StartsWith(Prefix, StringComparison.Ordinal)
-            || text.Length != Prefix.Length + DigestLength
-            || !text[Prefix.Length..].All(char.IsAsciiHexDigit))
+        if (!text.StartsWith(DigestPrefix, StringComparison.Ordinal)
+            || text.Length != DigestPrefix.Length + DigestLength
+            || !text[DigestPrefix.Length..].All(char.IsAsciiHexDigit))
         {
-            throw Invalid($"{holder} that is not '{Prefix}' and {DigestLength} hexadecimal characters.");
+            throw Invalid($"{holder} that is not '{DigestPrefix}' and {DigestLength} hexadecimal characters.");
         }
 
-        return Prefix + text[Prefix.Length..].ToLowerInvariant();
+        return DigestPrefix + text[DigestPrefix.Length..].ToLowerInvariant();
     }
+
+    private const string DigestPrefix = "sha256:";
+
+    /// <summary>Whether <paramref name="text"/> is a package's digest as this reader keeps one: <c>sha256:</c> and 64 lowercase hexadecimal characters.</summary>
+    internal static bool IsPackageDigest(string text) =>
+        text.StartsWith(DigestPrefix, StringComparison.Ordinal)
+        && text.Length == DigestPrefix.Length + DigestLength
+        && text[DigestPrefix.Length..].All(c => char.IsAsciiDigit(c) || c is >= 'a' and <= 'f');
 
     /// <summary>A text field of the plugin package <paramref name="id"/>, refused by the package's id when it is absent.</summary>
     private static string PackageText(string id, JsonElement element, string name) =>

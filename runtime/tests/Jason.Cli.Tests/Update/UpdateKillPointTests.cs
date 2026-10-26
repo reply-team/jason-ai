@@ -246,11 +246,13 @@ public class UpdateKillPointTests
 
         // Started by path, and the path is the installation's rather than whatever is running this.
         Assert.Equal([installation.InstallPath], installation.Processes.Executables[^1]);
-        Assert.Equal(["started", "healthy"], applier.Steps.Take(2).Select(step => step.Split(' ', ':')[0]));
+        Assert.Equal(["plugins", "started", "healthy"], applier.Steps.Take(3).Select(step => step.Split(' ', ':')[0]));
 
-        // And nothing was moved twice: what was kept is still what was kept.
+        // And nothing was moved twice: what was kept is still what was kept. Nothing was fetched again but the release's
+        // manifest, which the plugins step reads once.
         Assert.Equal($"jason {installation.From}", File.ReadAllText(installation.Update.PreviousExecutable));
         Assert.Empty(installation.Fetched);
+        Assert.EndsWith("/" + Jason.Contracts.Update.ReleaseAssets.Manifest, Assert.Single(installation.FetchedForPlugins).Path, StringComparison.Ordinal);
     }
 
     /// <summary>

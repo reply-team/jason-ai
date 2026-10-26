@@ -548,24 +548,14 @@ public static class PluginInstaller
             new HeldOpen(from, isDirectory: true, Rule, held).Said(IdentityFacts.HomeFor(Env.Identity));
 
         /// <summary>
-        /// The rename, with the access-denied Windows answers for a held file inside the tree said as one: .NET carries it as an
-        /// IOException with that code, and the held-file rule counts the exception an access-denied is.
+        /// The rename. The access-denied that Windows answers with for a held file inside the tree arrives as an IOException
+        /// with that code, which the held-file rule counts as a hold wherever it counts an access-denied.
         /// </summary>
         private static void Rename(string from, string to)
         {
-            try
-            {
-                BeforeMove.Value?.Invoke(from, to);
-                Directory.Move(from, to);
-            }
-            catch (IOException denied) when (denied.HResult == AccessDenied)
-            {
-                throw new UnauthorizedAccessException(denied.Message, denied);
-            }
+            BeforeMove.Value?.Invoke(from, to);
+            Directory.Move(from, to);
         }
-
-        /// <summary>ERROR_ACCESS_DENIED, as .NET carries it in an exception's HResult.</summary>
-        private const int AccessDenied = unchecked((int)0x80070005);
     }
 
     /// <summary>How every refusal before the swap ends, the release's own refusals of a file included.</summary>

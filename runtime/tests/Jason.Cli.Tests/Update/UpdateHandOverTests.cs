@@ -92,7 +92,7 @@ public class UpdateHandOverTests
         var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.Equal("complete", answer.Step);
         Assert.Equal(
-            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete", "skills", "ui"],
+            ["staged", "drained", "stopped", "kept", "swapped", "plugins", "started", "healthy", "complete", "skills", "ui"],
             answer.Steps.Select(step => step[..step.IndexOf(':', StringComparison.Ordinal)]));
     }
 
@@ -240,7 +240,7 @@ public class UpdateHandOverTests
         var lines = installation.Out.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.All(lines, line => Assert.StartsWith("- ", line, StringComparison.Ordinal));
         Assert.Equal(
-            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete", "skills", "ui"],
+            ["staged", "drained", "stopped", "kept", "swapped", "plugins", "started", "healthy", "complete", "skills", "ui"],
             lines.Select(line => line[2..line.IndexOf(':', StringComparison.Ordinal)]));
     }
 

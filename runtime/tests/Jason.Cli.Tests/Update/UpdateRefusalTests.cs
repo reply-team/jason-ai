@@ -268,10 +268,11 @@ public class UpdateRefusalTests
         Assert.Equal(killed.StartedAt, ledger.StartedAt);
 
         // And it began at the step the ledger named: nothing was fetched again, no runtime was drained again,
-        // and what it says it did starts at the swap.
+        // and what it says it did starts at the swap. The plugins step reads the release's manifest once, and only that.
         Assert.Empty(installation.Fetched);
+        Assert.EndsWith("/" + Jason.Contracts.Update.ReleaseAssets.Manifest, Assert.Single(installation.FetchedForPlugins).Path, StringComparison.Ordinal);
         Assert.DoesNotContain("system.drain", installation.Operations);
-        Assert.Equal(["swapped", "started", "healthy"], applier.Steps.Select(Word).Take(3));
+        Assert.Equal(["swapped", "plugins", "started", "healthy"], applier.Steps.Select(Word).Take(4));
     }
 
     /// <summary>

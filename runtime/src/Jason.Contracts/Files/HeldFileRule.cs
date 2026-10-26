@@ -12,7 +12,8 @@ namespace Jason.Contracts.Files;
 /// <param name="Interval">The pause between two tries.</param>
 /// <param name="AccessDeniedCounts">
 /// Whether an access-denied counts as the file being held. Windows refuses to replace a file a reader holds with an
-/// access-denied rather than a sharing violation, so replacing the endpoint descriptor counts it. Anywhere else an
+/// access-denied rather than a sharing violation, so replacing the endpoint descriptor counts it, and so does a rename of
+/// a directory with a file in it held open, as a plugin package's moves count it. Anywhere else an
 /// access-denied is a permission or a read-only file, and waiting does not change either.
 /// </param>
 public sealed record HeldFileRule(TimeSpan Wait, TimeSpan Interval, bool AccessDeniedCounts)

@@ -381,14 +381,15 @@ was left running across an upgrade that replaced the executable — a package ma
 hand — because that runtime is still the old build and starts its plugin hosts from the old image. Its repair is
 `jason runtime restart`.
 
-`plugin_package` compares each plugin package the release you run publishes — today the Reply plugin — with the
-package of that id installed, by content digest, offline: the runtime carries its release's package and asks no
-network. An earlier release's package fails it, an upgrade having replaced the executable and left
-`~/.jason/plugins/reply` as it was. Its fact names the installed version, the version this release published, and
-the command that places it, `jason plugin install reply --replace`, which swaps the old package for the release's
-and asks the runtime to load it. A package with the same version or a later one passes, and the fact says it is a
-later release's package or one built or edited on this machine; no package of that id is absent. A development
-build compares with its own tree, and the fact names the build it compared with.
+`plugin_package` compares each plugin package the release you run publishes — today the Reply plugin — with the package
+of that id installed, by content digest, offline: the runtime carries its release's package and asks no network. An
+earlier release's package fails it: a package manager's upgrade replaces the executable and leaves
+`~/.jason/plugins/reply` as it was, and so does an update whose `plugins:` line says the package was not replaced. Its
+fact names the installed version, the version this release published, and the command that places it,
+`jason plugin install reply --replace`, which swaps the old package for the release's and asks the runtime to load it. A
+package with the same version or a later one passes, and the fact says it is a later release's package or one built or
+edited on this machine; no package of that id is absent. A development build compares with its own tree, and the fact
+names the build it compared with.
 
 `plugin_availability` names each plugin `jason plugin list` reports `unavailable`, with its problem codes and never
 their text — `reply is unavailable; its problems: executable_missing.` Such a problem is about this machine rather than

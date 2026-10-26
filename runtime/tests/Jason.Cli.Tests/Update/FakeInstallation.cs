@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using Jason.Cli.Update;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
@@ -304,14 +306,82 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     /// <summary>
     /// Every address the update fetched for itself, in order: the feed and the archive. The UI's two files are left
-    /// out, because its step fetches them after every update, resumed or not; <see cref="FakeRelease.Requested"/> has
-    /// everything.
+    /// out, because its step fetches them after every update, resumed or not, and so is all the <c>plugins</c> step
+    /// fetches, for the same reason; <see cref="FakeRelease.Requested"/> has everything.
     /// </summary>
     public List<string> Fetched =>
     [
-        .. _release.Requested.Where(path =>
+        .. _fetched.Where(fetched => fetched.Step != UpdateStep.Plugins).Select(fetched => fetched.Path).Where(path =>
             !path.EndsWith("/" + ReleaseAssets.Checksums, StringComparison.Ordinal) && !path.EndsWith("/" + UiAssetLayout.AssetName, StringComparison.Ordinal)),
     ];
+
+    /// <summary>
+    /// Every address asked of the release, the step the ledger on disk named when it was asked, and whether the executable
+    /// an update handed the rest to asked it.
+    /// </summary>
+    private readonly List<(string Path, UpdateStep? Step, bool HandedOver)> _fetched = [];
+
+    /// <summary>Everything the <c>plugins</c> step asked of the release, in order, and whether a handed-over run asked it.</summary>
+    public List<(string Path, bool HandedOver)> FetchedForPlugins =>
+        [.. _fetched.Where(fetched => fetched.Step == UpdateStep.Plugins).Select(fetched => (fetched.Path, fetched.HandedOver))];
+
+    /// <summary>A plugin package a test made: its files, the archive a release publishes and the digest of the tree.</summary>
+    public sealed record PluginPackage(string Id, SemanticVersion Version, IReadOnlyList<(string Name, string Text)> Files, byte[] Zip, string Digest);
+
+    /// <summary>The package <paramref name="id"/> at <paramref name="version"/>, its files saying which version they are.</summary>
+    public static PluginPackage Plugin(string id, string version)
+    {
+        (string Name, string Text)[] files =
+        [
+            ("plugin.yaml", $"id: {id}\nversion: {version}\n"),
+            ("main.js", $"export default {{ version: \"{version}\" }};\n"),
+            ("modules/send.js", $"// send, as {version} does it\n"),
+        ];
+        var digest = PackageDigest.Compute(files.Select(file => new PackageFile(file.Name, Encoding.UTF8.GetByteCount(file.Text), () => new MemoryStream(Encoding.UTF8.GetBytes(file.Text))))).Digest;
+
+        using var memory = new MemoryStream();
+        using (var zip = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, text) in files)
+            {
+                using var stream = zip.CreateEntry(name).Open();
+                stream.Write(Encoding.UTF8.GetBytes(text));
+            }
+        }
+
+        return new PluginPackage(id, SemanticVersion.Parse(version), files, memory.ToArray(), digest);
+    }
+
+    /// <summary>The package placed in the plugins directory, as an install of it leaves it.</summary>
+    public FakeInstallation WithInstalledPlugin(PluginPackage package)
+    {
+        var directory = Paths.PluginPackageDirectory(package.Id);
+        foreach (var (name, text) in package.Files)
+        {
+            var file = Path.Combine(directory, name);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, text);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// The release this installation updates to publishes <paramref name="package"/>, its record holding <paramref name="earlier"/>
+    /// beside it.
+    /// </summary>
+    public FakeInstallation PublishingPlugin(PluginPackage package, params PluginPackage[] earlier)
+    {
+        _release.WithPlugin(package.Id, package.Version, package.Zip, package.Digest, earlier: earlier.Select(before => (before.Version, before.Digest)));
+        return this;
+    }
+
+    /// <summary>The digest of what is installed as <paramref name="id"/>, or null when nothing is.</summary>
+    public string? PluginDigest(string id)
+    {
+        var directory = Paths.PluginPackageDirectory(id);
+        return Directory.Exists(directory) ? PackageDigest.Compute(directory).Digest : null;
+    }
 
     public Uri Feed => _release.Feed;
 
@@ -453,6 +523,19 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     public UpdateLedger? Ledger() => UpdateLedger.ReadFile(Update.Ledger);
 
+    /// <summary>The step the ledger on disk names, or null when there is none or it cannot be read as one.</summary>
+    private UpdateStep? StepOnDisk()
+    {
+        try
+        {
+            return Ledger()?.Step;
+        }
+        catch (Exception unread) when (unread is UpdateLedgerException or IOException)
+        {
+            return null;
+        }
+    }
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var url = request.RequestUri!;
@@ -462,6 +545,7 @@ public sealed class FakeInstallation : HttpMessageHandler
         }
 
         // Anything else is the release feed, which has its own rules about what it will serve.
+        _fetched.Add((url.AbsolutePath, StepOnDisk(), _handedOver));
         return Task.FromResult(_release.Answer(request));
     }
 

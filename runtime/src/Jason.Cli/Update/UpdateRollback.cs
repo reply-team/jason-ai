@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
+using Jason.Cli.Files;
 using Jason.Cli.Process;
+using Jason.Cli.Ui;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
@@ -46,8 +48,17 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     /// </summary>
     internal HeldFileRule HeldFiles { get; init; } = InstallationRemovers.HeldFiles;
 
+    /// <summary>
+    /// The same rule for a rename of a plugin package's directory, with access denied counted as a hold: Windows refuses
+    /// a directory whose file is held open that way, as the plugin installer's own moves count it.
+    /// </summary>
+    private HeldFileRule PackageMoves => HeldFiles with { AccessDeniedCounts = true };
+
     /// <summary>How a pause between two tries is taken: <see cref="HeldFileRetry.Sleep"/> outside a test, which counts them.</summary>
     internal Action<TimeSpan, CancellationToken> Pause { get; init; } = HeldFileRetry.Sleep;
+
+    /// <summary>How a plugin package's directory is renamed: <see cref="Directory.Move"/> outside a test.</summary>
+    internal Action<string, string> MovePackage { get; init; } = Directory.Move;
 
     /// <summary>
     /// What loads every assembly this process may still need, before the executable at the install path is moved aside:
@@ -85,12 +96,13 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         Restore(ledger);
 
         var (restored, unsafeToRestore) = RestoreDatabase(ledger, chronicle);
+        RestorePlugins(ledger);
 
         // Whatever was decided about the database, the runtime comes back up on the version that is now
         // installed. A refusal below is about the database and never about leaving a machine with nothing running.
         await StartAsync(ledger, cancellationToken).ConfigureAwait(false);
 
-        var back = ledger with { Step = UpdateStep.Complete, ToVersion = ledger.FromVersion, FromVersion = ledger.ToVersion };
+        var back = ledger with { Step = UpdateStep.Complete, ToVersion = ledger.FromVersion, FromVersion = ledger.ToVersion, Plugins = [] };
         var record = Keep(back, restored);
 
         if (unsafeToRestore is { } refusal)
@@ -341,6 +353,82 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                         ExecutableMove.Run(env, HeldFiles, clock, Pause, NoticesBack, kept, remedy, () => File.Move(kept, installed));
                     }
                 });
+        }
+    }
+
+    /// <summary>
+    /// The plugin packages the update replaced, put back from where it kept them: each one whose place still holds the
+    /// package the update placed, or holds nothing, as a kill in the middle of the update's own move leaves it. A package
+    /// there that is neither was installed by somebody since, and a rollback does not undo somebody's install, so it is
+    /// left with the kept copy beside it. A package that is not put back never stops the rollback: its line says why.
+    /// </summary>
+    private void RestorePlugins(UpdateLedger ledger)
+    {
+        foreach (var plugin in ledger.Plugins)
+        {
+            var kept = update.PreviousPlugin(plugin.Id);
+            if (!Directory.Exists(kept))
+            {
+                continue;
+            }
+
+            var target = env.Paths.PluginPackageDirectory(plugin.Id);
+            if (Path.Exists(target) && !string.Equals(PluginUpdates.InstalledDigest(target), plugin.ToDigest, StringComparison.Ordinal))
+            {
+                Say($"the plugin {plugin.Id} is not the {plugin.To} this update placed, so it is left as it is and {plugin.From} stays at {kept}");
+                continue;
+            }
+
+            var aside = $"{kept}{SetAside}";
+            string? leftAside = null;
+            try
+            {
+                if (Path.Exists(target))
+                {
+                    DirectoryTrees.Delete(aside);
+                    Moved(target, aside);
+                }
+
+                try
+                {
+                    Moved(kept, target);
+                }
+                catch
+                {
+                    // The update's own package back into its place; where that fails too, the first refusal is still the
+                    // one said, with where the update's package was left.
+                    if (Directory.Exists(aside) && !Path.Exists(target))
+                    {
+                        try
+                        {
+                            Moved(aside, target);
+                        }
+                        catch (Exception stuck) when (stuck is IOException or UnauthorizedAccessException)
+                        {
+                            leftAside = $" The {plugin.To} this update placed could not be moved back either: {stuck.Message} It is in {aside}, and {target} is empty.";
+                        }
+                    }
+
+                    throw;
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                Say($"the plugin {plugin.Id} {plugin.From} could not be put back from {kept}: {error.Message}{leftAside}");
+                continue;
+            }
+
+            UiAssetInstaller.Discard(() => DirectoryTrees.Delete(aside), aside);
+            Say($"put the plugin {plugin.Id} {plugin.From} back");
+        }
+    }
+
+    /// <summary>One rename of a package directory, tried again while a file in it is held.</summary>
+    private void Moved(string from, string to)
+    {
+        if (HeldFileRetry.Run(() => MovePackage(from, to), PackageMoves, clock, Pause, CancellationToken.None) is { } held)
+        {
+            throw held;
         }
     }
 

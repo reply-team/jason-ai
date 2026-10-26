@@ -16,6 +16,7 @@ public class HeldFileRetryTests
 
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
+    private const int AccessDenied = unchecked((int)0x80070005);
 
     [Theory]
     [InlineData(SharingViolation)]
@@ -87,24 +88,35 @@ public class HeldFileRetryTests
         Assert.Equal([Rule.Interval], clock.Pauses);
     }
 
-    [Fact]
-    public void An_access_denied_is_thrown_at_once_where_the_rule_does_not_count_it()
+    /// <summary>
+    /// An access-denied in either form .NET gives it: the exception of its own, or an <see cref="IOException"/> carrying
+    /// ERROR_ACCESS_DENIED, which is how Windows refuses to rename a directory with a file in it held open.
+    /// </summary>
+    private static Exception Denied(bool asIOException) =>
+        asIOException ? new IOException("access denied, as an IOException", AccessDenied) : new UnauthorizedAccessException("denied");
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void An_access_denied_is_thrown_at_once_where_the_rule_does_not_count_it(bool asIOException)
     {
         var clock = new SteppedClock();
-        var call = new Call(times: int.MaxValue, () => new UnauthorizedAccessException("denied"));
+        var call = new Call(times: int.MaxValue, () => Denied(asIOException));
 
-        var thrown = Assert.Throws<UnauthorizedAccessException>(() => Run(call, Rule, clock, windows: true));
+        var thrown = Assert.Throws(Denied(asIOException).GetType(), () => Run(call, Rule, clock, windows: true));
 
         Assert.Same(call.Last, thrown);
         Assert.Equal(1, call.Tries);
         Assert.Empty(clock.Pauses);
     }
 
-    [Fact]
-    public void An_access_denied_counts_as_a_hold_where_the_rule_says_so()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void An_access_denied_counts_as_a_hold_where_the_rule_says_so(bool asIOException)
     {
         var clock = new SteppedClock();
-        var call = new Call(times: 2, () => new UnauthorizedAccessException("denied"));
+        var call = new Call(times: 2, () => Denied(asIOException));
 
         var held = Run(call, Rule with { AccessDeniedCounts = true }, clock, windows: true);
 
@@ -117,7 +129,6 @@ public class HeldFileRetryTests
     {
         new IOException("no hresult"),
         new IOException("disk full", unchecked((int)0x80070070)),
-        new IOException("access denied, as an IOException", unchecked((int)0x80070005)),
         new FileNotFoundException("gone"),
         new DirectoryNotFoundException("gone"),
         new PathTooLongException("long"),
