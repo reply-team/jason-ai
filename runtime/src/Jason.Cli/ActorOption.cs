@@ -16,7 +16,7 @@ public static class ActorOption
 
     public static Option<string?> Create() => new(Name)
     {
-        Description = "Who performs the operation: human, human:<id>, role:<id> or attempt:att_… for a running executor.",
+        Description = "Who performs the operation: human, human:<id>, role:<id> or attempt:att_... for a running executor.",
         Recursive = true,
     };
 
@@ -53,7 +53,7 @@ public static class ActorOption
 
         if (type is not "human" and not "role" and not "attempt")
         {
-            throw new UsageException($"{Name} must be 'human', 'human:<id>', 'role:<id>' or 'attempt:att_…'.");
+            throw new UsageException($"{Name} must be 'human', 'human:<id>', 'role:<id>' or 'attempt:att_...'.");
         }
 
         if (separator >= 0 && string.IsNullOrWhiteSpace(id))
@@ -64,7 +64,7 @@ public static class ActorOption
         // An attempt is a specific run: the claim is meaningless without the attempt it names.
         if (type is "attempt" && id is null)
         {
-            throw new UsageException($"{Name} 'attempt' names no attempt; write 'attempt:att_…'.");
+            throw new UsageException($"{Name} 'attempt' names no attempt; write 'attempt:att_...'.");
         }
 
         var actor = new JsonObject { ["type"] = type };

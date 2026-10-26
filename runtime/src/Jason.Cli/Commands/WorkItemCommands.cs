@@ -51,7 +51,7 @@ public static class WorkItemCommands
         var kind = new Option<string?>("--kind") { Description = "What the item is: ai_role or provider_op." };
         var role = new Option<string?>("--role") { Description = "The role that does the work, for an ai_role item — for example researcher." };
         var operation = new Option<string?>("--operation") { Description = "The canonical operation to perform, for a provider_op item: one of those under docs/contracts/operations, not a Jason verb." };
-        var contact = new Option<string?>("--contact") { Description = "The contact the work is about, as cnt_…, when it is about one." };
+        var contact = new Option<string?>("--contact") { Description = "The contact the work is about, as cnt_..., when it is about one." };
         var executionProfile = new Option<string?>("--execution-profile") { Description = "The execution profile the attempt should run under." };
         var priority = new Option<int?>("--priority") { Description = "Higher is claimed first; the runtime defaults to 0." };
         var notBefore = new Option<string?>("--not-before") { Description = "Do not start before this moment, as ISO-8601 UTC — for example 2026-09-14T10:00:00Z." };
@@ -189,8 +189,8 @@ public static class WorkItemCommands
     /// <summary>The filters a listing and a count share, so the two verbs can never take different ones.</summary>
     private sealed class ListingFilter
     {
-        private readonly Option<string?> _campaign = new("--campaign") { Description = "Only items of this campaign, as cmp_…." };
-        private readonly Option<string?> _contact = new("--contact") { Description = "Only items about this contact, as cnt_…." };
+        private readonly Option<string?> _campaign = new("--campaign") { Description = "Only items of this campaign, as cmp_...." };
+        private readonly Option<string?> _contact = new("--contact") { Description = "Only items about this contact, as cnt_...." };
         private readonly Option<string[]> _status = VerbOptions.Repeatable("--status", "Only items in this status. Repeat the option to ask for more than one — for example failed and expired.");
         private readonly Option<string?> _kind = new("--kind") { Description = "Only items of this kind: ai_role or provider_op." };
         private readonly Option<string?> _role = new("--role") { Description = "Only items for this role." };
@@ -199,7 +199,7 @@ public static class WorkItemCommands
         private readonly Option<string?> _since = VerbOptions.Moment("--since", "Only items whose ordered time (created, due or finished, as --order says) is at or after this moment, as ISO-8601 UTC, or now. An item without that time is left out.");
         private readonly Option<string?> _until = VerbOptions.Moment("--until", "Only items whose ordered time is before this moment, as ISO-8601 UTC, or now.");
         private readonly Option<string?> _order = new("--order") { Description = "created (the default, oldest first), due (soonest first, undated last) or finished (newest first; open items are left out)." };
-        private readonly Option<string?> _block = new("--block") { Description = "Only the items this provider block holds, as blk_…: those whose open wait names it." };
+        private readonly Option<string?> _block = new("--block") { Description = "Only the items this provider block holds, as blk_...: those whose open wait names it." };
 
         public ListingFilter(Command command)
         {
@@ -468,7 +468,7 @@ public static class WorkItemCommands
         var attempt = AttemptOption();
         var on = VerbOptions.Repeatable(
             "--on",
-            "A work item this attempt raised, as wi_…, to wait for. Repeat the option for each one, at most 100; leave it "
+            "A work item this attempt raised, as wi_..., to wait for. Repeat the option for each one, at most 100; leave it "
             + "out to wait for --until alone.");
         var all = new Option<bool>("--all") { Description = "Release when every item named with --on has ended. The default when items are named." };
         var any = new Option<bool>("--any") { Description = "Release when any one item named with --on has ended." };
@@ -634,7 +634,7 @@ public static class WorkItemCommands
 
     private static Option<string> AttemptOption() => new("--attempt")
     {
-        Description = "The attempt you are reporting for, as att_… — the fencing token from the launch envelope.",
+        Description = "The attempt you are reporting for, as att_... — the fencing token from the launch envelope.",
         Required = true,
     };
 
@@ -645,7 +645,7 @@ public static class WorkItemCommands
         Description = "The result as JSON — a path, or - for standard input. The file holds the result itself, not a request body.",
     };
 
-    private static Argument<string> WorkItemId() => new("work-item-id") { Description = "The work item, as wi_…." };
+    private static Argument<string> WorkItemId() => new("work-item-id") { Description = "The work item, as wi_...." };
 
-    private static Argument<string> CampaignId() => new("campaign-id") { Description = "The campaign the work belongs to, as cmp_…." };
+    private static Argument<string> CampaignId() => new("campaign-id") { Description = "The campaign the work belongs to, as cmp_...." };
 }

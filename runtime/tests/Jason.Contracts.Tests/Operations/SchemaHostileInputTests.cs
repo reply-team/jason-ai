@@ -208,6 +208,21 @@ public class SchemaHostileInputTests
     }
 
     /// <summary>
+    /// `uniqueItems` compares items by a canonical form, and an object written that way has none, so it is written as a
+    /// placeholder. The placeholder begins no JSON token, so it is no item's own form: quoted, it was the form of the
+    /// string "...", and the two were taken for one item.
+    /// </summary>
+    [Fact]
+    public void An_object_written_that_way_and_the_string_of_three_dots_are_two_items()
+    {
+        var schema = Schema("""{"type":"array","uniqueItems":true}""");
+
+        var problems = SchemaValidator.Validate(Duplicated("""[{"a":1,"a":2},"..."]"""), schema);
+
+        Assert.DoesNotContain(problems, problem => problem.Reason == "unique_items");
+    }
+
+    /// <summary>
     /// The same number, written in code as each of the CLR types a builder might hand it. A node parsed from text
     /// holds a <c>JsonElement</c> that converts to anything; a node built in memory holds the value it was given
     /// and converts to that type alone, so <c>JsonValue.Create(1)</c> is an <c>int</c> and nothing else. All of

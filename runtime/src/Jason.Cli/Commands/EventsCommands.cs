@@ -54,7 +54,7 @@ public static class EventsCommands
             "Read a span of one account's events again: every event at or after --from and before --to, at most 366 days back. It reads and sends nothing, and leaves the account's own reading where it stands; what it finds wakes the campaigns it concerns that were live when it happened and were not told.");
         var source = new Option<string?>("--source")
         {
-            Description = "The account, by the id jason events sources lists (evs_…).",
+            Description = "The account, by the id jason events sources lists (evs_...).",
             Required = true,
         };
         var from = new Option<string?>("--from")
@@ -102,7 +102,7 @@ public static class EventsCommands
             "Have one account read sooner: at the next scan, never within a minute of its last read. For a program that receives a provider's webhooks; it sends the account and nothing else.");
         var source = new Option<string?>("--source")
         {
-            Description = "The account, by the id jason events sources lists (evs_…).",
+            Description = "The account, by the id jason events sources lists (evs_...).",
             Required = true,
         };
         var human = VerbOptions.Human();

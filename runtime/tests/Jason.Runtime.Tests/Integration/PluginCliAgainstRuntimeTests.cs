@@ -85,7 +85,7 @@ public class PluginCliAgainstRuntimeTests
         var shown = digest["sha256:".Length..][..12];
 
         var status = await HumanAsync(fixture, "runtime", "status", "--human");
-        Assert.Contains("Plugins:    1 active · snapshot snp_", status, StringComparison.Ordinal);
+        Assert.Contains("Plugins:    1 active | snapshot snp_", status, StringComparison.Ordinal);
 
         var table = await HumanAsync(fixture, "plugin", "list", "--human");
         Assert.Contains(TestPlugins.FakeProviderId, table, StringComparison.Ordinal);

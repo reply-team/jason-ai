@@ -24,7 +24,7 @@ public static class JournalCommands
     private static Command Append(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("append", "Record what happened. Kinds the runtime writes itself are refused.");
-        var id = new Argument<string>("campaign-id") { Description = "The campaign the entry belongs to, as cmp_…." };
+        var id = new Argument<string>("campaign-id") { Description = "The campaign the entry belongs to, as cmp_...." };
         var kind = new Option<string>("--kind")
         {
             Description = "What kind of entry this is, in snake_case — for example decision, observation or plan_revision.",
@@ -64,9 +64,9 @@ public static class JournalCommands
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("list", "Read the chronicle, newest entry first.");
-        var campaign = new Option<string?>("--campaign") { Description = "Only entries of this campaign, as cmp_…." };
-        var workItem = new Option<string?>("--work-item") { Description = "Only entries about this work item, as wi_…." };
-        var contact = new Option<string?>("--contact") { Description = "Only entries about this person, as cnt_…." };
+        var campaign = new Option<string?>("--campaign") { Description = "Only entries of this campaign, as cmp_...." };
+        var workItem = new Option<string?>("--work-item") { Description = "Only entries about this work item, as wi_...." };
+        var contact = new Option<string?>("--contact") { Description = "Only entries about this person, as cnt_...." };
         var kinds = VerbOptions.Repeatable("--kind", "Only entries of this kind; repeat it for several kinds.");
         var since = new Option<string?>("--since") { Description = "Only entries at or after this moment, as ISO-8601 UTC — for example 2026-09-14T10:00:00Z." };
         var limit = VerbOptions.Limit();

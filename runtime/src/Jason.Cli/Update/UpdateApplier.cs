@@ -789,7 +789,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private UpdateLedger Done(UpdateLedger ledger)
     {
-        Say(UpdateStep.Complete, $"{ledger.FromVersion} → {ledger.ToVersion}");
+        Say(UpdateStep.Complete, $"{ledger.FromVersion} -> {ledger.ToVersion}");
         return ledger;
     }
 

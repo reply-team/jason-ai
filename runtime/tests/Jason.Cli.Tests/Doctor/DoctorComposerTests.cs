@@ -1713,8 +1713,8 @@ public sealed class DoctorComposerTests
         Assert.Equal(@"<domain>\<user> <sid>", Text(failure["Account"]));
         var capped = Text(failure["@x"]);
         Assert.StartsWith(@"System.IO.IOException: ~\.jason\config\settings.json on <machine>: mmm", capped, StringComparison.Ordinal);
-        Assert.Contains("… [truncated ", capped, StringComparison.Ordinal);
-        Assert.Contains("… [20 more frames]", capped, StringComparison.Ordinal);
+        Assert.Contains("... [truncated ", capped, StringComparison.Ordinal);
+        Assert.Contains("... [20 more frames]", capped, StringComparison.Ordinal);
         Assert.Contains(@"in ~\src\Frame59.cs:line 59", capped, StringComparison.Ordinal);
         Assert.DoesNotContain("Frame60", capped, StringComparison.Ordinal);
     }
@@ -1965,7 +1965,7 @@ public sealed class DoctorComposerTests
 
         var failure = bundle.Document["logs"]!.AsObject().First(member => member.Value is JsonArray { Count: 1 } list && list[0]!["@mt"] is not null).Value![0]!.AsObject();
         var capped = failure.Select(member => member.Value).OfType<JsonValue>().Select(value => value.GetValue<string>()).Single(text => text.StartsWith("System.Exception", StringComparison.Ordinal));
-        Assert.EndsWith("… [10 more frames]", capped, StringComparison.Ordinal);
+        Assert.EndsWith("... [10 more frames]", capped, StringComparison.Ordinal);
     }
 
     // ---- what a runtime that is not the real one can answer, and what it cannot cost ------------------------------

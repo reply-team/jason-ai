@@ -777,7 +777,7 @@ public static class DoctorCommand
             {CliErrors.DoctorOutputUnwritable}. A plain run writes the file and prints path, bytes, sha256 — of the file's exact
             bytes — and the same five lists. The file and the printed JSON are compact and plain ASCII: every character
             above ~ is a \uXXXX escape, which a parser reads back as the same text. --human prints the listing as a table
-            instead, then "Would write …" or "Written to …". --human and the warning on stderr are written as text as it
+            instead, then "Would write ..." or "Written to ...". --human and the warning on stderr are written as text as it
             is, so a console that is not UTF-8 may show some characters differently; the JSON is the exact form.
 
             Exit codes: 0 when the bundle was listed or written, whether or not the runtime answered. 1 when it refused

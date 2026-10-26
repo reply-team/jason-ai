@@ -1,6 +1,3 @@
-using System.Reflection.Metadata;
-using System.Reflection.Metadata.Ecma335;
-using System.Reflection.PortableExecutable;
 using System.Text.RegularExpressions;
 
 namespace Jason.Runtime.Tests.Documentation;
@@ -26,7 +23,7 @@ public sealed partial class CompiledPageNamesTests
         var found = new List<string>();
         foreach (var assembly in CompiledCalls.ProductionAssemblies(root))
         {
-            foreach (var text in UserStrings(assembly))
+            foreach (var text in UserStrings.Of(assembly))
             {
                 found.AddRange(Unpublished(text, openSet).Select(page => $"{Path.GetFileName(assembly)}: {page}, in \"{text}\""));
             }
@@ -75,25 +72,6 @@ public sealed partial class CompiledPageNamesTests
         }
 
         return named;
-    }
-
-    /// <summary>The strings an assembly carries, read from its user-string heap without loading it.</summary>
-    private static List<string> UserStrings(string assemblyFile)
-    {
-        using var image = new PEReader(File.OpenRead(assemblyFile));
-        var metadata = image.GetMetadataReader();
-        var strings = new List<string>();
-        if (metadata.GetHeapSize(HeapIndex.UserString) <= 1)
-        {
-            return strings;
-        }
-
-        for (var handle = MetadataTokens.UserStringHandle(1); !handle.IsNil; handle = metadata.GetNextHandle(handle))
-        {
-            strings.Add(metadata.GetUserString(handle));
-        }
-
-        return strings;
     }
 
     /// <summary>A path into <c>docs/</c>, never one inside an address or another path: a page, or a directory and what is under it.</summary>

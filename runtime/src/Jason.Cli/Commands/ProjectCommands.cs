@@ -63,7 +63,7 @@ public static class ProjectCommands
         var command = new Command(
             "get",
             "Show one project, by its id or by its slug. With neither, it is the project whose folder, or whose campaign's folder, the command runs in.");
-        var id = new Argument<string?>("project-id") { Description = "The project, as prj_…. Leave it out to name the project by --slug.", Arity = ArgumentArity.ZeroOrOne };
+        var id = new Argument<string?>("project-id") { Description = "The project, as prj_.... Leave it out to name the project by --slug.", Arity = ArgumentArity.ZeroOrOne };
         var slug = new Option<string?>("--slug") { Description = "The project's slug, instead of its id." };
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -130,7 +130,7 @@ public static class ProjectCommands
     private static Command Update(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("update", "Rename a project. Its slug stays as it is.");
-        var id = new Argument<string>("project-id") { Description = "The project, as prj_…." };
+        var id = new Argument<string>("project-id") { Description = "The project, as prj_...." };
         var name = new Option<string?>("--name") { Description = "The new project name." };
         var file = VerbOptions.File("The object holds the fields to patch (name).");
         var reason = VerbOptions.Reason();
@@ -176,7 +176,7 @@ public static class ProjectCommands
             "It never moves, copies or deletes a folder or a file, never reads or writes a word of an AGENTS.md, and never writes over a CLAUDE.md.");
         var id = new Argument<string?>("project-id")
         {
-            Description = "The project, as prj_…. Leave it out to link the folder --path names by its marker, or, inside a project's folder, that folder.",
+            Description = "The project, as prj_.... Leave it out to link the folder --path names by its marker, or, inside a project's folder, that folder.",
             Arity = ArgumentArity.ZeroOrOne,
         };
         var path = new Option<string?>("--path") { Description = "The project's folder as it is now. A relative path is read from the folder the command runs in." };

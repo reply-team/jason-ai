@@ -102,7 +102,7 @@ public static class ApprovalRenderers
 
         // A contact known only by an address has no name to set its id apart from: the id stands where the name would.
         var who = string.IsNullOrEmpty(name) ? id : $"{name} ({id})";
-        return who + (where is null ? string.Empty : $" · {channel} {where}");
+        return who + (where is null ? string.Empty : $" | {channel} {where}");
     }
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);

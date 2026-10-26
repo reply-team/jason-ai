@@ -93,10 +93,10 @@ public static class DecisionCommands
     private static Command Raise(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("raise", "Ask a person a question you cannot answer yourself, from the attempt you were launched for.");
-        var id = new Argument<string>("work-item-id") { Description = "The work item you are running, as wi_…." };
+        var id = new Argument<string>("work-item-id") { Description = "The work item you are running, as wi_...." };
         var attempt = new Option<string>("--attempt")
         {
-            Description = "The attempt you are asking from, as att_… — the fencing token from the launch envelope.",
+            Description = "The attempt you are asking from, as att_... — the fencing token from the launch envelope.",
             Required = true,
         };
         var question = new Option<string>("--question")
@@ -201,7 +201,7 @@ public static class DecisionCommands
             var split = value.IndexOf(':', StringComparison.Ordinal);
             if (split <= 0 || split == value.Length - 1)
             {
-                throw new UsageException($"--reference must be written as kind:id — for example work_item:wi_…; '{value}' is not.");
+                throw new UsageException($"--reference must be written as kind:id — for example work_item:wi_...; '{value}' is not.");
             }
 
             references.Add(new JsonObject
@@ -214,5 +214,5 @@ public static class DecisionCommands
         return references;
     }
 
-    private static Argument<string> DecisionId() => new("decision-id") { Description = "The question, as decision list shows it: dec_…." };
+    private static Argument<string> DecisionId() => new("decision-id") { Description = "The question, as decision list shows it: dec_...." };
 }

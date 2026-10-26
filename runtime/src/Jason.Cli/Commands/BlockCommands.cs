@@ -111,5 +111,5 @@ public static class BlockCommands
         return command;
     }
 
-    private static Argument<string> BlockId() => new("block-id") { Description = "The block, as block list shows it (blk_…)." };
+    private static Argument<string> BlockId() => new("block-id") { Description = "The block, as block list shows it (blk_...)." };
 }

@@ -16,8 +16,8 @@ namespace Jason.Cli.Doctor;
 /// with <c>at</c>, such as a sentence or the stack of another language. A message line is kept to
 /// <see cref="MaxLineCharacters"/> characters, every message line together to <see cref="MaxMessageCharacters"/>, and
 /// the frames of the whole text to <see cref="MaxFrames"/> lines, not that many for each inner exception. What is cut
-/// is replaced by a mark, <c>… [truncated N characters]</c> at the end of a line that was cut, or on a line of its own
-/// where whole lines were left out, and <c>… [N more frames]</c> where frames were; a run of lines left out one after
+/// is replaced by a mark, <c>... [truncated N characters]</c> at the end of a line that was cut, or on a line of its own
+/// where whole lines were left out, and <c>... [N more frames]</c> where frames were; a run of lines left out one after
 /// another is one mark. A text under every limit is returned as it was, line endings and all.
 /// </para>
 /// <para>
@@ -47,7 +47,7 @@ public static class ExceptionText
     /// <summary>The most frames a text keeps.</summary>
     public const int MaxFrames = 60;
 
-    private const string Ellipsis = "…";
+    private const string Ellipsis = "...";
 
     // The words of the two marks, which a later cap reads back.
     private const string TruncatedOpen = " [truncated ";

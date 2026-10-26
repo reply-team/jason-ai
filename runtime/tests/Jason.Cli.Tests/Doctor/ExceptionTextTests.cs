@@ -139,7 +139,7 @@ public sealed class ExceptionTextTests
     {
         var text = "Type: " + Line('m', 495) + "\r\n" + Frames(1);
 
-        Assert.Equal("Type: " + Line('m', 494) + "… [truncated 1 characters]\r\n" + Frames(1), ExceptionText.Cap(text));
+        Assert.Equal("Type: " + Line('m', 494) + "... [truncated 1 characters]\r\n" + Frames(1), ExceptionText.Cap(text));
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public sealed class ExceptionTextTests
         var text = Line('a', 700) + "\n" + Line('b', 20) + "\r\n" + Line('c', 501);
 
         Assert.Equal(
-            Line('a', 500) + "… [truncated 200 characters]\n" + Line('b', 20) + "\r\n" + Line('c', 500) + "… [truncated 1 characters]",
+            Line('a', 500) + "... [truncated 200 characters]\n" + Line('b', 20) + "\r\n" + Line('c', 500) + "... [truncated 1 characters]",
             ExceptionText.Cap(text));
     }
 
@@ -161,7 +161,7 @@ public sealed class ExceptionTextTests
 
         var capped = ExceptionText.Cap(text);
 
-        Assert.Equal(Line('x', 499) + "… [truncated 4 characters]", capped);
+        Assert.Equal(Line('x', 499) + "... [truncated 4 characters]", capped);
         Assert.All(capped, character => Assert.False(char.IsSurrogate(character)));
     }
 
@@ -171,7 +171,7 @@ public sealed class ExceptionTextTests
         var full = string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500));
 
         Assert.Equal(full, ExceptionText.Cap(full));
-        Assert.Equal(full + "\r\n… [truncated 1 characters]", ExceptionText.Cap(full + "\r\nz"));
+        Assert.Equal(full + "\r\n... [truncated 1 characters]", ExceptionText.Cap(full + "\r\nz"));
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class ExceptionTextTests
         var text = string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 400), Line('e', 300));
 
         Assert.Equal(
-            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 400), Line('e', 100) + "… [truncated 200 characters]"),
+            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 400), Line('e', 100) + "... [truncated 200 characters]"),
             ExceptionText.Cap(text));
     }
 
@@ -191,8 +191,8 @@ public sealed class ExceptionTextTests
 
         // The four lines keep 500 each, which is the whole total: the fifth has nothing left to keep.
         Assert.Equal(
-            string.Join("\r\n", Line('a', 500) + "… [truncated 400 characters]", Line('b', 500) + "… [truncated 400 characters]", Line('c', 500) + "… [truncated 400 characters]", Line('d', 500) + "… [truncated 400 characters]")
-                + "\r\n… [truncated 900 characters]",
+            string.Join("\r\n", Line('a', 500) + "... [truncated 400 characters]", Line('b', 500) + "... [truncated 400 characters]", Line('c', 500) + "... [truncated 400 characters]", Line('d', 500) + "... [truncated 400 characters]")
+                + "\r\n... [truncated 900 characters]",
             ExceptionText.Cap(text));
     }
 
@@ -202,7 +202,7 @@ public sealed class ExceptionTextTests
         var text = string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "xxxxxxxxxx", "yyyyyyyyyy", Frame(1), "zzzzz", "");
 
         Assert.Equal(
-            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "… [truncated 20 characters]", Frame(1), "… [truncated 5 characters]", ""),
+            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "... [truncated 20 characters]", Frame(1), "... [truncated 5 characters]", ""),
             ExceptionText.Cap(text));
     }
 
@@ -220,7 +220,7 @@ public sealed class ExceptionTextTests
     {
         var text = "System.X: boom\r\n" + Frames(61);
 
-        Assert.Equal("System.X: boom\r\n" + Frames(60) + "… [1 more frames]\r\n", ExceptionText.Cap(text));
+        Assert.Equal("System.X: boom\r\n" + Frames(60) + "... [1 more frames]\r\n", ExceptionText.Cap(text));
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public sealed class ExceptionTextTests
     {
         var text = "System.X: boom\r\n" + Frames(100);
 
-        Assert.Equal("System.X: boom\r\n" + Frames(60) + "… [40 more frames]\r\n", ExceptionText.Cap(text));
+        Assert.Equal("System.X: boom\r\n" + Frames(60) + "... [40 more frames]\r\n", ExceptionText.Cap(text));
     }
 
     /// <summary>The sixty are for the whole text: an exception with inner exceptions has one stack for each, and a cap per stack would be a cap of sixty times as many.</summary>
@@ -239,7 +239,7 @@ public sealed class ExceptionTextTests
         var text = "System.X: boom\r\n ---> System.Y: inner\r\n" + Frames(40) + end + "\r\n" + Frames(40) + end + "\r\n" + Frames(5);
 
         var expected = "System.X: boom\r\n ---> System.Y: inner\r\n" + Frames(40) + end + "\r\n" + Frames(20)
-            + "… [20 more frames]\r\n" + end + "\r\n" + "… [5 more frames]\r\n";
+            + "... [20 more frames]\r\n" + end + "\r\n" + "... [5 more frames]\r\n";
 
         Assert.Equal(expected, ExceptionText.Cap(text));
     }
@@ -250,8 +250,8 @@ public sealed class ExceptionTextTests
         var withoutNewline = string.Concat(Enumerable.Range(1, 61).Select(Frame).Select((frame, index) => index == 0 ? frame : "\n" + frame));
         var withNewline = withoutNewline + "\n";
 
-        Assert.EndsWith("\n… [1 more frames]", ExceptionText.Cap(withoutNewline), StringComparison.Ordinal);
-        Assert.EndsWith("\n… [1 more frames]\n", ExceptionText.Cap(withNewline), StringComparison.Ordinal);
+        Assert.EndsWith("\n... [1 more frames]", ExceptionText.Cap(withoutNewline), StringComparison.Ordinal);
+        Assert.EndsWith("\n... [1 more frames]\n", ExceptionText.Cap(withNewline), StringComparison.Ordinal);
     }
 
     /// <summary>A frame is a line that is indented and says <c>at</c>; a line that says it at the margin is somebody's message.</summary>
@@ -268,7 +268,7 @@ public sealed class ExceptionTextTests
     {
         var text = string.Concat(Enumerable.Range(1, 61).Select(_ => "\tat Tab.Frame()\r\n"));
 
-        Assert.Equal(string.Concat(Enumerable.Range(1, 60).Select(_ => "\tat Tab.Frame()\r\n")) + "… [1 more frames]\r\n", ExceptionText.Cap(text));
+        Assert.Equal(string.Concat(Enumerable.Range(1, 60).Select(_ => "\tat Tab.Frame()\r\n")) + "... [1 more frames]\r\n", ExceptionText.Cap(text));
     }
 
     /// <summary>
@@ -294,7 +294,7 @@ public sealed class ExceptionTextTests
 
         var capped = ExceptionText.Cap(text);
 
-        Assert.Equal(isFrame, capped.EndsWith("… [1 more frames]\r\n", StringComparison.Ordinal));
+        Assert.Equal(isFrame, capped.EndsWith("... [1 more frames]\r\n", StringComparison.Ordinal));
         Assert.Equal(isFrame, capped.Contains("more frames]", StringComparison.Ordinal));
     }
 
@@ -305,7 +305,7 @@ public sealed class ExceptionTextTests
 
         var capped = ExceptionText.Cap(message + "\r\n");
 
-        Assert.Equal(message[..500] + $"… [truncated {message.Length - 500} characters]\r\n", capped);
+        Assert.Equal(message[..500] + $"... [truncated {message.Length - 500} characters]\r\n", capped);
     }
 
     [Fact]
@@ -316,7 +316,7 @@ public sealed class ExceptionTextTests
         var capped = ExceptionText.Cap(text);
 
         Assert.True(capped.Length < ExceptionText.MaxMessageCharacters + 200, $"{capped.Length} characters were kept.");
-        Assert.Contains("… [truncated ", capped, StringComparison.Ordinal);
+        Assert.Contains("... [truncated ", capped, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -352,20 +352,20 @@ public sealed class ExceptionTextTests
     public void A_line_the_cap_has_cut_is_cut_further_only_where_the_total_now_requires_it_and_says_so_honestly()
     {
         // 1,900 characters of message, then a line that was already cut at 500 and says 200 more were cut before: only 100 fit.
-        var text = string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 400), Line('e', 500) + "… [truncated 200 characters]");
+        var text = string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 400), Line('e', 500) + "... [truncated 200 characters]");
 
         Assert.Equal(
-            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 400), Line('e', 100) + "… [truncated 600 characters]"),
+            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 400), Line('e', 100) + "... [truncated 600 characters]"),
             ExceptionText.Cap(text));
     }
 
     [Fact]
     public void A_mark_that_stands_on_a_line_of_its_own_is_kept_and_what_the_total_has_to_leave_out_is_marked_beside_it()
     {
-        var text = string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "xxxxx", "… [truncated 7 characters]", "yy", "");
+        var text = string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "xxxxx", "... [truncated 7 characters]", "yy", "");
 
         Assert.Equal(
-            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "… [truncated 5 characters]", "… [truncated 7 characters]", "… [truncated 2 characters]", ""),
+            string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "... [truncated 5 characters]", "... [truncated 7 characters]", "... [truncated 2 characters]", ""),
             ExceptionText.Cap(text));
     }
 
@@ -373,7 +373,7 @@ public sealed class ExceptionTextTests
     [Fact]
     public void A_mark_with_the_largest_count_there_is_stays_the_largest_and_never_wraps_round()
     {
-        const string largest = "… [truncated 9223372036854775807 characters]";
+        const string largest = "... [truncated 9223372036854775807 characters]";
 
         var cutLine = ExceptionText.Cap(Line('a', 600) + largest);
         var run = ExceptionText.Cap(string.Join("\r\n", Line('a', 500), Line('b', 500), Line('c', 500), Line('d', 500), "x" + largest, "y" + largest, "z" + largest));
@@ -388,12 +388,12 @@ public sealed class ExceptionTextTests
     [Fact]
     public void A_count_too_large_to_be_a_count_is_not_a_mark()
     {
-        var text = "… [truncated 99999999999999999999 characters]\r\n" + Line('a', 10) + "… [truncated 99999999999999999999 characters]\r\n" + Line('b', 600) + "… [truncated 99999999999999999999 characters]";
+        var text = "... [truncated 99999999999999999999 characters]\r\n" + Line('a', 10) + "... [truncated 99999999999999999999 characters]\r\n" + Line('b', 600) + "... [truncated 99999999999999999999 characters]";
 
         var capped = ExceptionText.Cap(text);
 
-        Assert.StartsWith("… [truncated 99999999999999999999 characters]\r\n" + Line('a', 10) + "… [truncated 99999999999999999999 characters]\r\n" + Line('b', 500), capped, StringComparison.Ordinal);
-        Assert.EndsWith("… [truncated " + (600 + "… [truncated 99999999999999999999 characters]".Length - 500) + " characters]", capped, StringComparison.Ordinal);
+        Assert.StartsWith("... [truncated 99999999999999999999 characters]\r\n" + Line('a', 10) + "... [truncated 99999999999999999999 characters]\r\n" + Line('b', 500), capped, StringComparison.Ordinal);
+        Assert.EndsWith("... [truncated " + (600 + "... [truncated 99999999999999999999 characters]".Length - 500) + " characters]", capped, StringComparison.Ordinal);
     }
 
     /// <summary>However much is thrown at it, what is kept is a size that does not depend on the size of the text: a run of lines is one mark.</summary>
@@ -404,10 +404,10 @@ public sealed class ExceptionTextTests
         var stack = string.Concat(Enumerable.Repeat("   at Jason.Probe.Deep.Method()\r\n", 50_000));
 
         Assert.Equal(
-            string.Concat(Enumerable.Repeat(Line('m', 100) + "\r\n", 20)) + "… [truncated 4998000 characters]\r\n",
+            string.Concat(Enumerable.Repeat(Line('m', 100) + "\r\n", 20)) + "... [truncated 4998000 characters]\r\n",
             ExceptionText.Cap(messages));
         Assert.Equal(
-            string.Concat(Enumerable.Repeat("   at Jason.Probe.Deep.Method()\r\n", 60)) + "… [49940 more frames]\r\n",
+            string.Concat(Enumerable.Repeat("   at Jason.Probe.Deep.Method()\r\n", 60)) + "... [49940 more frames]\r\n",
             ExceptionText.Cap(stack));
     }
 

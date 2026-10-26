@@ -89,6 +89,36 @@ public class UpdateOutputTests
         Assert.Contains("the runtime would not stop", installation.Error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The step that closes an update names the two versions with an arrow made of ASCII. The console a person reads it
+    /// on writes through its own code page, and under PowerShell on Windows that page turns the single arrow glyph into
+    /// a control byte the terminal draws as a box with a letter in it. The same words are in the JSON body and in the
+    /// <c>--human</c> list, so both are read.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_complete_step_joins_the_two_versions_with_an_ascii_arrow(bool human)
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        var step = $"complete: {installation.From} -> {installation.To}";
+
+        var exit = await CliApp.RunAsync(
+            ["update", "apply", "--feed", installation.Feed.ToString(), "--drain-seconds", "0", .. human ? new[] { "--human" } : []],
+            installation.Env,
+            Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        if (human)
+        {
+            Assert.Contains($"- {step}", installation.Out.ToString().Split(Environment.NewLine), StringComparer.Ordinal);
+        }
+        else
+        {
+            Assert.Contains(step, Only<UpdateApplyResponse>(installation).Steps, StringComparer.Ordinal);
+        }
+    }
+
     /// <summary>The one line stdout is allowed, parsed as what it claims to be.</summary>
     private static T Only<T>(FakeInstallation installation)
     {

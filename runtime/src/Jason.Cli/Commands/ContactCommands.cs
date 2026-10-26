@@ -82,7 +82,7 @@ public static class ContactCommands
         var channel = new Option<string?>("--channel") { Description = "Only contacts having this channel, for example email." };
         var value = new Option<string?>("--value") { Description = "Only contacts whose channel value is this one; needs --channel." };
         var query = new Option<string?>("--query") { Description = "Only people whose name, company, title or any channel value contains this text; case and accents do not matter, a phone number matches however it is spaced, and a pasted LinkedIn link finds its profile." };
-        var campaign = new Option<string?>("--campaign") { Description = "Only people on this campaign, as cmp_…; excluded members are left out." };
+        var campaign = new Option<string?>("--campaign") { Description = "Only people on this campaign, as cmp_...; excluded members are left out." };
         var order = new Option<string?>("--order") { Description = "created (the default, oldest first) or activity (the person something last happened to first; people with nothing yet come last)." };
         var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived contacts, which are hidden by default." };
         var limit = VerbOptions.Limit();
@@ -255,7 +255,7 @@ public static class ContactCommands
 
     private static Option<int?> Offset() => new("--offset") { Description = "How many to skip, for the next page; 0 when absent." };
 
-    private static Argument<string> ContactId() => new("contact-id") { Description = "The contact, as cnt_…." };
+    private static Argument<string> ContactId() => new("contact-id") { Description = "The contact, as cnt_...." };
 
     /// <summary>The contact fields <c>create</c> and <c>update</c> share, so both spell them the same way.</summary>
     private sealed class ContactFields

@@ -37,7 +37,7 @@ public static class RouteRenderers
             Line("Plugin:", Plugin(resolution)),
             Line("Scope:", resolution.Scope is null ? null : RenderText.Snake(resolution.Scope.Value)),
             Line("Binding:", RenderText.Compact(resolution.Binding)),
-            Line("Snapshots:", $"routes {resolution.RoutingSnapshotId} · plugins {resolution.PluginSnapshotId}"),
+            Line("Snapshots:", $"routes {resolution.RoutingSnapshotId} | plugins {resolution.PluginSnapshotId}"),
             Line("Usable:", resolution.Usable ? "yes" : "no"),
         };
 
@@ -104,7 +104,7 @@ public static class RouteRenderers
         }
 
         var status = resolution.PluginStatus is null ? "not loaded" : RenderText.Snake(resolution.PluginStatus.Value);
-        return $"{resolution.PluginId} {resolution.PluginVersion ?? "-"} · {status}";
+        return $"{resolution.PluginId} {resolution.PluginVersion ?? "-"} | {status}";
     }
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);

@@ -350,7 +350,7 @@ public class DecisionCommandsTests
         Assert.Contains("Which of the two accounts do we mean?", cli.Text, StringComparison.Ordinal);
         Assert.Contains("pending", cli.Text, StringComparison.Ordinal);
         Assert.Contains("dec_2", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("word word …", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("word word ...", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain(longQuestion, cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: ZGVjXzI", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);

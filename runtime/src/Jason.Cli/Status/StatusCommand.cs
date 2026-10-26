@@ -32,17 +32,17 @@ public static class StatusCommand
     /// </summary>
     private const string Partition =
         """
-        Required — a failure exits 1:   the runtime answers · the running runtime is the build this CLI is ·
-                                        migrations are applied · the plugin registry is alive (zero plugins is
-                                        alive) · role skills are present, named after their directories and
-                                        within the runtime's live cap · 'jason' resolves on PATH, in this shell
+        Required — a failure exits 1:   the runtime answers | the running runtime is the build this CLI is |
+                                        migrations are applied | the plugin registry is alive (zero plugins is
+                                        alive) | role skills are present, named after their directories and
+                                        within the runtime's live cap | 'jason' resolves on PATH, in this shell
                                         or in every shell started from now on
-        Optional — absent never fails:  a provider plugin is installed · each plugin package this release
-                                        publishes is the one installed · every plugin installed is available ·
-                                        a route is configured · a binding names an account · a provider CLI
-                                        you name answers · the skill packs are deployed to an agent harness ·
-                                        autostart is registered · notifications reach you · a UI is installed,
-                                        and the default one is this release's · the harness root can take the
+        Optional — absent never fails:  a provider plugin is installed | each plugin package this release
+                                        publishes is the one installed | every plugin installed is available |
+                                        a route is configured | a binding names an account | a provider CLI
+                                        you name answers | the skill packs are deployed to an agent harness |
+                                        autostart is registered | notifications reach you | a UI is installed,
+                                        and the default one is this release's | the harness root can take the
                                         first project or campaign
 
         The path check is ok in two cases. 'jason' resolves in this shell; or it does not, and this account

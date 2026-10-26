@@ -45,7 +45,7 @@ public static class CampaignCommands
         var name = new Option<string?>("--name") { Description = "The campaign name." };
         var context = new Option<string?>("--context") { Description = "The initial campaign context, as a JSON object." };
         var project = ProjectOption(
-            "The project the campaign is in, as prj_…. Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and the default project elsewhere.");
+            "The project the campaign is in, as prj_.... Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and the default project elsewhere.");
         var idempotencyKey = VerbOptions.IdempotencyKey();
         var file = VerbOptions.File("The object holds name, context, project_id and idempotency_key.");
         var reason = VerbOptions.Reason();
@@ -105,7 +105,7 @@ public static class CampaignCommands
         var status = new Option<string?>("--status") { Description = "Only campaigns in this status: draft, active, paused or archived." };
         var query = new Option<string?>("--query") { Description = "Only campaigns whose name contains this text; case and accents do not matter." };
         var project = ProjectOption(
-            "Only the campaigns of this project, as prj_…. Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and every project elsewhere.");
+            "Only the campaigns of this project, as prj_.... Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and every project elsewhere.");
         var everyProject = new Option<bool>("--all-projects") { Description = "The campaigns of every project, wherever the command runs; not with --project." };
         var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived campaigns, which are hidden by default." };
         var limit = VerbOptions.Limit();
@@ -172,7 +172,7 @@ public static class CampaignCommands
         {
             Description = "How often this campaign is reviewed, in seconds. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
         };
-        var project = ProjectOption("Move the campaign to this project, as prj_…. A campaign is always in one, so it cannot be cleared.");
+        var project = ProjectOption("Move the campaign to this project, as prj_.... A campaign is always in one, so it cannot be cleared.");
         var clear = VerbOptions.Repeatable(
             "--clear",
             $"A field to set back to nothing: {string.Join(", ", Clearable)}. Repeat the option for more than one.");
@@ -288,7 +288,7 @@ public static class CampaignCommands
         var file = new Option<string>("--file")
         {
             Description = "The contacts as JSON — a path, or - for standard input. Either an array of items, or an object holding contacts and match_by. "
-                + "An item is a contact payload (first_name, last_name, company, title, time_zone, channels, custom) or {\"contact_id\": \"cnt_…\"}.",
+                + "An item is a contact payload (first_name, last_name, company, title, time_zone, channels, custom) or {\"contact_id\": \"cnt_...\"}.",
             Required = true,
         };
         var matchBy = new Option<string?>("--match-by") { Description = "Deduplicate on an existing contact by this key: a channel name such as email, or custom:<field>." };
@@ -320,7 +320,7 @@ public static class CampaignCommands
     {
         var command = new Command("remove-contacts", "Remove contacts from a campaign. They stay on record as excluded.");
         var id = CampaignId();
-        var contact = VerbOptions.Repeatable("--contact", "A contact to remove, as cnt_…. Repeat the option for more than one.");
+        var contact = VerbOptions.Repeatable("--contact", "A contact to remove, as cnt_.... Repeat the option for more than one.");
         var file = VerbOptions.File("The object holds contact_ids.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
@@ -516,11 +516,11 @@ public static class CampaignCommands
 
     private static Argument<string[]> CampaignIds() => new("campaign-id")
     {
-        Description = "The campaigns, as cmp_…; none means every campaign not archived, in every project.",
+        Description = "The campaigns, as cmp_...; none means every campaign not archived, in every project.",
         Arity = ArgumentArity.ZeroOrMore,
     };
 
-    private static Argument<string> CampaignId() => new("campaign-id") { Description = "The campaign, as cmp_…." };
+    private static Argument<string> CampaignId() => new("campaign-id") { Description = "The campaign, as cmp_...." };
 
     /// <summary><c>--project</c> takes a project's id, as every verb that names a project does.</summary>
     private static Option<string?> ProjectOption(string description) => new("--project") { Description = description };

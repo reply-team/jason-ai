@@ -79,8 +79,8 @@ public static partial class LogsCommand
         Filters — every one given must hold, and none is required; with none, everything written is shown:
           --level <level>   at or above: verbose, debug, information, warning, error, fatal, in any case (the names
                             Logging:MinimumLevel uses). A line that names no level is information.
-          --campaign <id>   lines whose CampaignId is this campaign, as cmp_….
-          --work-item <id>  lines whose WorkItemId is this work item, as wi_….
+          --campaign <id>   lines whose CampaignId is this campaign, as cmp_....
+          --work-item <id>  lines whose WorkItemId is this work item, as wi_....
           --since <time>    lines stamped at or after this moment: ISO-8601 with Z or an offset, for example
                             2026-09-18T09:00:00Z. A time with neither is a usage error, never a guess at your time zone.
         Every line inside an attempt carries CampaignId, WorkItemId and AttemptId. Lines written by an older build name
@@ -136,8 +136,8 @@ public static partial class LogsCommand
         {
             Description = "Only events at this level or above: verbose, debug, information, warning, error or fatal.",
         };
-        var campaign = new Option<string?>("--campaign") { Description = "Only events of this campaign, as cmp_…." };
-        var workItem = new Option<string?>("--work-item") { Description = "Only events about this work item, as wi_…." };
+        var campaign = new Option<string?>("--campaign") { Description = "Only events of this campaign, as cmp_...." };
+        var workItem = new Option<string?>("--work-item") { Description = "Only events about this work item, as wi_...." };
         var since = new Option<string?>("--since")
         {
             Description = "Only events stamped at or after this moment, as ISO-8601 with Z or an offset — for example 2026-09-18T09:00:00Z.",

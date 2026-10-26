@@ -119,7 +119,7 @@ public sealed class NotificationsCheckTests
     }
 
     [Theory]
-    [InlineData("disabled_for_application", "Windows has Jason's notifications switched off (Settings → System → Notifications → Jason).")]
+    [InlineData("disabled_for_application", "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).")]
     [InlineData("disabled_for_user", "Windows has notifications switched off for every app.")]
     [InlineData("disabled_by_group_policy", "A group policy on this machine switches Windows' notifications off; an administrator sets it.")]
     [InlineData("disabled_by_manifest", "Windows says this program's own manifest switches its notifications off.")]
@@ -276,7 +276,7 @@ public sealed class NotificationsCheckTests
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application"), Ntfy()], "ntf_01K", NineOhSix)),
             CheckState.Ok,
             "Notifications reach you by ntfy; none has reached you yet. "
-            + "Windows has Jason's notifications switched off (Settings → System → Notifications → Jason).");
+            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).");
 
     /// <summary>A toast switched off beside a plugin that delivers still reaches the person, through the plugin.</summary>
     [Fact]
@@ -285,7 +285,7 @@ public sealed class NotificationsCheckTests
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application"), Ntfy("delivered")], "ntf_01K", NineOhSix)),
             CheckState.Ok,
             "Notifications reach you by ntfy; the last one was delivered at 2026-10-01 09:06 UTC. "
-            + "Windows has Jason's notifications switched off (Settings → System → Notifications → Jason).");
+            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).");
 
     /// <summary>An optional check never fails readiness, whatever its state.</summary>
     [Fact]
@@ -311,7 +311,7 @@ public sealed class NotificationsCheckTests
         await CliApp.RunAsync(["status", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
 
         var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
-        Assert.Contains("autostart is registered · notifications reach you", text, StringComparison.Ordinal);
+        Assert.Contains("autostart is registered | notifications reach you", text, StringComparison.Ordinal);
     }
 
     /// <summary>

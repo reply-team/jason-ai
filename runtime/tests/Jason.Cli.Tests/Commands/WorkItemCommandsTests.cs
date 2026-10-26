@@ -808,13 +808,13 @@ public class WorkItemCommandsTests
     [Theory]
     [InlineData(
         """{"scope":"account","reason":"billing","link":"https://app.example.com/billing"}""",
-        "Blocked:      account · billing · https://app.example.com/billing")]
+        "Blocked:      account | billing | https://app.example.com/billing")]
     [InlineData(
         """{"scope":"sender","sender_external_id":"mbx_1042","reason":"limit","link":"https://app.example.com/mailboxes/1042","clears_at":"2026-10-25T00:00:00Z"}""",
-        "Blocked:      sender mbx_1042 · limit · https://app.example.com/mailboxes/1042 · clears 2026-10-25 00:00:00 UTC")]
+        "Blocked:      sender mbx_1042 | limit | https://app.example.com/mailboxes/1042 | clears 2026-10-25 00:00:00 UTC")]
     [InlineData(
         """{"scope":"account","reason":"other"}""",
-        "Blocked:      account · other")]
+        "Blocked:      account | other")]
     public async Task Human_mode_says_what_a_provider_block_holds_under_the_last_error(string block, string expected)
     {
         var lastError = new AttemptErrorDto(
@@ -855,7 +855,7 @@ public class WorkItemCommandsTests
         var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("Lineage:      inherited · profile fast-claude r3 · from att_B", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Lineage:      inherited | profile fast-claude r3 | from att_B", cli.Text, StringComparison.Ordinal);
     }
 
     /// <summary>The one state that will not run: it says so on the item rather than only in the error afterwards.</summary>
@@ -979,11 +979,11 @@ public class WorkItemCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("ATTEMPT 1 (att_A) RAN", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("Plugin:       fake-provider 1.2.0 · 9f2b7c4d1e6a", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Plugin:       fake-provider 1.2.0 | 9f2b7c4d1e6a", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Operation:    campaign.get v1", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("Route:        campaign_operation · binding aa11bb22cc33", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("Snapshots:    plugins snp_01K5B7Q2WE5X3M9T0YH4C6RDNA · routes rts_01K5B7Q2WE5X3M9T0YH4C6RDNB", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("Invocation:   pin_01K5B7Q2WE5X3M9T0YH4C6RDNC · 412 ms · exec 0 · http 2 · log 7", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Route:        campaign_operation | binding aa11bb22cc33", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Snapshots:    plugins snp_01K5B7Q2WE5X3M9T0YH4C6RDNA | routes rts_01K5B7Q2WE5X3M9T0YH4C6RDNB", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Invocation:   pin_01K5B7Q2WE5X3M9T0YH4C6RDNC | 412 ms | exec 0 | http 2 | log 7", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
@@ -1006,7 +1006,7 @@ public class WorkItemCommandsTests
         var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("Invocation:   pin_01K5B7Q2WE5X3M9T0YH4C6RDNC · 412 ms · exec 0 · http 2 · log 7 · contact created", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Invocation:   pin_01K5B7Q2WE5X3M9T0YH4C6RDNC | 412 ms | exec 0 | http 2 | log 7 | contact created", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("campaign found", cli.Text, StringComparison.Ordinal);
     }
 

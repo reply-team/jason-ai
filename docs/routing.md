@@ -87,7 +87,7 @@ a file is saved. `jason runtime status --human` names the snapshot that is actua
 runtime whose global default is one plugin and which also holds one campaign route:
 
 ```text
-Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY · default fake-provider · 0 overrides · 1 campaign route
+Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY | default fake-provider | 0 overrides | 1 campaign route
 ```
 
 ## 4. A campaign's own routes
@@ -173,10 +173,10 @@ the rest:
 ```text
 Operation:  campaign.enroll v1
 Campaign:   cmp_01M2M7JBD1D9MEMMJQAJCWZV3H
-Plugin:     other-provider 1.0.0 · valid
+Plugin:     other-provider 1.0.0 | valid
 Scope:      global_default
 Binding:    -
-Snapshots:  routes rts_01M2M7JAP1E2T14EFE0XG7MGVA · plugins snp_01M2M7JAE3KB7Q2MXN266SDKQQ
+Snapshots:  routes rts_01M2M7JAP1E2T14EFE0XG7MGVA | plugins snp_01M2M7JAE3KB7Q2MXN266SDKQQ
 Usable:     no
 problems:
 Routes:Default: plugin_operation_unsupported — Plugin 'other-provider' does not perform 'campaign.enroll', and work is never handed to a plugin the route did not name.
@@ -493,11 +493,11 @@ afterwards leaves a finished attempt exactly as it stands.
 
 ```text
 ATTEMPT 1 (att_01M2M7H924BZ5FS6CSZ794J1R8) RAN
-Plugin:       fake-provider 1.0.0 · 9a357c7bfe4e
+Plugin:       fake-provider 1.0.0 | 9a357c7bfe4e
 Operation:    list_membership.add v1
-Route:        global_default · binding a728b92b6cdc
-Snapshots:    plugins snp_01M2M7H79JANSWPE9EFGTGG7DH · routes rts_01M2M7H79NXYND9TAPQFDEQTHY
-Invocation:   pin_01M2M7H97ED18X6V82B19FA85A · 478 ms · exec 2 · http 0 · log 0 · contact created
+Route:        global_default | binding a728b92b6cdc
+Snapshots:    plugins snp_01M2M7H79JANSWPE9EFGTGG7DH | routes rts_01M2M7H79NXYND9TAPQFDEQTHY
+Invocation:   pin_01M2M7H97ED18X6V82B19FA85A | 478 ms | exec 2 | http 0 | log 0 | contact created
 ```
 
 Read it as: which package and at which content digest, which operation at which contract version, which

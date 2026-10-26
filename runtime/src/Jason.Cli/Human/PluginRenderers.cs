@@ -97,7 +97,7 @@ public static class PluginRenderers
     {
         var listed = operations is not { Count: > 0 } ? null
             : operations.Count <= OperationsShown ? string.Join(", ", operations)
-            : string.Join(", ", operations.Take(OperationsShown)) + " …";
+            : string.Join(", ", operations.Take(OperationsShown)) + " ...";
         return events is not { Count: > 0 } ? listed
             : listed is null ? "events"
             : listed + " + events";
@@ -115,7 +115,7 @@ public static class PluginRenderers
         var http = capabilities.Http is null ? Absent : Counts(capabilities.Http.Granted?.Count ?? 0, capabilities.Http.Requested?.Count ?? 0);
         var env = capabilities.Env is null ? Absent : Counts(capabilities.Env.Granted?.Count ?? 0, capabilities.Env.Requested?.Count ?? 0);
 
-        return $"exec {exec} · http {http} · env {env}";
+        return $"exec {exec} | http {http} | env {env}";
     }
 
     private static string Counts(int granted, int requested) =>

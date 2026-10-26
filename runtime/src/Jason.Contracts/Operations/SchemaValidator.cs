@@ -1801,7 +1801,7 @@ public static class SchemaValidator
     {
         if (depth > MaxDepth)
         {
-            builder.Append("\"…\"");
+            builder.Append("...");
             return;
         }
 
@@ -1814,7 +1814,7 @@ public static class SchemaValidator
             // An object nothing can read has no canonical form, and this one is only ever compared or shown; the
             // entry points name such an object where they meet it.
             case JsonObject unreadable when Unreadable(unreadable):
-                builder.Append("\"…\"");
+                builder.Append("...");
                 break;
 
             case JsonObject map:
@@ -1868,7 +1868,10 @@ public static class SchemaValidator
     /// infinity is the quoted text <c>"Infinity"</c>, which is also the canonical form of the ordinary string
     /// <c>Infinity</c>, so a <c>const</c> of one would accept the other. Nothing can reach it — a schema holding
     /// such a number is refused by the dialect check before it is ever applied, and no document parsed from text
-    /// can hold one — and inventing a distinct spelling here would change what every comparison compares by.
+    /// can hold one — and inventing a distinct spelling here would change what every comparison compares by. Also
+    /// observed rather than fixed: two values that differ only deeper than <see cref="MaxDepth"/> levels both write the
+    /// placeholder there — the bare <c>...</c>, which begins no JSON token and so is no value's own form — and compare
+    /// as one value.
     /// </remarks>
     private static string Scalar(JsonNode node)
     {
@@ -1880,7 +1883,7 @@ public static class SchemaValidator
         {
             return node is JsonValue value && value.TryGetValue(out double real)
                 ? "\"" + real.ToString("R", CultureInfo.InvariantCulture) + "\""
-                : "\"…\"";
+                : "...";
         }
     }
 

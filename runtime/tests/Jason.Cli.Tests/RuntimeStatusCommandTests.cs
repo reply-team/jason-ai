@@ -75,7 +75,7 @@ public class RuntimeStatusCommandTests
         var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("· 7 summoned", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("| 7 summoned", output.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ public class RuntimeStatusCommandTests
         var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("· 0 summoned", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("| 0 summoned", output.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -308,7 +308,7 @@ public class RuntimeStatusCommandTests
                 [Toast("delivered"), new NotificationChannelInfo("ntfy", "plugin", true, "failed", null, "notification_unreachable", "transient", null, NineOhSix)],
                 "ntf_01K",
                 NineOhSix)),
-            "toast delivered at 09:06 UTC · ntfy failed (notification_unreachable) at 09:06 UTC"
+            "toast delivered at 09:06 UTC | ntfy failed (notification_unreachable) at 09:06 UTC"
         },
         { InfoJson(new NotificationsInfo(true, [Toast("not_attempted", "no_desktop", "session 0", presence: "no_desktop", presenceDetail: "session 0")], "ntf_01K", NineOhSix)), "toast has no desktop (session 0)" },
 
@@ -366,7 +366,7 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains(
-            "Dispatcher: running · tick 10 s · 2/4 attempts · last scan 2026-09-14 10:00:00 UTC",
+            "Dispatcher: running | tick 10 s | 2/4 attempts | last scan 2026-09-14 10:00:00 UTC",
             output.ToString(),
             StringComparison.Ordinal);
     }
@@ -381,7 +381,7 @@ public class RuntimeStatusCommandTests
         var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("Dispatcher: running · tick 10 s · 0/4 attempts · last scan never", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Dispatcher: running | tick 10 s | 0/4 attempts | last scan never", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -410,11 +410,11 @@ public class RuntimeStatusCommandTests
     {
         {
             "refused and teaching nothing",
-            "Skills:     1 role taught · 1 would be refused (skill_too_large) · 1 teaches nothing · cap 4096 bytes"
+            "Skills:     1 role taught | 1 would be refused (skill_too_large) | 1 teaches nothing | cap 4096 bytes"
         },
-        { "teaching nothing alone", "Skills:     0 roles taught · 2 teach nothing · cap 4096 bytes" },
+        { "teaching nothing alone", "Skills:     0 roles taught | 2 teach nothing | cap 4096 bytes" },
         { "the directory unreadable", "Skills:     The role skills directory could not be read: denied [skills_directory_unreadable]" },
-        { "a runtime without codes", "Skills:     1 role taught · 1 would be refused · cap 4096 bytes" },
+        { "a runtime without codes", "Skills:     1 role taught | 1 would be refused | cap 4096 bytes" },
     };
 
     [Theory]
@@ -458,7 +458,7 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains(
-            "Plugins:    2 active · snapshot snp_01J4 · loaded 2026-09-14 12:00:00 UTC",
+            "Plugins:    2 active | snapshot snp_01J4 | loaded 2026-09-14 12:00:00 UTC",
             output.ToString(),
             StringComparison.Ordinal);
     }
@@ -478,7 +478,7 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains(
-            "Routes:     snapshot rts_01J4 · default fake-provider · 1 override · 3 campaign routes",
+            "Routes:     snapshot rts_01J4 | default fake-provider | 1 override | 3 campaign routes",
             output.ToString(),
             StringComparison.Ordinal);
     }
@@ -496,7 +496,7 @@ public class RuntimeStatusCommandTests
         var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("Routes:     nothing is routed anywhere · snapshot rts_EMPTY", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Routes:     nothing is routed anywhere | snapshot rts_EMPTY", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -511,7 +511,7 @@ public class RuntimeStatusCommandTests
         var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("Plugins:    none active · last reload rejected", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Plugins:    none active | last reload rejected", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

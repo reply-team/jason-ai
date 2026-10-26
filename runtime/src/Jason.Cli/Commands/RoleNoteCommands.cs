@@ -155,10 +155,10 @@ public static class RoleNoteCommands
     }
 
     private static Option<string?> CampaignOption(string whose = "note this is") =>
-        new("--campaign") { Description = $"The campaign whose {whose}, as cmp_…. With neither this nor --project, it is the client's level." };
+        new("--campaign") { Description = $"The campaign whose {whose}, as cmp_.... With neither this nor --project, it is the client's level." };
 
     private static Option<string?> ProjectOption(string whose = "note this is") =>
-        new("--project") { Description = $"The project whose {whose}, as prj_…. With neither this nor --campaign, it is the client's level." };
+        new("--project") { Description = $"The project whose {whose}, as prj_.... With neither this nor --campaign, it is the client's level." };
 
     /// <summary>
     /// The role and the level a <c>get</c> or <c>set</c> names: <c>--role</c>, with <c>--campaign</c>, <c>--project</c> or

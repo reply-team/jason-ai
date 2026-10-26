@@ -402,7 +402,7 @@ public sealed partial class ExecutorService(
 
         if (on.Any(string.IsNullOrWhiteSpace))
         {
-            errors.Add("on", "invalid", "on holds work item ids, as wi_…, none of them blank.");
+            errors.Add("on", "invalid", "on holds work item ids, as wi_..., none of them blank.");
             return [];
         }
 

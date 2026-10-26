@@ -558,7 +558,7 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
         }
 
         said = (redactor ?? Redactor.None).Redact(said);
-        return ": " + (said.Length <= SaidChars ? said : "…" + said[^SaidChars..]);
+        return ": " + (said.Length <= SaidChars ? said : "..." + said[^SaidChars..]);
     }
 
     private static string ProblemPath(int index) =>

@@ -119,7 +119,7 @@ public class ApprovalCommandsTests
         Assert.Contains("Intent:        Put one person into a campaign at the provider.", text, StringComparison.Ordinal);
         Assert.Contains("Reach:         act (conditional)", text, StringComparison.Ordinal);
         Assert.Contains("Undo:          irreversible (conditional)", text, StringComparison.Ordinal);
-        Assert.Contains("Contact:       Ada (cnt_1) · email ada@example.test", text, StringComparison.Ordinal);
+        Assert.Contains("Contact:       Ada (cnt_1) | email ada@example.test", text, StringComparison.Ordinal);
         Assert.Contains("Account:       sha256:account", text, StringComparison.Ordinal);
         Assert.True(text.IndexOf("Intent:", StringComparison.Ordinal) < text.IndexOf("Id:", StringComparison.Ordinal));
     }
@@ -139,7 +139,7 @@ public class ApprovalCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         var contact = Assert.Single(cli.Text.ReplaceLineEndings("\n").Split('\n'), line => line.StartsWith("Contact:", StringComparison.Ordinal));
-        Assert.Equal("Contact:       cnt_1 · email ada@example.test", contact);
+        Assert.Equal("Contact:       cnt_1 | email ada@example.test", contact);
     }
 
     /// <summary>

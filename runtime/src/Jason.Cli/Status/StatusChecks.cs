@@ -1111,7 +1111,7 @@ internal static class StatusChecks
             {
                 asides.Add(channel.Reason switch
                 {
-                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings → System → Notifications → Jason).",
+                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).",
                     SilencedReasons.DisabledByGroupPolicy => "A group policy on this machine switches Windows' notifications off; an administrator sets it.",
                     SilencedReasons.DisabledByManifest => "Windows says this program's own manifest switches its notifications off.",
                     _ => "Windows has notifications switched off for every app.",

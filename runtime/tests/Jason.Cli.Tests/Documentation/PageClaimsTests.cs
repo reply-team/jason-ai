@@ -1869,7 +1869,7 @@ public partial class PageClaimsTests
         var help = Flat(output.ToString());
         var start = help.IndexOf("Optional — absent never fails:", StringComparison.Ordinal) + "Optional — absent never fails:".Length;
         var end = help.IndexOf("The path check", start, StringComparison.Ordinal);
-        var printed = help[start..end].Split(" · ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var printed = help[start..end].Split(" | ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
         var rows = Page(page.Split('/'))
             .Split('\n')

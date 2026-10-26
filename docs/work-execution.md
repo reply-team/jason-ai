@@ -949,7 +949,7 @@ rather than raising the number quietly: a lease silently changed is one the plan
 `jason runtime status --human` shows what the loop is doing:
 
 ```text
-Dispatcher: running · tick 10 s · 2/4 attempts · last scan 2026-09-14 12:00:03 UTC
+Dispatcher: running | tick 10 s | 2/4 attempts | last scan 2026-09-14 12:00:03 UTC | 0 summoned
 ```
 
 ## Stopping and restarting

@@ -175,7 +175,7 @@ public static class RuntimeStatusCommand
             return "off";
         }
 
-        return string.Join(" · ", on.Select(channel => Channel(channel, startedAt, notifications.LastAt)));
+        return string.Join(" | ", on.Select(channel => Channel(channel, startedAt, notifications.LastAt)));
 
         static string Channel(NotificationChannelInfo channel, DateTimeOffset startedAt, DateTimeOffset? lastAt)
         {
@@ -231,7 +231,7 @@ public static class RuntimeStatusCommand
         var cap = string.Create(CultureInfo.InvariantCulture, $"cap {skills.MaxSkillBytes} bytes");
         if (skills.Roles.Count == 0)
         {
-            return $"no role skills deployed · every role would launch untaught · {cap}";
+            return $"no role skills deployed | every role would launch untaught | {cap}";
         }
 
         // A directory with no SKILL.md is copied and teaches the host nothing; the launcher does not refuse it, so it is
@@ -254,7 +254,7 @@ public static class RuntimeStatusCommand
         }
 
         parts.Add(cap);
-        return string.Join(" · ", parts);
+        return string.Join(" | ", parts);
     }
 
     /// <summary>
@@ -289,12 +289,12 @@ public static class RuntimeStatusCommand
 
         if (routes is { GlobalDefaultPlugin: null, GlobalOverrideCount: 0, CampaignRouteCount: 0 })
         {
-            return $"nothing is routed anywhere · snapshot {routes.SnapshotId}";
+            return $"nothing is routed anywhere | snapshot {routes.SnapshotId}";
         }
 
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"snapshot {routes.SnapshotId} · default {routes.GlobalDefaultPlugin ?? "none"} · {Plural(routes.GlobalOverrideCount, "override")} · {Plural(routes.CampaignRouteCount, "campaign route")}");
+            $"snapshot {routes.SnapshotId} | default {routes.GlobalDefaultPlugin ?? "none"} | {Plural(routes.GlobalOverrideCount, "override")} | {Plural(routes.CampaignRouteCount, "campaign route")}");
     }
 
     private static string Plural(int count, string noun) =>
@@ -317,11 +317,11 @@ public static class RuntimeStatusCommand
         // counters — and printed at zero too, because a loop that is running and has summoned nothing is
         // exactly the thing somebody runs this to see. A field that disappeared at zero would answer that
         // question by saying nothing, which is what a runtime too old to have the counter looks like.
-        var summons = string.Create(CultureInfo.InvariantCulture, $" · {dispatcher.Summons} summoned");
+        var summons = string.Create(CultureInfo.InvariantCulture, $" | {dispatcher.Summons} summoned");
 
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{state} · tick {dispatcher.TickSeconds} s · {dispatcher.RunningAttempts}/{dispatcher.MaxParallel} attempts · last scan {lastScan}{summons}");
+            $"{state} | tick {dispatcher.TickSeconds} s | {dispatcher.RunningAttempts}/{dispatcher.MaxParallel} attempts | last scan {lastScan}{summons}");
     }
 
     /// <summary>
@@ -337,10 +337,10 @@ public static class RuntimeStatusCommand
 
         if (plugins is { ActiveCount: 0, LastReloadActivated: false })
         {
-            return "none active · last reload rejected";
+            return "none active | last reload rejected";
         }
 
         var loadedAt = plugins.LoadedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
-        return string.Create(CultureInfo.InvariantCulture, $"{plugins.ActiveCount} active · snapshot {plugins.SnapshotId} · loaded {loadedAt}");
+        return string.Create(CultureInfo.InvariantCulture, $"{plugins.ActiveCount} active | snapshot {plugins.SnapshotId} | loaded {loadedAt}");
     }
 }

@@ -187,9 +187,9 @@ jason plugin list --human
 ```
 
 ```text
-ID             VERSION  KIND      STATUS  OPERATIONS            GRANTS                         DIGEST
--------------  -------  --------  ------  --------------------  -----------------------------  ------------
-fake-provider  1.0.0    provider  valid   echo.run, exec.run …  exec 1/1 · http 0/2 · env 1/2  3f2a9c1b4d5e
+ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                         DIGEST
+-------------  -------  --------  ------  ----------------------  -----------------------------  ------------
+fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2  3f2a9c1b4d5e
 ```
 
 `GRANTS` is granted-over-requested per capability, `-` where the manifest requested nothing; `DIGEST`
@@ -271,8 +271,8 @@ so the package is refused as `field_invalid` and the previous snapshot is kept. 
 reload` is not repeated. `jason runtime status --human` says which of the two it is:
 
 ```text
-Plugins:    1 active · snapshot snp_01J4… · loaded 2026-09-14 12:00:00 UTC
-Plugins:    none active · last reload rejected
+Plugins:    1 active | snapshot snp_01J4… | loaded 2026-09-14 12:00:00 UTC
+Plugins:    none active | last reload rejected
 ```
 
 An **activated** load writes one global journal entry of the reserved kind `plugins_reloaded`

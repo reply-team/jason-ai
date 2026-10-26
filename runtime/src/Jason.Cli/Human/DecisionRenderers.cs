@@ -129,7 +129,7 @@ public static partial class DecisionRenderers
         }
 
         var folded = Whitespace().Replace(question, " ").Trim();
-        return folded.Length <= QuestionShown ? folded : Head(folded, QuestionShown).TrimEnd() + " …";
+        return folded.Length <= QuestionShown ? folded : Head(folded, QuestionShown).TrimEnd() + " ...";
     }
 
     /// <summary>

@@ -289,18 +289,18 @@ public static class WorkItemRenderers
         ran.Diagnostics is { } cost
             ? string.Create(
                 CultureInfo.InvariantCulture,
-                $"{cost.DurationMs} ms · exec {cost.ExecCalls} · http {cost.HttpCalls} · log {cost.LogLines}")
+                $"{cost.DurationMs} ms | exec {cost.ExecCalls} | http {cost.HttpCalls} | log {cost.LogLines}")
             : null,
         Origins(ran.ExternalIdOrigins));
 
     private static string? Origins(IReadOnlyDictionary<string, string>? origins) => origins is null || origins.Count == 0
         ? null
-        : string.Join(" · ", origins.OrderBy(origin => origin.Key, StringComparer.Ordinal).Select(origin => origin.Key + " " + origin.Value));
+        : string.Join(" | ", origins.OrderBy(origin => origin.Key, StringComparer.Ordinal).Select(origin => origin.Key + " " + origin.Value));
 
     private static string? Parts(params string?[] parts)
     {
         var present = parts.Where(part => !string.IsNullOrEmpty(part)).ToList();
-        return present.Count == 0 ? null : string.Join(" · ", present);
+        return present.Count == 0 ? null : string.Join(" | ", present);
     }
 
     /// <summary>

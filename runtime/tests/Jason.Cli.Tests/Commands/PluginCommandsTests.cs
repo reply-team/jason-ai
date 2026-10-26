@@ -65,10 +65,10 @@ public class PluginCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(
             """
-            ID             VERSION  KIND          STATUS       OPERATIONS            GRANTS                         DIGEST
-            -------------  -------  ------------  -----------  --------------------  -----------------------------  ------------
-            fake-provider  1.0.0    provider      valid        echo.run, exec.run …  exec 1/1 · http 0/2 · env 1/2  3f2a9c1b4d5e
-            notifier       0.2.0    notification  unavailable  -                     exec 1/1 · http - · env -      9a8b7c6d5e4f
+            ID             VERSION  KIND          STATUS       OPERATIONS              GRANTS                         DIGEST
+            -------------  -------  ------------  -----------  ----------------------  -----------------------------  ------------
+            fake-provider  1.0.0    provider      valid        echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2  3f2a9c1b4d5e
+            notifier       0.2.0    notification  unavailable  -                       exec 1/1 | http - | env -      9a8b7c6d5e4f
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
     }

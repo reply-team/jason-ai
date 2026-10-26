@@ -175,10 +175,10 @@ public class RouteCommandsTests
             """
             Operation:  campaign.get v1
             Campaign:   cmp_A
-            Plugin:     fake-provider 1.0.0 · valid
+            Plugin:     fake-provider 1.0.0 | valid
             Scope:      global_default
             Binding:    {"workspace":"west"}
-            Snapshots:  routes rts_01J4 · plugins snp_01J4
+            Snapshots:  routes rts_01J4 | plugins snp_01J4
             Usable:     yes
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
