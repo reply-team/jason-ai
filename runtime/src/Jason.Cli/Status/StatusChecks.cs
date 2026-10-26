@@ -718,8 +718,8 @@ internal static class StatusChecks
 
     /// <summary>
     /// Whether each plugin package this runtime's release publishes is the one installed. Optional: a provider package is
-    /// the person's to choose, so this never decides readiness. An earlier release's package fails it, and the fact says how
-    /// to install this one's, because no command does: the wiring check's step 3 prints the lines. One built or edited here
+    /// the person's to choose, so this never decides readiness. An earlier release's package fails it, and the fact names the
+    /// command that installs this one's, <c>jason plugin install</c>, with what it replaces. One built or edited here
     /// passes with a line that says so, and a development build compares against its own tree, named in the fact.
     /// </summary>
     private static StatusCheck PluginPackage(SystemInfoResponse? info)
@@ -762,10 +762,9 @@ internal static class StatusChecks
             ReleasedPluginState.Current => $"{installed} is installed, the package runtime {runtime} carries.",
             ReleasedPluginState.Behind =>
                 $"{installed} is installed; runtime {runtime} carries {released}, the package its release publishes. "
-                + $"Step 3 of the wiring check prints the two lines that place it: the checksum match, and the unpack into {directory} once the package there is moved away. "
-                + $"Then run `{Repair.ReloadPlugins}`.",
+                + $"`jason plugin install {package.Id} --replace` places it in {directory} in place of the one there, and asks the runtime to load it.",
             ReleasedPluginState.Differs => $"{installed} is installed and is not the package runtime {runtime} carries ({released}); it names the same version or a later one, so it is a later release's package or one built or edited on this machine.",
-            ReleasedPluginState.NotInstalled => $"{installed} is not installed; runtime {runtime} carries {released}, the package its release publishes, and step 3 of the wiring check prints the lines that install it.",
+            ReleasedPluginState.NotInstalled => $"{installed} is not installed; runtime {runtime} carries {released}, the package its release publishes, and `jason plugin install {package.Id}` installs it.",
 
             // Every state the runtime says has its arm above; the words are read by name, never as numbers.
             _ => throw new ArgumentOutOfRangeException(nameof(package), package.State, "There is no such package state."),

@@ -238,7 +238,7 @@ internal static class GoldenPath
         }
     }
 
-    /// <summary>Installing a plugin is copying its directory. There is no install verb, and none is needed.</summary>
+    /// <summary>A package of the test's own is installed by copying its directory; `jason plugin install` places only what a release publishes.</summary>
     public static void InstallReplyPackage(Installation it)
     {
         ArgumentNullException.ThrowIfNull(it);

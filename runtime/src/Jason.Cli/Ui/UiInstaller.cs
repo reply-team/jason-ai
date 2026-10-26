@@ -1,10 +1,6 @@
-using System.Globalization;
-using System.Net;
-using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using Jason.Cli.Update;
-using Jason.Contracts;
 using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
 
@@ -33,9 +29,6 @@ public static class UiInstaller
     /// <summary>A build is held to 16 MB unpacked; a package twice that is not one, whatever the address served.</summary>
     public static long MaxDownloadBytes => 32L * 1024 * 1024;
 
-    /// <summary>checksums.txt is a line per file a release carries.</summary>
-    private const long MaxChecksumsBytes = 64 * 1024;
-
     /// <summary>A package of a megabyte or two: what has not arrived in two minutes is not arriving.</summary>
     private static readonly TimeSpan Deadline = TimeSpan.FromMinutes(2);
 
@@ -60,7 +53,7 @@ public static class UiInstaller
         deadline.CancelAfter(Deadline);
 
         var sums = UpdateFeed.DownloadUrlFor(release, ReleaseAssets.Checksums);
-        var listed = Encoding.UTF8.GetString(await FetchAsync(client, sums, version, MaxChecksumsBytes, $"a release's {ReleaseAssets.Checksums}", cancellationToken, deadline.Token).ConfigureAwait(false));
+        var listed = Encoding.UTF8.GetString(await FetchAsync(client, sums, version, ReleaseFiles.MaxChecksumsBytes, $"a release's {ReleaseAssets.Checksums}", cancellationToken, deadline.Token).ConfigureAwait(false));
         var expected = ReleaseChecksums.DigestOf(listed, UiAssetLayout.AssetName, out var problem)
             ?? throw (ReleaseChecksums.Lists(listed, UiAssetLayout.AssetName)
                 ? new UiInstallException($"{problem} ({sums}) Nothing was changed.")
@@ -92,58 +85,15 @@ public static class UiInstaller
     }
 
     /// <summary>One file of the release, whole and within <paramref name="cap"/>, or a refusal that names its address.</summary>
-    private static async Task<byte[]> FetchAsync(HttpClient client, Uri address, SemanticVersion version, long cap, string what, CancellationToken asked, CancellationToken deadline)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, address);
-        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("jason", JasonVersion.Current));
-        try
-        {
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline).ConfigureAwait(false);
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                throw new UiNotPublishedException($"No UI is published for {version}: {address} answered 404.");
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new UiInstallException($"{address} answered {(int)response.StatusCode}.");
-            }
-
-            if (response.Content.Headers.ContentLength > cap)
-            {
-                throw TooLarge(address, cap, what);
-            }
-
-            await using var body = await response.Content.ReadAsStreamAsync(deadline).ConfigureAwait(false);
-            using var buffer = new MemoryStream();
-            var chunk = new byte[81920];
-            int read;
-            while ((read = await body.ReadAsync(chunk, deadline).ConfigureAwait(false)) > 0)
-            {
-                // Counted as it arrives, so an address that says nothing of its length, or says less than it sends, is
-                // stopped at the cap rather than read whole into memory.
-                if (buffer.Length + read > cap)
-                {
-                    throw TooLarge(address, cap, what);
-                }
-
-                buffer.Write(chunk, 0, read);
-            }
-
-            return buffer.ToArray();
-        }
-        catch (OperationCanceledException) when (!asked.IsCancellationRequested)
-        {
-            throw new UiInstallException($"{address} did not arrive within {Deadline.TotalMinutes:0} minutes.");
-        }
-        catch (Exception failure) when (failure is HttpRequestException or IOException)
-        {
-            throw new UiInstallException($"{address} could not be read: {failure.Message}");
-        }
-    }
-
-    private static UiInstallException TooLarge(Uri address, long cap, string what) =>
-        new(string.Create(
-            CultureInfo.InvariantCulture,
-            $"{address} is larger than {(cap >= 1024 * 1024 ? $"{cap / (1024 * 1024)} MB" : $"{cap / 1024} KB")}, more than {what} ever is. Nothing was changed."));
+    private static Task<byte[]> FetchAsync(HttpClient client, Uri address, SemanticVersion version, long cap, string what, CancellationToken asked, CancellationToken deadline) =>
+        ReleaseFiles.FetchAsync(
+            client,
+            address,
+            cap,
+            what,
+            Deadline,
+            refused => new UiInstallException(refused),
+            answered => new UiNotPublishedException($"No UI is published for {version}: {answered}"),
+            asked,
+            deadline);
 }

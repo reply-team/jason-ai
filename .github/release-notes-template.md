@@ -21,14 +21,15 @@ at this version and released only after its tests passed.
 | `checksums.txt` | the SHA-256 of each archive and of the two packages, in `sha256sum` format |
 | `install.sh` | macOS and Linux: the install script this release was published with |
 | `install.ps1` | Windows: the install script this release was published with |
-| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, to unpack into `~/.jason/plugins/reply` |
+| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
 
 Each archive holds the executable, `LICENSE` (the runtime's licence; the repository's MIT does not cover the
-runtime) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by unpacking it into
-`~/.jason/plugins/reply` once it matches its line in `checksums.txt`; step 3 of `docs/golden-path.md` prints the
-lines. The UI's package is placed by `jason ui install`, which the install guide runs and `jason update apply` runs
-at its end. On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
+runtime) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by
+`jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in
+`checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it. The UI's package is
+placed by `jason ui install`, which the install guide runs and `jason update apply` runs at its end.
+On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
 images may not; the install script stops, with the runtime's own message, rather than install a program that does
 not start.
 

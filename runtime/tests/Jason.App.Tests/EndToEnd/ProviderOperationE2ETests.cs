@@ -95,7 +95,7 @@ public class ProviderOperationE2ETests
             }.ToJsonString(JasonJson.Options),
             Ct);
 
-        // Installing a plugin is copying its directory. There is no install verb, and none is needed.
+        // A package of the test's own is installed by copying its directory; `jason plugin install` places only what a release publishes.
         Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", PluginId), paths.PluginPackageDirectory(PluginId));
 
         var pids = new Dictionary<int, DateTimeOffset>();

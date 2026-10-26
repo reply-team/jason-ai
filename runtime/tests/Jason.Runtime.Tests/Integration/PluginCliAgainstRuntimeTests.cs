@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Tests.Integration;
 
 /// <summary>
-/// Installing a plugin is copying a directory; everything after that is the command line. What is asserted here
+/// Installing a package of one's own is copying a directory; everything after that is the command line. What is asserted here
 /// is the whole of what a person or an agent sees while doing it: the package listed with its digest, a reload
 /// that refuses a broken package and changes nothing, the diagnostics that say why, the repaired package
 /// activated under a new snapshot, and the chronicle that remembers both activations.

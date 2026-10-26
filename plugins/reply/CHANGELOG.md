@@ -3,6 +3,12 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.9.1
+
+- No behaviour changes. The README installs the package with `jason plugin install reply`, which checks it against the
+  release's `checksums.txt` and its content digest before placing it; copying the tree `jason skills install` fetched
+  stays the fallback.
+
 ## 0.9.0
 
 - The six writes that may create the person — `list_membership.add`, `campaign.enroll`, `optout.record`,

@@ -14,7 +14,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Seven names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Eight names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -49,14 +49,21 @@ namespace Jason.Cli;
 /// bundle rather than given as a reason there is none.
 /// </para>
 /// <para>
-/// <c>ui install</c> is the seventh, and the one verb of a noun whose other verbs are operations. It changes this
+/// <c>ui install</c> is the seventh, and the first verb of a noun whose other verbs are operations. It changes this
 /// installation as <c>skills</c> and <c>update</c> do: it places the release's UI as the default build on this
 /// machine, and asks the runtime nothing. <c>ui open</c>, <c>ui tokens</c> and <c>ui revoke</c> stay operations.
 /// </para>
 /// <para>
-/// Guards hold the list to these: the verb-map tests to the four verbs, the two nouns and the <c>ui</c> group's three
-/// operations and <c>install</c>. An eighth has to be added in the open rather than arriving as one more verb somebody
-/// thought was obviously fine.
+/// <c>plugin install</c> is the eighth, made the same way. It places a plugin package the release publishes in the
+/// plugins directory — downloaded beside the release's checksums.txt, held to its line there and to the content digest
+/// the release's manifest gives — which the runtime neither performs nor is asked about, since its plugins are read
+/// from disk. Of the runtime it asks only the reload <c>plugin reload</c> asks, and only when one answers; it never
+/// starts one. <c>plugin list</c> and <c>plugin reload</c> stay operations.
+/// </para>
+/// <para>
+/// Guards hold the list to these: the verb-map tests to the four verbs, the two nouns, the <c>ui</c> group's three
+/// operations and <c>install</c>, and the <c>plugin</c> group's two operations and <c>install</c>. A ninth has to be
+/// added in the open rather than arriving as one more verb somebody thought was obviously fine.
 /// </para>
 /// </remarks>
 public static class CliApp

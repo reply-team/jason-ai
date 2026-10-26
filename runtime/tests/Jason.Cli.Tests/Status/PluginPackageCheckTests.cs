@@ -30,8 +30,7 @@ public class PluginPackageCheckTests
             CheckState.Failed,
             [
                 "reply 0.6.1 is installed; runtime 0.7.1 carries reply 0.7.0, the package its release publishes.",
-                "Step 3 of the wiring check prints the two lines that place it: the checksum match, and the unpack into /data/plugins/reply once the package there is moved away.",
-                "Then run `jason plugin reload`.",
+                "`jason plugin install reply --replace` places it in /data/plugins/reply in place of the one there, and asks the runtime to load it.",
             ]
         },
         {
@@ -42,7 +41,7 @@ public class PluginPackageCheckTests
         {
             Reply(ReleasedPluginState.NotInstalled, null),
             CheckState.Absent,
-            ["reply is not installed; runtime 0.7.1 carries reply 0.7.0, the package its release publishes, and step 3 of the wiring check prints the lines that install it."]
+            ["reply is not installed; runtime 0.7.1 carries reply 0.7.0, the package its release publishes, and `jason plugin install reply` installs it."]
         },
     };
 

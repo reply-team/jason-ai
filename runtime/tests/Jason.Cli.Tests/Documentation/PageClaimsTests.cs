@@ -171,15 +171,16 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Seven names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
-    /// the <c>skills</c> and <c>update</c> nouns, and <c>ui install</c>, a verb of a noun whose other verbs are
-    /// operations — and no page says two, the four it said before the two verbs that read the installation's files
-    /// arrived, or the six it said before the UI was placed by a command.
+    /// Eight names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
+    /// the <c>skills</c> and <c>update</c> nouns, and <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
+    /// other verbs are operations — and no page says two, the four it said before the two verbs that read the
+    /// installation's files arrived, the six it said before the UI was placed by a command, or the seven it said before a
+    /// plugin package was.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "It is one of seven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install`")]
-    [InlineData("docs/INSTALL.md", "It is one of seven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install`")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **seven declared exceptions**")]
+    [InlineData("README.md", "It is one of eight names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and `plugin install`")]
+    [InlineData("docs/INSTALL.md", "It is one of eight names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and `plugin install`")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **eight declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -191,6 +192,8 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("four declared exceptions", text, StringComparison.Ordinal);
         Assert.DoesNotContain("one of six names", text, StringComparison.Ordinal);
         Assert.DoesNotContain("six declared exceptions", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of seven names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("seven declared exceptions", text, StringComparison.Ordinal);
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
@@ -485,29 +488,31 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The pages that list what a release publishes, or say how a plugin is installed, name the Reply plugin's package by
-    /// what it holds and how it is installed: the files of <c>plugins/reply</c> at the tag, checked against
-    /// <c>checksums.txt</c> and unpacked. None of them says plugins are installed from the repository any more; the package
-    /// is never called an archive, which on those pages is a platform's.
+    /// what it holds and how it is installed: the files of <c>plugins/reply</c> at the tag, placed by
+    /// <c>jason plugin install</c> once they match <c>checksums.txt</c>. None of them says plugins are installed from the
+    /// repository any more, or that the package is unpacked by hand; the package is never called an archive, which on those
+    /// pages is a platform's.
     /// </summary>
     [Theory]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |")]
     [InlineData("docs/release-and-update.md", "| `checksums.txt` | one `sha256sum` line per archive, and one for each package |")]
-    [InlineData("docs/release-and-update.md", "Installing it is unpacking it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 prints the lines — and what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002).")]
+    [InlineData("docs/release-and-update.md", "Installing it is `jason plugin install reply`, which unpacks it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 runs it — and what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002).")]
     [InlineData("docs/release-and-update.md", "listed in `checksums.txt`, and named in the manifest's `plugins` (§3) rather than its artifacts, which are platforms.")]
     [InlineData("docs/release-and-update.md", "Nor does an added root field every reader since 0.1.0 skips, as `plugins` is:")]
-    [InlineData(".github/release-notes-template.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, to unpack into `~/.jason/plugins/reply` |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |")]
     [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of the two packages, in `sha256sum` format |")]
     [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
-    [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by unpacking it into `~/.jason/plugins/reply` once it matches its line in `checksums.txt`; step 3 of `docs/golden-path.md` prints the lines.")]
-    [InlineData("docs/plugins.md", "The package this repository ships, the Reply plugin, is also published with every release from 0.11.0 on as `jason-plugin-reply.zip`, its files at the archive's root: checked against that release's `checksums.txt` and unpacked into `~/.jason/plugins/reply`, it is installed.")]
+    [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it.")]
+    [InlineData("docs/plugins.md", "`jason plugin install <id>` installs a package the release you run publishes: it downloads the file the manifest names, from that release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why.")]
     [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
-    [InlineData("README.md", "signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program")]
+    [InlineData("README.md", "signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program")]
     public void The_pages_say_how_the_plugin_s_package_is_published_and_installed(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
 
         Assert.Contains(said, text, StringComparison.Ordinal);
         Assert.DoesNotContain("installed from the repository", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("prints the lines", text, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1359,49 +1364,33 @@ public partial class PageClaimsTests
     {
         var page = Page("docs", "golden-path.md");
         var step = Section(page, "## 3. ");
-        const string Release = "https://jasonharness.ai/releases/download/v<version>";
 
-        var sh = FencedLines(Regex.Match(step, "```sh\n.*?\n```", RegexOptions.Singleline).Value);
-        Assert.Equal(
-            [
-                $"curl -fsSL -o <temporary directory>/checksums.txt {Release}/checksums.txt",
-                $"curl -fsSL -o <temporary directory>/jason-plugin-reply.zip {Release}/jason-plugin-reply.zip",
-                "(cd <temporary directory> && grep '  jason-plugin-reply.zip$' checksums.txt > jason-plugin-reply.zip.sha256 && sha256sum -c jason-plugin-reply.zip.sha256) && unzip -q <temporary directory>/jason-plugin-reply.zip -d ~/.jason/plugins/reply",
-            ],
-            sh);
-
-        var powershell = FencedLines(Regex.Match(step, "```powershell\n.*?\n```", RegexOptions.Singleline).Value);
-        Assert.Equal(
-            [
-                $"irm {Release}/checksums.txt -OutFile <temporary directory>/checksums.txt",
-                $"irm {Release}/jason-plugin-reply.zip -OutFile <temporary directory>/jason-plugin-reply.zip",
-                "if ((Get-FileHash <temporary directory>/jason-plugin-reply.zip).Hash -eq ((Select-String '  jason-plugin-reply.zip$' <temporary directory>/checksums.txt).Line -split ' ')[0]) { Expand-Archive <temporary directory>/jason-plugin-reply.zip ~/.jason/plugins/reply } else { throw 'jason-plugin-reply.zip does not match checksums.txt' }",
-            ],
-            powershell);
+        Assert.Equal(["jason plugin install reply"], FencedLines(Regex.Match(step, "```\n.*?\n```", RegexOptions.Singleline).Value));
 
         var said = Flat(step);
-        Assert.Contains("Installing a plugin is copying its directory into `~/.jason/plugins/<id>/`. There is no install verb.", said, StringComparison.Ordinal);
         Assert.Contains("Every release of Jason from 0.11.0 on publishes the Reply plugin's directory as `jason-plugin-reply.zip`", said, StringComparison.Ordinal);
-        Assert.Contains("written `<temporary directory>` below and quoted if it holds a space.", said, StringComparison.Ordinal);
-        Assert.Contains("into a `~/.jason/plugins/reply` that is not there yet; step 1's start made `~/.jason/plugins`.", said, StringComparison.Ordinal);
-        Assert.Contains("The unpack is part of the check's own line, so it follows only a check that passed: a package that does not match its line, or has none, is never unpacked, however the lines are run, and you stop and say why.", said, StringComparison.Ordinal);
-        Assert.Contains("The sh line checks the package's line from a file of its own, `jason-plugin-reply.zip.sha256` beside the download, because the `sha256sum` macOS carries reads a file and not a pipe.", said, StringComparison.Ordinal);
-        Assert.Contains("A macOS older than 14 has no `sha256sum`; `shasum -a 256 -c` in its place reads the same file.", said, StringComparison.Ordinal);
-        Assert.Contains("Where the release cannot be reached, or is older than 0.11.0 and does not carry the package,", said, StringComparison.Ordinal);
+        Assert.Contains("holds it to its line in `checksums.txt` and, unpacked, to that digest, and only then moves it in whole as `~/.jason/plugins/reply`.", said, StringComparison.Ordinal);
+        Assert.Contains("A package that does not match places nothing: the verb exits 1, says why, and you stop and say so too.", said, StringComparison.Ordinal);
+        Assert.Contains("`--replace` swaps it for the release's.", said, StringComparison.Ordinal);
+        Assert.Contains("Without a runtime the package is placed all the same, and the runtime loads it at its next start; the verb never starts one.", said, StringComparison.Ordinal);
+        Assert.Contains("Where the release cannot be reached, the tree `jason skills install` fetched", said, StringComparison.Ordinal);
         Assert.Contains("cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("There is no install verb", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("curl ", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("irm ", step, StringComparison.Ordinal);
         Assert.DoesNotContain("git clone", step, StringComparison.Ordinal);
         Assert.DoesNotContain("cp -r plugins/reply ~/.jason/plugins/reply", page, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The section for an agent says where every file the run makes goes — the two step 3 downloads, the checksum line
-    /// its sh line writes beside them, and the one step 6 writes — which is the system's temporary directory, never the
-    /// folder the run was started in.
+    /// The section for an agent says where every file the run makes goes — the package step 3 places, into Jason's data
+    /// directory, and the one file step 6 writes, into the system's temporary directory — never the folder the run was
+    /// started in.
     /// </summary>
     [Fact]
     public void The_golden_path_s_agent_says_where_the_run_s_files_go() =>
         Assert.Contains(
-            "nothing in this run writes there — the two files step 3 downloads, the `.sha256` file its sh line writes beside them, and the one file step 6 makes go in the system's temporary directory.",
+            "nothing in this run writes there — the package step 3 places goes into Jason's data directory, and the one file step 6 makes goes in the system's temporary directory.",
             Flat(GoldenAgent()),
             StringComparison.Ordinal);
 
@@ -2080,7 +2069,7 @@ public partial class PageClaimsTests
     private const string AgentSectionDigest = "sha256:3e2b21971398ee3fa53a79a7d2c8599bb61fe2be8258c7f94afeec930b1e6edf";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
-    private const string GoldenAgentSectionDigest = "sha256:c75395eeb75839aeeee9b296b13bae58a0f038c14646e18d28d5b967bc15d9e3";
+    private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line

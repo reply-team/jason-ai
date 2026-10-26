@@ -58,13 +58,13 @@ behind it can change without any of them changing.
 **An archive holds the executable, `LICENSE` and `THIRD-PARTY-NOTICES`, and nothing else.** That `LICENSE` is
 the runtime's own; the repository's MIT licence covers the skills, contracts, plugins, documentation and install
 scripts, not the runtime. `THIRD-PARTY-NOTICES` names the .NET runtime and the packages the executable carries,
-each with its licence. A plugin is installed by copying a directory into the data directory and nothing reads the
-install directory, so a plugin bundled with the executable would be a file nothing loads. The Reply plugin is
+each with its licence. A plugin is installed into the data directory and nothing reads the install directory, so
+a plugin bundled with the executable would be a file nothing loads. The Reply plugin is
 published beside the archives instead, from 0.11.0 on, as a package of its own: `jason-plugin-reply.zip`, the
 files of `plugins/reply` at the tag at its root, built once per release, listed in `checksums.txt`, and named in the
-manifest's `plugins` (§3) rather than its artifacts, which are platforms. Installing it is unpacking it into
-`~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 prints the lines — and what is
-unpacked has the content digest of the package at the tag (DEC-INSTALL-002). Any other plugin is installed as
+manifest's `plugins` (§3) rather than its artifacts, which are platforms. Installing it is `jason plugin install reply`, which
+unpacks it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 runs it — and
+what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002). Any other plugin is installed as
 `docs/plugins.md` §4 says.
 
 **The browser UI is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
@@ -468,8 +468,8 @@ So after an update the plugin packages installed are the earlier release's, unti
 Before the update, `jason update check` names each one whose digest the new release's record holds under an earlier
 version (§5), and never a package the list does not know: built or edited on that machine, or a version before the
 list's first line, 0.3.2. After it, `jason status` fails its optional `plugin_package` check and names the installed
-version and the version this release published, and step 3 of [the wiring check](golden-path.md) prints the lines
-that place the package.
+version and the version this release published, and `jason plugin install <id> --replace` places the package, as
+step 3 of [the wiring check](golden-path.md) does.
 
 Its last step, after `complete`, is the skills: exactly what `jason skills update` does, at the new release's tag.
 The runtime's own role skills, and each agent harness this machine detects, are redeployed wherever a deployment

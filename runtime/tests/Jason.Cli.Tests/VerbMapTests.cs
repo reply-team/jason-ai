@@ -102,7 +102,7 @@ public class VerbMapTests
     /// without one is the map drifting from the rule its own doc comment states.
     /// </summary>
     [Fact]
-    [Critical(Family.R2, "the seven declared exceptions")]
+    [Critical(Family.R2, "the eight declared exceptions")]
     public void Exactly_the_declared_names_have_no_api_operation_behind_them()
     {
         var operations = typeof(Contracts.Api.Operations)
@@ -118,7 +118,7 @@ public class VerbMapTests
 
         // And the verbs stand for none either. Each says it never will, and nothing held that: an
         // `uninstall.*`, `status.*`, `logs.*` or `doctor.*` operation arriving in the contracts would have kept
-        // this test green while the seven declared exceptions quietly became six.
+        // this test green while the eight declared exceptions quietly became seven.
         Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
     }
 
@@ -142,6 +142,29 @@ public class VerbMapTests
 
         Assert.Equal(["install", "open", "revoke", "tokens"], verbs);
         Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The <c>plugin</c> group is its two operations and one verb that is none: <c>install</c>, which places the package
+    /// the release names in the plugins directory, as <c>ui install</c> places the release's UI, and asks the runtime only
+    /// the reload <c>plugin reload</c> asks. The eighth exception, made here in the open.
+    /// </summary>
+    [Fact]
+    public void The_plugin_verb_group_is_its_two_operations_and_install()
+    {
+        using var paths = new TempPaths();
+        var group = Jason.Cli.Commands.PluginCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
+        var verbs = group.Subcommands.Select(command => command.Name).Order(StringComparer.Ordinal).ToArray();
+        var operations = typeof(Contracts.Api.Operations)
+            .GetFields()
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .Where(name => name.StartsWith("plugin.", StringComparison.Ordinal))
+            .Select(name => name["plugin.".Length..]);
+
+        Assert.Equal(["install", "list", "reload"], verbs);
+        Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
+        Assert.DoesNotContain("install", operations);
     }
 
     /// <summary>

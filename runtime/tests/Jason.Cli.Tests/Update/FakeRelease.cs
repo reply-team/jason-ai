@@ -18,6 +18,9 @@ public sealed class FakeRelease : HttpMessageHandler
 {
     private readonly Dictionary<string, byte[]> _files = new(StringComparer.Ordinal);
 
+    /// <summary>The plugin packages the manifest names, by id, as the lines of its <c>plugins</c> object.</summary>
+    private readonly SortedDictionary<string, string> _plugins = new(StringComparer.Ordinal);
+
     public FakeRelease(SemanticVersion version, byte[]? archive = null, string? asset = null, string? digest = null, long? size = null)
     {
         Version = version;
@@ -43,6 +46,24 @@ public sealed class FakeRelease : HttpMessageHandler
     {
         _files.Remove(UiAssetLayout.AssetName);
         return ChecksumsSay($"{Digest}  {Asset}\n");
+    }
+
+    /// <summary>
+    /// A plugin package the release publishes beside its archives: the file, named in the manifest's <c>plugins</c> with its
+    /// version and content digest, and listed in checksums.txt after what is listed there already. <paramref name="checksum"/>
+    /// is what that line says, the package's own hash when not given; <paramref name="contentDigest"/> is what the manifest
+    /// says the unpacked tree hashes to.
+    /// </summary>
+    public FakeRelease WithPlugin(string id, SemanticVersion version, byte[] zip, string contentDigest, string? checksum = null)
+    {
+        var asset = $"jason-plugin-{id}.zip";
+        _files[asset] = zip;
+        _plugins[id] = $$"""
+            "{{id}}": { "version": "{{version}}", "asset": "{{asset}}", "digest": "{{contentDigest}}", "recorded": { "{{version}}": "{{contentDigest}}" } }
+            """;
+        _files[ReleaseAssets.Manifest] = Encoding.UTF8.GetBytes(Manifest());
+        var listed = Encoding.UTF8.GetString(_files[ReleaseAssets.Checksums]);
+        return ChecksumsSay($"{listed}{checksum ?? Convert.ToHexStringLower(SHA256.HashData(zip))}  {asset}\n");
     }
 
     /// <summary>Replaces what checksums.txt says, for a test about a file that says something wrong.</summary>
@@ -124,7 +145,8 @@ public sealed class FakeRelease : HttpMessageHandler
           "min_upgrade_from": null,
           "artifacts": {
             "{{Rid}}": { "asset": "{{Asset}}", "sha256": "{{digest ?? Digest}}", "size": {{size ?? Size}} }
-          }
+          },
+          "plugins": { {{string.Join(", ", _plugins.Values)}} }
         }
         """;
 
@@ -152,17 +174,18 @@ public sealed class FakeRelease : HttpMessageHandler
         // Only the two addresses a release really serves. Answering by file name whatever directory was asked
         // for is what let a composed-from-nothing path pass every test here and then 404 on a runner: a stub
         // that is more forgiving than the thing it stands in for proves the caller works against the stub.
-        var served = Feed.AbsolutePath.StartsWith("/releases/", StringComparison.Ordinal)
-            ? new[]
-            {
+        string[] served = Feed.AbsolutePath.StartsWith("/releases/", StringComparison.Ordinal)
+            ?
+            [
                 $"/releases/latest/download/{ReleaseAssets.Manifest}",
                 $"/releases/latest/download/{Asset}",
                 $"/releases/download/v{Version}/{ReleaseAssets.Manifest}",
                 $"/releases/download/v{Version}/{Asset}",
                 $"/releases/download/v{Version}/{ReleaseAssets.Checksums}",
                 $"/releases/download/v{Version}/{UiAssetLayout.AssetName}",
-            }
-            : new[] { $"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}" };
+                .. _plugins.Keys.Select(id => $"/releases/download/v{Version}/jason-plugin-{id}.zip"),
+            ]
+            : [$"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}", .. _plugins.Keys.Select(id => $"/jason-plugin-{id}.zip")];
 
         var name = path[(path.LastIndexOf('/') + 1)..];
         if (!served.Contains(path, StringComparer.Ordinal) || !_files.TryGetValue(name, out var bytes))

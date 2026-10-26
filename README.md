@@ -149,7 +149,7 @@ anywhere until somebody writes a route: work with no route fails at the claim wi
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
 such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twenty-two published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
-CLI, signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program,
+CLI, signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program,
 and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of
 your own address approved by you and performed against the provider, and the history it leaves — is
 [docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. It proves the
@@ -233,9 +233,9 @@ would later refuse to launch, rather than writing one.
 [`skills/README.md`](skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of seven names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install`, which
-changes this installation's files as those two do — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
+One question, answered check by check. It is one of eight names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and
+`plugin install`, which change this installation's files as those two do — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 

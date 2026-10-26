@@ -163,15 +163,17 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable
-  or unauthorized. The verb map is one-to-one with API operations with **seven declared exceptions**:
+  or unauthorized. The verb map is one-to-one with API operations with **eight declared exceptions**:
   `jason status` answers "can this installation start work?", half of which is not the runtime's to
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
   the runtime neither performs nor is asked about; the `skills` and `update` nouns and the
-  `jason ui install` verb change this installation's files — deploying skills, replacing the executable
-  and redeploying the recorded skills, placing the release's UI as the default build — rather than ask the
-  runtime anything (`ui install` is the one such verb under a noun whose other verbs are operations, and
-  the verb-map tests hold the `ui` group to its three operations and it); `jason logs` reads the
+  `jason ui install` and `jason plugin install` verbs change this installation's files — deploying skills,
+  replacing the executable and redeploying the recorded skills, placing the release's UI as the default
+  build, placing a plugin package the release publishes — rather than ask the runtime anything (each is the
+  one such verb under a noun whose other verbs are operations, `plugin install` asks only the reload
+  `plugin reload` asks and never starts a runtime, and the verb-map tests hold the `ui` group to its three
+  operations and `install` and the `plugin` group to its two and `install`); `jason logs` reads the
   installation's log files, which the runtime writes and is never asked about; and `jason doctor` collects one installation into one file, half of which is not the
   runtime's to know — of the runtime it asks only what the runtime says about itself, its roles and
   routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
@@ -193,9 +195,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   runtime's own words, skill problem text and the release-notes URL, and the bundle says so; and before
   anything is written the home directory becomes `~`, a data directory outside it `<data>`, a different
   one the runtime keeps its data in a mark of its own, and the account's user, machine and domain names
-  and SIDs marks of their own. `CliApp` states all seven where the rule is written, each verb's `--help`
+  and SIDs marks of their own. `CliApp` states all eight where the rule is written, each verb's `--help`
   publishes its own contract — which checks are required, what is removed, what is never touched and
-  what a bundle never carries — and guards hold the list to these seven.
+  what a bundle never carries — and guards hold the list to these eight.
 - Persistence: EF Core over SQLite in WAL mode, snake_case tables and columns, integer primary keys
   plus a unique public ULID. The `journal` table is append-only, enforced three times over: no API
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign

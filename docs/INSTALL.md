@@ -332,9 +332,9 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of seven names in
+One question — "can this installation start work?" — answered check by check. It is one of eight names in
 this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and
-`update` nouns, and `ui install`, which changes this installation's files as those two do — and it cannot be
+`update` nouns, and `ui install` and `plugin install`, which change this installation's files as those two do — and it cannot be
 otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |
@@ -384,10 +384,9 @@ hand — because that runtime is still the old build and starts its plugin hosts
 `plugin_package` compares each plugin package the release you run publishes — today the Reply plugin — with the
 package of that id installed, by content digest, offline: the runtime carries its release's package and asks no
 network. An earlier release's package fails it, an upgrade having replaced the executable and left
-`~/.jason/plugins/reply` as it was. No command installs a package, so its fact carries the repair in words: the
-installed version, the version this release published, and that step 3 of [the wiring check](golden-path.md) prints
-the two lines — the checksum match and the unpack into `~/.jason/plugins/reply`, once the old package is moved away
-— then `jason plugin reload`. A package with the same version or a later one passes, and the fact says it is a
+`~/.jason/plugins/reply` as it was. Its fact names the installed version, the version this release published, and
+the command that places it, `jason plugin install reply --replace`, which swaps the old package for the release's
+and asks the runtime to load it. A package with the same version or a later one passes, and the fact says it is a
 later release's package or one built or edited on this machine; no package of that id is absent. A development
 build compares with its own tree, and the fact names the build it compared with.
 

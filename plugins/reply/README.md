@@ -80,13 +80,18 @@ In this order, and none of it implied by anything else. Steps 4 and 6 are the tw
 are; one of them is what makes work reach this plugin at all.
 
 **1. Install the package.** Every release of Jason from 0.11.0 on publishes it as `jason-plugin-reply.zip`,
-listed in that release's `checksums.txt`. Download both from the release you run, check the package against
-its line, and unpack it into `~/.jason/plugins/reply` only once it matches — the directory name is the plugin
-id, so it has to be `reply`, and it must not be there yet; the runtime's first start makes `~/.jason/plugins`.
-The lines, for macOS and Linux and for PowerShell, are step 3 of [the wiring check](../../docs/golden-path.md).
-Where the release cannot be reached, or is older than 0.11.0 and does not carry the package, the tree
-`jason skills install` fetched holds the same package, at the tag of the runtime you run, and copying it is the
-same install:
+listed in that release's `checksums.txt`. One command installs the release you run's:
+
+```sh
+jason plugin install reply
+```
+
+It checks the package against its line in `checksums.txt` and, unpacked, against the content digest the release's
+manifest gives, places it as `~/.jason/plugins/reply` only once both hold — the directory name is the plugin id —
+and asks a runtime that answers to reload. A different package already there is kept unless `--replace` says
+otherwise. It is step 3 of [the wiring check](../../docs/golden-path.md). Where the release cannot be reached, the
+tree `jason skills install` fetched holds the same package, at the tag of the runtime you run, and copying it into a
+`~/.jason/plugins/reply` that is not there yet is the same install:
 
 ```sh
 cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply
@@ -141,8 +146,7 @@ jason route resolve --campaign cmp_… --operation list_membership.add --human
 act that freezes the plugins it names, so the only way to write one is to edit `settings.json` and
 reload; the CLI refuses `route set` without `--campaign` and says where a global route lives instead.
 
-**And three things that are not true yet.** There is **no install verb**: installing is copying a
-directory, and nothing reads it until a reload. There is **no signing and no publisher identity**: the
+**And two things that are not true yet.** There is **no signing and no publisher identity**: the
 digest in `plugin list` says what the files are, never who wrote them, so a package is exactly as trusted
 as the machine you copied it onto. There is **no update awareness**: nothing checks whether a newer
 version exists, and because the id is the directory name there is **one version per id** — upgrading is

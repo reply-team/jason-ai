@@ -46,7 +46,7 @@ public class BootstrapTests
         Assert.Null(unrouted["global"]!["default"]);
         Assert.Empty(unrouted["global"]!["operations"]!.AsObject());
 
-        // 3. Installing a plugin is copying its directory. There is no install verb, and none is needed.
+        // 3. A package of the test's own is installed by copying its directory; `jason plugin install` places only what a release publishes.
         GoldenPath.InstallReplyPackage(it);
 
         // 4. The reload is the act that reads the package, recomputes its digest and swaps the snapshot.

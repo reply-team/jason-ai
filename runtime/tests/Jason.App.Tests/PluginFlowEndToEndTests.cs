@@ -68,7 +68,7 @@ public class PluginFlowEndToEndTests
         var paths = new JasonPaths(root);
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
 
-        // Installing a plugin is copying its directory. There is no install verb, and none is needed.
+        // A package of the test's own is installed by copying its directory; `jason plugin install` places only what a release publishes.
         var package = paths.PluginPackageDirectory(PluginId);
         Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", PluginId), package);
 
