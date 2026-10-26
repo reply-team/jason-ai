@@ -30,7 +30,8 @@ namespace Jason.Runtime.Hosting;
 /// <summary>
 /// Composes one runtime process: data directory → configuration → instance lock → logging → database
 /// migration → capability token → Kestrel on 127.0.0.1 → descriptor. The descriptor is published last so a
-/// client never finds an endpoint that is not yet listening.
+/// client never finds an endpoint that is not yet listening, and off the caller's thread, so a reader holding it keeps
+/// the start's task from completing, never the caller from going on.
 /// </summary>
 public static class RuntimeHost
 {
@@ -223,7 +224,11 @@ public static class RuntimeHost
             RuntimeDescriptor descriptor;
             try
             {
-                descriptor = publisher.Publish(info, new Uri(address), token, cancellationToken);
+                // On a thread of the pool, never the caller's: a held descriptor makes the publish sleep between its tries
+                // for as long as its rule allows, and nothing before it is sure to have yielded, so done in place it would
+                // hold whoever called this start for that long. The start's cancellation still reaches the publish through
+                // the token it is handed, and only there, so a publish that finds nothing held goes ahead as before.
+                descriptor = await Task.Run(() => publisher.Publish(info, new Uri(address), token, cancellationToken), CancellationToken.None).ConfigureAwait(false);
             }
             catch (DescriptorUnpublishableException unpublishable)
             {
