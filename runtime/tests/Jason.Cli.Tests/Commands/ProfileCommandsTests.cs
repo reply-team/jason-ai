@@ -54,6 +54,8 @@ public class ProfileCommandsTests
             "--arg", "dontAsk",
             "--deny", "Write",
             "--deny", "WebFetch",
+            "--tool", "web_search",
+            "--tool", "web_fetch",
             "--cli-command", "jason",
             "--host-version-verified", "2.1.275",
             "--reason", "Registering the host that is installed.");
@@ -63,7 +65,7 @@ public class ProfileCommandsTests
             Operations.ProfileCreate,
             "{\"name\":\"local-claude\",\"description\":\"The host installed on this machine.\",\"host\":\"claude_code\","
             + "\"program\":\"claude\",\"args\":[\"--permission-mode\",\"dontAsk\"],\"deny\":[\"Write\",\"WebFetch\"],"
-            + "\"cli_command\":\"jason\",\"host_version_verified\":\"2.1.275\","
+            + "\"tools\":[\"web_search\",\"web_fetch\"],\"cli_command\":\"jason\",\"host_version_verified\":\"2.1.275\","
             + "\"reason\":\"Registering the host that is installed.\",\"actor\":{\"type\":\"human\",\"id\":\"person-1\"}}");
     }
 
@@ -94,6 +96,33 @@ public class ProfileCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(Operations.ProfileUpdate, "{\"name\":\"local-claude\",\"deny\":[\"Write\",\"WebFetch\"]}");
+    }
+
+    /// <summary>A grant is typed one tool at a time, and the CLI passes the words on as typed: the vocabulary is the runtime's.</summary>
+    [Fact]
+    public async Task Update_sends_the_tools_it_was_given_as_typed()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("profile", "update", "local-claude", "--tool", "web_fetch", "--tool", "Bash");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.ProfileUpdate, "{\"name\":\"local-claude\",\"tools\":[\"web_fetch\",\"Bash\"]}");
+    }
+
+    /// <summary>The help names the words a grant can be made of, from the vocabulary itself rather than a copy of it.</summary>
+    [Theory]
+    [InlineData("create")]
+    [InlineData("update")]
+    public async Task The_help_names_the_tools_a_profile_can_grant(string verb)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("profile", verb, "--help");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("--tool", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("web_search, web_fetch", cli.Text, StringComparison.Ordinal);
     }
 
     /// <summary>An empty list is a thing a repeatable option cannot say, and <c>--file</c> is how it is said.</summary>
@@ -203,6 +232,7 @@ public class ProfileCommandsTests
         Assert.Contains("--model sonnet", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Deny:", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Write", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Tools:          web_search, web_fetch", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Revision:", cli.Text, StringComparison.Ordinal);
         Assert.Contains("2.1.275", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
@@ -217,7 +247,7 @@ public class ProfileCommandsTests
     {
         var profile = Profile("local-claude", revision: 3) with
         {
-            Revision = new ExecutionProfileRevisionDto(1, AgentHostKind.ClaudeCode, "claude", [], [], "jason", null, Moment),
+            Revision = new ExecutionProfileRevisionDto(1, AgentHostKind.ClaudeCode, "claude", [], [], [], "jason", null, Moment),
         };
         using var cli = new CliRun(JsonSerializer.Serialize(profile, JasonJson.Options));
 
@@ -270,7 +300,8 @@ public class ProfileCommandsTests
             "The host installed on this machine.",
             disabled,
             revision,
-            new ExecutionProfileRevisionDto(revision, AgentHostKind.ClaudeCode, "claude", ["--model", "sonnet"], ["Write"], "jason", "2.1.275", Moment),
+            new ExecutionProfileRevisionDto(
+                revision, AgentHostKind.ClaudeCode, "claude", ["--model", "sonnet"], ["Write"], [AgentTool.WebSearch, AgentTool.WebFetch], "jason", "2.1.275", Moment),
             Moment,
             Moment);
 }

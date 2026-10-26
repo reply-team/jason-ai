@@ -33,6 +33,7 @@ public static class ProfileRenderers
             Line("Program:", profile.Revision.Program),
             Line("Args:", Args(profile.Revision.Args)),
             Line("Deny:", Deny(profile.Revision.Deny)),
+            Line("Tools:", Tools(profile.Revision.Tools)),
             Line("CLI command:", profile.Revision.CliCommand),
             Line("Host verified:", profile.Revision.HostVersionVerified),
             Line("Revision:", Revision(profile)),
@@ -76,6 +77,10 @@ public static class ProfileRenderers
     private static string? Args(IReadOnlyList<string>? args) => args is { Count: > 0 } ? string.Join(' ', args) : null;
 
     private static string? Deny(IReadOnlyList<string>? deny) => deny is { Count: > 0 } ? string.Join(", ", deny) : null;
+
+    /// <summary>The tools granted, in the words they were granted with.</summary>
+    private static string? Tools(IReadOnlyList<AgentTool>? tools) =>
+        tools is { Count: > 0 } ? string.Join(", ", tools.Select(RenderText.Snake)) : null;
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
 }

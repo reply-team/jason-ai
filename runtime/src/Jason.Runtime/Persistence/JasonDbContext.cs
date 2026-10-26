@@ -133,6 +133,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<AttemptLaunchDto>().HaveConversion<JsonTextConverter<AttemptLaunchDto>, JsonTextComparer<AttemptLaunchDto>>();
         configurationBuilder.Properties<AttemptProvenanceDto>().HaveConversion<JsonTextConverter<AttemptProvenanceDto>, JsonTextComparer<AttemptProvenanceDto>>();
         configurationBuilder.Properties<List<string>>().HaveConversion<StringListConverter, StringListComparer>();
+        configurationBuilder.Properties<List<AgentTool>>().HaveConversion<JsonTextConverter<List<AgentTool>>, JsonTextComparer<List<AgentTool>>>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -390,10 +391,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             revision.Property(r => r.CreatedById).HasMaxLength(100);
             revision.Property(r => r.Args).HasColumnName("args_json").IsRequired().HasDefaultValueSql("'[]'");
             revision.Property(r => r.Deny).HasColumnName("deny_json").IsRequired().HasDefaultValueSql("'[]'");
+            revision.Property(r => r.Tools).HasColumnName("tools_json").IsRequired().HasDefaultValueSql("'[]'");
             revision.ToTable(t =>
             {
                 t.HasCheckConstraint("ck_execution_profile_revisions_args_json", "json_valid(args_json)");
                 t.HasCheckConstraint("ck_execution_profile_revisions_deny_json", "json_valid(deny_json)");
+                t.HasCheckConstraint("ck_execution_profile_revisions_tools_json", "json_valid(tools_json)");
             });
 
             // Revision numbers are the profile's own sequence, and an attempt names one of them for ever.

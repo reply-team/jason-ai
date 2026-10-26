@@ -1070,6 +1070,13 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("program");
 
+                    b.Property<string>("Tools")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tools_json")
+                        .HasDefaultValueSql("'[]'");
+
                     b.HasKey("Id")
                         .HasName("pk_execution_profile_revisions");
 
@@ -1082,6 +1089,8 @@ namespace Jason.Runtime.Persistence.Migrations
                             t.HasCheckConstraint("ck_execution_profile_revisions_args_json", "json_valid(args_json)");
 
                             t.HasCheckConstraint("ck_execution_profile_revisions_deny_json", "json_valid(deny_json)");
+
+                            t.HasCheckConstraint("ck_execution_profile_revisions_tools_json", "json_valid(tools_json)");
                         });
                 });
 

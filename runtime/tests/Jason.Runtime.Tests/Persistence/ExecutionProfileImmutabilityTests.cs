@@ -70,6 +70,41 @@ public class ExecutionProfileImmutabilityTests
         Assert.Equal("claude", db.ExecutionProfileRevisions.AsNoTracking().Single(r => r.Profile!.PublicId == "prf_B").Program);
     }
 
+    /// <summary>
+    /// The tools a revision grants are frozen with the rest of it: a grant added to a revision afterwards would let a
+    /// later edit say that an earlier attempt ran with tools it never had, or without ones it did.
+    /// </summary>
+    [Fact]
+    public void A_revisions_grant_is_frozen_with_the_rest_of_it()
+    {
+        using var database = new TestDatabase();
+        using (var db = database.Open())
+        {
+            db.ExecutionProfiles.Add(Profile("prf_D", "granted"));
+            db.SaveChanges();
+        }
+
+        using (var connection = new SqliteConnection($"Data Source={database.File}"))
+        {
+            connection.Open();
+            using var update = connection.CreateCommand();
+            update.CommandText = "UPDATE execution_profile_revisions SET tools_json = '[\"web_search\",\"web_fetch\"]'";
+            var refused = Assert.Throws<SqliteException>(() => update.ExecuteNonQuery());
+            Assert.Contains("immutable", refused.Message, StringComparison.Ordinal);
+        }
+
+        using (var db = database.Open())
+        {
+            var revision = db.ExecutionProfileRevisions.Single(r => r.Profile!.PublicId == "prf_D");
+            revision.Tools.Add(AgentTool.WebFetch);
+            var modified = Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+            Assert.Contains("immutable", modified.Message, StringComparison.Ordinal);
+        }
+
+        using var reread = database.Open();
+        Assert.Equal([AgentTool.WebSearch], reread.ExecutionProfileRevisions.AsNoTracking().Single(r => r.Profile!.PublicId == "prf_D").Tools);
+    }
+
     [Fact]
     public void The_profile_row_still_moves_because_a_revision_and_a_profile_are_not_the_same_thing()
     {
@@ -108,6 +143,7 @@ public class ExecutionProfileImmutabilityTests
             Program = "claude",
             Args = [],
             Deny = ["Write"],
+            Tools = [AgentTool.WebSearch],
             CreatedByType = ActorType.Human,
             CreatedAt = now,
         });

@@ -38,6 +38,12 @@ public sealed class ExecutionProfileRevision
     public List<string> Deny { get; set; } = [];
 
     /// <summary>
+    /// The tools a person granted by name, beyond what the runtime composes for every attempt. The host turns each into
+    /// its own rules at the launch; a profile never names a host's rule itself.
+    /// </summary>
+    public List<AgentTool> Tools { get; set; } = [];
+
+    /// <summary>
     /// The bare command word the launched agent calls home with. Null means the runtime's own executable name,
     /// which is what the runtime puts within the child's reach.
     /// </summary>

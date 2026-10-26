@@ -39,6 +39,7 @@ public static class ProfileMapper
             revision.Program,
             revision.Args,
             revision.Deny,
+            revision.Tools,
             revision.CliCommand ?? ProfileService.DefaultCliCommand,
             revision.HostVersionVerified,
             WorkItemMapper.Utc(revision.CreatedAt));

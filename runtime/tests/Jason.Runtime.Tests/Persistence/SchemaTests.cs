@@ -1,9 +1,24 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Persistence;
 
 public class SchemaTests
 {
+    /// <summary>
+    /// Migrations are written by hand. A start's Migrate() already refuses a model with pending changes, so a column added
+    /// to an entity without its migration is red in every row that opens the database; this row says it by name, so the
+    /// reason is read here rather than in a migration failure.
+    /// </summary>
+    [Fact]
+    public void The_migrated_database_and_the_model_have_no_pending_changes()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+
+        Assert.False(db.Database.HasPendingModelChanges());
+    }
+
     [Fact]
     public void Wave_two_tables_columns_indexes_and_triggers_exist()
     {
@@ -130,7 +145,7 @@ public class SchemaTests
         Assert.Equal(
             [
                 "args_json", "cli_command", "created_at", "created_by_id", "created_by_type", "deny_json", "host",
-                "host_version_verified", "id", "number", "profile_id", "program",
+                "host_version_verified", "id", "number", "profile_id", "program", "tools_json",
             ],
             Sorted(connection, "SELECT name FROM pragma_table_info('execution_profile_revisions')"));
 

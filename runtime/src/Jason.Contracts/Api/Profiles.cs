@@ -14,6 +14,7 @@ public sealed record ExecutionProfileRevisionDto(
     string Program,
     IReadOnlyList<string> Args,
     IReadOnlyList<string> Deny,
+    IReadOnlyList<AgentTool> Tools,
     string CliCommand,
     string? HostVersionVerified,
     DateTimeOffset CreatedAt);
@@ -36,7 +37,7 @@ public sealed record ExecutionProfileDto(
 /// <summary>
 /// A new profile and its first revision, written together.
 /// <para>
-/// <c>host</c> is a string and the two lists are nodes, rather than the enum and the string lists they become.
+/// <c>host</c> is a string and the three lists are nodes, rather than the enums and the string lists they become.
 /// Every one of them is a value a person typed, and a caller who typed the wrong thing is owed a field-level
 /// refusal that names the field and says what was expected — not a binding failure naming a CLR type.
 /// </para>
@@ -48,6 +49,7 @@ public sealed record ProfileCreateRequest(
     string? Program,
     IReadOnlyList<JsonNode?>? Args,
     IReadOnlyList<JsonNode?>? Deny,
+    IReadOnlyList<JsonNode?>? Tools,
     string? CliCommand,
     string? HostVersionVerified,
     ActorRef? Actor,
@@ -68,6 +70,7 @@ public sealed record ProfileUpdateRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> Program,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<IReadOnlyList<JsonNode?>?> Args,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<IReadOnlyList<JsonNode?>?> Deny,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<IReadOnlyList<JsonNode?>?> Tools,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> CliCommand,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> HostVersionVerified,
     ActorRef? Actor,

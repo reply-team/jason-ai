@@ -30,6 +30,7 @@ internal static partial class ProfileValidation
         ValidateProgram(request.Program, errors);
         ValidateArgs(request.Args, reserved, errors);
         ValidateDeny(request.Deny, errors);
+        ValidateTools(request.Tools, errors);
         ValidateCliCommand(request.CliCommand, errors);
         ValidateHostVersion(request.HostVersionVerified, errors);
         ValidateReason(request.Reason, errors);
@@ -70,6 +71,11 @@ internal static partial class ProfileValidation
         if (request.Deny.IsSet)
         {
             ValidateDeny(request.Deny.Value, errors);
+        }
+
+        if (request.Tools.IsSet)
+        {
+            ValidateTools(request.Tools.Value, errors);
         }
 
         if (request.CliCommand.IsSet)
@@ -122,6 +128,22 @@ internal static partial class ProfileValidation
                 .Select(kind => (AgentHostKind?)kind)
                 .FirstOrDefault();
     }
+
+    /// <summary>A granted tool as the closed vocabulary spells it, or nothing for a word outside it.</summary>
+    public static AgentTool? ParseTool(string? tool)
+    {
+        var text = tool?.Trim();
+        return text is null
+            ? null
+            : Enum.GetValues<AgentTool>()
+                .Where(known => string.Equals(SnakeCaseEnumConverter<AgentTool>.Format(known), text, StringComparison.Ordinal))
+                .Select(known => (AgentTool?)known)
+                .FirstOrDefault();
+    }
+
+    /// <summary>The grant as it will be stored, once every entry is known to be a word of the vocabulary.</summary>
+    public static List<AgentTool> Tools(IReadOnlyList<JsonNode?>? values) =>
+        values is null ? [] : [.. values.Select(value => ParseTool(Text(value))!.Value)];
 
     private static void ValidateName(string? name, ValidationErrors errors)
     {
@@ -241,6 +263,41 @@ internal static partial class ProfileValidation
 
     private static void ValidateDeny(IReadOnlyList<JsonNode?>? deny, ValidationErrors errors) =>
         ValidateStrings(deny, "deny", ProfileService.MaxDenyEntries, ProfileService.MaxDenyEntryLength, errors);
+
+    /// <summary>
+    /// The tools a person grants by name: words of the closed vocabulary, each at most once. A list longer than the
+    /// vocabulary cannot be a grant, so it is refused by its count as one problem. A word named twice is refused rather
+    /// than folded into one: it is likelier a slip for the other word than emphasis, and folding it would grant less than
+    /// the person meant without telling them.
+    /// </summary>
+    private static void ValidateTools(IReadOnlyList<JsonNode?>? tools, ValidationErrors errors)
+    {
+        if (tools is null)
+        {
+            return;
+        }
+
+        var vocabulary = string.Join(", ", Enum.GetValues<AgentTool>().Select(SnakeCaseEnumConverter<AgentTool>.Format));
+        if (tools.Count > Enum.GetValues<AgentTool>().Length)
+        {
+            errors.Add("tools", "too_long", $"tools names each of {vocabulary} at most once.");
+            return;
+        }
+
+        var granted = new HashSet<AgentTool>();
+        for (var index = 0; index < tools.Count; index++)
+        {
+            var field = string.Create(CultureInfo.InvariantCulture, $"tools[{index}]");
+            if (ParseTool(Text(tools[index])) is not { } tool)
+            {
+                errors.Add(field, "invalid", $"every tools entry must be one of: {vocabulary}.");
+            }
+            else if (!granted.Add(tool))
+            {
+                errors.Add(field, "duplicate", $"tools names each of {vocabulary} at most once.");
+            }
+        }
+    }
 
     /// <summary>
     /// A bounded list of non-blank, bounded strings. The count is checked before the entries so that a list of

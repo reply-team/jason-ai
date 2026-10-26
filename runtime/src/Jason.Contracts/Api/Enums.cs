@@ -65,6 +65,17 @@ public enum AgentHostKind
 }
 
 /// <summary>
+/// A tool a person grants by name to the agents a profile launches, beyond what the runtime composes for every attempt.
+/// A closed vocabulary on purpose, like the hosts: the grant is the person's word, and each host turns it into its own
+/// rules, so a word no host knows how to turn into a rule is refused when the profile is written.
+/// </summary>
+public enum AgentTool
+{
+    WebSearch,
+    WebFetch,
+}
+
+/// <summary>
 /// Which level of the published order decided an attempt's execution profile — or, for
 /// <see cref="RoleEntryCommand"/>, that no profile did and the role's own command ran it.
 /// </summary>

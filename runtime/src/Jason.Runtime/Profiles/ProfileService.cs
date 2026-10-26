@@ -79,6 +79,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             Program = request.Program!.Trim(),
             Args = ProfileValidation.Strings(request.Args),
             Deny = ProfileValidation.Strings(request.Deny),
+            Tools = ProfileValidation.Tools(request.Tools),
             CliCommand = Text(request.CliCommand),
             HostVersionVerified = Text(request.HostVersionVerified),
             CreatedByType = actor.Type,
@@ -191,6 +192,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             Program = request.Program.IsSet ? request.Program.Value!.Trim() : current.Program,
             Args = request.Args.IsSet ? ProfileValidation.Strings(request.Args.Value) : [.. current.Args],
             Deny = request.Deny.IsSet ? ProfileValidation.Strings(request.Deny.Value) : [.. current.Deny],
+            Tools = request.Tools.IsSet ? ProfileValidation.Tools(request.Tools.Value) : [.. current.Tools],
             CliCommand = request.CliCommand.IsSet ? Text(request.CliCommand.Value) : current.CliCommand,
             HostVersionVerified = request.HostVersionVerified.IsSet ? Text(request.HostVersionVerified.Value) : current.HostVersionVerified,
             CreatedByType = actor.Type,
@@ -400,6 +402,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         Add(request.Program.IsSet, "program");
         Add(request.Args.IsSet, "args");
         Add(request.Deny.IsSet, "deny");
+        Add(request.Tools.IsSet, "tools");
         Add(request.CliCommand.IsSet, "cli_command");
         Add(request.HostVersionVerified.IsSet, "host_version_verified");
         return fields;

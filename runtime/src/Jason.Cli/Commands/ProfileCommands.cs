@@ -17,8 +17,8 @@ namespace Jason.Cli.Commands;
 public static class ProfileCommands
 {
     private const string FileShape =
-        "The object may hold name, description, host, program, args, deny, cli_command and host_version_verified, "
-        + "and is the way to send an empty args or deny list.";
+        "The object may hold name, description, host, program, args, deny, tools, cli_command and host_version_verified, "
+        + "and is the way to send an empty args, deny or tools list.";
 
     public static Command Build(CliEnvironment env, Option<string?> actor)
     {
@@ -185,12 +185,15 @@ public static class ProfileCommands
         private readonly Option<string?> _program = new("--program") { Description = "The program to start: an absolute path, or a name resolved on PATH. Never a script a shell would interpret: a .cmd, .bat or .ps1 is refused." };
         private readonly Option<string[]> _arg = VerbOptions.Repeatable("--arg", "One argument added after the ones the runtime composes. Repeat the option once per argument, in order.");
         private readonly Option<string[]> _deny = VerbOptions.Repeatable("--deny", "One thing the launched agent may not do, in the host's own vocabulary. Repeat for more.");
+        private readonly Option<string[]> _tool = VerbOptions.Repeatable(
+            "--tool",
+            "One tool the person grants the launched agents, by name: " + string.Join(", ", Enum.GetValues<AgentTool>().Select(RenderText.Snake)) + ". Repeat for more.");
         private readonly Option<string?> _cliCommand = new("--cli-command") { Description = "The bare command word the launched agent calls home with. Absent means the runtime's own." };
         private readonly Option<string?> _hostVersion = new("--host-version-verified") { Description = "The host version this profile was verified against, as a version such as 2.1.289. Recorded, never enforced." };
 
         public void AddTo(Command command)
         {
-            foreach (var option in (Option[])[_description, _host, _program, _arg, _deny, _cliCommand, _hostVersion])
+            foreach (var option in (Option[])[_description, _host, _program, _arg, _deny, _tool, _cliCommand, _hostVersion])
             {
                 command.Options.Add(option);
             }
@@ -203,6 +206,7 @@ public static class ProfileCommands
                 .Set("program", parseResult.GetValue(_program))
                 .Set("args", VerbOptions.Strings(parseResult.GetValue(_arg)))
                 .Set("deny", VerbOptions.Strings(parseResult.GetValue(_deny)))
+                .Set("tools", VerbOptions.Strings(parseResult.GetValue(_tool)))
                 .Set("cli_command", parseResult.GetValue(_cliCommand))
                 .Set("host_version_verified", parseResult.GetValue(_hostVersion));
     }
