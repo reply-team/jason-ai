@@ -472,17 +472,24 @@ public class UpdateCommandsTests
     }
 
     /// <summary>
-    /// A person is told in one line per package, after every line about Jason itself: below the release's floor, after the
-    /// two applies the refusal names.
+    /// Below the release's floor a plugin package behind is named as well: the answer holds the version to install first
+    /// and the package beside it, and a person is told in one line per package, after every line about Jason itself —
+    /// after the two applies the refusal names.
     /// </summary>
     [Fact]
-    public async Task Human_mode_names_a_plugin_package_behind_after_the_lines_about_jason()
+    public async Task Below_the_floor_a_plugin_package_behind_is_named_after_the_two_applies()
     {
         using var installation = new FakeInstallation();
         var installed = Install(installation.Paths, "reply");
         var floored = UpdateRefusalTests.Floored(installation, "9.0.0");
         installation.Release.Says(floored[..floored.LastIndexOf('}')] + ", \"plugins\": " + Reply(("0.8.0", installed), ("0.9.0", Later)) + "}");
 
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--feed", installation.Feed.ToString()], installation.Env, Ct));
+        var answer = JsonSerializer.Deserialize<UpdateCheckResponse>(installation.Out.ToString(), JasonJson.Options)!;
+        Assert.Equal("9.0.0", answer.InstallFirst);
+        Assert.Equal([new PluginUpdate("reply", "0.8.0", "0.9.0")], answer.PluginUpdates);
+
+        installation.Out.GetStringBuilder().Clear();
         var exit = await CliApp.RunAsync(["update", "check", "--human", "--feed", installation.Feed.ToString()], installation.Env, Ct);
 
         Assert.Equal(ExitCodes.Success, exit);

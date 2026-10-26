@@ -30,8 +30,8 @@ The index so far:
 
 [`reply.digests`](reply.digests) lists the digest of each version the Reply package has had from 0.9.0 on, and of the
 earlier versions a release published — the digest `jason plugin list` reports for an installed copy, whole in its JSON
-answer; `--human` shows its first twelve characters — so a person can check an installed package against its version's
-line, and a copy whose digest is not its version's line is not that version.
+answer; `--human` shows the first twelve hexadecimal characters after `sha256:` — so a person can check an installed
+package against its version's line, and a copy whose digest is not its version's line is not that version.
 
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the
