@@ -100,17 +100,19 @@ right there, as on Attention.
 
 ## People
 
-Everyone Jason knows, the person something last happened to first (`jason contact list --order activity`), grouped
-by day, with a search, a campaign filter and the archived on request, all part of the page's address. Opening a person
+Everyone Jason knows, the person something last happened to first (`jason contact list --order activity`), grouped by
+day, with a search, a campaign filter and the archived on request, all part of the page's address. Opening a person
 shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to campaign**
 (`jason campaign add-contacts`). The **Timeline** puts their open work above the now line and what happened to them
-below it: the journal's lines about them (`jason journal list --contact`), narrowed by chips to replies, work,
-decisions or changes, with their additions to and exclusions from campaigns in place. **Details** is their record:
-channels, facts, custom fields, and what each provider calls them. A person a provider knows has their threads there,
-read from the provider only when the section is opened (`jason contact threads`, and `jason contact thread` for one),
-outside any work item: nothing about such a read is journaled, retried or pinned. The runtime passes a message's body
-through as the provider holds it; the page parses it where nothing can run or load, and shows only its structure,
-emphasis and web or mail links.
+below it: the journal's lines about them (`jason journal list --contact`), narrowed by chips to replies, work, decisions
+or changes, with their additions to and exclusions from campaigns in place. **Details** is their record: channels,
+facts, custom fields, and what each provider calls them. A person a provider knows has their threads there, read from
+the provider only when the section is opened (`jason contact threads`, and `jason contact thread` for one), outside any
+work item: the runtime takes only the route's half of the claim, the plugin is loaded and available, it performs the
+operation, and the route's binding passes its checks, and skips the rest of it, and with it the attempt, provenance, the
+journal, pins, approval and retry; it has no bound of its own, running outside the handler pool `Dispatcher:MaxParallel`
+sizes, one child each. The runtime passes a message's body through as the provider holds it; the page parses it where
+nothing can run or load, and shows only its structure, emphasis and web or mail links.
 
 ## What the page may do
 

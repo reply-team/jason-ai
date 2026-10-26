@@ -28,6 +28,9 @@ const FIND = "contact find";
 
 // The person's own fields, which every document of a write that may create them projects — as null where Jason holds
 // nothing in one. A runtime whose documents projected the identifier and the channel alone leaves them out altogether.
+// The source is the documents' `contact_projection.fields` (the operation documents under docs/contracts/operations/):
+// the plugin host does not hand a plugin the documents, so this list is a copy, which a test holds to what the
+// documents project.
 const PROJECTED = ["first_name", "last_name", "company", "title", "time_zone"];
 
 // What the CLI takes a person by, for each channel a document may name that Reply can look a person up by: an email,
@@ -170,6 +173,19 @@ export function writtenAsItIs(consumed) {
  */
 export function keyOf(channel, value) {
   return typeof value === "string" ? host.channelKey(channel, value) : null;
+}
+
+/**
+ * The answer of a write that may create the person, saying whether Reply found the contact or created it, as reply-cli's
+ * `contact_created` says: `true` is `created`, `false` is `found`. Absent, or anything but a boolean, says nothing, so the
+ * answer carries no origin and nothing is guessed in its place.
+ */
+export function withOrigin(answer, said) {
+  if (said === null || typeof said !== "object" || typeof said.contact_created !== "boolean") {
+    return answer;
+  }
+
+  return Object.assign({}, answer, { external_id_origins: { contact: said.contact_created ? "created" : "found" } });
 }
 
 /** Reply's identifier for a contact, as this package works by it — a string — or null when the value is not one. */

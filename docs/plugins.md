@@ -321,13 +321,17 @@ export function invoke(operation, input, context) {
 }
 ```
 
-**The return contract.** `invoke` returns `{ result, external_ids? }`, or a Promise of it. `result`
-is any JSON value up to 1 MiB (`result_too_large` above that); `external_ids` is an object of at most
+**The return contract.** `invoke` returns `{ result, external_ids?, external_id_origins? }`, or a Promise of
+it. `result` is any JSON value up to 1 MiB (`result_too_large` above that); `external_ids` is an object of at most
 64 string values of at most 256 characters, keyed by the **provider's** own names, which travel
 verbatim. Because an identifier is later printed to a person exactly as you returned it, a value
 carrying a control character — a newline, an escape sequence — is refused the way an undeclared kind
 is, and is never written down. Anything else — a bare value, `undefined`, an array, an object without
-`result` — fails `permanent` with `bad_return`.
+`result` — fails `permanent` with `bad_return`. `external_id_origins` is optional, on the success answer only: every
+key of it is a key of `external_ids` in the same answer, spelled exactly, and every value is exactly `"found"` — the
+provider held the entity before the call — or `"created"` — the call created it; anything else fails `permanent` with
+`bad_return`, the same rule a malformed `external_ids` has. An optional key added to the success answer is additive,
+so the protocol stays at version 1.
 
 **Failing.** `throw host.fail({ class, code, message, details?, external_ids?, block? })` is the only way to
 report a business failure with its class. Anything else thrown fails `permanent` with
@@ -657,6 +661,16 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 - Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
   before. Another plugin's identifier for the same person is never visible to you.
 
+### A read on request
+
+Two operations are invoked when a person asks, by an API request outside any work item: `conversation.list` for a
+person's threads (`contact.threads`) and `conversation.get` for one thread (`contact.thread`). The invocation is the
+same, but the runtime takes only the route's half of the claim: the plugin is loaded and available, it performs the
+operation, and the route's binding passes its checks. It skips the claim's other half, and with it the attempt,
+provenance, the journal, pins, approval and retry, so nothing is recorded about the read, no identifier you return is
+pinned, and the invocation's `context` carries no attempt, work item or campaign. Such a read has no bound of its own:
+it runs outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.
+
 ### The contact proxy rule
 
 A provider's list or campaign holds the *provider's* contacts, not Jason's, so an operation about a person has you find
@@ -686,7 +700,9 @@ The rule has four parts.
    a lookup you cannot finish says nothing about a second match, so it is refused, never taken for nobody or for one.
    More than one match is `contact_not_unique`, and nothing is done. Create only where the word is `find_or_create`,
    and return the provider's identifier under `external_ids.contact` — on `error.external_ids` too, when the call
-   fails after you learned it. The runtime never guesses one.
+   fails after you learned it. The runtime never guesses one. On a success, say under `external_id_origins.contact`
+   whether the provider found the contact (`"found"`) or the call created it (`"created"`), and say nothing when you
+   cannot tell: the runtime writes the line that says which only where you said it.
 2. **A pin is worked by, and never overwritten.** Once `contacts[0].external_ids.contact` is present it is the
    provider's identifier for this person, whatever the operation, and nobody matches the person by address again — which
    is what stops two spellings of one address becoming two people. If the provider answers with another identifier,
@@ -731,7 +747,8 @@ effect. `campaign.get` says `safe` instead, because a read may simply be asked a
 ```json
 {
   "result": { "items": [ { "contact_id": "cnt_…", "status": "added", "external_ids": { "contact": "p_88421" } } ] },
-  "external_ids": { "contact": "p_88421" }
+  "external_ids": { "contact": "p_88421" },
+  "external_id_origins": { "contact": "created" }
 }
 ```
 
@@ -741,6 +758,14 @@ receives back where that entity sits in its input — `contacts[0].external_ids`
 `campaign.external_ids` for a campaign. The `external_ids` inside each item
 of the result is the record of *who got what* — which person this identifier belongs to — and it stays
 right when a call addresses more than one person. They are not copies of each other; return both.
+
+**Say whether the provider found it or created it, when you know.** `external_id_origins` beside `external_ids`
+says, kind by kind, whether the provider already held the entity (`"found"`) or the call created it (`"created"`).
+The runtime writes a reserved `external_id_origin` line right after the pin, or the divergence, it speaks of, and keeps
+what you said on the attempt's provenance. A kind you say nothing about is unknown, and nothing is guessed in its
+place; an identifier the runtime had already pinned to the same value writes no line at all. The word is about this
+attempt's own call: an attempt after a lost answer may find what an earlier attempt of the same item created, and
+then says `"found"` — what the earlier call did is not this one's to say.
 
 **A failure's identifiers go on `error.external_ids`.** That is where `host.fail` puts them and the
 only place the runtime reads them on a failed answer: a top-level `external_ids` beside a failure is
@@ -1068,7 +1093,8 @@ channel. The runtime re-validates the outcome after the child exits: exactly one
 invocation's id, `protocol_version` 1, a known status, an error exactly when the status is `failed`,
 a result of at most 1 MiB, `details` of at most 64 KiB, a lower snake_case code of at most 64
 characters, a message of at most 2000 characters, `external_ids` of at most 64 string values of at
-most 256 characters, and `error.block` exactly when the class is `blocked`, an object of at most 8 KiB.
+most 256 characters, `external_id_origins` only on a succeeded outcome and only under kinds `external_ids` names,
+each `"found"` or `"created"`, and `error.block` exactly when the class is `blocked`, an object of at most 8 KiB.
 Anything else is `plugin_malformed_outcome`. The operation's own `output_schema`
 is **not** applied here — this check is about the envelope. The runtime applies it a moment later, when
 it turns the answer into the work item's outcome: a result that does not satisfy the schema, or an
