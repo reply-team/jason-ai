@@ -26,6 +26,24 @@ public partial class EventsDocTests
         Assert.Contains("A failure that outlasts the 30 days leaves a gap, which the first read that succeeds says, and which is counted like any other.", page, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A gap is a span a read reaches back to, so a source that is not being read leaves none: the page says so for a
+    /// source never read, one whose plugin is unrouted or unavailable, and a campaign never linked, by the depth the
+    /// schedule reads back.
+    /// </summary>
+    [Fact]
+    public void A_gap_is_a_span_a_read_reaches_back_to_so_a_source_that_is_not_being_read_leaves_none()
+    {
+        var page = Flattened(Read("events.md"));
+        var depth = EventSchedule.DepthDays;
+
+        Assert.Contains($"A gap is a span older than {depth} days that a read reaches back to, so a source that is not being read leaves no gap, however long it stays that way.", page, StringComparison.Ordinal);
+        Assert.Contains($"A source never read starts {depth} days back and owes nothing before that.", page, StringComparison.Ordinal);
+        Assert.Contains($"A source whose plugin is unrouted or unavailable is not read (see Which accounts, above): it keeps its row and its cursor, no gap is said while it stays so, and the first read that succeeds after a route binds it again says the gap, when its cursor is by then older than {depth} days.", page, StringComparison.Ordinal);
+        Assert.Contains("A campaign never linked leaves none either: a gap belongs to an account and names no campaign, and the account is read whether or not a campaign is linked there.", page, StringComparison.Ordinal);
+        Assert.Contains("The inbound read skips a campaign that is not linked and has no gap to say; its start moves with every skip, so a campaign linked late is read from then ([inbound sync](inbound-sync.md) §5).", page, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_kinds_and_the_codes_the_page_publishes_are_the_contract_s()
     {

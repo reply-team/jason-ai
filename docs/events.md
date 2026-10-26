@@ -192,6 +192,15 @@ in `jason events sources`, as how many reads in a row failed and how the last on
 `events_gap_observed` line or counted by a notification. A failure that outlasts the 30 days leaves a gap, which the first
 read that succeeds says, and which is counted like any other.
 
+A gap is a span older than 30 days that a read reaches back to, so a source that is not being read leaves no gap,
+however long it stays that way. A source never read starts 30 days back and owes nothing before that. A source whose
+plugin is unrouted or unavailable is not read (see Which accounts, above): it keeps its row and its cursor, no gap is
+said while it stays so, and the first read that succeeds after a route binds it again says the gap, when its cursor is
+by then older than 30 days. A campaign never linked leaves none either: a gap belongs to an account and names no
+campaign, and the account is read whether or not a campaign is linked there. The inbound read skips a campaign that is
+not linked and has no gap to say; its start moves with every skip, so a campaign linked late is read from then
+([inbound sync](inbound-sync.md) §5).
+
 **When a read fails.**
 
 | How it ended | The next read |
