@@ -365,8 +365,8 @@ the value has to meet. ECMA-262 has been the dialect all along; this table is ho
 | `$` | `\z` | admitted | ECMA-262's end is the end of the value, where the engine's also matches before a final line feed; in a class, itself |
 | `.` | `[^\n\r\u2028\u2029]` | admitted | ECMA-262 leaves out the four line terminators, where the engine leaves out only the line feed; in a class, itself |
 | `\|` | admitted | admitted | the same in both readings; in a class, itself |
-| `(` … `)` | admitted | admitted | the same in both readings; in a class, itself |
-| `(?:` … `)` | admitted | — | the same in both readings |
+| `(` ... `)` | admitted | admitted | the same in both readings; in a class, itself |
+| `(?:` ... `)` | admitted | — | the same in both readings |
 | `(?=`, `(?!` | refused | — | the engine that runs patterns cannot run it without backtracking, which keeps a hostile pattern linear |
 | `(?<=`, `(?<!` | refused | — | the engine that runs patterns cannot run it without backtracking, which keeps a hostile pattern linear |
 | `(?<`name`>`, `(?'`name`'` | refused | — | a name serves nothing in a pattern that only accepts or refuses a value |
@@ -379,7 +379,7 @@ the value has to meet. ECMA-262 has been the dialect all along; this table is ho
 | `{n}`, `{n,}`, `{n,m}`, each also followed by `?` | admitted | admitted | the same in both readings; in a class, itself |
 | `{` that starts no counted quantifier, and `}` | refused | admitted | only ECMA-262's older grammar reads it as itself; write `\{` or `\}`; in a class, itself |
 | `]` outside a class | admitted | — | itself, in both readings |
-| `[` … `]`, `[^` … `]` | admitted | admitted | the same in both readings; in a class, `[` is itself |
+| `[` ... `]`, `[^` ... `]` | admitted | admitted | the same in both readings; in a class, `[` is itself |
 | `[]`, `[^]` | refused | — | ECMA-262 reads `[]` as a class of nothing and `[^]` as any character, where the engine reads the `]` as a member; write `\]` for a bracket in a class |
 | a `[` never closed | refused | — | neither reading has it |
 | `a-z` | — | admitted | the same in both readings |
@@ -393,7 +393,7 @@ the value has to meet. ECMA-262 has been the dialect all along; this table is ho
 | `\S` | `[^\t\n\v\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]` | refused | its complement of ECMA-262's white space; in a class, a complement cannot be written as members |
 | `\b`, `\B` | refused | refused | a boundary between word characters, which the two readings define differently; in a class ECMA-262 reads `\b` as a backspace |
 | `\A`, `\Z`, `\z`, `\G` | refused | refused | ECMA-262 reads it as the letter, the engine as an anchor; write the letter without the backslash, or `^` and `$` for the start and the end |
-| `\p{`…`}`, `\P{`…`}` | refused | refused | a schema's pattern carries no flags, and ECMA-262 reads it only with one |
+| `\p{`...`}`, `\P{`...`}` | refused | refused | a schema's pattern carries no flags, and ECMA-262 reads it only with one |
 | `\1` to `\9`, `\k` | refused | refused | the engine that runs patterns cannot run it without backtracking, which keeps a hostile pattern linear; in a class ECMA-262 reads a digit or a letter |
 | `\0` followed by a digit | refused | refused | ECMA-262's older grammar reads an octal escape, the engine its own |
 | `\0` followed by no digit | admitted | admitted | the same in both readings |

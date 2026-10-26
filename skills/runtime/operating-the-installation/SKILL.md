@@ -215,7 +215,10 @@ jason plugin reload --reason "installed my plugin"
 `jason plugin list` prints the active snapshot: every plugin with its digest, the capabilities it was granted,
 and any problems that make it unavailable. A plugin reported `unavailable` is usually environmental — the
 program it needs is not on the `PATH` this runtime started with, which is why a plugin that works from your
-terminal can be unavailable to a runtime that started at logon.
+terminal can be unavailable to a runtime that started at logon. `jason status` names each unavailable plugin
+with its problem codes in its optional `plugin_availability` check, which never makes the installation not
+ready: work routed to such a plugin fails at the claim, and a notification plugin delivers nothing; nothing
+else stops.
 
 `jason plugin reload` reads every package again and swaps the snapshot, or keeps the old one and says what is
 wrong. It is all or nothing: a package problem rejects the whole reload, and the runtime carries on with the
@@ -295,10 +298,13 @@ jason update rollback
 and installs **nothing**, and it asks the feed rather than the runtime, so it answers on a machine whose runtime
 will not start.
 
-`jason update apply` performs the update: it downloads the release for this platform, proves its digest, stops
-the runtime, replaces the executable and starts it again. `jason update rollback` puts back the version the
-update replaced. `jason update status` says where an in-flight update stands, or what the last completed one
-recorded; it needs no runtime either.
+`jason update apply` performs the update: it downloads the release for this platform, proves its digest, stops the
+runtime, replaces the executable and starts it again. `jason update rollback` puts back the version the update
+replaced. `jason update status` says where an in-flight update stands, or what the last completed one recorded; it
+needs no runtime either. From 0.20.0, Jason's own installation on 0.18.x or earlier updates through 0.19.0:
+`jason update apply --version 0.19.0`, then `jason update apply`. Its own `jason update check` still names
+`jason update apply`, and that apply refuses with `update_not_directly_applicable`, naming 0.19.0. A package manager's
+upgrade goes straight to the newest release.
 
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
@@ -340,7 +346,11 @@ pointing at a file being swapped. Noticing an update is yours; deciding to take 
 An update leaves the plugins under `~/.jason/plugins/` as they were, so afterwards `jason status`'s optional
 `plugin_package` check can fail: the package installed is an earlier release's. Its fact names the installed version,
 the version this release published, and the step of the wiring check that prints the lines placing it; replacing a
-package is a change to the installation, so ask first, then `jason plugin reload`.
+package is a change to the installation, so ask first, then `jason plugin reload`. `jason update check` says it before
+the update: its `plugin_updates` names each package installed here that the newer release publishes a later version of,
+with both versions, and is `[]` when nothing installed here that the record holds is behind. It never names a package
+the list does not know: built or edited on that machine, or a version before the list's first line, 0.3.2; whether that
+one is behind is `jason status`'s to say, by its version.
 
 ## Installing it in the first place
 
