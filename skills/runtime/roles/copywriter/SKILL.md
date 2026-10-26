@@ -26,19 +26,37 @@ jason rolenote get --role copywriter --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 **There is no message store and no template store in this build.** The copy you write is this work item's
-result; where the campaign must keep a decision about wording, that belongs in campaign context, which the role
+result. A template is the text of one message, written once for an audience, and is a result too: nothing keeps it for
+the next. Where the campaign must keep a decision about wording, that belongs in campaign context, which the role
 holding that operation writes. Nothing is sent by being written.
 
-**No operation this build publishes sends outreach. The one that writes a message, `conversation.reply`, only answers
-inside the thread the person wrote in.** Some write and the rest only read: enrolling somebody puts
-them into the provider's own campaign, starting a campaign releases its first step to everybody in it, and whatever
-goes out after that is the provider's doing, on its schedule. Nothing here composes outreach and sends it.
-`campaign.activate` is what starts a campaign sending, and a person approves it with a preview that names how many
-people its first step goes to.
+**The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn
+message to one person outside any campaign; `social_invitation.send`, a LinkedIn connection request with its note; and
+`conversation.reply`, an answer inside the thread the person wrote in. A person approves each one with a preview
+before it is sent.** Each is its own decision, one message to one person, and the dispatcher runs one only after a
+person has approved it. Your copy is this work item's result; completing it sends nothing. The other operations write
+no message of their own: enrolling somebody puts them into the provider's own campaign, starting a campaign releases
+its first step to everybody in it, and whatever goes out after that is the provider's doing, on its schedule, and
+nobody approves those messages one by one. `campaign.activate` is what starts a campaign sending, and a person
+approves it with a preview that names how many people its first step goes to.
 
 ```
 jason rolenote set --role copywriter --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"voice":"short sentences, no adjectives in the first line","checked":"2026-09-21"}'
 ```
+
+## When one message serves a whole audience
+
+Where the brief asks for one message per audience rather than one text per person, you may answer with a template in
+Jason's own standard, only the constructs and names `message.send` lists, and a person reads it with one rendered
+example before anything is sent. A template is for an email only: a LinkedIn message written as a template is refused,
+so write one as final text. The example cannot show `sender.*` or `contact.custom.*`, which only the provider fills
+in, and `sender.*` is the provider account's identity, not the `sender.identity` preference you write by below. Answer
+with a subject template and a body template together, as this work item's result: whoever raises the sends copies them
+into each person's `message.send` item, and each of those parks for its own approval. Read `docs/contracts/README.md`,
+in the section "The template standard", before you write one: it is the only statement of what a template may hold,
+and a template outside it is refused when the work item that carries it is written. That page is published with the
+project's source and no verb prints it: on a machine with no copy of it, write final text for each person and say so
+in your answer.
 
 ## Write as the sender, in the company's tone
 

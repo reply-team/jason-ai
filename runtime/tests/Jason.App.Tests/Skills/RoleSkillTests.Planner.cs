@@ -210,4 +210,21 @@ public partial class RoleSkillTests
             "jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status scheduled --status processing --status awaiting_approval --status waiting",
             SkillPack.PrintedCommands(File.ReadAllLines(file)));
     }
+
+    /// <summary>
+    /// The planner's judgement on a template, which the session file shares byte for byte. Pinned here once; the craft guard
+    /// carries it to the other file. A <c>message.send</c> item for an email that carries a template has <c>compose</c>
+    /// <c>template</c> and both the subject and the body as templates; a planner that raised it as final text would send the
+    /// braces, or have the item refused.
+    /// </summary>
+    [Fact]
+    public void The_planners_judgement_gives_a_message_send_that_carries_a_template_compose_template()
+    {
+        var skill = Flattened("planner");
+
+        Assert.Contains(
+            "A `message.send` item for an email that carries a template, as the copywriter's answer gives it, has `compose` `template` in its `message`, with the subject and the body both templates.",
+            skill,
+            StringComparison.Ordinal);
+    }
 }

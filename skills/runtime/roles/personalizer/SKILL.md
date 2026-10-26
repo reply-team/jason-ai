@@ -26,12 +26,16 @@ jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 **There is no per-contact draft store in this build.** What you write for one person is this work item's result;
 the contact record holds that person's own data and is not a place to park drafts about them.
 
-**No operation this build publishes sends outreach. The one that writes a message, `conversation.reply`, only answers
-inside the thread the person wrote in.** Some write and the rest only read: enrolling somebody puts
-them into the provider's own campaign, starting a campaign releases its first step to everybody in it, and whatever
-goes out after that is the provider's doing, on its schedule. Nothing here composes outreach and sends it.
-`campaign.activate` is what starts a campaign sending, and a person approves it with a preview that names how many
-people its first step goes to.
+**The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn
+message to one person outside any campaign; `social_invitation.send`, a LinkedIn connection request with its note; and
+`conversation.reply`, an answer inside the thread the person wrote in. A person approves each one with a preview
+before it is sent.** Each is its own decision, one message to one person, and the dispatcher runs one only after a
+person has approved it. What you write is this work item's result; completing it sends nothing. A template is the
+copywriter's shape; yours is final text for one person. The other operations write no message of their own: enrolling
+somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,
+and whatever goes out after that is the provider's doing, on its schedule, and nobody approves those messages one by
+one. `campaign.activate` is what starts a campaign sending, and a person approves it with a preview that names how
+many people its first step goes to.
 
 ```
 jason rolenote set --role personalizer --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"pattern":"mentioning the funding round lands better than the job title","checked":"2026-09-21"}'

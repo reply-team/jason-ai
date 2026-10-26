@@ -28,26 +28,6 @@ public partial class RoleSkillTests
             LaunchContract.Extract(SkillPack.Find(role).File) is not null,
             $"'{role}' carries no launch contract, so it was told nothing about how it was launched.");
 
-    /// <summary>
-    /// The roles that write copy were told that no operation writes a message, which stopped being true when a reply in
-    /// a thread could be sent. They are told what is true instead: nothing sends outreach, and the one operation that
-    /// writes a message answers inside a thread somebody wrote in.
-    /// </summary>
-    [Theory]
-    [InlineData("copywriter")]
-    [InlineData("personalizer")]
-    public void A_role_that_writes_copy_is_told_that_the_one_message_written_is_a_reply(string role)
-    {
-        var skill = Flattened(role);
-
-        Assert.DoesNotContain("No operation this build publishes writes a message", skill, StringComparison.Ordinal);
-        Assert.Contains(
-            "**No operation this build publishes sends outreach. The one that writes a message, `conversation.reply`, only answers inside the thread the person wrote in.**",
-            skill,
-            StringComparison.Ordinal);
-        Assert.Contains("Nothing here composes outreach and sends it.", skill, StringComparison.Ordinal);
-    }
-
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
 }

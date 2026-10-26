@@ -100,7 +100,7 @@ for a role that sits with a person, the judgement it shares with its session fil
   dispatcher will claim.
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
-  written, and why writing it is not sending it.
+  written, when one text may be a template for a whole audience, and why writing it is not sending it.
 - [`roles/personalizer`](roles/personalizer/SKILL.md) — **draft.** The messaging adapted to one person: what
   this runtime knows about them and where to read it, the tone and the sender's forms it writes in, where the
   wording goes afterwards, and why a contact record is not the place for it.
