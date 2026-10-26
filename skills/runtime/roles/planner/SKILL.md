@@ -44,6 +44,9 @@ guess: nothing that would write to anybody is settled while either is unknown. W
 message is a rule for the messages after it, so it is kept at the level it belongs to — all of the person's work, the
 project this campaign belongs to, or this campaign alone — rather than only in the message it corrected.
 
+**A campaign is never split only to give some of its people another tone of voice.** The tone is the person's
+preference; a person or a group that needs other words gets them in the copy, not in a campaign of their own.
+
 **Confirm before you scale.** A direction is checked before anything is gathered or sent at scale. The deep work
 per person and the first outreach go to a pilot, a small part of the people rather than all of them, and the rest
 waits for the pilot's first results. Then the choice is to go on, change course, or take it back to the person, and

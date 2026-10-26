@@ -256,6 +256,42 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// A campaign is shaped by who it is for and what it is trying to find out, never by a voice: the tone is the
+    /// client's preference, and a person or a group that needs other words gets them in the copy. A planner that split a
+    /// campaign to give some of its people another tone would multiply the campaigns a person has to approve, read and
+    /// compare for a difference the copy carries. Said whole in the shared judgement, so both seats say the same rule.
+    /// </summary>
+    [Theory]
+    [InlineData("planner-in-session")]
+    [InlineData("planner")]
+    public void The_planners_judgement_never_splits_a_campaign_only_to_give_some_of_its_people_another_tone(string skill)
+    {
+        var block = Whitespace().Replace(CraftBlock.Extract(SkillPack.Find(skill).File) ?? string.Empty, " ");
+        const string Rule = "**A campaign is never split only to give some of its people another tone of voice.** "
+            + "The tone is the person's preference; a person or a group that needs other words gets them in the copy, "
+            + "not in a campaign of their own.";
+        Assert.True(
+            block.Contains(Rule, StringComparison.Ordinal),
+            $"The planner's judgement in '{skill}' does not say '{Rule}'.");
+        Assert.Equal(block.IndexOf(Rule, StringComparison.Ordinal), block.LastIndexOf(Rule, StringComparison.Ordinal));
+    }
+
+    /// <summary>The catalog says that the planner never splits a campaign only for a tone, in both seats, so a reader learns the rule before opening a file.</summary>
+    [Theory]
+    [InlineData("- [`planner-in-session`]")]
+    [InlineData("- [`roles/planner`]")]
+    public void The_catalog_says_that_the_planner_never_splits_a_campaign_only_for_a_tone(string entry)
+    {
+        var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
+        var start = catalog.IndexOf(entry, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"The catalog has no line for '{entry}'.");
+        var end = catalog.IndexOf(" - [`", start + 1, StringComparison.Ordinal);
+        var line = end > start ? catalog[start..end] : catalog[start..];
+
+        Assert.Contains("a campaign never split only to give some of its people another tone", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Who writes and how the company sounds are the person's word: read before the first question, asked when the order
     /// reaches each, and set on the answer under the person's own name — a preference is refused from anything but a
     /// person, and one set under another name records a word nobody gave. Nothing is agreed or created while either has

@@ -44,7 +44,8 @@ description that promises everything matches nothing.
   start needs, with who writes and how the company sounds set as the person's word, taking a brief as it comes and
   asking for what is missing one question at a time, what stays a quick look, what is agreed with the person before
   anything is created, among it a campaign named for what it is for, under a project named from what they sell, when it
-  becomes campaign work, and the first message seen before anything is sent. The session file of the planner, below.
+  becomes campaign work, and the first message seen before anything is sent; a campaign never split only to give
+  some of its people another tone of voice. The session file of the planner, below.
 - [`researcher-in-session`](researcher-in-session/SKILL.md) — **draft.** The researcher's judgement in a person's own
   conversation about an account or a person: taking the question as it comes, what stays a quick look and what
   becomes research work items, what Jason already holds and the launched researcher's notes read as a lead, the
@@ -94,8 +95,9 @@ for a role that sits with a person, the judgement it shares with its session fil
   order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
   the chronicle every time.
 - [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
-  before it plans, the order a first campaign opens in, what this build stores of a plan and what it does not, and
-  how a horizon becomes work items a dispatcher will claim.
+  before it plans, the order a first campaign opens in, a campaign never split only to give some of its people
+  another tone of voice, what this build stores of a plan and what it does not, and how a horizon becomes work items a
+  dispatcher will claim.
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
   written, and why writing it is not sending it.
