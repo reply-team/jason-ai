@@ -13,6 +13,10 @@
 // exactly that text: every character HTML reads as markup is escaped, and every line break is one `<br>`. Spaces and tabs
 // stay as written, and a mail program shows a run of them as one, as HTML does. The subject is a header, and goes as
 // written. A message that may have gone is never sent again: the document says `never`.
+//
+// A message composed as a template is one the provider fills in for each person, and this package does not yet write
+// one in Reply's syntax, so it refuses every template before anything is called: sent as written, it would not be the
+// message the person approved.
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { contactNumber, refuseUnprojected, withOrigin } from "./contacts.js";
 import { refusePlaceholders, senderFor, sendTo } from "./send.js";
@@ -44,6 +48,10 @@ export function messageSend(input, context) {
   // format is the email channel's, and every other format is LinkedIn's.
   if ((args.channel === "email") !== (message.format === "email")) {
     fail(OPERATION, { call: null, row: "format_of_another_channel" }, undefined);
+  }
+
+  if (message.compose === "template") {
+    fail(OPERATION, { call: null, row: "template_not_written" }, undefined);
   }
 
   refusePlaceholders(OPERATION, [message.subject, message.body]);

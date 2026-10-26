@@ -250,8 +250,8 @@ public class ReplyStubDirectSendTests
     }
 
     /// <summary>
-    /// Reply's refusals of a direct email, each definite and each saying which contact and mailbox it was about. A double
-    /// opening brace is read by Reply as the start of its own template and refused under a code that says nothing of it.
+    /// Reply's refusals of a direct email, each definite and each saying which contact and mailbox it was about. A tag
+    /// Reply cannot fill, here one naming no field it holds, is refused under a code that says nothing of it.
     /// </summary>
     [Theory]
     [InlineData("contact", "contact.not_found", 404, "contact.notFound")]
@@ -274,6 +274,104 @@ public class ReplyStubDirectSendTests
         Assert.Equal(1, exit);
         Assert.Equal((code, status, replyCode), ((string?)Error(said)["code"], (int)Error(said)["status"]!, (string?)Error(said)["reply_code"]));
         Assert.Equal("""{"contact_id":1001,"email_account_id":9007199254740991}""", Error(said)["ids"]!.ToJsonString());
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// Reply fills a direct email's tags in for the person before it sends: the contact's fields, a custom field by its
+    /// key, and the mailbox's names and address, with a fallback, a condition and its other branch. What went out is
+    /// recorded as written and as rendered.
+    /// </summary>
+    [Fact]
+    public async Task An_email_written_with_tags_is_rendered_over_the_contact_and_the_mailbox()
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", lastName: "Alvarez", company: "Puerto Analytics", title: "Head of Growth")
+            .WithCustomValue(1001, "team", "Data")
+            .WithSender(Mailbox, "email", "Ann Owner", "ann@example.com");
+        var text = new JsonObject
+        {
+            ["subject"] = "Notes for {{FirstName}}",
+            ["body"] = "Hi {{ FirstName }} {{LastName}}, {{#if Title == 'Head of Growth'}}growth{{else}}thanks{{/if}} at {{Company}} for {{team}}"
+                + "{{#if Title != 'CEO'}}!{{/if}} {{SendingEmail.SenderFirstName}} {{SendingEmail.SenderLastName}} ({{SendingEmail.SenderName}}, "
+                + "{{SendingEmail.Email}}) to {{Email}}, {{region | 'everywhere'}}.",
+        };
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), text.ToJsonString(), Ct);
+
+        Assert.True(exit == 0, said);
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal(text.ToJsonString(), went["text"]!.ToJsonString());
+        Assert.Equal(
+            """{"subject":"Notes for Marta","body":"Hi Marta Alvarez, growth at Puerto Analytics for Data! Ann Owner (Ann Owner, ann@example.com) to marta@example.com, everywhere."}""",
+            went["rendered"]!.ToJsonString());
+    }
+
+    /// <summary>
+    /// Reply counts more as no value than null, empty and white space: <c>false</c> and <c>0</c> too, so a fallback and
+    /// the other branch are written for them as well.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("false")]
+    [InlineData("0")]
+    public async Task A_field_reply_reads_as_no_value_takes_the_fallback_and_the_other_branch(string? title)
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", title: title)
+            .WithSender(Mailbox, "email", "Ann Owner", "ann@example.com");
+        var text = new JsonObject { ["subject"] = "Hi {{Title | 'there'}}", ["body"] = "{{#if Title}}set{{else}}unset{{/if}}" };
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), text.ToJsonString(), Ct);
+
+        Assert.True(exit == 0, said);
+        Assert.Equal("""{"subject":"Hi there","body":"unset"}""", Assert.Single(account.Sent)!["rendered"]!.ToJsonString());
+    }
+
+    /// <summary>
+    /// A comparison reads a white-space value as empty text, as it reads no value, and an operator inside its quoted
+    /// text is part of the text.
+    /// </summary>
+    [Theory]
+    [InlineData(" ", "{{#if Title == ''}}empty{{else}}set{{/if}}", "empty")]
+    [InlineData("CEO", "{{#if Title != 'a==b'}}other{{else}}same{{/if}}", "other")]
+    [InlineData("a==b", "{{#if Title == 'a==b'}}same{{else}}other{{/if}}", "same")]
+    public async Task A_comparison_reads_white_space_as_empty_and_an_operator_in_its_quoted_text_as_text(string title, string body, string rendered)
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", title: title)
+            .WithSender(Mailbox, "email", "Ann Owner", "ann@example.com");
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), new JsonObject { ["subject"] = "Tuesday", ["body"] = body }.ToJsonString(), Ct);
+
+        Assert.True(exit == 0, said);
+        Assert.Equal(rendered, (string?)Assert.Single(account.Sent)!["rendered"]!["body"]);
+    }
+
+    /// <summary>
+    /// A tag Reply has no value for and no fallback, or one never closed, is refused with Reply's own words under a
+    /// code that says nothing of it, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("Hi {{Title}}", "RenderingFail: One or more values for variables are missing or incorrect.")]
+    [InlineData("Hi {{region}}", "RenderingFail: One or more values for variables are missing or incorrect.")]
+    [InlineData("Hi {{SendingEmail.SenderLastName}}", "RenderingFail: One or more values for variables are missing or incorrect.")]
+    [InlineData("Hi {{FirstName", "Reached end of template before the expression was closed.")]
+    [InlineData("Hi {{FirstName}}}", "RenderingFail: One or more values for variables are missing or incorrect.")]
+    public async Task A_tag_reply_cannot_fill_is_refused_in_its_words_and_nothing_is_sent(string body, string detail)
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta")
+            .WithSender(Mailbox, "email", "Ann", "ann@example.com");
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), new JsonObject { ["subject"] = "Tuesday", ["body"] = body }.ToJsonString(), Ct);
+
+        Assert.Equal(1, exit);
+        var error = Error(said);
+        Assert.Equal(("reply.refused", 400, "contact.unknown", detail), ((string?)error["code"], (int)error["status"]!, (string?)error["reply_code"], (string?)error["detail"]));
+        Assert.Equal("""{"contact_id":1001,"email_account_id":9007199254740991}""", error["ids"]!.ToJsonString());
         Assert.Empty(account.Sent);
     }
 

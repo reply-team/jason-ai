@@ -405,8 +405,8 @@ public class ContractDocumentTests
     /// <summary>
     /// A message outside any thread goes to the work item's own person and to nobody else, from the one account named: an
     /// added recipient would be somebody the suppression register was never asked about. So the arguments are exactly the
-    /// channel, the sender and the message, the message is exactly its format, its subject and its text, both closed, and
-    /// no copy, blind copy, attachment or recording can be named in this version.
+    /// channel, the sender and the message, the message is exactly its format, how it is composed, its subject and its
+    /// text, both closed, and no copy, blind copy, attachment or recording can be named in this version.
     /// </summary>
     [Fact]
     public void A_message_names_no_recipient_of_its_own()
@@ -416,7 +416,7 @@ public class ContractDocumentTests
 
         Assert.Equal(["channel", "message", "sender"], ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
         Assert.False((bool)arguments["additionalProperties"]!);
-        Assert.Equal(["body", "format", "subject"], ((JsonObject)message["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(["body", "compose", "format", "subject"], ((JsonObject)message["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
         Assert.False((bool)message["additionalProperties"]!);
     }
 

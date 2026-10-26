@@ -34,7 +34,8 @@
       "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
       "/args/channel": "linkedin",
       "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
-      "/args/message": { "format": "linkedin_inmail", "subject": "The Lisbon meetup", "body": "Hi Marta, we have not met yet, but the meetup came up." }
+      "/args/message": { "format": "linkedin_inmail", "subject": "The Lisbon meetup", "body": "Hi Marta, we have not met yet, but the meetup came up." },
+      "/args/message/compose": null
     }
   }
 }

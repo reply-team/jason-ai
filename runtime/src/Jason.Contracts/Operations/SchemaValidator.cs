@@ -39,8 +39,17 @@ public static class SchemaValidator
         "title", "description", "examples",
     ];
 
-    /// <summary>The one string <c>format</c> may name: the others mean different things to different validators.</summary>
+    /// <summary>A string <c>format</c> may name: a timestamp, ISO-8601 with an offset.</summary>
     public const string SupportedFormat = "date-time";
+
+    /// <summary>
+    /// The other string <c>format</c> may name: a template in the template standard the contracts README publishes. It is
+    /// this dialect's own, so another validator reads it as an annotation and holds nothing to it.
+    /// </summary>
+    public const string TemplateFormat = "jason-template";
+
+    private const string FormatsAsserted =
+        "`date-time` and `jason-template` are the only formats this dialect validates, because the others mean different things to different validators.";
 
     private const int MaxCachedPatterns = 512;
     private const string RefPrefix = "#/$defs/";
@@ -1002,7 +1011,7 @@ public static class SchemaValidator
             problems.Add(unmeasured ?? new SchemaProblem(
                 pointer,
                 "any_of",
-                $"No alternative this schema allows accepts the value here; the first reported `{firstProblem!.Reason}` at `{Shown(firstProblem.Pointer)}`."));
+                $"No alternative this schema allows accepts the value here; the first reported `{firstProblem!.Reason}` at `{Shown(firstProblem.Pointer)}`: {firstProblem.Message}"));
         }
         else if (keyword == "allOf" && refused > 0)
         {
@@ -1011,7 +1020,7 @@ public static class SchemaValidator
                 "all_of",
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Every requirement here has to hold, and requirement {first + 1} reported `{firstProblem!.Reason}` at `{Shown(firstProblem.Pointer)}`.")));
+                    $"Every requirement here has to hold, and requirement {first + 1} reported `{firstProblem!.Reason}` at `{Shown(firstProblem.Pointer)}`: {firstProblem.Message}")));
         }
         else if (keyword == "allOf" && unmeasured is not null)
         {
@@ -1050,12 +1059,25 @@ public static class SchemaValidator
 
     private static void ApplyFormat(JsonNode? argument, JsonNode? value, string pointer, List<SchemaProblem> problems)
     {
-        if (!TryString(argument, out var format) || format != SupportedFormat)
+        if (!TryString(argument, out var format) || format is not (SupportedFormat or TemplateFormat))
         {
-            problems.Add(new SchemaProblem(
-                pointer,
-                "format",
-                $"`{SupportedFormat}` is the only format this dialect validates, because the others mean different things to different validators."));
+            problems.Add(new SchemaProblem(pointer, "format", FormatsAsserted));
+            return;
+        }
+
+        if (format == TemplateFormat)
+        {
+            if (TryString(value, out var template) && TemplateGrammar.Check(template) is { } refusal)
+            {
+                // The template is somebody's message: the refusal names the construct and where it starts, never the text.
+                problems.Add(new SchemaProblem(
+                    pointer,
+                    "format",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The template here writes {refusal.Row.Name} at character {refusal.Position}, which the template standard refuses, because {refusal.Row.Why}.")));
+            }
+
             return;
         }
 
@@ -1187,12 +1209,9 @@ public static class SchemaValidator
                     break;
 
                 case "format":
-                    if (!TryString(argument, out var format) || format != SupportedFormat)
+                    if (!TryString(argument, out var format) || format is not (SupportedFormat or TemplateFormat))
                     {
-                        problems.Add(new SchemaProblem(
-                            at,
-                            "format",
-                            $"`{SupportedFormat}` is the only format this dialect validates, because the others mean different things to different validators."));
+                        problems.Add(new SchemaProblem(at, "format", FormatsAsserted));
                     }
 
                     break;

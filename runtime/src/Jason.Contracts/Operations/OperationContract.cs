@@ -715,6 +715,13 @@ public sealed record OperationPreview(PreviewTemplate Summary, IReadOnlyList<str
 
         return values;
     }
+
+    /// <summary>
+    /// One example of a message the composed input writes as a template, rendered by the template standard over the
+    /// values the input holds: its subject, its text, and the names left for the provider to fill. Null when the
+    /// input's message is final, or there is none.
+    /// </summary>
+    public JsonObject? Example(JsonNode? input) => TemplateExample.Of(input);
 }
 
 /// <summary>One kind of provider identifier this operation may return, and what it identifies.</summary>

@@ -3,6 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.10.0
+
+- `message.send` reads the message's `compose`. A message composed as a `template` is refused as
+  `template_unsupported` (validation) before anything is called: this version writes no template in Reply's syntax, and
+  a template sent as written would not be the message a person approved. A message composed as final text, or with no
+  `compose`, goes as before, and a double opening brace in it is still `message_invalid`. The error table carries a row
+  for `template_unrendered` too, which this version never reports, since it asks Reply to fill in no template.
+
 ## 0.9.1
 
 - No behaviour changes. The README installs the package with `jason plugin install reply`, which checks it against the

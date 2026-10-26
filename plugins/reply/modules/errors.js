@@ -1199,6 +1199,18 @@ export const ROWS = {
         "class": "validation",
         "note": "The subject or the text carries a double opening brace, which Reply reads as a placeholder it fills in for each person, so what would go out might not be the message a person approved. Nothing was sent. Write it without one and propose the message again."
       },
+      "template_not_written": {
+        "when": "The message is composed as a template. This version of the package writes no template in Reply's syntax, so it refuses every one, with a tag or without. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "note": "This version of the Reply plugin does not send a template, so nothing was sent. Write the message as final text and propose it again, or update the plugin to a version that sends templates."
+      },
+      "template_not_filled": {
+        "when": "Never reported by this version: it refuses every template before any call, so Reply is never asked to fill one in.",
+        "code": "template_unrendered",
+        "class": "validation",
+        "note": "Reply could not fill in the template for this person, so nothing was sent. Give the person a value for each name the template uses, or a fallback beside it, and propose the message again."
+      },
       "format_of_another_channel": {
         "when": "The message's format belongs to another channel than the one the call named — an email on LinkedIn, or a LinkedIn format on the email channel. The document refuses it first; this is the package's own check behind it. Decided before any call.",
         "code": "message_invalid",

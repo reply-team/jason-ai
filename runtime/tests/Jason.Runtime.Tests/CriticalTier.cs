@@ -35,7 +35,7 @@ internal static partial class CriticalTier
         //              App  Cli  Contracts  PluginHost  Runtime
         [Family.B1] =  [  7,   2,   4,   2,   5],
         [Family.B2] =  [  4,   2,   0,   0,   6],
-        [Family.B3] =  [  0,   0,   3,   1,  29],
+        [Family.B3] =  [  0,   0,   4,   1,  29],
         [Family.B4] =  [  0,   0,   0,   0,  13],
         [Family.B5] =  [  0,   0,   0,   0,   2],
         [Family.B6] =  [  0,   1,   2,   0,   3],
@@ -57,14 +57,14 @@ internal static partial class CriticalTier
         [Family.P2] =  [  0,   2,   0,   0,  12],
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  23],
-        [Family.S2] =  [  2,   1,  10,   0,  22],
+        [Family.S2] =  [  2,   1,  10,   0,  23],
         [Family.S3] =  [  0,   3,   3,   3,  12],
         [Family.S4] =  [  0,  29,   0,   0,   3],
         [Family.S5] =  [  0,   0,   0,   0,  17],
         [Family.S6] =  [  0,   0,   0,   0,  12],
         [Family.R1] =  [  0,   0,  12,   9,  21],
         [Family.R2] =  [  0,  25,   8,   0,  12],
-        [Family.R3] =  [  0,   1,  30,   0,  12],
+        [Family.R3] =  [  0,   1,  30,   0,  13],
         [Family.R4] =  [  0,   0,   0,   8,   0],
         [Family.R5] =  [  0,   0,   0,   5,   5],
         [Family.I1] =  [  0,  10,   5,   0,   4],
@@ -102,9 +102,9 @@ internal static partial class CriticalTier
     [
         (23, 203, 298),       // Jason.App.Tests
         (148, 1688, 2790),    // Jason.Cli.Tests
-        (100, 513, 2069),     // Jason.Contracts.Tests
+        (101, 513, 2069),     // Jason.Contracts.Tests
         (41, 185, 277),       // Jason.PluginHost.Tests
-        (508, 3768, 6560),    // Jason.Runtime.Tests
+        (510, 3768, 6560),    // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>

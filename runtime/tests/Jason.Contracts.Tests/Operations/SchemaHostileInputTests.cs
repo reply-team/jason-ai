@@ -114,12 +114,14 @@ public class SchemaHostileInputTests
     [InlineData("email")]
     [InlineData("uri")]
     [InlineData("hostname")]
-    public void Only_date_time_survives_of_the_format_vocabulary(string format)
+    [InlineData("Jason-Template")]
+    public void Only_date_time_and_jason_template_survive_of_the_format_vocabulary(string format)
     {
         var schema = new JsonObject { ["type"] = "string", ["format"] = format };
 
         Assert.Equal("format", Assert.Single(SchemaValidator.CheckDialect(schema)).Reason);
         Assert.Empty(SchemaValidator.CheckDialect(new JsonObject { ["type"] = "string", ["format"] = "date-time" }));
+        Assert.Empty(SchemaValidator.CheckDialect(new JsonObject { ["type"] = "string", ["format"] = "jason-template" }));
     }
 
     [Fact]

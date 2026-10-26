@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Json;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
@@ -16,6 +17,8 @@ namespace Jason.Runtime.Tests.Approvals;
 public class ApprovalPreviewTests
 {
     private static readonly OperationContract Enroll = OperationCatalog.Find("campaign.enroll")!;
+
+    private static readonly OperationContract Send = OperationCatalog.Find("message.send")!;
 
     [Fact]
     [Critical(Family.S2, "what a person approves")]
@@ -135,6 +138,89 @@ public class ApprovalPreviewTests
         Assert.False(preview.ContainsKey("summary"));
         Assert.False(preview.ContainsKey("highlights"));
     }
+
+    /// <summary>
+    /// A message the provider fills in for each person is read with one example rendered from the subject's own input,
+    /// beside the template as written: a name the input does not hold is left for the provider and listed.
+    /// </summary>
+    [Fact]
+    public void A_template_is_read_with_one_example_rendered_from_the_subject()
+    {
+        var campaign = WorkItemFactory.NewCampaign("Autumn outreach");
+
+        var preview = ApprovalPreview.Of(Send, Message(campaign, "template"), campaign, NewContact(), "email");
+
+        Assert.Equal(
+            """{"subject":"Meetup notes for Alex","body":"Hi Alex, [sender.first_name] here.","unfilled":["sender.first_name"]}""",
+            preview["example"]!.ToJsonString());
+        Assert.Contains("subject: Meetup notes for {{contact.first_name}};", (string?)preview["summary"], StringComparison.Ordinal);
+        Assert.Equal("template", (string?)preview["highlights"]!["/args/message/compose"]);
+        Assert.Null(preview["subject"]!["input"]!["example"]);
+    }
+
+    /// <summary>
+    /// The example is never part of what is approved: the subject a template's preview carries hashes exactly as the
+    /// subject the person decides on, so the hash does not change with how a template is rendered.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S2, "what a person approves")]
+    public void A_templates_example_leaves_the_subjects_hash_as_it_was()
+    {
+        var campaign = WorkItemFactory.NewCampaign("Autumn outreach");
+        var subject = Message(campaign, "template");
+
+        var preview = ApprovalPreview.Of(Send, subject, campaign, NewContact(), "email");
+
+        Assert.NotNull(preview["example"]);
+        Assert.Equal(subject.Hash, CanonicalJson.Hash(preview["subject"]!.AsObject()));
+    }
+
+    /// <summary>A final message is read as it is written, so its preview carries no example.</summary>
+    [Fact]
+    public void A_final_message_has_no_example()
+    {
+        var campaign = WorkItemFactory.NewCampaign("Autumn outreach");
+
+        var preview = ApprovalPreview.Of(Send, Message(campaign, "text"), campaign, NewContact(), "email");
+
+        Assert.False(preview.ContainsKey("example"));
+    }
+
+    /// <summary>The subject of a message to one person, whose subject and text are written as a template or as final text.</summary>
+    private static ApprovalSubject Message(Campaign campaign, string compose) =>
+        ApprovalSubject.Of(
+            new ProviderOpPlan(
+                TestPlugins.Loaded("provider", ["message.send"]),
+                "snp_one",
+                "rts_one",
+                RouteScope.CampaignDefault,
+                new JsonObject { ["account"] = "one" },
+                "sha256:account",
+                Send,
+                new JsonObject
+                {
+                    ["args"] = new JsonObject
+                    {
+                        ["channel"] = "email",
+                        ["sender"] = new JsonObject { ["external_id"] = "s_12", ["address"] = "ann@example.test" },
+                        ["message"] = new JsonObject
+                        {
+                            ["format"] = "email",
+                            ["compose"] = compose,
+                            ["subject"] = "Meetup notes for {{contact.first_name}}",
+                            ["body"] = "Hi {{contact.first_name}}, {{sender.first_name}} here.",
+                        },
+                    },
+                    ["contacts"] = new JsonArray(new JsonObject
+                    {
+                        ["id"] = "ctc_01K52JR0000000000000000001",
+                        ["first_name"] = "Alex",
+                        ["last_name"] = "Rivera",
+                        ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = "alex@example.test", ["primary"] = true }),
+                        ["external_ids"] = new JsonObject(),
+                    }),
+                }),
+            WorkItemFactory.NewProviderOp(campaign, "message.send"));
 
     /// <summary>The subject of an enrollment whose composed input names a person, a campaign and the three choices.</summary>
     private static ApprovalSubject Composed(Campaign campaign, string campaignName) =>

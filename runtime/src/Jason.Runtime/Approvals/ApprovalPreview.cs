@@ -44,6 +44,13 @@ public static class ApprovalPreview
             var input = subject.Document["input"];
             preview["summary"] = declared.Summary.Render(input);
             preview["highlights"] = declared.Highlight(input);
+
+            // A template is read with one example of what it writes, rendered from the same input; a final message
+            // has none, because it is read exactly as it goes out.
+            if (declared.Example(input) is { } example)
+            {
+                preview["example"] = example;
+            }
         }
 
         preview["intent"] = contract.Intent;

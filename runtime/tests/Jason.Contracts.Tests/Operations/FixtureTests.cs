@@ -142,7 +142,8 @@ public class FixtureTests
 
     /// <summary>
     /// What a person deciding will read, rendered from an input the schema accepts. The summary is compared whole,
-    /// because the words around the values are the half of the preview a pointer check cannot see.
+    /// because the words around the values are the half of the preview a pointer check cannot see. The example of a
+    /// template is compared whole too, and a fixture that expects none holds the preview to having none.
     /// </summary>
     [Theory]
     [MemberData(nameof(Previews))]
@@ -158,8 +159,8 @@ public class FixtureTests
 
         var expected = Assert.IsType<JsonObject>(fixture["expect"]);
         Assert.True(
-            expected.All(member => member.Key is "summary" or "highlights"),
-            $"{relative} expects something other than a summary and its highlights.");
+            expected.All(member => member.Key is "summary" or "highlights" or "example"),
+            $"{relative} expects something other than a summary, its highlights and an example.");
         Assert.Equal((string?)expected["summary"], contract.Preview.Summary.Render(input));
 
         var highlights = Assert.IsType<JsonObject>(expected["highlights"]);
@@ -167,6 +168,11 @@ public class FixtureTests
         Assert.True(
             JsonNode.DeepEquals(highlights, rendered),
             $"{relative} expects the highlights {highlights.ToJsonString()}; the preview carries {rendered.ToJsonString()}.");
+
+        var example = contract.Preview.Example(input);
+        Assert.True(
+            JsonNode.DeepEquals(expected["example"], example),
+            $"{relative} expects the example {expected["example"]?.ToJsonString() ?? "to be absent"}; the preview carries {example?.ToJsonString() ?? "none"}.");
     }
 
     /// <summary>

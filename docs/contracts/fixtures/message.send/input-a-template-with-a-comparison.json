@@ -1,0 +1,32 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a template with a condition that compares the person's title with a quoted text, and another branch",
+  "input": {
+    "args": {
+      "channel": "email",
+      "sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "message": { "format": "email", "compose": "template", "subject": "The Lisbon meetup", "body": "Hi {{contact.first_name}}, {{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}}" }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": "valid"
+}

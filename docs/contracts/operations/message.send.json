@@ -33,7 +33,7 @@
   "precondition": "The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent.",
   "preview": {
     "summary": "Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}), outside any campaign — subject: {/args/message/subject}; text: {/args/message/body}",
-    "highlights": ["/contacts/0/channels/0/value", "/args/channel", "/args/sender", "/args/message"]
+    "highlights": ["/contacts/0/channels/0/value", "/args/channel", "/args/sender", "/args/message", "/args/message/compose"]
   },
 
   "input_schema": {
@@ -60,12 +60,17 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["format", "body"],
-            "description": "What goes out, exactly as the person approving it reads it: one format of the channel's, and its text.",
+            "description": "What goes out: one format of the channel's, and its text — final, exactly as the person approving it reads it, or an email's template the provider fills in for the person.",
             "properties": {
               "format": {
                 "type": "string",
                 "enum": ["email", "linkedin_message", "linkedin_inmail", "linkedin_voice"],
                 "description": "`email` on the email channel; on LinkedIn, a message to a connection, an InMail, or a voice message the provider speaks from the text."
+              },
+              "compose": {
+                "type": "string",
+                "enum": ["text", "template"],
+                "description": "`text`, or absent: the subject and the text are final and go out exactly as written. `template`: both are templates in the template standard the contracts README publishes, which the provider fills in for the person; only an email may be one. The bounds below hold a template as written; a text the provider finds too long once filled in fails `message_too_long`."
               },
               "subject": {
                 "type": "string",
@@ -82,7 +87,23 @@
                 "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
                 "description": "The text as plain text, something other than white space — for a voice message the text the provider speaks: at most 12000 characters on an email, the most `conversation.get` reads back of one message; 8000 in a LinkedIn message, 1900 in an InMail and 1000 in a voice message, the most each holds."
               }
-            }
+            },
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["compose"],
+                "properties": {
+                  "compose": { "const": "template" },
+                  "format": { "const": "email" },
+                  "subject": { "format": "jason-template" },
+                  "body": { "format": "jason-template" }
+                }
+              },
+              {
+                "type": "object",
+                "properties": { "compose": { "const": "text" } }
+              }
+            ]
           }
         },
         "anyOf": [
@@ -296,7 +317,9 @@
     { "code": "not_connected", "class": "permanent", "when": "A LinkedIn message or voice message to a person the sender's account is not connected with. Nothing was sent: invite them first, or send an InMail." },
     { "code": "insufficient_credits", "class": "permanent", "when": "The sender's account has no credits left for an InMail. Nothing was sent. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
     { "code": "message_too_long", "class": "validation", "when": "The provider found the text too long — a voice message too long to speak among them. Nothing was sent." },
-    { "code": "message_invalid", "class": "validation", "when": "The subject or the text carries something the provider would read as markup of its own — a placeholder it fills in for each person — so what would go out is not the text a person approved. Nothing was sent." },
+    { "code": "message_invalid", "class": "validation", "when": "The message is final — `compose` absent or `text` — and the subject or the text carries something the provider would read as markup of its own — a placeholder it fills in for each person — so what would go out is not the text a person approved. Nothing was sent." },
+    { "code": "template_unsupported", "class": "validation", "when": "The message is a template the plugin cannot write in its provider's own syntax: a construct the plugin's reading of the standard refuses, or a custom field under a key the provider keeps for a field of its own, which it would fill with that field's value. Nothing was sent." },
+    { "code": "template_unrendered", "class": "validation", "when": "The message is a template the provider could not fill in for this person — a name with no value and no fallback among the causes; the provider's own words travel in the message. Nothing was sent." },
     { "code": "suppressed", "class": "permanent", "when": "The provider holds this person as opted out, or its blacklist holds them, so nothing was sent." },
     { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include messages outside a campaign on this channel, so no call by this account can send one." },
     { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing was sent. Repeating it runs the same call again." },
@@ -312,8 +335,10 @@
   "conformance": [
     "Nothing is sent before the person's contact at the provider is settled: found by the pin or by the consumed value, or created from that value only when the provider holds nobody under it. A contact the provider already held is read first: one it holds as opted out fails `suppressed`; one reached at another address or carrying another LinkedIn profile fails `contact_channel_conflict` and is not changed; one carrying no LinkedIn profile is given the consumed one first, before a LinkedIn message.",
     "The message goes from the account `args.sender` names, of the channel the message consumes, and only when the provider holds that account under the address the arguments state — null only for an account it holds no address for; otherwise it fails `sender_mismatch` before anything is sent.",
-    "The subject and the text go out exactly as approved: one the provider would read as a placeholder of its own fails `message_invalid` before anything is sent.",
-    "An email's text reaches the provider written as markup that shows exactly that text, its line breaks included; nothing in it is read as markup of the provider's.",
+    "A message whose `compose` is absent or `text` goes out exactly as approved: a subject or a text the provider would read as a placeholder of its own fails `message_invalid` before anything is sent.",
+    "A message whose `compose` is `template` reaches the provider in the provider's own syntax, construct by construct and name by name as the template standard says, and the provider fills it in for the person. `sender.*` is the sending account's identity at the provider, not the `sender.identity` preference. A template the plugin cannot write fails `template_unsupported`, and one the provider could not fill fails `template_unrendered`, before anything is sent.",
+    "The provider renders a value it fills in as it renders that value anywhere else, so a template's author treats a field's value as the provider will: whatever the provider makes of markup in a field, it makes of it in the message.",
+    "An email's text reaches the provider written as markup that shows exactly that text, its line breaks included; nothing in it but a template's tags is read as markup of the provider's.",
     "An attempt sends at most once. One that may have sent and lost its answer fails `provider_answer_lost` and is never repeated.",
     "The person's identifier comes back under `external_ids.contact`, on a failure too once the person was found or created.",
     "The result carries exactly one item, its channel and format the ones the call named, and its `contact_id` is the identifier the call was given."

@@ -177,6 +177,46 @@ public class ReplyMessageSendTests
     }
 
     /// <summary>
+    /// This version of the package writes no template in Reply's syntax, so a message composed as one is refused before
+    /// anything is called, with a tag or without: sent as written, it would not be the message the person approved, which
+    /// is the template filled in for the person it goes to.
+    /// </summary>
+    [Theory]
+    [InlineData("The Lisbon meetup, {{contact.first_name}}", "Hi {{contact.first_name | 'there'}}, thanks for the chat.")]
+    [InlineData(Subject, Body)]
+    public async Task A_template_is_refused_before_anything_is_called(string subject, string body)
+    {
+        using var account = ByEmail();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("email", pinned: "1001", subject: subject, body: body);
+        input["args"]!["message"]!["compose"] = "template";
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>A message composed as final text is the text as before: a double opening brace in it is still refused as invalid.</summary>
+    [Fact]
+    public async Task A_final_text_with_a_double_opening_brace_is_still_refused_as_invalid()
+    {
+        using var account = ByEmail();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("email", pinned: "1001", body: "Braces {{ stay as typed.");
+        input["args"]!["message"]!["compose"] = "text";
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(("message_invalid", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
     /// The document ties a message's format to its channel, and the claim holds it there; the package holds it too, behind
     /// both: an email's format is the email channel's and every other format is LinkedIn's, so a format of the other
     /// channel is refused before anything is called, even where the input reaches the package without the document read.

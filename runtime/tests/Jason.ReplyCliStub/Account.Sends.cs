@@ -13,7 +13,7 @@ using System.Text.Json.Nodes;
 /// given a person's fields goes only to a contact it creates: one a lookup finds, or one the import matched, is
 /// <c>contact.already_held</c>, named and not sent to. Every answer names the contact it went to and whether the command
 /// made it. A send that goes out is appended to the account's record of what was sent, which is how a test says whether
-/// anything went. Reply's own checks are kept in the order a live account was seen to make them: a note too long is
+/// anything went; an email's entry carries its text as written and as Reply rendered it for the person. Reply's own checks are kept in the order a live account was seen to make them: a note too long is
 /// refused before the ids are looked at. Reply does not refuse a contact it holds as opted out on these sends, and
 /// neither does this; it consults its blacklist on an email alone.
 /// </summary>
@@ -156,8 +156,9 @@ internal static partial class Account
         }
 
         var ids = new JsonObject { ["contact_id"] = contactId, [AccountKey(send)] = accountId };
+        JsonObject? rendered = null;
         var refused = send.Channel == "email"
-            ? EmailRefusal(root, contactId, accountId, text!, ids)
+            ? EmailRefusal(root, contactId, accountId, text!, ids, out rendered)
             : LinkedInRefusal(root, command, send, contactId, accountId, text, ids);
         if (refused is not null)
         {
@@ -170,7 +171,13 @@ internal static partial class Account
         }
 
         var sent = Read(root, SentFile);
-        sent.Add(new JsonObject { ["command"] = command, ["contactId"] = contactId, ["accountId"] = accountId, ["text"] = text?.DeepClone() });
+        var entry = new JsonObject { ["command"] = command, ["contactId"] = contactId, ["accountId"] = accountId, ["text"] = text?.DeepClone() };
+        if (rendered is not null)
+        {
+            entry["rendered"] = rendered;
+        }
+
+        sent.Add(entry);
         Write(root, SentFile, sent);
 
         if (send.Channel == "email")
@@ -197,15 +204,19 @@ internal static partial class Account
         });
     }
 
-    /// <summary>Reply's refusals of a direct email, in the order this stand-in makes them: the contact, the mailbox, the blacklist, the template.</summary>
-    private static Ending? EmailRefusal(string root, int contactId, long accountId, JsonObject text, JsonObject ids)
+    /// <summary>
+    /// Reply's refusals of a direct email, in the order this stand-in makes them: the contact, the mailbox, the blacklist,
+    /// the template; and, when none refuses, the text as Reply rendered it.
+    /// </summary>
+    private static Ending? EmailRefusal(string root, int contactId, long accountId, JsonObject text, JsonObject ids, out JsonObject? rendered)
     {
+        rendered = null;
         if (Find(Read(root, ContactsFile), contactId) is not { } contact)
         {
             return Refused("contact.not_found", $"This account has no contact {contactId}.", status: 404, replyCode: "contact.notFound", ids: ids);
         }
 
-        if (SenderOf(root, "email", accountId) is null)
+        if (SenderOf(root, "email", accountId) is not { } mailbox)
         {
             return Refused(
                 "email_account.not_found", "Reply has no mailbox by that id that this account can send from, so nothing was sent.",
@@ -219,16 +230,11 @@ internal static partial class Account
                 status: 400, replyCode: "contact.contactInBlackList", ids: ids);
         }
 
-        if (HoldsPlaceholder(text))
-        {
-            // Reply reads the text as a template of its own and refuses one it cannot read, under a code that says nothing
-            // of it; the CLI has no word for it and passes it on as a refusal.
-            return Refused(
-                "reply.refused", "Reply refused the request.", status: 400, replyCode: "contact.unknown",
-                detail: "Reached end of template before the expression was closed.", ids: ids);
-        }
-
-        return null;
+        // Reply reads the text as a template of its own and refuses one it cannot fill or read, under a code that says
+        // nothing of it.
+        var (filled, refusal) = RenderedEmail(text, contact, mailbox, ids);
+        rendered = filled;
+        return refusal;
     }
 
     /// <summary>Reply's refusals of a LinkedIn send, in the order this stand-in makes them.</summary>

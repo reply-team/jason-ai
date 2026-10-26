@@ -34,7 +34,8 @@
       "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
       "/args/channel": "linkedin",
       "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
-      "/args/message": { "format": "linkedin_message", "body": "Thanks for connecting, Marta." }
+      "/args/message": { "format": "linkedin_message", "body": "Thanks for connecting, Marta." },
+      "/args/message/compose": null
     }
   }
 }

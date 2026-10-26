@@ -1,0 +1,32 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a LinkedIn message written as a template, which only an email may be, refused at the message",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "message": { "format": "linkedin_message", "compose": "template", "body": "Thanks for connecting, {{contact.first_name}}." }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": { "invalid": [{ "pointer": "/args/message", "reason": "any_of" }] }
+}

@@ -270,6 +270,121 @@ public class WorkItemContractTests
     }
 
     /// <summary>
+    /// A template the standard refuses is refused when the item is written, at the message, in words that name what
+    /// the template writes and where — never the template — rather than hours later by the provider.
+    /// </summary>
+    [Fact]
+    [Critical(Family.R3, "a template refused at create")]
+    public async Task A_template_that_writes_a_helper_is_refused_when_the_item_is_written()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var input = Message();
+        input["message"]!["compose"] = "template";
+        input["message"]!["body"] = "Hi {{toLower contact.first_name}}, thanks for the chat.";
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => service.CreateAsync(
+                ProviderOp(campaign.PublicId, "message.send") with { Context = new JsonObject { ["input"] = input } },
+                Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.True(detail.Field == "context.input/message", $"The template was refused at {detail.Field}: {detail.Message}");
+        Assert.Contains("`format` at `/message/body`", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("a helper or a macro at character 4", detail.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("toLower", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A template refused inside the message's alternatives is refused by the alternatives, at the message, and their
+    /// words are what a person reads: a LinkedIn message written as a template is told the format it would need.
+    /// </summary>
+    [Fact]
+    public async Task A_template_on_a_linkedin_message_is_told_the_format_a_template_needs()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var input = new JsonObject
+        {
+            ["channel"] = "linkedin",
+            ["sender"] = new JsonObject { ["external_id"] = "s_34", ["address"] = "https://www.linkedin.com/in/ann-owner" },
+            ["message"] = new JsonObject
+            {
+                ["format"] = "linkedin_message",
+                ["compose"] = "template",
+                ["body"] = "Thanks for connecting, {{contact.first_name}}.",
+            },
+        };
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => service.CreateAsync(
+                ProviderOp(campaign.PublicId, "message.send") with { Context = new JsonObject { ["input"] = input } },
+                Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("context.input/message", detail.Field);
+        Assert.Equal(
+            "No alternative this schema allows accepts the value here; the first reported `const` at `/message/format`: "
+            + "The only value accepted here is \"email\".",
+            detail.Message);
+    }
+
+    /// <summary>
+    /// A subject that writes a construct the standard refuses is refused at the message, in words that name the
+    /// subject's pointer, the construct and the character it starts on — never the subject.
+    /// </summary>
+    [Fact]
+    public async Task A_subject_that_writes_a_helper_is_refused_naming_the_subject_and_where_it_starts()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var input = Message();
+        input["message"]!["compose"] = "template";
+        input["message"]!["subject"] = "Lisbon {{toLower contact.company}}";
+        input["message"]!["body"] = "Hi {{contact.first_name}}, thanks for the chat at the meetup.";
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => service.CreateAsync(
+                ProviderOp(campaign.PublicId, "message.send") with { Context = new JsonObject { ["input"] = input } },
+                Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("context.input/message", detail.Field);
+        Assert.Equal(
+            "No alternative this schema allows accepts the value here; the first reported `format` at `/message/subject`: "
+            + "The template here writes a helper or a macro at character 8, which the template standard refuses, because "
+            + "it is a provider's own computation, which another provider does not have.",
+            detail.Message);
+    }
+
+    /// <summary>
+    /// A message that does not say it is a template is the final text, as it always was: braces in it are accepted when
+    /// the item is written, and stay the plugin's to refuse.
+    /// </summary>
+    [Fact]
+    public async Task A_text_with_braces_is_still_accepted_when_the_item_is_written()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var input = Message();
+        input["message"]!["body"] = "Hi {{toLower contact.first_name}}, thanks for the chat.";
+
+        var item = await service.CreateAsync(
+            ProviderOp(campaign.PublicId, "message.send") with { Context = new JsonObject { ["input"] = input } },
+            Ct);
+
+        Assert.Equal("Hi {{toLower contact.first_name}}, thanks for the chat.", (string?)item.Context["input"]!["message"]!["body"]);
+    }
+
+    /// <summary>
     /// What the create and a patch of the arguments make of every published input fixture agrees with what the
     /// fixture says about the arguments, whatever shape a document gives them. A fixture that expects <c>valid</c> is
     /// accepted, and every problem it states under <c>/args</c> is refused at <c>context.input</c>, at the same place
