@@ -69,6 +69,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
+      sdk: ${{ steps.dotnet.outputs.sdk-version }}
       full: ${{ steps.legs.outputs.full }}
       build: ${{ steps.legs.outputs.build }}
       linux: ${{ steps.legs.outputs.linux }}
@@ -87,7 +88,13 @@ jobs:
         with:
           fetch-depth: 2
 
-      - uses: ./.github/actions/setup-dotnet
+      # The SDK this whole run builds on: the newest the 10.0 channel has released, resolved here once and handed on as
+      # the sdk output, which every other job that sets up .NET passes to the action. So no two jobs of one run build on
+      # two SDKs, even when the channel releases one while the run is going.
+      - id: dotnet
+        uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: latest
 
       - id: version
         shell: pwsh
@@ -562,6 +569,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
 
       - name: Restore
         run: dotnet restore runtime/Jason.slnx
@@ -597,6 +606,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
 
       - name: Restore
         run: dotnet restore runtime/Jason.slnx
@@ -831,6 +842,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
 
       # The version this tree carries, as the platform job already published it. Taking the artifact rather
       # than publishing it again is one whole publish saved per platform, and it is the same bytes a person
@@ -1466,6 +1479,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
 
       - name: Build the runtime the smoke drives
         working-directory: .

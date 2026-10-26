@@ -147,8 +147,9 @@ tested, and the release's pull request is the one draft this flow opens. Marking
 ready runs the Linux set with the critical tier on linux-x64; the whole suite runs once per release, on the release's
 pull request, and locally, once per branch, while the branch is read, for a change under `runtime/`. The tag is the tree
 that pull request tested on all three operating systems, so the release workflow does not run the whole suite again: at
-the tag it runs the critical tier under the tag's version on Linux alone, since only the version differs from the tree
-that pull request tested, and each platform then packages and smoke-tests the published executable. The pull request
+the tag it runs the critical tier under the tag's version on Linux alone, since what differs from that pull request's
+run is the version and, when the 10.0 channel has released an SDK in between, the SDK the tag resolves again, both of
+which that run carries; each platform then packages and smoke-tests the published executable. The pull request
 from a release branch into `main` runs every check on all three operating systems, macOS included, and that run is the
 release's gate; a pull request into `main` from any other branch — a document, a change to the pipeline — runs the Linux
 set and reports the rest as skipped by rule. The version pull request into `main` runs the critical tier alone, on

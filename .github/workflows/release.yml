@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      sdk: ${{ steps.dotnet.outputs.sdk-version }}
     steps:
       - id: version
         shell: pwsh
@@ -50,6 +51,17 @@ jobs:
           Write-Host "version -> $version"
           "version=$version" >> $env:GITHUB_OUTPUT
 
+      # And the SDK every platform builds on: the newest the 10.0 channel has released, resolved here once and handed on
+      # as the sdk output, so the three platforms of one release build on one SDK. The repository's action is the one
+      # place that says what the newest is, and it resolves the SDK by installing it, so this job checks the tree out and
+      # installs .NET, which it builds nothing with.
+      - uses: actions/checkout@v7
+
+      - id: dotnet
+        uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: latest
+
   build:
     name: ${{ matrix.rid }}
     needs: version
@@ -68,6 +80,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
 
       # Restore, build and the critical tier below run on Linux alone; the package action restores and builds what it
       # publishes on every platform by itself.
@@ -82,10 +96,13 @@ jobs:
 
       # The whole suite ran on this tree, on every platform, on the release's pull request into main, and again under the
       # bare version on Linux; the tag is that merge, so its tree is the one those runs passed, and the version the tag
-      # stamps is the only thing that differs from what the platform legs built. What runs here, before anything is
-      # published, is the critical tier on Linux, stamped with the version the tag names: a release is a build of a tree
-      # the suite passed, whose tier passes under its own version. The same tier on Windows and macOS would repeat a run
-      # this tree already passed there, on the dearest runners, so those two legs go straight to packaging.
+      # stamps differs from what the platform legs built. The SDK is resolved again at the tag, by the version job above,
+      # so a channel release between the pull request's run and the tag is a second difference: an SDK, and the runtime
+      # patch the executable carries, that the whole suite never ran on. What runs here, before anything is published, is
+      # the critical tier on Linux, stamped with the version the tag names, and it is the run on that SDK: a release is a
+      # build of a tree the suite passed, whose tier passes under its own version, on the SDK it is built with. The same
+      # tier on Windows and macOS would repeat a run this tree already passed there, on the dearest runners, so those two
+      # legs go straight to packaging.
       - name: Test the critical tier (offline)
         if: matrix.rid == 'linux-x64'
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"

@@ -990,8 +990,9 @@ public class ReleaseWorkflowTests
 
     /// <summary>
     /// The critical tier runs at the tag on Linux alone. The tag is the tree the release's pull request tested whole on every
-    /// platform, and what differs at the tag is only the version string, which the Linux run stamps and tests: the same tier
-    /// on Windows and macOS would repeat a run that tree already passed there, on the dearest runners. The build the tier
+    /// platform, and what differs at the tag is the version string and, when the channel has released an SDK since, the SDK
+    /// the tag resolves again, which the Linux run stamps, builds on and tests: the same tier on Windows and macOS would
+    /// repeat a run that tree already passed there, on the dearest runners. The build the tier
     /// tests is the Linux leg's alone for the same reason, since the packaging step publishes on its own; every platform
     /// still packages and is smoke-tested.
     /// </summary>
@@ -1990,25 +1991,28 @@ public class ReleaseWorkflowTests
             }
         }
 
-        Assert.True(uses >= 6, $"only {uses} job(s) set up .NET through the repository's action");
+        Assert.True(uses >= 7, $"only {uses} job(s) set up .NET through the repository's action");
     }
 
     /// <summary>
-    /// The action installs one pinned SDK by default, from Microsoft's CDN, through the install scripts at the addresses
-    /// Microsoft publishes; given an empty version it installs the newest SDK the 10.0 channel has released, read from the
-    /// release metadata on that CDN; and whichever it is, a version that is not a 10.0 release stops the step before
-    /// anything is installed.
+    /// The action pins no SDK: its default is empty, which it refuses, and given the word <c>latest</c> it installs the
+    /// newest SDK the 10.0 channel has released, read from the release metadata on Microsoft's CDN, through the install
+    /// scripts at the addresses Microsoft publishes; given an exact version it installs that one from the same CDN; and
+    /// whichever it is, a version that is not a 10.0 release stops the step before anything is installed.
     /// </summary>
     /// <remarks>
-    /// The pin holds one runtime patch while the update into the release that fixes a swap between two patches is still
-    /// performed by a build without the fix. It lifts in the release after, by emptying the default, and the channel's
-    /// shape is held here already so that the lift is the one line.
+    /// A pin once held every build to one runtime patch, while the update into the release whose applier survives a
+    /// change of patch was still performed by a build without that applier. Updates performed by 0.19.0 or a later build
+    /// survive it, and the update job proves that on every run that builds a platform, the version pull request aside, by
+    /// building its two sides on two patches, so no SDK is written down here: each run resolves the channel's newest once,
+    /// in its version job.
     /// </remarks>
     [Fact]
-    public void The_dotnet_action_installs_the_pinned_sdk_and_can_install_the_channel_s_newest_from_the_cdn()
+    public void The_dotnet_action_pins_no_sdk_and_installs_the_channel_s_newest_from_the_cdn()
     {
         var action = Parse(Read(SetupDotnet));
-        Assert.Equal("10.0.402", Scalar(Mapping(Mapping(action, "inputs"), "sdk-version"), "default"));
+        var asked = Scalar(Mapping(Mapping(action, "inputs"), "sdk-version"), "default") ?? string.Empty;
+        Assert.True(asked.Length == 0, $"the action's sdk-version defaults to '{asked}', rather than to nothing, which the action refuses");
 
         var installs = Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>()
             .Where(step => Scalar(step, "name") == "Install the .NET SDK")
@@ -2023,16 +2027,24 @@ public class ReleaseWorkflowTests
         }
 
         var bash = installs["bash"];
-        Assert.Contains("if [[ -z \"$SDK_VERSION\" ]]; then", bash, StringComparison.Ordinal);
+        AssertResolvedOnLatest(bash, "if [[ \"$SDK_VERSION\" == latest ]]; then");
         Assert.Contains("https://dot.net/v1/dotnet-install.sh", bash, StringComparison.Ordinal);
         Assert.Contains("--version \"$SDK_VERSION\" --azure-feed \"$feed\"", bash, StringComparison.Ordinal);
         AssertCheckedBetween(bash, Regex.Match(bash, @"\[\[ ""\$SDK_VERSION"" =~ \^10\\\.0\\\.\[0-9\]\+\$ \]\] \|\| \{[^}\n]*exit 1; \}"), "dotnet-install.sh");
 
         var pwsh = installs["pwsh"];
-        Assert.Contains("if (-not $env:SDK_VERSION) {", pwsh, StringComparison.Ordinal);
+        AssertResolvedOnLatest(pwsh, "if ($env:SDK_VERSION -ceq 'latest') {");
         Assert.Contains("https://dot.net/v1/dotnet-install.ps1", pwsh, StringComparison.Ordinal);
         Assert.Contains("-Version $env:SDK_VERSION -AzureFeed $feed", pwsh, StringComparison.Ordinal);
         AssertCheckedBetween(pwsh, Regex.Match(pwsh, @"if \(\$env:SDK_VERSION -cnotmatch '\^10\\\.0\\\.\[0-9\]\+\\z'\) \{ throw"), "dotnet-install.ps1");
+
+        // The release metadata is read only when the step was asked for latest.
+        static void AssertResolvedOnLatest(string run, string asked)
+        {
+            var at = run.IndexOf(asked, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"the step does not read the release metadata on '{asked}':\n{run}");
+            Assert.True(at < run.IndexOf("$feed/release-metadata/10.0/releases.json", StringComparison.Ordinal), $"the step reads the release metadata before it asks whether it was given latest:\n{run}");
+        }
 
         // The version is checked after the metadata may have named it and before the script that installs it is fetched.
         static void AssertCheckedBetween(string run, Match check, string script)
@@ -2043,6 +2055,170 @@ public class ReleaseWorkflowTests
                 $"the step checks the version outside the metadata read and the install:\n{run}");
         }
     }
+
+    /// <summary>
+    /// The action refuses an empty <c>sdk-version</c>, in both install steps, before it fetches anything: before the
+    /// release metadata is read and before the install script is fetched. Both steps stop with the same sentence, which
+    /// names the input and says where the SDK comes from: a workflow's version job resolves it with <c>latest</c>, and
+    /// every other job passes that job's <c>sdk</c> output.
+    /// </summary>
+    /// <remarks>
+    /// Empty is also what a job reads from an output that is not there. Were it read as the channel's newest, a job handed
+    /// no SDK would resolve one of its own at its own start, a second SDK in one run with nothing to say so; refused, the
+    /// job fails where it is.
+    /// </remarks>
+    [Fact]
+    public void The_dotnet_action_refuses_an_empty_sdk_version_before_it_fetches_anything()
+    {
+        var installs = Assert.IsType<YamlSequenceNode>(Node(Mapping(Parse(Read(SetupDotnet)), "runs"), "steps")).Children.Cast<YamlMappingNode>()
+            .Where(step => Scalar(step, "name") == "Install the .NET SDK")
+            .ToDictionary(step => Scalar(step, "shell")!, step => Scalar(step, "run")!, StringComparer.Ordinal);
+        Assert.Equal(["bash", "pwsh"], installs.Keys.Order(StringComparer.Ordinal));
+
+        var bash = installs["bash"];
+        var saidByBash = AssertRefusedBeforeAnyFetch(
+            bash,
+            Regex.Match(bash, @"\[\[ -n ""\$\{SDK_VERSION:-\}"" \]\] \|\| \{ echo ""(?<said>[^""\n]+)"" >&2; exit 1; \}"),
+            ["curl ", "dotnet-install.sh"]);
+        var pwsh = installs["pwsh"];
+        var saidByPwsh = AssertRefusedBeforeAnyFetch(
+            pwsh,
+            Regex.Match(pwsh, @"if \(-not \$env:SDK_VERSION\) \{ throw ""(?<said>[^""\n]+)"" \}"),
+            ["Invoke-RestMethod", "Invoke-WebRequest", "dotnet-install.ps1"]);
+
+        Assert.Equal(saidByBash, saidByPwsh);
+        foreach (var named in (string[])["sdk-version", "version job", "sdk output"])
+        {
+            Assert.Contains(named, saidByBash, StringComparison.Ordinal);
+        }
+
+        // The empty value is tested before the step first names a command that fetches, or the script it fetches.
+        static string AssertRefusedBeforeAnyFetch(string run, Match refusal, string[] fetching)
+        {
+            Assert.True(refusal.Success, $"the step does not refuse an empty sdk-version:\n{run}");
+            foreach (var fetch in fetching)
+            {
+                var at = run.IndexOf(fetch, StringComparison.Ordinal);
+                Assert.True(at >= 0, $"the step never names '{fetch}':\n{run}");
+                Assert.True(refusal.Index < at, $"the step reaches '{fetch}' before it refuses an empty sdk-version:\n{run}");
+            }
+
+            return refusal.Groups["said"].Value;
+        }
+    }
+
+    /// <summary>
+    /// The action says which SDK it installed, the exact version, as its <c>sdk-version</c> output: each install step,
+    /// the bash one and the pwsh one, writes the version once its install script has run, and the output reads
+    /// whichever of the two ran on the runner.
+    /// </summary>
+    /// <remarks>
+    /// Given latest the action decides the SDK itself, from the release metadata, and nothing else in the job
+    /// knows what it decided. The version job hands the output on, so that every other job of the run installs that SDK.
+    /// </remarks>
+    [Fact]
+    public void The_dotnet_action_says_which_sdk_it_installed()
+    {
+        var action = Parse(Read(SetupDotnet));
+        var installs = Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>()
+            .Where(step => Scalar(step, "name") == "Install the .NET SDK")
+            .ToList();
+        Assert.Equal(["bash", "pwsh"], installs.Select(step => Scalar(step, "shell")));
+
+        var ids = installs.Select(step => Scalar(step, "id")).ToList();
+        Assert.All(ids, id => Assert.False(string.IsNullOrEmpty(id), "an install step has no id its output can be read by"));
+        var outputs = Node(action, "outputs") as YamlMappingNode;
+        var said = outputs is null || Node(outputs, "sdk-version") is not YamlMappingNode output ? null : Scalar(output, "value");
+        Assert.Equal($"${{{{ steps.{ids[0]}.outputs.sdk-version || steps.{ids[1]}.outputs.sdk-version }}}}", said);
+
+        AssertWrittenAfterTheInstall(Scalar(installs[0], "run")!, "echo \"sdk-version=$SDK_VERSION\" >> \"$GITHUB_OUTPUT\"", "bash \"$script\" --version");
+        AssertWrittenAfterTheInstall(Scalar(installs[1], "run")!, "\"sdk-version=$env:SDK_VERSION\" >> $env:GITHUB_OUTPUT", "& $script -Version");
+
+        // The version written is the one the install script was given, so it is written once that script has run.
+        static void AssertWrittenAfterTheInstall(string run, string written, string install)
+        {
+            var at = run.IndexOf(written, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"the step does not write the SDK it installed as '{written}':\n{run}");
+            var installed = run.IndexOf(install, StringComparison.Ordinal);
+            Assert.True(installed >= 0 && installed < at, $"the step writes the SDK before its install script has run:\n{run}");
+        }
+    }
+
+    /// <summary>
+    /// One run, one SDK. Each workflow's version job installs .NET through the action asking for <c>latest</c>, the
+    /// channel's newest, and hands on the exact SDK it installed as its <c>sdk</c> output; every other use of the action
+    /// passes that output, so no two jobs of one run build on two SDKs, even when the channel releases one while the run
+    /// is going.
+    /// </summary>
+    [Fact]
+    public void Every_job_of_a_run_builds_on_the_sdk_its_version_job_resolved()
+    {
+        var passing = 0;
+        foreach (var workflow in (string[][])[Ci, Release])
+        {
+            var jobs = Mapping(Parse(Read(workflow)), "jobs");
+
+            var version = Mapping(jobs, "version");
+            var resolving = Assert.Single(SettingUpDotnet(version));
+            var asked = Node(resolving, "with") is YamlMappingNode given ? Scalar(given, "sdk-version") : null;
+            Assert.True(asked == "latest", $"{workflow[^1]}: the version job asks the action for '{asked}' rather than latest, the channel's newest");
+            var id = Scalar(resolving, "id");
+            Assert.False(string.IsNullOrEmpty(id), $"{workflow[^1]}: the version job's use of the action has no id its output can be read by");
+            var outputs = Node(version, "outputs") as YamlMappingNode;
+            Assert.Equal($"${{{{ steps.{id}.outputs.sdk-version }}}}", outputs is null ? null : Scalar(outputs, "sdk"));
+
+            foreach (var (name, job) in jobs.Children.Select(pair => (pair.Key.ToString(), (YamlMappingNode)pair.Value)).Where(pair => pair.Item1 != "version"))
+            {
+                foreach (var use in SettingUpDotnet(job))
+                {
+                    passing++;
+                    var passed = Node(use, "with") is YamlMappingNode told ? Scalar(told, "sdk-version") : null;
+                    Assert.True(
+                        passed == "${{ needs.version.outputs.sdk }}",
+                        $"{workflow[^1]}: the job '{name}' sets up .NET with '{passed}', not the SDK its version job resolved");
+                }
+            }
+        }
+
+        Assert.True(passing >= 5, $"only {passing} use(s) of the action outside a version job");
+    }
+
+    /// <summary>
+    /// Every job that sets up .NET needs its workflow's version job directly: a job reads the outputs of the jobs it
+    /// needs and of no other, so one that reached the version job only through another job would read no SDK there, and
+    /// its install would stop on the empty version.
+    /// </summary>
+    [Fact]
+    public void Every_job_that_sets_up_dotnet_needs_its_version_job_directly()
+    {
+        var checkedJobs = 0;
+        foreach (var workflow in (string[][])[Ci, Release])
+        {
+            foreach (var (name, job) in Mapping(Parse(Read(workflow)), "jobs").Children.Select(pair => (pair.Key.ToString(), (YamlMappingNode)pair.Value)))
+            {
+                if (name == "version" || !SettingUpDotnet(job).Any())
+                {
+                    continue;
+                }
+
+                checkedJobs++;
+                List<string> needs = Node(job, "needs") switch
+                {
+                    YamlScalarNode one => [one.Value!],
+                    YamlSequenceNode many => [.. many.Children.Select(need => need.ToString())],
+                    _ => [],
+                };
+                Assert.True(needs.Contains("version"), $"{workflow[^1]}: the job '{name}' sets up .NET and needs {(needs.Count == 0 ? "no job" : string.Join(", ", needs))}, not the version job");
+            }
+        }
+
+        Assert.True(checkedJobs >= 5, $"only {checkedJobs} job(s) outside a version job set up .NET");
+    }
+
+    private static IEnumerable<YamlMappingNode> SettingUpDotnet(YamlMappingNode job) =>
+        Node(job, "steps") is YamlSequenceNode steps
+            ? steps.Children.Cast<YamlMappingNode>().Where(step => Scalar(step, "uses") == "./.github/actions/setup-dotnet")
+            : [];
 
     private static readonly string[] SetupDotnet = [".github", "actions", "setup-dotnet", "action.yml"];
 }

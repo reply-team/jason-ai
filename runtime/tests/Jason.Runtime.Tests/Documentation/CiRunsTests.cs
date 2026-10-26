@@ -311,9 +311,10 @@ public class CiRunsTests
             told.OrderBy(pair => pair.Key, StringComparer.Ordinal),
             Variables(deciding).Where(pair => pair.Key is not ("PLATFORMS" or "UPDATES")).OrderBy(pair => pair.Key, StringComparer.Ordinal));
 
-        // In the order a runner needs them: the tree, then what an earlier run tested, then the decision.
+        // In the order a runner needs them: the SDK the version is read with, the version, the tree, then what an earlier
+        // run tested, then the decision.
         var ids = Steps(Mapping(Jobs(), "version")).Select(step => Scalar(step, "id")).OfType<string>().ToList();
-        Assert.Equal(["version", "tree", "earlier", "legs"], ids);
+        Assert.Equal(["dotnet", "version", "tree", "earlier", "legs"], ids);
     }
 
     /// <summary>
