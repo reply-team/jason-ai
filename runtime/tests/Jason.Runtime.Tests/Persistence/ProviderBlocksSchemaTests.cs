@@ -70,11 +70,54 @@ public class ProviderBlocksSchemaTests
     }
 
     /// <summary>
-    /// The indexes the trial and the clear stand on: a block's waits by how they stand, the blocks by how they stand and
-    /// when their trial is due, and the one-open rule in its two halves, the account's and a sender's.
+    /// An installation that upgrades from the release before the listing's index keeps every block as it was, open and
+    /// cleared alike, and the index is built over them in the same start.
     /// </summary>
     [Fact]
-    public void The_block_indexes_are_the_ones_the_resume_step_and_the_one_open_rule_read()
+    public void An_upgraded_database_keeps_its_blocks_and_has_them_in_the_listing_index()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.StateDirectory);
+        var options = JasonDbContext.CreateOptions(dir.Paths.DatabaseFile);
+        using (var db = new JasonDbContext(options))
+        {
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate("20261025010407_ProviderBlockClearedBy");
+        }
+
+        Execute(dir.Paths.DatabaseFile, Seed);
+        Execute(
+            dir.Paths.DatabaseFile,
+            """
+            INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at, cleared_at, cleared_by_type, cleared_by_id) VALUES
+              ('blk_1', 'fake', 'sha256:a', 'account', NULL, 'billing', 'cleared', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00', '2026-10-01 01:00:00', 'human', 'marta'),
+              ('blk_2', 'fake', 'sha256:a', 'sender', 'snd_1', 'limit', 'open', '2026-10-01 02:00:00', 1, '2026-10-01 02:00:00', 3, '2026-10-01 02:15:00', NULL, NULL, NULL),
+              ('blk_3', 'other', 'sha256:b', 'account', NULL, 'channel', 'open', '2026-10-01 03:00:00', 1, '2026-10-01 03:00:00', 1, '2026-10-01 03:15:00', NULL, NULL, NULL);
+            INSERT INTO work_item_waits (work_item_id, status, opened_at, provider_block_id) VALUES (1, 'open', '2026-10-01 02:00:00', 2);
+            """);
+        const string Everything = "SELECT * FROM provider_blocks ORDER BY id";
+        var before = Rows(dir.Paths.DatabaseFile, Everything);
+
+        using (var db = new JasonDbContext(options))
+        {
+            db.Database.Migrate();
+        }
+
+        Assert.Equal(before, Rows(dir.Paths.DatabaseFile, Everything));
+        Assert.Contains("ix_provider_blocks_status_opened_at_public_id|0|status,opened_at,public_id", Rows(dir.Paths.DatabaseFile, IndexList("provider_blocks")));
+        Assert.Equal(
+            ["blk_3", "blk_2"],
+            Rows(dir.Paths.DatabaseFile, "SELECT public_id FROM provider_blocks INDEXED BY ix_provider_blocks_status_opened_at_public_id WHERE status = 'open' ORDER BY opened_at DESC, public_id DESC"));
+        Assert.Equal(["1|open|2"], Rows(dir.Paths.DatabaseFile, "SELECT work_item_id, status, provider_block_id FROM work_item_waits"));
+        Assert.Equal(["ok"], Rows(dir.Paths.DatabaseFile, "PRAGMA integrity_check"));
+    }
+
+    /// <summary>
+    /// The indexes the trial, the listing and the clear stand on: a block's waits by how they stand, the blocks by how they
+    /// stand and when their trial is due, the blocks by how they stand and when they opened, and the one-open rule in its
+    /// two halves, the account's and a sender's.
+    /// </summary>
+    [Fact]
+    public void The_block_indexes_are_the_ones_the_resume_step_the_listing_and_the_one_open_rule_read()
     {
         using var database = new TestDatabase();
         Assert.Equal(
@@ -85,6 +128,7 @@ public class ProviderBlocksSchemaTests
                 "ix_provider_blocks_opened_by_attempt_id|0|opened_by_attempt_id",
                 "ix_provider_blocks_public_id|1|public_id",
                 "ix_provider_blocks_status_next_trial_at|0|status,next_trial_at",
+                "ix_provider_blocks_status_opened_at_public_id|0|status,opened_at,public_id",
                 "ix_provider_blocks_trial_work_item_id|0|trial_work_item_id",
             ],
             Rows(database.File, IndexList("provider_blocks")));

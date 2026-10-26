@@ -1272,15 +1272,15 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_journal_contacts_removed_campaign_ts")
                         .HasFilter("kind = 'contacts_removed'");
 
-                    b.HasIndex(new[] { "Kind", "Key" }, "ix_journal_kind_key_gaps")
-                        .IsUnique()
-                        .HasDatabaseName("ix_journal_kind_key_gaps")
-                        .HasFilter("kind = 'events_gap_observed'");
-
                     b.HasIndex(new[] { "Kind", "Key", "CampaignId" }, "ix_journal_kind_key_campaign_blocks")
                         .IsUnique()
                         .HasDatabaseName("ix_journal_kind_key_campaign_blocks")
                         .HasFilter("kind = 'provider_blocked'");
+
+                    b.HasIndex(new[] { "Kind", "Key" }, "ix_journal_kind_key_gaps")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_kind_key_gaps")
+                        .HasFilter("kind = 'events_gap_observed'");
 
                     b.HasIndex(new[] { "Ts" }, "ix_journal_suppression_added_ts")
                         .HasDatabaseName("ix_journal_suppression_added_ts")
@@ -1543,6 +1543,9 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_provider_blocks_one_open_per_sender")
                         .HasFilter("status = 'open' AND scope = 'sender'");
+
+                    b.HasIndex("Status", "OpenedAt", "PublicId")
+                        .HasDatabaseName("ix_provider_blocks_status_opened_at_public_id");
 
                     b.ToTable("provider_blocks", t =>
                         {

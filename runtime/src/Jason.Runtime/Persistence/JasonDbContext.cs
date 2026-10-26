@@ -561,6 +561,9 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             // The blocks whose trial is due, by how they stand and when: the resume step's trial query reads them here.
             block.HasIndex(b => new { b.Status, b.NextTrialAt });
 
+            // The blocks of one status newest first, as block.list pages them: its order and its cursor are this index's.
+            block.HasIndex(b => new { b.Status, b.OpenedAt, b.PublicId });
+
             // Two calls that get past one block at once must not both clear it, and the status is what a clear changes.
             block.Property(b => b.Status).IsConcurrencyToken();
             block.ToTable(t => t.HasCheckConstraint("ck_provider_blocks_sender", "(scope = 'sender') = (sender_external_id IS NOT NULL)"));

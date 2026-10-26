@@ -66,7 +66,10 @@ public partial class BlockServiceTests
         Assert.Equal([fake], Ids(page));
     }
 
-    /// <summary>A page is cut by its cursor in the listing's own order: the opening moment, then the id, both newest first.</summary>
+    /// <summary>
+    /// A page is cut by its cursor in the listing's own order: the opening moment, then the id, both newest first. Pages of
+    /// one block put the cursor between two blocks opened at one moment, so the second is found by the id alone.
+    /// </summary>
     [Fact]
     public async Task A_listing_pages_by_its_cursor_through_blocks_opened_at_one_moment()
     {
@@ -79,13 +82,15 @@ public partial class BlockServiceTests
 
         await using var db = harness.Open();
         var service = NewService(db, Noon);
-        var one = await service.ListAsync(new BlockListRequest(null, null, 2, null), Ct);
-        Assert.True(one.NextCursor is not null, "The first page of two out of three gave no cursor.");
-        var two = await service.ListAsync(new BlockListRequest(null, null, 2, one.NextCursor), Ct);
+        var one = await service.ListAsync(new BlockListRequest(null, null, 1, null), Ct);
+        Assert.True(one.NextCursor is not null, "The first page of one out of three gave no cursor.");
+        var two = await service.ListAsync(new BlockListRequest(null, null, 1, one.NextCursor), Ct);
+        Assert.True(two.NextCursor is not null, "The second page of one out of three gave no cursor.");
+        var three = await service.ListAsync(new BlockListRequest(null, null, 1, two.NextCursor), Ct);
 
-        string[] actual = [.. Ids(one), .. Ids(two)];
+        string[] actual = [.. Ids(one), .. Ids(two), .. Ids(three)];
         Assert.Equal(expected, actual);
-        Assert.True(two.NextCursor is null, $"The last page still points on, at '{two.NextCursor}'.");
+        Assert.True(three.NextCursor is null, $"The last page still points on, at '{three.NextCursor}'.");
     }
 
     /// <summary>
@@ -591,34 +596,106 @@ public partial class BlockServiceTests
     }
 
     /// <summary>
-    /// A block listing is bounded by the blocks of the statuses asked for: it reads them through the index that leads with
-    /// the status and sorts what that finds, never walking every block the installation has had.
+    /// A block listing reads the blocks of one status off the index that leads with the status, then the moment each
+    /// opened and its id: the order and the cursor are the index's own, so nothing is sorted and a page stops at its
+    /// limit, with or without a plugin. Two statuses are two ranges of an index, which SQLite merges by sorting what they
+    /// hold; without a cursor it reads them through the index the trial reads, and with one, bounded by the cursor.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task A_block_listing_reads_the_blocks_of_the_asked_statuses_through_their_index(bool history)
+    [InlineData("open", false, false, ListingIndex, "(status=?)", false)]
+    [InlineData("open", true, false, ListingIndex, "(status=?)", false)]
+    [InlineData("open", false, true, ListingIndex, "(status=? AND opened_at<?)", false)]
+    [InlineData("open", true, true, ListingIndex, "(status=? AND opened_at<?)", false)]
+    [InlineData("open,cleared", true, false, AnyStatusIndex, "(status=?)", true)]
+    [InlineData("open,cleared", true, true, ListingIndex, "(status=? AND opened_at<?)", true)]
+    public async Task A_block_listing_reads_the_blocks_of_the_asked_statuses_through_their_index(
+        string statuses,
+        bool plugin,
+        bool cursor,
+        string index,
+        string range,
+        bool sorted)
     {
         using var harness = new DispatchHarness(Noon);
+        var request = await ListingAsync(harness, statuses, plugin, cursor);
+        await AssertListingReadsAsync(harness, request, index, range, sorted);
+    }
+
+    /// <summary>
+    /// The listing's pin goes red once the index is gone: one status is then read through the index the trial reads and
+    /// sorted, and the failure prints that plan.
+    /// </summary>
+    [Fact]
+    public async Task A_block_listing_without_its_index_sorts_and_its_pin_says_so()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var request = await ListingAsync(harness, "open", plugin: true, cursor: true);
+        using (var connection = new SqliteConnection(JasonDbContext.ConnectionString(harness.DatabaseFile)))
+        {
+            connection.Open();
+            using var drop = connection.CreateCommand();
+            drop.CommandText = $"DROP INDEX {ListingIndex}";
+            drop.ExecuteNonQuery();
+        }
+
+        var red = await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(
+            () => AssertListingReadsAsync(harness, request, ListingIndex, "(status=? AND opened_at<?)", sorted: false));
+        Assert.Contains("SEARCH p USING INDEX ix_provider_blocks_status_next_trial_at (status=?)", red.Message, StringComparison.Ordinal);
+        Assert.Contains("USE TEMP B-TREE FOR ORDER BY", red.Message, StringComparison.Ordinal);
+    }
+
+    private const string ListingIndex = "ix_provider_blocks_status_opened_at_public_id";
+
+    /// <summary>
+    /// Any index searched on the status alone: for two statuses without a cursor SQLite picks between two such indexes by a
+    /// tie-break of their widths, and which one it picks is not what the listing relies on.
+    /// </summary>
+    private const string AnyStatusIndex = "*";
+
+    /// <summary>
+    /// Two open blocks and a cleared one, and a listing of <paramref name="statuses"/> (comma-separated), of the blocks'
+    /// plugin when <paramref name="plugin"/>, and past the newest block when <paramref name="cursor"/>.
+    /// </summary>
+    private static async Task<BlockListRequest> ListingAsync(DispatchHarness harness, string statuses, bool plugin, bool cursor)
+    {
         var campaign = await CampaignAsync(harness);
         await BlockAsync(harness, campaign, openedAt: Noon, parked: 1);
         await BlockAsync(harness, campaign, openedAt: Noon.AddHours(-1), cleared: true);
+        await BlockAsync(harness, campaign, openedAt: Noon.AddHours(-2), binding: "acct:other");
+        string? after = null;
+        if (cursor)
+        {
+            await using var db = harness.Open();
+            after = (await NewService(db, Noon).ListAsync(new BlockListRequest(null, null, 1, null), Ct)).NextCursor;
+            Assert.NotNull(after);
+        }
+
+        ProviderBlockStatus[] wanted = [.. statuses.Split(',').Select(status => Enum.Parse<ProviderBlockStatus>(status, ignoreCase: true))];
+        return new BlockListRequest(wanted, plugin ? BlockRows.Plugin : null, null, after);
+    }
+
+    /// <summary>
+    /// The listing's read of the blocks is a search of <paramref name="index"/> over <paramref name="range"/>, sorted
+    /// afterwards exactly when <paramref name="sorted"/>, and never a walk of the table; a failure prints the plan.
+    /// </summary>
+    private static async Task AssertListingReadsAsync(DispatchHarness harness, BlockListRequest request, string index, string range, bool sorted)
+    {
         var recorder = new Recorder();
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
         JasonDbContext.Configure(builder, harness.DatabaseFile).AddInterceptors(recorder);
         await using (var db = new JasonDbContext(builder.Options))
         {
-            var request = history
-                ? new BlockListRequest([ProviderBlockStatus.Open, ProviderBlockStatus.Cleared], BlockRows.Plugin, null, null)
-                : new BlockListRequest(null, null, null, null);
             await NewService(db, Noon).ListAsync(request, Ct);
         }
 
         var read = Assert.Single(recorder.Commands, c => c.Text.Contains("FROM \"provider_blocks\" AS \"p\"", StringComparison.Ordinal));
         var plan = PlanOf(harness, read);
+        var searched = index == AnyStatusIndex
+            ? plan.Any(step => step.StartsWith("SEARCH p USING INDEX ", StringComparison.Ordinal) && step.EndsWith($" {range}", StringComparison.Ordinal))
+            : plan.Contains($"SEARCH p USING INDEX {index} {range}");
         Assert.True(
-            plan.Contains("SEARCH p USING INDEX ix_provider_blocks_status_next_trial_at (status=?)") && plan.Contains("USE TEMP B-TREE FOR ORDER BY") && !Scans(plan, "p"),
-            $"The listing does not read the blocks of its statuses through their index:{Environment.NewLine}{Described(plan, read)}");
+            searched && plan.Contains("USE TEMP B-TREE FOR ORDER BY") == sorted && !Scans(plan, "p"),
+            $"The listing does not read the blocks of its statuses through {index} {range}{(sorted ? ", sorted" : " in order")}:{Environment.NewLine}{Described(plan, read)}");
     }
 
     /// <summary>Whether a step of the plan walks <paramref name="alias"/> itself; a co-routine over it has a name of its own.</summary>

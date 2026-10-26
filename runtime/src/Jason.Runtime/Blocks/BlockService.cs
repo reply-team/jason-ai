@@ -26,8 +26,10 @@ public sealed class BlockService(JasonDbContext db, JournalWriter journal, TimeP
         var limit = Paging.ResolveLimit(request.Limit);
         var after = After(Paging.DecodeCursor(request.Cursor));
 
-        // Bounded by the blocks of the asked statuses: they are found through the index that leads with the status and
-        // sorted there, so the open blocks a person asks for first never cost a walk of every block ever opened.
+        // Bounded by the blocks of the asked statuses: one status is read newest first off the index of the status, the
+        // moment a block opened and its id, so a page stops at its limit and the open blocks a person asks for first never
+        // cost a walk, or a sort, of every block ever opened. Two statuses are read through an index on the status and
+        // sorted; with a cursor, through this one, bounded by the cursor.
         IQueryable<ProviderBlock> query = db.ProviderBlocks.AsNoTracking();
         ProviderBlockStatus[] wanted = request.Statuses is { Count: > 0 } several ? [.. several.Distinct()] : [ProviderBlockStatus.Open];
         query = query.Where(b => wanted.Contains(b.Status));

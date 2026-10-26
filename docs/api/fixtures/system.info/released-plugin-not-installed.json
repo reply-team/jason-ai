@@ -37,7 +37,8 @@
         "20261023172016_CampaignWorkByFinish",
         "20261024123426_WorkItemWaits",
         "20261024194108_ProviderBlocks",
-        "20261025010407_ProviderBlockClearedBy"
+        "20261025010407_ProviderBlockClearedBy",
+        "20261025231527_ProviderBlockListingIndex"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -65,7 +66,8 @@
         "20261023172016_CampaignWorkByFinish",
         "20261024123426_WorkItemWaits",
         "20261024194108_ProviderBlocks",
-        "20261025010407_ProviderBlockClearedBy"
+        "20261025010407_ProviderBlockClearedBy",
+        "20261025231527_ProviderBlockListingIndex"
       ],
       "backup_file": null
     },
