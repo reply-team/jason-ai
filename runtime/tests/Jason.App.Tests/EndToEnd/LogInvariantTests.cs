@@ -12,12 +12,12 @@ namespace Jason.App.Tests.EndToEnd;
 /// carry. Values a person types into this runtime go in carrying a sentinel, and these are the ones planted: a
 /// campaign's context, the reason a campaign was updated, a contact's first name, email address and custom field, a
 /// work item's brief, a provider operation's argument that the provider's refusal quotes, a role the claim cannot
-/// launch, which its refusal quotes, a question a running role asks and its reason for asking, a person's answer and
-/// the reason for it, the reason a running work item was
-/// cancelled, an unloadable package's manifest, a refused setting, a setting of the wrong type, a reload's reason and
-/// a timestamp the request door cannot read, and the keys a campaign and a work item were created with — made, repeated,
-/// sent again with a different request and once too long to be a key. None of them may appear anywhere in the log,
-/// whole or in part.
+/// launch, which its refusal quotes, a question a running role asks and its reason for asking, the name a person
+/// answers as — the kind of name the CLI writes for the account's person too — their answer and the reason for it, the
+/// reason a running work item was cancelled, an unloadable package's manifest, a refused setting, a setting of the
+/// wrong type, a reload's reason and a timestamp the request door cannot read, and the keys a campaign and a work item
+/// were created with — made, repeated, sent again with a different request and once too long to be a key. None of them
+/// may appear anywhere in the log, whole or in part.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -73,6 +73,8 @@ public class LogInvariantTests
             ["a provider operation's argument"] = SentinelPrefix + "INPUT_" + mark,
             ["a role's question"] = SentinelPrefix + "QUESTION_" + mark,
             ["a role's reason for asking"] = SentinelPrefix + "ASKED_" + mark,
+            // The name a person writes as: given here, and what the CLI writes for a person who gives none — the account's.
+            ["a person's name"] = SentinelPrefix + "PERSON_" + mark,
             ["a person's answer"] = SentinelPrefix + "ANSWER_" + mark,
             ["a person's reason for the answer"] = SentinelPrefix + "ANSWERED_" + mark,
             ["a cancellation's reason"] = SentinelPrefix + "CANCEL_" + mark,
@@ -238,7 +240,7 @@ public class LogInvariantTests
         var answered = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it,
             "--actor",
-            "human:ada",
+            "human:" + sentinels["a person's name"],
             "decision",
             "answer",
             decision,

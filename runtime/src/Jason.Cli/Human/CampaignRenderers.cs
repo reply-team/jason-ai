@@ -113,20 +113,22 @@ public static class CampaignRenderers
 
     /// <summary>
     /// Where each campaign's people stand now, and the total across them; the provider's two counts are a dash while no
-    /// sequence is linked.
+    /// sequence is linked. Each campaign is named by its name, from <paramref name="names"/>, with its id beside it.
     /// </summary>
-    public static string? Summary(string json)
+    public static string? Summary(string json, IReadOnlyDictionary<string, string> names)
     {
+        ArgumentNullException.ThrowIfNull(names);
         var summary = RenderText.Read<CampaignSummaryResponse>(json);
         if (summary?.Campaigns is null)
         {
             return null;
         }
 
-        var table = new HumanTable("CAMPAIGN", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED");
+        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED");
         foreach (var row in summary.Campaigns)
         {
             table.Row(
+                names.GetValueOrDefault(row.CampaignId),
                 row.CampaignId,
                 Count(row.People),
                 Count(row.Waiting),
@@ -144,34 +146,38 @@ public static class CampaignRenderers
             // With no campaign linked to a sequence, the total has no sequence to count either, as each row says.
             var linked = summary.Campaigns.Any(row => row.SequenceLinked);
             table.Row(
-                "TOTAL", Count(total.People), Count(total.Waiting), Count(total.Failed), Count(total.Working), Count(total.New), Count(total.Idle),
+                "TOTAL", null, Count(total.People), Count(total.Waiting), Count(total.Failed), Count(total.Working), Count(total.New), Count(total.Idle),
                 linked ? Count(total.Sequence) : "-", linked ? Count(total.Out) : "-", Count(total.Removed));
         }
 
         return table.Render();
     }
 
-    /// <summary>What happened to each campaign's people in the period asked about, and the total across them.</summary>
-    public static string? Activity(string json)
+    /// <summary>
+    /// What happened to each campaign's people in the period asked about, and the total across them, each campaign named
+    /// as <see cref="Summary"/> names it.
+    /// </summary>
+    public static string? Activity(string json, IReadOnlyDictionary<string, string> names)
     {
+        ArgumentNullException.ThrowIfNull(names);
         var activity = RenderText.Read<CampaignActivityResponse>(json);
         if (activity?.Campaigns is null)
         {
             return null;
         }
 
-        var table = new HumanTable("CAMPAIGN", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED");
+        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED");
         foreach (var row in activity.Campaigns)
         {
             table.Row(
-                row.CampaignId, Count(row.People), Count(row.Added), Count(row.WorkedOn), Count(row.Contacted), Count(row.Replied), Count(row.OptedOut),
+                names.GetValueOrDefault(row.CampaignId), row.CampaignId, Count(row.People), Count(row.Added), Count(row.WorkedOn), Count(row.Contacted), Count(row.Replied), Count(row.OptedOut),
                 Count(row.Removed));
         }
 
         if (activity.Total is { } total)
         {
             table.Row(
-                "TOTAL", Count(total.People), Count(total.Added), Count(total.WorkedOn), Count(total.Contacted), Count(total.Replied), Count(total.OptedOut),
+                "TOTAL", null, Count(total.People), Count(total.Added), Count(total.WorkedOn), Count(total.Contacted), Count(total.Replied), Count(total.OptedOut),
                 Count(total.Removed));
         }
 

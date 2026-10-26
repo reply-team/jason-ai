@@ -48,7 +48,7 @@ public static class WorkItemCommands
     {
         var command = new Command("create", "Create a work item in a campaign.");
         var id = CampaignId();
-        var kind = new Option<string?>("--kind") { Description = "What the item is: ai_role or provider_op." };
+        var kind = Choice<WorkItemKind>.Only(new Option<string?>("--kind") { Description = "What the item is: ai_role or provider_op." });
         var role = new Option<string?>("--role") { Description = "The role that does the work, for an ai_role item — for example researcher." };
         var operation = new Option<string?>("--operation") { Description = "The canonical operation to perform, for a provider_op item: one of those under docs/contracts/operations, not a Jason verb." };
         var contact = new Option<string?>("--contact") { Description = "The contact the work is about, as cnt_..., when it is about one." };
@@ -110,7 +110,7 @@ public static class WorkItemCommands
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.WorkItemCreate, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken)
@@ -191,14 +191,16 @@ public static class WorkItemCommands
     {
         private readonly Option<string?> _campaign = new("--campaign") { Description = "Only items of this campaign, as cmp_...." };
         private readonly Option<string?> _contact = new("--contact") { Description = "Only items about this contact, as cnt_...." };
-        private readonly Option<string[]> _status = VerbOptions.Repeatable("--status", "Only items in this status. Repeat the option to ask for more than one — for example failed and expired.");
-        private readonly Option<string?> _kind = new("--kind") { Description = "Only items of this kind: ai_role or provider_op." };
+        private readonly Option<string[]> _status = Choice<WorkItemStatus>.Only(VerbOptions.Repeatable(
+            "--status",
+            $"Only items in this status: {Choices.Spoken(Choice<WorkItemStatus>.Words)}. Repeat the option to ask for more than one — for example failed and expired."));
+        private readonly Option<string?> _kind = Choice<WorkItemKind>.Only(new Option<string?>("--kind") { Description = "Only items of this kind: ai_role or provider_op." });
         private readonly Option<string?> _role = new("--role") { Description = "Only items for this role." };
         private readonly Option<bool> _eligible = new("--eligible") { Description = "Only items the dispatcher would claim right now." };
         private readonly Option<bool> _notEligible = new("--not-eligible") { Description = "Only items the dispatcher would not claim right now." };
         private readonly Option<string?> _since = VerbOptions.Moment("--since", "Only items whose ordered time (created, due or finished, as --order says) is at or after this moment, as ISO-8601 UTC, or now. An item without that time is left out.");
         private readonly Option<string?> _until = VerbOptions.Moment("--until", "Only items whose ordered time is before this moment, as ISO-8601 UTC, or now.");
-        private readonly Option<string?> _order = new("--order") { Description = "created (the default, oldest first), due (soonest first, undated last) or finished (newest first; open items are left out)." };
+        private readonly Option<string?> _order = Choice<WorkItemListOrder>.Only(new Option<string?>("--order") { Description = "created (the default, oldest first), due (soonest first, undated last) or finished (newest first; open items are left out)." });
         private readonly Option<string?> _block = new("--block") { Description = "Only the items this provider block holds, as blk_...: those whose open wait names it." };
 
         public ListingFilter(Command command)
@@ -286,7 +288,7 @@ public static class WorkItemCommands
                 .Set("execution_profile", parseResult.GetValue(executionProfile))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
             Clear(body, parseResult.GetValue(clear));
 
             return await OperationRunner
@@ -314,7 +316,7 @@ public static class WorkItemCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("work_item_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.WorkItemCancel, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken)
@@ -330,7 +332,7 @@ public static class WorkItemCommands
             "resume",
             "Release a waiting work item before what it waits for has happened. It goes back to the queue, and its next "
             + "attempt is told it was resumed by the actor named rather than woken by its work. --actor is required: a "
-            + "wait is ended on somebody's word. Only a waiting item can be resumed.");
+            + "wait is ended on somebody's word. Only a waiting item can be resumed. " + ActorOption.NoDefaultForResume);
         var id = WorkItemId();
         var file = VerbOptions.File("The object holds the request fields (reason).");
         var reason = VerbOptions.Reason();
@@ -346,10 +348,7 @@ public static class WorkItemCommands
             body.Set("work_item_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
-            if (body["actor"] is null)
-            {
-                throw new UsageException($"workitem resume needs {ActorOption.Name}: a wait is ended on somebody's word, and the line says whose.");
-            }
+            ActorOption.Named(body, "workitem resume", "a wait is ended on somebody's word", $"name who ends it, e.g. {ActorOption.Name} human:<Name>");
 
             return await OperationRunner
                 .RunAsync(env, Operations.WorkItemResume, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken)
@@ -418,11 +417,11 @@ public static class WorkItemCommands
         var command = new Command("complete", "Finish the attempt you were launched for, one way or the other.");
         var id = WorkItemId();
         var attempt = AttemptOption();
-        var status = new Option<string>("--status")
+        var status = Choice<CompletionStatus>.Only(new Option<string>("--status")
         {
             Description = "How the attempt ended: succeeded or failed.",
             Required = true,
-        };
+        });
         var result = ResultOption();
         var resultFile = ResultFileOption();
         var error = new Option<string?>("--error") { Description = "Why the attempt failed, as a JSON object holding code, message and details." };

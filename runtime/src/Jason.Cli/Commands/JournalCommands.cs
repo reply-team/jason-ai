@@ -51,7 +51,7 @@ public static class JournalCommands
                 .Set("key", parseResult.GetValue(key))
                 .Set("new", VerbOptions.Json(parseResult.GetValue(newValue), "--new"))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.JournalAppend, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.Entry), cancellationToken)

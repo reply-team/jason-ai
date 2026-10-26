@@ -26,7 +26,7 @@ public static class ReportCommands
 
     private static Command Submit(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("submit", "Report an effect you performed outside Jason. It is recorded as your word, not as work Jason did.");
+        var command = new Command("submit", "Report an effect you performed outside Jason. It is recorded as your word, not as work Jason did. " + ActorOption.NoDefaultForReport);
         var effect = new Option<string?>("--effect") { Description = "What was done, in your own words — for example email_sent." };
         var tool = new Option<string?>("--tool") { Description = "What you did it with: a CLI, an MCP server, a script, your own hands." };
         var summary = new Option<string?>("--summary") { Description = "One sentence a person reading the campaign later would need." };
@@ -78,6 +78,9 @@ public static class ReportCommands
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+
+            // A report's author is never taken from the machine: the reporter names themselves, a person or a role.
+            ActorOption.Named(body, "report submit", "a report is its reporter's word", $"write {ActorOption.Name} human:<Name> or {ActorOption.Name} role:<id>");
 
             return await OperationRunner.RunAsync(
                 env, Operations.ReportSubmit, body, new RunOptions(parseResult.GetValue(human), ReportRenderers.Report), cancellationToken).ConfigureAwait(false);

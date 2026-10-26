@@ -113,7 +113,12 @@ A request that carries an `Origin` header naming anything but the runtime's own 
   `system` is refused because it is the runtime's own. Some operations ask for more: `approval.approve`,
   `approval.reject`, `decision.answer`, `block.clear`, `preference.set` and `preference.unset` need an actor of type
   `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
-  records the actor as the caller claims it and cannot verify it: it holds one token and knows no caller. `reason` is
+  records the actor as the caller claims it and cannot verify it: it holds one token and knows no caller. The CLI
+  claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
+  write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
+  no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
+  such default: given no actor, the CLI refuses all eight itself, before any request, in one sentence that names the
+  form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. `reason` is
   free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`, `contact.archive`,
   `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove` set it no limit of
   their own.

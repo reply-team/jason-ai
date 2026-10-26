@@ -27,7 +27,7 @@ public static class ApprovalCommands
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("list", "What is waiting for a decision. Pending unless you ask for something else.");
-        var status = VerbOptions.Repeatable("--status", "pending (the default), approved, rejected, superseded or cancelled; repeat it to list several at once.");
+        var status = Choice<ApprovalStatus>.Only(VerbOptions.Repeatable("--status", "pending (the default), approved, rejected, superseded or cancelled; repeat it to list several at once."));
         var campaign = new Option<string?>("--campaign") { Description = "Only decisions about one campaign's work." };
         var workItem = new Option<string?>("--work-item") { Description = "Only decisions about one work item." };
         var limit = VerbOptions.Limit();
@@ -80,12 +80,12 @@ public static class ApprovalCommands
     }
 
     /// <summary>
-    /// Both decisions take the same three things. The actor is the one the whole CLI carries, and the runtime
-    /// refuses a decision that does not name a person — so <c>--actor</c> is not optional here in practice.
+    /// Both decisions take the same three things. The actor is the one the whole CLI carries, but not its default: a
+    /// decision is a person's word, so one that names nobody is refused here, before the runtime would refuse it.
     /// </summary>
     private static Command Decide(CliEnvironment env, Option<string?> actor, string verb, string operation, string description)
     {
-        var command = new Command(verb, description);
+        var command = new Command(verb, $"{description} {ActorOption.NoDefault}");
         var id = new Argument<string>("approval-id") { Description = "The approval, as approval list shows it." };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
@@ -99,6 +99,7 @@ public static class ApprovalCommands
                 .Set("approval_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+            ActorOption.Named(body, $"approval {verb}", "an approval is decided on a person's word");
 
             return OperationRunner.RunAsync(
                 env, operation, body, new RunOptions(parseResult.GetValue(human), ApprovalRenderers.Approval), cancellationToken);

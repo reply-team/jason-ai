@@ -8,17 +8,58 @@ namespace Jason.Cli;
 /// The global <c>--actor &lt;type&gt;[:&lt;id&gt;]</c> claim, so a skill running as a role journals under that role and
 /// a running executor journals under its attempt. The CLI only parses the text: claims are verified by the
 /// runtime, and the one rule enforced here is that <c>system</c> belongs to the runtime's own writes and
-/// cannot be claimed from outside.
+/// cannot be claimed from outside. A write that claims nobody is made as the person this account is — except the
+/// eight that are somebody's own word, an approval or a rejection, an answer, a preference set or unset, a block's
+/// clear, a resume and a report, which name who acts or are refused.
 /// </summary>
 public static class ActorOption
 {
     public const string Name = "--actor";
 
+    /// <summary>
+    /// The help a verb that takes no default actor carries: approving, rejecting, answering, setting or taking back a
+    /// preference and clearing a block are a person's own word, which an account's name is not.
+    /// </summary>
+    public const string NoDefault = "The CLI's default actor does not apply here: name the person with --actor human:<Name>.";
+
+    /// <summary>A resume's help: whoever is named ends the wait, a person or not.</summary>
+    public const string NoDefaultForResume = "The CLI's default actor does not apply here: name who ends it, e.g. --actor human:<Name>.";
+
+    /// <summary>A report's help: the reporter is named, a person or a role, and never taken from the machine.</summary>
+    public const string NoDefaultForReport = "The CLI's default actor does not apply here: name who reports it with --actor human:<Name> or --actor role:<id>.";
+
     public static Option<string?> Create() => new(Name)
     {
-        Description = "Who performs the operation: human, human:<id>, role:<id> or attempt:att_... for a running executor.",
+        Description = "Who performs the operation: human, human:<id>, role:<id> or attempt:att_... for a running executor. "
+            + "Without it, a running executor is its attempt, and anything else is written as human:<this account's name>, "
+            + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
+            + "Approving, rejecting, answering, setting or unsetting a preference, clearing a block, resuming a work item "
+            + "and submitting a report take no default.",
         Recursive = true,
     };
+
+    /// <summary>
+    /// The actor a write carries when none was claimed: the person this account is, by the name the operating system
+    /// gives it — the one the runtime's browser door issues its token to, so one person carries one name in a timeline
+    /// whichever of the two they wrote from. A claim of the caller's own, or of an attempt the environment names, comes
+    /// first; where the name cannot be read, the write names nobody, as it did before.
+    /// </summary>
+    public static JsonObject? Default(JsonObject? actor, string? accountName) =>
+        actor ?? (string.IsNullOrWhiteSpace(accountName) ? null : new JsonObject { ["type"] = "human", ["id"] = accountName });
+
+    /// <summary>
+    /// Refuses a person's own word that names nobody, before anything is sent, in one sentence that names the form. The
+    /// runtime refuses it too, but only after the request, and in words that cannot say what the CLI's default was.
+    /// <paramref name="how"/> is the form the sentence ends with: a person by default, whoever ends a wait for a resume,
+    /// a person or a role for a report.
+    /// </summary>
+    public static JsonObject Named(JsonObject body, string verb, string why, string how = $"write {Name} human:<Name>")
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        return body["actor"] is not null
+            ? body
+            : throw new UsageException($"{verb} needs {Name}: {why}, and the CLI's default actor does not apply to it; {how}.");
+    }
 
     /// <summary>
     /// Turns the option text into the <c>actor</c> object of a request body. Absent text means no claim of the

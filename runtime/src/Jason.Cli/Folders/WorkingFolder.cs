@@ -29,6 +29,12 @@ public static class WorkingFolder
     /// <summary>How a campaign verb names another project than the one its folder gave: by <c>--project</c>.</summary>
     public const string ByProjectOption = "give --project to name another";
 
+    /// <summary>
+    /// How <c>campaign list</c> names another project, or every one: in JSON mode this line is all that says the listing
+    /// was scoped, so it names <c>--all-projects</c> as the human header does.
+    /// </summary>
+    public const string ByProjectOrAllProjects = "give --project to name another, or --all-projects to list every project's campaigns";
+
     /// <summary>How <c>project get</c> names another project than the one its folder gave: it has no <c>--project</c>.</summary>
     public const string ByIdOrSlug = "give a project id or --slug to name another";
 

@@ -34,6 +34,12 @@ public sealed class PluginInstallCommandTests : IDisposable
     private readonly StringWriter _error = new();
     private readonly List<string> _posted = [];
 
+    /// <summary>The bodies the runtime was sent, in order.</summary>
+    private readonly List<string> _bodies = [];
+
+    /// <summary>The account's name the CLI sees, when a test says.</summary>
+    private string? _account;
+
     /// <summary>What the release's server answers a path with instead of the file, when a test says.</summary>
     private Func<string, HttpStatusCode?>? _failing;
 
@@ -67,6 +73,23 @@ public sealed class PluginInstallCommandTests : IDisposable
         Assert.Equal(package.Digest, answer.RootElement.GetProperty("digest").GetString());
         Assert.Equal("new", answer.RootElement.GetProperty("placed").GetString());
         Assert.Equal("activated", answer.RootElement.GetProperty("load").GetString());
+    }
+
+    /// <summary>The reload an install asks for is a write like any other: without <c>--actor</c> it is made as the account's person.</summary>
+    [Fact]
+    public async Task The_reload_an_install_asks_for_is_made_as_the_account_s_person()
+    {
+        var (release, _) = Release();
+        _paths.WriteDescriptor(Live);
+        _account = "quillon";
+
+        var exit = await RunAsync(release, "plugin", "install", "example");
+
+        Assert.True(exit == ExitCodes.Success, _out.ToString() + _error.ToString());
+        using var sent = JsonDocument.Parse(Assert.Single(_bodies));
+        var actor = sent.RootElement.GetProperty("actor");
+        Assert.Equal("human", actor.GetProperty("type").GetString());
+        Assert.Equal("quillon", actor.GetProperty("id").GetString());
     }
 
     /// <summary>
@@ -741,11 +764,12 @@ public sealed class PluginInstallCommandTests : IDisposable
             }
 
             _posted.Add(request.RequestUri.AbsolutePath["/v1/".Length..]);
+            _bodies.Add(request.Content!.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult());
             const string Registry = """{"snapshot":{"id":"snp_A","loaded_at":"2026-10-26T00:00:00Z","source":"reload","plugin_count":1},"routing_snapshot_id":"rsn_A","plugins":[],"last_reload":null,"activated":true}""";
             return _reload?.Invoke() ?? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Registry, Encoding.UTF8, "application/json") };
         });
 
-        return CliApp.RunAsync(args, new CliEnvironment(_out, _error, _paths.Paths, HttpHandler: handler, BuildVersion: version), Ct);
+        return CliApp.RunAsync(args, new CliEnvironment(_out, _error, _paths.Paths, HttpHandler: handler, BuildVersion: version, AccountName: _account), Ct);
     }
 
     public void Dispose()

@@ -82,7 +82,7 @@ public static class EventsCommands
                 .Set("from", parseResult.GetValue(from))
                 .Set("to", parseResult.GetValue(to))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return OperationRunner.RunAsync(env, Operations.EventsBackfill, body, new RunOptions(parseResult.GetValue(human), EventsRenderers.Backfill), cancellationToken);
         });

@@ -1242,6 +1242,35 @@ public sealed class DoctorComposerTests
         Assert.Equal("SENTINEL_ACTOR_ID", Text(entries["entries"]![0]!["actor"]!["id"]));
     }
 
+    /// <summary>
+    /// The CLI writes as <c>human:&lt;the account's name&gt;</c> when no actor is given, as the paired browser does, so the
+    /// journal's actors carry the account's name. The entries travel on the flag, and that name in them is its mark.
+    /// </summary>
+    [Fact]
+    public async Task With_the_journal_asked_for_the_account_s_name_as_an_actor_is_its_mark()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) =>
+        {
+            if (operation != Operations.JournalList)
+            {
+                return null;
+            }
+
+            var entry = runtime.Entry(0);
+            entry["actor"] = new JsonObject { ["type"] = "human", ["id"] = MadeUp.User };
+            return Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(entry), ["next_cursor"] = null }.ToJsonString());
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
+
+        var actor = Section(bundle, "journal_entries")["entries"]![0]!["actor"]!;
+        Assert.Equal("human", Text(actor["type"]));
+        Assert.Equal("<user>", Text(actor["id"]));
+        AssertAbsent(bundle, MadeUp.User);
+    }
+
     /// <summary>Entries of most of a mebibyte each: as many of the newest as sixteen mebibytes of the bundle hold.</summary>
     [Fact]
     public async Task The_journals_entries_stop_at_sixteen_mebibytes_in_the_bundle_and_keep_the_newest()

@@ -16,6 +16,9 @@ public static class CampaignCommands
     /// <summary>The fields <c>--clear</c> can set back to nothing. A campaign always has a name, so that is not one.</summary>
     private static readonly string[] Clearable = ["execution_profile", "review_seconds"];
 
+    /// <summary>The largest page the runtime gives, so the names of every campaign usually take one request.</summary>
+    private const int NamesPage = 1000;
+
     public static Command Build(CliEnvironment env, Option<string?> actor)
     {
         ArgumentNullException.ThrowIfNull(env);
@@ -66,7 +69,7 @@ public static class CampaignCommands
                 .Set("project_id", parseResult.GetValue(project))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             if ((await WorkingFolder.FillProjectAsync(env, body, WorkingFolder.ByProjectOption, cancellationToken).ConfigureAwait(false)).ExitCode is { } stopped)
             {
@@ -102,7 +105,7 @@ public static class CampaignCommands
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("list", "List campaigns. Archived ones appear only when asked for, by status or with --include-archived.");
-        var status = new Option<string?>("--status") { Description = "Only campaigns in this status: draft, active, paused or archived." };
+        var status = Choice<CampaignStatus>.Only(new Option<string?>("--status") { Description = "Only campaigns in this status: draft, active, paused or archived." });
         var query = new Option<string?>("--query") { Description = "Only campaigns whose name contains this text; case and accents do not matter." };
         var project = ProjectOption(
             "Only the campaigns of this project, as prj_.... Absent, it is the project whose folder, or whose campaign's folder, the command runs in, and every project elsewhere.");
@@ -140,7 +143,7 @@ public static class CampaignCommands
                 body.Set("include_archived", true);
             }
 
-            var fill = every ? FolderFill.None : await WorkingFolder.FillProjectAsync(env, body, WorkingFolder.ByProjectOption, cancellationToken).ConfigureAwait(false);
+            var fill = every ? FolderFill.None : await WorkingFolder.FillProjectAsync(env, body, WorkingFolder.ByProjectOrAllProjects, cancellationToken).ConfigureAwait(false);
             if (fill.ExitCode is { } stopped)
             {
                 return stopped;
@@ -211,7 +214,7 @@ public static class CampaignCommands
             }
 
             body.Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignUpdate, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
@@ -238,7 +241,7 @@ public static class CampaignCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, operation, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
@@ -271,7 +274,7 @@ public static class CampaignCommands
                 .Set("set", VerbOptions.Object(parseResult.GetValue(set), "--set"))
                 .Set("unset", VerbOptions.Strings(parseResult.GetValue(unset)))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignUpdateContext, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
@@ -306,7 +309,7 @@ public static class CampaignCommands
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("match_by", parseResult.GetValue(matchBy))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignAddContacts, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Batch), cancellationToken)
@@ -336,7 +339,7 @@ public static class CampaignCommands
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("contact_ids", VerbOptions.Strings(parseResult.GetValue(contact)))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignRemoveContacts, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.RemoveBatch), cancellationToken)
@@ -354,16 +357,16 @@ public static class CampaignCommands
             + "the people one count of campaign summary or campaign activity counts, the latest first for an activity. "
             + "Excluded ones appear only when asked for by state.");
         var ids = CampaignIds();
-        var state = new Option<string?>("--state") { Description = "Only members in this state: enrolled, paused, finished or excluded." };
-        var summary = new Option<string?>("--summary")
+        var state = Choice<MembershipState>.Only(new Option<string?>("--state") { Description = "Only members in this state: enrolled, paused, finished or excluded." });
+        var summary = Choice<CampaignSummaryFilter>.Only(new Option<string?>("--summary")
         {
             Description = "Only the people one count of campaign summary counts: waiting, failed, working, new, idle, sequence, out or removed.",
-        };
-        var activity = new Option<string?>("--activity")
+        });
+        var activity = Choice<CampaignActivityFilter>.Only(new Option<string?>("--activity")
         {
             Description = "Only the people one count of campaign activity counts in the period of --since and --until: "
                 + "people (anything at all), added, worked_on, contacted, replied, opted_out or removed. Removed people are included.",
-        };
+        });
         var since = VerbOptions.Moment("--since", "With --activity: the period's start, included, as ISO-8601 UTC, or now.");
         var until = VerbOptions.Moment("--until", "With --activity: the period's end, not included, as ISO-8601 UTC, or now.");
         var query = new Option<string?>("--query") { Description = "Only people found by this text: a name, company, title or any channel value." };
@@ -416,7 +419,7 @@ public static class CampaignCommands
         {
             ActorOption.Parse(parseResult.GetValue(actor));
             var body = RequestBody.Empty().Set("campaign_ids", Ids(parseResult.GetValue(ids)));
-            return OperationRunner.RunAsync(env, Operations.CampaignSummary, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Summary), cancellationToken);
+            return OperationRunner.RunAsync(env, Operations.CampaignSummary, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Summary), cancellationToken);
         });
 
         return command;
@@ -447,7 +450,7 @@ public static class CampaignCommands
                 .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
                 .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
                 .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System));
-            return OperationRunner.RunAsync(env, Operations.CampaignActivity, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Activity), cancellationToken);
+            return OperationRunner.RunAsync(env, Operations.CampaignActivity, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Activity), cancellationToken);
         });
 
         return command;
@@ -461,12 +464,12 @@ public static class CampaignCommands
             + "the campaigns named or every campaign not archived, in every project. A person counted on two days is in both, and once in the total `campaign activity` "
             + "gives for the window.");
         var ids = CampaignIds();
-        var count = new Option<string?>("--count")
+        var count = Choice<CampaignActivityFilter>.Only(new Option<string?>("--count")
         {
             Description = "The count: people (anything at all), added, worked_on, contacted, replied, opted_out or removed.",
             Required = true,
-        };
-        var period = new Option<string?>("--period") { Description = "What each bucket is: hour, day or week (Monday to Sunday).", Required = true };
+        });
+        var period = Choice<ActivityPeriod>.Only(new Option<string?>("--period") { Description = "What each bucket is: hour, day or week (Monday to Sunday).", Required = true });
         var since = VerbOptions.Moment("--since", "The window's start, included, as ISO-8601 UTC, or now.");
         since.Required = true;
         var until = VerbOptions.Moment("--until", "The window's end, not included, as ISO-8601 UTC, or now.");
@@ -508,6 +511,73 @@ public static class CampaignCommands
         }
 
         return TimeZoneInfo.TryConvertWindowsIdToIanaId(local.Id, out var iana) ? iana : "UTC";
+    }
+
+    /// <summary>
+    /// How counts that name each campaign by its id alone are shown to people: by each campaign's name, read from the
+    /// campaign listing, archived campaigns included, page after page until every campaign the counts show is named. A
+    /// listing that cannot be read leaves the rest unnamed, and the counts are shown all the same. JSON output asks
+    /// nothing more.
+    /// </summary>
+    private static RunOptions Named(CliEnvironment env, bool human, Func<string, IReadOnlyDictionary<string, string>, string?> render) =>
+        new(human)
+        {
+            RenderHumanAsync = async (json, cancellationToken) =>
+                render(json, await CampaignNamesAsync(env, CountedIds(json), cancellationToken).ConfigureAwait(false)),
+        };
+
+    private static async Task<IReadOnlyDictionary<string, string>> CampaignNamesAsync(
+        CliEnvironment env, IReadOnlySet<string> ids, CancellationToken cancellationToken)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? cursor = null;
+        while (ids.Any(id => !names.ContainsKey(id)))
+        {
+            var body = RequestBody.Empty().Set("include_archived", true).Set("limit", NamesPage).Set("cursor", cursor);
+            var (_, response) = await OperationRunner.SendAsync(env with { Out = TextWriter.Null }, Operations.CampaignList, body, cancellationToken)
+                .ConfigureAwait(false);
+            if (response is not { IsSuccess: true } || RenderText.Read<Page<CampaignSummaryDto>>(response.Body) is not { Items: { } items } page)
+            {
+                break;
+            }
+
+            foreach (var campaign in items)
+            {
+                names[campaign.Id] = campaign.Name;
+            }
+
+            cursor = page.NextCursor;
+            if (cursor is null)
+            {
+                break;
+            }
+        }
+
+        return names;
+    }
+
+    private static HashSet<string> CountedIds(string json)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            if (JsonNode.Parse(json) is JsonObject counts && counts["campaigns"] is JsonArray rows)
+            {
+                foreach (var row in rows)
+                {
+                    if (row?["campaign_id"] is JsonValue value && value.TryGetValue<string>(out var id))
+                    {
+                        ids.Add(id);
+                    }
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // A body that is not the counts is printed raw by the renderer; there is nothing to name.
+        }
+
+        return ids;
     }
 
     /// <summary>The campaigns named, or nothing at all when none is: then the runtime answers for every campaign not archived, in every project.</summary>

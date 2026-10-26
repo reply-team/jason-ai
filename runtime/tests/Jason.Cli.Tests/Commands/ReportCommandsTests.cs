@@ -77,22 +77,20 @@ public class ReportCommandsTests
     }
 
     /// <summary>
-    /// The CLI composes a body and nothing more. Whether a report may name nobody is the runtime's rule, and
-    /// duplicating it here would mean two places to change it and one of them getting it wrong.
+    /// A report names its reporter, and the CLI's default actor is never that: without <c>--actor</c> the CLI refuses it
+    /// before any request, in its own words, rather than send it for the runtime to refuse in words that cannot say how
+    /// to name one.
     /// </summary>
     [Fact]
-    public async Task Submit_without_an_actor_is_the_runtimes_refusal_rather_than_the_clis()
+    public async Task Submit_without_an_actor_is_refused_before_any_request()
     {
-        using var cli = new CliRun(
-            "{\"error\":{\"code\":\"actor_required\",\"message\":\"actor.id is required.\",\"retryable\":false}}",
-            status: System.Net.HttpStatusCode.BadRequest);
+        using var cli = new CliRun(accountName: "quillon");
 
         var exit = await cli.RunAsync("report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s");
 
-        Assert.Equal(ExitCodes.ApiError, exit);
-
-        // The API's own answer, verbatim on stdout: stderr is diagnostics, and the envelope is the answer.
-        Assert.Contains("actor_required", cli.Text, StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Equal(0, cli.Requests);
+        Assert.Contains("write --actor human:<Name> or --actor role:<id>.", cli.Error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

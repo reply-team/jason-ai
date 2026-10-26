@@ -28,7 +28,7 @@ public static class DecisionCommands
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("list", "What is waiting on a person. Pending unless you ask for something else.");
-        var status = VerbOptions.Repeatable("--status", "pending (the default), answered or cancelled; repeat it to list several at once.");
+        var status = Choice<DecisionStatus>.Only(VerbOptions.Repeatable("--status", "pending (the default), answered or cancelled; repeat it to list several at once."));
         var campaign = new Option<string?>("--campaign") { Description = "Only questions about one campaign's work." };
         var workItem = new Option<string?>("--work-item") { Description = "Only questions raised about one work item." };
         var limit = VerbOptions.Limit();
@@ -107,7 +107,7 @@ public static class DecisionCommands
         var option = VerbOptions.Repeatable("--option", "An answer you are offering, by label. Repeat the option for more than one; an answer may then name one of them.");
         var reference = VerbOptions.Repeatable(
             "--reference",
-            "Something to read before deciding, as kind:id — the kind is work_item, attempt, journal_entry, report or approval. Repeat the option for more than one.");
+            $"Something to read before deciding, as kind:id — the kind is {Choices.Spoken(Choice<DecisionReferenceKind>.Words)}. Repeat the option for more than one.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -137,13 +137,13 @@ public static class DecisionCommands
     }
 
     /// <summary>
-    /// The person's verb. The answer takes the actor the whole CLI carries, and the runtime refuses an answer
-    /// that does not name a person — so <c>--actor human:&lt;id&gt;</c> is not optional here in practice, and a
-    /// role holding an attempt cannot answer its own question by leaving it out.
+    /// The person's verb. The answer takes the actor the whole CLI carries, but not its default, and the runtime refuses
+    /// an answer that does not name a person — so one that names nobody is refused here first, and a role holding an
+    /// attempt cannot answer its own question by leaving <c>--actor human:&lt;id&gt;</c> out.
     /// </summary>
     private static Command Answer(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("answer", "Answer a question, as the person you are. The review that continues the work follows from it.");
+        var command = new Command("answer", "Answer a question, as the person you are. The review that continues the work follows from it. " + ActorOption.NoDefault);
         var id = DecisionId();
         var answer = new Option<string>("--answer")
         {
@@ -167,6 +167,7 @@ public static class DecisionCommands
                 .Set("option", parseResult.GetValue(option))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+            ActorOption.Named(body, "decision answer", "a question is answered on a person's word");
 
             return OperationRunner.RunAsync(
                 env, Operations.DecisionAnswer, body, new RunOptions(parseResult.GetValue(human), DecisionRenderers.Decision), cancellationToken);
@@ -185,8 +186,10 @@ public static class DecisionCommands
     /// <c>kind:id</c>, once per reference, split at the first colon only so an id is never cut where the CLI
     /// happened to look. A value with no colon, or nothing on one side of it, is not a reference in any
     /// vocabulary and is refused here rather than sent: the runtime would refuse it too, but as a validation
-    /// error about a request, when what went wrong was the typing. Which kinds exist is the runtime's business,
-    /// so the kind travels as typed.
+    /// error about a request, when what went wrong was the typing. A kind is a word of the API's own reference kinds,
+    /// held to them as an enum-valued option is (<see cref="Choice{TEnum}"/>): one the API's JSON cannot read is refused
+    /// here in the CLI's words, where the runtime's binding would name a type it could not build. The kind travels as
+    /// typed.
     /// </summary>
     private static JsonArray? References(string[]? values)
     {
@@ -204,9 +207,15 @@ public static class DecisionCommands
                 throw new UsageException($"--reference must be written as kind:id — for example work_item:wi_...; '{value}' is not.");
             }
 
+            var kind = value[..split];
+            if (!Choice<DecisionReferenceKind>.Reads(kind))
+            {
+                throw new UsageException($"--reference takes a kind of {Choices.Spoken(Choice<DecisionReferenceKind>.Words)}; '{kind}' is not one of them.");
+            }
+
             references.Add(new JsonObject
             {
-                ["kind"] = value[..split],
+                ["kind"] = kind,
                 ["id"] = value[(split + 1)..],
             });
         }

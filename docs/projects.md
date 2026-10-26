@@ -144,8 +144,9 @@ gives that project; a campaign's marker gives the campaign's project as the runt
 marker names no parent; the root's marker, or none up to the top of the file system, gives nothing, and the verb does
 what it does anywhere else. Every fill is said once on stderr, in one line: the project by its slug and its id, that it
 came from the working directory, the folder whose marker said so, and how that verb is given another project — `--project`,
-or for `project get` an id or `--slug`. `campaign list --human` shows a listing scoped
-this way under that project's slug, so a person reading it knows why it holds one project's campaigns. The CLI reads a
+and for `campaign list` also `--all-projects`, or for `project get` an id or `--slug`. `campaign list --human` shows a
+listing scoped this way under that project's slug, so a person reading it knows why it holds one project's campaigns; in
+JSON mode that line on stderr is what says so. The CLI reads a
 marker with the runtime's own reader — one definition of the format for both — and never writes one. A role Jason
 launches runs in its attempt's work directory, which carries no marker, so nothing is ever filled for it.
 

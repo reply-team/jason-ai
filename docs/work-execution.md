@@ -358,9 +358,12 @@ between `--since`, included, and `--until`, not included. Each count is a number
 person may be in several counts at once, so the counts need not add up. Both answers also carry `total`: the same counts
 across every campaign asked, each person counted once however many of those campaigns count them. The total's `out`
 counts a suppressed person in a campaign with no sequence too, whose own `sequence` and `out` the CLI prints as `-`, as
-it prints the total's when no campaign asked has a sequence. `jason campaign list-contacts` (`campaign.list_contacts`)
-lists the people of the campaigns named, or of every campaign not archived, each person once with the campaigns that
-list them under `counted`; with `--summary <count>`, or with `--activity <count>` and the same period, it lists exactly
+it prints the total's when no campaign asked has a sequence. With `--human` the CLI names each campaign by
+its name, with its id beside it: the answer names campaigns by id alone, so the CLI reads their names from the campaign
+listing (`campaign.list`, archived campaigns included). The JSON output is the answer as it came.
+`jason campaign list-contacts` (`campaign.list_contacts`) lists the people of the campaigns named, or of every campaign
+not archived, each person once with the campaigns that list them under `counted`; with `--summary <count>`, or with
+`--activity <count>` and the same period, it lists exactly
 the people one count counts, each with why it counts them in each of those campaigns: the approval or question waiting,
 how their latest work ended, or when in the period it happened, the latest first. Under `--activity people` the why is
 the latest of what happened to them, its `text` naming the count it was. Work about a person is work in that campaign

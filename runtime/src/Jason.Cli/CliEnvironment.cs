@@ -83,7 +83,14 @@ namespace Jason.Cli;
 /// <see cref="Default"/>, and the default for the reason <paramref name="Harnesses"/> gives: a test that walked up from
 /// its own folder would read whatever folders the person running the suite has above it.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null)
+/// <param name="AccountName">
+/// The name of the account the CLI runs as, which a write that names no actor is made as — <c>human:&lt;name&gt;</c>, the
+/// name the runtime's browser door issues its tokens to, so a person carries one name whichever of the two they wrote
+/// from. Null names nobody, as a write did before there was a default, and the answer everywhere but <see cref="Default"/>,
+/// for the reason <paramref name="Identity"/> gives: a test that read the real name would write the developer's own into
+/// the requests it checks.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null)
 {
     public static CliEnvironment Default() =>
         new(
@@ -101,7 +108,8 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             InstallationRemovers.ForThisMachine(),
             Managers: ManagerRecords.ForThisMachine(),
             Opener: new PlatformUrlOpener(),
-            WorkingDirectory: WorkingDirectoryOf(() => Environment.CurrentDirectory));
+            WorkingDirectory: WorkingDirectoryOf(() => Environment.CurrentDirectory),
+            AccountName: AccountNameOf(() => Environment.UserName));
 
     /// <summary>
     /// The folder the command was typed in, or null where the platform cannot name it — on Linux and macOS, a folder
@@ -116,6 +124,24 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             return read();
         }
         catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The account's name, or null where the platform cannot give one, which writes as it did before there was a default:
+    /// a person who gave no name. A name is never what a write is refused over.
+    /// </summary>
+    internal static string? AccountNameOf(Func<string> read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        try
+        {
+            var name = read();
+            return string.IsNullOrWhiteSpace(name) ? null : name;
+        }
+        catch (Exception unread) when (unread is InvalidOperationException or PlatformNotSupportedException)
         {
             return null;
         }

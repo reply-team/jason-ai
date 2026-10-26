@@ -29,7 +29,7 @@ public static class PreferenceCommands
     {
         var command = new Command(
             "set",
-            "Set a preference's value whole, as the person said it; name them with --actor human:<name>. The value is checked against the key's published schema.");
+            "Set a preference's value whole, as the person said it. The value is checked against the key's published schema. " + ActorOption.NoDefault);
         var key = KeyArgument();
         var value = new Option<string?>("--value") { Description = "The whole value, as a JSON object." };
         var valueFile = new Option<string?>("--value-file")
@@ -52,6 +52,7 @@ public static class PreferenceCommands
                 .Set("value", document)
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+            ActorOption.Named(body, "preference set", "a preference is set on a person's word");
 
             return await OperationRunner
                 .RunAsync(env, Operations.PreferenceSet, body, new RunOptions(parseResult.GetValue(human), PreferenceRenderers.Preference), cancellationToken)
@@ -65,7 +66,7 @@ public static class PreferenceCommands
     {
         var command = new Command(
             "unset",
-            "Take a preference's value back: it is deleted, and the record of the change keeps only its size and hash. Name the person with --actor human:<name>.");
+            "Take a preference's value back: it is deleted, and the record of the change keeps only its size and hash. " + ActorOption.NoDefault);
         var key = KeyArgument();
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
@@ -79,6 +80,7 @@ public static class PreferenceCommands
                 .Set("key", parseResult.GetValue(key))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+            ActorOption.Named(body, "preference unset", "a preference is taken back on a person's word");
 
             return OperationRunner.RunAsync(env, Operations.PreferenceUnset, body, new RunOptions(parseResult.GetValue(human), PreferenceRenderers.Preference), cancellationToken);
         });

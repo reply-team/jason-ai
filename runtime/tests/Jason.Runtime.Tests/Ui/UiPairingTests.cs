@@ -75,6 +75,23 @@ public class UiPairingTests
         Assert.Single((await api.PostOkAsync<UiTokensResponse>(Operations.UiTokens, null, Ct)).Items);
     }
 
+    /// <summary>
+    /// The door issues its token to the name the CLI writes as when no actor is given, so one person carries one name in a
+    /// timeline whichever of the two they wrote from.
+    /// </summary>
+    [Fact]
+    public async Task The_door_names_the_person_the_cli_writes_as()
+    {
+        await using var api = await StartWithBuildAsync(new FixedClock(Nine));
+        var ticket = await TicketAsync(api);
+
+        var (status, body, _) = await DoorAsync(api, ticket, Own(api));
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        var session = JsonSerializer.Deserialize<UiSessionResponse>(body, JasonJson.Options)!;
+        Assert.Equal(Cli.CliEnvironment.Default().AccountName, session.ActorId);
+    }
+
     [Fact]
     public async Task An_expired_or_unknown_ticket_is_refused_and_nothing_is_minted()
     {

@@ -117,7 +117,7 @@ internal sealed record ReportSubmission(
     {
         if (!body.TryGetPropertyValue(ReportFields.Actor, out var node) || node is null)
         {
-            throw DomainErrors.ActorRequired();
+            throw DomainErrors.ReportActorRequired();
         }
 
         ActorRef? claimed;
@@ -132,7 +132,7 @@ internal sealed record ReportSubmission(
 
         if (claimed is null)
         {
-            throw DomainErrors.ActorRequired();
+            throw DomainErrors.ReportActorRequired();
         }
 
         if (claimed.Type == ActorType.System)
@@ -141,7 +141,7 @@ internal sealed record ReportSubmission(
         }
 
         var resolved = Actors.Resolve(claimed);
-        return string.IsNullOrWhiteSpace(resolved.Id) ? throw DomainErrors.ActorRequired() : resolved;
+        return string.IsNullOrWhiteSpace(resolved.Id) ? throw DomainErrors.ReportActorRequired() : resolved;
     }
 
     private static string? Text(JsonObject body, string field, ValidationErrors errors, bool required) =>

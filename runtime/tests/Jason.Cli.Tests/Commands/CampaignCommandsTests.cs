@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Cli.Tests.Folders;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
@@ -344,16 +345,16 @@ public class CampaignCommandsTests
             ],
             new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Removed: 1)),
             JasonJson.Options);
-        using var cli = new CliRun(summary);
+        using var cli = new FolderRun(null, Answer(summary, Campaigns(("cmp_A", "Spring outreach"), ("cmp_B", "Partners"))));
 
         var exit = await cli.RunAsync("campaign", "summary", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
         var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["CAMPAIGN", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED"], Cells(lines[0]));
-        Assert.Equal(["cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1"], Cells(lines[2]));
-        Assert.Equal(["cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(lines[3]));
-        Assert.Equal(["TOTAL", "22", "3", "3", "2", "3", "7", "2", "6", "1"], Cells(lines[^1]));
+        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED"], Cells(lines[0]));
+        Assert.Equal(["Spring outreach", "cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1"], Cells(lines[2]));
+        Assert.Equal(["Partners", "cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(lines[3]));
+        Assert.Equal(["TOTAL", "-", "22", "3", "3", "2", "3", "7", "2", "6", "1"], Cells(lines[^1]));
 
         // With no campaign linked to a sequence, the total has none to count either.
         var unlinked = JsonSerializer.Serialize(
@@ -361,10 +362,10 @@ public class CampaignCommandsTests
                 [new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 1, Removed: 0, SequenceLinked: false)],
                 new CampaignSummaryTotal(2, 0, 0, 0, 1, 1, 0, 1, Removed: 0)),
             JasonJson.Options);
-        using var alone = new CliRun(unlinked);
+        using var alone = new FolderRun(null, Answer(unlinked, Campaigns(("cmp_B", "Partners"))));
         Assert.Equal(ExitCodes.Success, await alone.RunAsync("campaign", "summary", "cmp_B", "--human"));
         var only = alone.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["TOTAL", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(only[^1]));
+        Assert.Equal(["TOTAL", "-", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(only[^1]));
     }
 
     [Fact]
@@ -375,16 +376,111 @@ public class CampaignCommandsTests
                 [new CampaignActivityRow("cmp_A", 14, 2, 9, 4, 2, 2, Removed: 1), new CampaignActivityRow("cmp_B", 1, 0, 1, 0, 0, 0, Removed: 0)],
                 new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1)),
             JasonJson.Options);
-        using var cli = new CliRun(activity);
+        using var cli = new FolderRun(null, Answer(activity, Campaigns(("cmp_A", "Spring outreach"), ("cmp_B", "Partners"))));
 
         var exit = await cli.RunAsync("campaign", "activity", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
         var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["CAMPAIGN", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED"], Cells(lines[0]));
-        Assert.Equal(["cmp_A", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[2]));
-        Assert.Equal(["TOTAL", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[^1]));
+        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED"], Cells(lines[0]));
+        Assert.Equal(["Spring outreach", "cmp_A", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[2]));
+        Assert.Equal(["Partners", "cmp_B", "1", "0", "1", "0", "0", "0", "0"], Cells(lines[3]));
+        Assert.Equal(["TOTAL", "-", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[^1]));
     }
+
+    /// <summary>
+    /// The counts name each campaign by its id alone, so the human rendering reads the names from the campaign listing,
+    /// archived campaigns included, page after page until every campaign it shows is named.
+    /// </summary>
+    [Theory]
+    [InlineData("summary")]
+    [InlineData("activity")]
+    public async Task Human_mode_reads_the_names_page_after_page_until_every_campaign_is_named(string verb)
+    {
+        var counts = Counts(verb, "cmp_A", "cmp_B");
+        var first = JsonSerializer.Serialize(new Page<CampaignSummaryDto>([Campaign("cmp_A", "Spring outreach")], "Y3Vyc29y"), JasonJson.Options);
+        var second = JsonSerializer.Serialize(new Page<CampaignSummaryDto>([Campaign("cmp_B", "Partners")], null), JasonJson.Options);
+        using var cli = new FolderRun(null, (operation, body) => operation switch
+        {
+            Operations.CampaignList when body["cursor"] is null => (HttpStatusCode.OK, first),
+            Operations.CampaignList => (HttpStatusCode.OK, second),
+            _ => (HttpStatusCode.OK, counts),
+        });
+
+        var exit = await cli.RunAsync(Args(verb, "--human"));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([Operation(verb), Operations.CampaignList, Operations.CampaignList], cli.Operations);
+        cli.AssertSent(1, "{\"include_archived\":true,\"limit\":1000}");
+        cli.AssertSent(2, "{\"include_archived\":true,\"limit\":1000,\"cursor\":\"Y3Vyc29y\"}");
+        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["Spring outreach", "cmp_A"], Cells(lines[2])[..2]);
+        Assert.Equal(["Partners", "cmp_B"], Cells(lines[3])[..2]);
+    }
+
+    /// <summary>Where the names cannot be read, the counts are still shown: each campaign by its id, with a dash for its name.</summary>
+    [Theory]
+    [InlineData("summary")]
+    [InlineData("activity")]
+    public async Task Human_mode_shows_the_counts_when_the_names_cannot_be_read(string verb)
+    {
+        var counts = Counts(verb, "cmp_A");
+        using var cli = new FolderRun(null, (operation, _) => operation == Operations.CampaignList
+            ? (HttpStatusCode.InternalServerError, string.Empty)
+            : (HttpStatusCode.OK, counts));
+
+        var exit = await cli.RunAsync(Args(verb, "--human"));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["CAMPAIGN", "ID"], Cells(lines[0])[..2]);
+        Assert.Equal(["-", "cmp_A"], Cells(lines[2])[..2]);
+    }
+
+    /// <summary>The JSON output is the API's answer as it came, and nothing more is asked for it.</summary>
+    [Theory]
+    [InlineData("summary")]
+    [InlineData("activity")]
+    public async Task Json_mode_prints_the_counts_as_they_came_and_asks_nothing_more(string verb)
+    {
+        var counts = Counts(verb, "cmp_A");
+        using var cli = new FolderRun(null, (_, _) => (HttpStatusCode.OK, counts));
+
+        var exit = await cli.RunAsync(Args(verb));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([Operation(verb)], cli.Operations);
+        Assert.Equal(counts, cli.Text.TrimEnd());
+    }
+
+    private static Func<string, JsonObject, (HttpStatusCode Status, string Body)> Answer(string counts, string campaigns) =>
+        (operation, _) => (HttpStatusCode.OK, operation == Operations.CampaignList ? campaigns : counts);
+
+    private static string Campaigns(params (string Id, string Name)[] campaigns) =>
+        JsonSerializer.Serialize(
+            new Page<CampaignSummaryDto>([.. campaigns.Select(campaign => Campaign(campaign.Id, campaign.Name))], null),
+            JasonJson.Options);
+
+    private static CampaignSummaryDto Campaign(string id, string name) =>
+        new(id, name, CampaignStatus.Active, "prj_A", "default", Moment, Moment, null);
+
+    private static string Counts(string verb, params string[] ids) => verb == "summary"
+        ? JsonSerializer.Serialize(
+            new CampaignSummaryResponse(
+                [.. ids.Select(id => new CampaignSummaryRow(id, 1, 0, 0, 0, 1, 0, 0, 0, Removed: 0, SequenceLinked: false))],
+                new CampaignSummaryTotal(ids.Length, 0, 0, 0, ids.Length, 0, 0, 0, Removed: 0)),
+            JasonJson.Options)
+        : JsonSerializer.Serialize(
+            new CampaignActivityResponse(
+                [.. ids.Select(id => new CampaignActivityRow(id, 1, 1, 0, 0, 0, 0, Removed: 0))],
+                new CampaignActivityTotal(ids.Length, ids.Length, 0, 0, 0, 0, Removed: 0)),
+            JasonJson.Options);
+
+    private static string Operation(string verb) => verb == "summary" ? Operations.CampaignSummary : Operations.CampaignActivity;
+
+    private static string[] Args(string verb, params string[] more) => verb == "summary"
+        ? ["campaign", "summary", .. more]
+        : ["campaign", "activity", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z", .. more];
 
     [Fact]
     public async Task An_unknown_option_is_a_usage_error()
@@ -604,7 +700,7 @@ internal sealed class CliRun : IDisposable
     private readonly TempPaths _paths = new();
     private readonly CliEnvironment _environment;
 
-    public CliRun(string response = "{}", string? standardInput = null, HttpStatusCode status = HttpStatusCode.OK, bool descriptor = true, Jason.Cli.Process.IUrlOpener? opener = null)
+    public CliRun(string response = "{}", string? standardInput = null, HttpStatusCode status = HttpStatusCode.OK, bool descriptor = true, Jason.Cli.Process.IUrlOpener? opener = null, string? accountName = null)
     {
         if (descriptor)
         {
@@ -623,7 +719,8 @@ internal sealed class CliRun : IDisposable
                 return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
             }),
             standardInput is null ? null : new StringReader(standardInput),
-            Opener: opener);
+            Opener: opener,
+            AccountName: accountName);
     }
 
     public StringWriter Output { get; } = new();
@@ -634,7 +731,10 @@ internal sealed class CliRun : IDisposable
 
     public string? Sent { get; private set; }
 
-    /// <summary>How many requests the invocation sent: a renderer answers from the one response, never by asking again.</summary>
+    /// <summary>
+    /// How many requests the invocation sent: a renderer answers from the one response, never by asking again — except the
+    /// counts of campaign summary and activity, whose names it reads from the campaign listing (those rows use FolderRun).
+    /// </summary>
     public int Requests { get; private set; }
 
     public string Text => Output.ToString();

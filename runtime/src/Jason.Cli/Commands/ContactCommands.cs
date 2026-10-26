@@ -48,7 +48,7 @@ public static class ContactCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             fields.LayOver(body, parseResult);
             body.Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ContactCreate, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Contact), cancellationToken)
@@ -83,7 +83,7 @@ public static class ContactCommands
         var value = new Option<string?>("--value") { Description = "Only contacts whose channel value is this one; needs --channel." };
         var query = new Option<string?>("--query") { Description = "Only people whose name, company, title or any channel value contains this text; case and accents do not matter, a phone number matches however it is spaced, and a pasted LinkedIn link finds its profile." };
         var campaign = new Option<string?>("--campaign") { Description = "Only people on this campaign, as cmp_...; excluded members are left out." };
-        var order = new Option<string?>("--order") { Description = "created (the default, oldest first) or activity (the person something last happened to first; people with nothing yet come last)." };
+        var order = Choice<ContactListOrder>.Only(new Option<string?>("--order") { Description = "created (the default, oldest first) or activity (the person something last happened to first; people with nothing yet come last)." });
         var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived contacts, which are hidden by default." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
@@ -154,7 +154,7 @@ public static class ContactCommands
             }
 
             body.Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ContactUpdate, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Contact), cancellationToken)
@@ -181,7 +181,7 @@ public static class ContactCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("contact_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ContactArchive, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Contact), cancellationToken)

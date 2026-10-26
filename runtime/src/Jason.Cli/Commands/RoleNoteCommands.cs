@@ -87,7 +87,7 @@ public static class RoleNoteCommands
             body = body
                 .Set("note", document)
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.RoleNoteSet, body, new RunOptions(parseResult.GetValue(human), RoleNoteRenderers.Note), cancellationToken)

@@ -111,7 +111,7 @@ public static class RouteCommands
                 .Set("plugin", parseResult.GetValue(plugin))
                 .Set("binding", VerbOptions.Object(parseResult.GetValue(binding), "--binding"))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return OperationRunner.RunAsync(env, Operations.RouteSet, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken);
         });
@@ -136,7 +136,7 @@ public static class RouteCommands
             var body = RequireCampaign(parseResult.GetValue(campaign))
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return OperationRunner.RunAsync(env, Operations.RouteUnset, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken);
         });

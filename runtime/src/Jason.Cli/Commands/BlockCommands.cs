@@ -26,7 +26,7 @@ public static class BlockCommands
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("list", "The provider's blocks, newest first: open blocks only unless --status asks for others.");
-        var status = VerbOptions.Repeatable("--status", "open (the default) or cleared; repeat it to list both.");
+        var status = Choice<ProviderBlockStatus>.Only(VerbOptions.Repeatable("--status", "open (the default) or cleared; repeat it to list both."));
         var plugin = new Option<string?>("--plugin") { Description = "Only the blocks one plugin's provider reported." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
@@ -85,7 +85,7 @@ public static class BlockCommands
             + "and the next scan releases what it held; this command releases nothing itself. A clear is not a mute: if "
             + "the provider refuses again, the account or sender is blocked again as a new block, and the campaigns are "
             + "told again. --actor is required: a block is cleared on a person's word, and it names one with an id. An agent "
-            + "cannot clear a block: a role or an attempt is refused with block_not_human. Only an open block can be cleared.");
+            + "cannot clear a block: a role or an attempt is refused with block_not_human. Only an open block can be cleared. " + ActorOption.NoDefault);
         var id = BlockId();
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
@@ -99,10 +99,7 @@ public static class BlockCommands
                 .Set("block_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
-            if (body["actor"] is null)
-            {
-                throw new UsageException($"block clear needs {ActorOption.Name}: a block is cleared on a person's word, and the line says whose.");
-            }
+            ActorOption.Named(body, "block clear", "a block is cleared on a person's word");
 
             return OperationRunner.RunAsync(
                 env, Operations.BlockClear, body, new RunOptions(parseResult.GetValue(human), BlockRenderers.Block), cancellationToken);

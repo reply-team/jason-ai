@@ -299,7 +299,10 @@ public class CliAgainstRuntimeTests
         Assert.Equal("approval_not_pending", (string?)again["error"]!["code"]);
     }
 
-    /// <summary>A decision that names nobody is refused by the runtime, whatever the shell wanted to send.</summary>
+    /// <summary>
+    /// A decision that names nobody is refused: by the CLI before any request when no actor is given, and by the runtime
+    /// when the shell claims a person without a name.
+    /// </summary>
     [Fact]
     public async Task A_decision_the_cli_sends_without_an_actor_is_refused()
     {
@@ -310,7 +313,9 @@ public class CliAgainstRuntimeTests
             approval = (await ParkedWork.WriteAsync(db, Ct)).Approval.PublicId;
         }
 
-        var refused = await ErrorAsync(fixture, "approval", "approve", approval);
+        var (anonymous, _, said) = await RunAsync(fixture, ["approval", "approve", approval]);
+        Assert.True(anonymous == ExitCodes.Usage, $"An approval naming nobody exited {anonymous}: {said}");
+        var refused = await ErrorAsync(fixture, "--actor", "human", "approval", "approve", approval);
 
         Assert.Equal("actor_required", (string?)refused["error"]!["code"]);
     }

@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using Jason.Cli.Commands;
 using Jason.Cli.Doctor;
 using Jason.Cli.Logs;
@@ -75,8 +76,14 @@ public static class CliApp
 
         var root = BuildRootCommand(env);
         var parseResult = root.Parse(args);
-        if (parseResult.Errors.Count > 0)
+        var unknown = UnknownOptions(parseResult);
+        if (unknown.Count > 0 || parseResult.Errors.Count > 0)
         {
+            foreach (var option in unknown)
+            {
+                env.Error.WriteLine($"'{option}' is not an option of 'jason {Verb(parseResult)}', or give it after -- to use it as a value.");
+            }
+
             foreach (var error in parseResult.Errors)
             {
                 env.Error.WriteLine(error.Message);
@@ -119,6 +126,58 @@ public static class CliApp
 
             return ExitCodes.ApiError;
         }
+    }
+
+    /// <summary>
+    /// The words a positional argument took that look like options: the parser hands a word it does not know as an option
+    /// to whatever argument has room for it, so a misspelt <c>--summary</c> became a campaign id and the runtime answered
+    /// that no such campaign exists. Decided here, once, for every verb. A lone <c>-</c> is a value (standard input), an
+    /// option's own value is never read here, and after <c>--</c> every word is a value, which is how one that starts with
+    /// a dash is given.
+    /// </summary>
+    private static List<string> UnknownOptions(ParseResult parseResult)
+    {
+        var tokens = parseResult.Tokens;
+        var end = tokens.Count;
+        for (var index = 0; index < tokens.Count; index++)
+        {
+            if (tokens[index].Type == TokenType.DoubleDash)
+            {
+                end = index;
+                break;
+            }
+        }
+
+        var beforeTheDoubleDash = new HashSet<Token>(ReferenceEqualityComparer.Instance);
+        for (var index = 0; index < end; index++)
+        {
+            beforeTheDoubleDash.Add(tokens[index]);
+        }
+
+        var unknown = new List<string>();
+        for (CommandResult? command = parseResult.CommandResult; command is not null; command = command.Parent as CommandResult)
+        {
+            foreach (var argument in command.Children.OfType<ArgumentResult>())
+            {
+                unknown.AddRange(argument.Tokens
+                    .Where(token => beforeTheDoubleDash.Contains(token) && token.Value.Length > 1 && token.Value[0] == '-')
+                    .Select(token => token.Value));
+            }
+        }
+
+        return unknown;
+    }
+
+    /// <summary>The verb as it was typed, from the root's subcommand down: <c>campaign list-contacts</c>.</summary>
+    private static string Verb(ParseResult parseResult)
+    {
+        var names = new List<string>();
+        for (var command = parseResult.CommandResult; command.Parent is CommandResult parent; command = parent)
+        {
+            names.Insert(0, command.Command.Name);
+        }
+
+        return string.Join(' ', names);
     }
 
     internal static RootCommand BuildRootCommand(CliEnvironment env)

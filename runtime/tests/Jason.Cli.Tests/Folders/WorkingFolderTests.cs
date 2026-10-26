@@ -382,6 +382,36 @@ public sealed class WorkingFolderTests : IDisposable
         Assert.Empty(cli.ErrorLines);
     }
 
+    /// <summary>
+    /// In JSON mode nothing on stdout says the listing was scoped, so the line on stderr says it follows the working
+    /// directory's project and names <c>--all-projects</c>, as the human header does; stdout is the API's answer as it came.
+    /// </summary>
+    [Fact]
+    public async Task Campaign_list_scoped_by_the_folder_names_all_projects_on_stderr_and_leaves_stdout_alone()
+    {
+        string? listed = null;
+        var answers = Answers();
+        using var cli = new FolderRun(AcmeFolder, (operation, body) =>
+        {
+            var answer = answers(operation, body);
+            if (operation == Operations.CampaignList)
+            {
+                listed = answer.Item2;
+            }
+
+            return answer;
+        });
+
+        var exit = await cli.RunAsync("campaign", "list");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(new[] { Operations.ProjectGet, Operations.CampaignList }, cli.Operations);
+        Assert.Equal(listed, cli.Text.TrimEnd());
+        var line = Assert.Single(cli.ErrorLines);
+        Assert.Contains("from the working directory", line, StringComparison.Ordinal);
+        Assert.EndsWith("give --project to name another, or --all-projects to list every project's campaigns.", line, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Campaign_list_with_all_projects_and_a_project_is_a_usage_error()
     {

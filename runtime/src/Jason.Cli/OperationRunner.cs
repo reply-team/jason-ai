@@ -10,9 +10,13 @@ namespace Jason.Cli;
 
 /// <summary>
 /// How one verb presents its answer. With <c>--human</c> the renderer turns the response body into text for
-/// people; a renderer that cannot make sense of the body returns null and the raw JSON is printed instead.
+/// people; a renderer that cannot make sense of the body returns null and the raw JSON is printed instead. A renderer
+/// that has to ask the runtime something more first is <see cref="RenderHumanAsync"/>, used in place of the other.
 /// </summary>
-public sealed record RunOptions(bool Human, Func<string, string?>? RenderHuman = null);
+public sealed record RunOptions(bool Human, Func<string, string?>? RenderHuman = null)
+{
+    public Func<string, CancellationToken, Task<string?>>? RenderHumanAsync { get; init; }
+}
 
 /// <summary>
 /// The single path from a composed request body to an exit code: read the descriptor, POST the operation,
@@ -43,7 +47,11 @@ public static class OperationRunner
         }
 
         string? rendered = null;
-        if (options.Human && options.RenderHuman is not null)
+        if (options.Human && options.RenderHumanAsync is not null)
+        {
+            rendered = await options.RenderHumanAsync(response.Body, cancellationToken).ConfigureAwait(false);
+        }
+        else if (options.Human && options.RenderHuman is not null)
         {
             rendered = options.RenderHuman(response.Body);
         }

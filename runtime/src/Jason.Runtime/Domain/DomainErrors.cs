@@ -263,6 +263,13 @@ public static class DomainErrors
         new("actor_required", "actor.id is required on a decision: what is recorded has to name the person who made it.");
 
     /// <summary>
+    /// The same rule for a report, in its own words: a report with no author is not provenance, and its reporter may be a
+    /// person or a role.
+    /// </summary>
+    public static InvalidRequestException ReportActorRequired() =>
+        new("actor_required", "actor.id is required on a report: what is recorded has to name who reports it.");
+
+    /// <summary>
     /// The runtime performs effects; it does not report them. Every caller is already refused the system actor,
     /// but a reporter is told why in the words of the thing they were doing.
     /// </summary>

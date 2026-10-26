@@ -56,7 +56,7 @@ public static class ProfileCommands
             fields.LayOver(body, parseResult)
                 .Set("name", parseResult.GetValue(name))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ProfileCreate, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Profile), cancellationToken)
@@ -87,7 +87,7 @@ public static class ProfileCommands
             fields.LayOver(body, parseResult)
                 .Set("name", parseResult.GetValue(name))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ProfileUpdate, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Profile), cancellationToken)
@@ -165,7 +165,7 @@ public static class ProfileCommands
             var body = RequestBody.Empty()
                 .Set("name", parseResult.GetValue(name))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 
             return OperationRunner.RunAsync(
                 env, operation, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Profile), cancellationToken);

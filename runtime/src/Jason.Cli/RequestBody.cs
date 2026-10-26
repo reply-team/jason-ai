@@ -65,6 +65,18 @@ public static class RequestBody
     /// <summary>Writes the claimed actor, or leaves the body alone when no <c>--actor</c> was given.</summary>
     public static JsonObject SetActor(this JsonObject body, JsonObject? actor) => body.Set("actor", actor);
 
+    /// <summary>
+    /// Writes the claimed actor or, when none was claimed and the body names none of its own, the CLI's default: the
+    /// person this account is (<see cref="ActorOption.Default"/>). Every write takes this one but the eight that are
+    /// somebody's own word, a report among them, which name who acts or are refused (<see cref="ActorOption.Named"/>).
+    /// </summary>
+    public static JsonObject SetActor(this JsonObject body, JsonObject? actor, CliEnvironment env)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(env);
+        return actor is null && body["actor"] is not null ? body : body.SetActor(ActorOption.Default(actor, env.AccountName));
+    }
+
     public static string Serialize(JsonObject body)
     {
         ArgumentNullException.ThrowIfNull(body);

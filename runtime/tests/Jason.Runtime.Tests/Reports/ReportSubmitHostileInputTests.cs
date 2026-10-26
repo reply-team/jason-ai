@@ -37,6 +37,20 @@ public class ReportSubmitHostileInputTests
         Assert.Equal(0, await db.Reports.CountAsync(Ct));
     }
 
+    /// <summary>And the refusal speaks of a report, not of the decision the same code is given for elsewhere.</summary>
+    [Fact]
+    public async Task A_report_from_nobody_is_refused_in_a_report_s_own_words()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var anonymous = ReportedWorld.Submission();
+        anonymous.Remove("actor");
+
+        var refused = await Assert.ThrowsAsync<InvalidRequestException>(() => ReportedWorld.Service(db).SubmitAsync(anonymous, Ct));
+
+        Assert.Equal("actor.id is required on a report: what is recorded has to name who reports it.", refused.Message);
+    }
+
     /// <summary>
     /// The same rule, refused a step earlier and in the words every verb uses. A role or an attempt that carries
     /// no id never reaches the report path: <c>Actors.Resolve</c> refuses it for the whole API, and a report
