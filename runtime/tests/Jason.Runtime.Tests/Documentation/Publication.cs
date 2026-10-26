@@ -45,7 +45,7 @@ internal static class OpenSet
     /// recorded exchanges under <c>docs/api/</c>. The
     /// rest of <c>docs/</c> describes the runtime's design and is not published.
     /// </summary>
-    public static readonly string[] Documents = ["docs/INSTALL.md", "docs/api/", "docs/contracts/", "docs/golden-path.md", "docs/philosophy.md", "docs/plugins.md", "docs/ui.md"];
+    public static readonly string[] Documents = ["docs/INSTALL.md", "docs/api/", "docs/contracts/", "docs/golden-path.md", "docs/philosophy.md", "docs/plugins.md", "docs/runtime-api.md", "docs/ui.md"];
 
     /// <summary>
     /// The licence texts at the root: the MIT licence of the published tree, the runtime's own licence, the third-party

@@ -13,6 +13,7 @@ docs/contracts/
 docs/golden-path.md
 docs/philosophy.md
 docs/plugins.md
+docs/runtime-api.md
 docs/ui.md
 examples/
 install/

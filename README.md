@@ -20,6 +20,8 @@ We built it with the current, not against it. In a few years the agents themselv
 and memory; Jason stands on those conventions, so most of the work happens inside your session, and each step their
 makers take forward strengthens it. Nothing reaches a real person without your approval, and the skills, contracts and
 plugins are open, so the harness grows the way agent tooling does: by people adding what they need.
+The Runtime API is documented and open as well, so a plugin of your own — a program that reads and writes the runtime —
+can be built over it: [docs/runtime-api.md](docs/runtime-api.md).
 
 The reasoning behind this, and who Jason is for and who it is not for, is in [docs/philosophy.md](docs/philosophy.md).
 
