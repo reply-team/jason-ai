@@ -8,7 +8,7 @@
 # Harness:Root in the settings names another folder — and makes no folder for it.
 #
 #   curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
-#   curl -fsSL https://jasonharness.ai/releases/download/v0.19.0/install.sh | sh -s -- --version 0.19.0 --no-modify-path
+#   curl -fsSL https://jasonharness.ai/releases/download/v0.20.0/install.sh | sh -s -- --version 0.20.0 --no-modify-path
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, manifest.json and checksums.txt — which is how CI runs it against the archives it has just

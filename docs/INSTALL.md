@@ -136,14 +136,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.19.0/install.sh | sh -s -- --version 0.19.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.20.0/install.sh | sh -s -- --version 0.20.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.19.0/install.ps1))) -Version 0.19.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.20.0/install.ps1))) -Version 0.20.0
 ```
 
-These install 0.19.0 with 0.19.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.20.0 with 0.20.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -302,6 +302,10 @@ from another. A deployment made at the tag of the build that installed it moves 
 made with `--ref` stays at its ref, a directory is read where it stands, and a development build keeps the ref the
 record names, because the tag its own version names is not published yet.
 
+From 0.20.0, Jason's own installation on 0.18.x or earlier updates through 0.19.0: `jason update apply --version 0.19.0`,
+then `jason update apply`. Its own `jason update check` still names `jason update apply`, and that apply refuses with
+`update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
+
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
 and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. A package
@@ -336,10 +340,11 @@ otherwise: half of what it reports is not the runtime's to know.
 |---|---|
 | the runtime answers | a provider plugin is installed |
 | the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
-| migrations are applied | a route is configured |
-| the plugin registry is alive (zero plugins is alive) | a binding names an account |
-| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
+| migrations are applied | every plugin installed is available |
+| the plugin registry is alive (zero plugins is alive) | a route is configured |
+| role skills are present, named after their directories and within the runtime's live cap | a binding names an account |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a provider CLI **you name** answers |
+| | the skill packs are deployed to an agent harness |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
@@ -384,6 +389,13 @@ the two lines — the checksum match and the unpack into `~/.jason/plugins/reply
 — then `jason plugin reload`. A package with the same version or a later one passes, and the fact says it is a
 later release's package or one built or edited on this machine; no package of that id is absent. A development
 build compares with its own tree, and the fact names the build it compared with.
+
+`plugin_availability` names each plugin `jason plugin list` reports `unavailable`, with its problem codes and never
+their text — `reply is unavailable; its problems: executable_missing.` Such a problem is about this machine rather than
+the package, most often a program the plugin runs that is not on the PATH the runtime started with. Work routed to such
+a plugin fails at the claim, and a notification plugin delivers nothing; nothing else stops, so the check never decides
+`ready`. `jason plugin list` says what each problem is, and once it is repaired `jason plugin reload` reads the plugins
+again.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 

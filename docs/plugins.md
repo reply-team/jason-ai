@@ -52,6 +52,13 @@ endings are not normalised — the bytes that will run are the bytes that are ha
 the identity of *this* package on *this* machine. It is shown by `plugin list`, carried in every
 invocation, and recomputed by the child before it runs a line of JavaScript.
 
+**A package's version is its content:** change any file of a package, its README and its changelog included, and the
+version changes with it, because the runtime compares an installed package's digest with the package its own release
+carries, and reads the versions only when the two differ; two packages under one version would make an earlier release's
+package look like one edited here, so `jason status` would not say it was left behind. The marketplace records the digest
+of each version the Reply package has had from 0.9.0 on, and of the earlier versions a release published, in
+[`plugins/reply.digests`](../plugins/reply.digests).
+
 ## 3. The manifest
 
 `plugin.yaml` is read as one YAML 1.2 document by the core schema: `yes` is the string "yes", and a
@@ -172,6 +179,10 @@ files at the archive's root: checked against that release's `checksums.txt` and 
 `~/.jason/plugins/reply`, it is installed. Step 3 of [the wiring check](golden-path.md) prints the lines.
 The runtime carries the package its own release publishes and says in `system.info`'s `released_plugins` whether the
 one installed is it, by content digest, so `jason status` names an earlier release's package left behind by an update.
+Before the update, `jason update check` names it from the other side: the newer release's manifest records the digest of
+each version on the package's list, so the check says which version is installed and which one that release publishes.
+It never names a package the list does not know: built or edited on that machine, or a version before the list's first
+line, 0.3.2. Whether that one is behind is `jason status`'s to say, by its version.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/
@@ -180,9 +191,9 @@ jason plugin list --human
 ```
 
 ```text
-ID             VERSION  KIND      STATUS  OPERATIONS            GRANTS                         DIGEST
--------------  -------  --------  ------  --------------------  -----------------------------  ------------
-fake-provider  1.0.0    provider  valid   echo.run, exec.run …  exec 1/1 · http 0/2 · env 1/2  3f2a9c1b4d5e
+ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                         DIGEST
+-------------  -------  --------  ------  ----------------------  -----------------------------  ------------
+fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2  3f2a9c1b4d5e
 ```
 
 `GRANTS` is granted-over-requested per capability, `-` where the manifest requested nothing; `DIGEST`
@@ -264,8 +275,8 @@ so the package is refused as `field_invalid` and the previous snapshot is kept. 
 reload` is not repeated. `jason runtime status --human` says which of the two it is:
 
 ```text
-Plugins:    1 active · snapshot snp_01J4… · loaded 2026-09-14 12:00:00 UTC
-Plugins:    none active · last reload rejected
+Plugins:    1 active | snapshot snp_01J4… | loaded 2026-09-14 12:00:00 UTC
+Plugins:    none active | last reload rejected
 ```
 
 An **activated** load writes one global journal entry of the reserved kind `plugins_reloaded`
@@ -1000,10 +1011,9 @@ copied package grants nothing — the default is nothing, and a plugin with no g
 `grant_unrequested` warning at `grants.<capability>[i]`; it does not make the plugin unavailable.
 Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
 the next `jason plugin reload`, and `plugin list` always shows requested next to granted. The reload
-reads `settings.json` itself before it resolves anything, so a reload sent straight after an edit
-holds the edit. The one exception is two edits that land within the settings watch's own delay of each other: a
-reload can meet the watch still applying the earlier edit and hold that one, and the next reload holds the later
-edit, so after a quick second save, reload once more. A file that is there and cannot be read — not valid JSON, or held open by an
+reads `settings.json` itself before it resolves anything, and waits for an edit the settings watch is
+still applying. So a reload sent straight after an edit holds it, and after two quick saves it holds
+the later one. A file that is there and cannot be read — not valid JSON, or held open by an
 editor — rejects the reload as a package problem does: `409 plugin_reload_rejected` with one
 `settings_file_unreadable` detail at `settings.json`, naming the failure by its type and, for JSON,
 by its line and byte, never by what the file holds; the previous snapshot stays active, nothing is

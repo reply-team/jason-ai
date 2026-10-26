@@ -214,7 +214,8 @@ jason plugin list --human
 **What it means.** The package is there and the program it needs is not — missing, not executable, or a
 version that does not answer. Such a plugin loads as unavailable rather than rejecting the whole snapshot, so
 everything else keeps working and only its operations stop. The listed problem names what is wrong on the
-machine.
+machine. `jason status` names such a plugin, with its problem codes, in its optional `plugin_availability`
+check, and an unavailable notification plugin delivers nothing.
 
 ### 11. Waiting
 

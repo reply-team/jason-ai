@@ -1,0 +1,18 @@
+# The digest of each version of the Reply plugin package, plugins/reply: one line per version, the version, a space, and
+# the sha256 of the whole package as the runtime computes it — the number `jason plugin list` shows for an installed copy.
+# It is the digest of the package a release publishes, which that release's runtime reports in `system.info`'s
+# `released_plugins`; it is not the archive's checksum in `checksums.txt`. From 0.20.0 on, each release's manifest carries
+# the whole list as plugins.reply.recorded, from which `jason update check` reads an installed copy's version by digest.
+# The list starts with 0.3.2, the package of the first release that published it as an asset (v0.11.0), and holds the
+# versions a release published after it. From 0.9.0 on it holds every version the package has had, published or not,
+# because every bump appends a line.
+# A version is its content: any change to a file of the package is a new version, and a new version appends its line at
+# the end, after the last edit to the package, since every edit changes the digest; once the version is bumped, the
+# package's test prints the line to append. A line already here is never changed, and a line that changes or disappears
+# in a diff is refused in review.
+0.3.2 sha256:4cf81f162696ee28a087203676ac783e3ef37eb22b8d41f80f6206280937dc08
+0.4.0 sha256:b694b20ecd021850f84c7765edf1967f10e2651063e231d3a978331efe392bb4
+0.5.0 sha256:59899d5d780e399d7f01707f679730b5604144dad76e076528851c2e49a711b6
+0.6.0 sha256:3fe3238aa837ac75bf22f5ac92f2fde8f76317d56f9a866535c89f28e6a2ed33
+0.8.0 sha256:b5c26bdcbea7493d9a6153893b46810a93bff86d03427d848b2224dee07150f6
+0.9.0 sha256:5e0edd8114dbc01f929403804a7efc239587a893aab6cd9c402ceb2f32840a7d

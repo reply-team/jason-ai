@@ -28,6 +28,11 @@ The index so far:
 | [`reply/`](reply/README.md) | every operation this build publishes — `campaign.get`, `campaign.create`, `list_membership.add`, `campaign.enroll`, `campaign.pause`, `campaign.activate`, `optout.record`, `enrollment.stop`, `enrollment.list`, `engagement.summarize`, `conversation.list`, `conversation.get`, `conversation.reply`, `conversation.classify`, `conversation.close`, `conversation.reopen`, `contact.update`, `contact.delete`, `sender.list`, `schedule.list`, `social_invitation.send` and `message.send` — against a Reply account, performed through the Reply CLI, which owns the credential. Its README is the operator's page: what it needs, how it is installed today, the account a route names, every failure it reports, and what it cannot do. |
 | [`ntfy/`](ntfy/README.md) | the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — published to an ntfy topic. Its README says what a topic on the public server means, the settings that name it, the token, a self-hosted server, and every outcome it reports. |
 
+[`reply.digests`](reply.digests) lists the digest of each version the Reply package has had from 0.9.0 on, and of the
+earlier versions a release published — the digest `jason plugin list` reports for an installed copy, whole in its JSON
+answer; `--human` shows the first twelve hexadecimal characters after `sha256:` — so a person can check an installed
+package against its version's line, and a copy whose digest is not its version's line is not that version.
+
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the
 invocation protocol, and how to test a package locally.
