@@ -1007,10 +1007,9 @@ copied package grants nothing — the default is nothing, and a plugin with no g
 `grant_unrequested` warning at `grants.<capability>[i]`; it does not make the plugin unavailable.
 Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
 the next `jason plugin reload`, and `plugin list` always shows requested next to granted. The reload
-reads `settings.json` itself before it resolves anything, so a reload sent straight after an edit
-holds the edit. The one exception is two edits that land within the settings watch's own delay of each other: a
-reload can meet the watch still applying the earlier edit and hold that one, and the next reload holds the later
-edit, so after a quick second save, reload once more. A file that is there and cannot be read — not valid JSON, or held open by an
+reads `settings.json` itself before it resolves anything, and waits for an edit the settings watch is
+still applying. So a reload sent straight after an edit holds it, and after two quick saves it holds
+the later one. A file that is there and cannot be read — not valid JSON, or held open by an
 editor — rejects the reload as a package problem does: `409 plugin_reload_rejected` with one
 `settings_file_unreadable` detail at `settings.json`, naming the failure by its type and, for JSON,
 by its line and byte, never by what the file holds; the previous snapshot stays active, nothing is

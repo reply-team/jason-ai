@@ -326,6 +326,55 @@ public class PluginServiceTests
     }
 
     /// <summary>
+    /// Two edits close together, the grant in the second, and a reload sent straight after it while the file's watch is
+    /// still telling the runtime of the first: that reload waits for the watch to finish and holds the grant. A section of
+    /// the test's own holds the watch in the middle of telling the runtime until the reload waits for it, so the reload
+    /// meets it every time rather than now and then; nothing waits on the clock. The reload is the one the API's
+    /// <c>plugin.reload</c> runs, on a thread of its own, so that the test sees it wait.
+    /// </summary>
+    [Fact]
+    public async Task A_grant_written_while_the_watch_still_tells_the_runtime_of_an_earlier_edit_is_held_by_the_reload_after_it()
+    {
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        await using var api = await StartAsync(new TestSearchPath { Path = programs.Root }, paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+        });
+        var started = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+        Assert.Empty(Assert.Single(started.Plugins).Capabilities.Exec!.Granted);
+
+        var ct = Ct;
+        PluginRegistryDto reloaded;
+        using (var held = new HeldNotification(api.Runtime.Configuration))
+        {
+            File.WriteAllText(api.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false,"TickSeconds":7}}""");
+            await held.WaitUntilHeldAsync(Ct);
+            TestPlugins.Grant(api.Paths, TestPlugins.FakeProviderId, exec: ["*"]);
+            var reload = new OnItsOwnThread<PluginRegistryDto>(() => Reload(api, ct));
+            await reload.WaitingOrDoneAsync(Ct);
+            held.LetGo();
+            reloaded = await reload.DoneAsync(Ct);
+        }
+
+        Assert.Equal([FakeProviderCli.ExecutableName], Assert.Single(reloaded.Plugins).Capabilities.Exec!.Granted);
+    }
+
+    /// <summary>
+    /// The reload <c>plugin.reload</c> runs, in a scope of its own as a request's, on the calling thread as far as its first
+    /// wait: with no other reload under way, that is the read of the settings file.
+    /// </summary>
+    private static PluginRegistryDto Reload(RuntimeApiFixture api, CancellationToken cancellationToken)
+    {
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        return scope.ServiceProvider.GetRequiredService<PluginService>()
+            .ReloadAsync(new PluginReloadRequest(null, null), cancellationToken)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <summary>
     /// The same edit beside a section the validator refuses — text where the dispatcher's tick wants a number. That is
     /// the dispatcher's seam's to say, which keeps the tick it had; the reload reads the plugins and the routes, which
     /// still validate, so it holds the grant as it would without the refusal beside it, and the text is nowhere in the log.

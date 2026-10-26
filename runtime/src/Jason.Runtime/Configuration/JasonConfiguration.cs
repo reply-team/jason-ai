@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 
 namespace Jason.Runtime.Configuration;
 
@@ -73,16 +74,24 @@ public static class JasonConfiguration
     /// A file that cannot be read is refused differently at start and after it. At start there are no settings to
     /// fall back to, so this throws an <see cref="InvalidSettingsException"/> naming the file and the position — with no
     /// inner exception, since nothing runs before this that could log it and the framework's own message quotes the
-    /// input. After that, whatever has read its settings keeps them: the failure is reported to
-    /// <paramref name="onReloadFailure"/> and the framework's refusal is left to stand. It is not ignored, though
-    /// ignoring is what the loader offers: an ignored failure is still a reload, and the reload publishes what the
-    /// provider holds, which is nothing — the file's old keys are dropped before it is read — so every setting would
-    /// silently go back to its default. Those dropped keys are also why a section first read after such a failure
-    /// reads none of the file; the host, which knows when its sections are read, says so in what it reports.
+    /// input. After that, whatever has read its settings keeps them: the watch reads an edit as the loader's own reload
+    /// does, which drops the file's old keys when the file does not parse, so it reports the failure to
+    /// <paramref name="onReloadFailure"/> and tells no section of it. Telling them would publish what the provider
+    /// holds, which is nothing, and every setting would silently go back to its default. Those dropped keys are also
+    /// why a section first read after such a failure reads none of the file; the host, which knows when its sections
+    /// are read, says so in what it reports.
     /// </para>
     /// <para>
     /// The loader's exception context does not say which of the two this is, so the build says: the file's first
     /// load happens inside <c>Build</c>, and every later one happens after it.
+    /// </para>
+    /// <para>
+    /// The file's watch is the provider's own rather than the loader's, which reads the file and tells the sections in
+    /// code a caller cannot wait for. It applies an edit as the loader's reload does: a file that is not there leaves no
+    /// keys and every section is told, so each goes back to its default; one that does not parse is said as above; one
+    /// that parses replaces the keys and every section is told. Reading the file, replacing the keys and telling the
+    /// sections are one step, under a lock <see cref="ReadSettingsFile"/> takes too, so a read asked for while the
+    /// watch applies an edit waits until every section has been told of it.
     /// </para>
     /// </remarks>
     /// <returns>
@@ -102,11 +111,11 @@ public static class JasonConfiguration
         var gate = new Lock();
         ReportedFailure? reported = null;
 
-        // The file watcher raises more than one notification for a single write, and the loader registers its next
-        // change token before it waits out its reload delay, so a second notification that lands in the wait makes
-        // it read the same file again. The person who saved it is told once: a failure that is the same as the last
-        // one reported, for a file in the same state, is not said again. A file whose state cannot be read has no
-        // state to compare, and is always said.
+        // The file watcher raises more than one notification for a single write, and the watch takes its next change
+        // token before it waits out its reload delay, as the loader does, so a second notification that lands in the
+        // wait makes it read the same file again. The person who saved it is told once: a failure that is the same as
+        // the last one reported, for a file in the same state, is not said again. A file whose state cannot be read
+        // has no state to compare, and is always said.
         bool FirstReport(SettingsFileFailure failure)
         {
             ReportedFailure? now = null;
@@ -139,7 +148,9 @@ public static class JasonConfiguration
             source.FullPath = paths.UserSettingsFile;
             source.Path = paths.UserSettingsFile;
             source.Optional = true;
-            source.ReloadOnChange = true;
+
+            // Watched by its provider, which a read can wait for, and not by the loader as well.
+            source.ReloadOnChange = false;
             source.ResolveFileProvider();
             source.OnLoadException = context =>
             {
@@ -165,7 +176,9 @@ public static class JasonConfiguration
     /// Reads the user's settings file now, rather than when its watch next fires, and tells every section read from it, as
     /// the watch does: once this returns, the next read of a section binds what the file says. For an act that has to
     /// work from the file as it stands — the watch says an edit only after a delay of its own, and a request sent
-    /// straight after the edit would otherwise work from the file as it was.
+    /// straight after the edit would otherwise work from the file as it was. An edit the watch is still applying is
+    /// finished first, every section told of it, and the file is read after it: of two edits saved close together,
+    /// this holds the later one.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -234,66 +247,157 @@ public static class JasonConfiguration
         }
     }
 
-    private sealed class SettingsFileProvider(SettingsFileSource source) : JsonConfigurationProvider(source)
+    /// <summary>
+    /// The settings file's provider. It watches the file itself, as the loader would, and applies an edit as the loader's
+    /// reload does; <see cref="Read"/> and the watch take one lock through reading the file, replacing the keys and
+    /// telling the sections. The loader's watch could not be waited for: its read and its telling are closed to a
+    /// provider of its kind, so a read asked for while it told the sections of one edit replaced the keys with a later
+    /// edit and returned with the sections still bound to the earlier one — the watch told them of the later edit only
+    /// once it was done with the earlier.
+    /// </summary>
+    /// <remarks>
+    /// The lock is held while every section is told, and a section is told by running what listens to it, so nothing in
+    /// the runtime listens for a change to its settings: it reads them when it needs them. A section's binding and
+    /// validators run under the lock as well, and none may read the settings file or wait for a reload.
+    /// </remarks>
+    private sealed class SettingsFileProvider : JsonConfigurationProvider
     {
+        private readonly Lock _applying = new();
+        private readonly IDisposable? _watch;
+
+        public SettingsFileProvider(SettingsFileSource source)
+            : base(source)
+        {
+            // Registered as the loader registers its own: each notification takes the next one before the delay is waited
+            // out and the file read, so an edit written in the meantime makes the watch read the file once more.
+            if (Source.FileProvider is not null)
+            {
+                _watch = ChangeToken.OnChange(() => Source.FileProvider?.Watch(Source.Path ?? string.Empty), Apply);
+            }
+        }
+
         /// <summary>
         /// The read <see cref="ReadSettingsFile"/> asks for. It opens and parses the file itself rather than through the
         /// loader, which reads a file that is not there as one with no keys and tells every section so; every failure
-        /// is said where an edit's is.
+        /// is said where an edit's is. An edit the watch is applying is finished first.
         /// </summary>
         /// <returns>The failure of a file that is there and could not be used; null when it was read or is not there.</returns>
         public SettingsFileFailure? Read()
         {
-            FileStream stream;
-            try
+            lock (_applying)
             {
-                // Opened as the loader opens it: shared with a writer that has it open, and read synchronously.
-                stream = new FileStream(((SettingsFileSource)Source).FullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 1, FileOptions.SequentialScan);
-            }
-            catch (Exception unopened) when (unopened is IOException or UnauthorizedAccessException)
-            {
-                // A file that is not there refuses nothing. The keys held from it are kept, and that is said; with none
-                // held there is nothing to keep, and nothing to say.
-                if (unopened is FileNotFoundException or DirectoryNotFoundException)
-                {
-                    if (Data.Count > 0)
-                    {
-                        Refuse(unopened);
-                    }
-
-                    return null;
-                }
-
-                return Refuse(unopened);
-            }
-
-            using (stream)
-            {
+                FileStream stream;
                 try
                 {
-                    Load(stream);
+                    // Opened as the loader opens it: shared with a writer that has it open, and read synchronously.
+                    stream = new FileStream(((SettingsFileSource)Source).FullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 1, FileOptions.SequentialScan);
                 }
-                catch (Exception unparsed) when (unparsed is FormatException or IOException)
+                catch (Exception unopened) when (unopened is IOException or UnauthorizedAccessException)
                 {
-                    // The keys are replaced only once the whole file has parsed, so the ones held stay where they were.
-                    return Refuse(unparsed);
-                }
-            }
+                    // A file that is not there refuses nothing. The keys held from it are kept, and that is said; with none
+                    // held there is nothing to keep, and nothing to say.
+                    if (unopened is FileNotFoundException or DirectoryNotFoundException)
+                    {
+                        if (Data.Count > 0)
+                        {
+                            Refuse(unopened);
+                        }
 
+                        return null;
+                    }
+
+                    return Refuse(unopened);
+                }
+
+                using (stream)
+                {
+                    try
+                    {
+                        Load(stream);
+                    }
+                    catch (Exception unparsed) when (unparsed is FormatException or IOException)
+                    {
+                        // The keys are replaced only once the whole file has parsed, so the ones held stay where they were.
+                        return Refuse(unparsed);
+                    }
+                }
+
+                Tell();
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// What the watch does with an edit, once the loader's reload delay has passed: the loader's own reload of the file.
+        /// A file that is not there leaves no keys and every section is told; one that does not parse drops the keys, is
+        /// said, and no section is told; one that parses replaces the keys and every section is told.
+        /// </summary>
+        private void Apply()
+        {
+            Thread.Sleep(Source.ReloadDelay);
+            lock (_applying)
+            {
+                var file = Source.FileProvider?.GetFileInfo(Source.Path ?? string.Empty);
+                if (file is null || !file.Exists)
+                {
+                    Data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                    Tell();
+                    return;
+                }
+
+                Stream stream;
+                try
+                {
+                    stream = file.PhysicalPath is { } path
+                        ? new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 1, FileOptions.SequentialScan)
+                        : file.CreateReadStream();
+                }
+                catch (Exception unopened) when (unopened is IOException or UnauthorizedAccessException)
+                {
+                    // A file that cannot be opened — another handle holds it, or it went between being found and being
+                    // opened — changes nothing and says nothing, as the loader leaves it; the edit is read at the next
+                    // notification, if one comes, or by the next read a reload makes.
+                    return;
+                }
+
+                using (stream)
+                {
+                    try
+                    {
+                        Load(stream);
+                    }
+                    catch (Exception unparsed) when (unparsed is FormatException or IOException or UnauthorizedAccessException)
+                    {
+                        // The keys are dropped and the failure is said, as the loader does; the rest escape to the
+                        // watcher with the keys kept.
+                        Data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                        Refuse(unparsed);
+                        return;
+                    }
+                }
+
+                Tell();
+            }
+        }
+
+        /// <summary>
+        /// Tells every section of the keys now held. A section that no longer validates is that section's to say when it
+        /// is next read: the options system binds every section it holds as it is told of the change, and raises the
+        /// refusal here once every section has been told, where it goes no further — the watch's notification would
+        /// otherwise end in it.
+        /// </summary>
+        private void Tell()
+        {
             try
             {
                 OnReload();
             }
             catch (AggregateException refused) when (refused.Flatten().InnerExceptions.All(inner => inner is OptionsValidationException))
             {
-                // The file was read, and a section of it no longer validates: the options system binds every section it
-                // holds as it is told of the change, and raises the refusal here once every section has been told.
             }
-
-            return null;
         }
 
-        /// <summary>A file this read cannot use, put through the handling the loader gives an edit it cannot read.</summary>
+        /// <summary>A file this provider cannot use, put through the handling the loader gives an edit it cannot read.</summary>
         private SettingsFileFailure Refuse(Exception failure)
         {
             Source.OnLoadException?.Invoke(new FileLoadExceptionContext { Provider = this, Exception = failure });
@@ -302,6 +406,8 @@ public static class JasonConfiguration
 
         protected override void Dispose(bool disposing)
         {
+            // The watch first, so that no notification asks a file provider that is gone for the next one.
+            _watch?.Dispose();
             base.Dispose(disposing);
             (Source.FileProvider as IDisposable)?.Dispose();
         }
@@ -345,7 +451,7 @@ public static class JasonConfiguration
     /// validation failure like any other (<see cref="SafeBinding"/>), so it is refused wherever a value out of
     /// range would be, and never escapes as the binder's own exception. Each section's change-token source is
     /// registered here, the one <see cref="OptionsBuilder{TOptions}.Bind(IConfiguration)"/> would have registered,
-    /// so the user's settings file — added with <c>reloadOnChange</c> — feeds <c>IOptionsMonitor</c> live.
+    /// so the user's settings file — watched by its provider — feeds <c>IOptionsMonitor</c> live.
     /// </summary>
     /// <param name="paths">
     /// Where the installed plugins are listed from, for a refusal whose path names one — by the binder or by a
