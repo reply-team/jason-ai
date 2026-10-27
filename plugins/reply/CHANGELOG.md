@@ -12,8 +12,17 @@ absorbed by a release of this package alone.
   spell a prompt to a model, a template that compares a value with a text holding a character Reply's comparison does
   not read, and a template on LinkedIn. A template Reply could not fill in for the person is `template_unrendered`
   (validation), with Reply's own sentence in the message and nothing sent. A message composed as final text, or with no
-  `compose`, goes as before: a double opening brace in it, or in an invitation's note, is still `message_invalid`, and
-  so, from this release, is `@prompt[[`, which Reply reads as a prompt to a model.
+  `compose`, goes as before, but for the `<` that starts a tag the next entry refuses: a double opening brace in it, or
+  in an invitation's note, is still `message_invalid`, and so, from this release, is `@prompt[[`, which Reply reads as a
+  prompt to a model.
+- An email whose subject or body holds a `<` that starts a tag, one followed by an ASCII letter, `/`, `!` or `?`, is
+  refused before anything is called, as `message_invalid` (validation) when it is final text and as
+  `template_unsupported` (validation) when it is a template, and the message names the character without quoting the
+  text. Reply decodes the body before it reads it and drops a tag it does not know with everything after it, in the body
+  and in the subject alike, so an address written as `<name@example.com>` cut the email there; the subject goes as
+  written. In a template its text, a fallback's text and the text a comparison compares are held alike, the last because
+  whether Reply sanitizes before or after it fills a template in has not been seen, and so is a `<` right before a
+  value. `a < b`, `<3` and a `<` at the end still go.
 
 ## 0.9.1
 

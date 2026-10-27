@@ -401,6 +401,31 @@ public class ReplyStubDirectSendTests
     }
 
     /// <summary>
+    /// Reply decodes a direct email's body, fills it in, and drops a tag it does not keep with everything after it, in
+    /// the subject too; a <c>&lt;</c> that starts no tag is text, and the line break the plugin writes is kept.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "Notes <name@example.com> end",
+        "Line one.<br>Write to &lt;name@example.com&gt; for the details.<br>Line three.",
+        "Notes ",
+        "Line one.<br>Write to ")]
+    [InlineData("Tuesday", "a &lt; b and &lt;3 here.<br>Line two.", "Tuesday", "a < b and <3 here.<br>Line two.")]
+    [InlineData("Tuesday", "One two<br>three, it ends &lt;", "Tuesday", "One two<br>three, it ends <")]
+    [InlineData("Tuesday", "Hi {{FirstName}}&lt;name@example.com&gt; there", "Tuesday", "Hi Marta")]
+    public async Task Reply_drops_a_tag_it_does_not_keep_with_everything_after_it(string subject, string body, string sentSubject, string sentBody)
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta")
+            .WithSender(Mailbox, "email", "Ann", "ann@example.com");
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), new JsonObject { ["subject"] = subject, ["body"] = body }.ToJsonString(), Ct);
+
+        Assert.True(exit == 0, said);
+        Assert.Equal(new JsonObject { ["subject"] = sentSubject, ["body"] = sentBody }.ToJsonString(), Assert.Single(account.Sent)!["rendered"]!.ToJsonString());
+    }
+
+    /// <summary>
     /// Each LinkedIn send takes its text under its own names, and the CLI refuses a text longer than Reply publishes before
     /// anything is sent, counted in characters: one outside the basic plane counts once.
     /// </summary>

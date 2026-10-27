@@ -41,10 +41,42 @@ internal static partial class Account
                 return (null, Refused(TemplateRefused, "Reply refused the request.", status: 400, replyCode: "contact.unknown", detail: problem, ids: ids));
             }
 
-            rendered[field] = written;
+            rendered[field] = Sanitized(written!);
         }
 
         return (rendered, null);
+    }
+
+    /// <summary>The tag Reply was seen to keep in a direct email: the line break the plugin writes, which both sends kept.</summary>
+    private static readonly string[] KeptTags = ["br"];
+
+    /// <summary>
+    /// What Reply sends of a rendered text: a tag it does not keep is dropped with everything after it. A tag starts at a
+    /// <c>&lt;</c> followed by an ASCII letter, <c>/</c>, <c>!</c> or <c>?</c>, as an HTML reader takes it. A live account
+    /// stored a direct email whose body held <c>&amp;lt;name@example.com&amp;gt;</c> in the middle of a line cut right
+    /// before it, its later lines gone, and its subject, which held <c>&lt;name@example.com&gt;</c> as written, cut the
+    /// same way; <c>a &amp;lt; b</c> and <c>&amp;lt;3</c> arrived whole, and <c>&lt;br&gt;</c> was kept. That every other
+    /// tag, an end tag, a comment or a <c>&lt;?</c> among them, is cut the same way is this stub's assumption, which no send
+    /// showed. Reply's public pages say nothing of it. A tag's name is read coarsely, everything up to the next
+    /// <c>&gt;</c> with a leading <c>/</c> trimmed; nothing the plugin writes reaches that.
+    /// </summary>
+    private static string Sanitized(string text)
+    {
+        for (var at = text.IndexOf('<', StringComparison.Ordinal); at >= 0 && at + 1 < text.Length; at = text.IndexOf('<', at + 1))
+        {
+            if (!char.IsAsciiLetter(text[at + 1]) && text[at + 1] is not ('/' or '!' or '?'))
+            {
+                continue;
+            }
+
+            var close = text.IndexOf('>', at);
+            if (close < 0 || !KeptTags.Contains(text[(at + 1)..close].TrimStart('/'), StringComparer.OrdinalIgnoreCase))
+            {
+                return text[..at];
+            }
+        }
+
+        return text;
     }
 
     /// <summary>The value Reply fills a name with for this contact from this mailbox, or null when it holds none.</summary>

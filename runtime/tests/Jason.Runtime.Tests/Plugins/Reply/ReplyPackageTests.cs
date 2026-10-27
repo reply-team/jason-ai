@@ -850,7 +850,8 @@ public class ReplyPackageTests
 
     /// <summary>
     /// What Reply counts as no value and how it compares are Reply's, and the README states them as Reply's rendering reads
-    /// a template, beside the sentence the package reads Reply's refusal by and the tag Reply drops with what follows it.
+    /// a template, beside the sentence the package reads Reply's refusal by and the tag Reply drops with what follows it,
+    /// which the package refuses before anything is called.
     /// </summary>
     [Fact]
     public void The_readme_states_how_reply_reads_a_template_as_reply_s()
@@ -866,10 +867,16 @@ public class ReplyPackageTests
                 "white space is a value",
                 "two numbers as numbers",
                 "that sentence starts `RenderingFail`",
-                "Reply decodes the whole message before it reads it** and drops an unknown tag with everything after it, in a final text as in a template",
+                "Reply decodes the body before it reads it, and drops an unknown tag with everything after it, in the body and in the subject alike, in a final text as in a template",
+                "The subject goes as written, and a character reference in it is not read.",
+                "**A `<` that starts a tag is refused in a direct email, `message.send`.**",
+                "A reply on a thread, `conversation.reply`, is not held to this yet, and its text goes as written.",
+                "The refusals come in one order: a final text is read for a placeholder or a prompt, then its subject for a tag's start, then its body; a template is read part by part, its subject first, each for a construct the standard refuses, then a key Reply keeps, then a comparison Reply cannot read, then a prompt, then a tag's start.",
                 "its text, the text of a fallback and the text a comparison compares reach Reply escaped as a final text's are",
                 "so a comparison compares the value with the text as the template wrote it",
-                "so write an address, and any `<...>` not meant as markup, without angle brackets: the package sends them as written.",
+                "So the package refuses, before anything is called, an email whose subject or body holds a `<` followed by an ASCII letter, `/`, `!` or `?`, as `message_invalid` in a final text and as `template_unsupported` in a template, and names the character without quoting the text.",
+                "In a template its text, a fallback and the text a comparison compares are held alike, and so is a `<` right before a value, which the package does not see and which may start with a letter.",
+                "A comparison's text is held because whether Reply sanitizes a template before or after it fills it in has not been seen.",
             },
             words => Assert.Contains(words, readme, StringComparison.Ordinal));
     }

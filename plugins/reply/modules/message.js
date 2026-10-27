@@ -21,7 +21,7 @@
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { contactNumber, refuseUnprojected, withOrigin } from "./contacts.js";
 import { refusePlaceholders, senderFor, sendTo } from "./send.js";
-import { inReplySyntax } from "./template.js";
+import { inReplySyntax, refuseTagStart } from "./template.js";
 import { lookup, text } from "./reading.js";
 
 const OPERATION = "message.send";
@@ -60,6 +60,14 @@ export function messageSend(input, context) {
 
   if (composed === undefined) {
     refusePlaceholders(OPERATION, [message.subject, message.body]);
+  }
+
+  // Reply decodes an email's body before it reads it, and drops a tag it does not know with everything after it, in the
+  // body and in the subject alike, so a `<` that starts one is refused before anything is called, in a final text as in a
+  // template. The subject goes as written, and a character reference in it is not read.
+  if (composed === undefined && message.format === "email") {
+    refuseTagStart(OPERATION, "subject", message.subject);
+    refuseTagStart(OPERATION, "body", message.body);
   }
 
   const written = format.text(message);

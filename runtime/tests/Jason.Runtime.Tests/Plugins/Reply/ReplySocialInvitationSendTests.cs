@@ -320,6 +320,20 @@ public class ReplySocialInvitationSendTests
         Assert.Empty(account.Calls);
     }
 
+    /// <summary>A note is not HTML, so a <c>&lt;</c> that would start a tag in an email goes in it as written.</summary>
+    [Fact]
+    public async Task A_note_holding_what_would_start_a_tag_in_an_email_goes_as_written()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        const string note = "Hi, write to <ann@example.com> any time.";
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(pinned: "1001", note: note)));
+
+        Assert.Equal(note, (string?)JsonNode.Parse(account.Calls[^1].Body!)!["note"]);
+    }
+
     /// <summary>Reply does not refuse an invitation to a person it holds as opted out, so the read of the contact is the stop.</summary>
     [Fact]
     [Critical(Family.S1, "opted out, nothing sent")]

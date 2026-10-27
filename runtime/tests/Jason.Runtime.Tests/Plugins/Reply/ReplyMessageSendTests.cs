@@ -91,12 +91,12 @@ public class ReplyMessageSendTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        const string written = "Tom & Jerry <tom@example.com>\r\nsaid \"5 > 3\" and 'yes'.\nThen\rnothing\u2028more\u2029  two  spaces\tand a tab.";
+        const string written = "Tom & Jerry <3 tom@example.com>\r\nsaid \"5 > 3\" and 'yes'.\nThen\rnothing\u2028more\u2029  two  spaces\tand a tab.";
         ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input("email", pinned: "1001", subject: "Tom & Jerry <1 > 0>", body: written)));
 
         var text = Assert.Single(account.Sent)!["text"]!;
         Assert.Equal(
-            "Tom &amp; Jerry &lt;tom@example.com&gt;<br>said &quot;5 &gt; 3&quot; and &#39;yes&#39;.<br>Then<br>nothing<br>more<br>  two  spaces\tand a tab.",
+            "Tom &amp; Jerry &lt;3 tom@example.com&gt;<br>said &quot;5 &gt; 3&quot; and &#39;yes&#39;.<br>Then<br>nothing<br>more<br>  two  spaces\tand a tab.",
             (string?)text["body"]);
         Assert.Equal("Tom & Jerry <1 > 0>", (string?)text["subject"]);
     }
@@ -104,7 +104,7 @@ public class ReplyMessageSendTests
     /// <summary>
     /// Only an email's text is written as HTML: a LinkedIn text of every format goes as written, so its recipient never
     /// reads an escape or a break tag the person approving did not write. A voice message's text is the script, and an
-    /// InMail's subject goes as written too.
+    /// InMail's subject goes as written too, a <c>&lt;</c> that would start a tag in an email among it.
     /// </summary>
     [Theory]
     [InlineData("linkedin_message", "body")]
@@ -117,13 +117,13 @@ public class ReplyMessageSendTests
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         const string written = "Tom & Jerry <tom@example.com>\nsaid \"5 > 3\" and 'yes'.";
-        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(format, pinned: "1001", subject: "Tom & Jerry <1 > 0>", body: written)));
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(format, pinned: "1001", subject: "Tom & Jerry <1 > 0> <a", body: written)));
 
         var text = Assert.Single(account.Sent)!["text"]!;
         Assert.Equal(written, (string?)text[field]);
         if (format == "linkedin_inmail")
         {
-            Assert.Equal("Tom & Jerry <1 > 0>", (string?)text["subject"]);
+            Assert.Equal("Tom & Jerry <1 > 0> <a", (string?)text["subject"]);
         }
     }
 
@@ -201,6 +201,61 @@ public class ReplyMessageSendTests
         Assert.Empty(account.Sent);
     }
 
+    /// <summary>
+    /// Reply decodes an email's whole message before it reads it and drops a tag it does not know with everything after
+    /// it, so a final subject or text holding a <c>&lt;</c> an HTML reader takes as the start of a tag — one followed by an
+    /// ASCII letter, <c>/</c>, <c>!</c> or <c>?</c> — is refused before anything is called. The message names the
+    /// character and quotes nothing of the text.
+    /// </summary>
+    [Theory]
+    [InlineData(null, "Write to <name@example.com> for the details.", "body", 10)]
+    [InlineData("Notes <name@example.com> end", null, "subject", 7)]
+    [InlineData(null, "Done.</p>", "body", 6)]
+    [InlineData(null, "Hi <!-- a note -->", "body", 4)]
+    [InlineData(null, "Hi <?xml?>", "body", 4)]
+    [InlineData(null, "a < b, then <<B", "body", 14)]
+    public async Task A_tag_s_start_in_a_final_email_is_refused_where_it_stands_before_anything_is_called(string? subject, string? body, string part, int position)
+    {
+        using var account = ByEmail();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001", subject: subject ?? Subject, body: body ?? Body)));
+
+        Assert.Equal(("message_invalid", FailureClass.Validation), (error.Code, error.Class));
+        var reason = $"The {part} holds, at character {position}, a `<` Reply reads as markup, and Reply drops a tag it does not know with everything after it.";
+        Assert.Equal(reason, (string?)error.Details!["reason"]);
+        Assert.StartsWith(reason, error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("name@", error.Message, StringComparison.Ordinal);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A <c>&lt;</c> that starts no tag — before a space, a digit or a letter outside ASCII, at the end, or before another
+    /// <c>&lt;</c> — is text to Reply: a final email holding one goes, escaped, and reaches the person whole. So does a
+    /// character reference the person wrote, which the body carries escaped and the subject as written.
+    /// </summary>
+    [Theory]
+    [InlineData("a < b", "a &lt; b")]
+    [InlineData("<3 from us", "&lt;3 from us")]
+    [InlineData("it ends <", "it ends &lt;")]
+    [InlineData("<< twice, and 1 <= 2", "&lt;&lt; twice, and 1 &lt;= 2")]
+    [InlineData("<é and <Ж are letters", "&lt;é and &lt;Ж are letters")]
+    [InlineData("&lt;b stays as written", "&amp;lt;b stays as written")]
+    public async Task A_lt_that_starts_no_tag_goes_in_a_final_email_and_reaches_the_person_whole(string written, string escaped)
+    {
+        using var account = ByEmail();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input("email", pinned: "1001", subject: written, body: written)));
+
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal((written, escaped), ((string?)went["text"]!["subject"], (string?)went["text"]!["body"]));
+        Assert.Equal((written, written), ((string?)went["rendered"]!["subject"], (string?)went["rendered"]!["body"]));
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // A template, written in Reply's syntax
     // -------------------------------------------------------------------------------------------------------
@@ -272,17 +327,17 @@ public class ReplyMessageSendTests
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var input = Template(
-            "Tom & Jerry's <news> for {{contact.first_name | 'you'}}",
-            "Tom & Jerry <tom@example.com>\nsaid 'yes', {{contact.custom.nickname | 'R&D <team>\nand co'}}{{#if contact.company == 'Puerto & Co'}} at Puerto{{/if}}.");
+            "Tom & Jerry's <3 news> for {{contact.first_name | 'you'}}",
+            "Tom & Jerry <3 tom@example.com>\nsaid 'yes', {{contact.custom.nickname | 'R&D < team>\nand co'}}{{#if contact.company == 'Puerto & Co'}} at Puerto{{/if}}.");
         ReplyOperations.Succeeded(Operation, await InvokeAsync(api, input));
 
         var went = Assert.Single(account.Sent)!;
-        Assert.Equal("Tom & Jerry's <news> for {{FirstName | 'you'}}", (string?)went["text"]!["subject"]);
+        Assert.Equal("Tom & Jerry's <3 news> for {{FirstName | 'you'}}", (string?)went["text"]!["subject"]);
         Assert.Equal(
-            "Tom &amp; Jerry &lt;tom@example.com&gt;<br>said &#39;yes&#39;, {{nickname | 'R&amp;D &lt;team&gt;<br>and co'}}{{#if Company == 'Puerto &amp; Co'}} at Puerto{{/if}}.",
+            "Tom &amp; Jerry &lt;3 tom@example.com&gt;<br>said &#39;yes&#39;, {{nickname | 'R&amp;D &lt; team&gt;<br>and co'}}{{#if Company == 'Puerto &amp; Co'}} at Puerto{{/if}}.",
             (string?)went["text"]!["body"]);
         Assert.Equal(
-            "Tom & Jerry <tom@example.com><br>said 'yes', R&D <team><br>and co.",
+            "Tom & Jerry <3 tom@example.com><br>said 'yes', R&D < team><br>and co.",
             (string?)went["rendered"]!["body"]);
     }
 
@@ -480,6 +535,63 @@ public class ReplyMessageSendTests
             "{{#if venue == 'Café-Bar, S.A. (Lisbon) #2: 50% off; &lt;=&quot;1&quot; @ $5*2+1/3=~`!^'}}Yes{{/if}}",
             (string?)went["text"]!["body"]);
         Assert.Equal("Yes", (string?)went["rendered"]!["body"]);
+    }
+
+    /// <summary>
+    /// A template's text, a fallback's text and the text a comparison compares are held as a final text is: a
+    /// <c>&lt;</c> an HTML reader takes as the start of a tag is refused before anything is called, naming the character,
+    /// as <c>template_unsupported</c>: the contract keeps <c>message_invalid</c> for a final message. Whether Reply
+    /// sanitizes a template before or after it fills it in no send has shown, so a comparison's text is held too. What
+    /// follows a <c>&lt;</c> is read along every way through the conditions, and a value Reply fills in is not in hand, so a
+    /// <c>&lt;</c> right before one is refused too: an address filled in there would be the tag Reply drops.
+    /// </summary>
+    [Theory]
+    [InlineData(Subject, "Write to <name@example.com> today.", "body", 10)]
+    [InlineData(Subject, "Write to <{{sender.address}}> today.", "body", 10)]
+    [InlineData(Subject, "Hi {{contact.first_name | '</b>'}}", "body", 28)]
+    [InlineData(Subject, "Hi {{contact.first_name | 'x<'}}b", "body", 29)]
+    [InlineData(Subject, "{{#if contact.title == '<b'}}x{{/if}}", "body", 25)]
+    [InlineData(Subject, "{{#if contact.title != '</p'}}x{{/if}}", "body", 25)]
+    [InlineData(Subject, "<{{#if contact.title}}b{{/if}}", "body", 1)]
+    [InlineData(Subject, "Hi {{#if contact.title}}<{{else}}x{{/if}}a", "body", 25)]
+    [InlineData(Subject, "<{{#if contact.title}}3{{/if}}b", "body", 1)]
+    [InlineData(Subject, "<{{#if contact.title}}b{{else}}3{{/if}}", "body", 1)]
+    [InlineData("<b>{{contact.first_name}}", Body, "subject", 1)]
+    public async Task A_tag_s_start_in_a_template_is_refused_where_it_stands_before_anything_is_called(string subject, string body, string part, int position)
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Template(subject, body)));
+
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(
+            $"The {part} holds, at character {position}, a `<` Reply reads as markup, and Reply drops a tag it does not know with everything after it.",
+            (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A <c>&lt;</c> that starts no tag goes in a template as in a final text, in its text, a fallback and a comparison,
+    /// and before a branch whose text does not start one.
+    /// </summary>
+    [Fact]
+    public async Task A_lt_that_starts_no_tag_goes_in_a_template_and_reaches_the_person_whole()
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var body = "a < b, <3 {{contact.custom.nickname | '<3 you'}} <{{#if contact.title}}3{{/if}}{{#if contact.title != '<3'}} yes{{/if}} <";
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Template("a < b <3 {{contact.first_name}} <", body)));
+
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal(
+            "a &lt; b, &lt;3 {{nickname | '&lt;3 you'}} &lt;{{#if Title}}3{{/if}}{{#if Title != '&lt;3'}} yes{{/if}} &lt;",
+            (string?)went["text"]!["body"]);
+        Assert.Equal(("a < b <3 Marta <", "a < b, <3 <3 you <3 yes <"), ((string?)went["rendered"]!["subject"], (string?)went["rendered"]!["body"]));
     }
 
     /// <summary>

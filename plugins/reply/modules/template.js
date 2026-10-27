@@ -73,6 +73,11 @@ const WHITE = /[\t-\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3
 // to its template engine, which reads it otherwise.
 const COMPARED = /[\p{L}\p{Mn}\p{Nd}\p{Pc}$@"`~!#%^&*()+,.\/:;<=\-]/u;
 
+// What follows a `<` that an HTML reader takes as the start of a tag: an ASCII letter, `/`, `!` or `?`. Reply decodes the
+// whole message before it reads it and drops a tag it does not know with everything after it, so a `<` the text holds,
+// though it reaches Reply as `&lt;`, is read there as that start all the same.
+const TAG_START = /^[A-Za-z\/!?]$/;
+
 const WORD = "word";
 const OPERATOR = "operator";
 const QUOTED = "quoted";
@@ -81,7 +86,9 @@ const QUOTED = "quoted";
  * The subject or the body, `part`, as Reply reads a template: each run of text and each fallback passed through
  * `literal`, which writes text as the part carries it, and every tag in Reply's syntax. Refuses, before anything is
  * called, a template the standard refuses, a custom field under a key Reply keeps, a comparison with a character Reply's
- * comparison does not read, and a template whose text and fallbacks spell a prompt to a model once Reply fills it in.
+ * comparison does not read, a template whose text and fallbacks spell a prompt to a model once Reply fills it in, and a
+ * `<` in its text, a fallback or a comparison that starts a tag, or that stands right before a value; a comparison's
+ * text is held because whether Reply sanitizes a template before or after it fills it in is not known.
  */
 export function inReplySyntax(operation, part, template, literal) {
   const read = parse(template);
@@ -104,7 +111,23 @@ export function inReplySyntax(operation, part, template, literal) {
     refuse(operation, "template_spells_a_prompt", "The " + part + " spells `@prompt[[` once Reply fills it in, complete at character " + spelled + ", which Reply would read as a prompt to a model.");
   }
 
+  refuseTag(operation, "template_tag_in_the_text", part, tagIn(read.nodes, []).at);
   return written(read.nodes, literal);
+}
+
+/**
+ * Refuses an email's subject or body, `part`, written as final text, that holds a `<` Reply reads as markup.
+ * Nothing is called.
+ */
+export function refuseTagStart(operation, part, text) {
+  refuseTag(operation, "tag_in_the_text", part, typeof text === "string" ? tagIn([{ kind: "text", text: text, at: 1 }], []).at : null);
+}
+
+// A final text's refusal is `message_invalid` and a template's `template_unsupported`, so the row is the caller's.
+function refuseTag(operation, row, part, at) {
+  if (at !== null) {
+    refuse(operation, row, "The " + part + " holds, at character " + at + ", a `<` Reply reads as markup, and Reply drops a tag it does not know with everything after it.");
+  }
 }
 
 function refuse(operation, row, reason) {
@@ -227,6 +250,56 @@ function stepped(states, text, from) {
 function merged(one, other) {
   const at = one.at === null ? other.at : other.at === null ? one.at : Math.min(one.at, other.at);
   return { states: one.states.concat(other.states.filter(state => one.states.indexOf(state) < 0)), at: at };
+}
+
+// Where the first `<` an HTML reader takes as the start of a tag stands, along each way through the conditions, or null:
+// `open` holds the characters of every `<` the text written so far may end with, and so may start a tag with what comes
+// next. Text and fallbacks are in hand, and so is the text a comparison compares, which is read on its own, since
+// whether Reply sanitizes before or after it fills a template in is not known; a value is not in hand, and may start
+// with a letter, so a `<` right before one is a tag's start. Answers the `<`s the nodes may end with, and `at`.
+function tagIn(nodes, open) {
+  let now = open;
+  for (const node of nodes) {
+    let next;
+    if (node.kind === "text") {
+      next = tagged(now, node.text, node.at);
+    } else if (node.kind === "value") {
+      next = now.length > 0 ? { open: [], at: Math.min.apply(null, now) } : node.fallback === null ? { open: [], at: null } : tagged([], node.fallback, node.fallbackAt);
+    } else {
+      // A comparison is read before its branches: with an open `<` before it as well, the comparison's `<` is named.
+      const compared = node.operator === null ? null : tagged([], node.text, node.textAt).at;
+      next = compared !== null ? { open: [], at: compared } : joined(tagIn(node.then, now), node.otherwise === null ? { open: now, at: null } : tagIn(node.otherwise, now));
+    }
+
+    if (next.at !== null) {
+      return next;
+    }
+
+    now = next.open;
+  }
+
+  return { open: now, at: null };
+}
+
+// `text`, which starts at character `from`, after the `<`s in `open`.
+function tagged(open, text, from) {
+  if (open.length > 0 && text.length > 0 && TAG_START.test(text[0])) {
+    return { open: [], at: Math.min.apply(null, open) };
+  }
+
+  // A `</` that ends the text is refused too, though an HTML reader makes it text: a refusal too many, accepted.
+  for (let index = 0; index < text.length - 1; index++) {
+    if (text[index] === "<" && TAG_START.test(text[index + 1])) {
+      return { open: [], at: from + index };
+    }
+  }
+
+  return { open: text.length === 0 ? open : text[text.length - 1] === "<" ? [from + text.length - 1] : [], at: null };
+}
+
+function joined(one, other) {
+  const at = one.at === null ? other.at : other.at === null ? one.at : Math.min(one.at, other.at);
+  return { open: one.open.concat(other.open.filter(character => one.open.indexOf(character) < 0)), at: at };
 }
 
 /**

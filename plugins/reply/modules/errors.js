@@ -1202,6 +1202,13 @@ export const ROWS = {
         "class": "validation",
         "note": "The subject or the text carries a double opening brace, which Reply reads as a placeholder it fills in for each person, or `@prompt[[`, which Reply reads as a prompt to a model whose answer it sends, so what would go out might not be the message a person approved. Nothing was sent. Write it without either and propose the message again."
       },
+      "tag_in_the_text": {
+        "when": "An email's subject or body, written as final text, holds a `<` an HTML reader takes as the start of a tag: one followed by an ASCII letter, `/`, `!` or `?`. Reply decodes the body before it reads it, and drops a tag it does not know with everything after it, in the body and in the subject alike, so what went out would stop there; the subject goes as written, and a character reference in it is not read. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write it without a `<` right before a letter, `/`, `!`, `?` or a value, an address without its angle brackets, and propose the message again."
+      },
       "template_refused": {
         "when": "The message is composed as a template, and its subject or its body writes a construct the template standard refuses: the package reads a template by the standard, behind the document. Decided before any call.",
         "code": "template_unsupported",
@@ -1222,6 +1229,13 @@ export const ROWS = {
         "class": "validation",
         "quotes": "reason",
         "note": "Nothing was sent. Write the template so that its text and its fallbacks spell no prompt, and propose the message again."
+      },
+      "template_tag_in_the_text": {
+        "when": "The message is composed as a template whose subject or body holds a `<` an HTML reader takes as the start of a tag, in its text, a fallback's or a comparison's: one followed by an ASCII letter, `/`, `!` or `?`, or one right before a value Reply fills in, which may start with a letter. Reply decodes the body before it reads it, and drops a tag it does not know with everything after it, in the body and in the subject alike, so what went out would stop there. A template's text, a fallback's text and the text a comparison compares are held alike, the last because whether Reply sanitizes before or after it fills a template in has not been seen. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write the template without a `<` right before a letter, `/`, `!`, `?` or a value, an address without its angle brackets, and propose the message again."
       },
       "template_compares_what_reply_cannot_read": {
         "when": "The message is composed as a template whose comparison compares a text holding a character Reply's comparison does not read: Reply reads letters, the marks that combine with them, digits, `_` and the other joining punctuation, white space and the punctuation $@\"`~!#%^&*()+,-./:;<= there, and leaves any other tag to its template engine, which reads it otherwise. Decided before any call.",
