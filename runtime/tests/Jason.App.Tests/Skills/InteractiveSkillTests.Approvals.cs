@@ -5,28 +5,58 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// A skill that teaches notifications and is verified is verified by the host that read it as it ships: the front
-    /// matter, the body and the catalog's bullet say so, the catalog's row names that host, and the pack's own rule holds
-    /// the row's digest to the text. The operating skill teaches them too, and is a draft again: its text lost a clause about
-    /// the runtime's source after its reading in 0.13.0. The planner in a person's session teaches none, and is a draft
-    /// again: its craft block gained the direct sends after its reading. The managed path, which teaches none either, is
-    /// a draft again: its text gained the planned and counted reads and the search for a person. None of the three has a
-    /// row until a host reads it again.
+    /// The approvals skill teaches notifications and is a draft: its text gained the manager's check-in as the one that acts
+    /// on an answer, and the preview's example, after the reading that made it verified. The front matter, the body and the
+    /// catalog's bullet say draft, and the catalog records no reading of it until a host reads it again. The operating
+    /// skill, the planner in a person's session and the managed path are drafts for the same reason.
     /// </summary>
-    [Theory]
-    [InlineData("approvals-and-questions", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
-    public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading) =>
-        IsVerifiedByTheHostThatReadIt(name, reading);
-
-    private static void IsVerifiedByTheHostThatReadIt(string name, string reading)
+    [Fact]
+    public void The_approvals_skill_is_a_draft_until_a_host_reads_its_new_text()
     {
-        var host = reading[..reading.IndexOf(" (", StringComparison.Ordinal)];
-        Assert.Equal("verified", SkillFrontMatter.Read(SkillPack.Find(name).File).Metadata.GetValueOrDefault("status"));
-        Assert.Contains($"**Status: verified** against {host}.", Flattened(name), StringComparison.Ordinal);
+        const string Name = "approvals-and-questions";
+        Assert.Equal("draft", SkillFrontMatter.Read(SkillPack.Find(Name).File).Metadata.GetValueOrDefault("status"));
+        Assert.Contains("**Status: draft.** No agent host has read this text in the state it ships in.", Flattened(Name), StringComparison.Ordinal);
+        Assert.DoesNotContain("**Status: verified**", Flattened(Name), StringComparison.Ordinal);
 
         var catalog = File.ReadAllText(SkillPack.Catalog());
-        Assert.Contains($"| `{name}` | {reading} | `{SkillPack.ReadingDigest(SkillPack.Find(name).File)}` |", catalog, StringComparison.Ordinal);
-        Assert.Contains($"[`{name}`]({name}/SKILL.md) — **verified.**", catalog, StringComparison.Ordinal);
+        Assert.Contains($"[`{Name}`]({Name}/SKILL.md) — **draft** until a host reads its new text.", catalog, StringComparison.Ordinal);
+        Assert.DoesNotContain($"| `{Name}` | Claude Code", catalog, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A question a role raised is answered by recording the answer: the campaign manager's next check-in creates the work
+    /// the answer implies, and what recorded it creates nothing, as the skills for a person's own conversation say it. A
+    /// host that read only this skill would carry the answer out itself and leave the campaign holding the work twice.
+    /// And what <c>--answer</c> is for is the manager's reading, not the role's that asked, which ended when it asked.
+    /// </summary>
+    [Fact]
+    public void The_approvals_skill_leaves_the_work_an_answer_implies_to_the_managers_next_check_in()
+    {
+        var skill = Flattened("approvals-and-questions");
+        Assert.Contains(
+            "Its answer wakes the review that carries the work on: the campaign manager's next check-in will create the work the answer implies, and the session that recorded the answer creates nothing: if it did, the campaign would hold the same work twice.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "`--answer` is required and is what the campaign manager reads at its next check-in",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("what the role reads when the work comes back to it", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("when the work comes back to it", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>approval get --human</c> prints the example, a template rendered for one person, beside a line saying the person
+    /// approves the template as written. The skill says the same where the preview carries one, in the same terms, so a
+    /// person is not asked to approve the example as though it were the message every recipient gets.
+    /// </summary>
+    [Fact]
+    public void The_approvals_skill_presents_an_example_as_one_reading_of_the_template()
+    {
+        Assert.Contains(
+            "Where the preview carries an `example`, present it as one reading of the template and say that what is approved is the template as written: the example is the runtime's rendering for one person, and the provider's rendering may differ.",
+            Flattened("approvals-and-questions"),
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -72,7 +102,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("never decide on a person's behalf", skill, StringComparison.Ordinal);
 
         // What goes into --reason and --answer is quoted back to whoever reads it later, and --answer is what
-        // the role reads when the work comes back. A session that wrote its own tidier paraphrase would put
+        // the campaign manager reads when the work comes back. An agent that wrote its own tidier paraphrase would put
         // words in a person's mouth in the one row that exists to say what that person actually decided.
         Assert.Contains("their word on that item", skill, StringComparison.Ordinal);
 

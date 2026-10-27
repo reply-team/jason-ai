@@ -943,11 +943,11 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             string? stuck;
             try
             {
-                stuck = HeldFileRetry.Run(() => MovePackageBack(kept, target), PackageMoves, clock, Pause, CancellationToken.None)?.Message;
+                stuck = HeldFileRetry.Run(() => MovePackageBack(kept, target), PackageMoves, clock, Pause, CancellationToken.None, () => HeldFileReader.Read(kept))?.Message;
             }
             catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
             {
-                stuck = failure.Message;
+                stuck = HeldFileRetry.IsAccessDenied(failure) ? new AccessRefused(failure).Message : failure.Message;
             }
 
             if (stuck is not null)

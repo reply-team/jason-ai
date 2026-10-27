@@ -257,7 +257,7 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// A campaign is shaped by who it is for and what it is trying to find out, never by a voice: the tone is the
-    /// client's preference, and a person or a group that needs other words gets them in the copy. A planner that split a
+    /// person's preference, and a person or a group that needs other words gets them in the copy. A planner that split a
     /// campaign to give some of its people another tone would multiply the campaigns a person has to approve, read and
     /// compare for a difference the copy carries. Said whole in the shared judgement, so both seats say the same rule.
     /// </summary>

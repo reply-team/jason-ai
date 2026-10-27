@@ -26,9 +26,10 @@ description that promises everything matches nothing.
   Turning an objective into durable campaign work and following it: the provider check, what the person has
   already written down, the campaign, the people it is about, provider operations and AI role work, what the
   runtime does with them afterwards, answering a conversation, and stopping or holding work.
-- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
-  person to decide: the approvals parked at a claim and the questions a running role raised — including when a
-  notification brought the person — presented in their own words and recorded as their decision.
+- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **draft** until a host reads its new text.
+  What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
+  raised — including when a notification brought the person — presented in their own words and recorded as their
+  decision.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
@@ -183,5 +184,4 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
-| `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |

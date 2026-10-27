@@ -511,7 +511,7 @@ public class CiRunsTests
     /// <summary>
     /// A push to the release's pull request after ready runs the Linux set only when every path it changes since the tree its
     /// last run of every check tested is documentation: Markdown outside <c>runtime/</c>, <c>.github/</c> and <c>plugins/</c>, a plain file before and after,
-    /// and neither the wiring check's page, whose step 3 a test runs in sh and both PowerShells, nor the runtime's licence,
+    /// and neither the wiring check's page, whose step 3 line a test runs through the program, nor the runtime's licence,
     /// which every archive carries. Anything else runs every check.
     /// </summary>
     [Theory]

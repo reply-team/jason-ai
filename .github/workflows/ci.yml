@@ -293,8 +293,9 @@ jobs:
           # branch and a pull request into another branch run the whole suite on linux-x64). So a branch that changes
           # docs/ or skills/ runs the whole suite locally before its pull request opens, and the release's pull request,
           # where the whole suite runs, is the first place CI reads those pages. Two files differ in kind and stay code: the wiring check's page,
-          # docs/golden-path.md, whose step 3 a test runs as a script in sh and in both PowerShells, so a change to it
-          # runs the three legs; and the runtime's licence, LICENSE-RUNTIME.md, which every archive the legs package carries.
+          # docs/golden-path.md, whose step 3 line, `jason plugin install reply`, a test runs through the program, and whose
+          # other commands the wiring check's tests read their arguments from, so a change to it runs the three legs; and the
+          # runtime's licence, LICENSE-RUNTIME.md, which every archive the legs package carries.
           $runAsCode = @('docs/golden-path.md', 'LICENSE-RUNTIME.md')
           function Documentation([string] $path, $kinds) {
             ($path -cmatch '\.md$') -and ($path -cnotmatch '^(runtime|\.github|plugins)/') -and ($runAsCode -cnotcontains $path) -and

@@ -4,8 +4,11 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Jason.Cli.Doctor;
 using Jason.Cli.Plugins;
+using Jason.Cli.Tests.Files;
 using Jason.Cli.Tests.Update;
+using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
@@ -549,6 +552,50 @@ public sealed class PluginInstallCommandTests : IDisposable
     }
 
     /// <summary>
+    /// A package in place that this account is refused, as one placed by an elevated process is, is not a package held open:
+    /// Windows answers the rename with the same access-denied, and the directory itself shows that it is a permission. The move
+    /// is given up at once, without a pause of the installer's wait, saying that waiting would not help and that nothing
+    /// was changed, with the package in place as it was.
+    /// </summary>
+    [Fact]
+    public async Task A_package_in_place_this_account_is_refused_stops_replace_at_once_and_changes_nothing()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A deny on the directory is Windows' own way to refuse its rename.");
+
+        var (release, _) = Release();
+        var before = InstallAnother();
+        var target = _paths.Paths.PluginPackageDirectory("example");
+        var keep = KeepDirectory();
+        var pauses = new List<TimeSpan>();
+        var clock = new PausedClock();
+
+        PluginInstallException refused;
+        var undo = OperatingSystem.IsWindows() ? RefusedPackage.Deny(target) : throw new PlatformNotSupportedException();
+        try
+        {
+            refused = await Assert.ThrowsAsync<PluginInstallException>(
+                () => PlaceAsync(release, PluginInPlace.Digest(before), keep, PluginInstaller.PackageMoves, (delay, _) =>
+                    {
+                        pauses.Add(delay);
+                        clock.Pass(delay);
+                    },
+                    new IdentityFacts(_paths.Paths.Root, "someone", "a-machine", null, null),
+                    clock));
+        }
+        finally
+        {
+            undo();
+        }
+
+        Assert.Empty(pauses);
+        Assert.Equal($"'~{target[_paths.Paths.Root.Length..]}' could not be moved: {AccessRefused.Clause}. Nothing was changed.", refused.Message);
+        Assert.DoesNotContain("held open", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(before, PackageDigest.Compute(target).Digest);
+        Assert.False(Path.Exists(keep));
+        Assert.Equal(["example"], Directory.EnumerateFileSystemEntries(_paths.Paths.PluginsDirectory).Select(Path.GetFileName));
+    }
+
+    /// <summary>
     /// The release's package cannot be moved in once the package in place has been moved aside: the one in place is moved
     /// back, so <c>--replace</c> exits 1 having changed nothing, and nothing is left beside the packages.
     /// </summary>
@@ -659,9 +706,16 @@ public sealed class PluginInstallCommandTests : IDisposable
         Path.Combine(Path.GetDirectoryName(_paths.Paths.PluginsDirectory)!, "kept", "example");
 
     /// <summary>The installer called directly, as a caller with the release's manifest in hand calls it.</summary>
-    private async Task<PluginPlaced> PlaceAsync(FakeRelease release, PluginInPlace expected, string? keep, HeldFileRule? rule = null)
+    private async Task<PluginPlaced> PlaceAsync(
+        FakeRelease release,
+        PluginInPlace expected,
+        string? keep,
+        HeldFileRule? rule = null,
+        Action<TimeSpan, CancellationToken>? pause = null,
+        IdentityFacts? identity = null,
+        TimeProvider? clock = null)
     {
-        var env = new CliEnvironment(_out, _error, _paths.Paths, HttpHandler: release, BuildVersion: Version);
+        var env = new CliEnvironment(_out, _error, _paths.Paths, HttpHandler: release, BuildVersion: Version, Identity: identity);
         var pinned = UpdateFeed.PinnedFor(release.Feed, SemanticVersion.Parse(Version));
         UpdatePluginPackage package;
         using (var client = new HttpClient(release, disposeHandler: false))
@@ -671,7 +725,7 @@ public sealed class PluginInstallCommandTests : IDisposable
 
         return rule is null
             ? await PluginInstaller.PlaceAsync(env, pinned, "example", package, expected, keep, Ct)
-            : await PluginInstaller.PlaceAsync(env, pinned, "example", package, expected, keep, rule, TimeProvider.System, HeldFileRetry.Sleep, Ct);
+            : await PluginInstaller.PlaceAsync(env, pinned, "example", package, expected, keep, rule, clock ?? TimeProvider.System, pause ?? HeldFileRetry.Sleep, Ct);
     }
 
     private void AssertNothingPlaced() =>

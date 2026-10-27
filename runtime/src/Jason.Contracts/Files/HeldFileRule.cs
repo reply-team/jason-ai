@@ -15,6 +15,8 @@ namespace Jason.Contracts.Files;
 /// access-denied rather than a sharing violation, so replacing the endpoint descriptor counts it, and so does a rename of
 /// a directory with a file in it held open, as a plugin package's moves count it. Anywhere else an
 /// access-denied is a permission or a read-only file, and waiting does not change either.
+/// Where a caller can also name the directory the act is on, <see cref="HeldFileReader"/> tells a permission from a hold, and an
+/// access-denied it finds to be a permission is not waited for.
 /// </param>
 public sealed record HeldFileRule(TimeSpan Wait, TimeSpan Interval, bool AccessDeniedCounts)
 {

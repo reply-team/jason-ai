@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Cli.Tests.Files;
 using Jason.Cli.Uninstall;
 using Jason.Cli.Update;
 using Jason.Contracts.Api;
@@ -293,6 +294,51 @@ public sealed class UpdatePluginsStepTests
         Assert.Contains("checksums.txt", line, StringComparison.Ordinal);
         Assert.Contains($"{installation.Update.PreviousPlugin("reply")} could not be put back as {installation.Paths.PluginPackageDirectory("reply")} either: The disk would not rename it", line, StringComparison.Ordinal);
         Assert.EndsWith(RunInstall, line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The kept copy's way back into its empty place is refused for a permission, not a hold: the files in it show that, and
+    /// the put-back is given up at once, without a pause of the held-file rule, the line saying that waiting would not help.
+    /// </summary>
+    /// <remarks>Windows only: the files are refused by a deny of their own; the rename is the test's to refuse.</remarks>
+    [Fact]
+    public async Task A_kept_package_this_account_is_refused_is_not_waited_for_when_it_is_put_back()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A deny on the file is Windows' own way to refuse an open the account could otherwise make.");
+
+        using var installation = new FakeInstallation().WithInstalledPlugin(Earlier);
+        installation.Release.WithPlugin("reply", Latest.Version, Latest.Zip, Latest.Digest, checksum: new string('0', 64), earlier: [(Earlier.Version, Earlier.Digest)]);
+        KilledInPlugins(installation, placed: false);
+        var kept = installation.Update.PreviousPlugin("reply");
+        var clock = new PausedClock();
+        var pauses = new List<TimeSpan>();
+        var applier = new UpdateApplier(installation.Env, installation.Update, clock, installation.InstallPath)
+        {
+            HeldFiles = InstallationRemovers.HeldFiles,
+            MovePackageBack = (_, _) => throw new UnauthorizedAccessException("The rename was refused."),
+            Pause = (delay, _) =>
+            {
+                pauses.Add(delay);
+                clock.Pass(delay);
+            },
+        };
+
+        UpdateLedger ledger;
+        var undo = OperatingSystem.IsWindows() ? RefusedPackage.Deny(kept) : throw new PlatformNotSupportedException();
+        try
+        {
+            ledger = await applier.ApplyAsync(Request(installation), Ct);
+        }
+        finally
+        {
+            undo();
+        }
+
+        Assert.Empty(pauses);
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        var line = Assert.Single(applier.Steps, step => step.StartsWith("plugins: reply", StringComparison.Ordinal));
+        Assert.Contains($"{kept} could not be put back as {installation.Paths.PluginPackageDirectory("reply")} either: {AccessRefused.Clause}", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("The rename was refused", line, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -605,6 +651,101 @@ public sealed class UpdatePluginsStepTests
     }
 
     /// <summary>
+    /// A package of the update this account is refused, as one placed by an elevated process is, is not one held open: a
+    /// rollback that restores finds the same access-denied, the files in it show a permission, and the restore is given up
+    /// at once, without a pause of the held-file rule, with a line that says waiting would not help.
+    /// </summary>
+    /// <remarks>Windows only: a deny on the directory is its own way to refuse a rename.</remarks>
+    [Fact]
+    public async Task A_rollback_does_not_wait_for_a_package_of_the_update_this_account_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A deny on the directory is Windows' own way to refuse its rename.");
+
+        using var installation = Behind();
+        installation.WithRuntime();
+        await installation.Applier().ApplyAsync(Request(installation), Ct);
+        var target = installation.Paths.PluginPackageDirectory("reply");
+        var kept = installation.Update.PreviousPlugin("reply");
+        var clock = new PausedClock();
+        var pauses = new List<TimeSpan>();
+        var rollback = new UpdateRollback(installation.Env, installation.Update, clock)
+        {
+            HeldFiles = InstallationRemovers.HeldFiles,
+            Pause = (delay, _) =>
+            {
+                pauses.Add(delay);
+                clock.Pass(delay);
+            },
+        };
+
+        var undo = OperatingSystem.IsWindows() ? RefusedPackage.Deny(target) : throw new PlatformNotSupportedException();
+        try
+        {
+            await rollback.RollBackAsync(Ct);
+        }
+        finally
+        {
+            undo();
+        }
+
+        Assert.Empty(pauses);
+        Assert.Equal(Latest.Digest, installation.PluginDigest("reply"));
+        Assert.Equal(Earlier.Digest, PackageDigestOf(kept));
+        var line = Assert.Single(rollback.Steps, step => step.StartsWith($"the plugin reply 0.8.0 could not be put back from {kept}: ", StringComparison.Ordinal));
+        Assert.Contains($": {AccessRefused.Clause}", line, StringComparison.Ordinal);
+        Assert.EndsWith($": {AccessRefused.Clause}", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("held open", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An installed package this account is refused, as one placed by an elevated process is, is not one held open: the
+    /// update's move of it comes back with the same access-denied, the files in it show a permission, and the move is given
+    /// up at once, without a pause of the held-file rule. The package stays as it was, the line names the install, says that
+    /// waiting would not help, and the update completes.
+    /// </summary>
+    /// <remarks>Windows only: a deny on the directory is its own way to refuse a rename.</remarks>
+    [Fact]
+    public async Task A_package_this_account_is_refused_is_left_at_once_and_the_update_completes()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A deny on the directory is Windows' own way to refuse its rename.");
+
+        using var installation = Behind();
+        var clock = new PausedClock();
+        var pauses = new List<TimeSpan>();
+        var applier = new UpdateApplier(installation.Env, installation.Update, clock, installation.InstallPath)
+        {
+            HeldFiles = InstallationRemovers.HeldFiles,
+            Pause = (delay, _) =>
+            {
+                pauses.Add(delay);
+                clock.Pass(delay);
+            },
+        };
+
+        var target = installation.Paths.PluginPackageDirectory("reply");
+        UpdateLedger ledger;
+        var undo = OperatingSystem.IsWindows() ? RefusedPackage.Deny(target) : throw new PlatformNotSupportedException();
+        try
+        {
+            ledger = await applier.ApplyAsync(Request(installation), Ct);
+        }
+        finally
+        {
+            undo();
+        }
+
+        Assert.Empty(pauses);
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(Earlier.Digest, installation.PluginDigest("reply"));
+        Assert.False(Path.Exists(installation.Update.PreviousPlugin("reply")));
+        var line = Assert.Single(applier.Steps, step => step.StartsWith("plugins: reply", StringComparison.Ordinal));
+        Assert.StartsWith("plugins: reply 0.8.0 not replaced — ", line, StringComparison.Ordinal);
+        Assert.Contains("this account is refused access to it, so waiting would not help", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("held open", line, StringComparison.Ordinal);
+        Assert.EndsWith(RunInstall, line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The check and the step read the plugins directory through one plan: with one package behind and one edited, the
     /// check names exactly the one the apply replaces, and the apply leaves the other with its line.
     /// </summary>
@@ -715,16 +856,4 @@ public sealed class UpdatePluginsStepTests
     private static string PackageDigestOf(string directory) => Jason.Contracts.Plugins.PackageDigest.Compute(directory).Digest;
 
     private static UpdateRequest Request(FakeInstallation installation) => new(installation.Feed, null, TimeSpan.FromSeconds(5));
-
-    /// <summary>A clock that moves only when a pause is taken, so a held-file wait ends after exactly the rule's pauses.</summary>
-    private sealed class PausedClock : TimeProvider
-    {
-        private long _ticks;
-
-        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-
-        public override long GetTimestamp() => _ticks;
-
-        public void Pass(TimeSpan delay) => _ticks += delay.Ticks;
-    }
 }

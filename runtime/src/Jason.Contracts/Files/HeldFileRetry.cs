@@ -16,6 +16,14 @@ namespace Jason.Contracts.Files;
 /// failure is thrown at once, because waiting does not change a permission, a missing directory or a full disk.
 /// </para>
 /// <para>
+/// An access-denied the rule counts is a hold or a permission refusal, and nothing in it says which. A caller that can name
+/// the directory the call acts on gives a <see cref="HeldFileReading"/> of it: the reader is asked after each such refusal, and
+/// <see cref="HeldFileReading.Refused"/> ends the wait at once, the refusal thrown as any other failure is. Only that
+/// positive evidence shortens the wait. <see cref="HeldFileReading.Unknown"/> keeps it, because a hold the reader cannot
+/// see, a file deleted while it is held for one, is what the wait is for. A sharing or a lock violation is a
+/// hold without being asked. Without a reader the rule's word stands.
+/// </para>
+/// <para>
 /// The uninstall's remover and the runtime's endpoint descriptor both go through it, so the two agree on what a held file
 /// is.
 /// </para>
@@ -30,14 +38,19 @@ public static class HeldFileRetry
     /// <param name="clock">What the wait is measured by.</param>
     /// <param name="pause">How a pause is taken: <see cref="Sleep"/> outside a test.</param>
     /// <param name="cancellationToken">Handed to each pause, which throws when it is cancelled.</param>
+    /// <param name="read">
+    /// What the directory the call acts on says about an access-denied the rule counts, or null for no reader. It is asked only for
+    /// that refusal, on Windows, and each time it comes back.
+    /// </param>
     /// <returns>Null when the call went through, or the last refusal when the file was still held at the end of the wait.</returns>
     public static Exception? Run(
         Action call,
         HeldFileRule rule,
         TimeProvider clock,
         Action<TimeSpan, CancellationToken> pause,
-        CancellationToken cancellationToken = default) =>
-        Run(call, rule, clock, pause, OperatingSystem.IsWindows(), cancellationToken);
+        CancellationToken cancellationToken = default,
+        Func<HeldFileReading>? read = null) =>
+        Run(call, rule, clock, pause, OperatingSystem.IsWindows(), cancellationToken, read);
 
     /// <summary>The same, with the platform's answer given, so a test can ask what either platform would do.</summary>
     internal static Exception? Run(
@@ -46,7 +59,8 @@ public static class HeldFileRetry
         TimeProvider clock,
         Action<TimeSpan, CancellationToken> pause,
         bool windows,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<HeldFileReading>? read = null)
     {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(rule);
@@ -63,6 +77,11 @@ public static class HeldFileRetry
             }
             catch (Exception refusal) when (windows && IsHold(refusal, rule))
             {
+                if (read is not null && IsAccessDenied(refusal) && read() == HeldFileReading.Refused)
+                {
+                    throw;
+                }
+
                 started ??= clock.GetTimestamp();
                 var left = rule.Wait - clock.GetElapsedTime(started.Value);
                 if (left <= TimeSpan.Zero)
@@ -86,7 +105,11 @@ public static class HeldFileRetry
 
     private static bool IsHold(Exception refusal, HeldFileRule rule) =>
         refusal is IOException { HResult: SharingViolation or LockViolation }
-        || (rule.AccessDeniedCounts && refusal is UnauthorizedAccessException or IOException { HResult: AccessDenied });
+        || (rule.AccessDeniedCounts && IsAccessDenied(refusal));
+
+    /// <summary>An access-denied, in either form .NET gives it: its own exception, or an IOException carrying it.</summary>
+    public static bool IsAccessDenied(Exception refusal) =>
+        refusal is UnauthorizedAccessException or IOException { HResult: AccessDenied };
 
     /// <summary>
     /// A pause outside a test: the delay in real time, ended early by a cancellation, which it then throws.

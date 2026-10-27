@@ -125,6 +125,92 @@ public class HeldFileRetryTests
         Assert.Equal(2, clock.Pauses.Count);
     }
 
+    /// <summary>
+    /// An access-denied the rule counts is a permission, not a hold, when the files the call acts on say so: it is thrown at
+    /// once, without a pause, as an access-denied is where the rule does not count it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void An_access_denied_the_files_show_to_be_a_permission_is_thrown_at_once(bool asIOException)
+    {
+        var clock = new SteppedClock();
+        var call = new Call(times: int.MaxValue, () => Denied(asIOException));
+        var reader = new Reader(HeldFileReading.Refused);
+
+        var thrown = Assert.Throws(Denied(asIOException).GetType(), () => Run(call, Rule with { AccessDeniedCounts = true }, clock, windows: true, reader.Read));
+
+        Assert.Same(call.Last, thrown);
+        Assert.Equal(1, call.Tries);
+        Assert.Equal(1, reader.Asked);
+        Assert.Empty(clock.Pauses);
+    }
+
+    /// <summary>A file held is what the wait is for: the same refusal is tried for the whole wait and returned as held.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void An_access_denied_the_files_show_to_be_a_hold_is_waited_for_and_returned_when_the_wait_is_over(bool asIOException)
+    {
+        var clock = new SteppedClock();
+        var call = new Call(times: int.MaxValue, () => Denied(asIOException));
+        var reader = new Reader(HeldFileReading.Held);
+
+        var held = Run(call, Rule with { AccessDeniedCounts = true }, clock, windows: true, reader.Read);
+
+        Assert.Same(call.Last, held);
+        Assert.Equal(41, call.Tries);
+        Assert.Equal(40, clock.Pauses.Count);
+        Assert.Equal(40 + 1, reader.Asked);
+        Assert.Equal(Rule.Wait, clock.Now);
+    }
+
+    /// <summary>
+    /// Nothing the files say keeps the wait as it was before there was a reader: a handle on the directory itself is not
+    /// one a walk over its files sees, and the wait is for exactly that.
+    /// </summary>
+    [Fact]
+    public void An_access_denied_the_files_say_nothing_about_is_waited_for_as_before()
+    {
+        var clock = new SteppedClock();
+        var call = new Call(times: 2, () => Denied(asIOException: true));
+        var reader = new Reader(HeldFileReading.Unknown);
+
+        var held = Run(call, Rule with { AccessDeniedCounts = true }, clock, windows: true, reader.Read);
+
+        Assert.Null(held);
+        Assert.Equal(3, call.Tries);
+        Assert.Equal(2, reader.Asked);
+        Assert.Equal([Rule.Interval, Rule.Interval], clock.Pauses);
+    }
+
+    /// <summary>
+    /// The files are asked only about an access-denied the rule counts: not about a sharing or a lock violation, which is a
+    /// hold already, not where the rule does not count an access-denied, and not off Windows, where nothing is held.
+    /// </summary>
+    [Theory]
+    [InlineData(SharingViolation, true, true)]
+    [InlineData(LockViolation, true, true)]
+    [InlineData(AccessDenied, false, true)]
+    [InlineData(AccessDenied, true, false)]
+    public void The_files_are_asked_only_about_an_access_denied_the_rule_counts(int refusal, bool counts, bool windows)
+    {
+        var clock = new SteppedClock();
+        var call = new Call(times: 1, () => new IOException("refused", refusal));
+        var reader = new Reader(HeldFileReading.Refused);
+
+        try
+        {
+            Run(call, Rule with { AccessDeniedCounts = counts }, clock, windows, reader.Read);
+        }
+        catch (IOException)
+        {
+            // An access-denied that is not counted, or that is off Windows, is thrown: not what this row reads.
+        }
+
+        Assert.Equal(0, reader.Asked);
+    }
+
     public static TheoryData<Exception> NotAHold => new()
     {
         new IOException("no hresult"),
@@ -221,8 +307,20 @@ public class HeldFileRetryTests
         }
     }
 
-    private static Exception? Run(Call call, HeldFileRule rule, SteppedClock clock, bool windows) =>
-        HeldFileRetry.Run(call.Invoke, rule, clock, clock.Pause, windows, CancellationToken.None);
+    private static Exception? Run(Call call, HeldFileRule rule, SteppedClock clock, bool windows, Func<HeldFileReading>? read = null) =>
+        HeldFileRetry.Run(call.Invoke, rule, clock, clock.Pause, windows, CancellationToken.None, read);
+
+    /// <summary>What the files of the call say, always the same, and how often they were asked.</summary>
+    private sealed class Reader(HeldFileReading reading)
+    {
+        public int Asked { get; private set; }
+
+        public HeldFileReading Read()
+        {
+            Asked++;
+            return reading;
+        }
+    }
 
     /// <summary>A call that fails with a made refusal a number of times, then goes through.</summary>
     private sealed class Call(int times, Func<Exception> refusal)

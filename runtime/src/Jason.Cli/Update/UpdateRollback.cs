@@ -426,7 +426,17 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     /// <summary>One rename of a package directory, tried again while a file in it is held.</summary>
     private void Moved(string from, string to)
     {
-        if (HeldFileRetry.Run(() => MovePackage(from, to), PackageMoves, clock, Pause, CancellationToken.None) is { } held)
+        Exception? held;
+        try
+        {
+            held = HeldFileRetry.Run(() => MovePackage(from, to), PackageMoves, clock, Pause, CancellationToken.None, () => HeldFileReader.Read(from));
+        }
+        catch (Exception refused) when (HeldFileRetry.IsAccessDenied(refused))
+        {
+            throw new AccessRefused(refused);
+        }
+
+        if (held is not null)
         {
             throw held;
         }

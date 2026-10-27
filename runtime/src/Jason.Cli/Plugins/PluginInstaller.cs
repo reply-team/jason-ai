@@ -522,11 +522,28 @@ public static class PluginInstaller
     {
         public void Move(string from, string to)
         {
-            if (HeldFileRetry.Run(() => Rename(from, to), Rule, Clock, Pause, CancellationToken) is { } held)
+            Exception? held;
+            try
             {
-                throw new PluginInstallException($"{Held(from, held)} Nothing was changed.");
+                held = Run(from, to, CancellationToken);
+            }
+            catch (Exception refused) when (HeldFileRetry.IsAccessDenied(refused))
+            {
+                throw new PluginInstallException($"{AccessRefused.Said(from, IdentityFacts.HomeFor(Env.Identity))} {NothingChanged}");
+            }
+
+            if (held is not null)
+            {
+                throw new PluginInstallException($"{Held(from, held)} {NothingChanged}");
             }
         }
+
+        /// <summary>
+        /// The rename under the rule, with the package's own files asked about an access-denied: a permission is thrown at
+        /// once, and a held file is waited for.
+        /// </summary>
+        private Exception? Run(string from, string to, CancellationToken cancellationToken) =>
+            HeldFileRetry.Run(() => Rename(from, to), Rule, Clock, Pause, cancellationToken, () => HeldFileReader.Read(from));
 
         /// <summary>
         /// The rename back of a package moved aside, under the same wait: null when it went through, or why it did not. It is
@@ -536,11 +553,11 @@ public static class PluginInstaller
         {
             try
             {
-                return HeldFileRetry.Run(() => Rename(from, to), Rule, Clock, Pause, CancellationToken.None) is { } held ? Held(from, held) : null;
+                return Run(from, to, CancellationToken.None) is { } held ? Held(from, held) : null;
             }
             catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
             {
-                return failure.Message;
+                return HeldFileRetry.IsAccessDenied(failure) ? new AccessRefused(failure).Message : failure.Message;
             }
         }
 
