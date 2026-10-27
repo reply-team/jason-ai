@@ -20,8 +20,8 @@ The runtime starts the shipped executable in plugin-host mode, which runs exactl
 and exits**: globals do not survive, there is no plugin-local state and no warm pool. The engine is
 Jint, embedded in that host, so there is no Node, no npm install step and no native module — a
 package is the JavaScript you ship in it. Official and community plugins use exactly this mechanism;
-there is no private extension path. What is **not** here yet: `plugin install|update|remove`
-(installing is copying a directory); signing and trust.
+there is no private extension path. What is **not** here yet: `plugin update|remove` (`plugin install`
+places only a package a release publishes, and any other is a directory copied in); signing and trust.
 
 ## 2. The package
 
@@ -172,17 +172,29 @@ manifest could name the arguments, a version check would be a way to run anythin
 
 ## 4. Installing, reloading and listing
 
-Installing a plugin is copying its directory into `~/.jason/plugins/` (override the data directory
-with `JASON_DATA_DIR`). There are no install verbs in this version. The package this repository ships,
-the Reply plugin, is also published with every release from 0.11.0 on as `jason-plugin-reply.zip`, its
-files at the archive's root: checked against that release's `checksums.txt` and unpacked into
-`~/.jason/plugins/reply`, it is installed. Step 3 of [the wiring check](golden-path.md) prints the lines.
+Installing a plugin is placing its directory in `~/.jason/plugins/` (override the data directory
+with `JASON_DATA_DIR`). The package this repository ships, the Reply plugin, is also published with every
+release from 0.11.0 on as `jason-plugin-reply.zip`, its files at the archive's root, and the release's
+`manifest.json` names it with the content digest of the tree it unpacks to. `jason plugin install <id>`
+installs a package the release you run publishes: it downloads the file the manifest names, from that
+release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that
+digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why. A
+different package already there under that id is kept unless `--replace` says to swap it whole; the
+release's own already there is left as it is. When the runtime answers, the verb then asks it to reload;
+otherwise the package loads at the runtime's next start, and the verb never starts one. A runtime that
+answers and refuses the reload leaves the package placed, and the verb exits 1 with `load: rejected` in its
+body and the runtime's refusal under `error`. A `.staging-<id>-…` or `.old-<id>-…` directory beside the
+packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
+the install replaced. Every other package is installed by copying its directory in.
+Step 3 of [the wiring check](golden-path.md) runs the verb.
 The runtime carries the package its own release publishes and says in `system.info`'s `released_plugins` whether the
-one installed is it, by content digest, so `jason status` names an earlier release's package left behind by an update.
-Before the update, `jason update check` names it from the other side: the newer release's manifest records the digest of
-each version on the package's list, so the check says which version is installed and which one that release publishes.
-It never names a package the list does not know: built or edited on that machine, or a version before the list's first
-line, 0.3.2. Whether that one is behind is `jason status`'s to say, by its version.
+one installed is it, by content digest, so `jason status` names an earlier release's package left behind by a package
+manager's upgrade, or by an update that could not replace it. Before the update, `jason update check` names it from the
+other side: the newer release's manifest records the digest of each version on the package's list, so the check says
+which version is installed and which one that release publishes. It never names a package the list does not know: built
+or edited on that machine, or a version before the list's first line, 0.3.2. Whether that one is behind is
+`jason status`'s to say, by its version. `jason update apply` replaces exactly the packages the check names with the new
+release's, held to the same two checks before anything moves, and leaves every other package as it is.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/
@@ -656,7 +668,11 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 ```
 
 - **`args`** is what the caller wrote under the work item's `context.input`, and nothing else from
-  that context. It is always present — `{}` when the operation takes no arguments.
+  that context. It is always present — `{}` when the operation takes no arguments. Its one reserved member,
+  `provider`, is the caller's object for your package ([the rule](contracts/README.md#the-input-a-plugin-receives)):
+  a package that reads it and cannot make sense of what it was given fails the item before any call, under a code the
+  operation declares, with a message that names the shape it expects and never quotes the text, and a package that
+  does not read it ignores it.
 - **`contacts`** appears when the operation's pre-flight says a contact is `required`, or when it says
   `optional` and the work item names one. It carries exactly one person, and is cut to the **declared
   projection**: the fields the document names, and only the one channel the operation consumes, or none.
@@ -1259,7 +1275,8 @@ are the operations' own examples; §7 says how to drive one through the host by 
   campaign or for the whole installation.
 - **Notification plugins are not routed**: a route to one is refused at activation with
   `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).
-- **No install verbs, no signing, no trust model.** Installing is copying a directory.
+- **One install verb, for a release's own packages; no signing, no trust model.** Any other package is
+  installed by copying a directory.
 
 The operations themselves, with their schemas, fixtures and the dialect they are written in, are in
 [docs/contracts/](contracts/README.md). Nothing else is part of the contract: Jason's own design notes are

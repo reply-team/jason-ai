@@ -302,9 +302,9 @@ will not start.
 runtime, replaces the executable and starts it again. `jason update rollback` puts back the version the update
 replaced. `jason update status` says where an in-flight update stands, or what the last completed one recorded; it
 needs no runtime either. From 0.20.0, Jason's own installation on 0.18.x or earlier updates through 0.19.0:
-`jason update apply --version 0.19.0`, then `jason update apply`. Its own `jason update check` still names
-`jason update apply`, and that apply refuses with `update_not_directly_applicable`, naming 0.19.0. A package manager's
-upgrade goes straight to the newest release.
+`jason update apply --version 0.19.0`, then `jason update apply`. Its own `jason update check` names 0.19.0 as
+`install_first` and its apply as `upgrade_command`, and a plain `jason update apply` refuses with
+`update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
 
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
@@ -313,6 +313,11 @@ step, once the update is complete; if that step's line says it could not, the up
 the line it names. An update applied by a build before 0.12.0 has no such step, so it needs one
 `jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older
 than that step places none, so `jason ui install` follows it; `jason status` names it until it has.
+
+A skill file the person edited, or a file they put in a skill, is theirs: the skills verbs, `jason skills update`
+and the install it repeats, keep it, write everything else around it, name each file they kept and succeed. The
+skill holding it is then a blend of two hands, the person's and the release's, which the person reconciles. Only
+`--force` overwrites it, and it is the person's to type, never yours to add.
 
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
@@ -343,14 +348,24 @@ And **never run `jason update apply` unless the person asked for it**. It replac
 running and stops the runtime to do it, so work in flight is drained and everything pointing at Jason is briefly
 pointing at a file being swapped. Noticing an update is yours; deciding to take it is theirs.
 
-An update leaves the plugins under `~/.jason/plugins/` as they were, so afterwards `jason status`'s optional
-`plugin_package` check can fail: the package installed is an earlier release's. Its fact names the installed version,
-the version this release published, and the step of the wiring check that prints the lines placing it; replacing a
-package is a change to the installation, so ask first, then `jason plugin reload`. `jason update check` says it before
-the update: its `plugin_updates` names each package installed here that the newer release publishes a later version of,
-with both versions, and is `[]` when nothing installed here that the record holds is behind. It never names a package
-the list does not know: built or edited on that machine, or a version before the list's first line, 0.3.2; whether that
-one is behind is `jason status`'s to say, by its version.
+An update that stopped part-way is the exception, because the person already asked for it: `jason status` names the
+update and the step it stopped at, and its repair is `jason update apply`, which finishes it and starts the runtime
+itself. Before its swap nothing has been replaced, the optional `update` check says so, and `jason runtime start` starts
+the installed build; from the swap on the `runtime` check fails, and `jason runtime start` refuses with
+`update_in_progress` and starts nothing, as does the start a sign-in makes: only the update's own starts run then, the
+apply's and the rollback's. `jason update rollback` is the other way on, and that choice is the person's.
+
+`jason update apply` replaces each plugin package installed as an earlier release's with the new release's, and leaves
+every other package under `~/.jason/plugins/` as it is; its `plugins:` lines say which. A package it could not replace,
+or one a package manager's upgrade left, since that upgrade runs no apply, makes `jason status`'s optional
+`plugin_package` check fail: the package installed is an earlier release's. Its fact names the installed version, the
+version this release published, and the command that places it, `jason plugin install <id> --replace`, which swaps the
+old package for the release's and asks the runtime to load it; replacing a package is a change to the installation, so
+ask first. `jason update check` says it before the update: its `plugin_updates` names each package installed here that
+the newer release publishes a later version of, exactly the ones the apply replaces, with both versions, and is `[]`
+when nothing installed here that the record holds is behind. It never names a package the list does not know: built or
+edited on that machine, or a version before the list's first line, 0.3.2; whether that one is behind is `jason status`'s
+to say, by its version.
 
 ## Installing it in the first place
 
@@ -406,7 +421,9 @@ there, and the verb removes those skills and nothing else. **A skill somebody co
 no receipt, so it is removed by nobody, including this** — say so while you are there, rather than leaving
 them to find it months later. A recorded file whose bytes they have changed since is reported and kept unless
 `--force` says otherwise. The rest — the logon registration, the PATH entry where the installer wrote it, the
-executable and what it unpacked — goes by rule, and the dry run names each.
+executable and what it unpacked, and on Windows what every other build of Jason unpacked — goes by rule, and the
+dry run names each. On macOS and Linux the other builds' directories stay, counted in one line, for the person to
+remove once nothing runs from them.
 
 **The data directory is kept** unless `--purge-data` says so, and the verb names it in one line; with it, what
 Jason keeps there goes and anything else in it stays. In the machine shape `--yes` has to be given in advance,

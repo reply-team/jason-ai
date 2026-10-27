@@ -91,6 +91,15 @@ person.
 
 Somebody who asked to stop is sent no answer: recording the stop is the whole of what you do about that reply.
 
+**Greet the person by the name Jason holds, and say when the thread names them otherwise.** The greeting in what you
+write is the person's own name from `jason contact get`, the first name Jason's record carries, and never the name on the
+thread. A provider may already have held a contact for the address under another name, so the thread's `contact` name
+can differ from Jason's person, and a reply that opens with it greets somebody the campaign never meant. Compare the two
+before you write. Where they match, nothing is said. Where they differ, greet by Jason's name and say so in two places a
+person will read: in the reply item's `--reason`, and in your answer — Jason's name, the thread's name, and that you
+greeted by Jason's. Do not choose silently, and do not change either record to make them agree. Where Jason's record
+holds no first name, write no name in the greeting and say that too.
+
 **Your answer goes into the person's own thread, as work a person approves.** What you would write back is a
 `provider_op` item naming `conversation.reply`, in this campaign, for the person the thread is with, naming the read's
 thread: it answers inside that thread and reaches nobody else, never a new thread. Its `channel` is the thread's, as

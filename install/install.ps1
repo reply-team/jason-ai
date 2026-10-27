@@ -12,7 +12,7 @@ what it learns about your business - Jason in your home directory, unless Harnes
 another folder - and makes no folder for it.
 
     irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.20.0/install.ps1))) -Version 0.20.0 -NoModifyPath
+    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.21.0/install.ps1))) -Version 0.21.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just
@@ -371,12 +371,15 @@ function Install-Jason {
         Write-Host "$directory is on your PATH; open a new terminal to run jason from anywhere."
     }
 
-    # --- the licence ------------------------------------------------------------------------------------------
+    # --- the licence, and what to run next ---------------------------------------------------------------------
 
-    # The last line of a successful run, and never a question: what is installed, and the terms it is installed under.
+    # The last two lines of a successful run, and never a question: what is installed and the terms it is installed
+    # under, then the one command that says what this installation still needs. The text is in single quotes, so its
+    # backticks are text and not an escape.
     if (Test-Licensed $latest) {
         Write-Host "Jason $latest is licensed under the Jason Runtime Licence: $licenceBase/v$latest/LICENSE-RUNTIME.md"
     }
+    Write-Host 'Next, run `jason status`: it says what this installation still needs, and the command for each.'
 }
 
 # Removed again whatever happens: the one-liner is `irm ... | iex`, which runs this text in the session that

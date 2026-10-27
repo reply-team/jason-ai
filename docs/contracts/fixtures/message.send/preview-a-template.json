@@ -1,0 +1,46 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "an email written as a template: the summary carries the template as written, and the example renders it over the composed input, leaving the names the input does not hold to the provider",
+  "input": {
+    "args": {
+      "channel": "email",
+      "sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "message": { "format": "email", "compose": "template", "subject": "The Lisbon meetup, {{contact.first_name}}", "body": "Hi {{contact.first_name}},\n{{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing?\n{{sender.first_name}}" }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Send marta@example.com a message by email, from the provider's account s_12 (ann@example.com), outside any campaign — subject: The Lisbon meetup, {{contact.first_name}}; text: Hi {{contact.first_name}}, {{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing? {{sender.first_name}}",
+    "highlights": {
+      "/contacts/0/channels/0/value": "marta@example.com",
+      "/args/channel": "email",
+      "/args/sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "/args/message": { "format": "email", "compose": "template", "subject": "The Lisbon meetup, {{contact.first_name}}", "body": "Hi {{contact.first_name}},\n{{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing?\n{{sender.first_name}}" },
+      "/args/message/compose": "template"
+    },
+    "example": {
+      "subject": "The Lisbon meetup, Marta",
+      "body": "Hi Marta,\ngrowth was the theme of the night. How is your team doing?\n[sender.first_name]",
+      "unfilled": ["contact.custom.team", "sender.first_name"]
+    }
+  }
+}

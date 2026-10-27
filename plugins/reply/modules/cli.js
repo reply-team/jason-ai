@@ -234,9 +234,9 @@ function ended(answer, request) {
     observed.row = lost;
   } else if (answer.exit_code === REFUSED_THE_CALL) {
     // Nothing was sent. The CLI's own word says whether it was about who is calling or about what was asked.
-    observed.row = said === null ? "call_refused_before_it_was_sent" : rowOf(operation, said);
+    observed.row = said === null ? "call_refused_before_it_was_sent" : rowOf(operation, said, request.variant);
   } else if (answer.exit_code === FAILED && said !== null) {
-    observed.row = rowOf(operation, said);
+    observed.row = rowOf(operation, said, request.variant);
   } else {
     // An exit the CLI did not explain: a crash, a stack trace. On a write it may have happened.
     observed.row = lost;

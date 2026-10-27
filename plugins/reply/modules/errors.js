@@ -122,7 +122,7 @@ export const COMMANDS = {
   },
   "contact send-email": {
     "kind": "write",
-    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
   },
   "contact linkedin-message": {
     "kind": "write",
@@ -143,7 +143,9 @@ export const COMMANDS = {
 // no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email — and
 // `reply.invalid_request:message` one whose fields name a send's text — and
 // `reply.refused:inboxThread.invalidInput:RenderingFail` the row for a refusal Reply explained by its own code and by the
-// first word of its sentence, up to the first colon or white space.
+// first word of its sentence, up to the first colon or white space. A key that starts `template:` is that row only for a
+// send composed as a template: Reply answers a template it could not fill in under the code it gives a mailbox that
+// failed, so the same refusal of a final text keeps the row it has.
 //
 // `outcome.unknown` is never looked up here for a work command: the CLI answers it with exit 3, and `cli.js` reads an
 // exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
@@ -298,6 +300,7 @@ export const CODES = {
       "access.feature_unavailable": "feature_not_included"
     },
     "message.send": {
+      "template:reply.refused:contact.unknown:RenderingFail": "template_not_filled",
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
       "contact.invalid_email": "invalid_channel_value",
@@ -1044,10 +1047,10 @@ export const ROWS = {
         "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nothing was sent. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "placeholder_in_the_text": {
-        "when": "The note carries a double opening brace, which Reply reads as the start of a placeholder of its own. Decided before any call.",
+        "when": "The note carries a double opening brace, which Reply reads as the start of a placeholder of its own, or `@prompt[[`, which Reply reads as the start of a prompt to a model. Decided before any call.",
         "code": "message_invalid",
         "class": "validation",
-        "note": "The note carries a double opening brace, which Reply reads as a placeholder it fills in for each person, so what would go out might not be the note a person approved. Nothing was sent. Write the note without one and propose the invitation again."
+        "note": "The note carries a double opening brace, which Reply reads as a placeholder it fills in for each person, or `@prompt[[`, which Reply reads as a prompt to a model whose answer it sends, so what would go out might not be the note a person approved. Nothing was sent. Write the note without either and propose the invitation again."
       },
       "text_would_render": {
         "when": "The CLI answered `linkedin.missing_variables`: Reply read part of the note as a placeholder of its own and could not fill it in.",
@@ -1194,10 +1197,65 @@ export const ROWS = {
         "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nothing was sent. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "placeholder_in_the_text": {
-        "when": "The subject or the text carries a double opening brace, which Reply reads as the start of a placeholder of its own. Decided before any call.",
+        "when": "The subject or the text of a final message carries a double opening brace, which Reply reads as the start of a placeholder of its own, or `@prompt[[`, which Reply reads as the start of a prompt to a model. Decided before any call.",
         "code": "message_invalid",
         "class": "validation",
-        "note": "The subject or the text carries a double opening brace, which Reply reads as a placeholder it fills in for each person, so what would go out might not be the message a person approved. Nothing was sent. Write it without one and propose the message again."
+        "note": "The subject or the text carries a double opening brace, which Reply reads as a placeholder it fills in for each person, or `@prompt[[`, which Reply reads as a prompt to a model whose answer it sends, so what would go out might not be the message a person approved. Nothing was sent. Write it without either and propose the message again."
+      },
+      "tag_in_the_text": {
+        "when": "An email's subject or body, written as final text, holds a `<` an HTML reader takes as the start of a tag: one followed by an ASCII letter, `/`, `!` or `?`. Reply decodes the body before it reads it, and drops a tag it does not know with everything after it, in the body and in the subject alike, so what went out would stop there; the subject goes as written, and a character reference in it is not read. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write it without a `<` right before a letter, `/`, `!`, `?` or a value, an address without its angle brackets, and propose the message again."
+      },
+      "template_refused": {
+        "when": "The message is composed as a template, and its subject or its body writes a construct the template standard refuses: the package reads a template by the standard, behind the document. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write the template as the template standard does, and propose the message again."
+      },
+      "template_names_a_key_reply_keeps": {
+        "when": "The message is composed as a template that names a custom field under a key Reply keeps for a value of its own: one of the contact's fields or engagement counts, the root of an account's person or mailbox, a date or a flag Reply computes, one of its helpers, or a word its template engine reads. Reply would write its own value instead of the field. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Keep the field at Reply under another key, name that key in the template, and propose the message again."
+      },
+      "template_spells_a_prompt": {
+        "when": "The message is composed as a template whose text and fallbacks, put together along one way through its conditions, spell `@prompt[[` once Reply fills it in, which Reply reads as a prompt to a model whose answer nobody approved. A value is not the package's to read, so a value between two parts breaks the spelling. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write the template so that its text and its fallbacks spell no prompt, and propose the message again."
+      },
+      "template_tag_in_the_text": {
+        "when": "The message is composed as a template whose subject or body holds a `<` an HTML reader takes as the start of a tag, in its text, a fallback's or a comparison's: one followed by an ASCII letter, `/`, `!` or `?`, or one right before a value Reply fills in, which may start with a letter. Reply decodes the body before it reads it, and drops a tag it does not know with everything after it, in the body and in the subject alike, so what went out would stop there. A template's text, a fallback's text and the text a comparison compares are held alike, the last because whether Reply sanitizes before or after it fills a template in has not been seen. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write the template without a `<` right before a letter, `/`, `!`, `?` or a value, an address without its angle brackets, and propose the message again."
+      },
+      "template_compares_what_reply_cannot_read": {
+        "when": "The message is composed as a template whose comparison compares a text holding a character Reply's comparison does not read: Reply reads letters, the marks that combine with them, digits, `_` and the other joining punctuation, white space and the punctuation $@\"`~!#%^&*()+,-./:;<= there, and leaves any other tag to its template engine, which reads it otherwise. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write the text the comparison compares without that character, or send the message as final text, and propose it again."
+      },
+      "template_off_email": {
+        "when": "The message is composed as a template in a LinkedIn format: only an email may be one. The document refuses it first; this is the package's own check behind it. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "note": "Only an email is sent as a template, so nothing was sent. Write the LinkedIn message as final text, and propose it again."
+      },
+      "template_not_filled": {
+        "when": "The message is composed as a template, and Reply refused the send because it could not fill the template in for this person: reply-cli's `reply.refused` with Reply's code `contact.unknown` and a sentence that starts `RenderingFail`. Reply fills a template in before it sends anything, so nothing was sent.",
+        "code": "template_unrendered",
+        "class": "validation",
+        "quotes": "reply",
+        "note": "Reply could not fill in the template for this person and refused it before anything was sent. Give the person a value for each name the template uses, or a fallback beside it, and propose the message again."
       },
       "format_of_another_channel": {
         "when": "The message's format belongs to another channel than the one the call named — an email on LinkedIn, or a LinkedIn format on the email channel. The document refuses it first; this is the package's own check behind it. Decided before any call.",
@@ -1378,8 +1436,9 @@ export function cutAnswerRow(operation, command) {
 // The row an error the CLI explained belongs in, for this operation: its own mapping, then the shared one, then the
 // CLI's namespaces. An invalid request naming a field has a row of its own wherever the operation has one for that
 // field: the email, where the operation takes an address, because there the person's data is what Reply refused rather
-// than a request this package built wrong; and a send's text, which Reply holds to a length of its own.
-export function rowOf(operation, error) {
+// than a request this package built wrong; and a send's text, which Reply holds to a length of its own. `variant` is
+// `template` for a send composed as one, and undefined otherwise.
+export function rowOf(operation, error, variant) {
   const code = typeof error.code === "string" ? error.code : "";
   const own = has(CODES.per_operation, operation) ? CODES.per_operation[operation] : {};
   const details = error.details !== null && typeof error.details === "object" ? error.details : {};
@@ -1395,6 +1454,10 @@ export function rowOf(operation, error) {
   // exactly that one: Reply's code for invalid input covers more causes than any one row could name.
   if (typeof error.reply_code === "string" && typeof error.detail === "string") {
     const keyed = code + ":" + error.reply_code + ":" + error.detail.split(/[:\s]/)[0];
+    if (typeof variant === "string" && has(own, variant + ":" + keyed)) {
+      return own[variant + ":" + keyed];
+    }
+
     if (has(own, keyed)) {
       return own[keyed];
     }
@@ -1496,11 +1559,25 @@ export function fail(operation, observed, learned) {
   throw host.fail(compact({
     class: row.class,
     code: row.code,
-    message: row.note,
+    message: messageOf(row, observed),
     details: Object.keys(details).length === 0 ? undefined : details,
     external_ids: learned,
     block: row.block === undefined ? undefined : blockOf(row.block, observed),
   }));
+}
+
+// The failure's message: the row's note, and for a row that `quotes`, what would otherwise reach only the trace — this
+// package's own reason before the note, or Reply's own sentence after it.
+function messageOf(row, observed) {
+  if (row.quotes === "reason" && typeof observed.reason === "string") {
+    return observed.reason + " " + row.note;
+  }
+
+  if (row.quotes === "reply" && typeof observed.provider_detail === "string") {
+    return row.note + " Reply said: " + describe(observed.provider_detail);
+  }
+
+  return row.note;
 }
 
 // What a row of class `blocked` says is blocked: the scope and the reason the row names, the sending account the call

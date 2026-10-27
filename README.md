@@ -20,6 +20,8 @@ We built it with the current, not against it. In a few years the agents themselv
 and memory; Jason stands on those conventions, so most of the work happens inside your session, and each step their
 makers take forward strengthens it. Nothing reaches a real person without your approval, and the skills, contracts and
 plugins are open, so the harness grows the way agent tooling does: by people adding what they need.
+The Runtime API is documented and open as well, so a plugin of your own — a program that reads and writes the runtime —
+can be built over it: [docs/runtime-api.md](docs/runtime-api.md).
 
 The reasoning behind this, and who Jason is for and who it is not for, is in [docs/philosophy.md](docs/philosophy.md).
 
@@ -149,7 +151,7 @@ anywhere until somebody writes a route: work with no route fails at the claim wi
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
 such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twenty-two published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
-CLI, signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program,
+CLI, signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program,
 and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of
 your own address approved by you and performed against the provider, and the history it leaves — is
 [docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. It proves the
@@ -233,21 +235,22 @@ would later refuse to launch, rather than writing one.
 [`skills/README.md`](skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of seven names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install`, which
-changes this installation's files as those two do — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
+One question, answered check by check. It is one of eight names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and
+`plugin install`, which change this installation's files as those two do — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
-| the runtime answers | a provider plugin is installed |
-| the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
-| migrations are applied | every plugin installed is available |
-| the plugin registry is alive (zero plugins is alive) | a route is configured |
-| role skills are present, named after their directories and within the runtime's live cap | a binding names an account |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a provider CLI **you name** answers |
-| | the skill packs are deployed to an agent harness |
+| the runtime answers, and no update stopped part-way from its swap on — its repair then is `jason update apply`, never `jason runtime start` | no update is waiting to be resumed |
+| the running runtime is the build this CLI is | a provider plugin is installed |
+| migrations are applied | each plugin package this release publishes is the one installed |
+| the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
+| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a route is configured |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
+| | a provider CLI **you name** answers |
+| | the skill packs are deployed to an agent harness, and the files their record names are there |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
@@ -474,7 +477,7 @@ jason decision answer <decision-id> --answer "pause it" --actor human:you@exampl
 When the provider refuses an account, or one sending account under it, for something the work cannot change, such as
 billing, a plan's allowance or a disconnected channel, the runtime keeps that as a **block** and holds the work it
 concerns until a call gets past it. A person who has removed the cause says so under their name, and the next scan lets
-the work go; an agent cannot clear a block:
+the work go; a clear that comes from a role or from a run is refused, and so is one that names no person:
 
 ```sh
 jason block list --human

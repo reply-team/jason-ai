@@ -34,7 +34,8 @@
       "/contacts/0/channels/0/value": "marta@example.com",
       "/args/channel": "email",
       "/args/sender": { "external_id": "s_12", "address": "ann@example.com" },
-      "/args/message": { "format": "email", "subject": "The Lisbon meetup", "body": "Hi Marta,\nthanks for the chat at the meetup." }
+      "/args/message": { "format": "email", "subject": "The Lisbon meetup", "body": "Hi Marta,\nthanks for the chat at the meetup." },
+      "/args/message/compose": null
     }
   }
 }

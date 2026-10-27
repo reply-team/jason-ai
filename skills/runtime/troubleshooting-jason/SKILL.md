@@ -164,7 +164,8 @@ answer, not the item, went unmeasured, after the provider had acted.
 Three spellings to expect yourself to get wrong while you look. **A campaign id is an argument, not an
 option**: it is `campaign list-contacts cmp_…`, and `campaign list-contacts --campaign cmp_…` is refused —
 which is the one every session so far has reached for first. The campaign's own people, each with where they
-stand in it, are that verb; `contact list --campaign cmp_…` lists the ones not excluded. And these listings print JSON already, so there is no `--json`;
+stand in it, are that verb, and its `enrolled` is Jason's own membership, never enrolment at the provider;
+`contact list --campaign cmp_…` lists the ones not excluded. And these listings print JSON already, so there is no `--json`;
 `--human` is the option that changes the rendering.
 
 **What it means.** The arguments do not satisfy the operation's published contract, or the provider refused

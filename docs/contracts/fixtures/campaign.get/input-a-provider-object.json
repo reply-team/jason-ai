@@ -1,0 +1,18 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the provider's own object beside the arguments: admitted for every operation and never read by the runtime",
+  "input": {
+    "args": {
+      "campaign": { "external_id": "c_7714" },
+      "provider": { "send_window": { "days": ["mon", "tue"], "zone": "America/Bogota", "label": "café de mañana" }, "notes": [1, true, null] }
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": "valid"
+}

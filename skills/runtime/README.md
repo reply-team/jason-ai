@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.20.0**.
+this pack ships with Jason **0.21.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -26,9 +26,10 @@ description that promises everything matches nothing.
   Turning an objective into durable campaign work and following it: the provider check, what the person has
   already written down, the campaign, the people it is about, provider operations and AI role work, what the
   runtime does with them afterwards, answering a conversation, and stopping or holding work.
-- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
-  person to decide: the approvals parked at a claim and the questions a running role raised — including when a
-  notification brought the person — presented in their own words and recorded as their decision.
+- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **draft** until a host reads its new text.
+  What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
+  raised — including when a notification brought the person — presented in their own words and recorded as their
+  decision.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
@@ -44,7 +45,8 @@ description that promises everything matches nothing.
   start needs, with who writes and how the company sounds set as the person's word, taking a brief as it comes and
   asking for what is missing one question at a time, what stays a quick look, what is agreed with the person before
   anything is created, among it a campaign named for what it is for, under a project named from what they sell, when it
-  becomes campaign work, and the first message seen before anything is sent. The session file of the planner, below.
+  becomes campaign work, and the first message seen before anything is sent; a campaign never split only to give
+  some of its people another tone of voice. The session file of the planner, below.
 - [`researcher-in-session`](researcher-in-session/SKILL.md) — **draft.** The researcher's judgement in a person's own
   conversation about an account or a person: taking the question as it comes, what stays a quick look and what
   becomes research work items, what Jason already holds and the launched researcher's notes read as a lead, the
@@ -94,11 +96,12 @@ for a role that sits with a person, the judgement it shares with its session fil
   order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
   the chronicle every time.
 - [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
-  before it plans, the order a first campaign opens in, what this build stores of a plan and what it does not, and
-  how a horizon becomes work items a dispatcher will claim.
+  before it plans, the order a first campaign opens in, a campaign never split only to give some of its people
+  another tone of voice, what this build stores of a plan and what it does not, and how a horizon becomes work items a
+  dispatcher will claim.
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
-  written, and why writing it is not sending it.
+  written, when one text may be a template for a whole audience, and why writing it is not sending it.
 - [`roles/personalizer`](roles/personalizer/SKILL.md) — **draft.** The messaging adapted to one person: what
   this runtime knows about them and where to read it, the tone and the sender's forms it writes in, where the
   wording goes afterwards, and why a contact record is not the place for it.
@@ -181,5 +184,4 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
-| `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |

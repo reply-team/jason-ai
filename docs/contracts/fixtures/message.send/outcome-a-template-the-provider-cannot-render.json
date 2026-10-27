@@ -1,0 +1,21 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a template naming a custom field under a key the provider keeps for a field of its own, refused before anything was sent",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "template_unsupported",
+      "message": "The template names a custom field under a key the provider keeps for one of its own fields, so nothing was sent.",
+      "details": null,
+      "external_ids": { "contact": "p_88421" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 4, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "validation", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

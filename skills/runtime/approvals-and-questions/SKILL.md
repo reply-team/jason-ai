@@ -2,7 +2,7 @@
 name: approvals-and-questions
 description: Use when a person asks what Jason is waiting for them to decide, or arrives because a notification said approvals or questions are waiting, or tells you to decide something Jason has parked - list the approvals and the questions waiting on a person, present each in their own words, and record their decision as theirs.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Approvals and questions
@@ -15,8 +15,8 @@ are confident, not when they told you earlier to handle things, not when work is
 runtime refuses a decision that does not name a person, and that refusal is the floor of this rule
 rather than the whole of it.
 
-**Status: verified** against Claude Code 2.1.293. It covers the two waiting things this build publishes and nothing
-else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers the two waiting things this
+build publishes and nothing else.
 
 ## The two things that wait, and how they differ
 
@@ -28,7 +28,9 @@ and the question in front of the person is whether it should happen at all.
 **A decision (`dec_…`) is a question a running role raised** because it could not work out what to do
 next and would not guess. The attempt that asked it ended there; the question outlives that attempt,
 which is why it is a row and not something held in a conversation. Its answer wakes the review that
-carries the work on. Something is half done here, and the question is what it should become.
+carries the work on: the campaign manager's next check-in will create the work the answer implies, and the session that
+recorded the answer creates nothing: if it did, the campaign would hold the same work twice. Something is half done here, and the
+question is what it should become.
 
 The difference decides how you present them. An approval asks *shall this exact thing be done*, and
 the runtime has already assembled everything needed to answer. A decision asks whatever the role
@@ -78,6 +80,9 @@ again at read time, so what a person reads is what the claim saw.
 Where the preview carries a `summary`, quote it first and word for word — it names this approval's own person,
 campaign and numbers; the `intent` beside it is the operation's generic sentence.
 
+Where the preview carries an `example`, present it as one reading of the template and say that what is approved is the
+template as written: the example is the runtime's rendering for one person, and the provider's rendering may differ.
+
 Give the person all of it. The reach, the cost and what can be undone are the three lines a decision
 actually turns on, and a summary that drops them to be shorter has dropped the part worth reading.
 Where one of them is marked conditional, say so and give the detail beside it: that is the operation's
@@ -110,9 +115,9 @@ actor with no name at all with `actor_required`. Leaving the option off inside a
 than useless: the command line then claims the attempt it was launched for, and that is refused too.
 
 What you put in `--reason`, and in `--answer`, is **their word on that item** — their sentence carried
-across, not your account of what they probably meant. `--answer` is required and is what the role
-reads when the work comes back to it, so a one-word answer to a question that deserved two sentences
-is a decision half recorded.
+across, not your account of what they probably meant. `--answer` is required and is what the campaign
+manager reads at its next check-in, so a one-word answer to a question that
+deserved two sentences is a decision half recorded.
 
 **There is no bulk verb, and there should not be.** A person who says "approve the first two" has
 decided two things, and two things are **one call each**: its own identifier, its own reason, its own

@@ -32,8 +32,8 @@ Jason never sends you there for the work itself.
 ### If an agent runs it
 
 Read this whole page first, word for word, and follow it in order. It assumes no repository and no particular
-folder: start in any folder of yours, and nothing in this run writes there — the two files step 3 downloads, the
-`.sha256` file its sh line writes beside them, and the one file step 6 makes go in the system's temporary directory.
+folder: start in any folder of yours, and nothing in this run writes there — the package step 3 places goes into
+Jason's data directory, and the one file step 6 makes goes in the system's temporary directory.
 
 Before anything, ask the person one question in plain words: what you will install and from where — the Reply
 plugin from the release of Jason they run, the Reply CLI from npm's registry, and Node if it is missing; what this
@@ -104,45 +104,36 @@ you did not choose.
 
 ## 3. Install the package
 
-Installing a plugin is copying its directory into `~/.jason/plugins/<id>/`. There is no install verb. Every release
-of Jason from 0.11.0 on publishes the Reply plugin's directory as `jason-plugin-reply.zip`, its files at the
-archive's root, and lists it in that release's `checksums.txt`. Take both from the release you run — `<version>` is
-what `jason --version` prints, up to any `+` — into the system's temporary directory, written
-`<temporary directory>` below and quoted if it holds a space. Then unpack the package, only once it matches its line,
-into a `~/.jason/plugins/reply` that is not there yet; step 1's start made `~/.jason/plugins`. On macOS and Linux:
-
-```sh
-curl -fsSL -o <temporary directory>/checksums.txt https://jasonharness.ai/releases/download/v<version>/checksums.txt
-curl -fsSL -o <temporary directory>/jason-plugin-reply.zip https://jasonharness.ai/releases/download/v<version>/jason-plugin-reply.zip
-(cd <temporary directory> && grep '  jason-plugin-reply.zip$' checksums.txt > jason-plugin-reply.zip.sha256 && sha256sum -c jason-plugin-reply.zip.sha256) && unzip -q <temporary directory>/jason-plugin-reply.zip -d ~/.jason/plugins/reply
+```
+jason plugin install reply
 ```
 
-On Windows, in PowerShell:
+Every release of Jason from 0.11.0 on publishes the Reply plugin's directory as `jason-plugin-reply.zip`, its files
+at the archive's root, lists it in that release's `checksums.txt`, and names it in its `manifest.json` with the
+content digest of the tree it unpacks to. The verb takes the package of the release you run — the version
+`jason --version` prints — from that release's own directory, holds it to its line in `checksums.txt` and, unpacked,
+to that digest, and only then moves it in whole as `~/.jason/plugins/reply`. A package that does not match places
+nothing: the verb exits 1, says why, and you stop and say so too. A different package already in
+`~/.jason/plugins/reply` — one edited or built on this machine, or another version — is kept, and the verb says so;
+`--replace` swaps it for the release's.
 
-```powershell
-irm https://jasonharness.ai/releases/download/v<version>/checksums.txt -OutFile <temporary directory>/checksums.txt
-irm https://jasonharness.ai/releases/download/v<version>/jason-plugin-reply.zip -OutFile <temporary directory>/jason-plugin-reply.zip
-if ((Get-FileHash <temporary directory>/jason-plugin-reply.zip).Hash -eq ((Select-String '  jason-plugin-reply.zip$' <temporary directory>/checksums.txt).Line -split ' ')[0]) { Expand-Archive <temporary directory>/jason-plugin-reply.zip ~/.jason/plugins/reply } else { throw 'jason-plugin-reply.zip does not match checksums.txt' }
-```
+The runtime from step 1 is then asked to reload, so the package is loaded at once, granted nothing yet: what it may
+run and which work it takes are steps 4 and 5. Without a runtime the package is placed all the same, and the runtime
+loads it at its next start; the verb never starts one. A runtime that answers and refuses the reload leaves the package
+placed, and the verb exits 1 with `load: rejected` in its body and the runtime's refusal under `error`.
 
-The unpack is part of the check's own line, so it follows only a check that passed: a package that does not match
-its line, or has none, is never unpacked, however the lines are run, and you stop and say why. The sh line checks
-the package's line from a file of its own, `jason-plugin-reply.zip.sha256` beside the download, because the
-`sha256sum` macOS carries reads a file and not a pipe. A macOS older than 14 has no `sha256sum`; `shasum -a 256 -c`
-in its place reads the same file.
-
-So the package is the one released with your runtime, file for file: what you unpacked has the content digest of the
-release's own tree, and once it is loaded `jason status` says so in its `plugin_package` check, which fails when the
-package installed is an earlier release's. Where the release cannot be reached, or is older than 0.11.0 and does not
-carry the package, the tree `jason skills install` fetched when the installation was taught — this repository at the
-tag of the release you run, kept in Jason's data directory — holds the same package, and copying it is the same
-install:
+So the package is the one released with your runtime, file for file: it has the content digest of the release's own
+tree, and `jason status` says so in its `plugin_package` check, which fails when the package installed is an earlier
+release's. `jason update apply` keeps it so: it replaces an earlier release's package with the new release's, and
+leaves one edited or built on this machine as it is. Where the release cannot be reached, the tree
+`jason skills install` fetched when the installation was taught — this repository at the tag of the release you run,
+kept in Jason's data directory — holds the same package, and copying it into a `~/.jason/plugins/reply` that is not
+there yet, then `jason plugin reload`, is the same install;
+`<version>` is what `jason --version` prints, up to any `+`:
 
 ```
 cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply
 ```
-
-Nothing is loaded yet. A package on disk is a candidate; what makes it active is the reload in step 5.
 
 ## 4. Grant it what it asks for, and write the route
 
@@ -188,7 +179,7 @@ The reload reads every package, recomputes each content digest, freezes the rout
 snapshots together — or refuses the lot and keeps what was working. `plugin list` shows the package as `valid`
 with its digest and what it was granted; `route resolve` says which plugin would perform one operation for one
 campaign, and why it could not. After a reload, `jason status` also names a plugin that is installed but
-unavailable, with its problems, in its `plugin_availability` check.
+unavailable, with its problem codes, in its `plugin_availability` check.
 
 ## 6. Create the work
 

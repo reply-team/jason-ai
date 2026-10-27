@@ -110,6 +110,21 @@ product's first campaign, unless the person renamed it to that product's name, w
 and the one `jason project list --query` finds. The project a command could take from the folder it runs in is no
 answer for that first create.
 
+**`jason campaign list` follows the folder you are in.** Run inside a project's folder, it lists that project's
+campaigns and no others, and it says so on stderr, where a command that reads JSON may never look. A campaign that is
+not in the list is therefore not necessarily absent: it may belong to another project. Before you tell the person that
+a campaign does not exist, list across projects with `jason campaign list --all-projects`; `--project` names one
+other project by its id, so `--project all` answers `project_not_found`, and it cannot be combined with `--all-projects`.
+The four reads of where people stand, `campaign summary`, `campaign activity`, `campaign activity-by-period` and
+`campaign list-contacts`, are different: given no campaign they answer for every campaign not archived, in every
+project, whatever folder they run in. So one folder can show a campaign through `campaign summary` that `campaign
+list` does not list.
+
+```
+jason campaign list --all-projects
+jason campaign list --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
 **The brief becomes the campaign.** What the person told you about the campaign — the product, the audience, how it
 sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any
 contact is added and before anything is sent. It is the campaign's shared knowledge: a role that reads the campaign
@@ -134,6 +149,11 @@ you already used is refused with `idempotency_key_reused`; give it a key of its 
 
 **The campaign's own people are `campaign list-contacts`**, each with where they stand in it: enrolled, paused,
 finished or excluded. `contact list --campaign cmp_…` lists the same people who are not excluded, as contact records.
+**`enrolled` here is Jason's own membership and nothing more.** It says the person is on this campaign in Jason, and
+it is the state a person has the moment they are added. It does not say the person was put into a sequence at the
+provider; that is a `campaign.enroll` work item that succeeded, and the provider's own list is read with
+`enrollment.list`. A campaign with no provider sequence has members, never enrolments: say "on the campaign" or
+"members", and never that they are enrolled at the provider, however `list-contacts` spells the state.
 To find one person among everyone the runtime knows, give `contact list` any part of what they are known by — a
 name, a company, an email, a phone however it is spaced, a LinkedIn link:
 
@@ -300,6 +320,16 @@ something different. What belongs here is only that they exist.
 claim: the item's status becomes `awaiting_approval`, no attempt is made, and nothing is sent to the provider.
 The decision is a person's — a session must not make it, and the runtime refuses a decision that does not name
 one. Presenting what is waiting, and recording what the person says about it, is **`approvals-and-questions`**.
+
+**A question a role raised is answered by recording the answer, and the campaign's manager acts on it.** When the
+person answers a question a launched role raised, you record it with `jason decision answer` and the person as
+`--actor`, and you stop there. The role that asked has already ended: the answer releases the campaign manager's next
+check-in, and the manager creates the work the answer implies. If you create it as well, the campaign holds the same
+work twice. That check-in runs only for an active campaign and at the next scan, and a check-in already open does not
+consume the answer, so read `jason campaign get` for the status. If the campaign is not active, tell the person that
+nothing acts on the answer until it is. If it is active and no new work has appeared yet, say the check-in has not run
+yet and create nothing in its place. Read the work items the check-in makes before you offer any, and create work
+yourself only where the person asks for something the answer did not cover.
 
 **It may stop with a code.** A work item that failed carries an error, and the code is the answer: it says
 whether this is somebody's configuration, your arguments, a provider that was unreachable, or a person who has

@@ -91,6 +91,13 @@ installs the executable under your own account — with its licence and the thir
 already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
 it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
 
+On macOS and Linux the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
+`~/.bashrc` or `~/.zshrc` as well: the terminal a desktop opens — GNOME's, for one — is not a login shell, reads
+that file and not the login profile, and so finds `jason` without your signing out. For any other shell the script
+says to sign out and back in, because only a new sign-in reads the login profile again. Every run ends with the
+licence it installed under, where the release has one, and then the one command to run next, `jason status` (§5),
+which says what this installation still needs and the command for each.
+
 Then, before the PATH step, each script says where Jason will keep what it learns about your business, and where a
 campaign goes that names no project. On Windows, for an account whose home directory is `C:\Users\Marta`:
 
@@ -136,14 +143,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.20.0/install.sh | sh -s -- --version 0.20.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.21.0/install.sh | sh -s -- --version 0.21.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.20.0/install.ps1))) -Version 0.20.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.21.0/install.ps1))) -Version 0.21.0
 ```
 
-These install 0.20.0 with 0.20.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.21.0 with 0.21.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -154,12 +161,14 @@ account's Path already names — the entry stays, and so does everything else it
 **Ask first.** On Windows, add its directory to your account's `Path`; on macOS and Linux, append an `export` line
 to the one profile a login shell of yours reads — `~/.zprofile` for `zsh`; for `bash` the first of
 `~/.bash_profile`, `~/.bash_login` and `~/.profile` that exists, because bash never reads `~/.profile` once one of
-the others does; `~/.profile` for every other shell. `jason status` prints the exact line for your platform — a
+the others does; `~/.profile` for every other shell — and, for `bash` and `zsh`, to `~/.bashrc` or `~/.zshrc` as well,
+which a terminal opened without a login reads. `jason status` prints the exact line for your platform — a
 PowerShell line on Windows, an `sh` line elsewhere — when it finds that `jason` does not resolve (§5), so the
 simplest path is to run it and type what it says.
 
-One thing that line cannot do for you: a login profile is read by a **login** shell. A person opening a new
-terminal gets it; an agent running one command at a time in a non-interactive child shell (`bash -c …`) has
+One thing that line cannot do for you: a profile is read by a shell that starts after it is written. A person
+opening a new terminal gets it — where the shell has no file of its own for that, as `bash` and `zsh` do, only after
+signing out and back in; an agent running one command at a time in a non-interactive child shell (`bash -c …`) has
 written the profile but will not see it in its own next command. If you are an agent, carry the `export` half
 of that line yourself, or call the executable by its full path until a new login shell exists.
 
@@ -170,8 +179,8 @@ jason --version
 ```
 
 On Windows the PowerShell you installed from is told about the new PATH entry. On macOS and Linux the script ran
-in a shell of its own, so the one you typed it into has not heard: open a new terminal, or type it by its full
-path — `~/.local/bin/jason --version`.
+in a shell of its own, so the one you typed it into has not heard: open a new terminal — or sign out and back in, where
+the script said so — or type it by its full path — `~/.local/bin/jason --version`.
 
 A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
 day after that, at the default settings: one `GET`, carrying nothing about you or your work — it identifies only
@@ -287,8 +296,11 @@ of this repository, to each of the lines above.
 
 It refuses a deployment the runtime would later refuse to launch, rather than writing one — a role whose
 directory and skill name disagree, or a tree over the runtime's live size cap, stops the whole deployment
-before a byte is written. A file you have since edited is reported and kept, not overwritten; `--force`
-overwrites it, and overwrites every edited file in every root of the plan, so read what it says first.
+before a byte is written. A file you have since edited is reported and kept, not overwritten, and
+everything else is written around it: the run names each file it kept and succeeds. The skill holding it is
+written file by file where it stands, and is a blend of two hands, yours and the release's, which is yours to
+reconcile. `--force` overwrites it,
+and overwrites every edited file in every root of the plan, so read what it says first.
 
 Later, to move an existing deployment to a newer set:
 
@@ -303,8 +315,9 @@ made with `--ref` stays at its ref, a directory is read where it stands, and a d
 record names, because the tag its own version names is not published yet.
 
 From 0.20.0, Jason's own installation on 0.18.x or earlier updates through 0.19.0: `jason update apply --version 0.19.0`,
-then `jason update apply`. Its own `jason update check` still names `jason update apply`, and that apply refuses with
-`update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
+then `jason update apply`. Its own `jason update check` names 0.19.0 as `install_first` and its apply as
+`upgrade_command`, and a plain `jason update apply` refuses with `update_not_directly_applicable`, naming 0.19.0. A
+package manager's upgrade goes straight to the newest release.
 
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
@@ -331,20 +344,21 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of seven names in
+One question — "can this installation start work?" — answered check by check. It is one of eight names in
 this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and
-`update` nouns, and `ui install`, which changes this installation's files as those two do — and it cannot be
+`update` nouns, and `ui install` and `plugin install`, which change this installation's files as those two do — and it cannot be
 otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
-| the runtime answers | a provider plugin is installed |
-| the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
-| migrations are applied | every plugin installed is available |
-| the plugin registry is alive (zero plugins is alive) | a route is configured |
-| role skills are present, named after their directories and within the runtime's live cap | a binding names an account |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a provider CLI **you name** answers |
-| | the skill packs are deployed to an agent harness |
+| the runtime answers, and no update stopped part-way from its swap on — its repair then is `jason update apply`, never `jason runtime start` | no update is waiting to be resumed |
+| the running runtime is the build this CLI is | a provider plugin is installed |
+| migrations are applied | each plugin package this release publishes is the one installed |
+| the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
+| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a route is configured |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
+| | a provider CLI **you name** answers |
+| | the skill packs are deployed to an agent harness, and the files their record names are there |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
@@ -359,7 +373,8 @@ commands. One is not: putting an executable on a PATH is the shell's own act, so
 line your platform needs — a PowerShell line on Windows, an `sh` line elsewhere, the same line this product's
 own installer writes — which you type rather than hand back to `jason`.
 
-**Ask first.** That line writes a login profile, or this account's `Path` on Windows. Typed twice, it changes
+**Ask first.** That line writes a login profile — for `bash` and `zsh`, `~/.bashrc` or `~/.zshrc` beside it — or this
+account's `Path` on Windows. Typed twice, it changes
 nothing the second time. Read §2's note about login shells before you type it.
 
 A shell that started before the installer put Jason on this account's PATH does not see it — and an agent's
@@ -380,15 +395,15 @@ was left running across an upgrade that replaced the executable — a package ma
 hand — because that runtime is still the old build and starts its plugin hosts from the old image. Its repair is
 `jason runtime restart`.
 
-`plugin_package` compares each plugin package the release you run publishes — today the Reply plugin — with the
-package of that id installed, by content digest, offline: the runtime carries its release's package and asks no
-network. An earlier release's package fails it, an upgrade having replaced the executable and left
-`~/.jason/plugins/reply` as it was. No command installs a package, so its fact carries the repair in words: the
-installed version, the version this release published, and that step 3 of [the wiring check](golden-path.md) prints
-the two lines — the checksum match and the unpack into `~/.jason/plugins/reply`, once the old package is moved away
-— then `jason plugin reload`. A package with the same version or a later one passes, and the fact says it is a
-later release's package or one built or edited on this machine; no package of that id is absent. A development
-build compares with its own tree, and the fact names the build it compared with.
+`plugin_package` compares each plugin package the release you run publishes — today the Reply plugin — with the package
+of that id installed, by content digest, offline: the runtime carries its release's package and asks no network. An
+earlier release's package fails it: a package manager's upgrade replaces the executable and leaves
+`~/.jason/plugins/reply` as it was, and so does an update whose `plugins:` line says the package was not replaced. Its
+fact names the installed version, the version this release published, and the command that places it,
+`jason plugin install reply --replace`, which swaps the old package for the release's and asks the runtime to load it. A
+package with the same version or a later one passes, and the fact says it is a later release's package or one built or
+edited on this machine; no package of that id is absent. A development build compares with its own tree, and the fact
+names the build it compared with.
 
 `plugin_availability` names each plugin `jason plugin list` reports `unavailable`, with its problem codes and never
 their text — `reply is unavailable; its problems: executable_missing.` Such a problem is about this machine rather than
@@ -466,13 +481,19 @@ registration — the AppUserModelID key the toast was shown under, and the two e
 first toast — after the runtime, so its next toast cannot write them back; then the recorded skills; then the
 PATH entry, only where the installer wrote it; then the executable, its two notice files, its install directory,
 and the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
-`~/.net` on macOS and Linux. The notice files go by name: on macOS and Linux it removes those two files by name
-from a directory other tools share, and a `LICENSE` there that is not one of them is another tool's and stays.
+`~/.net` on macOS and Linux. On Windows what every other build of Jason unpacked beside them goes too: the versions
+this installation was before an update, and any other installation of this account, which nothing there tells
+apart. A build unpacks again on its next start, and a copy running now holds its own, which stays and is named. On
+macOS and Linux a running copy holds nothing, so what the other builds unpacked stays: the plan and the report count
+those directories, name the directory they are in, and leave them for you to remove once nothing runs from them.
+With `DOTNET_BUNDLE_EXTRACT_BASE_DIR` set they are not looked for at all. The notice files go by name: on macOS and
+Linux it removes those two files by name from a directory other tools share, and a `LICENSE` there that is not
+one of them is another tool's and stays.
 
 "Only where the installer wrote it" is one rule on both platforms: the entry goes only where the installer wrote
 it **and** its directory holds nothing but what the installer puts there, because other programs are on the PATH
-through the same entry. On macOS and Linux the entry is the block the installer appends to a login profile — a
-marker line and the `export` line under it; a line nobody marked is yours and stays, and so does the block where
+through the same entry. On macOS and Linux the entry is the block the installer appends to a login profile, and to `~/.bashrc` or
+`~/.zshrc` beside it — a marker line and the `export` line under it; a line nobody marked is yours and stays, and so does the block where
 the directory holds more than `jason` and its two notice files: `~/.local/bin`, the installer's default, is where
 other tools install too. On Windows the Path carries no marker, so the entry goes only where its directory holds
 nothing but the executable, its two notice files (`jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`) and the
