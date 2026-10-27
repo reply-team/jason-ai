@@ -5,11 +5,15 @@ absorbed by a release of this package alone.
 
 ## 0.10.0
 
-- `message.send` reads the message's `compose`. A message composed as a `template` is refused as
-  `template_unsupported` (validation) before anything is called: this version writes no template in Reply's syntax, and
-  a template sent as written would not be the message a person approved. A message composed as final text, or with no
-  `compose`, goes as before, and a double opening brace in it is still `message_invalid`. The error table carries a row
-  for `template_unrendered` too, which this version never reports, since it asks Reply to fill in no template.
+- `message.send` sends an email composed as a `template` in Reply's own syntax, by the same `reply contact send-email`,
+  and Reply fills it in for the person: each construct and name of the template standard as Reply writes it, the body
+  HTML around the tags. Before anything is called it refuses as `template_unsupported` (validation) a template the
+  standard refuses, a custom field under a key Reply keeps for a value of its own, a template whose text and fallbacks
+  spell a prompt to a model, a template that compares a value with a text holding a character Reply's comparison does
+  not read, and a template on LinkedIn. A template Reply could not fill in for the person is `template_unrendered`
+  (validation), with Reply's own sentence in the message and nothing sent. A message composed as final text, or with no
+  `compose`, goes as before: a double opening brace in it, or in an invitation's note, is still `message_invalid`, and
+  so, from this release, is `@prompt[[`, which Reply reads as a prompt to a model.
 
 ## 0.9.1
 

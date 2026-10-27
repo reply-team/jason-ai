@@ -41,7 +41,7 @@ internal static class TemplateGrammar
         new("value", "`{{name}}`", "a value", Kind.Accepted, "the name's value; a name with no value leaves the provider nothing to write, and the message is not sent"),
         new("fallback", "`{{name | 'text'}}`", "a value with a fallback", Kind.Accepted, "the name's value, or the quoted text when it has none"),
         new("if", "`{{#if name}}` ... `{{/if}}`", "a condition", Kind.Accepted, "what it holds when the name has a value"),
-        new("compare", "`{{#if name == 'text'}}`, `{{#if name != 'text'}}`", "a comparison", Kind.Accepted, "a condition on the value being, or not being, exactly the quoted text"),
+        new("compare", "`{{#if name == 'text'}}`, `{{#if name != 'text'}}`", "a comparison", Kind.Accepted, "a condition on the value being, or not being, the quoted text"),
         new("else", "`{{else}}`", "the other branch", Kind.Accepted, "once inside a condition: what is written when it does not hold"),
         new("raw", "`{{{`", "a raw value", Kind.Refused, "a template escapes nothing, so there is no second kind of value"),
         new("comment", "`{{!`", "a comment", Kind.Refused, "nobody reads it, and the providers do not all drop it"),

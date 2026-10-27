@@ -2,8 +2,8 @@
 // Reply's record of them. Each step refuses with nothing sent.
 //
 // - The text. Reply reads a double opening brace as the start of a placeholder of its own and fills it in for each
-//   person, or refuses the send when it cannot, so a text with one is refused before anything is called: what would go
-//   out would not be the text a person approved.
+//   person, or refuses the send when it cannot, so a final text with one is refused before anything is called: what
+//   would go out would not be the text a person approved. A template is Reply's to fill in (template.js).
 // - The sender. The arguments name the account by its identifier and by its address, and the address is what the
 //   person approving read, so the account is read from `reply account list` and held to it: an account Reply holds
 //   under another address — or under one where the arguments say none — is not the one that was approved.
@@ -35,8 +35,9 @@ const PATCH = "contact update";
 // The row for a contact this attempt was not pinned to that Reply named and then held nothing under (cli.js).
 const GONE = "contact_gone";
 
-// How Reply writes a placeholder it fills in for each person.
-const PLACEHOLDER = "{{";
+// What Reply reads in a text as its own: the start of a placeholder it fills in for each person, and of a prompt to a
+// model whose answer it sends.
+const PLACEHOLDERS = ["{{", "@prompt[["];
 
 // Reply numbers its mailboxes in 64 bits and its LinkedIn accounts in 32, so this is what a sender's identifier has to
 // look like before there is anything worth asking about.
@@ -50,10 +51,10 @@ function states(answer, field) {
   return Object.prototype.hasOwnProperty.call(answer, field) && (answer[field] === null || typeof answer[field] === "string");
 }
 
-/** Refuses a text a person approved that Reply would read a placeholder of its own in. Nothing is called. */
+/** Refuses a text a person approved that Reply would read a placeholder or a prompt of its own in. Nothing is called. */
 export function refusePlaceholders(operation, texts) {
   for (const written of texts) {
-    if (typeof written === "string" && written.indexOf(PLACEHOLDER) >= 0) {
+    if (typeof written === "string" && PLACEHOLDERS.some(marker => written.indexOf(marker) >= 0)) {
       fail(operation, { call: null, row: "placeholder_in_the_text" }, undefined);
     }
   }
@@ -105,32 +106,33 @@ export function senderFor(operation, context, channel, sender) {
  * Runs the send's one command for the person this send may reach, from `sender` — the account `senderFor` answered,
  * which a block the command meets is said for — with `flags` after the person's own and `text` — the command's own
  * input, or none — on stdin, and answers `{ sent, learned }`: what the command answered, and what this package knows
- * Reply calls the person, which travels out with every failure from here on.
+ * Reply calls the person, which travels out with every failure from here on. `variant` is `template` for a text
+ * composed as one, which names the rows of the send's own refusals (errors.js), and undefined otherwise.
  *
  * A person found by the pin or by the consumed value is read first and named by Reply's identifier. A person Reply holds
  * nobody for is named by their fields, for the command to import; where the command answers that Reply already held
  * them, it sent nothing, and the contact it names is read exactly as a found one is and the send made to it by its
  * identifier — one more command in that case, never a send to a contact nobody read.
  */
-export function sendTo(operation, context, input, command, sender, flags, text) {
+export function sendTo(operation, context, input, command, sender, flags, text, variant) {
   const named = personFor(operation, context, input);
   if (named.stdin === undefined) {
-    return { sent: run(context, sendRequest(operation, command, sender, named, flags, text)), learned: named.learned };
+    return { sent: run(context, sendRequest(operation, command, sender, named, flags, text, variant)), learned: named.learned };
   }
 
-  const first = runOrHeld(context, sendRequest(operation, command, sender, named, flags, text));
+  const first = runOrHeld(context, sendRequest(operation, command, sender, named, flags, text, variant));
   if (first.held === undefined) {
     return { sent: first.result, learned: named.learned };
   }
 
   const held = read(operation, context, input, { flags: ["--contact-id", first.held], learned: { contact: first.held } });
-  return { sent: run(context, sendRequest(operation, command, sender, held, flags, text)), learned: held.learned };
+  return { sent: run(context, sendRequest(operation, command, sender, held, flags, text, variant)), learned: held.learned };
 }
 
 // One run of the send's command: the person as `named` gives them, then `flags`, and on stdin the command's own input
 // alone for a person named by Reply's identifier, or one object, the person under `contact` and the input under
 // `message`, for a person named by their fields — or the person alone where the command reads no input of its own.
-function sendRequest(operation, command, sender, named, flags, text) {
+function sendRequest(operation, command, sender, named, flags, text, variant) {
   const stdin = named.stdin === undefined ? text : text === undefined ? named.stdin : { contact: named.stdin, message: text };
   return {
     operation: operation,
@@ -141,6 +143,7 @@ function sendRequest(operation, command, sender, named, flags, text) {
     stdin: stdin,
     learned: named.learned,
     gone: named.pinned ? undefined : GONE,
+    variant: variant,
   };
 }
 

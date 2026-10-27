@@ -508,18 +508,26 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The release in which a message composed as a template is refused before anything is called, since the package
-    /// writes none in Reply's syntax yet, and a final text is sent as before.
+    /// The release in which an email composed as a template goes in Reply's syntax and Reply fills it in: what is refused
+    /// before anything is called, what Reply's own refusal is, and a final text sent as before, save the prompt marker.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_10_0_and_the_template_it_refuses()
+    public void The_changelog_opens_with_0_10_0_and_the_template_it_sends()
     {
         var section = Flat(ChangelogSection(0));
 
         Assert.StartsWith(" ## 0.10.0 ", section, StringComparison.Ordinal);
         Assert.All(
-            new[] { "`message.send`", "`compose`", "`template`", "`template_unsupported`", "before anything is called", "`template_unrendered`", "`message_invalid`" },
+            new[]
+            {
+                "`message.send`", "`template`", "Reply's own syntax", "`reply contact send-email`", "`template_unsupported`",
+                "Before anything is called", "a key Reply keeps", "a prompt to a model", "`template_unrendered`",
+                "Reply's own sentence", "`message_invalid`",
+                "a template that compares a value with a text holding a character Reply's comparison does not read",
+                "and so, from this release, is `@prompt[[`, which Reply reads as a prompt to a model",
+            },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("never reports", section, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -822,6 +830,63 @@ public class ReplyPackageTests
         Assert.Contains("inbound sync says nothing for it", readme, StringComparison.Ordinal);
         Assert.Contains("A line for that thread is the person, or somebody else, moving it.", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("moves the thread", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What Reply counts as no value and how it compares are Reply's, and the README states them as Reply's rendering reads
+    /// a template, beside the sentence the package reads Reply's refusal by and the tag Reply drops with what follows it.
+    /// </summary>
+    [Fact]
+    public void The_readme_states_how_reply_reads_a_template_as_reply_s()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.All(
+            new[]
+            {
+                "What counts as no value, and how two values compare, is Reply's.",
+                "a fallback is written in place of a value that is null, empty, or exactly `false` or `0`",
+                "an `#if` takes its other branch on those, and on `false` written in any case",
+                "white space is a value",
+                "two numbers as numbers",
+                "that sentence starts `RenderingFail`",
+                "Reply decodes the whole message before it reads it** and drops an unknown tag with everything after it, in a final text as in a template",
+                "its text, the text of a fallback and the text a comparison compares reach Reply escaped as a final text's are",
+                "so a comparison compares the value with the text as the template wrote it",
+                "so write an address, and any `<...>` not meant as markup, without angle brackets: the package sends them as written.",
+            },
+            words => Assert.Contains(words, readme, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// On Linux the runtime started at logon is a <c>systemd --user</c> unit, whose environment reads no shell profile, so
+    /// the README says where a directory on the terminal's PATH reaches it, in the terms the release page uses.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_where_a_directory_reaches_a_runtime_started_at_logon_on_linux()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.Contains(
+            "On Linux, a program on the PATH your terminal has is not necessarily on the runtime's: a runtime started at logon is a `systemd --user` unit, whose environment is the user manager's and reads no shell profile — neither `~/.profile` nor `~/.bashrc`, where npm's global directory or a version manager most often adds itself — so that directory reaches it only through `~/.config/environment.d/` or the unit's own `Environment=`.",
+            readme,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("reads the login PATH", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The README's row and the error table's row for a comparison Reply cannot read name every kind of character Reply's
+    /// comparison reads, the joining punctuation <c>_</c> among them, as the package's check holds them.
+    /// </summary>
+    [Fact]
+    public void The_comparison_rows_name_every_kind_of_character_reply_s_comparison_reads()
+    {
+        const string classes = "letters, the marks that combine with them, digits, `_` and the other joining punctuation, white space and the punctuation";
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+        var row = Assert.Single(ReplyErrorTable.AllRows(), entry => entry.Key == "template_compares_what_reply_cannot_read").Row;
+
+        Assert.Contains("Reply reads " + classes + " `` $@\"`~!#%^&*()+,-./:;<= `` there", readme, StringComparison.Ordinal);
+        Assert.Contains("Reply reads " + classes + " $@\"`~!#%^&*()+,-./:;<= there", (string?)row["when"], StringComparison.Ordinal);
     }
 
     /// <summary>The changelog's section at this position, newest first, from its heading up to the next one.</summary>

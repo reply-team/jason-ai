@@ -177,25 +177,380 @@ public class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// This version of the package writes no template in Reply's syntax, so a message composed as one is refused before
-    /// anything is called, with a tag or without: sent as written, it would not be the message the person approved, which
-    /// is the template filled in for the person it goes to.
+    /// Reply reads <c>@prompt[[</c> as a prompt to a model and sends the model's answer, which nobody approved, so a final
+    /// subject or text with one is refused before anything is called, whatever the format, as a double opening brace is.
     /// </summary>
     [Theory]
-    [InlineData("The Lisbon meetup, {{contact.first_name}}", "Hi {{contact.first_name | 'there'}}, thanks for the chat.")]
-    [InlineData(Subject, Body)]
-    public async Task A_template_is_refused_before_anything_is_called(string subject, string body)
+    [InlineData("email", "Our @prompt[[a line for them]] note", null)]
+    [InlineData("email", null, "Hi Marta, @prompt[[write a line about the meetup]]")]
+    [InlineData("linkedin_inmail", "@prompt[[a subject]]", null)]
+    [InlineData("linkedin_message", null, "Hi @prompt[[ unclosed")]
+    [InlineData("linkedin_voice", null, "Hi @prompt[[a greeting]]")]
+    public async Task A_prompt_marker_in_a_final_subject_or_text_is_refused_before_anything_is_called(string format, string? subject, string? body)
     {
-        using var account = ByEmail();
+        using var account = format == "email" ? ByEmail() : OnLinkedIn();
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var input = Input("email", pinned: "1001", subject: subject, body: body);
+        var takesSubject = format is "email" or "linkedin_inmail";
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(format, pinned: "1001", subject: takesSubject ? subject ?? Subject : null, body: body ?? Body)));
+
+        Assert.Equal(("message_invalid", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Contains("@prompt[[", error.Message, StringComparison.Ordinal);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    // -------------------------------------------------------------------------------------------------------
+    // A template, written in Reply's syntax
+    // -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A message composed as a template reaches Reply in Reply's own syntax, by the same command, and Reply fills it in
+    /// for the person: each name the standard lists as Reply names it, a fallback, a comparison and the other branch as
+    /// Reply writes them. A template with no tag at all is its text.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "For {{contact.first_name}}",
+        "{{contact.first_name}} {{contact.last_name}} of {{contact.company}}, {{contact.title}}, at {{contact.email}}",
+        "For {{FirstName}}",
+        "{{FirstName}} {{LastName}} of {{Company}}, {{Title}}, at {{Email}}",
+        "For Marta",
+        "Marta Alvarez of Puerto Analytics, Head of Growth, at marta@example.com")]
+    [InlineData(Subject, "Tier {{contact.custom.tier}}", Subject, "Tier {{tier}}", Subject, "Tier gold")]
+    [InlineData(
+        Subject,
+        "{{sender.first_name}} / {{sender.last_name}} / {{sender.name}} / {{sender.address}}",
+        Subject,
+        "{{SendingEmail.SenderFirstName}} / {{SendingEmail.SenderLastName}} / {{SendingEmail.SenderName}} / {{SendingEmail.Email}}",
+        Subject,
+        "Ann / Owner / Ann Owner / ann@example.com")]
+    [InlineData(Subject, "Hi {{contact.custom.nickname | 'there'}}", Subject, "Hi {{nickname | 'there'}}", Subject, "Hi there")]
+    [InlineData(
+        Subject,
+        "{{#if contact.custom.tier == 'gold'}}Gold{{else}}Other{{/if}} {{#if contact.title != 'CEO'}}and no CEO{{/if}}",
+        Subject,
+        "{{#if tier == 'gold'}}Gold{{else}}Other{{/if}} {{#if Title != 'CEO'}}and no CEO{{/if}}",
+        Subject,
+        "Gold and no CEO")]
+    [InlineData(
+        Subject,
+        "{{#if contact.custom.nickname}}Hi {{contact.custom.nickname}}{{else}}Hi {{contact.first_name}}{{/if}}",
+        Subject,
+        "{{#if nickname}}Hi {{nickname}}{{else}}Hi {{FirstName}}{{/if}}",
+        Subject,
+        "Hi Marta")]
+    [InlineData(Subject, Body, Subject, Body, Subject, Body)]
+    public async Task A_template_reaches_reply_in_reply_s_syntax_and_reply_fills_it_in(
+        string subject, string body, string sentSubject, string sentBody, string renderedSubject, string renderedBody)
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Template(subject, body)))["items"]![0]!;
+
+        Assert.Equal("sent", (string?)item["status"]);
+        Assert.Equal(["account list", "contact get 1001", "contact send-email"], Lines(account));
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal((sentSubject, sentBody), ((string?)went["text"]!["subject"], (string?)went["text"]!["body"]));
+        Assert.Equal((renderedSubject, renderedBody), ((string?)went["rendered"]!["subject"], (string?)went["rendered"]!["body"]));
+    }
+
+    /// <summary>
+    /// A template's body is HTML as a final text's is: its text, the text of a fallback and the text a comparison compares
+    /// reach Reply escaped, a <c>&lt;</c> as <c>&amp;lt;</c>, a <c>&amp;</c> as <c>&amp;amp;</c> and a <c>'</c> as
+    /// <c>&amp;#39;</c>, each line break as one <c>&lt;br&gt;</c>, since Reply decodes the whole message before it reads
+    /// it; its tags go as Reply reads them. The subject is a header, and goes as written.
+    /// </summary>
+    [Fact]
+    public async Task A_template_s_text_reaches_reply_escaped_and_its_tags_do_not()
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Template(
+            "Tom & Jerry's <news> for {{contact.first_name | 'you'}}",
+            "Tom & Jerry <tom@example.com>\nsaid 'yes', {{contact.custom.nickname | 'R&D <team>\nand co'}}{{#if contact.company == 'Puerto & Co'}} at Puerto{{/if}}.");
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, input));
+
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal("Tom & Jerry's <news> for {{FirstName | 'you'}}", (string?)went["text"]!["subject"]);
+        Assert.Equal(
+            "Tom &amp; Jerry &lt;tom@example.com&gt;<br>said &#39;yes&#39;, {{nickname | 'R&amp;D &lt;team&gt;<br>and co'}}{{#if Company == 'Puerto &amp; Co'}} at Puerto{{/if}}.",
+            (string?)went["text"]!["body"]);
+        Assert.Equal(
+            "Tom & Jerry <tom@example.com><br>said 'yes', R&D <team><br>and co.",
+            (string?)went["rendered"]!["body"]);
+    }
+
+    /// <summary>
+    /// Reply decodes the whole message before it reads it, so the text a comparison compares reaches it escaped as the
+    /// body's text does, and an <c>&amp;</c> in it is <c>&amp;amp;</c>: Reply then compares the value with the text as
+    /// the template wrote it.
+    /// </summary>
+    [Fact]
+    public async Task An_ampersand_in_a_comparison_reaches_reply_escaped_and_compares_as_written()
+    {
+        using var account = Filled().WithCustomValue(1001, "team", "R&D");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Template(Subject, "{{#if contact.custom.team == 'R&D'}}Hi team{{else}}Hi all{{/if}}")));
+
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal("{{#if team == 'R&amp;D'}}Hi team{{else}}Hi all{{/if}}", (string?)went["text"]!["body"]);
+        Assert.Equal("Hi team", (string?)went["rendered"]!["body"]);
+    }
+
+    /// <summary>
+    /// A custom field under a key Reply keeps for a value of its own — a field of the contact, an engagement count, a
+    /// date it computes, one of its own helpers or a word its template engine reads — would be filled with Reply's value,
+    /// or read as something else, so it is refused before anything is called, and the refusal says where without
+    /// quoting the template.
+    /// </summary>
+    [Theory]
+    [InlineData("contact.custom.Company")]
+    [InlineData("contact.custom.FirstName")]
+    [InlineData("contact.custom.Opens")]
+    [InlineData("contact.custom.last_touch")]
+    [InlineData("contact.custom.today")]
+    [InlineData("contact.custom.SendingEmail")]
+    [InlineData("contact.custom._f")]
+    [InlineData("contact.custom.else")]
+    [InlineData("contact.custom.null")]
+    public async Task A_custom_field_under_a_key_reply_keeps_is_refused_before_anything_is_called(string name)
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Template(Subject, "Hi {{" + name + " | 'there'}}")));
+
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(
+            "The body names a custom field at character 4 under a key Reply keeps for a value of its own, which Reply would write instead of the field.",
+            (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// The package reads a template by the same standard the document holds it to, behind the document: a template the
+    /// standard refuses is refused before anything is called, by the construct's own name and the character it starts
+    /// on, exactly as the standard names them, in the subject as in the body.
+    /// </summary>
+    [Theory]
+    [InlineData(null, "Hi {{toLower contact.first_name}}")]
+    [InlineData(null, "Hi {{{contact.first_name}}}")]
+    [InlineData(null, "Hi {{ contact.first_name }}")]
+    [InlineData(null, "{{#if contact.title}}x")]
+    [InlineData(null, "Hi {{contact.phone}}")]
+    [InlineData(null, "Hi \\{{contact.first_name}}")]
+    [InlineData(null, "Hi {{contact.first_name | 'never closed}}")]
+    [InlineData(null, "Hi }} there")]
+    [InlineData(null, "Hi @prompt[[ a line ]]")]
+    [InlineData("For {{#each contact.custom.items}}x{{/each}}", null)]
+    public async Task A_template_the_standard_refuses_is_refused_by_name_before_anything_is_called(string? subject, string? body)
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeUnreadAsync(api, Template(subject ?? Subject, body ?? Body)));
+
+        var (part, written) = subject is null ? ("body", body!) : ("subject", subject);
+        var refusal = TemplateGrammar.Check(written)!;
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(
+            $"The {part} writes {refusal.Row.Name} at character {refusal.Position}, which the template standard refuses.",
+            (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// The document holds a template to an email, since Reply fills in no template sent on LinkedIn here; the package holds
+    /// it too, behind the document.
+    /// </summary>
+    [Fact]
+    public async Task A_template_on_linkedin_is_refused_before_anything_is_called_though_the_document_was_not_read()
+    {
+        using var account = OnLinkedIn();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("linkedin_message", pinned: "1001", body: "Hi {{contact.first_name}}");
         input["args"]!["message"]!["compose"] = "template";
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+        var error = ReplyOperations.Failed(Operation, await InvokeUnreadAsync(api, input));
 
         Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
         Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// Reply reads <c>@prompt[[</c> in the text it has filled in as a prompt to a model, whose answer nobody approved. The
+    /// package refuses a template whose text and fallbacks spell it once Reply fills them in, along any one way through
+    /// its conditions, before anything is called. A value is not the package's to read, so a value between two parts
+    /// breaks the spelling.
+    /// </summary>
+    [Theory]
+    [InlineData("@prom{{contact.custom.nickname | 'pt[['}} a line", 38)]
+    [InlineData("{{contact.custom.nickname | '@pro'}}mpt[[ a line", 41)]
+    [InlineData("{{contact.custom.nickname | '@prom'}}{{contact.last_name | 'pt[['}} a line", 64)]
+    [InlineData("@prompt{{#if contact.title}}[[{{/if}} a line", 30)]
+    [InlineData("@pr{{#if contact.title}}x{{else}}ompt[[{{/if}} a line", 39)]
+    [InlineData("@prompt{{#if contact.title}}x{{/if}}[[ a line", 38)]
+    [InlineData("{{#if contact.title}}@prompt{{/if}}[[ a line", 37)]
+    public async Task A_template_that_spells_a_prompt_once_filled_in_is_refused_before_anything_is_called(string body, int position)
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Template(Subject, body)));
+
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(
+            $"The body spells `@prompt[[` once Reply fills it in, complete at character {position}, which Reply would read as a prompt to a model.",
+            (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>A value between the parts of a prompt is the person's, and the package does not read it: the template goes.</summary>
+    [Fact]
+    public async Task A_value_between_the_parts_of_a_prompt_breaks_its_spelling()
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Template(Subject, "@prompt{{contact.first_name}}[[ a line")));
+
+        Assert.Equal("@promptMarta[[ a line", (string?)Assert.Single(account.Sent)!["rendered"]!["body"]);
+    }
+
+    /// <summary>
+    /// Reply reads a comparison only where its quoted text holds letters, digits, white space and the punctuation its
+    /// comparison takes; anywhere else it leaves the tag for its template engine, which reads it otherwise. The package
+    /// refuses a comparison with any other character before anything is called, and says where without quoting it.
+    /// </summary>
+    [Theory]
+    [InlineData("{{#if contact.title == 'Why?'}}x{{/if}}", 28)]
+    [InlineData("{{#if contact.custom.tier == 'a|b'}}x{{/if}}", 32)]
+    [InlineData("{{#if contact.title != 'R&D [lab]'}}x{{/if}}", 29)]
+    [InlineData("{{#if contact.company == 'Café ’s'}}x{{/if}}", 32)]
+    [InlineData("{{#if contact.title == 'x > y'}}x{{/if}}", 27)]
+    public async Task A_comparison_with_a_character_reply_s_comparison_does_not_read_is_refused_before_anything_is_called(string body, int position)
+    {
+        using var account = Filled();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Template(Subject, body)));
+
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(
+            $"The body compares a value with a text holding, at character {position}, a character Reply's comparison does not read.",
+            (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// The punctuation Reply's comparison takes, and a letter of any script, reach Reply escaped as the body's text does,
+    /// and Reply compares the value with them as written.
+    /// </summary>
+    [Fact]
+    public async Task A_comparison_with_the_punctuation_reply_reads_compares_as_written()
+    {
+        using var account = Filled().WithCustomValue(1001, "venue", "Café-Bar, S.A. (Lisbon) #2: 50% off; <=\"1\" @ $5*2+1/3=~`!^");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var body = "{{#if contact.custom.venue == 'Café-Bar, S.A. (Lisbon) #2: 50% off; <=\"1\" @ $5*2+1/3=~`!^'}}Yes{{/if}}";
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Template(Subject, body)));
+
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal(
+            "{{#if venue == 'Café-Bar, S.A. (Lisbon) #2: 50% off; &lt;=&quot;1&quot; @ $5*2+1/3=~`!^'}}Yes{{/if}}",
+            (string?)went["text"]!["body"]);
+        Assert.Equal("Yes", (string?)went["rendered"]!["body"]);
+    }
+
+    /// <summary>
+    /// A template Reply could not fill in for the person is refused by Reply before anything is sent, under a code that
+    /// says nothing of it and a sentence that does: it is reported as the template unrendered, final, with Reply's own
+    /// words in the message. The same refusal of a final text is not a template's, and keeps the word it has; and a
+    /// refusal under the same code with another sentence is not this one.
+    /// </summary>
+    [Theory]
+    [InlineData("template", "Hi {{contact.custom.nickname}}", null, "template_unrendered", "validation")]
+    [InlineData("template", "Hi {{contact.first_name}}", "SendFail: the mailbox did not take the message.", "provider_call_failed", "permanent")]
+    [InlineData("text", Body, "RenderingFail: One or more values for variables are missing or incorrect.", "provider_call_failed", "permanent")]
+    public async Task A_template_reply_could_not_fill_in_is_unrendered_in_reply_s_words(string compose, string body, string? detail, string code, string klass)
+    {
+        using var account = Filled();
+        if (detail is not null)
+        {
+            account.Refuses(
+                "contact send-email", "reply.refused", status: 400, replyCode: "contact.unknown", detail: detail,
+                ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
+        }
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Template(Subject, body);
+        input["args"]!["message"]!["compose"] = compose;
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal((code, klass), (error.Code, error.Class.ToString().ToLowerInvariant()));
+        Assert.Equal("contact.unknown", (string?)error.Details!["provider_code"]);
+        if (code == "template_unrendered")
+        {
+            Assert.EndsWith(" Reply said: RenderingFail: One or more values for variables are missing or incorrect.", error.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// Reply's refusal of a template it could not fill in, for a person the send found by their address: the failure keeps
+    /// the contact, says the template was refused before anything was sent, and is final in Reply's own words. The same
+    /// code with another sentence is not this one: it is the permanent refusal, carrying Reply's sentence, the contact
+    /// kept as well. The send is called once either way.
+    /// </summary>
+    [Theory]
+    [InlineData("RenderingFail: One or more values for variables are missing or incorrect.", "template_unrendered", FailureClass.Validation)]
+    [InlineData("SendFail: the mailbox did not take the message.", "provider_call_failed", FailureClass.Permanent)]
+    public async Task A_template_reply_refuses_for_a_person_it_found_keeps_the_contact_and_reads_reply_s_sentence(string detail, string code, FailureClass klass)
+    {
+        using var account = Filled();
+        account.Refuses(
+            "contact send-email", "reply.refused", status: 400, replyCode: "contact.unknown", detail: detail,
+            ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("email", body: "Hi {{contact.first_name}}");
+        input["args"]!["message"]!["compose"] = "template";
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal((code, klass), (error.Code, error.Class));
+        Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Equal(detail, (string?)error.Details!["provider_detail"]);
+        if (code == "template_unrendered")
+        {
+            Assert.Contains("before anything was sent", error.Message, StringComparison.Ordinal);
+            Assert.EndsWith(" Reply said: " + detail, error.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Single(Lines(account), line => line == "contact send-email");
         Assert.Empty(account.Sent);
     }
 
@@ -1085,6 +1440,21 @@ public class ReplyMessageSendTests
                 WorkItemId: "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK",
                 CampaignId: "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE"),
             Ct);
+
+    /// <summary>A person reached by email with every field a template names filled but a nickname, and the caller's mailbox.</summary>
+    private static ReplyAccount Filled() =>
+        new ReplyAccount()
+            .WithContact(1001, Address, "Marta", lastName: "Alvarez", company: "Puerto Analytics", title: "Head of Growth")
+            .WithCustomValue(1001, "tier", "gold")
+            .WithSender(12, "email", "Ann Owner", Mailbox);
+
+    /// <summary>An email composed as a template, to the pinned person.</summary>
+    private static JsonObject Template(string subject, string body)
+    {
+        var input = Input("email", pinned: "1001", subject: subject, body: body);
+        input["args"]!["message"]!["compose"] = "template";
+        return input;
+    }
 
     private static IReadOnlyList<string> Lines(ReplyAccount account) => [.. account.Calls.Select(call => call.Line)];
 

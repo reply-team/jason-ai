@@ -308,13 +308,12 @@ public class ReplyStubDirectSendTests
     }
 
     /// <summary>
-    /// Reply counts more as no value than null, empty and white space: <c>false</c> and <c>0</c> too, so a fallback and
-    /// the other branch are written for them as well.
+    /// Reply counts more as no value than null and empty: <c>false</c> and <c>0</c> too, so a fallback and the other
+    /// branch are written for them as well.
     /// </summary>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    [InlineData(" ")]
     [InlineData("false")]
     [InlineData("0")]
     public async Task A_field_reply_reads_as_no_value_takes_the_fallback_and_the_other_branch(string? title)
@@ -331,14 +330,40 @@ public class ReplyStubDirectSendTests
     }
 
     /// <summary>
-    /// A comparison reads a white-space value as empty text, as it reads no value, and an operator inside its quoted
-    /// text is part of the text.
+    /// White space is a value: a fallback leaves it as it is and a condition holds on it. Only <c>false</c> written in
+    /// lower case is no value to a fallback, while a condition reads it as none in any case.
     /// </summary>
     [Theory]
-    [InlineData(" ", "{{#if Title == ''}}empty{{else}}set{{/if}}", "empty")]
+    [InlineData(" ", "Hi  ", "set")]
+    [InlineData("False", "Hi False", "unset")]
+    [InlineData("FALSE", "Hi FALSE", "unset")]
+    [InlineData(" 0", "Hi  0", "set")]
+    public async Task White_space_is_a_value_and_false_is_none_to_a_condition_in_any_case(string title, string subject, string body)
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", title: title)
+            .WithSender(Mailbox, "email", "Ann Owner", "ann@example.com");
+        var text = new JsonObject { ["subject"] = "Hi {{Title | 'there'}}", ["body"] = "{{#if Title}}set{{else}}unset{{/if}}" };
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), text.ToJsonString(), Ct);
+
+        Assert.True(exit == 0, said);
+        Assert.Equal(new JsonObject { ["subject"] = subject, ["body"] = body }.ToJsonString(), Assert.Single(account.Sent)!["rendered"]!.ToJsonString());
+    }
+
+    /// <summary>
+    /// A comparison compares the value as written, white space and all, and two numbers as numbers; an operator inside
+    /// its quoted text is part of the text.
+    /// </summary>
+    [Theory]
+    [InlineData(" ", "{{#if Title == ''}}empty{{else}}set{{/if}}", "set")]
+    [InlineData(" ", "{{#if Title == ' '}}same{{else}}other{{/if}}", "same")]
+    [InlineData("1", "{{#if Title == '1.0'}}same{{else}}other{{/if}}", "same")]
+    [InlineData("1", "{{#if Title != '01'}}other{{else}}same{{/if}}", "same")]
+    [InlineData("1a", "{{#if Title == '1A'}}same{{else}}other{{/if}}", "other")]
     [InlineData("CEO", "{{#if Title != 'a==b'}}other{{else}}same{{/if}}", "other")]
     [InlineData("a==b", "{{#if Title == 'a==b'}}same{{else}}other{{/if}}", "same")]
-    public async Task A_comparison_reads_white_space_as_empty_and_an_operator_in_its_quoted_text_as_text(string title, string body, string rendered)
+    public async Task A_comparison_reads_the_value_as_written_numbers_as_numbers_and_an_operator_in_its_quoted_text_as_text(string title, string body, string rendered)
     {
         using var account = new ReplyAccount()
             .WithContact(1001, "marta@example.com", "Marta", title: title)

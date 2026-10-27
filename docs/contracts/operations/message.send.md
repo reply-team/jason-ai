@@ -84,8 +84,8 @@ at the claim is a check for exactly the value reached.
   `{{#if contact.company}}{{contact.company}}{{/if}}` for a person with no company, passes them: it is the example's to
   show and the provider's to refuse or send. A plugin written before `compose` reads a template as a final message: it
   refuses what its provider would read as a placeholder of its own and sends the rest as written. The Reply package
-  refuses any `{{` in a final message, as it did before 0.10.0, and from 0.10.0 every template, before anything is
-  called.
+  refuses any `{{` in a final message, as it did before 0.10.0; from 0.10.0 it writes a template in Reply's syntax, and
+  refuses before anything is called what it cannot write there.
 
 ## What to return
 

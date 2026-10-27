@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -7,9 +9,9 @@ using System.Text.Json.Nodes;
 /// Reply's own filling-in of a direct email: every tag in the subject and the body is read before anything is sent,
 /// over the contact's fields, its custom fields by key and the mailbox's names and address. The core of Reply's syntax
 /// and no more — a value, a value with a quoted fallback, <c>#if</c> on a value or on its being, or not being, a quoted
-/// text, <c>else</c> and <c>/if</c> — with white space free inside the braces, as Reply reads it. Reply counts null,
-/// empty, white space, <c>false</c> and <c>0</c> as no value. A tag it cannot fill, or cannot read, refuses the send in
-/// Reply's own words.
+/// text, <c>else</c> and <c>/if</c> — with white space free inside the braces, as Reply reads it. What counts as no value
+/// and how a comparison compares are as Reply's rendering reads it; its public pages say neither. A tag it cannot
+/// fill, or cannot read, refuses the send in Reply's own words.
 /// </summary>
 internal static partial class Account
 {
@@ -23,13 +25,17 @@ internal static partial class Account
 
     private const string Unclosed = "Reached end of template before the expression was closed.";
 
-    /// <summary>The text rendered field by field, or the refusal Reply gives the first tag it cannot fill.</summary>
+    /// <summary>
+    /// The text rendered field by field, or the refusal Reply gives the first tag it cannot fill. Reply decodes the body
+    /// once before it reads it; whether it decodes a subject nothing Reply says tells, so the subject is read as written.
+    /// </summary>
     private static (JsonObject? Rendered, Ending? Refusal) RenderedEmail(JsonObject text, JsonObject contact, JsonObject mailbox, JsonObject ids)
     {
         var rendered = new JsonObject();
         foreach (var (field, value) in text)
         {
-            var (written, problem) = Render((string?)value ?? string.Empty, name => ValueOf(name, contact, mailbox));
+            var source = (string?)value ?? string.Empty;
+            var (written, problem) = Render(field == "body" ? WebUtility.HtmlDecode(source) : source, name => ValueOf(name, contact, mailbox));
             if (problem is not null)
             {
                 return (null, Refused(TemplateRefused, "Reply refused the request.", status: 400, replyCode: "contact.unknown", detail: problem, ids: ids));
@@ -65,7 +71,14 @@ internal static partial class Account
         };
     }
 
-    private static bool HasValue(string? value) => !string.IsNullOrWhiteSpace(value) && value.Trim() is not ("false" or "0");
+    /// <summary>
+    /// Whether a value is written rather than its fallback: null, empty, and exactly <c>false</c> or <c>0</c> are no value,
+    /// white space is one.
+    /// </summary>
+    private static bool Fills(string? value) => !string.IsNullOrEmpty(value) && value is not ("false" or "0");
+
+    /// <summary>Whether a condition on a value holds: as a fallback reads it, save that <c>false</c> is no value in any case.</summary>
+    private static bool Holds(string? value) => Fills(value) && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>One template rendered, or the words Reply refuses it with.</summary>
     private static (string? Text, string? Problem) Render(string template, Func<string, string?> valueOf)
@@ -104,7 +117,9 @@ internal static partial class Account
             index = end + 2;
             if (index < template.Length && template[index] == '}')
             {
-                // A third closing brace is read as the close of a tag Reply does not fill here.
+                // A third closing brace is read as the close of a tag Reply does not fill here. Nothing Reply says tells
+                // what its rendering makes of one; the template standard refuses it, so nothing the plugin writes reaches
+                // this.
                 return (null, Unfillable);
             }
 
@@ -150,7 +165,7 @@ internal static partial class Account
                 }
 
                 var value = valueOf(name);
-                if (HasValue(value))
+                if (Fills(value))
                 {
                     text.Append(value);
                 }
@@ -171,7 +186,8 @@ internal static partial class Account
     /// <summary>Whether an <c>#if</c>'s test holds, or null when Reply cannot read it.</summary>
     private static bool? Test(string test, Func<string, string?> valueOf)
     {
-        // An operator is looked for only before the quoted text, which may hold one as text.
+        // An operator is looked for only before the quoted text, which may hold one as text: Reply's rendering reads the
+        // operator right after the name.
         var quote = test.IndexOf('\'', StringComparison.Ordinal);
         var before = quote < 0 ? test : test[..quote];
         foreach (var comparison in new[] { "==", "!=" })
@@ -188,13 +204,19 @@ internal static partial class Account
                 return null;
             }
 
-            var value = valueOf(name);
-            var same = string.Equals(string.IsNullOrWhiteSpace(value) ? string.Empty : value, quoted, StringComparison.Ordinal);
+            var same = Same(valueOf(name) ?? string.Empty, quoted);
             return comparison == "==" ? same : !same;
         }
 
-        return IsReplyName(test) ? HasValue(valueOf(test)) : null;
+        return IsReplyName(test) ? Holds(valueOf(test)) : null;
     }
+
+    /// <summary>Whether a value and a quoted text are the same: two numbers as numbers, anything else as written.</summary>
+    private static bool Same(string value, string quoted) =>
+        double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var left)
+        && double.TryParse(quoted, NumberStyles.Float, CultureInfo.InvariantCulture, out var right)
+            ? left == right
+            : string.Equals(value, quoted, StringComparison.Ordinal);
 
     private static (string Name, string? After) Split(string tag, char by)
     {

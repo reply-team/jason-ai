@@ -302,6 +302,24 @@ public class ReplySocialInvitationSendTests
         Assert.Empty(account.Calls);
     }
 
+    /// <summary>
+    /// A note goes through the same check a final message does, so <c>@prompt[[</c>, which Reply reads as a prompt to a
+    /// model, is refused in it before anything is called, as a double opening brace is.
+    /// </summary>
+    [Fact]
+    public async Task A_note_with_a_prompt_marker_is_refused_before_anything_is_called()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001", note: "Hi, @prompt[[a line about the meetup]]")));
+
+        Assert.Equal(("message_invalid", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Contains("@prompt[[", error.Message, StringComparison.Ordinal);
+        Assert.Empty(account.Calls);
+    }
+
     /// <summary>Reply does not refuse an invitation to a person it holds as opted out, so the read of the contact is the stop.</summary>
     [Fact]
     [Critical(Family.S1, "opted out, nothing sent")]

@@ -438,12 +438,14 @@ holds a template to it wherever a schema names `"format": "jason-template"`, and
   somebody's message.
 - **A tag is `{{` … `}}`, spelled exactly as the table writes it:** one space between its parts and none inside the
   braces. Everything outside a tag is text, sent as written.
-- **A name is one of the names below.** A value that is null, empty or white space is **no value**: a fallback is
-  written in its place, an `#if` takes its other branch, and a comparison reads it as empty text. A name with no value
-  and no fallback cannot be filled, and the message is not sent. A provider may count more values as no value than
-  this does; the approval's example follows the standard.
+- **A name is one of the names below.** What counts as no value, and how two values compare, is the provider's; [the
+  Reply package's README](../../plugins/reply/README.md) says Reply's. A name with no value and no fallback cannot be
+  filled, and the message is not sent. The approval's example counts a value that is null, empty or white space as no
+  value — a fallback is written in its place, an `#if` takes its other branch, and a comparison reads it as empty text —
+  and compares a value with a quoted text exactly, character for character. The message sent may take another branch
+  than the example shows, and the provider may fill a name the example lists as unfilled.
 - **A quoted text** — a fallback, or the right side of a comparison — is written between single quotes, may be empty,
-  and holds neither `'` nor `}}`. A comparison compares the value with it exactly, character for character.
+  and holds neither `'` nor `}}`.
 - **A condition** holds `{{else}}` at most once, and nests inside another at most eight deep.
 - **A template is text.** It escapes nothing and holds no markup of its own: a value is written as the person's field
   holds it, and what a provider then does with it is the operation's to say.
@@ -456,7 +458,7 @@ holds a template to it wherever a schema names `"format": "jason-template"`, and
 | `{{name}}` | accepted | the name's value; a name with no value leaves the provider nothing to write, and the message is not sent |
 | `{{name \| 'text'}}` | accepted | the name's value, or the quoted text when it has none |
 | `{{#if name}}` ... `{{/if}}` | accepted | what it holds when the name has a value |
-| `{{#if name == 'text'}}`, `{{#if name != 'text'}}` | accepted | a condition on the value being, or not being, exactly the quoted text |
+| `{{#if name == 'text'}}`, `{{#if name != 'text'}}` | accepted | a condition on the value being, or not being, the quoted text |
 | `{{else}}` | accepted | once inside a condition: what is written when it does not hold |
 | `{{{` | refused | a template escapes nothing, so there is no second kind of value |
 | `{{!` | refused | nobody reads it, and the providers do not all drop it |
@@ -513,7 +515,7 @@ lists.
   host fails where it can be seen rather than being read as something else. A new optional input field that changes
   how other fields are read, as `message.send`'s `compose` changes how the subject and the text are read, is additive
   only when every plugin published under the family before the field existed refuses the input it would misread — as
-  the Reply package before 0.10.0 refused any `{{` and 0.10.0 refuses every template; otherwise it is breaking.
+  the Reply package before 0.10.0 refused any `{{`; otherwise it is breaking.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,
