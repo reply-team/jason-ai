@@ -1516,9 +1516,13 @@ public partial class ReleaseWorkflowTests
         var script = Path.Combine(tree.Root, "check-the-notes.ps1");
         File.WriteAllText(script, Scalar(check, "run"));
 
+        // Under the harness every script runs in, so that a refusal reaches stderr as the exception's message, whole: the
+        // error view wraps it at the console's width, which splits a long one on a runner without a terminal.
         var (code, stdout, stderr) = Pwsh(
             new Dictionary<string, string> { ["EVENT"] = eventName, ["VERSION"] = version, ["GITHUB_OUTPUT"] = output },
-            "-Command", $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{script}'");
+            "-Command",
+            $"Set-Location -LiteralPath '{tree.Root}'\n"
+                + Workflows.PlainErrors.Replace("@SCRIPT@", script.Replace("'", "''", StringComparison.Ordinal), StringComparison.Ordinal));
 
         if (exit != 0)
         {
