@@ -16,7 +16,7 @@ namespace Jason.Cli.Update;
 public sealed class UpdatePaths(JasonPaths paths)
 {
     /// <summary>Everything an update writes, under one directory.</summary>
-    public string Root { get; } = Path.Combine(paths?.Root ?? throw new ArgumentNullException(nameof(paths)), "update");
+    public string Root { get; } = Path.Combine(paths?.Root ?? throw new ArgumentNullException(nameof(paths)), UpdateLedger.DirectoryName);
 
     /// <summary>The record of what an update is doing, and of the last one that finished.</summary>
     public string Ledger => Path.Combine(Root, UpdateLedger.FileName);

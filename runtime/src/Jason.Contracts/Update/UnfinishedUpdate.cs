@@ -1,17 +1,16 @@
 using Jason.Contracts.Discovery;
-using Jason.Contracts.Update;
 
-namespace Jason.Cli.Update;
+namespace Jason.Contracts.Update;
 
 /// <summary>
 /// An update that stopped part-way, as the verbs that are not the update read it: <c>jason status</c>, which names it
-/// with the apply that finishes it, and <c>jason runtime start</c> and <c>restart</c>, which start nothing around it once
-/// it has touched the install path.
+/// with the apply that finishes it, and <c>jason runtime start</c>, <c>restart</c> and <c>run</c>, which start nothing
+/// around it once it has touched the install path.
 /// </summary>
 /// <remarks>
 /// <para>
 /// An apply that fails after the swap leaves the runtime stopped and the new build at the install path. The two verbs a
-/// person reaches for next read no ledger, so status offered <c>jason runtime start</c>, and that ran the new build
+/// person reaches for next once read no ledger, so status offered <c>jason runtime start</c>, and that ran the new build
 /// outside the update: the health check, the skills, the UI and the ledger's own end were never done, and nothing said
 /// so. The ledger is the one record of what is in flight; a completed one is the record of the last update and is not.
 /// </para>
@@ -26,8 +25,14 @@ namespace Jason.Cli.Update;
 /// <param name="Path">Where the ledger is.</param>
 /// <param name="Ledger">The ledger of the update in flight, or null where it could not be read.</param>
 /// <param name="Unreadable">Why the file at <paramref name="Path"/> could not be read as a ledger, or null where it was.</param>
-internal sealed record UnfinishedUpdate(string Path, UpdateLedger? Ledger, string? Unreadable)
+public sealed record UnfinishedUpdate(string Path, UpdateLedger? Ledger, string? Unreadable)
 {
+    /// <summary>
+    /// The code a start is refused with while an update is in flight, and the one an apply refuses a different version
+    /// with. Here, where the runtime's own start reads it too, rather than among the update's codes alone.
+    /// </summary>
+    public const string InProgress = "update_in_progress";
+
     /// <summary>
     /// The update in flight, an unreadable ledger, or null where there is no ledger or the last update completed. Never
     /// throws: a file the account cannot open is an unreadable ledger, said by whoever asked, and not an error that ends
@@ -35,7 +40,7 @@ internal sealed record UnfinishedUpdate(string Path, UpdateLedger? Ledger, strin
     /// </summary>
     public static UnfinishedUpdate? Read(JasonPaths paths)
     {
-        var path = new UpdatePaths(paths).Ledger;
+        var path = UpdateLedger.In(paths);
         try
         {
             return UpdateLedger.ReadFile(path) is { Step: not UpdateStep.Complete } ledger ? new UnfinishedUpdate(path, ledger, null) : null;
@@ -63,7 +68,7 @@ internal sealed record UnfinishedUpdate(string Path, UpdateLedger? Ledger, strin
 
     /// <summary>The refusal of a start or a restart, as one envelope: the code and the message.</summary>
     public (string Code, string Message) Refusal(string nothing) => Ledger is { } ledger
-        ? (UpdateCodes.InProgress,
+        ? (InProgress,
             $"{Said()}. `jason update apply` finishes it and starts the runtime as part of it, and `jason update rollback` goes back to {ledger.FromVersion}. {nothing}")
         : (UpdateLedgerException.Invalid, $"{Said()}. {nothing}");
 

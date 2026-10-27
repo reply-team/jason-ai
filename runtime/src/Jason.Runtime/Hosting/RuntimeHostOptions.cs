@@ -56,6 +56,13 @@ public sealed record RuntimeHostOptions(
     public Func<JasonPaths, string>? Home { get; init; }
 
     /// <summary>
+    /// The value of <see cref="Jason.Contracts.Update.UpdateLaunch.Variable"/> this run was started with, taken from the
+    /// environment by the mode that starts the runtime; null for a start no update made. From the step that moves the
+    /// installed build aside on, only a run an update marks as its own starts.
+    /// </summary>
+    public string? UpdateLaunch { get; init; }
+
+    /// <summary>
     /// Handed the configuration as soon as it is built, before anything can refuse the start. A refused start returns no
     /// runtime to ask, so this is how a test sees that it gave the configuration, and the settings file's watch, back.
     /// </summary>

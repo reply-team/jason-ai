@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Jason.Cli;
 using Jason.Contracts;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Update;
 using Jason.PluginHost;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Notifications.Desktop;
@@ -64,9 +65,24 @@ public static class ModeRouter
         return arguments.DataDirectory is { } named ? new JasonPaths(named) : JasonPaths.FromEnvironment();
     }
 
+    /// <summary>
+    /// The update's mark on this run, taken out of this process's environment: the runtime decides from it whether it may
+    /// start around an update left part-way, and nothing it starts — a plugin host, an agent, a toast — may carry it on to
+    /// a runtime of its own. Taken before anything reads the environment, the configuration's <c>JASON_</c> variables
+    /// included.
+    /// </summary>
+    public static string? TakeUpdateLaunch()
+    {
+        var mark = Environment.GetEnvironmentVariable(UpdateLaunch.Variable);
+        Environment.SetEnvironmentVariable(UpdateLaunch.Variable, null);
+        return mark;
+    }
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunRuntimeService(string[] args, CancellationToken cancellationToken)
     {
+        var updateLaunch = TakeUpdateLaunch();
+
         RuntimeRunArguments arguments;
         try
         {
@@ -99,7 +115,10 @@ public static class ModeRouter
                 ShippedSettingsDirectory: AppContext.BaseDirectory,
                 ConsoleLogging: !arguments.Detached,
                 Refusals: refusals,
-                ConsoleAtStart: console),
+                ConsoleAtStart: console)
+            {
+                UpdateLaunch = updateLaunch,
+            },
             cancellationToken);
     }
 

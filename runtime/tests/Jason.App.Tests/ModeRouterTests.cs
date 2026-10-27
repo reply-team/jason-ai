@@ -1,5 +1,6 @@
 using Jason.App;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
@@ -72,6 +73,28 @@ public class ModeRouterTests
         finally
         {
             Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, original);
+        }
+    }
+
+    /// <summary>
+    /// The update's mark is read once and taken out of the runtime's own environment, so no child the runtime starts
+    /// inherits it: a plugin host, an agent or a toast host that started a runtime of its own would otherwise start it as
+    /// the update's.
+    /// </summary>
+    [Fact]
+    public void The_runtime_mode_takes_the_update_mark_out_of_its_own_environment()
+    {
+        var original = Environment.GetEnvironmentVariable(UpdateLaunch.Variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(UpdateLaunch.Variable, UpdateLaunch.At(UpdateStep.Started));
+
+            Assert.Equal("started", ModeRouter.TakeUpdateLaunch());
+            Assert.Null(Environment.GetEnvironmentVariable(UpdateLaunch.Variable));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(UpdateLaunch.Variable, original);
         }
     }
 

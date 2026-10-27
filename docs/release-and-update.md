@@ -547,10 +547,12 @@ at with `jason update apply` as the repair, and `jason runtime start` starts the
 that the update waits. From the swap on, from `kept`, `jason status` fails its `runtime` check the same way, and
 `jason runtime start` and `restart` start and stop nothing and say the same: a runtime started any other way would run
 outside the update, with its last steps never taken. A runtime registered to start at sign-in (§8) runs `jason runtime
-run`, which reads no ledger, so a sign-in in that window starts the new build outside the update; `jason status` still
-names the apply, which finishes it past that runtime. A ledger that cannot be read is refused by all three, with
-`update_ledger_invalid` and the file's path; removing it is the way on when no update is wanted. Two states are worth
-knowing about by name.
+run`, which reads the ledger as well: a sign-in in that window is refused and starts nothing: with `update_in_progress`,
+or, while the update's own runtime is up, as a second runtime. `jason status` names the apply. The apply's own start
+of the runtime, and the rollback's, carry a mark in the runtime's environment, `JASON_UPDATE_LAUNCH`, never on its
+command line, and `jason runtime run` starts under that mark alone; the runtime drops it before it starts anything of
+its own. A ledger that cannot be read is refused by all four, with `update_ledger_invalid` and the file's path;
+removing it is the way on when no update is wanted. Two states are worth knowing about by name.
 
 **Between `kept` and `swapped` the install path is empty.** The old executable has been moved to
 `~/.jason/update/previous/`, its two notice files after it, and the new one is not in place yet. The
@@ -565,7 +567,9 @@ the first way out:
 
 The second way out needs no Jason at all: copy `~/.jason/update/previous/jason` back over the install path by
 hand, and you have the version you started with, running as it was before. On Windows the file is `jason.exe`
-and the install path is `%LOCALAPPDATA%\Programs\jason\jason.exe`.
+and the install path is `%LOCALAPPDATA%\Programs\jason\jason.exe`. The ledger still says the update is in flight from
+`kept`, so remove `~/.jason/update/ledger.json` as well: a build from 0.21.0 on reads it, and while it is there refuses
+`jason runtime start` and the next sign-in with `update_in_progress`.
 
 **Between `started` and `healthy` a new runtime is up and has not been checked.** The next run asks it what
 version it is and whether its migrations are applied, and takes it no further until it answers. A runtime that
@@ -674,7 +678,7 @@ a code on its own tells nobody what to do next.
 | `update_artifact_corrupt` | what was downloaded is not the digest the manifest published. The bytes are deleted rather than kept for a retry |
 | `update_artifact_unreachable` | the download did not arrive, or the archive could not be read. Worth trying again |
 | `update_artifact_unexpected` | the archive does not hold the executable a release for this platform is supposed to hold, or the release publishes nothing for this platform, or the manifest read for `--version` names another version. That last is said before the manifest's `min_upgrade_from` is read, since a manifest of another release says nothing about this one: no archive is downloaded and no update begins. The same code comes at `staged` when the manifest read again there names another version than the update in flight, which has already begun. Its notice files are taken where the archive holds them, and an archive without one is not refused |
-| `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. Before `kept` nothing has been replaced, and `jason runtime start` starts the installed build |
+| `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. So does `jason runtime run`, which a sign-in registration runs, on stderr with exit 1 and nothing started, unless the start is the apply's or the rollback's own; while the update's own runtime is up, a sign-in is refused instead as a second runtime, and starts nothing either. Before `kept` nothing has been replaced, and `jason runtime start` and a sign-in start the installed build |
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; no archive is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
@@ -684,7 +688,7 @@ a code on its own tells nobody what to do next.
 | `update_file_refused` | a file could not be moved, copied or written: a directory that is not one, a permission, a lock. It covers every file these two verbs touch — an update's renames and a rollback's, the ledger both are recorded in, and the database restore. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH. On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for 10 seconds first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable: the same command, once the file is free |
 | `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
 | `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
-| `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on. The message names the file. `jason runtime start` and `restart` refuse with it too and start nothing, as they do when the file cannot be opened at all, and `jason status` fails its `runtime` check with the same words; removing the file is the way on when no update is wanted |
+| `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on. The message names the file. `jason runtime start`, `restart` and `run` refuse with it too and start nothing, as they do when the file cannot be opened at all, and `jason status` fails its `runtime` check with the same words; removing the file is the way on when no update is wanted |
 
 ## 8. Starting at logon
 

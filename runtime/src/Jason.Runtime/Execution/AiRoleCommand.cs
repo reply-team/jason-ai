@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
+using Jason.Contracts.Update;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution.Hosts;
 using Microsoft.Extensions.Logging;
@@ -91,14 +92,18 @@ public sealed class AiRoleCommand(
         }
 
         // The child works against the same data directory this runtime owns, knows which attempt it is, and can
-        // find the command that calls home. Nothing else is added and nothing is taken away — least of all the
-        // token, which belongs in the descriptor file and nowhere else.
+        // find the command that calls home. Nothing else is added — least of all the token, which belongs in the
+        // descriptor file and nowhere else.
         LaunchEnvironment.Apply(
             startInfo.Environment,
             paths.Root,
             context.AttemptId,
             context.WorkItemId,
             ProgramResolver.ExecutableDirectory);
+
+        // And one thing is taken away: the mark of an update's own launch says whose start this runtime was, and an
+        // agent that ran `jason runtime run` with it would start a runtime around an update it is no part of.
+        startInfo.Environment.Remove(UpdateLaunch.Variable);
 
         Process process;
         try

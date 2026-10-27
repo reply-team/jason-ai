@@ -63,7 +63,7 @@ public class RuntimeProcessControlTests
 
     [Fact]
     public void Launching_without_a_data_directory_is_a_programming_error() =>
-        Assert.Throws<ArgumentNullException>(() => RuntimeProcessControl.Instance.Launch(null!, SelfExecutable.Command));
+        Assert.Throws<ArgumentNullException>(() => RuntimeProcessControl.Instance.Launch(null!, SelfExecutable.Command, updateLaunch: null));
 
     /// <summary>And a launch has to name a program: an empty command is a caller's mistake, not a start.</summary>
     [Fact]

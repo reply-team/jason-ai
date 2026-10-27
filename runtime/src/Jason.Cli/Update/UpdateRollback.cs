@@ -738,7 +738,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         var before = new DescriptorReader(env.Paths).Read()?.InstanceId;
 
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
-        using var child = processes.Launch(env.Paths, [ledger.InstallPath]);
+        using var child = processes.Launch(env.Paths, [ledger.InstallPath], UpdateLaunch.At(ledger.Step));
 
         var waited = TimeSpan.Zero;
         var limit = TimeSpan.FromSeconds(60);
@@ -748,6 +748,16 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             if (new DescriptorReader(env.Paths).Read() is { } published && !string.Equals(published.InstanceId, before, StringComparison.Ordinal))
             {
                 Say($"started {ledger.FromVersion}");
+                return;
+            }
+
+            if (child.HasExited)
+            {
+                // As the apply's own start reads it: the run is over, so is the wait, and what it said is the reason.
+                var said = child.Said;
+                Say($"{ledger.FromVersion} is back in place but the runtime it started exited with code {child.ExitCode} before it answered"
+                    + (said.Length > 0 ? $" (it said: {said})" : string.Empty)
+                    + "; start one with `jason runtime start`");
                 return;
             }
 

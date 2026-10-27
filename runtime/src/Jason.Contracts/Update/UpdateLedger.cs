@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Update;
@@ -86,6 +87,16 @@ public sealed record UpdateLedger(
 {
     /// <summary>The file's name under the update directory, so nothing composes it from a string twice.</summary>
     public const string FileName = "ledger.json";
+
+    /// <summary>The directory under the data directory an update keeps everything in, the ledger among it.</summary>
+    public const string DirectoryName = "update";
+
+    /// <summary>Where the ledger of the data directory <paramref name="paths"/> names is.</summary>
+    public static string In(JasonPaths paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        return Path.Combine(paths.Root, DirectoryName, FileName);
+    }
 
     /// <summary>Longer than any ledger this build writes, and short enough that a file that is not one is refused fast.</summary>
     private const int MaxBytes = 64 * 1024;

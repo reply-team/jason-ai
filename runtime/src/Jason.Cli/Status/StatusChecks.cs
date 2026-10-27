@@ -217,7 +217,7 @@ internal static class StatusChecks
                 info = await ReadAsync<SystemInfoResponse>(client, Operations.SystemInfo, cancellationToken).ConfigureAwait(false);
             }
 
-            var unfinished = Update.UnfinishedUpdate.Read(env.Paths);
+            var unfinished = Contracts.Update.UnfinishedUpdate.Read(env.Paths);
             checks.Add(Runtime(descriptor, info, unfinished));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
             checks.Add(Migrations(info));
@@ -247,7 +247,7 @@ internal static class StatusChecks
         return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks);
     }
 
-    private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Update.UnfinishedUpdate? unfinished)
+    private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
     {
         // First, and whether a runtime answers or not, once the update has touched the install path: its last steps are
         // the apply's, and a runtime started any other way runs outside them. A ledger that cannot say which step it is at
@@ -281,7 +281,7 @@ internal static class StatusChecks
     /// required check would stop every agent that branches on <c>ready</c> until the network came back. From that step
     /// on the required runtime check fails as well, and a ledger that cannot be read is said there.
     /// </summary>
-    private static StatusCheck UpdateInFlight(Update.UnfinishedUpdate? unfinished) => unfinished switch
+    private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
         null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
         { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),

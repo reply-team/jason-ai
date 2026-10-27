@@ -220,7 +220,7 @@ public class UpdateKillPointTests
             File.Copy(byHand.Update.PreviousExecutable, byHand.InstallPath);
 
             Assert.Equal(byHand.From.ToString(), byHand.Installed());
-            byHand.Processes.Launch(byHand.Paths, [byHand.InstallPath]);
+            byHand.Processes.Launch(byHand.Paths, [byHand.InstallPath], updateLaunch: null);
             Assert.True(byHand.Running);
             Assert.Equal(byHand.From.ToString(), byHand.Installed());
         }

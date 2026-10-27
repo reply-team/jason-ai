@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Update;
 using OperatingSystemProcess = System.Diagnostics.Process;
 
 namespace Jason.Cli.Process;
@@ -44,7 +45,12 @@ public interface IRuntimeProcessControl
     /// applier under the data directory. A seam that resolved this on its own would have that update start the old
     /// build, whereupon the health check would read the old version and fail an update that had in fact succeeded.
     /// </param>
-    IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable);
+    /// <param name="updateLaunch">
+    /// The update's mark, for a launch the update makes itself, and null for every other launch. From the step that moves
+    /// the installed build aside on, a runtime starts only under the mark, so the one an update starts must carry it and
+    /// one a person or a logon starts must not (<see cref="UpdateLaunch"/>).
+    /// </param>
+    IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable, string? updateLaunch);
 
     /// <summary>
     /// Runs a command of this product to its end against the given data directory and hands back its exit code and what
@@ -93,7 +99,11 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         return (executable[0], [.. executable.Skip(1), "runtime", "run", "--detached"]);
     }
 
-    public IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable)
+    /// <summary>
+    /// What <see cref="Launch"/> hands the operating system: the command, the data directory, and the update's mark only
+    /// where it is the update's launch.
+    /// </summary>
+    public static ProcessStartInfo LaunchStart(JasonPaths paths, IReadOnlyList<string> executable, string? updateLaunch)
     {
         ArgumentNullException.ThrowIfNull(paths);
 
@@ -110,6 +120,25 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         // The child must read the same data directory this CLI is talking about, whether it came from the
         // environment or from a default.
         startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
+
+        // The mark is set here and nowhere else, in the environment and never on the command line; a launch that is not
+        // the update's carries none, even where this process was handed one.
+        if (UpdateLaunch.Marks(updateLaunch))
+        {
+            startInfo.Environment[UpdateLaunch.Variable] = updateLaunch;
+        }
+        else
+        {
+            startInfo.Environment.Remove(UpdateLaunch.Variable);
+        }
+
+        return startInfo;
+    }
+
+    public IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable, string? updateLaunch)
+    {
+        var startInfo = LaunchStart(paths, executable, updateLaunch);
+        var fileName = startInfo.FileName;
 
         StandardStreams.KeepOutOfChildren();
 
@@ -152,6 +181,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         }
 
         startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
+        startInfo.Environment.Remove(UpdateLaunch.Variable);
 
         // The child starts a runtime, which outlives it: neither may hold the streams of whoever is reading this process.
         StandardStreams.KeepOutOfChildren();

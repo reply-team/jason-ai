@@ -353,7 +353,7 @@ public class AiRoleCommandTests
     }
 
     /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
-    private static Task<CommandOutcome> RunAsync(
+    internal static Task<CommandOutcome> RunAsync(
         JasonPaths paths,
         string workDir,
         IReadOnlyList<string> entryCommand,

@@ -3,6 +3,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Contracts.Update;
 using Jason.Runtime.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
@@ -28,9 +29,9 @@ using Serilog.Core;
 namespace Jason.Runtime.Hosting;
 
 /// <summary>
-/// Composes one runtime process: data directory → configuration → instance lock → logging → database
-/// migration → capability token → Kestrel on 127.0.0.1 → descriptor. The descriptor is published last so a
-/// client never finds an endpoint that is not yet listening, and off the caller's thread, so a reader holding it keeps
+/// Composes one runtime process: data directory → configuration → instance lock → logging → an update left
+/// part-way → database migration → capability token → Kestrel on 127.0.0.1 → descriptor. The descriptor is published
+/// last so a client never finds an endpoint that is not yet listening, and off the caller's thread, so a reader holding it keeps
 /// the start's task from completing, never the caller from going on.
 /// </summary>
 public static class RuntimeHost
@@ -109,6 +110,10 @@ public static class RuntimeHost
                 // consoleAllocationPolicy, which nobody can otherwise tell after the fact.
                 logger.Information(ProcessDetacher.LogTemplate, ProcessDetacher.Word(console));
             }
+
+            // Before the database is touched: a run nobody marked as the update's, around an update that has moved the
+            // installed build aside, would migrate it with a build whose last steps were never taken.
+            RefuseAroundAnUnfinishedUpdate(paths, options.UpdateLaunch, logger);
 
             MigrationReport migration;
             try
@@ -278,6 +283,54 @@ public static class RuntimeHost
     }
 
     /// <summary>
+    /// Refuses a start made around an update that stopped part-way, unless the update made it. A runtime registered to
+    /// start at sign-in runs this mode, and so do the apply's own start and the rollback's: from the step that moves the
+    /// installed build aside on, the install path may hold a build whose last steps were never taken, and only the
+    /// update's own run, marked by <see cref="UpdateLaunch"/>, is the one that takes them. A ledger that cannot be read
+    /// cannot say which step it is at and is refused the same way, as <c>jason runtime start</c> refuses it. Before that
+    /// step nothing has been replaced, and the installed build starts.
+    /// </summary>
+    /// <remarks>
+    /// After the instance lock and the log, so the refusal is written down and a second runtime is still told it is the
+    /// second; before the database, the token and the descriptor, so a refused run leaves none of them, and the start's own
+    /// way out gives the lock and the log back. Logged by the code, the step and the ledger's path, an installation path,
+    /// and never by the ledger's text or the mark's value, which come from whatever wrote them.
+    /// </remarks>
+    private static void RefuseAroundAnUnfinishedUpdate(JasonPaths paths, string? mark, Logger logger)
+    {
+        var unfinished = UnfinishedUpdate.Read(paths);
+        if (unfinished is null)
+        {
+            return;
+        }
+
+        var step = unfinished.Ledger is { } ledger ? UpdateLaunch.At(ledger.Step) : "unknown";
+        if (UpdateLaunch.Marks(mark))
+        {
+            logger.Information("Started by the update's own launch; its ledger is at {Step}", step);
+            return;
+        }
+
+        if (!unfinished.Replacing)
+        {
+            logger.Information("An update stopped at {Step}, before anything was replaced; the installed build starts", step);
+            return;
+        }
+
+        var (code, message) = unfinished.Refusal("Nothing was started.");
+        if (unfinished.Ledger is null)
+        {
+            logger.Error("The runtime did not start: the update ledger {Ledger} cannot be read ({Code})", unfinished.Path, code);
+        }
+        else
+        {
+            logger.Error("The runtime did not start: an update stopped at {Step} and this start is not its own ({Code}); its ledger is {Ledger}", step, code, unfinished.Path);
+        }
+
+        throw new UnfinishedUpdateRefusalException(code, message);
+    }
+
+    /// <summary>
     /// One line for an edit that left the settings file unreadable: the kind of failure and where the parser
     /// stopped, as separate properties so the log can be searched by them. Never the exception, whose message
     /// quotes what was typed.
@@ -342,13 +395,16 @@ public static class RuntimeHost
         // back from.
         catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or InvalidSettingsException
             or DescriptorUnpublishableException or TextCompositionUnavailableException or MigrationFailedException
+            or UnfinishedUpdateRefusalException
             || UnreadableStoredValueException.In(refused) is not null)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null
-            // device by now, and the reason it will not start used to go there.
+            // device by now, and the reason it will not start used to go there. An update's refusal is said in the
+            // envelope `jason runtime start` says it in, with its code.
             try
             {
-                await refusals.WriteLineAsync(UnreadableStoredValueException.In(refused)?.Message ?? refused.Message).ConfigureAwait(false);
+                await refusals.WriteLineAsync(
+                    refused is UnfinishedUpdateRefusalException update ? update.Envelope : UnreadableStoredValueException.In(refused)?.Message ?? refused.Message).ConfigureAwait(false);
                 await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (IOException)

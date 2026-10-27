@@ -979,7 +979,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
         // The install path, and never this process: an update resumed by hand may be running from the copy of the
         // applier under the data directory, so "start me again" would start the old build from the wrong place.
-        using var child = processes.Launch(env.Paths, [ledger.InstallPath]);
+        using var child = processes.Launch(env.Paths, [ledger.InstallPath], UpdateLaunch.At(UpdateStep.Started));
 
         var waited = TimeSpan.Zero;
         while (waited < StartTimeout)
@@ -988,6 +988,19 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             {
                 Say(UpdateStep.Started, $"{ledger.ToVersion}");
                 return ledger;
+            }
+
+            if (child.HasExited)
+            {
+                // Nothing can answer now, and the reason is in what it said: a run refused as a second runtime, which a
+                // sign-in's run holding the lock for an instant makes it, says so on its standard error. It is not
+                // started again here; the same command typed once more resumes at this start.
+                var said = child.Said;
+                throw new UpdateException(
+                    UpdateCodes.NotHealthy,
+                    $"{ledger.ToVersion} was installed but the runtime it started exited with code {child.ExitCode} before it answered. "
+                    + (said.Length > 0 ? $"It said: {said} " : string.Empty)
+                    + $"`jason update apply` starts it again; `jason update rollback` puts {ledger.FromVersion} back.");
             }
 
             await Task.Delay(Poll, clock, cancellationToken).ConfigureAwait(false);

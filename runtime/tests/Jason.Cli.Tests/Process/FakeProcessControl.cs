@@ -40,12 +40,16 @@ public sealed class FakeProcessControl : IRuntimeProcessControl
     /// </summary>
     public List<IReadOnlyList<string>> Executables { get; } = [];
 
-    public IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable)
+    /// <summary>The update's mark of every launch, in order: null for a launch that is not the update's.</summary>
+    public List<string?> UpdateLaunches { get; } = [];
+
+    public IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable, string? updateLaunch)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(executable);
         Launches.Add(paths.Root);
         Executables.Add(executable);
+        UpdateLaunches.Add(updateLaunch);
         return OnLaunch?.Invoke(paths) ?? new FakeProcessHandle(4242);
     }
 

@@ -507,6 +507,10 @@ Its environment is the runtime's own plus four values and not one more:
 - the directory this build of Jason runs from, at the front of `PATH`, so the bare command word in
   `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
 
+One value is taken away: `JASON_UPDATE_LAUNCH`, the mark an update puts on its own start of the runtime
+([release-and-update.md](release-and-update.md#when-it-stops-halfway)). The runtime drops it from its own
+environment before it starts anything, and the launch removes it again, so no agent carries it.
+
 **The capability token is never on the command line, never in the environment, and never stored**:
 every occurrence of it is replaced with `[redacted]` before anything the child wrote is put in a file
 or in an attempt's error trace.

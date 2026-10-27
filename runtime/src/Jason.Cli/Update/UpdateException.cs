@@ -22,7 +22,7 @@ public static class UpdateCodes
     /// A different version is already in flight. The same one is resumed rather than refused. And <c>jason runtime start</c>
     /// refuses with it while any update is in flight, since the apply starts the runtime itself as one of its steps.
     /// </summary>
-    public const string InProgress = "update_in_progress";
+    public const string InProgress = Contracts.Update.UnfinishedUpdate.InProgress;
 
     /// <summary>The feed offers nothing newer than what is installed.</summary>
     public const string UpToDate = "update_up_to_date";

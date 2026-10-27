@@ -1,5 +1,6 @@
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Update;
 using Jason.Runtime.Plugins.Invocation;
 
 namespace Jason.Runtime.Tests.Plugins.Invocation;
@@ -45,6 +46,27 @@ public class ChildEnvironmentTests
             Environment.SetEnvironmentVariable(granted, null);
             Environment.SetEnvironmentVariable(unlisted, null);
             Environment.SetEnvironmentVariable(reserved, null);
+        }
+    }
+
+    /// <summary>
+    /// The mark an update puts on its own launch of the runtime is a <c>JASON_</c> name like any other: a plugin host
+    /// started under it, or under a grant that names it, never carries it.
+    /// </summary>
+    [Fact]
+    public void A_plugin_host_does_not_carry_the_updates_mark()
+    {
+        var original = Environment.GetEnvironmentVariable(UpdateLaunch.Variable);
+        Environment.SetEnvironmentVariable(UpdateLaunch.Variable, UpdateLaunch.At(UpdateStep.Started));
+        try
+        {
+            var environment = ChildEnvironment.Build([UpdateLaunch.Variable]);
+
+            Assert.DoesNotContain(UpdateLaunch.Variable, environment.Keys, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(UpdateLaunch.Variable, original);
         }
     }
 

@@ -74,9 +74,9 @@ public static class StatusCommand
         An update that stopped before its swap (a download that failed, an asset that failed its digest) has
         replaced nothing: the runtime check is the runtime's own, and the update check names the update and
         the apply that resumes it. From the swap on the runtime check fails, and its repair is the apply,
-        never 'jason runtime start': a runtime started any other way, by hand or by a sign-in registration,
-        runs outside the update and leaves its last steps undone. An update ledger that cannot be read fails
-        the runtime check and names the file.
+        never 'jason runtime start': a runtime started any other way would run outside the update and leave
+        its last steps undone, so 'jason runtime start' refuses then, and so does the start a sign-in
+        registration makes. An update ledger that cannot be read fails the runtime check and names the file.
 
         The build check compares the version the runtime reports with this CLI's own, as whole strings: a
         runtime left running across an upgrade that replaced the executable fails it, and its repair is

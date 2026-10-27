@@ -70,7 +70,7 @@ public static class RuntimeStartCommand
         // something other than that build, and its last steps undone; the apply starts the runtime itself as one of them.
         // So nothing is started there, nor beside a ledger that cannot say which step it is at. Before that step nothing
         // has been replaced, and the installed build is started with a word on the error stream that the update waits.
-        if (Update.UnfinishedUpdate.Read(env.Paths) is { } unfinished)
+        if (Contracts.Update.UnfinishedUpdate.Read(env.Paths) is { } unfinished)
         {
             if (unfinished.Replacing)
             {
@@ -92,7 +92,7 @@ public static class RuntimeStartCommand
 
         // Another copy of this program: what a person typing `jason runtime start` means by "the runtime".
         // Said here rather than inside the seam, because the applier starts something else entirely.
-        using var child = processes.Launch(env.Paths, SelfExecutable.Command);
+        using var child = processes.Launch(env.Paths, SelfExecutable.Command, updateLaunch: null);
 
         var waited = timeout ?? DefaultTimeout;
         var elapsed = Stopwatch.StartNew();

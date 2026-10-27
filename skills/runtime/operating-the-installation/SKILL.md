@@ -352,8 +352,8 @@ An update that stopped part-way is the exception, because the person already ask
 update and the step it stopped at, and its repair is `jason update apply`, which finishes it and starts the runtime
 itself. Before its swap nothing has been replaced, the optional `update` check says so, and `jason runtime start` starts
 the installed build; from the swap on the `runtime` check fails, and `jason runtime start` refuses with
-`update_in_progress` and starts nothing.
-`jason update rollback` is the other way on, and that choice is the person's.
+`update_in_progress` and starts nothing, as does the start a sign-in makes: only the update's own starts run then, the
+apply's and the rollback's. `jason update rollback` is the other way on, and that choice is the person's.
 
 `jason update apply` replaces each plugin package installed as an earlier release's with the new release's, and leaves
 every other package under `~/.jason/plugins/` as it is; its `plugins:` lines say which. A package it could not replace,

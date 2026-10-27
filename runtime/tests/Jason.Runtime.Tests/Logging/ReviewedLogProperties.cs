@@ -84,7 +84,11 @@ internal static class ReviewedLogProperties
         "@t", "@mt", "@x",
 
         // Paths under the data directory and the process's own, carried as they are: the diagnostic bundle rewrites them.
-        "DataDir", "Backup", "Directory", "Descriptor", "ContentRoot",
+        "DataDir", "Backup", "Directory", "Descriptor", "ContentRoot", "Ledger",
+
+        // The step an update stopped at, one of the ledger's own words, or "unknown" where the ledger cannot be read: the
+        // word is composed from the step the ledger was parsed to, never the file's text or a launch's mark (RuntimeHost).
+        "Step",
 
         // Summoner: the chronicle kind that summoned a manager, or "scheduled".
         "Intent",

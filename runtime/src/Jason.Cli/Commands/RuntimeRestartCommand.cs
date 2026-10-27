@@ -15,7 +15,7 @@ public static class RuntimeRestartCommand
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        if (Update.UnfinishedUpdate.Read(env.Paths) is { Replacing: true } unfinished)
+        if (Contracts.Update.UnfinishedUpdate.Read(env.Paths) is { Replacing: true } unfinished)
         {
             var (code, message) = unfinished.Refusal("Nothing was stopped or started.");
             env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
