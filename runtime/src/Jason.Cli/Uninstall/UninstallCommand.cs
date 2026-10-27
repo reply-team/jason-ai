@@ -47,9 +47,13 @@ public static class UninstallCommand
           4. every skill a deployment recorded, by the paths its record names
           5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason — the
              executable, its two notice files and what an upgrade left beside it: the marked block in a login
-             profile; on Windows, the entry in this account's Path
+             profile, and in ~/.bashrc or ~/.zshrc beside it; on Windows, the entry in this account's Path
           6. the executable, its notice files (jason-LICENSE, jason-THIRD-PARTY-NOTICES), its install
-             directory, and the native libraries it unpacked on first run
+             directory, the native libraries it unpacked on first run, and on Windows those every other
+             build of this program unpacked beside them — a running copy holds its own, and each build
+             unpacks again on its next start. Elsewhere a running copy holds nothing, so those are counted
+             and left, for you to remove once nothing runs from them; and with DOTNET_BUNDLE_EXTRACT_BASE_DIR
+             set they are not looked for
 
         A file another program holds open is tried again for up to {InstallationRemovers.HeldFiles.WaitInWords} before it is reported;
         elsewhere than Windows an open file does not stop the removal.
@@ -350,6 +354,16 @@ public static class UninstallCommand
         if (plan.ExtractedLibraries is { } extracted)
         {
             env.Out.WriteLine($"  the native libraries it unpacked, at {extracted}");
+        }
+
+        foreach (var other in plan.OtherExtractedLibraries ?? [])
+        {
+            env.Out.WriteLine($"  the native libraries another build of this program unpacked, at {other}");
+        }
+
+        if (plan.OtherExtractedLibrariesLeft is { } left)
+        {
+            env.Out.WriteLine($"  NOT touched: {left}");
         }
 
         foreach (var unknown in plan.Unknown)

@@ -32,18 +32,21 @@ public static class StatusCommand
     /// </summary>
     private const string Partition =
         """
-        Required — a failure exits 1:   the runtime answers | the running runtime is the build this CLI is |
-                                        migrations are applied | the plugin registry is alive (zero plugins is
-                                        alive) | role skills are present, named after their directories and
-                                        within the runtime's live cap | 'jason' resolves on PATH, in this shell
-                                        or in every shell started from now on
-        Optional — absent never fails:  a provider plugin is installed | each plugin package this release
-                                        publishes is the one installed | every plugin installed is available |
-                                        a route is configured | a binding names an account | a provider CLI
-                                        you name answers | the skill packs are deployed to an agent harness |
-                                        autostart is registered | notifications reach you | a UI is installed,
-                                        and the default one is this release's | the harness root can take the
-                                        first project or campaign
+        Required — a failure exits 1:   the runtime answers, and no update stopped part-way from its swap on
+                                        (its repair is jason update apply) | the running runtime is the build
+                                        this CLI is | migrations are applied | the plugin registry is alive
+                                        (zero plugins is alive) | role skills are present for every role Jason
+                                        ships (a role of your own is reported, never failed), named after their
+                                        directories and within the runtime's live cap | 'jason' resolves on
+                                        PATH, in this shell or in every shell started from now on
+        Optional — absent never fails:  no update is waiting to be resumed | a provider plugin is installed |
+                                        each plugin package this release publishes is the one installed |
+                                        every plugin installed is available | a route is configured | a
+                                        binding names an account | a provider CLI you name answers | the skill
+                                        packs are deployed to an agent harness, and the files their record
+                                        names are there | autostart is registered | notifications reach you |
+                                        a UI is installed, and the default one is this release's | the harness
+                                        root can take the first project or campaign
 
         The path check is ok in two cases. 'jason' resolves in this shell; or it does not, and this account
         keeps its directory for shells not yet started — its Path value on Windows, on macOS and Linux the one
@@ -53,9 +56,10 @@ public static class StatusCommand
         an agent host started before the install, and every command it runs, still fails a bare 'jason' while
         ready is true, until the host is restarted. Where neither holds the check fails, and its repair is a
         line for this machine's own shell — PowerShell on Windows, sh elsewhere — the same line the installer
-        writes, which changes nothing when typed twice. Where Homebrew or winget installed Jason, 'jason'
-        reached through the manager's link or its own directory is ok, and no line is ever offered: that
-        entry is the manager's.
+        writes, into the same files — for bash and zsh, ~/.bashrc or ~/.zshrc as well, which a terminal opened
+        without a login reads — and which changes nothing when typed twice. Where Homebrew or winget
+        installed Jason, 'jason' reached through the manager's link or its own directory is ok, and no line
+        is ever offered: that entry is the manager's.
 
         On a release, the role skills check compares the ref their record names with the runtime's own: skills
         a default install took at another tag fail it, and its repair keeps the source they came from; skills
@@ -63,7 +67,16 @@ public static class StatusCommand
         made with --ref passes, and the check says how to move it. harness_skills compares the harness the same
         way with this build's own ref, and its repair, 'jason skills update', is yours to run; a pack its record
         pins passes there too, with the line that moves it. A development version, and a directory read where
-        it stands, compare nothing.
+        it stands, compare nothing. harness_skills reads the files a record names, not the record alone: a pack
+        whose files are gone fails it, and the same repair writes them again, from the source and at the ref
+        the record names, and keeps a file you edited.
+
+        An update that stopped before its swap (a download that failed, an asset that failed its digest) has
+        replaced nothing: the runtime check is the runtime's own, and the update check names the update and
+        the apply that resumes it. From the swap on the runtime check fails, and its repair is the apply,
+        never 'jason runtime start': a runtime started any other way, by hand or by a sign-in registration,
+        runs outside the update and leaves its last steps undone. An update ledger that cannot be read fails
+        the runtime check and names the file.
 
         The build check compares the version the runtime reports with this CLI's own, as whole strings: a
         runtime left running across an upgrade that replaced the executable fails it, and its repair is

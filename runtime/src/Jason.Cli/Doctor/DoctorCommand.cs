@@ -755,8 +755,9 @@ public static class DoctorCommand
             does not — each answer below without the fields after it, which the header names under projected. The
             status section's facts are composed from that report as projected, so they quote none of it either. A
             skill problem is written as "{DoctorComposer.Withheld}" where the runtime reported one and is null where it reported
-            none, and the status section's role-skills fact made of them reads "{DoctorComposer.Withheld} (N)" with their count; a
-            presence detail that is one of the runtime's own words travels as written:
+            none, and the status section's role-skills fact opens with them as "{DoctorComposer.Withheld} (N)", their count, and what
+            it says after them of a role that is the person's own follows, its directory written as every path is, and
+            nothing else after them does; a presence detail that is one of the runtime's own words travels as written:
             {Indented(DoctorComposer.Projections.Select(projection => $"{projection.Field}: {string.Join("; ", projection.Withheld)}"))}
 
             --include-journal adds journal_entries, and with it this warning — on stderr, in the printed result and in

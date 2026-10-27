@@ -18,7 +18,10 @@ public static class UpdateCodes
     /// </summary>
     public const string ArtifactUnexpected = "update_artifact_unexpected";
 
-    /// <summary>A different version is already in flight. The same one is resumed rather than refused.</summary>
+    /// <summary>
+    /// A different version is already in flight. The same one is resumed rather than refused. And <c>jason runtime start</c>
+    /// refuses with it while any update is in flight, since the apply starts the runtime itself as one of its steps.
+    /// </summary>
     public const string InProgress = "update_in_progress";
 
     /// <summary>The feed offers nothing newer than what is installed.</summary>

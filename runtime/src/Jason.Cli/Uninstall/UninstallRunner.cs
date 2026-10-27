@@ -537,12 +537,16 @@ public static class UninstallRunner
     }
 
     /// <summary>
-    /// What a single-file build unpacked on its first run, and the directory holding it if that is now empty.
+    /// What a single-file build unpacked on its first run, what every other build unpacked beside it where those are
+    /// planned, and the directory holding them if that is now empty.
     /// </summary>
     /// <remarks>
     /// The parent is where every build of this program unpacks, one directory each: earlier versions of this
-    /// installation left theirs there, and so would another installation. None of those is this build's to
-    /// remove, so the parent goes only if nothing is left in it, and the report says why when it stays.
+    /// installation left theirs there, and so would another installation. Keeping them left the libraries of every
+    /// version this account ever ran behind an uninstall. On Windows removing one another installation still uses costs
+    /// it a moment on its next start, when its build unpacks again, and a copy running now keeps its own by holding it,
+    /// so they go and the plan names each. Elsewhere a running copy holds nothing, so they stay, counted, and the report
+    /// says so in the plan's words. The parent goes only if nothing is left in it — the report says why when it stays.
     /// </remarks>
     private static void RemoveExtractedLibraries(
         CliEnvironment env,
@@ -569,6 +573,30 @@ public static class UninstallRunner
             return;
         }
 
+        // Every other build's, beside it, where they are planned -- on Windows: earlier versions of this installation, or
+        // another installation of this account, which nothing in the directory tells apart. Not this installation's
+        // problem when one will not go: a copy of that build running now holds it, and that build unpacks it again on its
+        // next start if it does go. Where they are not planned, the plan's line says how many stay and why.
+        foreach (var other in plan.OtherExtractedLibraries ?? [])
+        {
+            try
+            {
+                env.Removes!.RemoveExtractedLibraries(other);
+                done.Add($"Removed the native libraries another build of this program unpacked, at '{other}'.");
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                kept.Add(
+                    $"{NotRemoved(env, other, exception)} Another build of this program unpacked it, and a copy of that "
+                    + "build running now would be holding it; nothing of this installation is in it.");
+            }
+        }
+
+        if (plan.OtherExtractedLibrariesLeft is { } left)
+        {
+            kept.Add(left);
+        }
+
         if (Path.GetDirectoryName(extracted) is not { Length: > 0 } parent)
         {
             return;
@@ -578,9 +606,9 @@ public static class UninstallRunner
         {
             if (!env.Removes!.RemoveDirectoryIfEmpty(parent) && Directory.Exists(parent))
             {
-                kept.Add(
-                    $"Kept '{parent}': other builds of this program unpacked their libraries there too — earlier "
-                    + "versions of this installation, or another one. Nothing of this build's is left in it.");
+                kept.Add(plan.OtherExtractedLibrariesLeft is null
+                    ? $"Kept '{parent}': what is left in it is not a build's unpacked libraries, or is held by a copy running now. Nothing of this build's is left in it."
+                    : $"Kept '{parent}', with what is left in it, as said above. Nothing of this build's is left in it.");
             }
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)

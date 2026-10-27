@@ -209,9 +209,14 @@ public sealed record UpdateLedger(
         {
             try
             {
-                using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using var reader = new StreamReader(file);
-                return Read(reader.ReadToEnd());
+                string text;
+                using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var reader = new StreamReader(file))
+                {
+                    text = reader.ReadToEnd();
+                }
+
+                return Named(path, text);
             }
             catch (Exception missing) when (NoLedgerThere(missing, path))
             {
@@ -239,6 +244,23 @@ public sealed record UpdateLedger(
             }
 
             Thread.Sleep(Wait);
+        }
+    }
+
+    /// <summary>
+    /// The document read from the file at <paramref name="path"/>, refused with the file's path in front of the reason: a
+    /// refusal that says only "the ledger is not JSON." leaves a person to find out which file it means, and whether
+    /// removing it is theirs to do.
+    /// </summary>
+    private static UpdateLedger Named(string path, string text)
+    {
+        try
+        {
+            return Read(text);
+        }
+        catch (UpdateLedgerException invalid)
+        {
+            throw new UpdateLedgerException($"The update ledger at '{path}' is not one this build can act on: {invalid.Message}", invalid);
         }
     }
 

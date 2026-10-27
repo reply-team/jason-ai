@@ -2207,7 +2207,7 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
-    /// Two roles whose skills the runtime refused: the readiness fact says so as one closed value and how many, never the
+    /// Two roles Jason ships whose skills the runtime refused: the readiness fact says so as one closed value and how many, never the
     /// operating system's words for it — a projection of the bundle's own; <c>jason status</c> says what it always said.
     /// </summary>
     [Fact]
@@ -2215,6 +2215,7 @@ public sealed class DoctorComposerTests
     {
         using var dir = new TempPaths();
         var runtime = Running(dir);
+        runtime.Roster = [("researcher", true), ("planner", true)];
         runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with
         {
             Skills = new SkillsInfo(
@@ -2244,6 +2245,7 @@ public sealed class DoctorComposerTests
     {
         using var dir = new TempPaths();
         var runtime = Running(dir);
+        runtime.Roster = [("researcher", true), ("planner", true)];
         runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with
         {
             Skills = new SkillsInfo(
@@ -2267,6 +2269,86 @@ public sealed class DoctorComposerTests
         var fact = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "role_skills")!;
         Assert.Equal(DoctorComposer.Withheld + " (2: role_directory_unreadable)", Text(fact["fact"]));
     }
+
+    /// <summary>
+    /// A refused skill of a role the person added, beside one of a role Jason ships: the withheld problems are still one
+    /// closed value and a count, and the sentence the status verb adds for the person's own role follows it as composed,
+    /// its name as written and its directory as the bundle writes paths, and nothing else: the shipped role's problem
+    /// text, planted with a sentinel, is in the count and nowhere in the bundle. Were the sentence to stop the summary, the
+    /// problems' codes would travel one by one again.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_role_of_the_person_s_own_keeps_its_sentence_after_the_withheld_summary()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Roster = [("researcher", true), ("scout", false)];
+        runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with
+        {
+            Skills = new SkillsInfo(
+                Path.Combine(dir.Paths.Root, "skills", "roles"),
+                4096,
+                [
+                    new DeployedRoleSkill("researcher", 100, "SENTINEL_ROLE_PROBLEM: access denied", Jason.Contracts.Skills.SkillProblemCodes.SkillTooLarge),
+                    new DeployedRoleSkill("scout", 100, "SENTINEL_OTHER_PROBLEM: in use", Jason.Contracts.Skills.SkillProblemCodes.SkillFileMissing),
+                ],
+                null),
+        };
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var fact = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "role_skills")!;
+        Assert.Equal(
+            DoctorComposer.Withheld + " (2: skill_too_large, skill_file_missing) 'scout' is no role Jason ships, so no command of Jason's"
+                + $" repairs its skill: correct it or remove it from {Path.Combine("<data>", "skills", "roles")}.",
+            Text(fact["fact"]));
+        AssertAbsent(bundle, "SENTINEL_ROLE_PROBLEM", "SENTINEL_OTHER_PROBLEM");
+    }
+
+    /// <summary>
+    /// What follows the withheld problems travels only where it is, whole, the status verb's own sentences for the refused
+    /// roles and the directory of the report it read. Text of any other shape after them — beside a sentence, before it,
+    /// inside its name or its directory — leaves the summary alone, so a change that put the runtime's words into this fact
+    /// turns these rows red rather than getting through on a sentence that happens to precede them.
+    /// </summary>
+    [Theory]
+    [InlineData("", true)]
+    [InlineData(" SENTINEL_RUNTIME_TEXT", false)]
+    [InlineData(" SENTINEL_RUNTIME_TEXT{own}", false)]
+    [InlineData("{own} SENTINEL_RUNTIME_TEXT", false)]
+    [InlineData("{own}{other}", false)]
+    [InlineData("{elsewhere}", false)]
+    [InlineData("{own}", true)]
+    public void Only_the_status_verb_s_own_sentences_follow_the_withheld_summary(string after, bool carried)
+    {
+        const string directory = "/srv/jason/skills/roles";
+        var skills = new SkillsInfo(
+            directory,
+            4096,
+            [
+                new DeployedRoleSkill("researcher", 100, DoctorComposer.Withheld, Jason.Contracts.Skills.SkillProblemCodes.SkillTooLarge),
+                new DeployedRoleSkill("scout", 100, DoctorComposer.Withheld, Jason.Contracts.Skills.SkillProblemCodes.SkillFileMissing),
+            ],
+            null);
+        var tail = after
+            .Replace("{own}", " " + Jason.Cli.Status.StatusChecks.OwnRoleRefused("scout", directory), StringComparison.Ordinal)
+            .Replace("{other}", " " + Jason.Cli.Status.StatusChecks.OwnRoleRefused("SENTINEL_NAME", directory), StringComparison.Ordinal)
+            .Replace("{elsewhere}", " " + Jason.Cli.Status.StatusChecks.OwnRoleRefused("scout", "/SENTINEL_DIRECTORY"), StringComparison.Ordinal);
+        var fact = "withheld [skill_too_large] withheld [skill_file_missing]" + tail;
+
+        var summary = DoctorComposer.WithheldSummary(fact, skills);
+
+        const string run = "withheld (2: skill_too_large, skill_file_missing)";
+        Assert.Equal(carried ? run + tail : run, summary);
+        Assert.DoesNotContain("SENTINEL", summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>With no report of the skills to read the sentences against, nothing after the withheld problems travels.</summary>
+    [Fact]
+    public void Without_the_report_s_skills_only_the_summary_travels() =>
+        Assert.Equal(
+            "withheld (1: skill_file_missing)",
+            DoctorComposer.WithheldSummary("withheld [skill_file_missing] " + Jason.Cli.Status.StatusChecks.OwnRoleRefused("scout", "/srv/jason/skills/roles"), null));
 
     /// <summary>A data directory the runtime reports as no full path names nothing, and no word that spells it is rewritten.</summary>
     [Fact]
@@ -2622,6 +2704,9 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
     /// <summary>What <c>system.info</c> answers, where a test says; otherwise an ordinary answer.</summary>
     public SystemInfoResponse? Info { get; set; }
 
+    /// <summary>The roles <c>role.list</c> answers with, each with whether Jason ships it; none unless a test says.</summary>
+    public IReadOnlyList<(string Name, bool Builtin)> Roster { get; set; } = [];
+
     /// <summary>What <c>plugin.list</c> answers, where a test says; otherwise two plugins.</summary>
     public PluginRegistryDto? Registry { get; set; }
 
@@ -2725,7 +2810,7 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
         return operation switch
         {
             Operations.SystemInfo => Answer(Info ?? SystemInfo()),
-            Operations.RoleList => Answer(new Page<RoleDto>([], null)),
+            Operations.RoleList => Answer(new Page<RoleDto>([.. Roster.Select(role => new RoleDto($"rol_{role.Name}", role.Name, role.Builtin, null, [], new JsonObject(), null, Now, Now))], null)),
             Operations.RouteList => Answer(new RoutesDto("rts_EMPTY", "snp_EMPTY", new RouteSetDto(null, new Dictionary<string, RouteDto>()), [])),
             Operations.PluginList => Answer(Registry ?? TwoPlugins()),
             Operations.JournalList => Answer(JournalPage(body)),

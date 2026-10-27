@@ -180,8 +180,86 @@ public class UninstallPathEntryTests
     [Fact]
     public void The_removal_looks_in_every_profile_the_installer_may_have_written() =>
         Assert.Equal(
-            [".profile", ".bash_profile", ".bash_login", ".zprofile"],
+            [".profile", ".bash_profile", ".bash_login", ".zprofile", ".bashrc", ".zshrc"],
             PathEntry.ProfileFiles("/home/a").Select(Path.GetFileName));
+
+    /// <summary>
+    /// And the line goes where every interactive shell of the account reads it, a login shell or not: a desktop's
+    /// terminal starts bash without a login, which reads <c>~/.bashrc</c> and never the login profile.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(InteractiveProfiles))]
+    public void The_interactive_profile_is_the_one_a_terminal_without_a_login_reads(string? shell, string? expected) =>
+        Assert.Equal(expected, PathEntry.InteractiveProfile("/home/a", shell) is { } file ? Path.GetFileName(file) : null);
+
+    public static TheoryData<string?, string?> InteractiveProfiles() => new()
+    {
+        { "/bin/bash", ".bashrc" },
+        { "bash", ".bashrc" },
+        { "/usr/bin/zsh", ".zshrc" },
+        { "zsh", ".zshrc" },
+        { "/bin/sh", null },
+        { "/bin/dash", null },
+        { "/usr/bin/fish", null },
+        { "/opt/notzsh", null },
+        { "/bin/bash/", null },
+        { "", null },
+        { null, null },
+    };
+
+    /// <summary>
+    /// <c>install.sh</c> carries that rule as the function the C# spells, word for word, and writes the line into the
+    /// file it names as well as into the login profile.
+    /// </summary>
+    [Fact]
+    public void The_installer_carries_the_interactive_profile_rule_word_for_word()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains(PathEntry.InteractiveProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
+        Assert.Contains("INTERACTIVE=\"$(interactive_profile)\"", script, StringComparison.Ordinal);
+        Assert.Contains("add_to_profile \"$INTERACTIVE\"", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>And the function, run in <c>sh</c> under the installer's <c>set -eu</c>, answers what the C# answers.</summary>
+    [Theory]
+    [MemberData(nameof(InteractiveProfiles))]
+    public void The_installers_interactive_function_answers_what_the_rule_answers(string? shell, string? expected)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh runs in sh, on the platforms it installs on.");
+
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+
+        var (said, saw, error) = InSh(home, shell, PathEntry.InteractiveProfileFunction, "interactive_profile");
+
+        Assert.True(error.Length == 0, $"sh said: {error}");
+        Assert.Equal(PathEntry.InteractiveProfile(home, saw) ?? string.Empty, said);
+        if (saw == (shell ?? string.Empty))
+        {
+            Assert.Equal(expected is null ? string.Empty : Path.Combine(home, expected), said);
+        }
+    }
+
+    /// <summary>
+    /// A block the installer appended to <c>~/.bashrc</c> is the removal's to take back, as one in a login profile is,
+    /// and it does not answer the check, which asks what a login shell reads.
+    /// </summary>
+    [Fact]
+    public void A_block_in_the_interactive_profile_is_ours_to_remove()
+    {
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+        var bin = Installed(home, "jason");
+        File.WriteAllText(Path.Combine(home, ".profile"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(bin)}\n");
+        File.WriteAllText(Path.Combine(home, ".bashrc"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(bin)}\n");
+
+        var plan = PathEntry.ReadProfiles(bin, home, "/bin/bash");
+
+        Assert.True(plan.Ours);
+        Assert.Equal([Path.Combine(home, ".profile"), Path.Combine(home, ".bashrc")], plan.Profiles);
+        Assert.Equal(Path.Combine(home, ".profile"), plan.Persisted);
+    }
 
     /// <summary>
     /// The block at the end of the file, which is what <c>install.sh</c> leaves behind whenever nothing was
@@ -331,7 +409,11 @@ public class UninstallPathEntryTests
     /// What <c>install.sh</c>'s <c>login_profile</c> prints under the script's own <c>set -eu</c>, and the
     /// <c>SHELL</c> it saw — empty where it had none.
     /// </summary>
-    private static (string Said, string Saw, string Error) LoginProfileInSh(string home, string? shell)
+    private static (string Said, string Saw, string Error) LoginProfileInSh(string home, string? shell) =>
+        InSh(home, shell, PathEntry.LoginProfileFunction, "login_profile");
+
+    /// <summary>What one of <c>install.sh</c>'s functions prints under the script's own <c>set -eu</c>, and the <c>SHELL</c> it saw.</summary>
+    private static (string Said, string Saw, string Error) InSh(string home, string? shell, string function, string call)
     {
         var start = new System.Diagnostics.ProcessStartInfo("/bin/sh")
         {
@@ -340,7 +422,7 @@ public class UninstallPathEntryTests
             UseShellExecute = false,
         };
         start.ArgumentList.Add("-c");
-        start.ArgumentList.Add("set -eu\n" + PathEntry.LoginProfileFunction + "\nprintf '%s\\n' \"${SHELL:-}\"\nlogin_profile");
+        start.ArgumentList.Add("set -eu\n" + function + "\nprintf '%s\\n' \"${SHELL:-}\"\n" + call);
         start.Environment["HOME"] = home;
         if (shell is null)
         {

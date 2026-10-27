@@ -314,6 +314,11 @@ the line it names. An update applied by a build before 0.12.0 has no such step, 
 `jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older
 than that step places none, so `jason ui install` follows it; `jason status` names it until it has.
 
+A skill file the person edited, or a file they put in a skill, is theirs: the skills verbs, `jason skills update`
+and the install it repeats, keep it, write everything else around it, name each file they kept and succeed. The
+skill holding it is then a blend of two hands, the person's and the release's, which the person reconciles. Only
+`--force` overwrites it, and it is the person's to type, never yours to add.
+
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
 lines, the runtime stopped first and started after, and only when the person asked for it, as for
@@ -342,6 +347,13 @@ asked. **Never interrupt** the task the person actually came with in order to ta
 And **never run `jason update apply` unless the person asked for it**. It replaces the executable that is
 running and stops the runtime to do it, so work in flight is drained and everything pointing at Jason is briefly
 pointing at a file being swapped. Noticing an update is yours; deciding to take it is theirs.
+
+An update that stopped part-way is the exception, because the person already asked for it: `jason status` names the
+update and the step it stopped at, and its repair is `jason update apply`, which finishes it and starts the runtime
+itself. Before its swap nothing has been replaced, the optional `update` check says so, and `jason runtime start` starts
+the installed build; from the swap on the `runtime` check fails, and `jason runtime start` refuses with
+`update_in_progress` and starts nothing.
+`jason update rollback` is the other way on, and that choice is the person's.
 
 `jason update apply` replaces each plugin package installed as an earlier release's with the new release's, and leaves
 every other package under `~/.jason/plugins/` as it is; its `plugins:` lines say which. A package it could not replace,
@@ -409,7 +421,9 @@ there, and the verb removes those skills and nothing else. **A skill somebody co
 no receipt, so it is removed by nobody, including this** — say so while you are there, rather than leaving
 them to find it months later. A recorded file whose bytes they have changed since is reported and kept unless
 `--force` says otherwise. The rest — the logon registration, the PATH entry where the installer wrote it, the
-executable and what it unpacked — goes by rule, and the dry run names each.
+executable and what it unpacked, and on Windows what every other build of Jason unpacked — goes by rule, and the
+dry run names each. On macOS and Linux the other builds' directories stay, counted in one line, for the person to
+remove once nothing runs from them.
 
 **The data directory is kept** unless `--purge-data` says so, and the verb names it in one line; with it, what
 Jason keeps there goes and anything else in it stays. In the machine shape `--yes` has to be given in advance,

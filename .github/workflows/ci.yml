@@ -737,6 +737,7 @@ jobs:
               throw "this account has a logon registration, recorded skills or a PATH entry of its own; this step uninstalls a scratch copy only, and refuses here"
           }
           Write-Host "unpacked libraries: $($plan.extracted_libraries)"
+          Write-Host "other builds' unpacked libraries: $(@($plan.other_extracted_libraries) -join ', ')"
 
           $said = & $exe uninstall --purge-data --yes 2>&1
           $exit = $LASTEXITCODE
@@ -753,6 +754,10 @@ jobs:
           if ((Get-Content (Join-Path $env:JASON_DATA_DIR 'marker.txt') -Raw).Trim() -ne "the operator's own work") { throw "the operator's marker was changed" }
           if (($report.kept -join ' ') -notmatch 'marker\.txt') { throw "the report does not name the file it kept: $($report.kept -join ' | ')" }
           if ($plan.extracted_libraries -and (Test-Path -LiteralPath $plan.extracted_libraries)) { throw "what the build unpacked is still at '$($plan.extracted_libraries)'" }
+          # Every other build's goes too; one a running copy holds stays, and the report says so by its path.
+          foreach ($other in @($plan.other_extracted_libraries | Where-Object { $_ })) {
+              if ((Test-Path -LiteralPath $other) -and -not (($report.kept -join ' ').Contains($other))) { throw "what another build unpacked is still at '$other', and the report does not say why" }
+          }
 
           # On Windows the running image is moved aside rather than deleted, and a cleanup removes the copy
           # once the verb has exited. The report names the cleanup's process and the directory. The cleanup is a
@@ -1209,10 +1214,11 @@ jobs:
           [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed', expected $VERSION"; exit 1; }
 
           # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
-          # LICENSE is this tree's LICENSE-RUNTIME.md. And the run ends saying which licence that is.
+          # LICENSE is this tree's LICENSE-RUNTIME.md. And the run ends saying which licence that is, then what to run next.
           cmp LICENSE-RUNTIME.md "$HOME/.local/bin/jason-LICENSE"
           cmp THIRD-PARTY-NOTICES "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES"
-          [ "$(tail -n 1 first.txt)" = "Jason $VERSION is licensed under the Jason Runtime Licence: https://github.com/reply-team/jason-ai/blob/v$VERSION/LICENSE-RUNTIME.md" ] || { tail -n 1 first.txt; exit 1; }
+          [ "$(tail -n 2 first.txt | head -n 1)" = "Jason $VERSION is licensed under the Jason Runtime Licence: https://github.com/reply-team/jason-ai/blob/v$VERSION/LICENSE-RUNTIME.md" ] || { tail -n 2 first.txt; exit 1; }
+          [ "$(tail -n 1 first.txt)" = 'Next, run `jason status`: it says what this installation still needs, and the command for each.' ] || { tail -n 1 first.txt; exit 1; }
 
           # What was installed opens its database, which is the half of "it runs" that --version cannot see.
           export JASON_DATA_DIR="$RUNNER_TEMP/installed-data"
@@ -1284,6 +1290,11 @@ jobs:
           if [ -f "$HOME/.profile" ]; then echo "the line went to ~/.profile, which this bash never reads"; exit 1; fi
           [ "$(bash -l -c 'command -v jason')" = "$HOME/.local/bin/jason" ]
 
+          # A terminal a desktop opens is no login shell and reads ~/.bashrc alone, so the line is there too, once,
+          # and the uninstall takes it back out of both files.
+          [ "$(grep -c '# added by jason install' "$HOME/.bashrc")" = "1" ]
+          [ "$(bash -i -c 'command -v jason' 2>/dev/null)" = "$HOME/.local/bin/jason" ]
+
           # This shell predates the line, and a new login shell reads it: the path check says ok, and says where.
           export JASON_DATA_DIR="$HOME/.jason"
           "$HOME/.local/bin/jason" status > status.json || true
@@ -1294,6 +1305,7 @@ jobs:
           # executable and its two notice files.
           "$HOME/.local/bin/jason" uninstall
           printf '# mine\n' | cmp - "$HOME/.bash_profile"
+          if grep -q '# added by jason install' "$HOME/.bashrc"; then echo "the uninstall left the line in ~/.bashrc"; exit 1; fi
           [ ! -e "$HOME/.local/bin/jason" ]
           [ ! -e "$HOME/.local/bin/jason-LICENSE" ]
           [ ! -e "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES" ]

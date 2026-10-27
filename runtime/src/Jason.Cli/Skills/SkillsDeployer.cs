@@ -26,19 +26,22 @@ public sealed record DeploymentReport(
     public IReadOnlyList<(string Pack, string Root)> Unrecorded { get; init; } = [];
 }
 
-/// <summary>Writes a plan, one whole skill at a time, and writes the record last.</summary>
+/// <summary>Writes a plan, one whole skill at a time where no file of the person's is in it, and writes the record last.</summary>
 public static class SkillsDeployer
 {
     /// <summary>
     /// Applies the plan. Each skill is assembled beside its destination and moved into place, so a launch
     /// reading a role's tree sees the tree that was there or the tree that arrived and never a blend of the
-    /// two. The record goes in last, so a crash half-way through reads as incomplete next time rather than as
-    /// a deployment that is current.
+    /// two. A skill holding a file of the person's is the exception: it is written file by file where it stands,
+    /// with no reader waited for, so a launch may read some of its files new and some old. The person's file has
+    /// already made it a blend of two hands, theirs and Jason's, which they reconcile. The record goes in last, so a
+    /// crash half-way through reads as incomplete next time rather than as a deployment that is current.
     /// </summary>
     /// <param name="force">
-    /// Overwrite files the operator has edited. Without it they are reported and kept, and nothing is written
-    /// at all: an installer that quietly reverts somebody's edit is a data-loss bug wearing a convenience
-    /// label, and one that half-reverts is worse.
+    /// Overwrite files the operator has edited. Without it they are reported and kept, and everything else is
+    /// written: an installer that quietly reverts somebody's edit is a data-loss bug wearing a convenience label,
+    /// and one that writes nothing over it leaves the person their edit or their skills, never both — which an
+    /// uninstall that keeps an edited file on purpose put to them on the very next install.
     /// </param>
     public static DeploymentReport Apply(SkillsPlan plan, JasonPaths paths, bool force, TimeProvider clock)
     {
@@ -82,20 +85,11 @@ public static class SkillsDeployer
             return new DeploymentReport(0, 0, [], problems, notes);
         }
 
-        // Everything is judged before anything is written, for the same reason the plan itself is: a partly
-        // applied deployment is a state nobody asked for and nothing reports.
-        var edited = Edited(plan, records);
-        if (edited.Count > 0 && !force)
-        {
-            return new DeploymentReport(
-                0,
-                0,
-                edited,
-                [string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{edited.Count} file(s) you have edited would be overwritten and nothing was written: {string.Join(", ", edited)}. Re-run with --force to overwrite them.")],
-                notes);
-        }
+        // Everything is judged before anything is written, for the same reason the plan itself is: what is kept is
+        // decided once, and the report names exactly that.
+        var (edited, retired) = Edited(plan, records);
+        HashSet<string> keep = force ? [] : edited.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var dropped = retired.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var written = 0;
         var unchanged = 0;
@@ -123,6 +117,29 @@ public static class SkillsDeployer
                     {
                         unchanged += unit.Files.Count;
                         mine.AddRange(Planned(root, unit));
+                        continue;
+                    }
+
+                    // A skill holding a file the person edited, or one they put in it, is never replaced whole: that
+                    // would take their file with the old tree. Its other files are written where they stand instead.
+                    if (unit.Files.Select(file => file.Target).Concat(Inside(unit)).Any(keep.Contains))
+                    {
+                        var placed = InPlace(root, unit, keep, dropped, recorded, staging);
+                        written += placed.Written;
+                        unchanged += placed.Unchanged;
+                        mine.AddRange(placed.Files);
+                        if (placed.Failed)
+                        {
+                            // The files it reached are on disk as it left them and recorded so; every other file of the
+                            // skill the record named is as it was, and keeps its old entry. The old digests recorded for
+                            // files already moved into place read them as the person's edits from then on, and a file new
+                            // in this release was in no record and removed by no uninstall.
+                            problems.Add($"'{unit.Name}' could not be written beside the file(s) you edited in it.");
+                            var reached = placed.Files.Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
+                            mine.AddRange(Previously(recorded, Relative(root, unit.Unit)).Where(file => !reached.Contains(file.Path)));
+                            kept = true;
+                        }
+
                         continue;
                     }
 
@@ -247,6 +264,91 @@ public static class SkillsDeployer
         return true;
     }
 
+    /// <summary>Every file in a deployed skill's directory, the plan's or not.</summary>
+    private static IEnumerable<string> Inside(PlannedUnit unit) =>
+        Directory.Exists(unit.Unit) ? Directory.GetFiles(unit.Unit, "*", SearchOption.AllDirectories) : [];
+
+    /// <summary>
+    /// A skill holding a file the person edited, written file by file where it stands: every file of the plan that is
+    /// not theirs is written unless it is already current, each moved into place whole, theirs is left as it is, and a
+    /// file of Jason's that this release no longer ships is deleted. What it did up to a file it could not write or
+    /// delete is returned with <see cref="InPlaceResult.Failed"/>, so that the record states what is on disk.
+    /// </summary>
+    /// <remarks>
+    /// A kept file is recorded with the digest the record already had for it — what Jason wrote there — so the next run
+    /// tells it for an edit again rather than for a file that is merely out of date, and an uninstall keeps it. Not one
+    /// tree swapped for another, so a launch reading this skill while it is written can see some files new and some not,
+    /// and no reader is waited for; the person's edit has already made it a blend of two hands. Each file lands in the
+    /// root's staging directory, on the same volume, and is moved from there: a kill between the two leaves the landing
+    /// where the next run collects it, never inside the skill, where it would be taken for the person's file.
+    /// </remarks>
+    private static InPlaceResult InPlace(string root, PlannedUnit unit, HashSet<string> keep, HashSet<string> dropped, SkillsDeployment? recorded, string staging)
+    {
+        var written = 0;
+        var unchanged = 0;
+        var files = new List<DeployedFile>();
+        foreach (var file in unit.Files)
+        {
+            var relative = Relative(root, file.Target);
+            if (keep.Contains(file.Target))
+            {
+                // A file the plan names is the person's edit only where the record says what Jason wrote there; the plan's
+                // digest in its place would name bytes never written.
+                var wrote = recorded?.Files.FirstOrDefault(entry => string.Equals(entry.Path, relative, StringComparison.Ordinal))?.Sha256
+                    ?? throw new InvalidOperationException($"'{relative}' is kept as an edit with no record of what was written there.");
+                files.Add(new DeployedFile(relative, wrote));
+                continue;
+            }
+
+            if (File.Exists(file.Target) && string.Equals(SkillsRecord.Digest(file.Target), file.Sha256, StringComparison.Ordinal))
+            {
+                files.Add(new DeployedFile(relative, file.Sha256));
+                unchanged++;
+                continue;
+            }
+
+            var landing = Path.Combine(staging, $"{Path.GetFileName(file.Target)}{SkillsSwap.Landing}{Guid.NewGuid():N}");
+            try
+            {
+                Directory.CreateDirectory(staging);
+                Directory.CreateDirectory(Path.GetDirectoryName(file.Target)!);
+                File.Copy(file.Source, landing, overwrite: true);
+                File.Move(landing, file.Target, overwrite: true);
+                files.Add(new DeployedFile(relative, file.Sha256));
+                written++;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                try
+                {
+                    File.Delete(landing);
+                }
+                catch (Exception left) when (left is IOException or UnauthorizedAccessException)
+                {
+                }
+
+                return new InPlaceResult(written, unchanged, files, Failed: true);
+            }
+        }
+
+        foreach (var retired in Inside(unit).Where(dropped.Contains).ToList())
+        {
+            try
+            {
+                File.Delete(retired);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return new InPlaceResult(written, unchanged, files, Failed: true);
+            }
+        }
+
+        return new InPlaceResult(written, unchanged, files, Failed: false);
+    }
+
+    /// <summary>What <see cref="InPlace"/> did: the files it reached, each as it now is on disk, and whether it stopped short.</summary>
+    private sealed record InPlaceResult(int Written, int Unchanged, List<DeployedFile> Files, bool Failed);
+
     /// <summary>The whole skill, assembled beside its destination and moved into place.</summary>
     private static string? Swap(PlannedUnit unit, string staging, TimeProvider clock)
     {
@@ -283,11 +385,13 @@ public static class SkillsDeployer
 
     /// <summary>
     /// Files on disk that differ from what the record says was written there. Differing from the record is the
-    /// operator's own edit; differing from the source while matching the record is simply out of date.
+    /// operator's own edit; differing from the source while matching the record is simply out of date. And, apart, the
+    /// files of Jason's this plan no longer ships: named by the record, and on disk at the digest it records.
     /// </summary>
-    private static IReadOnlyList<string> Edited(SkillsPlan plan, Dictionary<string, SkillsRecord> records)
+    private static (IReadOnlyList<string> Edited, IReadOnlyList<string> Retired) Edited(SkillsPlan plan, Dictionary<string, SkillsRecord> records)
     {
         var edited = new List<string>();
+        var retired = new List<string>();
         foreach (var pack in plan.Packs)
         {
             var known = records[pack.Root].Packs
@@ -314,20 +418,26 @@ public static class SkillsDeployer
             // -- the old tree is moved aside and removed -- so a file the operator put in one is destroyed by
             // an ordinary re-run, silently, with no --force asked for and nothing said afterwards. Walking
             // only the plan's own files could never see it: the plan does not know it exists.
+            // A file the record names, on disk at the digest it records, is not one: it is a file of Jason's that a later
+            // release dropped, and it goes with the skill rather than staying for good as the person's.
             foreach (var unit in pack.Units.Where(unit => Directory.Exists(unit.Unit)))
             {
                 var ours = unit.Files.Select(file => file.Target).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 foreach (var found in Directory.GetFiles(unit.Unit, "*", SearchOption.AllDirectories))
                 {
-                    if (!ours.Contains(found))
+                    if (ours.Contains(found))
                     {
-                        edited.Add(found);
+                        continue;
                     }
+
+                    var jasons = known.TryGetValue(Relative(pack.Root, found), out var wrote)
+                        && string.Equals(SkillsRecord.Digest(found), wrote, StringComparison.Ordinal);
+                    (jasons ? retired : edited).Add(found);
                 }
             }
         }
 
-        return edited;
+        return (edited, retired);
     }
 
     private static string Relative(string root, string target) =>

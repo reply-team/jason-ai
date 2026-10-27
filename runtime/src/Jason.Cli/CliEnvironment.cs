@@ -54,10 +54,11 @@ namespace Jason.Cli;
 /// it hands in names of its own, and no fixture ever holds the real ones.
 /// </param>
 /// <param name="Variables">
-/// This process's environment variables, of which a diagnostic bundle describes the <c>JASON_*</c> ones. Null reads the
-/// process's own, the answer everywhere but a test — and the same kind of seam as <paramref name="Identity"/>: reading a
-/// variable acts on nothing, but a test that read the real environment would describe whatever the person running the
-/// suite happens to have set, so it hands in variables of its own.
+/// This process's environment variables, of which a diagnostic bundle describes the <c>JASON_*</c> ones and an uninstall
+/// reads whether the host was told to unpack somewhere other than its default. Null reads the process's own, the answer
+/// everywhere but a test — and the same kind of seam as <paramref name="Identity"/>: reading a variable acts on nothing,
+/// but a test that read the real environment would describe whatever the person running the suite happens to have set,
+/// so it hands in variables of its own.
 /// </param>
 /// <param name="BuildVersion">
 /// The version this build goes by, which decides the ref its skills are pinned to and which <c>jason status</c> compares

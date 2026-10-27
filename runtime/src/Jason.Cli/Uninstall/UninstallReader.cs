@@ -1,3 +1,4 @@
+using System.Globalization;
 using Jason.Cli.Discovery;
 using Jason.Cli.Installation;
 using Jason.Contracts.Discovery;
@@ -69,6 +70,8 @@ public static class UninstallReader
         var directory = executable is null ? null : Path.GetDirectoryName(executable);
         var descriptor = new DescriptorReader(env.Paths).Read();
         var (notificationKeys, registryUnreadable) = NotificationKeys(env);
+        var extracted = Extracted(env, executable, directory);
+        var (others, othersLeft) = Others(env, extracted, directory, OperatingSystem.IsWindows(), ExtractBase(env));
 
         return new UninstallPlan(
             autostart.Registered,
@@ -81,13 +84,15 @@ public static class UninstallReader
             executable,
             directory,
             Previous(directory),
-            Extracted(env, executable, directory),
+            extracted,
             purgeData,
             env.Paths.Root,
             notificationKeys,
             registryUnreadable,
             Notices(executable),
-            owner);
+            owner,
+            others,
+            othersLeft);
     }
 
     /// <summary>
@@ -163,6 +168,77 @@ public static class UninstallReader
 
     /// <summary>What <c>install.ps1</c> calls the executable it moved aside, spelled as it spells it.</summary>
     public const string PreviousExecutableName = "jason.previous.exe";
+
+    /// <summary>
+    /// What every other build of this program unpacked beside this build's own directory: each directory beside it that
+    /// is shaped as the host unpacks — a directory, not a link, holding files and no directory — and holds neither the
+    /// data directory nor the installation. Planned for removal on Windows only, and only where the host unpacks into its
+    /// own default base; otherwise none is, and the line that says why is returned instead.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The host unpacks into <c>&lt;base&gt;/&lt;program&gt;/&lt;bundle id&gt;</c>, where the base is this account's and the
+    /// program is the executable's name, and the bundle id is the build's own. So every build of Jason this account ever
+    /// ran unpacked beside this one: the versions this installation was before an update, and any other installation of
+    /// this account — a package manager's beside a script's, a build from source. Nothing in such a directory says which
+    /// executable made it, so this cannot tell an earlier version of this installation from another installation, and it
+    /// does not try: what it tells apart is a build's unpacked libraries from anything else, by shape.
+    /// </para>
+    /// <para>
+    /// Removing another installation's is safe only where a copy running from it keeps it. On Windows a copy running now
+    /// holds what it loaded, the removal is refused, and the runner keeps the directory and says so. Elsewhere nothing holds
+    /// it: a copy running from it would lose a library it has not loaded yet, and one starting would lose the directory it
+    /// is unpacking into. So there none is planned, and the plan counts them and says they are removed by hand.
+    /// </para>
+    /// <para>
+    /// And the base is the host's default only while <c>DOTNET_BUNDLE_EXTRACT_BASE_DIR</c> is unset. Set, it can name any
+    /// directory — the home directory, whose <c>jason</c> is the harness root on a file system that ignores case — and
+    /// what else is under the program's directory there is not known to be any build's, so nothing beside this build's
+    /// own is looked for.
+    /// </para>
+    /// </remarks>
+    internal static (IReadOnlyList<string> Others, string? Left) Others(CliEnvironment env, string? extracted, string? installDirectory, bool windows, string? extractBase)
+    {
+        if (extracted is null || Path.GetDirectoryName(extracted) is not { Length: > 0 } parent)
+        {
+            return ([], null);
+        }
+
+        if (extractBase is { Length: > 0 })
+        {
+            return ([], $"{ExtractBaseVariable} is set, so the native libraries other builds of this program unpacked under '{parent}' are not looked for: it names a directory of its own, and what else is in it is not known to be theirs.");
+        }
+
+        IReadOnlyList<string> others;
+        try
+        {
+            others = [.. Directory.EnumerateDirectories(parent)
+                .Where(other => !string.Equals(Path.GetFullPath(other), Path.GetFullPath(extracted), StringComparison.OrdinalIgnoreCase))
+                .Where(other => !new DirectoryInfo(other).Attributes.HasFlag(FileAttributes.ReparsePoint))
+                .Where(other => !Directory.EnumerateDirectories(other).Any())
+                .Where(other => !Holds(other, env.Paths.Root) && (installDirectory is null || !Holds(other, installDirectory)))
+                .Order(StringComparer.Ordinal)];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return ([], null);
+        }
+
+        return windows || others.Count == 0
+            ? (others, null)
+            : ([], string.Create(
+                CultureInfo.InvariantCulture,
+                $"What other builds of this program unpacked under '{parent}' is left, {others.Count} director{(others.Count == 1 ? "y" : "ies")} of native libraries: a copy may be running from them, and elsewhere than Windows nothing it holds stops a removal. Remove them by hand once nothing runs from them."));
+    }
+
+    /// <summary>The variable that moves the directory a single-file build unpacks into away from the host's default.</summary>
+    internal const string ExtractBaseVariable = "DOTNET_BUNDLE_EXTRACT_BASE_DIR";
+
+    /// <summary>Where this process's host unpacks, where the variable moves it; null where the host's default holds.</summary>
+    private static string? ExtractBase(CliEnvironment env) =>
+        env.Variables is { } variables
+            ? variables.GetValueOrDefault(ExtractBaseVariable)
+            : Environment.GetEnvironmentVariable(ExtractBaseVariable);
 
     /// <summary>Whether <paramref name="directory"/> is <paramref name="path"/> or one of its ancestors.</summary>
     private static bool Holds(string directory, string path)

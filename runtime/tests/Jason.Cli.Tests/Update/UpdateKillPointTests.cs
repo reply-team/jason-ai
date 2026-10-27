@@ -372,6 +372,27 @@ public class UpdateKillPointTests
                 $"the install path was empty when the runtime was asked {witness.Operation} under '{witness.Step}'"));
     }
 
+    /// <summary>
+    /// A kill during the health check, then a restart of the machine with no logon registration: the ledger says 'healthy'
+    /// and nothing is running. The health step starts nothing, so the next run refused there and named only the rollback,
+    /// which undoes an update that may have been healthy. It resumes from the start now, which is safe to begin twice, and
+    /// completes.
+    /// </summary>
+    [Fact]
+    public async Task A_kill_during_the_health_check_with_no_runtime_left_starts_one_and_completes()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        installation.Killed(UpdateStep.Healthy);
+        installation.RuntimeGoesAway();
+
+        var ledger = await installation.Applier().ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.True(installation.Running);
+        Assert.Equal([installation.InstallPath], installation.Processes.Executables[^1]);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+    }
+
     private static UpdateRequest Request(FakeInstallation installation) =>
         new(installation.Feed, null, TimeSpan.FromSeconds(5));
 }

@@ -51,6 +51,18 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// Where this build unpacked the native libraries it carries, or null where it unpacked none or cannot say
 /// for certain which directory was its own.
 /// </param>
+/// <param name="OtherExtractedLibraries">
+/// What every other build of this program unpacked beside <paramref name="ExtractedLibraries"/>, one directory each,
+/// shaped as the host unpacks: earlier versions of this installation, or another installation of this account. Nothing
+/// in such a directory says which; on Windows, where a copy running from one holds it, all of them go, and a build whose
+/// directory is gone unpacks it again on its next start. Elsewhere, and wherever the host was told to unpack somewhere
+/// else, none is named here.
+/// </param>
+/// <param name="OtherExtractedLibrariesLeft">
+/// Why the other builds' directories are not in <paramref name="OtherExtractedLibraries"/> where some may be: elsewhere
+/// than Windows how many there are, under which directory, and that they are removed by hand once nothing runs from them;
+/// with the host told to unpack elsewhere, that they were not looked for. Null where nothing is left that way.
+/// </param>
 /// <param name="PurgesData">Whether the explicit word was said. Nothing else stands for it.</param>
 /// <param name="Notices">
 /// The notice files the installer keeps beside the executable, by their names there, where they are present. The
@@ -79,7 +91,9 @@ public sealed record UninstallPlan(
     IReadOnlyList<string>? NotificationKeys = null,
     string? NotificationKeysUnreadable = null,
     IReadOnlyList<string>? Notices = null,
-    PackageOwner? LeftTo = null)
+    PackageOwner? LeftTo = null,
+    IReadOnlyList<string>? OtherExtractedLibraries = null,
+    string? OtherExtractedLibrariesLeft = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

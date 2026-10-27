@@ -91,6 +91,13 @@ installs the executable under your own account — with its licence and the thir
 already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
 it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
 
+On macOS and Linux the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
+`~/.bashrc` or `~/.zshrc` as well: the terminal a desktop opens — GNOME's, for one — is not a login shell, reads
+that file and not the login profile, and so finds `jason` without your signing out. For any other shell the script
+says to sign out and back in, because only a new sign-in reads the login profile again. Every run ends with the
+licence it installed under, where the release has one, and then the one command to run next, `jason status` (§5),
+which says what this installation still needs and the command for each.
+
 Then, before the PATH step, each script says where Jason will keep what it learns about your business, and where a
 campaign goes that names no project. On Windows, for an account whose home directory is `C:\Users\Marta`:
 
@@ -154,12 +161,14 @@ account's Path already names — the entry stays, and so does everything else it
 **Ask first.** On Windows, add its directory to your account's `Path`; on macOS and Linux, append an `export` line
 to the one profile a login shell of yours reads — `~/.zprofile` for `zsh`; for `bash` the first of
 `~/.bash_profile`, `~/.bash_login` and `~/.profile` that exists, because bash never reads `~/.profile` once one of
-the others does; `~/.profile` for every other shell. `jason status` prints the exact line for your platform — a
+the others does; `~/.profile` for every other shell — and, for `bash` and `zsh`, to `~/.bashrc` or `~/.zshrc` as well,
+which a terminal opened without a login reads. `jason status` prints the exact line for your platform — a
 PowerShell line on Windows, an `sh` line elsewhere — when it finds that `jason` does not resolve (§5), so the
 simplest path is to run it and type what it says.
 
-One thing that line cannot do for you: a login profile is read by a **login** shell. A person opening a new
-terminal gets it; an agent running one command at a time in a non-interactive child shell (`bash -c …`) has
+One thing that line cannot do for you: a profile is read by a shell that starts after it is written. A person
+opening a new terminal gets it — where the shell has no file of its own for that, as `bash` and `zsh` do, only after
+signing out and back in; an agent running one command at a time in a non-interactive child shell (`bash -c …`) has
 written the profile but will not see it in its own next command. If you are an agent, carry the `export` half
 of that line yourself, or call the executable by its full path until a new login shell exists.
 
@@ -170,8 +179,8 @@ jason --version
 ```
 
 On Windows the PowerShell you installed from is told about the new PATH entry. On macOS and Linux the script ran
-in a shell of its own, so the one you typed it into has not heard: open a new terminal, or type it by its full
-path — `~/.local/bin/jason --version`.
+in a shell of its own, so the one you typed it into has not heard: open a new terminal — or sign out and back in, where
+the script said so — or type it by its full path — `~/.local/bin/jason --version`.
 
 A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
 day after that, at the default settings: one `GET`, carrying nothing about you or your work — it identifies only
@@ -287,8 +296,11 @@ of this repository, to each of the lines above.
 
 It refuses a deployment the runtime would later refuse to launch, rather than writing one — a role whose
 directory and skill name disagree, or a tree over the runtime's live size cap, stops the whole deployment
-before a byte is written. A file you have since edited is reported and kept, not overwritten; `--force`
-overwrites it, and overwrites every edited file in every root of the plan, so read what it says first.
+before a byte is written. A file you have since edited is reported and kept, not overwritten, and
+everything else is written around it: the run names each file it kept and succeeds. The skill holding it is
+written file by file where it stands, and is a blend of two hands, yours and the release's, which is yours to
+reconcile. `--force` overwrites it,
+and overwrites every edited file in every root of the plan, so read what it says first.
 
 Later, to move an existing deployment to a newer set:
 
@@ -339,13 +351,14 @@ otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
-| the runtime answers | a provider plugin is installed |
-| the running runtime is the build this CLI is | each plugin package this release publishes is the one installed |
-| migrations are applied | every plugin installed is available |
-| the plugin registry is alive (zero plugins is alive) | a route is configured |
-| role skills are present, named after their directories and within the runtime's live cap | a binding names an account |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a provider CLI **you name** answers |
-| | the skill packs are deployed to an agent harness |
+| the runtime answers, and no update stopped part-way from its swap on — its repair then is `jason update apply`, never `jason runtime start` | no update is waiting to be resumed |
+| the running runtime is the build this CLI is | a provider plugin is installed |
+| migrations are applied | each plugin package this release publishes is the one installed |
+| the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
+| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a route is configured |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
+| | a provider CLI **you name** answers |
+| | the skill packs are deployed to an agent harness, and the files their record names are there |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
@@ -360,7 +373,8 @@ commands. One is not: putting an executable on a PATH is the shell's own act, so
 line your platform needs — a PowerShell line on Windows, an `sh` line elsewhere, the same line this product's
 own installer writes — which you type rather than hand back to `jason`.
 
-**Ask first.** That line writes a login profile, or this account's `Path` on Windows. Typed twice, it changes
+**Ask first.** That line writes a login profile — for `bash` and `zsh`, `~/.bashrc` or `~/.zshrc` beside it — or this
+account's `Path` on Windows. Typed twice, it changes
 nothing the second time. Read §2's note about login shells before you type it.
 
 A shell that started before the installer put Jason on this account's PATH does not see it — and an agent's
@@ -467,13 +481,19 @@ registration — the AppUserModelID key the toast was shown under, and the two e
 first toast — after the runtime, so its next toast cannot write them back; then the recorded skills; then the
 PATH entry, only where the installer wrote it; then the executable, its two notice files, its install directory,
 and the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
-`~/.net` on macOS and Linux. The notice files go by name: on macOS and Linux it removes those two files by name
-from a directory other tools share, and a `LICENSE` there that is not one of them is another tool's and stays.
+`~/.net` on macOS and Linux. On Windows what every other build of Jason unpacked beside them goes too: the versions
+this installation was before an update, and any other installation of this account, which nothing there tells
+apart. A build unpacks again on its next start, and a copy running now holds its own, which stays and is named. On
+macOS and Linux a running copy holds nothing, so what the other builds unpacked stays: the plan and the report count
+those directories, name the directory they are in, and leave them for you to remove once nothing runs from them.
+With `DOTNET_BUNDLE_EXTRACT_BASE_DIR` set they are not looked for at all. The notice files go by name: on macOS and
+Linux it removes those two files by name from a directory other tools share, and a `LICENSE` there that is not
+one of them is another tool's and stays.
 
 "Only where the installer wrote it" is one rule on both platforms: the entry goes only where the installer wrote
 it **and** its directory holds nothing but what the installer puts there, because other programs are on the PATH
-through the same entry. On macOS and Linux the entry is the block the installer appends to a login profile — a
-marker line and the `export` line under it; a line nobody marked is yours and stays, and so does the block where
+through the same entry. On macOS and Linux the entry is the block the installer appends to a login profile, and to `~/.bashrc` or
+`~/.zshrc` beside it — a marker line and the `export` line under it; a line nobody marked is yours and stays, and so does the block where
 the directory holds more than `jason` and its two notice files: `~/.local/bin`, the installer's default, is where
 other tools install too. On Windows the Path carries no marker, so the entry goes only where its directory holds
 nothing but the executable, its two notice files (`jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`) and the

@@ -6,8 +6,9 @@ namespace Jason.Cli.Tests.Documentation;
 /// What the install scripts say, in the same runs, about where Jason will keep what it learns about the person's business:
 /// two lines, the folder the harness root's default is on that machine and how to keep the files elsewhere, then where a
 /// campaign that names no project goes (<see cref="HarnessRootLines"/>). Said by every run that succeeds, after what was
-/// installed and before the PATH step, so that the PATH step and the licence stay the last two things said. An install
-/// makes no folder for the files: the runtime makes the root at the first project or campaign it creates.
+/// installed and before the PATH step, so that the PATH step, the licence and the command to run next stay the last three
+/// things said. An install makes no folder for the files: the runtime makes the root at the first project or campaign it
+/// creates.
 /// </summary>
 public sealed partial class InstallNoticesTests
 {
@@ -101,8 +102,9 @@ public sealed partial class InstallNoticesTests
     }
 
     /// <summary>
-    /// Where the PATH step writes a profile, the two lines come before what it says: the PATH step and the licence are the
-    /// last two things said. On Windows that step writes the account's registry, so its half is the order in the text below.
+    /// Where the PATH step writes a profile, the two lines come before what it says: the PATH step, the licence and the
+    /// command to run next are the last three things said. On Windows that step writes the account's registry, so its half
+    /// is the order in the text below.
     /// </summary>
     [Fact]
     public void Install_sh_says_where_the_files_will_be_before_the_path_step()
@@ -113,9 +115,9 @@ public sealed partial class InstallNoticesTests
 
         Assert.True(run.Exit == 0, run.Stderr);
         var lines = Lines(run.Stdout);
-        Assert.Equal(HarnessRootLines.Where(installer.DefaultRoot), lines[^4]);
-        Assert.Equal(HarnessRootLines.DefaultProject, lines[^3]);
-        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^2], StringComparison.Ordinal);
+        Assert.Equal(HarnessRootLines.Where(installer.DefaultRoot), lines[^5]);
+        Assert.Equal(HarnessRootLines.DefaultProject, lines[^4]);
+        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^3], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -142,7 +144,7 @@ public sealed partial class InstallNoticesTests
 
     /// <summary>
     /// The two lines, each said once, the first naming the root's default on this machine; after the line that says what
-    /// was installed; and the licence still the last thing said.
+    /// was installed; and the licence still said last but the command to run next.
     /// </summary>
     private static void AssertSaysWhereTheFilesWillBe(Installer installer, List<string> lines, string installed)
     {
@@ -154,6 +156,6 @@ public sealed partial class InstallNoticesTests
         Assert.True(where + 1 < lines.Count && lines[where + 1] == HarnessRootLines.DefaultProject, $"The line after it is not: {HarnessRootLines.DefaultProject}{Environment.NewLine}It said:{Environment.NewLine}{all}");
         Assert.Single(lines, line => line.StartsWith(HarnessRootLines.Opening, StringComparison.Ordinal));
         Assert.Single(lines, line => line == HarnessRootLines.DefaultProject);
-        Assert.Equal(LicenceLine("0.6.0"), lines[^1]);
+        AssertEndsWith(LicenceLine("0.6.0"), lines);
     }
 }

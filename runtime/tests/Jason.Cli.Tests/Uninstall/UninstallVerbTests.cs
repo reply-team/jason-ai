@@ -92,7 +92,7 @@ public class UninstallVerbTests
     /// </summary>
     [Theory]
     [InlineData("5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it:")]
-    [InlineData("6. the executable, its notice files (jason-LICENSE, jason-THIRD-PARTY-NOTICES), its install directory, and the native libraries it unpacked on first run")]
+    [InlineData("6. the executable, its notice files (jason-LICENSE, jason-THIRD-PARTY-NOTICES), its install directory, the native libraries it unpacked on first run, and on Windows those every other build of this program unpacked beside them")]
     public async Task The_help_page_names_the_notice_files_in_the_steps_that_remove_them(string published)
     {
         using var dir = new TempPaths();

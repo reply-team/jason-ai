@@ -227,6 +227,12 @@ public partial class StatusDisciplineTests
                 Environment.GetEnvironmentVariable("SHELL"));
 
             Assert.Contains(profile, repair, StringComparison.Ordinal);
+            if (PathEntry.InteractiveProfile(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("SHELL")) is { } interactive)
+            {
+                // The installer's two files, so that a terminal without a login finds it after the repair as well.
+                Assert.Contains(interactive, repair, StringComparison.Ordinal);
+            }
+
             Assert.Contains(PathEntry.ExportLine(directory), repair, StringComparison.Ordinal);
             Assert.DoesNotContain("[Environment]::", repair, StringComparison.Ordinal);
         }

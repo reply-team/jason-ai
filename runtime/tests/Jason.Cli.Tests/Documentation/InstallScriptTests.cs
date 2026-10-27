@@ -226,6 +226,34 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// And with the file an interactive shell reads, as the installer writes it for bash and zsh: typed twice, each file
+    /// carries one block, the one that did not exist is made, and the directory is on the PATH once.
+    /// </summary>
+    [Fact]
+    public void The_unix_repair_writes_the_interactive_file_too_and_typed_twice_changes_nothing()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The Unix repair is written for sh, on the platforms that print it.");
+
+        using var tree = new TempTree();
+        var home = tree.NewDirectory("home");
+        var profile = Path.Combine(home, ".profile");
+        var bashrc = Path.Combine(home, ".bashrc");
+        File.WriteAllText(profile, "# mine\n");
+        var command = Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason bin", profile, bashrc);
+
+        var (exit, stdout, stderr) = Run(
+            "/bin/sh",
+            new Dictionary<string, string>(),
+            "-c", $"{command}; {command}; echo \"$PATH\" | tr ':' '\\n' | grep -cxF '/opt/jason bin'");
+
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("1", stdout.Trim());
+        var block = Marker + "\n" + Jason.Cli.Uninstall.PathEntry.ExportLine("/opt/jason bin") + "\n";
+        Assert.Equal("# mine\n\n" + block, File.ReadAllText(profile));
+        Assert.Equal("\n" + block, File.ReadAllText(bashrc));
+    }
+
+    /// <summary>
     /// <c>install.ps1</c> runs the statements the Windows repair prints: one definition of how Jason goes on a
     /// Windows PATH, held to the script line by line and in order.
     /// </summary>

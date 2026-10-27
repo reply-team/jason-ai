@@ -124,7 +124,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             ? Resuming(inFlight, request)
             : await PlanAsync(request, cancellationToken).ConfigureAwait(false);
 
-        foreach (var step in Remaining(ledger.Step))
+        foreach (var step in Remaining(ResumesFrom(ledger.Step)))
         {
             // Written first, always: the ledger promises that a step was begun, never that it finished, and
             // every step below is written so that beginning it twice is the same as beginning it once.
@@ -344,6 +344,14 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// <summary>The steps still to take, beginning with the one the ledger names: it was begun, not finished.</summary>
     private static IEnumerable<UpdateStep> Remaining(UpdateStep from) =>
         Enum.GetValues<UpdateStep>().Where(step => step >= from);
+
+    /// <summary>
+    /// Where a ledger resumes: at the step it names, except at <c>healthy</c>, which resumes at <c>started</c>. The health
+    /// check asks a runtime the start began, and an update killed during it may have left none: asked again with nothing
+    /// running it failed every time, and only a rollback was left. The start is safe twice, since a runtime that already
+    /// answers is the one it would start.
+    /// </summary>
+    private static UpdateStep ResumesFrom(UpdateStep step) => step == UpdateStep.Healthy ? UpdateStep.Started : step;
 
     private static UpdateLedger Resuming(UpdateLedger ledger, UpdateRequest request)
     {

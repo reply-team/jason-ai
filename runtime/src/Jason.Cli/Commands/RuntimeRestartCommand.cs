@@ -5,11 +5,22 @@ namespace Jason.Cli.Commands;
 /// that case is swallowed and only the start speaks; anything the stop genuinely failed on is reported as it
 /// stands and no new runtime is launched, because the old one is still there.
 /// </summary>
+/// <remarks>
+/// An update the start would refuse to start around is read before the stop: stopped first, the runtime was gone and the
+/// start's refusal left nothing running. It is refused with the start's own envelope, and nothing is stopped.
+/// </remarks>
 public static class RuntimeRestartCommand
 {
     public static async Task<int> RunAsync(CliEnvironment env, bool human, CancellationToken cancellationToken, TimeSpan? timeout = null, TimeSpan? poll = null)
     {
         ArgumentNullException.ThrowIfNull(env);
+
+        if (Update.UnfinishedUpdate.Read(env.Paths) is { Replacing: true } unfinished)
+        {
+            var (code, message) = unfinished.Refusal("Nothing was stopped or started.");
+            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+            return ExitCodes.ApiError;
+        }
 
         using var stopOutput = new StringWriter();
         var stopped = await RuntimeStopCommand.RunAsync(env with { Out = stopOutput }, human, cancellationToken, timeout, poll).ConfigureAwait(false);

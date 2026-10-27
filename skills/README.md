@@ -90,21 +90,26 @@ These are the rules both verbs keep:
   so a launch reading a role's tree sees the tree that was there or the tree that arrived and never a
   blend of the two. A launch that loses that race reads again; one that loses it twice is refused rather
   than run with no skill, because a role that was given a skill and did not receive it would do the job
-  untaught at the price of a real launch.
+  untaught at the price of a real launch. A skill holding a file of yours, below, is the exception: it is
+  written file by file where it stands, so a launch reading it meanwhile may read some files new and some old.
 - **And if a launch is reading a role's skill when the deployment reaches it, the deployment waits** — up
   to ten seconds — **and then fails for that role rather than forcing it**, leaving what was there in
   place and saying which role and why. Stop the runtime, or try again. What it will not do is write over
-  a tree somebody is reading.
+  a tree somebody is reading. A skill holding a file of yours is not waited for: a file of it held open fails
+  that skill there, the files written before it stay written, and the record says so.
 - **There is nothing to reload.** The runtime reads the role skills directory at every launch, so a
   deployment is live the moment it lands.
 - **Installing twice costs nothing.** A skill already on disk exactly as the source has it is not written
   and not renamed, and the second run says it wrote nothing — down to the record, whose timestamp does not
   move either, because "it wrote nothing" has to mean the bytes are the bytes that were there.
 - **A file you deleted is put back**, which is what a deployment being current means.
-- **A file you edited is reported and kept, and nothing else is written either.** An installer that
-  quietly reverts somebody's edit is a data-loss bug wearing a convenience label, and one that reverts
-  half of them is worse: you would have to work out which half. `--force` is the word that says
-  otherwise. A file that merely differs from the source while still matching the record is out of date
+- **A file you edited is reported and kept, and everything else is written around it.** An installer
+  that quietly reverts somebody's edit is a data-loss bug wearing a convenience label, and one that writes
+  nothing over it leaves you your edit or your skills, never both. A skill holding a file of yours — an edit,
+  or a file you put in it — is written file by file where it stands instead of replaced whole; the run names
+  each file it kept and succeeds, and the next run still knows the file for yours. Such a skill is a blend
+  of two hands, yours and the release's, and reconciling them is yours. `--force` is the word
+  that says otherwise. A file that merely differs from the source while still matching the record is out of date
   rather than edited, and is simply written — which is what the digest per file is for.
 - **And an uninstall removes by that record, or keeps what it cannot account for.** `jason uninstall`
   removes the paths the record names and nothing else, then the record, then each directory only if

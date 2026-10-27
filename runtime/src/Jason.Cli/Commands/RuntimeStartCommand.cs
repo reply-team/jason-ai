@@ -66,6 +66,22 @@ public static class RuntimeStartCommand
             }
         }
 
+        // An update that stopped from the step that moves the installed build aside on has left the install path holding
+        // something other than that build, and its last steps undone; the apply starts the runtime itself as one of them.
+        // So nothing is started there, nor beside a ledger that cannot say which step it is at. Before that step nothing
+        // has been replaced, and the installed build is started with a word on the error stream that the update waits.
+        if (Update.UnfinishedUpdate.Read(env.Paths) is { } unfinished)
+        {
+            if (unfinished.Replacing)
+            {
+                var (code, message) = unfinished.Refusal("Nothing was started.");
+                env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+                return ExitCodes.ApiError;
+            }
+
+            env.Error.WriteLine(unfinished.Waiting());
+        }
+
         // Whatever the descriptor claimed, nobody is answering for it: the instance it names is the one the new
         // runtime must not be confused with.
         var staleInstance = descriptor?.InstanceId;

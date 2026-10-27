@@ -371,12 +371,15 @@ function Install-Jason {
         Write-Host "$directory is on your PATH; open a new terminal to run jason from anywhere."
     }
 
-    # --- the licence ------------------------------------------------------------------------------------------
+    # --- the licence, and what to run next ---------------------------------------------------------------------
 
-    # The last line of a successful run, and never a question: what is installed, and the terms it is installed under.
+    # The last two lines of a successful run, and never a question: what is installed and the terms it is installed
+    # under, then the one command that says what this installation still needs. The text is in single quotes, so its
+    # backticks are text and not an escape.
     if (Test-Licensed $latest) {
         Write-Host "Jason $latest is licensed under the Jason Runtime Licence: $licenceBase/v$latest/LICENSE-RUNTIME.md"
     }
+    Write-Host 'Next, run `jason status`: it says what this installation still needs, and the command for each.'
 }
 
 # Removed again whatever happens: the one-liner is `irm ... | iex`, which runs this text in the session that

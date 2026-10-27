@@ -219,7 +219,7 @@ public class StatusCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.True(report.Ready);
         Assert.NotEqual(CheckState.Failed, skills.State);
-        Assert.Contains("'leftovers' is deployed and is not a role this runtime seeds", skills.Fact, StringComparison.Ordinal);
+        Assert.Contains("'leftovers' is deployed and is no role on this runtime's roster", skills.Fact, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -895,7 +895,7 @@ public class StatusCommandTests
     /// A deployment record in a root, as `jason skills install` leaves one: from a directory read where it stood unless
     /// a commit is named, which is what a git source records.
     /// </summary>
-    private static void Deploy(string root, string source = "/somewhere", string reference = "v0.1.0", bool overridden = false, string? commit = null)
+    internal static void Deploy(string root, string source = "/somewhere", string reference = "v0.1.0", bool overridden = false, string? commit = null)
     {
         var skill = Path.Combine(root, "researcher", "SKILL.md");
         Directory.CreateDirectory(Path.GetDirectoryName(skill)!);
@@ -1069,7 +1069,7 @@ public class StatusCommandTests
         Assert.Contains("compares the harness the same way with this build's own ref", text, StringComparison.Ordinal);
     }
 
-    private static DeployedRoleSkill Taught(string role) => new(role, 4096, null);
+    internal static DeployedRoleSkill Taught(string role) => new(role, 4096, null);
 
     internal static StatusReport Read(StringWriter output) =>
         JsonSerializer.Deserialize<StatusReport>(output.ToString(), JasonJson.Options)!;
@@ -1092,6 +1092,21 @@ public class StatusCommandTests
             releasedPlugins,
             registry);
     }
+
+    /// <summary>
+    /// A role of the person's own on the roster beside the seeded ones: not shipped, and with the entry command it was added
+    /// with, where it was added with one.
+    /// </summary>
+    internal static void OwnRole(TempPaths dir, string name, params string[] entryCommand) =>
+        OwnRoles.AddOrUpdate(
+            dir.Paths.Root,
+            _ => [Own(name, entryCommand)],
+            (_, roles) => [.. roles, Own(name, entryCommand)]);
+
+    private static RoleDto Own(string name, string[] entryCommand) =>
+        new($"rol_{name}", name, false, null, entryCommand, new System.Text.Json.Nodes.JsonObject(), null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<RoleDto>> OwnRoles = [];
 
     /// <summary>The version the runtime here says it is, and the build the CLI under test goes by, unless a fact names others.</summary>
     internal const string Version = "0.1.0-dev";
@@ -1161,7 +1176,7 @@ public class StatusCommandTests
             }
 
             var page = new Page<RoleDto>(
-                [.. answers.Roles.Select(name => new RoleDto($"rol_{name}", name, true, null, [], new System.Text.Json.Nodes.JsonObject(), null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch))],
+                [.. answers.Roles.Select(name => new RoleDto($"rol_{name}", name, true, null, [], new System.Text.Json.Nodes.JsonObject(), null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch)), .. OwnRoles.GetValueOrDefault(dir.Paths.Root, [])],
                 null);
             return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(page, JasonJson.Options));
         }

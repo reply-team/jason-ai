@@ -31,11 +31,14 @@ public sealed partial class InstallNoticesTests : IDisposable
 
     public void Dispose() => _tree.Dispose();
 
-    /// <summary>The line names the version and the licence page at that version's tag, and it is the last thing said.</summary>
+    /// <summary>
+    /// The line names the version and the licence page at that version's tag, and it is the last thing said but the
+    /// command to run next.
+    /// </summary>
     [Theory]
     [InlineData(Sh)]
     [InlineData(Ps1)]
-    public void A_fresh_install_says_the_licence_last(string script)
+    public void A_fresh_install_says_the_licence_and_then_the_next_command(string script)
     {
         var installer = Installer.For(script, _tree);
 
@@ -46,7 +49,7 @@ public sealed partial class InstallNoticesTests : IDisposable
         var downloading = lines.FindIndex(line => line.StartsWith("Downloading Jason 0.6.0 ", StringComparison.Ordinal));
         var installed = lines.FindIndex(line => line.StartsWith("Installed Jason 0.6.0 to ", StringComparison.Ordinal));
         Assert.True(downloading >= 0 && installed > downloading, run.Stdout);
-        Assert.Equal(LicenceLine("0.6.0"), lines[^1]);
+        AssertEndsWith(LicenceLine("0.6.0"), lines);
         Assert.Single(lines, line => line.Contains(" is licensed under ", StringComparison.Ordinal));
     }
 
@@ -66,7 +69,7 @@ public sealed partial class InstallNoticesTests : IDisposable
         Assert.True(again.Exit == 0, again.Stderr);
         var lines = Lines(again.Stdout);
         Assert.Contains(lines, line => line.StartsWith("Jason 0.6.0 is already installed at ", StringComparison.Ordinal));
-        Assert.Equal(LicenceLine("0.6.0"), lines[^1]);
+        AssertEndsWith(LicenceLine("0.6.0"), lines);
     }
 
     /// <summary>A run that installs nothing says nothing about the licence of what it did not install.</summary>
@@ -112,16 +115,17 @@ public sealed partial class InstallNoticesTests : IDisposable
         Assert.Contains(lines, line => line.StartsWith($"Installed Jason {version} to ", StringComparison.Ordinal));
         if (says)
         {
-            Assert.Equal(LicenceLine(version), lines[^1]);
+            AssertEndsWith(LicenceLine(version), lines);
         }
         else
         {
             Assert.DoesNotContain(" is licensed under ", run.Stdout, StringComparison.Ordinal);
+            Assert.Equal(NextLine, lines[^1]);
         }
     }
 
     /// <summary>
-    /// The line is the last of the run, after what the PATH step says. Run where the step writes into a profile of the
+    /// The line follows what the PATH step says, and only the command to run next follows it. Run where the step writes into a profile of the
     /// test's own; on Windows it writes the account's registry, so the Windows half of this row is the order in the
     /// script's text below.
     /// </summary>
@@ -134,8 +138,8 @@ public sealed partial class InstallNoticesTests : IDisposable
 
         Assert.True(run.Exit == 0, run.Stderr);
         var lines = Lines(run.Stdout);
-        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^2], StringComparison.Ordinal);
-        Assert.Equal(LicenceLine("0.6.0"), lines[^1]);
+        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^3], StringComparison.Ordinal);
+        AssertEndsWith(LicenceLine("0.6.0"), lines);
     }
 
     [Fact]
@@ -147,6 +151,23 @@ public sealed partial class InstallNoticesTests : IDisposable
 
         Assert.True(path >= 0 && licence > path, "install.ps1 does not say the licence after the PATH step.");
         Assert.DoesNotContain("if ($NoModifyPath) { return }", code, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And both scripts name the command to run next after everything else, outside every branch: on Windows the PATH
+    /// step is never run here, so this half is read from the text, and the runs above end with it on both.
+    /// </summary>
+    [Theory]
+    [InlineData(Sh)]
+    [InlineData(Ps1)]
+    public void Each_script_names_the_next_command_after_the_licence(string script)
+    {
+        var code = Code(script);
+        var licence = code.IndexOf("is licensed under the Jason Runtime Licence: ", StringComparison.Ordinal);
+        var next = code.IndexOf(NextLine, StringComparison.Ordinal);
+
+        Assert.True(licence >= 0 && next > licence, $"{script} does not name the next command after the licence.");
+        Assert.Equal(next, code.LastIndexOf(NextLine, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -190,7 +211,7 @@ public sealed partial class InstallNoticesTests : IDisposable
         var run = installer.Run($"{address.Releases}/latest/download");
 
         Assert.True(run.Exit == 0, run.Stderr);
-        Assert.Equal(LicenceLine("0.6.0"), Lines(run.Stdout)[^1]);
+        AssertEndsWith(LicenceLine("0.6.0"), Lines(run.Stdout));
         var asked = address.Asked.ToList();
         foreach (var file in (string[])[ReleaseAssets.Manifest, ReleaseAssets.Checksums, installer.Asset])
         {
@@ -216,6 +237,20 @@ public sealed partial class InstallNoticesTests : IDisposable
 
     private static string LicenceLine(string version) =>
         $"Jason {version} is licensed under the Jason Runtime Licence: https://github.com/reply-team/jason-ai/blob/v{version}/LICENSE-RUNTIME.md";
+
+    /// <summary>
+    /// The last line of every run that succeeds: the command a person runs next, which says what the installation still
+    /// needs and the command for each. Nothing pointed at it, and a person who had just installed was left at a prompt.
+    /// </summary>
+    private const string NextLine = "Next, run `jason status`: it says what this installation still needs, and the command for each.";
+
+    /// <summary>The run ends with <paramref name="licence"/> and then <see cref="NextLine"/>.</summary>
+    private static void AssertEndsWith(string licence, List<string> lines)
+    {
+        Assert.True(lines.Count >= 2, string.Join(Environment.NewLine, lines));
+        Assert.Equal(NextLine, lines[^1]);
+        Assert.Equal(licence, lines[^2]);
+    }
 
     /// <summary>
     /// A refusal, as said. PowerShell's error view wraps a message at its width, colours each line and puts a gutter in
@@ -257,6 +292,9 @@ public sealed partial class InstallNoticesTests : IDisposable
 
         /// <summary>What <c>install.sh</c> is told its home is: <see cref="Home"/>, unless a row spells it another way.</summary>
         public string HomeVariable { get; set; } = string.Empty;
+
+        /// <summary>What <c>install.sh</c> is told the account's shell is; this process's own where a row says nothing.</summary>
+        public string? Shell { get; set; }
 
         /// <summary>
         /// The harness root's default as the runtime makes it, <c>Jason</c> in the home: the test's own home for
@@ -377,10 +415,13 @@ public sealed partial class InstallNoticesTests : IDisposable
             }
 
             string[] path = modifyPath ? [] : ["--no-modify-path"];
-            return RunToEnd(
-                "/bin/sh",
-                new Dictionary<string, string> { ["HOME"] = HomeVariable.Length > 0 ? HomeVariable : Home },
-                [script, "--feed", feed, "--install-dir", InstallDir, .. path, .. arguments]);
+            var environment = new Dictionary<string, string> { ["HOME"] = HomeVariable.Length > 0 ? HomeVariable : Home };
+            if (Shell is not null)
+            {
+                environment["SHELL"] = Shell;
+            }
+
+            return RunToEnd("/bin/sh", environment, [script, "--feed", feed, "--install-dir", InstallDir, .. path, .. arguments]);
         }
 
         /// <summary>

@@ -197,23 +197,212 @@ public class UninstallExecutableTests
     }
 
     /// <summary>
-    /// And another build's directory beside it is not this build's to remove: it stays, and so does the
-    /// directory holding both, with the reason.
+    /// And on Windows every other build's directory beside it goes too, planned and named: an update leaves the build
+    /// before it unpacked there, and an uninstall that took only the running build's left that one for good, with no verb
+    /// that removes it. The directory holding them all goes once nothing is left in it.
     /// </summary>
     [Fact]
-    public async Task Another_builds_unpacked_libraries_are_kept()
+    public async Task Every_other_builds_unpacked_libraries_go_with_it()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Elsewhere a running copy holds nothing, so the other builds' directories are left; the row below holds that.");
         using var dir = new TempPaths();
         var executable = Install(dir);
         var extracted = Unpacked(dir, "Xq7tzCSumrk");
         var other = Unpacked(dir, "L5GxzH7oZwh");
+        var older = Unpacked(dir, "a0Bc1De2Fg3");
+
+        var (exit, report) = await RunAsync(dir, executable, new RecordingRemover { ReallyRemoves = true, ExtractedLibraries = extracted });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([other, older], report.Plan.OtherExtractedLibraries!.Order(StringComparer.Ordinal));
+        Assert.False(Directory.Exists(extracted));
+        Assert.False(Directory.Exists(other), "another build's unpacked libraries were left.");
+        Assert.False(Directory.Exists(older), "another build's unpacked libraries were left.");
+        Assert.False(Directory.Exists(Path.GetDirectoryName(extracted)!), "the directory builds unpack into was left empty.");
+        Assert.Contains(report.Done, line => line.Contains(other, StringComparison.OrdinalIgnoreCase) && line.Contains("another build", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// What is not shaped as the host unpacks — a directory holding a directory, a file of its own — is not a build's
+    /// unpacked libraries and is not planned: it stays, and so does the directory holding it, with the reason.
+    /// </summary>
+    [Fact]
+    public async Task What_is_not_shaped_as_a_build_s_unpacked_libraries_is_kept()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var extracted = Unpacked(dir, "Xq7tzCSumrk");
+        var nested = Unpacked(dir, "L5GxzH7oZwh");
+        Directory.CreateDirectory(Path.Combine(nested, "inside"));
+        var parent = Path.GetDirectoryName(extracted)!;
+        var loose = Path.Combine(parent, "notes.txt");
+        await File.WriteAllTextAsync(loose, "somebody's own", Ct);
+
+        var (exit, report) = await RunAsync(dir, executable, new RecordingRemover { ReallyRemoves = true, ExtractedLibraries = extracted });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Empty(report.Plan.OtherExtractedLibraries!);
+        Assert.True(Directory.Exists(nested), "a directory holding a directory was taken for a build's unpacked libraries.");
+        Assert.True(File.Exists(loose));
+        Assert.Contains(report.Kept, line => line.Contains(parent, StringComparison.OrdinalIgnoreCase) && line.Contains("not a build's unpacked libraries", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Another build's directory a running copy of that build holds is kept and said, never a problem of this uninstall:
+    /// nothing of this installation is in it.
+    /// </summary>
+    [Fact]
+    public async Task Another_builds_unpacked_libraries_a_running_copy_holds_are_kept_and_said()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only on Windows is another build's directory planned for removal at all.");
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var extracted = Unpacked(dir, "Xq7tzCSumrk");
+        var held = Unpacked(dir, "L5GxzH7oZwh");
+        var remover = new RecordingRemover { ReallyRemoves = true, ExtractedLibraries = extracted };
+        remover.Refuses.Add(held);
+
+        var (exit, report) = await RunAsync(dir, executable, remover);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(Directory.Exists(held));
+        Assert.Empty(report.Problems);
+        Assert.Contains(report.Kept, line => line.Contains(held, StringComparison.OrdinalIgnoreCase) && line.Contains("running", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Elsewhere than Windows a copy running from another build's directory holds nothing, so a removal would go through
+    /// under it: this build's own directory goes, and the others stay, counted in one line of the plan and of the report
+    /// that names where they are and that they are removed by hand. The directory holding them stays with them.
+    /// </summary>
+    [Fact]
+    public async Task Elsewhere_than_Windows_other_builds_unpacked_libraries_are_counted_and_left()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "On Windows a running copy holds its own, and the other builds' directories go.");
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var extracted = Unpacked(dir, "Xq7tzCSumrk");
+        var other = Unpacked(dir, "L5GxzH7oZwh");
+        var older = Unpacked(dir, "a0Bc1De2Fg3");
+        var parent = Path.GetDirectoryName(extracted)!;
 
         var (exit, report) = await RunAsync(dir, executable, new RecordingRemover { ReallyRemoves = true, ExtractedLibraries = extracted });
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.False(Directory.Exists(extracted));
-        Assert.True(Directory.Exists(other), "another build's unpacked libraries were removed.");
-        Assert.Contains(report.Kept, line => line.Contains("other builds", StringComparison.Ordinal));
+        Assert.True(Directory.Exists(other), "another build's unpacked libraries were removed where nothing a running copy holds stops it.");
+        Assert.True(Directory.Exists(older), "another build's unpacked libraries were removed where nothing a running copy holds stops it.");
+        Assert.Empty(report.Plan.OtherExtractedLibraries!);
+        var left = report.Plan.OtherExtractedLibrariesLeft;
+        Assert.NotNull(left);
+        Assert.Contains($"under '{parent}' is left, 2 directories of native libraries: a copy may be running from them", left, StringComparison.Ordinal);
+        Assert.Contains("Remove them by hand once nothing runs from them.", left, StringComparison.Ordinal);
+        Assert.Contains(left, report.Kept);
+        Assert.Contains(report.Kept, line => line.StartsWith($"Kept '{parent}', with what is left in it", StringComparison.Ordinal));
+        Assert.Empty(report.Problems);
+    }
+
+    /// <summary>
+    /// The reader's half of the same rule, for both platforms on any: on Windows each other build's directory is planned,
+    /// and elsewhere none is, and the line counts them instead.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Other_builds_directories_are_planned_on_Windows_and_counted_elsewhere(bool windows)
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var extracted = Unpacked(dir, "Xq7tzCSumrk");
+        var other = Unpacked(dir, "L5GxzH7oZwh");
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (others, left) = UninstallReader.Others(env, extracted, Path.GetDirectoryName(executable), windows, extractBase: null);
+
+        if (windows)
+        {
+            Assert.Equal([other], others);
+            Assert.Null(left);
+        }
+        else
+        {
+            Assert.Empty(others);
+            Assert.Contains($"under '{Path.GetDirectoryName(extracted)}' is left, 1 directory of native libraries", left, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Where DOTNET_BUNDLE_EXTRACT_BASE_DIR moved where builds unpack, the directory holding this build's own can be any
+    /// directory of the person's — the harness root, with the base at the home directory on a file system that ignores
+    /// case. Nothing else in it is known to be a build's, so nothing else in it is looked for, on any platform: this build's
+    /// own goes, a folder beside it stays, and the plan says why in one line.
+    /// </summary>
+    [Fact]
+    public async Task With_the_unpack_base_moved_nothing_beside_this_build_s_own_is_looked_for()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var extracted = Unpacked(dir, "Xq7tzCSumrk");
+        var drafts = Unpacked(dir, "drafts");
+        var parent = Path.GetDirectoryName(extracted)!;
+
+        var (exit, report) = await RunAsync(
+            dir,
+            executable,
+            new RecordingRemover { ReallyRemoves = true, ExtractedLibraries = extracted },
+            new Dictionary<string, string> { ["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = Path.GetDirectoryName(parent)! });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.False(Directory.Exists(extracted));
+        Assert.True(Directory.Exists(drafts), "a folder beside this build's own was taken for another build's where the base was moved.");
+        Assert.Empty(report.Plan.OtherExtractedLibraries!);
+        Assert.Equal(
+            $"DOTNET_BUNDLE_EXTRACT_BASE_DIR is set, so the native libraries other builds of this program unpacked under '{parent}' are not looked for: it names a directory of its own, and what else is in it is not known to be theirs.",
+            report.Plan.OtherExtractedLibrariesLeft);
+        Assert.Contains(report.Kept, line => line.StartsWith($"Kept '{parent}', with what is left in it", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The install directory beside this build's own, flat as the host unpacks — the executable and its notices — is the
+    /// installation and never another build's: it is not planned, whatever the platform.
+    /// </summary>
+    [Fact]
+    public void An_install_directory_beside_this_build_s_own_is_never_another_build_s()
+    {
+        using var dir = new TempPaths();
+        var extracted = Unpacked(dir, "Xq7tzCSumrk");
+        var installDirectory = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(extracted)!, "bin")).FullName;
+        var executable = Path.Combine(installDirectory, "jason");
+        File.WriteAllText(executable, "not really a program");
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (others, left) = UninstallReader.Others(env, extracted, installDirectory, windows: true, extractBase: null);
+
+        Assert.Empty(others);
+        Assert.Null(left);
+    }
+
+    /// <summary>
+    /// A link beside this build's own is not a build's directory, whatever it points to: it is not planned, so neither it
+    /// nor what it points to is removed.
+    /// </summary>
+    [Fact]
+    public async Task A_link_beside_this_build_s_own_is_never_another_build_s()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var extracted = Unpacked(dir, "Xq7tzCSumrk");
+        var target = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "elsewhere", "flat")).FullName;
+        var kept = Path.Combine(target, "mine.txt");
+        await File.WriteAllTextAsync(kept, "somebody's own", Ct);
+        var link = Path.Combine(Path.GetDirectoryName(extracted)!, "L5GxzH7oZwh");
+        DataDirectoryBeltTests.Link(link, target);
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (others, _) = UninstallReader.Others(env, extracted, Path.GetDirectoryName(executable), windows: true, extractBase: null);
+
+        Assert.Empty(others);
+        Assert.True(File.Exists(kept));
     }
 
     /// <summary>
@@ -657,7 +846,7 @@ public class UninstallExecutableTests
         public override void WriteLine(string? value) => throw new IOException("this stream is gone.");
     }
 
-    private static CliEnvironment Environment(TempPaths dir, string executable, RecordingRemover remover, TextWriter output) =>
+    private static CliEnvironment Environment(TempPaths dir, string executable, RecordingRemover remover, TextWriter output, IReadOnlyDictionary<string, string>? variables = null) =>
         new(
             output,
             new StringWriter(),
@@ -665,7 +854,8 @@ public class UninstallExecutableTests
             Autostart: new RecordingRegistrar(),
             Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "harness")),
             InstallPath: executable,
-            Removes: remover);
+            Removes: remover,
+            Variables: variables ?? new Dictionary<string, string>());
 
     private static string Install(TempPaths dir)
     {
@@ -675,10 +865,10 @@ public class UninstallExecutableTests
         return executable;
     }
 
-    private static async Task<(int Exit, UninstallReport Report)> RunAsync(TempPaths dir, string executable, RecordingRemover remover)
+    private static async Task<(int Exit, UninstallReport Report)> RunAsync(TempPaths dir, string executable, RecordingRemover remover, IReadOnlyDictionary<string, string>? variables = null)
     {
         var output = new StringWriter();
-        var env = Environment(dir, executable, remover, output);
+        var env = Environment(dir, executable, remover, output, variables);
 
         var exit = await UninstallCommand.RunAsync(
             env,

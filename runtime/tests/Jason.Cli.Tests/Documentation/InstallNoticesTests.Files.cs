@@ -184,7 +184,7 @@ public sealed partial class InstallNoticesTests
         Assert.True(run.Exit == 0, run.Stderr);
         var lines = Lines(run.Stdout);
         Assert.Contains($"Jason 0.6.0 is already installed at {installer.Target}; its licence files were missing and are written beside it now.", lines);
-        Assert.Equal(LicenceLine("0.6.0"), lines[^1]);
+        AssertEndsWith(LicenceLine("0.6.0"), lines);
         Assert.Equal(Names(installer.ExecutableName, Licence, Notices), Listing(installer.InstallDir));
         Assert.Equal(LicenceText("0.6.0"), Text(installer, Licence));
         Assert.Equal(NoticesText("0.6.0"), Text(installer, Notices));

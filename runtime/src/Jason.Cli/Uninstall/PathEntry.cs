@@ -67,14 +67,50 @@ public static class PathEntry
     }
 
     /// <summary>
-    /// Every login profile the installer or the repair may have written into, whatever this account's shell is
-    /// now: the removal looks in all of them, because the shell somebody uses today is not the one they installed
-    /// under.
+    /// Every profile the installer or the repair may have written into, whatever this account's shell is now — the
+    /// login profiles, and the two files an interactive shell reads: the removal looks in all of them, because the
+    /// shell somebody uses today is not the one they installed under.
     /// </summary>
     public static IReadOnlyList<string> ProfileFiles(string home)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(home);
-        return [.. new[] { ".profile", ".bash_profile", ".bash_login", ".zprofile" }.Select(name => Path.Combine(home, name))];
+        return [.. new[] { ".profile", ".bash_profile", ".bash_login", ".zprofile", ".bashrc", ".zshrc" }.Select(name => Path.Combine(home, name))];
+    }
+
+    /// <summary>
+    /// The file every interactive shell of this account reads, a login shell or not: <c>~/.bashrc</c> for bash,
+    /// <c>~/.zshrc</c> for zsh, and none for any other shell. The installer and the repair write the line there as
+    /// well as into the <see cref="LoginProfile"/>.
+    /// </summary>
+    /// <param name="home">This account's home directory.</param>
+    /// <param name="shell">The account's shell, as <c>SHELL</c> names it.</param>
+    /// <remarks>
+    /// <para>
+    /// A login profile is read by a login shell, and a desktop's terminal does not start one: GNOME Terminal's bash
+    /// reads <c>~/.bashrc</c> and never <c>~/.profile</c>, which the desktop reads once, at sign-in. With the line in
+    /// the login profile alone, every new terminal after an install answered that there was no <c>jason</c> until the
+    /// account signed out and in, while the installer's last words were "open a new terminal".
+    /// </para>
+    /// <para>
+    /// The login profile keeps the line: it is what a desktop reads at sign-in, and so what a runtime started at logon
+    /// is given. A login shell that reads both files has the directory on its PATH twice, which finds the same
+    /// <c>jason</c>. Another shell has no such file this can name, and the installer says to sign out and in instead.
+    /// <c>install.sh</c> carries the same rule as <see cref="InteractiveProfileFunction"/>, and a test runs that
+    /// function against this one.
+    /// </para>
+    /// </remarks>
+    public static string? InteractiveProfile(string home, string? shell)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(home);
+
+        // The name as LoginProfile reads it: everything after the last slash, as sh's case patterns match it.
+        var name = shell is null ? string.Empty : shell[(shell.LastIndexOf('/') + 1)..];
+        return name switch
+        {
+            "zsh" => Path.Combine(home, ".zshrc"),
+            "bash" => Path.Combine(home, ".bashrc"),
+            _ => null,
+        };
     }
 
     /// <summary>
@@ -241,6 +277,21 @@ public static class PathEntry
         }
         """;
 
+    /// <summary>
+    /// <see cref="InteractiveProfile"/>, as the function <c>install.sh</c> defines and calls; it prints nothing for a shell
+    /// that has no such file. The script carries this text verbatim, and a test runs it in <c>sh</c> against every case.
+    /// </summary>
+    public const string InteractiveProfileFunction =
+        """
+        interactive_profile() {
+            case "${SHELL:-}" in
+                zsh|*/zsh) echo "$HOME/.zshrc" ;;
+                bash|*/bash) echo "$HOME/.bashrc" ;;
+                *) ;;
+            esac
+        }
+        """;
+
     /// <summary>The <c>printf</c> format <c>install.sh</c> appends with, and therefore the one a repair uses.</summary>
     public const string AppendFormat = @"\n%s\n%s\n";
 
@@ -267,14 +318,24 @@ public static class PathEntry
     /// shell the installer had already served got a second block, and the export half put the directory on
     /// the running PATH twice.
     /// </para>
+    /// <para>
+    /// Into the <see cref="InteractiveProfile"/> as well, where the shell has one, as the installer writes it: a repair
+    /// that wrote the login profile alone left a desktop's next terminal as unable to find <c>jason</c> as before.
+    /// </para>
     /// </remarks>
-    public static string AppendCommand(string installDirectory, string profile)
+    /// <param name="installDirectory">The directory to put on the PATH.</param>
+    /// <param name="profile">The <see cref="LoginProfile"/>.</param>
+    /// <param name="interactive">The <see cref="InteractiveProfile"/>, or null where the shell has none.</param>
+    public static string AppendCommand(string installDirectory, string profile, string? interactive = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(profile);
 
         var line = ExportLine(installDirectory);
-        return $"(grep -qxF {Word(line)} {Word(profile)} 2>/dev/null || printf '{AppendFormat}' {Word(Marker)} {Word(line)} >> {Word(profile)})"
+        string[] files = interactive is null ? [profile] : [profile, interactive];
+        return string.Join(
+                " && ",
+                files.Select(file => $"(grep -qxF {Word(line)} {Word(file)} 2>/dev/null || printf '{AppendFormat}' {Word(Marker)} {Word(line)} >> {Word(file)})"))
             + $" && case \":$PATH:\" in *:{Word(installDirectory)}:*) ;; *) {line} ;; esac";
     }
 

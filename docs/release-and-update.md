@@ -255,7 +255,9 @@ rather than what was there when the runtime started.
 Because it is read at every launch, something deploying into it can be reading it at the same moment. A
 deployment therefore assembles each skill beside its destination and moves it into place, so a launch sees the
 tree that was there or the tree that arrived and never a blend; a launch that loses that race reads the tree
-again, and one that loses it twice ends with `role_skill_unreadable` rather than running with no skill.
+again, and one that loses it twice ends with `role_skill_unreadable` rather than running with no skill. A skill
+holding a file of the person's is the exception: it is written file by file where it stands, with no reader waited
+for, so a launch may read some of its files new and some old.
 
 ## 5. Asking by hand
 
@@ -512,9 +514,10 @@ there was recorded, from the source its record names; a deployment made with `--
 does not find is not, and `jason skills update --root <dir>` moves it. A deployment made at a tag
 chosen with `--ref` stays at its ref, and nothing is written into an agent's harness that has no record. The apply
 prints one `skills:` line for each pack group it carried — one pack from one source at one ref, in the roots that
-hold it — with what it wrote. If a group cannot be redeployed — no `git`, no network, a file you edited, a skill
-held open by a role that was launching, an interrupt while they are fetched — the update still stands: the new
-executable is in place and its runtime is running, that group's `skills:` line says why and ends
+hold it — with what it wrote. A file you edited is kept and the rest of its group moves; the group's line names
+the file. If a group cannot be redeployed — no `git`, no network, a skill held open by a role that was
+launching, an interrupt while they are fetched — the update still stands: the new executable
+is in place and its runtime is running, that group's `skills:` line says why and ends
 `run: jason skills update`, and whatever could not move is still recorded at the tag before, so `jason status`
 fails it and prints the same repair it always has. An update applied by a build before 0.12.0 has no such step, so
 it needs one `jason skills update` after it; from 0.12.0 on, `jason update apply` does it. A package manager's
@@ -537,8 +540,17 @@ records which migrations that was and where the backup went, which is what makes
 ### When it stops halfway
 
 Kill the process anywhere and the ledger is still right, because it was written first. Run `jason update apply`
-again and it finishes from the step on disk, or says what it cannot finish. Two states are worth knowing about
-by name.
+again and it finishes from the step on disk, or says what it cannot finish; one killed during `healthy` starts the
+runtime again before it asks it, since the kill may have left none. Before `kept` nothing has been replaced: `jason
+status` is ready beside a runtime that answers, its optional `update` check names the update and the step it stopped
+at with `jason update apply` as the repair, and `jason runtime start` starts the installed build and says on stderr
+that the update waits. From the swap on, from `kept`, `jason status` fails its `runtime` check the same way, and
+`jason runtime start` and `restart` start and stop nothing and say the same: a runtime started any other way would run
+outside the update, with its last steps never taken. A runtime registered to start at sign-in (§8) runs `jason runtime
+run`, which reads no ledger, so a sign-in in that window starts the new build outside the update; `jason status` still
+names the apply, which finishes it past that runtime. A ledger that cannot be read is refused by all three, with
+`update_ledger_invalid` and the file's path; removing it is the way on when no update is wanted. Two states are worth
+knowing about by name.
 
 **Between `kept` and `swapped` the install path is empty.** The old executable has been moved to
 `~/.jason/update/previous/`, its two notice files after it, and the new one is not in place yet. The
@@ -662,7 +674,7 @@ a code on its own tells nobody what to do next.
 | `update_artifact_corrupt` | what was downloaded is not the digest the manifest published. The bytes are deleted rather than kept for a retry |
 | `update_artifact_unreachable` | the download did not arrive, or the archive could not be read. Worth trying again |
 | `update_artifact_unexpected` | the archive does not hold the executable a release for this platform is supposed to hold, or the release publishes nothing for this platform, or the manifest read for `--version` names another version. That last is said before the manifest's `min_upgrade_from` is read, since a manifest of another release says nothing about this one: no archive is downloaded and no update begins. The same code comes at `staged` when the manifest read again there names another version than the update in flight, which has already begun. Its notice files are taken where the archive holds them, and an archive without one is not refused |
-| `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move |
+| `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. Before `kept` nothing has been replaced, and `jason runtime start` starts the installed build |
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; no archive is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
@@ -672,7 +684,7 @@ a code on its own tells nobody what to do next.
 | `update_file_refused` | a file could not be moved, copied or written: a directory that is not one, a permission, a lock. It covers every file these two verbs touch — an update's renames and a rollback's, the ledger both are recorded in, and the database restore. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH. On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for 10 seconds first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable: the same command, once the file is free |
 | `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
 | `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
-| `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on |
+| `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on. The message names the file. `jason runtime start` and `restart` refuse with it too and start nothing, as they do when the file cannot be opened at all, and `jason status` fails its `runtime` check with the same words; removing the file is the way on when no update is wanted |
 
 ## 8. Starting at logon
 
@@ -816,6 +828,15 @@ registration carries it explicitly; a plugin whose executable is only on a `PATH
 other half, and it will be reported `unavailable` by a runtime that started at logon while working perfectly
 from a terminal. `jason plugin list` from the same account says which.
 
+On Linux the registration is a `systemd --user` unit, and the environment it starts the runtime with is the systemd
+user manager's, which reads no shell profile: not `~/.profile`, and not `~/.bashrc`, where a version manager or a
+package manager's own setup most often puts its line. So a program your terminal finds is not on it for that reason
+alone, and a provider's program on the CLI's PATH is missing to a runtime started at logon until its directory reaches
+the user manager. It does through a file ending `.conf` in `~/.config/environment.d/`, one assignment per line —
+`PATH=/opt/tool/bin:$PATH`, say — which the user manager passes to every service it starts, read when it starts
+and again at `systemctl --user daemon-reload`; or through the unit's own environment, an `Environment=` line in a
+drop-in `systemctl --user edit jason.service` opens. Or start the runtime from that terminal instead.
+
 ### What tests prove here, and what they cannot
 
 Every document above is composed and asserted by tests, on whatever machine the tests run on, including the two
@@ -879,8 +900,8 @@ The order is the order that makes a half-finished run safe:
 | the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
 | on Windows, the notification registration | after the runtime, so its next toast cannot write it back: the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the first toast. All three are this account's, under `HKEY_CURRENT_USER` |
 | every recorded skill | by the paths its root's record names, digest by digest |
-| the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it. A PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile; on Windows, whose Path carries no marker, the entry in this account's Path |
-| the executable, its notice files, its install directory and what it unpacked | last, because everything above runs from it. The notice files go by name, so in a directory other tools share a `LICENSE` that is not one of them stays. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
+| the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it. A PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile, and in `~/.bashrc` or `~/.zshrc` beside it; on Windows, whose Path carries no marker, the entry in this account's Path |
+| the executable, its notice files, its install directory and what it unpacked | last, because everything above runs from it. The notice files go by name, so in a directory other tools share a `LICENSE` that is not one of them stays. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too, and on Windows those every other build unpacked beside them — earlier versions of this installation, or another installation of this account, which nothing there tells apart; a build unpacks again on its next start, and one a running copy holds stays and is named. On macOS and Linux a running copy holds nothing, so the others stay, counted in one line that names the directory they are in, for removing by hand once nothing runs from them; where the directory builds unpack into was moved (§10), they are not looked for |
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason wrote
 and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway, and the containing
@@ -937,7 +958,9 @@ There is a third place, which nothing here controls. The executable is a single 
 its native libraries inside it, and the first run of each version unpacks those natives to a cache — 
 `%TEMP%\.net\jason\<hash>\` on Windows, `~/.net/jason/<hash>/` in the home directory on macOS and Linux, or
 under `DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
-new version is slower than the next, and it is safe to delete when nothing is running.
+new version is slower than the next, and it is safe to delete when nothing is running. `jason uninstall` removes its
+own build's directory there; on Windows every other build's too, and elsewhere it counts them and leaves them, since
+a copy running from one holds nothing there. Under `DOTNET_BUNDLE_EXTRACT_BASE_DIR` it removes its own alone.
 
 ## 11. The code behind this page
 

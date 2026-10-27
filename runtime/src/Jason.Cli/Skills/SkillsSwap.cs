@@ -42,6 +42,12 @@ public static class SkillsSwap
     private static TimeSpan Pause => TimeSpan.FromMilliseconds(25);
 
     /// <summary>
+    /// What marks a file landed in the staging directory on its way into a skill written file by file, beside a file of
+    /// the person's. One a kill left there is collected by the next deployment.
+    /// </summary>
+    public const string Landing = ".landing-";
+
+    /// <summary>
     /// Where a deployment assembles a tree before moving it into <paramref name="root"/>.
     /// </summary>
     /// <remarks>
@@ -189,7 +195,7 @@ public static class SkillsSwap
         }
     }
 
-    /// <summary>Everything a previous deployment set aside and could not remove at the time.</summary>
+    /// <summary>Everything a previous deployment set aside and could not remove at the time, and every file it landed and never moved.</summary>
     public static void Collect(string asideRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(asideRoot);
@@ -204,6 +210,18 @@ public static class SkillsSwap
             if (Path.GetFileName(directory).Contains(".replaced-", StringComparison.Ordinal))
             {
                 Remove(directory);
+            }
+        }
+
+        foreach (var landed in Directory.GetFiles(asideRoot).Where(file => Path.GetFileName(file).Contains(Landing, StringComparison.Ordinal)))
+        {
+            try
+            {
+                File.Delete(landed);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Debug.WriteLine($"A landed file at '{landed}' was left in place: {exception.Message}");
             }
         }
     }

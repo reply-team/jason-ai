@@ -424,7 +424,7 @@ public static partial class DoctorComposer
         try
         {
             // As the status verb composes it: its own reads, through the same descriptor, and no provider CLI, so no program.
-            var status = Projected(await StatusChecks.ComposeAsync(env with { HttpHandler = projected }, providerCli: null, cancellationToken).ConfigureAwait(false));
+            var status = Projected(await StatusChecks.ComposeAsync(env with { HttpHandler = projected }, providerCli: null, cancellationToken).ConfigureAwait(false), projected.Skills);
 
             var descriptor = new DescriptorReader(env.Paths).Read();
             using var client = descriptor is not null && IsLoopback(descriptor.BaseUrl) ? new RuntimeClient(descriptor, latch) : null;
@@ -522,16 +522,17 @@ public static partial class DoctorComposer
         path[0] is '/' or '\\' || (path.Length > 2 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '/' or '\\');
 
     /// <summary>
-    /// The readiness report as a bundle carries it: a role-skills fact made of withheld problems — the status checks join
-    /// a refused role's problem text, one after another, each with its code after it — is one closed value, how many, and
-    /// the codes that are the set's words, <c>withheld (2: skill_too_large, skill_file_missing)</c>, never the word
-    /// repeated. Everything else is as the status verb composed it.
+    /// The readiness report as a bundle carries it: a role-skills fact that opens with withheld problems — the status checks
+    /// join a refused role's problem text, one after another, each with its code after it — opens with one closed value,
+    /// how many, and the codes that are the set's words, <c>withheld (2: skill_too_large, skill_file_missing)</c>, never the
+    /// word repeated. What the status verb says after them, of a role that is the person's own, follows as it composed it,
+    /// and everything else is as it composed it too.
     /// </summary>
-    private static StatusReport Projected(StatusReport report) =>
+    private static StatusReport Projected(StatusReport report, SkillsInfo? skills) =>
         report with
         {
             Checks = [.. report.Checks.Select(check =>
-                check.Name == RoleSkillsCheck && WithheldSummary(check.Fact) is { } summary
+                check.Name == RoleSkillsCheck && WithheldSummary(check.Fact, skills) is { } summary
                     ? check with { Fact = summary }
                     : check)],
         };
@@ -540,37 +541,87 @@ public static partial class DoctorComposer
     private const string RoleSkillsCheck = "role_skills";
 
     /// <summary>
-    /// A fact made only of withheld problems, each with its code in brackets where it has one, as one closed value: how
-    /// many, and the codes that are words of the set. Null when the fact says anything more.
+    /// A fact that opens with withheld problems, each with its code in brackets where it has one, with that run as one
+    /// closed value: how many, and the codes that are words of the set. The run ends at the first word that is not the
+    /// withheld word. What follows it travels only where it is, whole, this program's own sentences of the roles a person
+    /// added, as <see cref="StatusChecks.OwnRoleRefused"/> composes them for the refused roles and the directory of the
+    /// report the status checks read (<paramref name="skills"/>), and nothing else. Any other text after the run is left
+    /// out and the summary stands alone, so no text of the runtime's rides along by sharing the fact. Null when the fact
+    /// does not open with the run.
     /// </summary>
-    private static string? WithheldSummary(string fact)
+    internal static string? WithheldSummary(string fact, SkillsInfo? skills)
     {
-        var words = fact.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var count = 0;
         var codes = new List<string>();
-        for (var index = 0; index < words.Length; index++)
+        var at = 0;
+        while (WordAt(fact, at) is { Word: Withheld } withheld)
         {
-            if (words[index] != Withheld)
-            {
-                return null;
-            }
-
             count++;
-            if (index + 1 < words.Length && words[index + 1] is ['[', .. var inner, ']'])
+            at = withheld.End;
+            if (WordAt(fact, at) is { Word: ['[', .. var code, ']'] } coded)
             {
-                var code = new string(inner);
                 if (SkillProblemCodes.All.Contains(code, StringComparer.Ordinal))
                 {
                     codes.Add(code);
                 }
 
-                index++;
+                at = coded.End;
             }
         }
 
-        return count == 0 ? null
-            : codes.Count == 0 ? string.Create(CultureInfo.InvariantCulture, $"{Withheld} ({count})")
+        if (count == 0)
+        {
+            return null;
+        }
+
+        var summary = codes.Count == 0
+            ? string.Create(CultureInfo.InvariantCulture, $"{Withheld} ({count})")
             : string.Create(CultureInfo.InvariantCulture, $"{Withheld} ({count}: {string.Join(", ", codes)})");
+        var rest = fact[at..];
+        return rest.Length > 0 && rest == OwnSentences(rest, skills) ? summary + rest : summary;
+    }
+
+    /// <summary>
+    /// The sentences of <see cref="StatusChecks.OwnRoleRefused"/> that open what follows the run, each after a space, as
+    /// they read for the refused roles of the report the status checks were given and its directory: by name, in the
+    /// order they compose them. Text that is not one of them ends them.
+    /// </summary>
+    private static string OwnSentences(string rest, SkillsInfo? skills)
+    {
+        if (skills is null)
+        {
+            return string.Empty;
+        }
+
+        var at = 0;
+        foreach (var name in skills.Roles.Where(role => role.Problem is not null).Select(role => role.Role).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            var sentence = " " + StatusChecks.OwnRoleRefused(name, skills.RoleSkillsDirectory);
+            if (rest.AsSpan(at).StartsWith(sentence, StringComparison.Ordinal))
+            {
+                at += sentence.Length;
+            }
+        }
+
+        return rest[..at];
+    }
+
+    /// <summary>The next word of a text from a position on, and where it ends; null where only spaces are left.</summary>
+    private static (string Word, int End)? WordAt(string text, int from)
+    {
+        while (from < text.Length && text[from] == ' ')
+        {
+            from++;
+        }
+
+        if (from == text.Length)
+        {
+            return null;
+        }
+
+        var end = text.IndexOf(' ', from);
+        end = end < 0 ? text.Length : end;
+        return (text[from..end], end);
     }
 
     /// <summary>One section before the rewrite: its name, its content and how many things it holds.</summary>
@@ -1622,6 +1673,9 @@ public static partial class DoctorComposer
     /// </summary>
     private sealed class ProjectedSystemInfo(HttpMessageHandler inner) : DelegatingHandler(inner)
     {
+        /// <summary>The skills of the last answer passed on, as projected: what the status checks composed their facts from.</summary>
+        public SkillsInfo? Skills { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -1652,7 +1706,17 @@ public static partial class DoctorComposer
                 return response;
             }
 
-            response.Content = new StringContent(Project(JsonSerializer.SerializeToNode(answer, Dialect)!.AsObject()).ToJsonString(), Encoding.UTF8, "application/json");
+            var passed = Project(JsonSerializer.SerializeToNode(answer, Dialect)!.AsObject()).ToJsonString();
+            try
+            {
+                Skills = JsonSerializer.Deserialize<SystemInfoResponse>(passed, JasonJson.Options)?.Skills;
+            }
+            catch (Exception unreadable) when (unreadable is JsonException or ArgumentException or InvalidOperationException or NotSupportedException)
+            {
+                Skills = null;
+            }
+
+            response.Content = new StringContent(passed, Encoding.UTF8, "application/json");
             return response;
         }
     }

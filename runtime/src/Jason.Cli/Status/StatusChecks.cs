@@ -68,6 +68,13 @@ internal static class StatusChecks
 
         public const string Restart = "jason runtime restart";
 
+        /// <summary>
+        /// The repair for an update that stopped part-way: the apply carries it on from the step its ledger names, starts the
+        /// runtime itself and finishes what the update still owes. Never <see cref="Start"/>, which would run the new build
+        /// outside the update.
+        /// </summary>
+        public const string FinishUpdate = "jason update apply";
+
         public const string ReloadPlugins = "jason plugin reload";
 
         /// <summary>
@@ -172,10 +179,13 @@ internal static class StatusChecks
             // Into the profile this shell reads at login, and exported for the shell it is typed in. The bare
             // export line lasts exactly one shell: printed as a repair it is advice that appears to have
             // worked, and it left the two platforms' repairs differing in kind with neither saying so.
+            // And into the file an interactive shell reads, where the shell has one, as the installer writes it: a
+            // desktop's terminal starts no login shell, and the login profile alone left it without `jason`.
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var shell = Environment.GetEnvironmentVariable("SHELL");
             return home.Length == 0
                 ? null
-                : PathEntry.AppendCommand(directory, PathEntry.LoginProfile(home, Environment.GetEnvironmentVariable("SHELL")));
+                : PathEntry.AppendCommand(directory, PathEntry.LoginProfile(home, shell), PathEntry.InteractiveProfile(home, shell));
         }
     }
 
@@ -207,12 +217,14 @@ internal static class StatusChecks
                 info = await ReadAsync<SystemInfoResponse>(client, Operations.SystemInfo, cancellationToken).ConfigureAwait(false);
             }
 
-            checks.Add(Runtime(descriptor, info));
+            var unfinished = Update.UnfinishedUpdate.Read(env.Paths);
+            checks.Add(Runtime(descriptor, info, unfinished));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
+            checks.Add(UpdateInFlight(unfinished));
 
             checks.Add(ProviderPlugin(info));
             checks.Add(PluginPackage(info));
@@ -235,8 +247,24 @@ internal static class StatusChecks
         return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks);
     }
 
-    private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info)
+    private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Update.UnfinishedUpdate? unfinished)
     {
+        // First, and whether a runtime answers or not, once the update has touched the install path: its last steps are
+        // the apply's, and a runtime started any other way runs outside them. A ledger that cannot say which step it is at
+        // fails the same way, with no repair this verb can name. Before that step nothing has been replaced, and the
+        // runtime check is the runtime's own; the optional update check names what is waiting.
+        if (unfinished is { Replacing: true })
+        {
+            return unfinished.Ledger is { } ledger
+                ? new StatusCheck(
+                    "runtime",
+                    true,
+                    CheckState.Failed,
+                    $"{unfinished.Said()}: `{Repair.FinishUpdate}` carries it on and starts the runtime itself, and `jason update rollback` goes back to {ledger.FromVersion}.",
+                    Repair.FinishUpdate)
+                : new StatusCheck("runtime", true, CheckState.Failed, $"{unfinished.Said()}.", null);
+        }
+
         if (descriptor is null)
         {
             return new StatusCheck("runtime", true, CheckState.Failed, "No runtime is running: there is no endpoint descriptor to ask.", Repair.Start);
@@ -246,6 +274,30 @@ internal static class StatusChecks
             ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
             : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
+
+    /// <summary>
+    /// Whether an update is waiting to be resumed. Optional: before the step that moves the installed build aside nothing
+    /// has been replaced, and an apply that could not download stops there with the installation as it was; failing a
+    /// required check would stop every agent that branches on <c>ready</c> until the network came back. From that step
+    /// on the required runtime check fails as well, and a ledger that cannot be read is said there.
+    /// </summary>
+    private static StatusCheck UpdateInFlight(Update.UnfinishedUpdate? unfinished) => unfinished switch
+    {
+        null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
+        { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),
+        { Replacing: false } => new StatusCheck(
+            "update",
+            false,
+            CheckState.Failed,
+            $"{unfinished.Said()}; nothing has been replaced, and `{Repair.FinishUpdate}` resumes it.",
+            Repair.FinishUpdate),
+        _ => new StatusCheck(
+            "update",
+            false,
+            CheckState.Failed,
+            $"{unfinished.Said()}; the runtime check says the two ways on.",
+            Repair.FinishUpdate),
+    };
 
     /// <summary>
     /// Whether the runtime answering is the build this CLI is. Required, because a binary can change under a running
@@ -388,11 +440,28 @@ internal static class StatusChecks
     }
 
     /// <summary>
+    /// What the role-skills fact says, after the problems, of a refused skill of a role Jason does not ship: its name and
+    /// the directory to correct it in, and no word of the runtime's about the problem. A bundle carries it only where it reads
+    /// as this composes it.
+    /// </summary>
+    internal static string OwnRoleRefused(string role, string directory) =>
+        $"'{role}' is no role Jason ships, so no command of Jason's repairs its skill: correct it or remove it from {directory}.";
+
+    /// <summary>
     /// A skill problem's sentence with its code after it, in brackets, where the runtime gave one: the code is what a
     /// reader of a bundle has where the sentence is withheld, and what a reader of this fact can search for. A runtime
     /// from before the codes gives none, and its sentence stands alone.
     /// </summary>
     private static string Coded(string problem, string? code) => code is null ? problem : $"{problem} [{code}]";
+
+    /// <summary>
+    /// The roles a person added that no deployed skill teaches, each said as what it is: one with an entry command of its own
+    /// runs that, and one without launches untaught unless a skill named after it is put in the role skills directory.
+    /// </summary>
+    private static string Own(IEnumerable<RoleDto> roles, string directory) =>
+        string.Concat(roles.OrderBy(role => role.Name, StringComparer.Ordinal).Select(role => role.EntryCommand.Count > 0
+            ? $" '{role.Name}' is a role of your own: it runs its own entry command, and no skill Jason ships teaches it."
+            : $" '{role.Name}' is a role of your own, and no skill Jason ships teaches it: it launches untaught unless a skill named after it is in {directory}."));
 
     /// <summary>
     /// The skills the roles are taught from, reported. A runtime that cannot teach its roles is not ready,
@@ -430,18 +499,27 @@ internal static class StatusChecks
                 null);
         }
 
-        var seeded = roster.Select(role => role.Name).ToHashSet(StringComparer.Ordinal);
+        // Only the roles Jason ships are required to have a skill: the repair deploys those and nothing else. A role a
+        // person added is reported, never failed -- failing it left an installation not ready for good, with a repair
+        // that changed nothing for it.
+        var seeded = roster.Where(role => role.Builtin).Select(role => role.Name).ToHashSet(StringComparer.Ordinal);
+        var rostered = roster.Select(role => role.Name).ToHashSet(StringComparer.Ordinal);
         var deployed = skills.Roles.Select(role => role.Role).ToHashSet(StringComparer.Ordinal);
 
+        // A refused skill still fails the check whoever's role it is: every launch of that role is refused. Its repair
+        // writes the shipped roles alone, so it is named only where a shipped role's skill is refused; a skill of any
+        // other name is the person's to correct, and the fact says where.
         var refused = skills.Roles.Where(role => role.Problem is not null).ToList();
         if (refused.Count > 0)
         {
-            return new StatusCheck(
-                "role_skills",
-                true,
-                CheckState.Failed,
-                string.Join(" ", refused.Select(role => Coded(role.Problem!, role.ProblemCode))),
-                Repair.Reinstall);
+            var fact = string.Join(" ", refused.Select(role => Coded(role.Problem!, role.ProblemCode))) + string.Concat(refused
+                .Where(role => !seeded.Contains(role.Role))
+                .Select(role => role.Role)
+                .Order(StringComparer.Ordinal)
+                .Select(name => " " + OwnRoleRefused(name, skills.RoleSkillsDirectory)));
+            return refused.Any(role => seeded.Contains(role.Role))
+                ? new StatusCheck("role_skills", true, CheckState.Failed, fact, Repair.Reinstall)
+                : new StatusCheck("role_skills", true, CheckState.Failed, fact, null);
         }
 
         var untaught = seeded.Except(deployed).Order(StringComparer.Ordinal).ToList();
@@ -457,10 +535,11 @@ internal static class StatusChecks
                 Repair.InstallRoles);
         }
 
-        var stranger = deployed.Except(seeded).Order(StringComparer.Ordinal).ToList();
+        var stranger = deployed.Except(rostered).Order(StringComparer.Ordinal).ToList();
         var note = stranger.Count == 0
             ? string.Empty
-            : $" {string.Join(", ", stranger.Select(name => $"'{name}'"))} is deployed and is not a role this runtime seeds, so nothing reads it.";
+            : $" {string.Join(", ", stranger.Select(name => $"'{name}'"))} is deployed and is no role on this runtime's roster, so nothing reads it.";
+        note += Own(roster.Where(role => !role.Builtin && !deployed.Contains(role.Name)), skills.RoleSkillsDirectory);
         var taught = string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}");
 
         // Present and launchable is not current. After `jason update apply` the roles went on being taught from the
@@ -1113,6 +1192,7 @@ internal static class StatusChecks
         var own = SkillsSource.IsRelease(build) ? SkillsSource.DefaultRef(build) : null;
 
         var deployed = new List<string>();
+        var gone = new List<string>();
         var behind = new List<string>();
         var pinned = new List<string>();
         foreach (var root in roots.Select(root => root.Directory).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -1122,6 +1202,17 @@ internal static class StatusChecks
                 var record = SkillsRecord.Read(root);
                 if (record is not null)
                 {
+                    // The files, not the record alone. An uninstall keeps the record beside a file the person edited, so a
+                    // record can name two packs over a root holding one file of them: read alone, it answered `ok` there.
+                    foreach (var pack in record.Packs)
+                    {
+                        var missing = pack.Files.Count(file => !File.Exists(System.IO.Path.Combine(root, file.Path)));
+                        if (missing > 0)
+                        {
+                            gone.Add(string.Create(CultureInfo.InvariantCulture, $"{pack.Pack} in {root}: {missing} of the {pack.Files.Count} file(s) its record names are not there."));
+                        }
+                    }
+
                     deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}"));
                     var away = record.Packs
                         .Where(pack => own is not null && pack.Commit is not null && !string.Equals(pack.Ref, own, StringComparison.Ordinal))
@@ -1146,8 +1237,11 @@ internal static class StatusChecks
             return new StatusCheck("harness_skills", false, CheckState.Absent, $"Nothing is deployed into {string.Join(", ", roots.Select(root => root.Directory))}.", Repair.Install);
         }
 
-        return behind.Count > 0
-            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", behind.Concat(pinned)), Repair.UpdateSkills)
+        // A pack with files gone is written again by an update, which writes what is missing and keeps an edited file, from
+        // the source and at the ref its record names and into the roots it names; and it moves a pack that is behind. An
+        // install would move a pack from another source, or pinned, to this build's default, and deploy into every harness.
+        return gone.Count > 0 || behind.Count > 0
+            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned)), Repair.UpdateSkills)
             : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Select(note => " " + note)), null);
     }
 

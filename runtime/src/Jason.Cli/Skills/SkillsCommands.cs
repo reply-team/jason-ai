@@ -55,7 +55,7 @@ public static class SkillsCommands
         var host = new Option<string?>("--host") { Description = "Update only this detected harness." };
         var pack = new Option<string?>("--pack") { Description = "Update only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
-        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
+        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
 
         foreach (var option in new Option[] { root, host, pack, dryRun, force })
         {
@@ -222,7 +222,7 @@ public static class SkillsCommands
         var host = new Option<string?>("--host") { Description = "Deploy only into this detected harness." };
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
-        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
+        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
         var rolesOnly = new Option<bool>("--roles-only") { Description = "Deploy only the role skills, into this runtime's own directory, and nothing into any agent harness. The role half is the one a runtime cannot work without; the harness half is yours to choose." };
 
         foreach (var option in new Option[] { source, reference, root, host, pack, dryRun, force, rolesOnly })
@@ -386,9 +386,14 @@ public static class SkillsCommands
                 + $"Run '{repair}' to complete it and record it; 'jason skills update' will not, since it moves recorded packs only.");
         }
 
-        var said = report.Written == 0 && report.Problems.Count == 0
+        // And what it kept, in the same line: the files the person edited are theirs, the rest was written around them, and
+        // the run succeeded. The line is also what `jason update apply` says for the pack group.
+        var keptSaid = !options.Force && report.Edited.Count > 0
+            ? string.Create(CultureInfo.InvariantCulture, $" Kept {report.Edited.Count} file(s) you have edited: {string.Join(", ", report.Edited)}. --force overwrites them.")
+            : string.Empty;
+        var said = (report.Written == 0 && report.Problems.Count == 0 && keptSaid.Length == 0
             ? string.Create(CultureInfo.InvariantCulture, $"Already current: nothing to write ({report.Unchanged} files already in place).")
-            : string.Create(CultureInfo.InvariantCulture, $"Written: {report.Written} files, {report.Unchanged} already in place.");
+            : string.Create(CultureInfo.InvariantCulture, $"Written: {report.Written} files, {report.Unchanged} already in place.")) + keptSaid;
         env.Out.WriteLine(said);
 
         return (report.Succeeded ? ExitCodes.Success : ExitCodes.ApiError, said, Refusal());

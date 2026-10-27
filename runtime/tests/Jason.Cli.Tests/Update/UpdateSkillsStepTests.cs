@@ -323,19 +323,19 @@ public class UpdateSkillsStepTests
     }
 
     /// <summary>
-    /// One pack group refused leaves the others' work said. A file the person edited in the harness's business pack keeps
-    /// that pack where it was, and the runtime's pack — the role half the runtime needs — still moves; the document said
-    /// "not updated" for all of it, and the lines of what did move went to stderr, where an agent reading the answer
-    /// could not tell the required half had landed.
+    /// A file the person edited in the harness's business pack is kept, and the pack still moves: its line says what was
+    /// written and names the file kept, beside the runtime pack's line. An edit used to refuse its whole group, so the
+    /// business pack stayed at the tag before for as long as the person kept their edit.
     /// </summary>
     [Fact]
-    public async Task A_pack_group_that_fails_does_not_hide_the_ones_that_were_redeployed()
+    public async Task A_file_the_person_edited_is_kept_and_its_pack_group_still_moves()
     {
         using var installation = new FakeInstallation();
         using var dir = new TempPaths();
         var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", Tag(installation));
         await InstallAsync(installation, ["skills", "install", "--source", origin]);
-        await File.WriteAllTextAsync(Path.Combine(Harness(installation), "campaign-planning", "SKILL.md"), "---\nname: campaign-planning\ndescription: mine\n---\n\nmy own words\n", Ct);
+        var edited = Path.Combine(Harness(installation), "campaign-planning", "SKILL.md");
+        await File.WriteAllTextAsync(edited, "---\nname: campaign-planning\ndescription: mine\n---\n\nmy own words\n", Ct);
 
         var exit = await UpdateCommands.ApplyAsync(Env(installation), installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
 
@@ -345,13 +345,13 @@ public class UpdateSkillsStepTests
         Assert.True(skills.Count == 2, $"The skills step said: {string.Join(" | ", skills)}");
         var carried = Assert.Single(skills, line => line.StartsWith("skills: jason-runtime-skills in ", StringComparison.Ordinal));
         Assert.Contains("Written:", carried, StringComparison.Ordinal);
-        var refused = Assert.Single(skills, line => line.StartsWith("skills: jason-business-skills in ", StringComparison.Ordinal));
-        Assert.Contains(" not updated — ", refused, StringComparison.Ordinal);
-        Assert.Contains("you have edited", refused, StringComparison.Ordinal);
-        Assert.EndsWith("; run: jason skills update", refused, StringComparison.Ordinal);
+        var business = Assert.Single(skills, line => line.StartsWith("skills: jason-business-skills in ", StringComparison.Ordinal));
+        Assert.DoesNotContain(" not updated — ", business, StringComparison.Ordinal);
+        Assert.Contains($"Kept 1 file(s) you have edited: {edited}.", business, StringComparison.Ordinal);
+        Assert.Contains("my own words", await File.ReadAllTextAsync(edited, Ct), StringComparison.Ordinal);
         Assert.Contains(TaggedSource.Body(Tag(installation)), await File.ReadAllTextAsync(Path.Combine(installation.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
-        var business = Assert.Single(SkillsRecord.Read(Harness(installation))!.Packs, pack => pack.Pack == SkillPacks.Business);
-        Assert.True(business.Ref == $"v{Before}", $"The business pack moved to {business.Ref} with the person's edit refused.");
+        var recorded = Assert.Single(SkillsRecord.Read(Harness(installation))!.Packs, pack => pack.Pack == SkillPacks.Business);
+        Assert.Equal(Tag(installation), recorded.Ref);
     }
 
     /// <summary>

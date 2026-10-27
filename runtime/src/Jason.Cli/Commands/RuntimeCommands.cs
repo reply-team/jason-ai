@@ -26,13 +26,13 @@ public static class RuntimeCommands
 
         runtime.Subcommands.Add(Verb(
             "start",
-            "Make sure a runtime is running, launching it in the background if none answers.",
+            "Make sure a runtime is running, launching it in the background if none answers. Beside an update stopped part-way from its swap on, or an update ledger it cannot read, it starts nothing and says why; 'jason update apply' finishes the update.",
             actor,
             (human, cancellationToken) => RuntimeStartCommand.RunAsync(env, human, cancellationToken)));
 
         runtime.Subcommands.Add(Verb(
             "restart",
-            "Stop the running runtime, if any, and start a fresh one in the background.",
+            "Stop the running runtime, if any, and start a fresh one in the background. Beside an update stopped part-way from its swap on, or an update ledger it cannot read, it stops and starts nothing and says why.",
             actor,
             (human, cancellationToken) => RuntimeRestartCommand.RunAsync(env, human, cancellationToken)));
 

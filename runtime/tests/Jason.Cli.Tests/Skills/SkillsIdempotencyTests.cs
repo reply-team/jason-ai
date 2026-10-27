@@ -55,13 +55,14 @@ public class SkillsIdempotencyTests
     }
 
     /// <summary>
-    /// A file the operator edited is reported and kept, and <b>nothing at all is written</b>. An installer that
-    /// quietly reverts somebody's edit is a data-loss bug wearing a convenience label, and one that reverts
-    /// half of them is worse: the operator would have to work out which half.
+    /// A file the operator edited is reported and kept, and everything else is written, as the help says. An installer
+    /// that quietly reverts somebody's edit is a data-loss bug wearing a convenience label; one that refuses every other
+    /// file over it left the person a choice between their edit and their skills, which an uninstall that keeps an edited
+    /// file on purpose put to them on the next install. The run succeeds and names each file it kept.
     /// </summary>
     [Fact]
     [Critical(Family.I3, "an operator's edit is never overwritten")]
-    public async Task A_file_the_operator_edited_is_reported_and_kept_and_nothing_else_is_written()
+    public async Task A_file_the_operator_edited_is_reported_and_kept_and_everything_else_is_written()
     {
         using var dir = new TempPaths();
         var source = Source(dir);
@@ -71,16 +72,178 @@ public class SkillsIdempotencyTests
         await File.AppendAllTextAsync(edited, "\nmy own note\n", Ct);
         var mine = await File.ReadAllTextAsync(edited, Ct);
         Change(source, "campaign-planning", "a newer body");
-        var untouched = Path.Combine(Harness(dir), "campaign-planning", "SKILL.md");
-        var before = await File.ReadAllTextAsync(untouched, Ct);
+        Change(source, "operating", "a newer body");
 
         var again = await InstallAsync(dir, source);
 
-        Assert.Equal(ExitCodes.ApiError, again.Exit);
+        Assert.Equal(ExitCodes.Success, again.Exit);
         Assert.Equal(mine, await File.ReadAllTextAsync(edited, Ct));
-        Assert.Equal(before, await File.ReadAllTextAsync(untouched, Ct));
-        Assert.Contains("you have edited", again.Error, StringComparison.Ordinal);
-        Assert.Contains("--force", again.Error, StringComparison.Ordinal);
+        Assert.Contains("a newer body", await File.ReadAllTextAsync(Path.Combine(Harness(dir), "campaign-planning", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.Contains($"Kept 1 file(s) you have edited: {edited}.", again.Output, StringComparison.Ordinal);
+        Assert.Contains("--force", again.Output, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, again.Error);
+
+        // And the next run knows it for an edit still: kept again, never taken for a file that is merely out of date.
+        var third = await InstallAsync(dir, source);
+
+        Assert.Equal(ExitCodes.Success, third.Exit);
+        Assert.Equal(mine, await File.ReadAllTextAsync(edited, Ct));
+        Assert.Contains("Kept 1 file(s) you have edited", third.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The reinstall after an uninstall that kept an edited file and its record: every other skill is written back beside
+    /// it, the edit stays, and the run succeeds. It used to write nothing and exit 1.
+    /// </summary>
+    [Fact]
+    public async Task A_reinstall_beside_an_edited_file_an_uninstall_kept_writes_every_other_skill()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        await InstallAsync(dir, source);
+        var edited = Path.Combine(Harness(dir), "operating", "SKILL.md");
+        await File.AppendAllTextAsync(edited, "\nmy own note\n", Ct);
+        var mine = await File.ReadAllTextAsync(edited, Ct);
+        File.Delete(Path.Combine(Harness(dir), "operating", "reference.md"));
+        Directory.Delete(Path.Combine(Harness(dir), "campaign-planning"), recursive: true);
+
+        var again = await InstallAsync(dir, source);
+
+        Assert.Equal(ExitCodes.Success, again.Exit);
+        Assert.Equal(mine, await File.ReadAllTextAsync(edited, Ct));
+        Assert.True(File.Exists(Path.Combine(Harness(dir), "operating", "reference.md")), "The other file of the edited skill was not written back.");
+        Assert.True(File.Exists(Path.Combine(Harness(dir), "campaign-planning", "SKILL.md")), "A skill of the other pack was not written back.");
+        Assert.Contains($"Kept 1 file(s) you have edited: {edited}.", again.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A skill holding the person's edit is written file by file, and a write that fails part-way recorded the old digests
+    /// for every file of it: the ones already moved into place read as the person's edits from then on, and a file new in
+    /// this release was in no record and removed by no uninstall. The record states what is on disk: each file written at
+    /// its new digest, each never reached at its old one, the edit at what Jason wrote there.
+    /// </summary>
+    [Fact]
+    public async Task A_write_beside_an_edit_that_fails_part_way_records_what_is_on_disk()
+    {
+        // A file another program holds without sharing its deletion refuses a move onto it on Windows only.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses a move onto a file another program holds.");
+
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        var operating = Path.Combine(source, "skills", "runtime", "operating");
+        Directory.CreateDirectory(Path.Combine(operating, "more"));
+        File.WriteAllText(Path.Combine(operating, "more", "notes.md"), "first notes");
+        await InstallAsync(dir, source);
+
+        var edited = Path.Combine(Harness(dir), "operating", "SKILL.md");
+        await File.AppendAllTextAsync(edited, "\nmy own note\n", Ct);
+        File.WriteAllText(Path.Combine(operating, "a-guide.md"), "new in this release");
+        File.WriteAllText(Path.Combine(operating, "reference.md"), "where to look now");
+        File.WriteAllText(Path.Combine(operating, "more", "notes.md"), "second notes");
+
+        // A subdirectory's files come after the skill's own, so the held one is reached last.
+        var held = Path.Combine(Harness(dir), "operating", "more", "notes.md");
+        (int Exit, string Output, string Error) again;
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            again = await InstallAsync(dir, source);
+        }
+
+        Assert.Equal(ExitCodes.ApiError, again.Exit);
+        var guide = Path.Combine(Harness(dir), "operating", "a-guide.md");
+        Assert.True(File.Exists(guide), "The files before the held one were not written.");
+
+        var record = SkillsRecord.Read(Harness(dir));
+        Assert.NotNull(record);
+        var files = record.Packs.SelectMany(pack => pack.Files)
+            .Where(file => file.Path.StartsWith("operating/", StringComparison.Ordinal))
+            .ToDictionary(file => file.Path, file => file.Sha256, StringComparer.Ordinal);
+        Assert.Contains("operating/a-guide.md", files.Keys);
+        foreach (var (path, digest) in files.Where(entry => entry.Key != "operating/SKILL.md"))
+        {
+            Assert.Equal(SkillsRecord.Digest(Path.Combine(Harness(dir), path.Replace('/', Path.DirectorySeparatorChar))), digest);
+        }
+
+        Assert.NotEqual(SkillsRecord.Digest(edited), files["operating/SKILL.md"]);
+
+        // And an uninstall removes the file this release wrote, and keeps the edit.
+        var output = new StringWriter();
+        await CliApp.RunAsync(
+            ["uninstall", "--dry-run"],
+            new CliEnvironment(
+                output,
+                new StringWriter(),
+                dir.Paths,
+                Harnesses: HarnessLocators.At(Harness(dir)),
+                Removes: new Uninstall.RecordingRemover(),
+                InstallPath: Path.Combine(dir.Paths.Root, "bin", "jason"),
+                SearchPath: Path.Combine(dir.Paths.Root, "bin")),
+            Ct);
+        var plan = System.Text.Json.JsonSerializer.Deserialize<Jason.Cli.Uninstall.UninstallReport>(output.ToString(), Jason.Contracts.Json.JasonJson.Options)!.Plan;
+        var removals = plan.Roots.SelectMany(root => root.Files).ToDictionary(file => Path.GetFullPath(file.Path), StringComparer.OrdinalIgnoreCase);
+        Assert.False(removals[Path.GetFullPath(guide)].Edited, "The file this release wrote is kept by an uninstall as the person's.");
+        Assert.True(removals[Path.GetFullPath(edited)].Edited);
+    }
+
+    /// <summary>
+    /// A file a later release drops from a skill is Jason's own, and the record says so: on disk at the digest the record
+    /// names. It was taken for the person's file, kept for good and named "you have edited" on every run, and left the
+    /// record, so no uninstall removed it. It goes with the skill now, swapped whole or, beside an edit, deleted.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_file_a_later_release_drops_goes_with_the_skill(bool besideAnEdit)
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        var operating = Path.Combine(source, "skills", "runtime", "operating");
+        File.WriteAllText(Path.Combine(operating, "old.md"), "dropped later");
+        await InstallAsync(dir, source);
+        var edited = Path.Combine(Harness(dir), "operating", "SKILL.md");
+        if (besideAnEdit)
+        {
+            await File.AppendAllTextAsync(edited, "\nmy own note\n", Ct);
+        }
+
+        File.Delete(Path.Combine(operating, "old.md"));
+        File.WriteAllText(Path.Combine(operating, "reference.md"), "where to look now");
+
+        var again = await InstallAsync(dir, source);
+
+        Assert.Equal(ExitCodes.Success, again.Exit);
+        Assert.False(File.Exists(Path.Combine(Harness(dir), "operating", "old.md")), "A file the release dropped was kept.");
+        Assert.DoesNotContain("old.md", again.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            SkillsRecord.Read(Harness(dir))!.Packs.SelectMany(pack => pack.Files),
+            file => file.Path == "operating/old.md");
+        Assert.Equal("where to look now", await File.ReadAllTextAsync(Path.Combine(Harness(dir), "operating", "reference.md"), Ct));
+        if (besideAnEdit)
+        {
+            Assert.Contains($"Kept 1 file(s) you have edited: {edited}.", again.Output, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A file is written beside an edit by landing it in the root's staging directory and moving it into place. A kill
+    /// between the two leaves the landing there, never inside the skill where the next run took it for the person's file,
+    /// and the next run collects it.
+    /// </summary>
+    [Fact]
+    public async Task A_landing_file_a_kill_left_in_the_staging_directory_is_collected()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        await InstallAsync(dir, source);
+        var staging = Path.Combine(Harness(dir), ".jason-staging");
+        Directory.CreateDirectory(staging);
+        File.WriteAllText(Path.Combine(staging, "SKILL.md.landing-0123456789abcdef"), "half a run");
+        Change(source, "operating", "a newer body");
+
+        var again = await InstallAsync(dir, source);
+
+        Assert.Equal(ExitCodes.Success, again.Exit);
+        Assert.False(Directory.Exists(staging), "A landing file a kill left was not collected.");
     }
 
     /// <summary>
@@ -102,13 +265,15 @@ public class SkillsIdempotencyTests
 
         var mine = Path.Combine(Harness(dir), "operating", "my-notes.md");
         await File.WriteAllTextAsync(mine, "what I worked out", Ct);
+        Change(source, "operating", "a newer body");
 
         var again = await InstallAsync(dir, source);
 
-        Assert.Equal(ExitCodes.ApiError, again.Exit);
-        Assert.True(File.Exists(mine), "A file the operator put inside a deployed skill was deleted by a re-run.");
-        Assert.Contains("my-notes.md", again.Error, StringComparison.Ordinal);
-        Assert.Contains("--force", again.Error, StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Success, again.Exit);
+        Assert.Equal("what I worked out", await File.ReadAllTextAsync(mine, Ct));
+        Assert.Contains("a newer body", await File.ReadAllTextAsync(Path.Combine(Harness(dir), "operating", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.Contains("my-notes.md", again.Output, StringComparison.Ordinal);
+        Assert.Contains("--force", again.Output, StringComparison.Ordinal);
     }
 
     /// <summary>And --force is the word that says otherwise.</summary>
