@@ -428,6 +428,22 @@ public class ReplyPackageTests
             Operations.RouteResolve, new { campaign_id = campaign, operation = "list_membership.add" }, Ct);
 
     /// <summary>
+    /// The package reads named arguments only, so the provider's reserved slot is ignored, and the README says so where
+    /// it says what the package does.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_the_provider_slot_is_ignored()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var section = Flat(readme[readme.IndexOf("## What it does", StringComparison.Ordinal)..readme.IndexOf("## What you need", StringComparison.Ordinal)]);
+
+        Assert.Contains(
+            "This package ignores the reserved `provider` object a work item may carry beside an operation's arguments: it reads none of it, passes none of it to the CLI, and an operation runs the same with it or without it.",
+            section,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The rule a person reads before they route a campaign to Reply: how a first name is derived, the switch that
     /// forbids it, and that an opt-out derives whatever the switch says. It lives where the binding is described.
     /// </summary>

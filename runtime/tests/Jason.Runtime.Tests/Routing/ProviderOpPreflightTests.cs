@@ -353,6 +353,40 @@ public class ProviderOpPreflightTests
     }
 
     /// <summary>
+    /// The provider's slot at the claim: the composed input is checked with it set aside, and the plan hands the
+    /// plugin the object exactly as the item holds it. A slot that is not an object is refused there by pointer, as
+    /// the create would have refused it.
+    /// </summary>
+    [Fact]
+    public void The_provider_slot_reaches_the_plan_as_written_and_is_held_to_being_an_object()
+    {
+        var provider = new JsonObject
+        {
+            ["send_window"] = new JsonObject { ["days"] = new JsonArray("mon", "tue"), ["label"] = "café de mañana" },
+            ["notes"] = new JsonArray(1, true, null),
+        };
+        var scenario = new Scenario
+        {
+            Operation = Get,
+            Route = Scenario.ToTheInstalledPackage,
+            Arguments = new JsonObject { ["provider"] = provider.DeepClone() },
+            CampaignPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["campaign"] = "cmp-provider-7" },
+        };
+
+        var plan = scenario.Check().Plan;
+
+        Assert.NotNull(plan);
+        Assert.Equal(provider.ToJsonString(), plan.Input["args"]!["provider"]!.ToJsonString());
+
+        scenario.Arguments = new JsonObject { ["provider"] = "send on Tuesdays" };
+        var verdict = scenario.Check();
+
+        Assert.Equal(AttemptErrors.InputInvalid, verdict.Code);
+        var detail = Assert.Single(verdict.Details!);
+        Assert.Equal(("/args/provider", "type"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
     /// The rule over the whole document is a claim-time check: creation validates the caller's own arguments, and
     /// only the composed document can say whether the campaign is named at all — by the arguments, or by a pin.
     /// </summary>

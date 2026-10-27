@@ -614,6 +614,35 @@ public sealed class PluginHostModeTests : IDisposable
         Assert.NotEqual(string.Empty, stdout);
     }
 
+    /// <summary>
+    /// The provider's slot in the arguments travels through the envelope to the package exactly as written: the real
+    /// runner is handed it on stdin and gives it back, nested members and text that is not ASCII included.
+    /// </summary>
+    [Fact]
+    public async Task The_provider_slot_reaches_the_package_as_written()
+    {
+        InvocationFactory.WritePackage(_root, "export function invoke(operation, input) { return { result: { provider: input.args.provider } }; }");
+        var provider = new JsonObject
+        {
+            ["send_window"] = new JsonObject { ["days"] = new JsonArray("mon", "tue"), ["label"] = "café de mañana" },
+            ["notes"] = new JsonArray(1, true, null),
+        };
+        var input = new JsonObject
+        {
+            ["args"] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "c_7714" }, ["provider"] = provider.DeepClone() },
+        };
+        var invocation = InvocationFactory.Create(_root, "campaign.get", input);
+
+        var (exit, stdout, stderr) = await RunAsync(Argv(operation: "campaign.get"), invocation);
+
+        Assert.True(exit == HostExitCodes.Completed, stderr);
+        var outcome = JsonSerializer.Deserialize<PluginOutcome>(stdout, JasonJson.Options)!;
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.True(
+            JsonNode.DeepEquals(provider, outcome.Result!["provider"]),
+            $"The package was handed {outcome.Result!["provider"]?.ToJsonString() ?? "nothing"}.");
+    }
+
     [Fact]
     public async Task A_missing_package_or_entry_module_is_refused()
     {

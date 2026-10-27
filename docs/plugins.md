@@ -668,7 +668,11 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 ```
 
 - **`args`** is what the caller wrote under the work item's `context.input`, and nothing else from
-  that context. It is always present — `{}` when the operation takes no arguments.
+  that context. It is always present — `{}` when the operation takes no arguments. Its one reserved member,
+  `provider`, is the caller's object for your package ([the rule](contracts/README.md#the-input-a-plugin-receives)):
+  a package that reads it and cannot make sense of what it was given fails the item before any call, under a code the
+  operation declares, with a message that names the shape it expects and never quotes the text, and a package that
+  does not read it ignores it.
 - **`contacts`** appears when the operation's pre-flight says a contact is `required`, or when it says
   `optional` and the work item names one. It carries exactly one person, and is cut to the **declared
   projection**: the fields the document names, and only the one channel the operation consumes, or none.

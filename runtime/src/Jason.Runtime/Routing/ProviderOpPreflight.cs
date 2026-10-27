@@ -202,8 +202,9 @@ public static class ProviderOpPreflight
         }
 
         // The whole document, not only the arguments: a rule over the root — "the campaign is named somehow" —
-        // is one only the composed input can answer, and creation never sees the composed input.
-        var problems = SchemaValidator.Validate(input, contract.InputSchema, timing);
+        // is one only the composed input can answer, and creation never sees the composed input. The provider's slot in
+        // the arguments is set aside as it was at creation, and travels in the plan as written.
+        var problems = contract.CheckInput(input, timing);
         if (SchemaValidator.Verdicts(problems) is { Count: > 0 } refused)
         {
             return Refused(

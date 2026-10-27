@@ -171,7 +171,7 @@ public sealed class ContactThreadService(JasonDbContext db, PluginRegistry plugi
     private async Task<JsonObject> ReadAsync(Target target, JsonObject args, CancellationToken ct)
     {
         var input = CanonicalInput.ComposeRead(target.Contract, target.Contact, target.Pins, args);
-        if (SchemaValidator.Validate(input, target.Contract.InputSchema, PatternTiming.Default) is { Count: > 0 } problems)
+        if (target.Contract.CheckInput(input, PatternTiming.Default) is { Count: > 0 } problems)
         {
             throw new InvalidOperationException($"The input composed for '{target.Contract.Id}' does not satisfy its schema: {problems.Count} problem(s).");
         }

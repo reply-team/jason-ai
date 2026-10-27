@@ -202,7 +202,7 @@ public class FixtureTests
     public void An_input_fixture_says_what_the_validator_will_say(string relative)
     {
         var fixture = Read(relative);
-        var problems = SchemaValidator.Validate(fixture["input"], InputSchema(fixture, relative));
+        var problems = InputProblems(fixture, relative);
 
         if (fixture["expect"] is JsonValue)
         {
@@ -523,9 +523,14 @@ public class FixtureTests
         }
     }
 
-    /// <summary>The schema an input fixture is checked against, in whichever family publishes its contract.</summary>
-    private static JsonObject InputSchema(JsonObject fixture, string relative) =>
-        Delivery(fixture, relative)?.InputSchema ?? Events(fixture, relative)?.InputSchema ?? Operation(fixture, relative).InputSchema;
+    /// <summary>
+    /// What the contract of an input fixture says of its input, in whichever family publishes it: an operation's reading
+    /// is the one the runtime makes at the claim, its arguments' provider slot set aside.
+    /// </summary>
+    private static IReadOnlyList<SchemaProblem> InputProblems(JsonObject fixture, string relative) =>
+        Delivery(fixture, relative)?.CheckInput(fixture["input"], PatternTiming.Default)
+            ?? Events(fixture, relative)?.CheckInput(fixture["input"], PatternTiming.Default)
+            ?? Operation(fixture, relative).CheckInput(fixture["input"], PatternTiming.Default);
 
     /// <summary>The events contract a fixture names, or null where it names another family's.</summary>
     private static EventsContract? Events(JsonObject fixture, string relative)

@@ -155,6 +155,53 @@ public class WorkItemContractTests
     }
 
     /// <summary>
+    /// The provider's slot: an object under <c>provider</c> is admitted beside arguments the document closes, and kept
+    /// exactly as written, nested members and text in any script included.
+    /// </summary>
+    [Fact]
+    public async Task An_object_in_the_provider_slot_is_admitted_beside_arguments_the_document_closes()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var input = Membership();
+        input["provider"] = ProviderObject();
+
+        var item = await service.CreateAsync(
+            ProviderOp(campaign.PublicId, "list_membership.add") with { Context = new JsonObject { ["input"] = input } },
+            Ct);
+
+        Assert.True(
+            JsonNode.DeepEquals(ProviderObject(), item.Context["input"]!["provider"]),
+            $"The slot was kept as {item.Context["input"]!["provider"]?.ToJsonString() ?? "nothing"}.");
+    }
+
+    [Theory]
+    [InlineData("\"send on Tuesdays\"")]
+    [InlineData("[\"mon\", \"tue\"]")]
+    [InlineData("7")]
+    public async Task A_provider_slot_that_is_not_an_object_is_refused_naming_the_key(string written)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var input = Membership();
+        input["provider"] = JsonNode.Parse(written);
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => service.CreateAsync(
+                ProviderOp(campaign.PublicId, "list_membership.add") with { Context = new JsonObject { ["input"] = input } },
+                Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("context.input/provider", "invalid"), (detail.Field, detail.Code));
+        Assert.StartsWith("Expected object here", detail.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tuesdays", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The channel's pattern ends in `$`, and an argument that is a name with a newline after it is not that name:
     /// creation refuses it at the pointer that holds it rather than storing it for a plugin to trip over.
     /// </summary>
@@ -421,10 +468,10 @@ public class WorkItemContractTests
             Assert.All(refused, detail => Assert.True(detail.Code == "invalid", $"{relative}: {name} reports {detail.Field} as `{detail.Code}`."));
         }
 
-        // Both report every problem as `invalid`, with the reason as the message; the reasons come from the schema they
-        // measure the arguments by. Each door must say exactly what that reading says, and where the fixture names the
-        // reason at every entry for a place, the reasons there are compared whole.
-        var problems = SchemaValidator.Validate(arguments, contract.ArgumentSchema);
+        // Both report every problem as `invalid`, with the reason as the message; the reasons come from the contract's
+        // reading of the arguments, its provider slot set aside. Each door must say exactly what that reading says, and
+        // where the fixture names the reason at every entry for a place, the reasons there are compared whole.
+        var problems = contract.CheckArguments(arguments, PatternTiming.Default);
         var verdicts = SchemaValidator.Verdicts(problems);
         var said = verdicts.Select(problem => (Field: InputField + problem.Pointer, problem.Message)).Order().ToList();
         foreach (var (name, validate) in doors)
@@ -642,6 +689,33 @@ public class WorkItemContractTests
         Assert.Equal("invalid", detail.Code);
     }
 
+    /// <summary>A patch that rewrites the arguments reads the provider's slot as the create does: an object is kept, anything else refused.</summary>
+    [Fact]
+    public async Task A_patch_reads_the_provider_slot_as_the_create_does()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var item = SeedProviderOp(db, "list_membership.add", Membership());
+        var service = NewService(db);
+        var refusedInput = Membership();
+        refusedInput["provider"] = new JsonArray("mon");
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateAsync(Patch(item.PublicId) with { Set = new JsonObject { ["input"] = refusedInput } }, Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("context.input/provider", "invalid"), (detail.Field, detail.Code));
+        Assert.StartsWith("Expected object here", detail.Message, StringComparison.Ordinal);
+
+        var admitted = Membership();
+        admitted["provider"] = ProviderObject();
+        var updated = await service.UpdateAsync(Patch(item.PublicId) with { Set = new JsonObject { ["input"] = admitted } }, Ct);
+
+        Assert.True(
+            JsonNode.DeepEquals(ProviderObject(), updated.Context["input"]!["provider"]),
+            $"The slot was kept as {updated.Context["input"]!["provider"]?.ToJsonString() ?? "nothing"}.");
+    }
+
     [Fact]
     public async Task Arguments_the_contract_accepts_replace_the_ones_the_item_held()
     {
@@ -807,6 +881,13 @@ public class WorkItemContractTests
     {
         ["list"] = new JsonObject { ["external_id"] = "lst_7" },
         ["channel"] = "email",
+    };
+
+    /// <summary>What a provider's own skills might put in the slot: nested members, and text that is not ASCII.</summary>
+    private static JsonObject ProviderObject() => new()
+    {
+        ["send_window"] = new JsonObject { ["days"] = new JsonArray("mon", "tue"), ["label"] = "café de mañana" },
+        ["notes"] = new JsonArray(1, true, null),
     };
 
     /// <summary>A complete set of <c>message.send</c> arguments: an email, from an account <c>sender.list</c> listed.</summary>

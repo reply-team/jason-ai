@@ -342,7 +342,8 @@ internal static partial class WorkItemValidation
             return;
         }
 
-        var problems = SchemaValidator.Validate(input, declared, timing);
+        // The contract's reading, not the bare schema's: the provider's slot is set aside and held to being an object.
+        var problems = contract.CheckArguments(input, timing);
         foreach (var problem in SchemaValidator.Verdicts(problems))
         {
             errors.Add(InputField + problem.Pointer, "invalid", problem.Message);

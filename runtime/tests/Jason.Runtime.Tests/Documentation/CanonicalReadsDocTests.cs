@@ -24,6 +24,9 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("a required input field made optional")]
     [InlineData("**Breaking** — a newly required field, a removed field, a changed enum")]
     [InlineData("`find_or_create` takes its channel `from_args`")]
+    [InlineData("are checked against that operation's argument schema, all but the one reserved key that [`args`](#the-input-a-plugin-receives) names")]
+    [InlineData("One key of `args` is reserved for every operation and declared by none: **`provider`**, the provider's and its skills' own object, which a caller may place beside the arguments the document declares.")]
+    [InlineData("The runtime never reads it: it holds the key to being a JSON object whose own member names are distinct, as every object a request carries must be, and to nothing else, refusing any other kind with `type` at the key's own pointer, sets it aside before the operation's argument schema applies, and hands it to the plugin exactly as written.")]
     public void The_contracts_readme_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/contracts/README.md")), StringComparison.Ordinal);
 
@@ -47,6 +50,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("the runtime takes only the route's half of the claim: the plugin is loaded and available, it performs the operation, and the route's binding passes its checks.")]
     [InlineData("It skips the claim's other half, and with it the attempt, provenance, the journal, pins, approval and retry, so nothing is recorded about the read, no identifier you return is pinned, and the invocation's `context` carries no attempt, work item or campaign.")]
     [InlineData("Such a read has no bound of its own: it runs outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.")]
+    [InlineData("Its one reserved member, `provider`, is the caller's object for your package ([the rule](contracts/README.md#the-input-a-plugin-receives)): a package that reads it and cannot make sense of what it was given fails the item before any call, under a code the operation declares, with a message that names the shape it expects and never quotes the text, and a package that does not read it ignores it.")]
     public void The_plugin_authors_page_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/plugins.md")), StringComparison.Ordinal);
 
@@ -98,6 +102,14 @@ public sealed partial class CanonicalReadsDocTests
         Assert.Contains(
             "and, where the operation declares one, a summary rendered from the composed input with the values it highlights",
             Flat(Source("docs/work-execution.md")),
+            StringComparison.Ordinal);
+
+    /// <summary>The refusal of an argument points to the one key every operation reserves, and to the rule that key keeps.</summary>
+    [Fact]
+    public void The_invalid_argument_row_points_to_the_provider_rule() =>
+        Assert.Contains(
+            "all of them reported at once. The one key every operation reserves, `provider`, is held only to [its own rule](contracts/README.md#the-input-a-plugin-receives) |",
+            Source("docs/work-execution.md"),
             StringComparison.Ordinal);
 
     /// <summary>
@@ -161,6 +173,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| An email's text is written as markup |")]
     [InlineData("| `not_connected` and `insufficient_credits` |")]
     [InlineData("| Named schedules |")]
+    [InlineData("| The provider's own object in the arguments |")]
     public void The_divergence_file_has_a_row_for_it(string row) =>
         Assert.Contains(row, Source("docs/contracts/divergence-from-l1.md"), StringComparison.Ordinal);
 

@@ -435,6 +435,38 @@ public class ReplyCampaignGetTests
         Assert.Null(call.Body);
     }
 
+    /// <summary>
+    /// The package does not read the provider's own slot of the arguments: the same campaign read with the slot and
+    /// without it makes the same call to the vendor CLI and answers with the same result.
+    /// </summary>
+    [Fact]
+    public async Task The_provider_slot_changes_nothing_the_package_does()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 outbound", "active");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var without = Input(pinned: "7");
+        var with = Input(pinned: "7");
+        with["args"]!["provider"] = new JsonObject
+        {
+            ["send_window"] = new JsonObject { ["days"] = new JsonArray("mon", "tue"), ["label"] = "café de mañana" },
+        };
+        Assert.Empty(OperationCatalog.Find(Operation)!.CheckInput(with, PatternTiming.Default));
+
+        var plain = Succeeded(await InvokeAsync(api, without, Ct));
+        var mark = account.Mark();
+        var slotted = Succeeded(await PluginInvokerTests.InvokeAsync(api, Request(with), Ct));
+
+        var first = Assert.Single(account.Calls.Take(mark));
+        var second = Assert.Single(account.CallsSince(mark));
+        Assert.Equal((first.Line, first.Body), (second.Line, second.Body));
+        Assert.Equal(first.Args, second.Args);
+        Assert.Equal(first.Environment, second.Environment);
+        Assert.Equal(plain.ToJsonString(), slotted.ToJsonString());
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // Composing the input, and checking both halves against the published document
     // -------------------------------------------------------------------------------------------------------
@@ -485,18 +517,17 @@ public class ReplyCampaignGetTests
         // nothing about whether the operation is implementable.
         Assert.Empty(SchemaValidator.Validate(input, OperationCatalog.Find(Operation)!.InputSchema));
 
-        return await PluginInvokerTests.InvokeAsync(
-            api,
-            new PluginInvocationRequest(
-                ReplyPlugins.PluginId,
-                Operation,
-                input,
-                Binding: null,
-                CorrelationId: "att_01K0REPLYCAMPAIGNGET",
-                AttemptId: "att_01K0REPLYCAMPAIGNGET",
-                AttemptNumber: 1,
-                WorkItemId: WorkItemId,
-                CampaignId: CampaignId),
-            kill);
+        return await PluginInvokerTests.InvokeAsync(api, Request(input), kill);
     }
+
+    private static PluginInvocationRequest Request(JsonObject input) => new(
+        ReplyPlugins.PluginId,
+        Operation,
+        input,
+        Binding: null,
+        CorrelationId: "att_01K0REPLYCAMPAIGNGET",
+        AttemptId: "att_01K0REPLYCAMPAIGNGET",
+        AttemptNumber: 1,
+        WorkItemId: WorkItemId,
+        CampaignId: CampaignId);
 }

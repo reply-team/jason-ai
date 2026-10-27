@@ -52,7 +52,7 @@ attempt that failed on it much later, with a provider already called. `workitem.
 |---|---|---|
 | `operation` | `unknown` | the name is well formed, but this build publishes no contract for it. The message names the operations it does publish |
 | `context.input` | `required` | the operation declares required arguments and the item carries none. An absent key and a JSON `null` read alike — neither is an argument |
-| `context.input<pointer>` | `invalid` | the arguments do not satisfy the `args` sub-schema of the operation's input, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once |
+| `context.input<pointer>` | `invalid` | the arguments do not satisfy the `args` sub-schema of the operation's input, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once. The one key every operation reserves, `provider`, is held only to [its own rule](contracts/README.md#the-input-a-plugin-receives) |
 
 A pattern that did not finish matching the arguments, twice, is none of these: a timeout says nothing about the
 value, so nothing is written and the request is answered `validation_timed_out`, 503, `retryable: true`, with a

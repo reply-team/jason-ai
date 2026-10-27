@@ -18,8 +18,9 @@ governs, and the JSON governs the block.**
 
 **What runs today.** The documents are published and embedded, and the runtime holds a `provider_op`
 work item to the one it names from end to end: an operation no contract is published for is refused at
-`workitem.create`, and the arguments the item carries under `context.input` are measured against that
-operation's argument schema — there, and again whenever a patch rewrites them. At the claim the item is
+`workitem.create`, and the arguments the item carries under `context.input` are checked against that
+operation's argument schema, all but the one reserved key that [`args`](#the-input-a-plugin-receives) names — there,
+and again whenever a patch rewrites them. At the claim the item is
 routed to a plugin, the whole input below is composed and validated, the plugin is given the budget the
 document states, and its answer is measured against the output schema before it becomes the item's
 result; the repeat rule below is what the runtime reads when such an attempt ends ambiguously.
@@ -206,7 +207,12 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
 ```
 
 - `args` is what the caller put under the work item's `context.input`, and nothing else from the context. It is
-  present even when the operation takes no arguments, as `{}`.
+  present even when the operation takes no arguments, as `{}`. One key of `args` is reserved for every operation and
+  declared by none: **`provider`**, the provider's and its skills' own object, which a caller may place beside the
+  arguments the document declares. The runtime never reads it: it holds the key to being a JSON object whose own
+  member names are distinct, as every object a request carries must be, and to nothing else, refusing any other kind
+  with `type` at the key's own pointer, sets it aside before the operation's argument schema applies, and hands it to
+  the plugin exactly as written.
 - `contacts` appears when `preflight.contact` is `required`, or when it is `optional` and the work item names a
   contact. It carries exactly one person — an operation about a person addresses one person in this version, and a
   read about a person reads about one — and is cut to the declared projection: only the channel the operation consumes,

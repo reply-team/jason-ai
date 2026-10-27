@@ -39,6 +39,9 @@ the command's result into the operation's answer, and the CLI's error code into 
 Reply's endpoints to call, in what order, and how to tell its answers apart is the CLI's to know, and the package
 never makes the CLI's raw call, `reply api`: every request it makes has a command made for it.
 
+This package ignores the reserved `provider` object a work item may carry beside an operation's arguments: it reads
+none of it, passes none of it to the CLI, and an operation runs the same with it or without it.
+
 **The CLI owns the credential, and Jason never sees it.** Signing in is something you do in your own
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a

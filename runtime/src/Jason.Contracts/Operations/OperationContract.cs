@@ -89,6 +89,124 @@ public sealed record OperationContract(
     public JsonObject ArgumentSchema { get; private init; } = ArgumentsOf(InputSchema);
 
     /// <summary>
+    /// The one key of a caller's arguments no document declares: the provider's own object, composed for its package by
+    /// the provider's skills. <c>docs/contracts/README.md</c> states the rule; <see cref="CheckArguments"/> and
+    /// <see cref="CheckInput"/> are where it is read, for every operation alike.
+    /// </summary>
+    public const string ProviderSlot = "provider";
+
+    /// <summary>The composed input's key for the caller's arguments.</summary>
+    private const string ArgumentsKey = "args";
+
+    /// <summary>All the runtime asks of the slot: that it is an object, whatever the object holds.</summary>
+    private static readonly JsonObject AnObject = new() { ["type"] = "object" };
+
+    /// <summary>
+    /// A caller's arguments checked against <see cref="ArgumentSchema"/>, with the provider's slot set aside: the slot is
+    /// held to being an object, and every other argument to what the document says. Pointers are into the arguments.
+    /// </summary>
+    /// <remarks>
+    /// What is checked is a copy without the slot, made only when the slot is there, so the arguments themselves are
+    /// never touched and a plugin is handed them as they were written, in the order they were written.
+    /// </remarks>
+    public IReadOnlyList<SchemaProblem> CheckArguments(JsonNode? arguments, PatternTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(timing);
+
+        if (!Slotted(arguments, out var slot))
+        {
+            return SchemaValidator.Validate(arguments, ArgumentSchema, timing);
+        }
+
+        var rest = Without(arguments!.AsObject(), ProviderSlot);
+        return [.. SchemaValidator.Validate(rest, ArgumentSchema, timing), .. Slot(slot, "/" + ProviderSlot, timing)];
+    }
+
+    /// <summary>
+    /// The composed input checked against <see cref="InputSchema"/>, the slot in its arguments set aside as
+    /// <see cref="CheckArguments"/> sets it aside. Pointers are into the composed input.
+    /// </summary>
+    public IReadOnlyList<SchemaProblem> CheckInput(JsonNode? input, PatternTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(timing);
+
+        var arguments = input is JsonObject document && Readable(document) ? document[ArgumentsKey] : null;
+        if (!Slotted(arguments, out var slot))
+        {
+            return SchemaValidator.Validate(input, InputSchema, timing);
+        }
+
+        var rest = Without(arguments!.AsObject(), ProviderSlot);
+        var checkedInput = new JsonObject();
+        foreach (var (name, value) in input!.AsObject())
+        {
+            checkedInput[name] = string.Equals(name, ArgumentsKey, StringComparison.Ordinal) ? rest : value?.DeepClone();
+        }
+
+        return [.. SchemaValidator.Validate(checkedInput, InputSchema, timing), .. Slot(slot, "/" + ArgumentsKey + "/" + ProviderSlot, timing)];
+    }
+
+    /// <summary>
+    /// Whether the arguments are an object that can be read and that names the slot, a null in it included. The name is
+    /// matched as written, by walking the pairs: an object read with names that match in any case would also answer a
+    /// lookup for <c>Provider</c>, which <see cref="Without"/> keeps as an argument.
+    /// </summary>
+    private static bool Slotted(JsonNode? arguments, out JsonNode? slot)
+    {
+        slot = null;
+        if (arguments is not JsonObject map || !Readable(map))
+        {
+            return false;
+        }
+
+        foreach (var (name, value) in map)
+        {
+            if (string.Equals(name, ProviderSlot, StringComparison.Ordinal))
+            {
+                slot = value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// A copy of a readable object without one key. A value is copied unread, so a property written twice deeper down
+    /// travels into the copy as written, and the schema reports it where it stands.
+    /// </summary>
+    private static JsonObject Without(JsonObject map, string key)
+    {
+        var copy = new JsonObject();
+        foreach (var (name, value) in map)
+        {
+            if (!string.Equals(name, key, StringComparison.Ordinal))
+            {
+                copy[name] = value?.DeepClone();
+            }
+        }
+
+        return copy;
+    }
+
+    private static IEnumerable<SchemaProblem> Slot(JsonNode? slot, string pointer, PatternTiming timing) =>
+        SchemaValidator.Validate(slot, AnObject, timing).Select(problem => problem with { Pointer = pointer + problem.Pointer });
+
+    /// <summary>Whether an object can be read at all: a parser may accept a property written twice and throw at the first read.</summary>
+    private static bool Readable(JsonObject map)
+    {
+        try
+        {
+            _ = map.Count;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Reads one published document. Absence is never a default: a field the document does not state is an error
     /// naming the file and the field, because the dangerous reading of a missing property is exactly the reading
     /// nobody intended to write down.
