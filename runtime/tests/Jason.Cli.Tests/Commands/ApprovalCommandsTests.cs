@@ -176,6 +176,170 @@ public class ApprovalCommandsTests
         Assert.DoesNotContain("Summary:", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Where the message is a template, the approval holds one reading of it, and a person approving a template
+    /// reads that reading: the subject, the body with its lines, what the runtime could not fill, and the one line
+    /// that says what is being approved. It sits after what the decision would do and before the identifiers.
+    /// </summary>
+    [Fact]
+    public async Task Get_prints_the_example_of_a_template_after_the_properties_and_before_the_identifiers()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada,\n\n  thanks <3 {{x}}\n[sender.first_name]", "unfilled": ["contact.custom.team", "sender.first_name"]}"""));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var text = cli.Text.ReplaceLineEndings("\n");
+        Assert.Contains(
+            "Example:       one reading of the template, as the runtime renders it\n"
+            + "  Subject:     Autumn outreach, Ada\n"
+            + "  Body:\n"
+            + "    Hi Ada,\n"
+            + "\n"
+            + "      thanks <3 {{x}}\n"
+            + "    [sender.first_name]\n"
+            + "  Unfilled:    contact.custom.team, sender.first_name\n"
+            + "  You approve the template as written; the example is the runtime's rendering, not the provider's, which may differ.\n",
+            text,
+            StringComparison.Ordinal);
+        Assert.True(text.IndexOf("Contact:", StringComparison.Ordinal) < text.IndexOf("Example:", StringComparison.Ordinal));
+        Assert.True(text.IndexOf("Example:", StringComparison.Ordinal) < text.IndexOf("Work item:", StringComparison.Ordinal));
+        Assert.True(text.IndexOf("Example:", StringComparison.Ordinal) < text.IndexOf("Id:", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The block sits between the account and the lifecycle lines: pinned from the account through the status, so
+    /// moving it after the note or before the account turns this red.
+    /// </summary>
+    [Fact]
+    public async Task Get_places_the_example_between_the_account_and_the_status()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada", "unfilled": []}"""));
+
+        await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        var text = cli.Text.ReplaceLineEndings("\n");
+        Assert.Contains(
+            "Account:       sha256:account\n"
+            + "Example:       one reading of the template, as the runtime renders it\n"
+            + "  Subject:     Autumn outreach, Ada\n"
+            + "  Body:\n"
+            + "    Hi Ada\n"
+            + "  You approve the template as written; the example is the runtime's rendering, not the provider's, which may differ.\n"
+            + "Status:        pending\n",
+            text,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The example is a message's text, written by whoever wrote the template and the contact: a character that
+    /// changes how the line around it reads (an escape sequence, backspaces, a right-to-left override, a line
+    /// separator) is shown as U+FFFD and never runs, and the subject, one line by contract, never breaks.
+    /// </summary>
+    [Fact]
+    public async Task Get_shows_a_character_that_changes_the_line_as_a_replacement_mark()
+    {
+        var body = "Hi Ada,\\u001b[2J done\\n\\b\\b\\b\\b\\b\\b\\bStatus:        approved\\n\\u202eevil\\u2028next\\u2029more\\u0085end\\fform\\tTabbed";
+        var subject = "Hello\\u001b[31m Ada\\nsecond\\rthird";
+        using var cli = new CliRun(WithExample($$"""{"subject": "{{subject}}", "body": "{{body}}", "unfilled": []}"""));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var text = cli.Text;
+        foreach (var character in new[] { '\u001b', '\b', '\u202e', '\u2028', '\u2029', '\u0085', '\f' })
+        {
+            Assert.DoesNotContain(character, text);
+        }
+
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Contains("  Subject:     Hello\uFFFD[31m Ada\uFFFDsecond\uFFFDthird", lines);
+        var start = Array.IndexOf(lines, "  Body:") + 1;
+        var end = Array.FindIndex(lines, start, line => line.StartsWith("  You approve", StringComparison.Ordinal));
+        Assert.True(start > 0 && end > start);
+        Assert.All(lines[start..end], line => Assert.True(line.Length == 0 || line.StartsWith("    ", StringComparison.Ordinal), line));
+        Assert.Contains("    Hi Ada,\uFFFD[2J done", lines);
+        Assert.Contains("    \uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFDStatus:        approved", lines);
+        Assert.Contains("    \uFFFDevil\uFFFDnext\uFFFDmore\uFFFDend\uFFFDform\tTabbed", lines);
+    }
+
+    /// <summary>
+    /// A carriage return alone is a line break in a message, and it must not reach the terminal as one: the parts
+    /// after it are lines of their own, indented like the rest, and no CR is printed but as half of a CR LF.
+    /// </summary>
+    [Fact]
+    public async Task Get_breaks_a_lone_carriage_return_in_the_body_into_indented_lines()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada,\rStatus:        approved\r\nBye", "unfilled": []}"""));
+
+        await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        var raw = cli.Text;
+        for (var at = raw.IndexOf('\r', StringComparison.Ordinal); at >= 0; at = raw.IndexOf('\r', at + 1))
+        {
+            Assert.True(at + 1 < raw.Length && raw[at + 1] == '\n', "a CR that is not followed by an LF");
+        }
+
+        var lines = raw.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.IndexOf(lines, "  Body:");
+        Assert.Equal(["    Hi Ada,", "    Status:        approved", "    Bye"], lines[(start + 1)..(start + 4)]);
+    }
+
+    [Fact]
+    public async Task Get_says_so_when_the_rendered_subject_is_empty()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": "", "body": "Hi Ada", "unfilled": []}"""));
+
+        await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Contains("  Subject:     (empty)", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Get_of_an_example_with_nothing_unfilled_prints_no_unfilled_line()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada", "unfilled": []}"""));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Example:", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("    Hi Ada", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("You approve the template as written", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unfilled:", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Get_of_a_preview_without_an_example_prints_no_example()
+    {
+        using var cli = new CliRun(OneApproval);
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain("Example:", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unfilled:", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("You approve the template", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The default output is the response as it came: the example is in it, untouched, and nothing is rendered.</summary>
+    [Fact]
+    public async Task Get_without_human_prints_the_response_as_it_came_example_included()
+    {
+        var body = WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada,\n<b>x</b>", "unfilled": ["sender.first_name"]}""");
+        using var cli = new CliRun(body);
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var printed = System.Text.Json.Nodes.JsonNode.Parse(cli.Text)!;
+        Assert.True(System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(body), printed));
+        Assert.DoesNotContain("Example:", cli.Text, StringComparison.Ordinal);
+    }
+
+    private static string WithExample(string example) =>
+        OneApproval.Replace("\"preview\": {", $"\"preview\": {{\"example\": {example},", StringComparison.Ordinal);
+
     [Fact]
     public async Task List_renders_a_table_of_what_is_waiting()
     {

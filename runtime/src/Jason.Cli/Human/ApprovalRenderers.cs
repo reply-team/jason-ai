@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 
 namespace Jason.Cli.Human;
 
@@ -67,6 +68,7 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Contact:", Person(preview?["contact"])));
         text.AppendLine(Line("Plugin:", approval.PluginId));
         text.AppendLine(Line("Account:", approval.BindingIdentity));
+        AppendExample(text, preview?["example"]);
         text.AppendLine(Line("Status:", RenderText.Snake(approval.Status)));
         text.AppendLine(Line("Parked:", approval.Reason));
         text.AppendLine(Line("Requested:", RenderText.Moment(approval.RequestedAt)));
@@ -77,6 +79,38 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Subject:", approval.SubjectHash));
         text.Append(Line("Id:", approval.Id));
         return text.ToString();
+    }
+
+    /// <summary>
+    /// The one reading of a template that the approval holds, printed as the runtime rendered it. It is somebody's
+    /// message, so a character that changes how the line around it reads (see
+    /// <see cref="PreviewTemplate.ChangesTheLine"/>) is shown as U+FFFD, a mark that can be seen, and never runs; a
+    /// tab stays. The subject is one line and its line breaks are such characters; the body keeps its own, each
+    /// of its lines indented under the label so that none reads as a labelled line of the approval. An empty subject
+    /// says so. A preview without an example adds nothing.
+    /// </summary>
+    private static void AppendExample(StringBuilder text, JsonNode? example)
+    {
+        if (example is not JsonObject)
+        {
+            return;
+        }
+
+        var subject = (string?)example["subject"];
+        text.AppendLine(Line("Example:", "one reading of the template, as the runtime renders it"));
+        text.AppendLine(Indented("Subject:", subject is { Length: 0 } ? "(empty)" : Shown(subject)));
+        text.AppendLine("  Body:");
+        foreach (var line in ((string?)example["body"] ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        {
+            text.AppendLine(line.Length == 0 ? string.Empty : "    " + Shown(line));
+        }
+
+        if (example["unfilled"] is JsonArray { Count: > 0 } unfilled)
+        {
+            text.AppendLine(Indented("Unfilled:", string.Join(", ", unfilled.Select(name => (string?)name))));
+        }
+
+        text.AppendLine("  You approve the template as written; the example is the runtime's rendering, not the provider's, which may differ.");
     }
 
     /// <summary>A published property as a person reads it: the dangerous value, and the condition beside it.</summary>
@@ -106,4 +140,23 @@ public static class ApprovalRenderers
     }
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+
+    private static string? Shown(string? text)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+
+        var shown = new StringBuilder(text.Length);
+        foreach (var character in text.EnumerateRunes())
+        {
+            // A tab is whitespace a person reads as such; the rule of the summary would turn it into a space.
+            shown.Append(character.Value != '\t' && PreviewTemplate.ChangesTheLine(character) ? "\uFFFD" : character.ToString());
+        }
+
+        return shown.ToString();
+    }
+
+    private static string Indented(string label, string? value) => "  " + label.PadRight(Label - 2) + (string.IsNullOrEmpty(value) ? "-" : value);
 }

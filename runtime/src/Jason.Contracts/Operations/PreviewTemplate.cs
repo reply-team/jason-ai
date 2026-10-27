@@ -161,7 +161,7 @@ public sealed class PreviewTemplate
     /// turn the rest of the summary around. The line is read in whole characters rather than UTF-16 units, so a
     /// format character outside the Basic Multilingual Plane is caught too.
     /// </summary>
-    private static bool ChangesTheLine(Rune character) => Rune.GetUnicodeCategory(character) is
+    public static bool ChangesTheLine(Rune character) => Rune.GetUnicodeCategory(character) is
         UnicodeCategory.Control
         or UnicodeCategory.LineSeparator
         or UnicodeCategory.ParagraphSeparator
