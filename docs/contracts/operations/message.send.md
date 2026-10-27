@@ -74,6 +74,18 @@ at the claim is a check for exactly the value reached.
 - `message.body` is plain text, exactly as the person approving it reads it — for `linkedin_voice` the text the provider
   speaks: at most 12000 characters on an email, 8000 in a LinkedIn message, 1900 in an InMail and 1000 in a voice message.
   A plugin whose provider takes an email's body as markup writes the text as markup that shows exactly that text.
+- `message.compose` is `text`, or absent, for a message that is final: it goes out exactly as written. It is `template`
+  for an email the provider fills in for the person: the subject and the text are then written in
+  [the template standard](../README.md#the-template-standard), refused when the work item is written if they are not,
+  and the plugin writes them in its provider's own syntax, construct by construct and name by name. `sender.*` is the
+  sending account's identity at the provider, not the `sender.identity` preference. The provider renders a value it
+  fills in as it renders that value anywhere else, so whatever it makes of markup in a field, it makes of it in the
+  message. The bounds hold a template as written, so a subject that renders empty for a person, as
+  `{{#if contact.company}}{{contact.company}}{{/if}}` for a person with no company, passes them: it is the example's to
+  show and the provider's to refuse or send. A plugin written before `compose` reads a template as a final message: it
+  refuses what its provider would read as a placeholder of its own and sends the rest as written. The Reply package
+  refuses any `{{` in a final message, as it did before 0.10.0; from 0.10.0 it writes a template in Reply's syntax, and
+  refuses before anything is called what it cannot write there.
 
 ## What to return
 
@@ -99,9 +111,13 @@ to be UTC. A refusal is a failed outcome with its class, never an item.
 ## When it fails
 
 Every refusal the document declares says nothing was sent, except `provider_answer_lost`. `message_invalid` is a
-subject or a text the provider would read as markup of its own — a placeholder it fills in for each person — so what
-would go out is not what a person approved. `not_connected` is a LinkedIn message or voice message to a person the
-sender's account is not connected with: invite them with `social_invitation.send` first, or send an InMail.
+final subject or text the provider would read as markup of its own — a placeholder it fills in for each person — so what
+would go out is not what a person approved. `template_unsupported` is a template the plugin cannot write in its
+provider's syntax — a construct its reading of the standard refuses, or a custom field under a key the provider keeps
+for a field of its own — and `template_unrendered` one the provider could not fill in for this person, a name with no
+value and no fallback among the causes, the provider's words in the message. `not_connected` is a LinkedIn message or
+voice message to a person the sender's account is not connected with: invite them with `social_invitation.send` first,
+or send an InMail.
 `insufficient_credits` is an InMail with no credits left. `sender_limit_reached` is the account's daily or weekly
 allowance spent, which one in the details; the message is proposed again once it renews. `limit_reached` is the
 provider's account full: it will hold no further contact, and the person had to be created.
@@ -118,7 +134,11 @@ cannot read as a provider block. Where it can — the provider refused for a blo
 
 The summary names the person by the value the message consumes, the format, and the account by its identifier and
 address, and carries the subject and the whole text; a format without a subject shows a dash there. It is not part of
-what is approved: what is approved is the composed input, not the summary. The fixtures
+what is approved: what is approved is the composed input, not the summary. A template is carried as written, and the
+preview adds one `example` of it ([the preview a person reads](../README.md#the-preview-a-person-reads)): the subject
+and the text rendered for this person from the composed input, with the names the input does not hold — a custom
+field, the sending account's names — left for the provider, shown as their fallback or as `[name]`, and listed under
+`unfilled`. The fixtures
 [`fixtures/message.send/preview-*.json`](../fixtures/message.send) show each case.
 
 ## The properties
@@ -143,7 +163,7 @@ what is approved: what is approved is the composed input, not the summary. The f
 | in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent. |
-| preview a person reads | `Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}), outside any campaign — subject: {/args/message/subject}; text: {/args/message/body}`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/sender`, `/args/message` |
+| preview a person reads | `Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}), outside any campaign — subject: {/args/message/subject}; text: {/args/message/body}`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/sender`, `/args/message`, `/args/message/compose` |
 | pinned identifiers | `contact` names a contact |
 | recovery read | none |
 | after an ambiguous end | `never` — the item ends for a person to look at |

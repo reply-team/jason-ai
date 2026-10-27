@@ -1,0 +1,21 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a template naming a field the person holds no value in, with no fallback: the provider could not fill it, and nothing was sent",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "template_unrendered",
+      "message": "The provider said: one or more values for variables are missing or incorrect. Nothing was sent.",
+      "details": null,
+      "external_ids": { "contact": "p_88421" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 4, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "validation", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

@@ -39,6 +39,9 @@ the command's result into the operation's answer, and the CLI's error code into 
 Reply's endpoints to call, in what order, and how to tell its answers apart is the CLI's to know, and the package
 never makes the CLI's raw call, `reply api`: every request it makes has a command made for it.
 
+This package ignores the reserved `provider` object a work item may carry beside an operation's arguments: it reads
+none of it, passes none of it to the CLI, and an operation runs the same with it or without it.
+
 **The CLI owns the credential, and Jason never sees it.** Signing in is something you do in your own
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a
@@ -66,6 +69,10 @@ of a call is the command line, which carries only Reply's identifiers and flags,
 - **A runtime that can find it.** The name `reply` is resolved on the search path the *runtime* sees, at
   every reload — which is not always the path your shell sees, least of all for a runtime started in the
   background. `executable_missing` in `jason plugin list --human` means that and nothing else.
+  On Linux, a program on the PATH your terminal has is not necessarily on the runtime's: a runtime started at
+  logon is a `systemd --user` unit, whose environment is the user manager's and reads no shell profile — neither
+  `~/.profile` nor `~/.bashrc`, where npm's global directory or a version manager most often adds itself — so that
+  directory reaches it only through `~/.config/environment.d/` or the unit's own `Environment=`.
 - **On Windows, `node.exe` on the same search path.** npm installs the CLI as `reply.cmd`, and the
   runtime starts no program through a shell: `cmd.exe` would parse the arguments, which is the thing the
   argument array exists to prevent. So the runtime reads that shim, cross-checks the entry script it
@@ -80,13 +87,18 @@ In this order, and none of it implied by anything else. Steps 4 and 6 are the tw
 are; one of them is what makes work reach this plugin at all.
 
 **1. Install the package.** Every release of Jason from 0.11.0 on publishes it as `jason-plugin-reply.zip`,
-listed in that release's `checksums.txt`. Download both from the release you run, check the package against
-its line, and unpack it into `~/.jason/plugins/reply` only once it matches — the directory name is the plugin
-id, so it has to be `reply`, and it must not be there yet; the runtime's first start makes `~/.jason/plugins`.
-The lines, for macOS and Linux and for PowerShell, are step 3 of [the wiring check](../../docs/golden-path.md).
-Where the release cannot be reached, or is older than 0.11.0 and does not carry the package, the tree
-`jason skills install` fetched holds the same package, at the tag of the runtime you run, and copying it is the
-same install:
+listed in that release's `checksums.txt`. One command installs the release you run's:
+
+```sh
+jason plugin install reply
+```
+
+It checks the package against its line in `checksums.txt` and, unpacked, against the content digest the release's
+manifest gives, places it as `~/.jason/plugins/reply` only once both hold — the directory name is the plugin id —
+and asks a runtime that answers to reload. A different package already there is kept unless `--replace` says
+otherwise. It is step 3 of [the wiring check](../../docs/golden-path.md). Where the release cannot be reached, the
+tree `jason skills install` fetched holds the same package, at the tag of the runtime you run, and copying it into a
+`~/.jason/plugins/reply` that is not there yet is the same install:
 
 ```sh
 cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply
@@ -141,8 +153,7 @@ jason route resolve --campaign cmp_… --operation list_membership.add --human
 act that freezes the plugins it names, so the only way to write one is to edit `settings.json` and
 reload; the CLI refuses `route set` without `--campaign` and says where a global route lives instead.
 
-**And three things that are not true yet.** There is **no install verb**: installing is copying a
-directory, and nothing reads it until a reload. There is **no signing and no publisher identity**: the
+**And two things that are not true yet.** There is **no signing and no publisher identity**: the
 digest in `plugin list` says what the files are, never who wrote them, so a package is exactly as trusted
 as the machine you copied it onto. There is **no update awareness**: nothing checks whether a newer
 version exists, and because the id is the directory name there is **one version per id** — upgrading is
@@ -308,7 +319,7 @@ route's binding names them.
 | `account list --channel` | read | The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what `sender.list` answers from, and the read a send makes of its sender. |
 | `schedule list` | read | Every sending schedule the team can use, in one answer, each with its Windows time zone and its windows by weekday: what `schedule.list` answers from. |
 | `contact linkedin-connect --contact-id --linkedin-account-id [--message -]` | write | Invites the contact to connect on LinkedIn from the account named, with the note on stdin, or with none when there is no `--message`. A send that Reply keeps no key on, so a lost answer is never repeated. |
-| `contact send-email --contact-id --email-account-id --message -` | write | Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML. A send that Reply keeps no key on, so a lost answer is never repeated. |
+| `contact send-email --contact-id --email-account-id --message -` | write | Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `contact linkedin-message`, `contact linkedin-inmail`, `contact linkedin-voice`, each `--contact-id --linkedin-account-id --message -` | write | Sends the contact one LinkedIn message, InMail or voice message from the account named, outside any sequence, with the text on stdin — `{body}`, `{subject, body}`, or the `{script}` Reply speaks. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `contact delete <contact>` | write | Deletes the contact by its id, with its history at Reply: it leaves every sequence and list. Run again after a lost answer, it answers that Reply holds the contact no longer. |
 
@@ -650,7 +661,7 @@ may end at `24:00`, the end of the day, and never start there. The read pins not
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The note carries `{{`, which Reply reads as the start of a placeholder of its own, closed or not; or Reply could not fill one it found (`linkedin.missing_variables`). Nothing is sent. | `message_invalid` | validation | Write the note without one and propose the invitation again. |
+| The note carries `{{`, which Reply reads as the start of a placeholder of its own, closed or not, or `@prompt[[`, which Reply reads as a prompt to a model; or Reply could not fill a placeholder it found (`linkedin.missing_variables`). Nothing is sent. | `message_invalid` | validation | Write the note without either and propose the invitation again. |
 | Reply found the note too long (`linkedin.message_too_long`, or `reply.invalid_request` naming the `message` field). Nothing is sent. | `message_too_long` | validation | Reply refuses notes over 200 characters; the document holds a note to that, so this comes back only if Reply's own bound moves. Write a shorter note. |
 | The sender's identifier is not a Reply number, Reply's list holds no LinkedIn account under it, or the invitation answered `linkedin.account_not_found`. | `sender_not_found` | permanent | Name an account `sender.list` returns. |
 | Reply holds the sender's account under another address than the arguments state, under one where they state none, or under none where they state one. Nothing is sent. | `sender_mismatch` | validation | Name the account by the identifier and the address `sender.list` returns. |
@@ -686,7 +697,15 @@ the item stops for a person, with the contact pinned.
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The subject or the text carries `{{`, which Reply reads as the start of a placeholder of its own, closed or not; or Reply could not fill one it found in a LinkedIn text (`linkedin.missing_variables`). Nothing is sent. | `message_invalid` | validation | Write it without one and propose the message again. |
+| A final text (`compose` absent or `text`) whose subject or text carries `{{`, which Reply reads as the start of a placeholder of its own, closed or not, or `@prompt[[`, which Reply reads as a prompt to a model; or Reply could not fill a placeholder it found in a LinkedIn text (`linkedin.missing_variables`). Nothing is sent. | `message_invalid` | validation | Write it without either and propose the message again. |
+| An email written as final text whose subject or body holds a `<` Reply reads as markup, one an HTML reader takes as the start of a tag: one followed by an ASCII letter, `/`, `!` or `?`, such as `<name@example.com>` or `</p>`. Reply decodes the body before it reads it, and drops a tag it does not know with everything after it, in the body and in the subject alike; the subject goes as written, and a character reference in it is not read. `a < b`, `<3` and a `<` at the end are not refused. The message names the character's position without quoting the text. Nothing is called. | `message_invalid` | validation | Write it without a `<` right before a letter, `/`, `!` or `?`, an address without its angle brackets, and propose the message again. |
+| A template (`compose: template`) whose subject or body writes a construct the template standard refuses: the package reads it by the standard, behind the document, and the message names the construct and the character it starts on. Nothing is called. | `template_unsupported` | validation | Write the template as the standard does and propose the message again. |
+| A template that names a custom field under a key Reply keeps for a value of its own — a field of the contact's such as `Company`, an engagement count such as `Opens`, a date it computes such as `today`, one of its helpers, or a word its template engine reads; the list is `KEPT` in `modules/template.js`. Reply would write its own value instead of the field. Nothing is called. | `template_unsupported` | validation | Keep the field at Reply under another key, name that key in the template, and propose the message again. |
+| A template whose text and fallbacks, put together along one way through its conditions, spell `@prompt[[` once Reply fills it in, which Reply reads as a prompt to a model. Nothing is called. | `template_unsupported` | validation | Write the template so that its text and its fallbacks spell no prompt, and propose the message again. |
+| A template whose comparison compares a text holding a character Reply's comparison does not read: Reply reads letters, the marks that combine with them, digits, `_` and the other joining punctuation, white space and the punctuation `` $@"`~!#%^&*()+,-./:;<= `` there, and leaves any other tag to its template engine, which reads it otherwise. The message names the character's position without quoting the template. Nothing is called. | `template_unsupported` | validation | Write the text the comparison compares without that character, or send the message as final text, and propose it again. |
+| A template (`compose: template`) whose subject or body holds a `<` Reply reads as markup, one an HTML reader takes as the start of a tag, in its text, a fallback's or a comparison's: one followed by an ASCII letter, `/`, `!` or `?`, or one right before a value Reply fills in, which may start with a letter. Reply drops a tag it does not know with everything after it, as in a final text. A template's text, a fallback's text and the text a comparison compares are held alike, the last because whether Reply sanitizes before or after it fills a template in has not been seen; `a < b`, `<3` and a `<` at the end are not refused. The message names the character's position without quoting the template. Nothing is called. | `template_unsupported` | validation | Write the template without a `<` right before a letter, `/`, `!`, `?` or a value, an address without its angle brackets, and propose the message again. |
+| A template in a LinkedIn format: only an email may be one. The document refuses it first; the package refuses it too. Nothing is called. | `template_unsupported` | validation | Write the LinkedIn message as final text and propose it again. |
+| Reply could not fill in the template for this person, a name with no value and no fallback among the causes: reply-cli's `reply.refused` with Reply's code `contact.unknown` and a sentence that starts `RenderingFail`. The message carries Reply's own sentence. Nothing is sent. | `template_unrendered` | validation | Give the person a value for each name the template uses, or a fallback beside it, and propose the message again. |
 | The message's format belongs to another channel than the one the call named: an email on LinkedIn, or a LinkedIn format on the email channel. The document refuses it first; the package refuses it too. Nothing is called. | `message_invalid` | validation | Name the format of the channel, or the channel of the format, and propose the message again. |
 | Reply found the text too long (`linkedin.message_too_long`), or a voice message too long to speak (`linkedin.voice_too_long`). Nothing is sent. | `message_too_long` | validation | Write a shorter text. A script within the document's 1000 characters can still be too long to speak. |
 | A LinkedIn message or voice message to a person the account is not connected with (`linkedin.not_connected`). Nothing is sent. | `not_connected` | permanent | Invite them with `social_invitation.send` and send once they accept, or send an InMail. |
@@ -718,7 +737,8 @@ linkedin` and held to the address the person approving read; the person is found
 find`; and the contact Reply holds is read with `reply contact get` — opted out is a stop, another address or profile a
 refusal, no LinkedIn profile filled with the work item's. Then the one command made for the format, the text on stdin —
 for a person Reply holds nobody for, given `--contact -`, which imports them, the person and the text one object
-`{"contact": …, "message": …}`: `reply contact send-email` with `{subject, body}`, the body the text written as HTML; `reply contact
+`{"contact": …, "message": …}`: `reply contact send-email` with `{subject, body}`, the body the text written as HTML, or
+the template in Reply's syntax; `reply contact
 linkedin-message` with `{body}`; `reply contact linkedin-inmail` with `{subject, body}`; `reply contact linkedin-voice`
 with the text as `{script}`. Given `--contact -`, the command sends only to a contact it made, and one Reply already
 held it names as `contact.already_held`, sending nothing; the package then reads that contact as above and sends to it
@@ -860,13 +880,55 @@ pinned.
   Reply's spelling is keyed: the work item's profile is the one Jason stored and asked its register about, compared as
   it stands, so a value stored before the key, which Jason left as it stood, matches nothing Reply holds. The invitation
   holds Reply's contact to the profile the same way.
-- **A text carrying `{{` is refused.** Reply writes its placeholders that way, and it does render one in a reply in a
+- **A final text carrying `{{` is refused.** Reply writes its placeholders that way, and it does render one in a reply in a
   thread: a live account refused a reply carrying `{{firstName}}` because it could not fill it in. So the package
   refuses such a text before anything is called rather than let something nobody approved go out, and a refusal of that
   kind from Reply is `message_invalid` too. An invitation's note, and a message's subject and text on every format, are
-  held the same way, `{{ name }}` and a `{{` that never closes alike; other template syntax is not refused. On an email
+  held the same way, `{{ name }}` and a `{{` that never closes alike, and so is `@prompt[[`, which Reply reads as a
+  prompt to a model and replaces with the model's answer; other template syntax is not refused. On an email
   Reply's own refusal of one comes under a code that says nothing of it, so one that got past this check would be
-  reported as `provider_call_failed`, Reply's code in the trace.
+  reported as `provider_call_failed`, Reply's code in the trace. A message composed as a template is Reply's to fill
+  in, and is not held to this.
+- **An email composed as a template goes in Reply's syntax.** Each construct and each name of the [template
+  standard](../../docs/contracts/README.md#the-template-standard) is written as Reply writes it — `contact.first_name`
+  as `FirstName`, a custom field by its key alone, `sender.*` as the sending mailbox's `SendingEmail.*` — and goes by
+  `reply contact send-email`, the command a final email takes. The body is HTML around the tags and inside them: its
+  text, the text of a fallback and the text a comparison compares reach Reply escaped as a final text's are, a `<` as
+  `&lt;`, a `&` as `&amp;` and a `'` as `&#39;`, a line break as `<br>`. Reply decodes the whole message before it reads
+  it, so a comparison compares the value with the text as the template wrote it, which the text sent as written would
+  not be once an entity in it was decoded. The subject goes as written.
+- **A `<` that starts a tag is refused in a direct email, `message.send`.** Reply decodes the body before it reads it,
+  and drops an unknown tag with everything after it, in the body and in the subject alike, in a final text as in a
+  template: a direct email whose body held `<name@example.com>` in the middle of a line arrived cut right before it, its
+  later lines gone, and a subject holding one lost it and the rest of the subject, while `a < b` and `<3` arrived whole.
+  So the package refuses, before anything is called, an email whose subject or body holds a `<` followed by an ASCII
+  letter, `/`, `!` or `?`, as `message_invalid` in a final text and as `template_unsupported` in a template, and names
+  the character without quoting the text. The refusals come in one order: a final text is read for a placeholder or a
+  prompt, then its subject for a tag's start, then its body; a template is read part by part, its subject first, each
+  for a construct the standard refuses, then a key Reply keeps, then a comparison Reply cannot read, then a prompt, then
+  a tag's start. The subject goes as written, and a character reference in it is not read. In a template its text, a
+  fallback and the text a comparison compares are held alike, and so is a `<` right before a value, which the package
+  does not see and which may start with a letter. A comparison's text is held because whether Reply sanitizes a template
+  before or after it fills it in has not been seen. Write an address without its angle brackets. A LinkedIn text is not
+  HTML and goes as written, and an invitation's note too. A reply on a thread, `conversation.reply`, is not held to this
+  yet, and its text goes as written.
+- **What counts as no value, and how two values compare, is Reply's.** As Reply's rendering reads a template, a fallback
+  is written in place of a value that is null, empty, or exactly `false` or `0`; an `#if` takes its other branch on
+  those, and on `false` written in any case; white space is a value; and a comparison compares the value as written, and
+  two numbers as numbers, so a `1` is `'1.0'`. The approval's example reads white space as no value and compares
+  character for character, so it may show another branch than the one Reply takes.
+- **A value Reply fills in is written as the contact's field holds it.** Reply escapes nothing it substitutes, so markup
+  in a contact's field becomes markup in the mail. The package never sees the value, so it cannot escape it: a field is
+  written for the mail it will appear in, at Reply.
+- **A prompt spelled with a value is not seen.** The package refuses a template whose text and fallbacks spell
+  `@prompt[[` once Reply fills it in; a value is not in hand, so a template whose value completes one is not refused,
+  and a value between the parts breaks the spelling the package reads.
+- **A template Reply could not fill in is never ambiguous.** This is the package's own reading of Reply's direct send,
+  which fills a template in before it sends anything: a refusal to fill it in says nothing went, so it is
+  `template_unrendered`, final. Reply answers it under `contact.unknown`, the code it gives a mailbox that failed too,
+  and the package tells the two apart by Reply's sentence, which the message carries. As Reply's rendering answers it,
+  that sentence starts `RenderingFail`; were Reply to word it otherwise, the refusal would be reported as
+  `provider_call_failed`, final, and the send would not be made twice.
 - **Reply does not refuse a send outside a sequence to a person it holds as opted out, nor consult its blacklist on a
   LinkedIn send.** Jason's own register is checked at the claim for the address or the profile the send consumes, and
   the package reads Reply's opt-out mark on the contact before every invitation and every message. Reply consults its

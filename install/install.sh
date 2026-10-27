@@ -8,7 +8,7 @@
 # Harness:Root in the settings names another folder — and makes no folder for it.
 #
 #   curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
-#   curl -fsSL https://jasonharness.ai/releases/download/v0.20.0/install.sh | sh -s -- --version 0.20.0 --no-modify-path
+#   curl -fsSL https://jasonharness.ai/releases/download/v0.21.0/install.sh | sh -s -- --version 0.21.0 --no-modify-path
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, manifest.json and checksums.txt — which is how CI runs it against the archives it has just
@@ -293,29 +293,55 @@ login_profile() {
         *) echo "$HOME/.profile" ;;
     esac
 }
+# A terminal a desktop opens is not a login shell: GNOME's reads ~/.bashrc and never the login profile, which the
+# desktop reads once, at sign-in. So for bash and zsh the line goes into the file every interactive shell of theirs
+# reads as well, ~/.bashrc or ~/.zshrc, and a new terminal finds jason without a sign-out. A shell with no such file
+# of its own is told to sign out and back in, since only that reads the login profile again. `jason status`'s repair
+# and `jason uninstall` hold the same rule, in C#, and this function to it word for word.
+interactive_profile() {
+    case "${SHELL:-}" in
+        zsh|*/zsh) echo "$HOME/.zshrc" ;;
+        bash|*/bash) echo "$HOME/.bashrc" ;;
+        *) ;;
+    esac
+}
 LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
 # What is searched for is the whole line this script wrote, not the marker above it: the marker is an English
 # sentence a person's own profile could carry, and keying the decision on it also meant that a run with a
 # different --install-dir found "the mark", wrote nothing, and left the directory it had just installed into off
 # the PATH. The line names that directory, so the line is the thing to match — whole (-x) and fixed (-F).
+ADDED=""
 add_to_profile() {
     if [ -f "$1" ] && grep -qxF "$LINE" "$1"; then
         return 0
     fi
     printf '\n%s\n%s\n' "$MARKER" "$LINE" >> "$1"
-    echo "Added $INSTALL_DIR to the PATH in $1; open a new terminal, or run: $LINE"
+    ADDED="${ADDED:+$ADDED and }$1"
 }
 
 if [ "$MODIFY_PATH" -eq 1 ]; then
     case ":$PATH:" in
         *":$INSTALL_DIR:"*) ;;
-        *) add_to_profile "$(login_profile)" ;;
+        *)
+            add_to_profile "$(login_profile)"
+            INTERACTIVE="$(interactive_profile)"
+            if [ -n "$INTERACTIVE" ]; then
+                add_to_profile "$INTERACTIVE"
+            fi
+            if [ -n "$ADDED" ] && [ -n "$INTERACTIVE" ]; then
+                echo "Added $INSTALL_DIR to the PATH in $ADDED; open a new terminal, or run: $LINE"
+            elif [ -n "$ADDED" ]; then
+                echo "Added $INSTALL_DIR to the PATH in $ADDED; sign out and back in for a new terminal to find it, or run: $LINE"
+            fi ;;
     esac
 fi
 
-# --- the licence ---------------------------------------------------------------------------------------------
+# --- the licence, and what to run next -----------------------------------------------------------------------
 
-# The last line of a successful run, and never a question: what is installed, and the terms it is installed under.
+# The last two lines of a successful run, and never a question: what is installed and the terms it is installed
+# under, then the one command that says what this installation still needs. Each text is in single quotes where it
+# carries backticks, so they are text and not a command to substitute.
 if licensed "$LATEST"; then
     echo "Jason $LATEST is licensed under the Jason Runtime Licence: $LICENCE_BASE/v$LATEST/LICENSE-RUNTIME.md"
 fi
+echo 'Next, run `jason status`: it says what this installation still needs, and the command for each.'

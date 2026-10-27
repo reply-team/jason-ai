@@ -102,7 +102,8 @@ Jason is built to do as much as it can on its own and nothing that should be you
   relaxes.
 - **A provider's block.** When the provider refuses an account for a cause the work cannot change, such as billing or
   a disconnected channel, Jason keeps that as a block and holds the work it concerns. A person who has removed the
-  cause clears it under their name; an agent cannot.
+  cause clears it under their name. A clear that comes from a role or from a run is refused, and so is one that names
+  no person.
 - **Questions.** A role that reaches a decision it cannot safely make raises a question with its reason, and the work
   waits for your answer in whichever session you give it, not in the one that asked.
 - **Notifications are pointers.** When something waits for you, Jason tells you how many things wait and where to

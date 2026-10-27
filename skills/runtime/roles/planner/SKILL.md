@@ -44,6 +44,9 @@ guess: nothing that would write to anybody is settled while either is unknown. W
 message is a rule for the messages after it, so it is kept at the level it belongs to — all of the person's work, the
 project this campaign belongs to, or this campaign alone — rather than only in the message it corrected.
 
+**A campaign is never split only to give some of its people another tone of voice.** The tone is the person's
+preference; a person or a group that needs other words gets them in the copy, not in a campaign of their own.
+
 **Confirm before you scale.** A direction is checked before anything is gathered or sent at scale. The deep work
 per person and the first outreach go to a pilot, a small part of the people rather than all of them, and the rest
 waits for the pilot's first results. Then the choice is to go on, change course, or take it back to the person, and
@@ -56,7 +59,9 @@ LinkedIn, a message, an InMail or a voice message, and `social_invitation.send` 
 connect. Either send names one person Jason already holds as a contact. Each send is one work item for one person,
 and each waits for a person to approve exactly what it would send: that fits the few people of a pilot or a single
 follow-up, and a population is a campaign's. Which account a send goes from is the person's to say: `sender.list`
-reads the accounts it can go from, and a colleague's account is used only when the person names it. A send that
+reads the accounts it can go from, and a colleague's account is used only when the person names it.
+A `message.send` item for an email that carries a template, as the copywriter's answer gives it, has `compose`
+`template` in its `message`, with the subject and the body both templates. A send that
 ended without knowing whether it went out is not planned again: a new item for the same message is a second
 message, so it goes back to the person.
 
@@ -100,7 +105,9 @@ the items themselves — `--not-before`, `--due-at` and `--priority` — and the
 repeats on its own.
 
 **What the provider holds is a read away.** A `provider_op` item naming `enrollment.list` answers who the provider's
-campaign holds, with its `total`; plan the horizon from that rather than from Jason's list of contacts alone.
+campaign holds, with its `total`; plan the horizon from that rather than from Jason's list of contacts alone. The
+`enrolled` state in `campaign list-contacts` is Jason's own membership, not enrolment at the provider: a campaign with no
+provider sequence has members and no enrolments, and only a succeeded `campaign.enroll` or this read says otherwise.
 
 **Starting a campaign is a person's decision over a population.** Prepare it as a `provider_op` item naming
 `campaign.activate`, with `expected.enrolled` set to the `total` you read: the item waits for a person, who is shown

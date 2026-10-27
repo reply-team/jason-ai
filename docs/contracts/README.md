@@ -18,8 +18,9 @@ governs, and the JSON governs the block.**
 
 **What runs today.** The documents are published and embedded, and the runtime holds a `provider_op`
 work item to the one it names from end to end: an operation no contract is published for is refused at
-`workitem.create`, and the arguments the item carries under `context.input` are measured against that
-operation's argument schema — there, and again whenever a patch rewrites them. At the claim the item is
+`workitem.create`, and the arguments the item carries under `context.input` are checked against that
+operation's argument schema, all but the one reserved key that [`args`](#the-input-a-plugin-receives) names — there,
+and again whenever a patch rewrites them. At the claim the item is
 routed to a plugin, the whole input below is composed and validated, the plugin is given the budget the
 document states, and its answer is measured against the output schema before it becomes the item's
 result; the repeat rule below is what the runtime reads when such an attempt ends ambiguously.
@@ -206,7 +207,12 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
 ```
 
 - `args` is what the caller put under the work item's `context.input`, and nothing else from the context. It is
-  present even when the operation takes no arguments, as `{}`.
+  present even when the operation takes no arguments, as `{}`. One key of `args` is reserved for every operation and
+  declared by none: **`provider`**, the provider's and its skills' own object, which a caller may place beside the
+  arguments the document declares. The runtime never reads it: it holds the key to being a JSON object whose own
+  member names are distinct, as every object a request carries must be, and to nothing else, refusing any other kind
+  with `type` at the key's own pointer, sets it aside before the operation's argument schema applies, and hands it to
+  the plugin exactly as written.
 - `contacts` appears when `preflight.contact` is `required`, or when it is `optional` and the work item names a
   contact. It carries exactly one person — an operation about a person addresses one person in this version, and a
   read about a person reads about one — and is cut to the declared projection: only the channel the operation consumes,
@@ -242,6 +248,15 @@ the input it singles out.
   space, so the summary is always one line, read in the order it is written: a value can neither forge a second line
   nor turn the first one around.
 - `highlights` lists pointers; each carries a copy of its value, or `null` where the input holds nothing there.
+- `example` is added wherever the input's message is a template (`/args/message/compose` is `template`): `{subject,
+  body, unfilled}`, the template rendered by [the template standard](#the-template-standard) over the composed input,
+  each name read where the table of names says the input holds it. A name the input does not hold, and a name it holds
+  with no value, renders its fallback, or else itself in brackets, as `[sender.first_name]`; it is listed under
+  `unfilled` once, in the order it is read — a held name only when it had no fallback, since the provider then sends
+  nothing. A condition on a name the input does not hold takes its other branch in the example, where the provider
+  may take the first, and the name is listed. The example renders text and escapes nothing. It is the runtime's
+  rendering, not the provider's, which may differ — in what it counts as no value, and in what it makes of markup in a
+  field.
 - Every pointer is checked when the document loads. The walk steps through plain `properties` by name and `items`
   by index, and refuses a name a closed object does not allow, an index past `maxItems` and a step into a value
   whose only type is a scalar; a value that may be a scalar or something else is not refused.
@@ -249,10 +264,11 @@ the input it singles out.
   name a value in at least one of them.
 
 The claim renders the preview when it parks the work, from the subject's own input, and stores it beside the subject:
-the approval's `preview` starts with `summary` and `highlights`, and `jason approval get --human` prints the summary
-first, above the operation. **The preview is never part of what is approved:** the subject carries the composed input
-— beside the operation and its version, the plugin, the account and the work item — and not the summary, so its hash
-does not change when a summary is worded differently. An operation nobody is asked to decide on
+the approval's `preview` starts with `summary`, `highlights` and, for a template, `example`, and
+`jason approval get --human` prints the summary first, above the operation. **The preview is never part of what is
+approved:** the subject carries the composed input — beside the operation and its version, the plugin, the account and
+the work item — and not the summary or the example, so its hash does not change when a summary is worded differently or
+a template rendered otherwise. An operation nobody is asked to decide on
 declares `preview: null`, and every `auto` operation does.
 
 ## Pages
@@ -284,15 +300,15 @@ at most a row per channel and is not paged.
 
 Schemas are JSON Schema 2020-12 — every schema carries
 `"$schema": "https://json-schema.org/draft/2020-12/schema"`, so any conforming validator reads them unchanged,
-with the one deviation noted below —
+with the two deviations noted below —
 restricted to a published vocabulary. A keyword outside it is refused rather than ignored, because a keyword the
 runtime would silently skip is a rule that does not run.
 
 **The vocabulary.** `$schema`, `$id`, `$defs`, `$ref` (local `#/$defs/<name>` only), `type`, `properties`,
 `required`, `additionalProperties` (boolean only), `enum`, `const`, `minLength`, `maxLength`, `pattern`, `minimum`,
 `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `items`, `minItems`, `maxItems`, `uniqueItems`,
-`anyOf`, `allOf`, `not`, `format` (for `date-time` and nothing else), `title`, `description`, `examples` (carried,
-never enforced).
+`anyOf`, `allOf`, `not`, `format` (for `date-time` and `jason-template`, and nothing else), `title`, `description`,
+`examples` (carried, never enforced).
 
 **Reason codes.** Every failure carries a JSON pointer — the empty string is the whole document — and one of these
 fixed codes: `type`, `required`, `enum`, `const`, `min_length`, `max_length`, `pattern`, `minimum`, `maximum`,
@@ -306,22 +322,28 @@ the reader who has to fix one is looking at the contract rather than at the argu
 neither: a pattern did not finish matching, twice, so nothing is known about the value — the last detail below says
 what that costs. Everything else is about the value at the pointer.
 
-Six details worth knowing before you write a schema:
+Seven details worth knowing before you write a schema:
 
 - **Combinators report once.** `anyOf`, `allOf` and `not` report a single problem at their own pointer rather than
-  every branch's problems; the message names what the first failing branch objected to. Listing every road not
-  taken buries the one thing a caller has to change. The exception is a branch no pattern could finish measuring:
-  unless a measured branch has already decided the combinator, its `pattern_timed_out` is passed up as it stands, at
-  its own pointer, because a branch nobody measured gives the combinator no verdict to report.
+  every branch's problems; the message names what the first failing branch objected to, and `anyOf` and `allOf` say
+  it in that branch's own words. Listing every road not taken buries the one thing a caller has to change. The
+  exception is a branch no pattern could finish measuring: unless a measured branch has already decided the
+  combinator, its `pattern_timed_out` is passed up as it stands, at its own pointer, because a branch nobody measured
+  gives the combinator no verdict to report.
 - **An explicit `null` satisfies `required`.** Saying null is saying something; only an absent property is missing.
   That is a rule about a property *inside* a document being validated, and it is not the rule about the work item's
   reserved `context.input` key, where an absent key and a JSON null read alike — neither is a set of arguments.
 - **`additionalProperties: false` sees only its own object.** It is evaluated against the properties named in the
   same schema object, and does not see properties contributed by an adjacent `$ref` or by an `allOf` branch. A
   2020-12 validator evaluates it against everything annotated at that location, so a schema that combines
-  `additionalProperties: false` with `$ref` or `allOf` is read differently here and elsewhere — which is the one
-  place the portability above does not hold. Write the properties in the same object as the keyword, and the two
+  `additionalProperties: false` with `$ref` or `allOf` is read differently here and elsewhere — which is one place
+  the portability above does not hold. Write the properties in the same object as the keyword, and the two
   readings agree.
+- **`format` is asserted, and `jason-template` is this dialect's own.** A value a schema gives `"format": "date-time"`
+  is held to ISO-8601 with an offset, and one it gives `"format": "jason-template"` to
+  [the template standard](#the-template-standard) below; either fails as `format`. JSON Schema 2020-12 reads `format`
+  as an annotation unless a validator is told otherwise, and no other validator knows `jason-template`, so another
+  validator accepts a template this one refuses: the second place the portability above does not hold.
 - **Numbers are compared as decimals**, so that a money-like value means what it says. A number no decimal can hold
   exactly — `1e40`, `1e-40` — is refused as `number_not_comparable`, whether it is the bound or the value, because
   the rule could not run at all. That is not the same as `minimum` or `maximum`, which say a rule ran and the value
@@ -407,6 +429,83 @@ the value has to meet. ECMA-262 has been the dialect all along; this table is ho
 | `\` before any other character | refused | refused | the two readings do not agree on what it means, or neither has it |
 | `\` at the end | refused | refused | neither reading has it |
 
+## The template standard
+
+A text the provider fills in for each person — today a `message.send` email whose `compose` is `template` — is written
+in this standard and in nothing else. It is Jason's own, so one template reads the same to every plugin that renders
+it, and a plugin turns it into its provider's own syntax. This section is the standard's only statement: the runtime
+holds a template to it wherever a schema names `"format": "jason-template"`, and a plugin parses the same grammar.
+
+- **The grammar is total.** Every template is accepted, or refused for the first tag that holds a refused construct,
+  reading from the start, or for a refused construct in the text before it — with that construct's reason and the
+  character it starts on: `format`, at the pointer of the string. Inside a combinator, as the `anyOf` that lets only
+  an email's message be a template, the refusal is the combinator's, at the combinator's pointer, and its message
+  names the string's pointer, the construct and the character. A refusal never quotes the template: a template is
+  somebody's message.
+- **A tag is `{{` … `}}`, spelled exactly as the table writes it:** one space between its parts and none inside the
+  braces. Everything outside a tag is text, sent as written.
+- **A name is one of the names below.** What counts as no value, and how two values compare, is the provider's; [the
+  Reply package's README](../../plugins/reply/README.md) says Reply's. A name with no value and no fallback cannot be
+  filled, and the message is not sent. The approval's example counts a value that is null, empty or white space as no
+  value — a fallback is written in its place, an `#if` takes its other branch, and a comparison reads it as empty text —
+  and compares a value with a quoted text exactly, character for character. The message sent may take another branch
+  than the example shows, and the provider may fill a name the example lists as unfilled.
+- **A quoted text** — a fallback, or the right side of a comparison — is written between single quotes, may be empty,
+  and holds neither `'` nor `}}`.
+- **A condition** holds `{{else}}` at most once, and nests inside another at most eight deep.
+- **A template is text.** It escapes nothing and holds no markup of its own: a value is written as the person's field
+  holds it, and what a provider then does with it is the operation's to say.
+
+### What a template may write
+
+| Construct | Treatment | Why |
+|---|---|---|
+| any text no other row names | accepted | sent as written; a single `{` or `}` is text too |
+| `{{name}}` | accepted | the name's value; a name with no value leaves the provider nothing to write, and the message is not sent |
+| `{{name \| 'text'}}` | accepted | the name's value, or the quoted text when it has none |
+| `{{#if name}}` ... `{{/if}}` | accepted | what it holds when the name has a value |
+| `{{#if name == 'text'}}`, `{{#if name != 'text'}}` | accepted | a condition on the value being, or not being, the quoted text |
+| `{{else}}` | accepted | once inside a condition: what is written when it does not hold |
+| `{{{` | refused | a template escapes nothing, so there is no second kind of value |
+| `{{!` | refused | nobody reads it, and the providers do not all drop it |
+| `{{>` | refused | it names text the provider keeps, which nobody approving reads |
+| `{{#each`, `{{#with`, `{{#unless`, any other `{{#` and any other `{{/` | refused | only `#if` is read alike by the providers |
+| `{{else if` | refused | the providers mapped first have none; write an `#if` inside `{{else}}` |
+| a word before a name, as `{{toLower name}}`, and a second `\|`, as `{{Random \| 'a' \| 'b'}}` | refused | it is a provider's own computation, which another provider does not have |
+| `@prompt[[` | refused | the provider would write in a model's answer, which nobody approved |
+| `=`, `<>`, `<`, `>`, `<=`, `>=` inside a tag | refused | the providers mapped first read them differently, or not at all |
+| `&&`, `\|\|` inside a tag | refused | the providers mapped first have none; write one `#if` inside another |
+| a name after `\|`, `==` or `!=` | refused | a fallback and the right side of a comparison are quoted text, so what they say is what was approved |
+| a name the table of names does not list | refused | the provider would fill it with a value of its own, or fail it |
+| a `'` with no `'` after it in its tag, or one followed by anything but white space or `}}` | refused | a quoted text runs to the next `'`, so it holds neither `'` nor `}}` |
+| a tag spaced otherwise, as `{{ name }}` or `{{name\|'text'}}` | refused | each tag has one spelling: one space between its parts and none inside the braces |
+| any other tag, as `{{}}` or `{{#if}}` | refused | the standard has no such tag |
+| an `{{#if` never closed, a `{{/if}}` or `{{else}}` outside a condition, and a second `{{else}}` | refused | a provider would render it its own way, or refuse it |
+| an `{{#if` inside eight others | refused | eight levels hold any message a person reads |
+| `{{` with no `}}` before the end or before the next `{{` | refused | a provider would read the text after it as part of the tag |
+| `}}` outside a tag, or a `}` right after one | refused | a provider would read it as the end of a tag |
+| `\{{` | refused | the providers mapped first have no escape for `{{`, so a template cannot hold the two braces as text |
+
+### The names a template may use
+
+`contact.*` is the person the message goes to; `sender.*` is the account it goes from, as the provider holds that
+account — its identity at the provider, not a preference about how a sender signs. The last column says where the
+approval's example reads each name in the composed input; a name it does not hold is filled by the provider alone
+([the preview a person reads](#the-preview-a-person-reads)).
+
+| Name | What it is | In the approval's example |
+|---|---|---|
+| `contact.first_name` | the person's first name | `/contacts/0/first_name` |
+| `contact.last_name` | the person's last name | `/contacts/0/last_name` |
+| `contact.company` | the person's company | `/contacts/0/company` |
+| `contact.title` | the person's title | `/contacts/0/title` |
+| `contact.email` | the address the message goes to | `/contacts/0/channels/0/value` |
+| `contact.custom.<key>` | the field the provider's account holds for the person under `<key>`: a letter or `_`, then at most 63 letters, digits and `_` | not held |
+| `sender.first_name` | the sending account's first name, as the provider holds the account | not held |
+| `sender.last_name` | the sending account's last name, as the provider holds the account | not held |
+| `sender.name` | the sending account's full name, as the provider holds the account | not held |
+| `sender.address` | the sending account's address | `/args/sender/address` |
+
 ## Versioning
 
 Every operation is at `version: 1`. A plugin's manifest declares the operation-contract **family** version under
@@ -419,7 +518,10 @@ lists.
   take its absence; otherwise it is a breaking change of the operation's version. A new failure class with its
   payload, and the new optional protocol field that carries it, keep the version too: a host that predates them
   refuses them at `host.fail`, and the invocation ends `plugin_exception`, `permanent`, so a newer plugin on an older
-  host fails where it can be seen rather than being read as something else.
+  host fails where it can be seen rather than being read as something else. A new optional input field that changes
+  how other fields are read, as `message.send`'s `compose` changes how the subject and the text are read, is additive
+  only when every plugin published under the family before the field existed refuses the input it would misread — as
+  the Reply package before 0.10.0 refused any `{{`; otherwise it is breaking.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,
@@ -450,8 +552,9 @@ output schema, which pins an identifier of a kind the operation never declared, 
 operation does not declare under that class. `pinned` is what the runtime
 writes into its record of provider identifiers from that answer, as `{kind: value}`. A **preview fixture** is
 `{operation, version, case, input, expect}`, where `input` is a composed input the operation's schema accepts and
-`expect` is `{summary, highlights}`: the line the template renders and the values it highlights, both compared
-whole. An operation has preview fixtures exactly when it declares a preview. A **value fixture** of a named preference
+`expect` is `{summary, highlights, example?}`: the line the template renders, the values it highlights and, where the
+message is a template, its example, each compared whole; a fixture without `example` holds the preview to having none.
+An operation has preview fixtures exactly when it declares a preview. A **value fixture** of a named preference
 is `{key, version, case, value, expect}`, with `expect` written as an input fixture's, and it lives in the directory
 named for its key; every key has at least one value it accepts and one it refuses. A **value fixture** of the provider
 block is `{contract, version, case, value, expect}`, written the same way, under `fixtures/block/`.

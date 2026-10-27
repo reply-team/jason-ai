@@ -13,9 +13,15 @@
 // exactly that text: every character HTML reads as markup is escaped, and every line break is one `<br>`. Spaces and tabs
 // stay as written, and a mail program shows a run of them as one, as HTML does. The subject is a header, and goes as
 // written. A message that may have gone is never sent again: the document says `never`.
+//
+// An email composed as a template goes by the same command in Reply's own syntax (template.js), which Reply fills in for
+// the person before it sends: its text and its fallbacks written as a final text's are, its tags as Reply reads them.
+// Reply writes a value as the person's field holds it, escaping nothing, so markup in a field is markup in the mail; this
+// package never sees the value. A template Reply could not fill in is refused before anything is sent.
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { contactNumber, refuseUnprojected, withOrigin } from "./contacts.js";
 import { refusePlaceholders, senderFor, sendTo } from "./send.js";
+import { inReplySyntax, refuseTagStart } from "./template.js";
 import { lookup, text } from "./reading.js";
 
 const OPERATION = "message.send";
@@ -23,7 +29,7 @@ const OPERATION = "message.send";
 // Each format: the command made for it, the option that names the account it goes from, and its text on stdin under the
 // CLI's own names.
 const FORMATS = {
-  "email": { command: "contact send-email", account: "--email-account-id", text: message => ({ subject: message.subject, body: html(message.body) }) },
+  "email": { command: "contact send-email", account: "--email-account-id", text: message => message.compose === "template" ? template(message) : { subject: message.subject, body: html(message.body) } },
   "linkedin_message": { command: "contact linkedin-message", account: "--linkedin-account-id", text: message => ({ body: message.body }) },
   "linkedin_inmail": { command: "contact linkedin-inmail", account: "--linkedin-account-id", text: message => ({ subject: message.subject, body: message.body }) },
   "linkedin_voice": { command: "contact linkedin-voice", account: "--linkedin-account-id", text: message => ({ script: message.body }) },
@@ -46,9 +52,27 @@ export function messageSend(input, context) {
     fail(OPERATION, { call: null, row: "format_of_another_channel" }, undefined);
   }
 
-  refusePlaceholders(OPERATION, [message.subject, message.body]);
+  // The document holds a template to an email; this holds it here too, before anything is called.
+  const composed = message.compose === "template" ? "template" : undefined;
+  if (composed !== undefined && message.format !== "email") {
+    fail(OPERATION, { call: null, row: "template_off_email" }, undefined);
+  }
+
+  if (composed === undefined) {
+    refusePlaceholders(OPERATION, [message.subject, message.body]);
+  }
+
+  // Reply decodes an email's body before it reads it, and drops a tag it does not know with everything after it, in the
+  // body and in the subject alike, so a `<` that starts one is refused before anything is called, in a final text as in a
+  // template. The subject goes as written, and a character reference in it is not read.
+  if (composed === undefined && message.format === "email") {
+    refuseTagStart(OPERATION, "subject", message.subject);
+    refuseTagStart(OPERATION, "body", message.body);
+  }
+
+  const written = format.text(message);
   const sender = senderFor(OPERATION, context, args.channel, args.sender);
-  const done = sendTo(OPERATION, context, input, format.command, sender, [format.account, sender, "--message", "-"], format.text(message));
+  const done = sendTo(OPERATION, context, input, format.command, sender, [format.account, sender, "--message", "-"], written, composed);
   const sent = done.sent;
   const learned = done.learned;
 
@@ -84,6 +108,15 @@ export function messageSend(input, context) {
 // return and a line feed together, either alone, or a Unicode line or paragraph separator — one `<br>`.
 function html(written) {
   return written.replace(/[&<>"']/g, character => ESCAPES[character]).replace(/\r\n|[\r\n\u2028\u2029]/g, "<br>");
+}
+
+// An email composed as a template, in Reply's syntax: the subject as written and the body as HTML, around the tags and
+// inside them.
+function template(message) {
+  return {
+    subject: typeof message.subject === "string" ? inReplySyntax(OPERATION, "subject", message.subject, same => same) : message.subject,
+    body: inReplySyntax(OPERATION, "body", message.body, html),
+  };
 }
 
 // An email's Message-ID as Reply answers it: a string, null where it gives none or gives one past the output's 998

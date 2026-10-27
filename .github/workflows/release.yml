@@ -2,6 +2,11 @@
 # process's pull request does — tags that merge and publishes the draft release the release process left for that
 # version. From the button it finishes a publication that stopped part-way; it takes no input and acts only on the
 # version VERSION names.
+#
+# Once the release is published, it asks the Homebrew tap to bump its formula, with the one secret it holds,
+# HOMEBREW_TAP_DISPATCH_TOKEN: a fine-grained token with Actions read and write on reply-team/homebrew-tap alone. A
+# missing, refused or misplaced token turns that job red and leaves the release published; the tap then moves at its
+# own six-hour schedule until the job is run again.
 name: Release
 
 on:
@@ -93,3 +98,87 @@ jobs:
           gh release edit $tag @how
           if ($LASTEXITCODE -ne 0) { throw "gh release edit exited with $LASTEXITCODE" }
           Write-Host "$tag is published."
+
+  # Asks the tap to bump its formula once the release is published: after publish ended 0, its "already published"
+  # answer included, and never after it failed. A 2xx proves only that a bump run was queued; the bump checks, tests
+  # and pushes in the tap, and changes nothing when the address still answers the previous release or when this one
+  # is a candidate or an older line's fix, since it reads the latest release. The tap's six-hour schedule catches
+  # whatever this misses. A red job leaves the release as it is: "Re-run failed jobs" runs this job alone, with the
+  # secret as it is then.
+  tap:
+    name: Tell the tap
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Nothing of this repository's: the job checks nothing out, and its one token is the tap's.
+    permissions: {}
+    steps:
+      - name: Dispatch the tap's bump
+        shell: pwsh
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
+        run: |
+          if (-not $env:TOKEN) {
+            Write-Host '::error::HOMEBREW_TAP_DISPATCH_TOKEN is not set: the tap moves at its six-hour schedule instead. Store a fine-grained token with Actions read and write on reply-team/homebrew-tap, then re-run this job.'
+            exit 1
+          }
+          $tail = 'The release is published; the tap moves at its six-hour schedule until this job runs green.'
+
+          # The bump takes no input: it reads the latest release's manifest itself, so the ref is all there is to send.
+          # -SkipHttpErrorCheck hands a refusal back as a response, so its status is read below rather than thrown; a
+          # request that gets no answer at all still throws.
+          try {
+            $response = Invoke-WebRequest -Method Post -Uri https://api.github.com/repos/reply-team/homebrew-tap/actions/workflows/bump.yml/dispatches -Headers @{ Authorization = "Bearer $env:TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -ContentType application/json -Body '{"ref":"main"}' -SkipHttpErrorCheck
+          } catch {
+            Write-Host "::error::GitHub could not be reached: $("$($_.Exception.Message)".TrimEnd('.')). $tail"
+            exit 1
+          }
+          $status = [int] $response.StatusCode
+
+          # A token that expires says when in a header of the response, as GitHub sent it when this was written, for
+          # example "2026-11-25 13:50:00 UTC"; one without an expiry sends no such header. A warning never turns the job
+          # red.
+          $expiration = @($response.Headers['github-authentication-token-expiration'])[0]
+          if ($expiration) {
+            $at = [DateTimeOffset]::MinValue
+            $text = $expiration.Trim() -replace ' UTC$', ' +00:00'
+            if ([DateTimeOffset]::TryParseExact($text, 'yyyy-MM-dd HH:mm:ss zzz', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref] $at)) {
+              $left = $at - [DateTimeOffset]::UtcNow
+              $date = "$($at.UtcDateTime.ToString('yyyy-MM-dd HH:mm')) UTC"
+              if ($left -le [TimeSpan]::Zero) {
+                Write-Host "::warning title=Tap token::HOMEBREW_TAP_DISPATCH_TOKEN expired ${date}: make a new one and store it."
+              } elseif ($left -lt [TimeSpan]::FromDays(14)) {
+                $days = [int] [math]::Ceiling($left.TotalDays)
+                $unit = if ($days -eq 1) { 'day' } else { 'days' }
+                Write-Host "::warning title=Tap token::HOMEBREW_TAP_DISPATCH_TOKEN expires $date, in $days ${unit}: make a new one and store it before then."
+              }
+            } else {
+              Write-Host "::warning title=Tap token::GitHub says HOMEBREW_TAP_DISPATCH_TOKEN expires '$expiration', which is not a date this job reads: look at the token's expiry yourself."
+            }
+          }
+
+          # GitHub documents the answer as 200 with the run it queued, whose address is printed; an answer without one is
+          # a bump queued all the same.
+          if ($status -ge 200 -and $status -lt 300) {
+            $queued = $null
+            try { $queued = "$(($response.Content | ConvertFrom-Json).html_url)" } catch { $queued = $null }
+            if ($queued) {
+              Write-Host "The tap's bump is queued at $queued; it reads the latest release itself."
+            } else {
+              Write-Host "The tap's bump is queued; it reads the latest release itself."
+            }
+            exit 0
+          }
+
+          switch ($status) {
+            401 { $why = 'HOMEBREW_TAP_DISPATCH_TOKEN was refused (expired or revoked): make a new one, store it, re-run this job.' }
+            403 { $why = 'HOMEBREW_TAP_DISPATCH_TOKEN may not dispatch there: it needs Actions read and write on reply-team/homebrew-tap, and the organisation may still have to approve it.' }
+            404 { $why = "HOMEBREW_TAP_DISPATCH_TOKEN does not reach reply-team/homebrew-tap's bump.yml: the repository is not selected for it, or the workflow moved." }
+            default {
+              $message = $null
+              try { $message = "$(($response.Content | ConvertFrom-Json).message)".TrimEnd('.') } catch { $message = $null }
+              $why = if ($message) { "GitHub answered ${status}: $message." } else { "GitHub answered $status." }
+            }
+          }
+          Write-Host "::error::$why $tail"
+          exit 1

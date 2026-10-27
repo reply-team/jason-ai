@@ -45,6 +45,9 @@ guess: nothing that would write to anybody is settled while either is unknown. W
 message is a rule for the messages after it, so it is kept at the level it belongs to — all of the person's work, the
 project this campaign belongs to, or this campaign alone — rather than only in the message it corrected.
 
+**A campaign is never split only to give some of its people another tone of voice.** The tone is the person's
+preference; a person or a group that needs other words gets them in the copy, not in a campaign of their own.
+
 **Confirm before you scale.** A direction is checked before anything is gathered or sent at scale. The deep work
 per person and the first outreach go to a pilot, a small part of the people rather than all of them, and the rest
 waits for the pilot's first results. Then the choice is to go on, change course, or take it back to the person, and
@@ -57,7 +60,9 @@ LinkedIn, a message, an InMail or a voice message, and `social_invitation.send` 
 connect. Either send names one person Jason already holds as a contact. Each send is one work item for one person,
 and each waits for a person to approve exactly what it would send: that fits the few people of a pilot or a single
 follow-up, and a population is a campaign's. Which account a send goes from is the person's to say: `sender.list`
-reads the accounts it can go from, and a colleague's account is used only when the person names it. A send that
+reads the accounts it can go from, and a colleague's account is used only when the person names it.
+A `message.send` item for an email that carries a template, as the copywriter's answer gives it, has `compose`
+`template` in its `message`, with the subject and the body both templates. A send that
 ended without knowing whether it went out is not planned again: a new item for the same message is a second
 message, so it goes back to the person.
 
@@ -191,6 +196,15 @@ jason rolenote get --role planner --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 The note is a lead, not the truth, as `managed-campaign-work` says. You read it and you do not write it.
+
+An answer to a question a launched role raised is not yours to carry out. Record it as the person's
+(`approvals-and-questions`); the campaign manager's next check-in creates the work it implies, and making that work too
+leaves the campaign holding it twice. It runs only for an active campaign, at the next scan, so where nothing has
+appeared yet, say that it has not run yet and make nothing in its place. Look at what it created before you offer
+anything of your own.
+
+When you tell the person who is on the campaign, take care with the word `enrolled` that `campaign list-contacts` prints:
+it is Jason's own membership, and `managed-campaign-work` says what it does not mean.
 
 ## What this file does not cover
 
