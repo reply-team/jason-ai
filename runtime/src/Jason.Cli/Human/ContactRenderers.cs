@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 
@@ -94,7 +95,7 @@ public static class ContactRenderers
             table.Row(
                 Shown(thread["external_id"]),
                 Shown(thread["channel"]),
-                Shown(thread["subject"]) ?? Shown(thread["preview"]),
+                Shown(thread["subject"]) ?? OneLine(thread["preview"]),
                 Shown(thread["last_activity_at"]),
                 thread["unread"]?.GetValue<bool>() == true ? "yes" : null);
         }
@@ -104,7 +105,7 @@ public static class ContactRenderers
 
     /// <summary>
     /// One thread: what it is, then each message with who wrote it to whom and when, and its body as the provider holds
-    /// it, less the control characters that would drive the terminal instead of being printed on it.
+    /// it, each line shown by <see cref="RenderText.ShownLines"/>.
     /// </summary>
     public static string? Thread(string json)
     {
@@ -125,7 +126,7 @@ public static class ContactRenderers
             var to = message["to"] is JsonArray recipients ? string.Join(", ", recipients.Select(Shown)) : null;
             lines.Add(string.Empty);
             lines.Add($"{Shown(message["sent_at"])}  {Shown(message["from"])} -> {to}");
-            lines.Add(Shown(message["body"]) ?? string.Empty);
+            lines.AddRange(RenderText.ShownLines((string?)message["body"] ?? string.Empty));
         }
 
         if (read.HasMore)
@@ -152,11 +153,42 @@ public static class ContactRenderers
     }
 
     /// <summary>
-    /// Text a provider wrote, as it may be printed: without the C0 and C1 control characters but the line feed and the
-    /// tab, so an escape sequence in a subject or a body is shown as the rest of its characters and never runs.
+    /// The start of a message, which a thread with no subject is listed by: its line breaks are ordinary, so each run of
+    /// them becomes one space in a one-line column, as a question's excerpt folds its white space, and the rest is shown by
+    /// <see cref="Shown(JsonNode?)"/>.
     /// </summary>
-    private static string? Shown(JsonNode? node) =>
-        (string?)node is { } text ? string.Concat(text.Where(c => c is '\n' or '\t' || !char.IsControl(c))) : null;
+    private static string? OneLine(JsonNode? node)
+    {
+        if ((string?)node is not { } text)
+        {
+            return null;
+        }
+
+        var folded = new StringBuilder(text.Length);
+        var inBreak = false;
+        foreach (var character in text)
+        {
+            if (character is (char)0x0A or (char)0x0D or (char)0x85 or (char)0x2028 or (char)0x2029)
+            {
+                if (!inBreak)
+                {
+                    folded.Append(' ');
+                }
+
+                inBreak = true;
+            }
+            else
+            {
+                folded.Append(character);
+                inBreak = false;
+            }
+        }
+
+        return RenderText.Shown(folded.ToString());
+    }
+
+    /// <summary>Text a provider wrote, printed by the rule the thread views hold for it (<see cref="RenderText.Shown"/>).</summary>
+    private static string? Shown(JsonNode? node) => RenderText.Shown((string?)node);
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
 }

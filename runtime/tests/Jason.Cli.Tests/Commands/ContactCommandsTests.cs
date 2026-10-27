@@ -303,11 +303,130 @@ public class ContactCommandsTests
             cli.AssertPosted(Operations.ContactThread, "{\"contact_id\":\"cnt_A\",\"thread_id\":\"t_1\"}");
             Assert.Contains("marta@example.com", cli.Text, StringComparison.Ordinal);
             Assert.Contains("<p>Thursday?</p>", cli.Text, StringComparison.Ordinal);
-            Assert.Contains("[2J31mred\tend", cli.Text, StringComparison.Ordinal);
-            Assert.Contains("Re: Q3]0;owned", cli.Text, StringComparison.Ordinal);
+            Assert.Contains("\uFFFD[2J\uFFFD31mred\tend", cli.Text, StringComparison.Ordinal);
+            Assert.Contains("Re: Q3\uFFFD]0;owned\uFFFD", cli.Text, StringComparison.Ordinal);
             Assert.DoesNotContain('\u001b', cli.Text);
             Assert.DoesNotContain('\u0007', cli.Text);
             Assert.DoesNotContain('\u009b', cli.Text);
         }
+    }
+
+    /// <summary>
+    /// A provider's text follows the rule the thread views hold for a person's text: a character that changes the
+    /// line (a right-to-left override, a zero-width character, a line separator, a lone carriage return) is shown as
+    /// U+FFFD and never runs, in the list's subject as in a thread's subject and body; a tab stays, and a body
+    /// keeps its own line breaks.
+    /// </summary>
+    [Fact]
+    public async Task Threads_and_thread_show_a_character_that_changes_the_line_as_a_replacement_mark()
+    {
+        const string threads = """
+            {"plugin_id":"reply","items":[{"external_id":"t_1","channel":"email","subject":"Re:\u202eQ3\u200bnow\u2028next\tTabbed","last_activity_at":"2026-10-16T08:41:00.000Z","unread":false}],"has_more":false}
+            """;
+        using (var cli = new CliRun(threads))
+        {
+            await cli.RunAsync("contact", "threads", "cnt_A", "--human");
+
+            Assert.Contains("Re:\uFFFDQ3\uFFFDnow\uFFFDnext\tTabbed", cli.Text, StringComparison.Ordinal);
+            foreach (var character in new[] { '\u202e', '\u200b', '\u2028' })
+            {
+                Assert.DoesNotContain(character, cli.Text);
+            }
+        }
+
+        const string thread = """
+            {"plugin_id":"reply","thread":{"external_id":"t_1","channel":"email","subject":"Re:\u202eQ3"},"messages":[{"direction":"inbound","sent_at":"2026-10-16T08:41:00.000Z","from":"marta@example.com","to":["sdr@example.com"],"body":"Hi,\rStatus: approved\r\nBye\u2029done\ttab"}],"has_more":false}
+            """;
+        using (var cli = new CliRun(thread))
+        {
+            await cli.RunAsync("contact", "thread", "cnt_A", "t_1", "--human");
+
+            foreach (var character in new[] { '\u202e', '\u2029' })
+            {
+                Assert.DoesNotContain(character, cli.Text);
+            }
+
+            var raw = cli.Text;
+            for (var at = raw.IndexOf('\r', StringComparison.Ordinal); at >= 0; at = raw.IndexOf('\r', at + 1))
+            {
+                Assert.True(at + 1 < raw.Length && raw[at + 1] == '\n', "a CR that is not followed by an LF");
+            }
+
+            var lines = raw.ReplaceLineEndings("\n").Split('\n');
+            Assert.Contains("Subject:      Re:\uFFFDQ3", lines);
+            Assert.Contains("Hi,", lines);
+            Assert.Contains("Status: approved", lines);
+            Assert.Contains("Bye\uFFFDdone\ttab", lines);
+        }
+    }
+
+    /// <summary>
+    /// The joiners and the soft hyphen are ordinary in a message (an emoji sequence, a Persian word, text that came from
+    /// HTML) and change no line, so a thread prints them as it always did; a zero-width space and a right-to-left override
+    /// next to them are still marked.
+    /// </summary>
+    [Fact]
+    public async Task Thread_keeps_the_joiners_and_the_soft_hyphen_and_marks_the_rest_of_the_format_characters()
+    {
+        const string thread = """
+            {"plugin_id":"reply","thread":{"external_id":"t_1","channel":"email","subject":"x"},"messages":[{"direction":"inbound","sent_at":"2026-10-16T08:41:00.000Z","from":"marta@example.com","to":["sdr@example.com"],"body":"\ud83e\udd37\u200d\u2642\ufe0f mi\u200crav co\u00adop\u200b\u202ex"}],"has_more":false}
+            """;
+        using var cli = new CliRun(thread);
+
+        await cli.RunAsync("contact", "thread", "cnt_A", "t_1", "--human");
+
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Contains("\U0001F937\u200d\u2642\ufe0f mi\u200crav co\u00adop\uFFFD\uFFFDx", lines);
+    }
+
+    /// <summary>
+    /// A message with no body, an empty body and a body that ends in a line break each keep the lines they always had: the
+    /// first two print one empty line, and the third a trailing empty line, each between the message's header and the next.
+    /// </summary>
+    [Fact]
+    public async Task Thread_prints_the_lines_of_a_missing_an_empty_and_a_trailing_break_body()
+    {
+        const string thread = """
+            {"plugin_id":"reply","thread":{"external_id":"t_1","channel":"email","subject":"x"},"messages":[
+              {"direction":"inbound","sent_at":"s1","from":"a1@example.com","to":["sdr@example.com"]},
+              {"direction":"inbound","sent_at":"s2","from":"a2@example.com","to":["sdr@example.com"],"body":""},
+              {"direction":"inbound","sent_at":"s3","from":"a3@example.com","to":["sdr@example.com"],"body":"last\n"}],"has_more":false}
+            """;
+        using var cli = new CliRun(thread);
+
+        await cli.RunAsync("contact", "thread", "cnt_A", "t_1", "--human");
+
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        var first = Array.FindIndex(lines, line => line.StartsWith("s1  a1@example.com", StringComparison.Ordinal));
+        var second = Array.FindIndex(lines, line => line.StartsWith("s2  a2@example.com", StringComparison.Ordinal));
+        var third = Array.FindIndex(lines, line => line.StartsWith("s3  a3@example.com", StringComparison.Ordinal));
+        Assert.True(first > 0);
+        Assert.Equal(first + 3, second);
+        Assert.Equal(["", string.Empty], lines[(first + 1)..(first + 3)]);
+        Assert.Equal(second + 3, third);
+        Assert.Equal(["", string.Empty], lines[(second + 1)..(second + 3)]);
+        Assert.Equal(["last", string.Empty], lines[(third + 1)..(third + 3)]);
+    }
+
+    /// <summary>
+    /// A thread with no subject is listed by the start of its latest message, where line breaks are ordinary, so each run
+    /// of them folds into one space in the one-line column, as a question's excerpt does; a character that changes the
+    /// line is still marked, and a subject, which is one line, keeps the mark for a break.
+    /// </summary>
+    [Fact]
+    public async Task Threads_fold_the_line_breaks_of_a_preview_into_one_space_and_mark_those_of_a_subject()
+    {
+        const string threads = """
+            {"plugin_id":"reply","items":[
+              {"external_id":"t_1","channel":"linkedin","preview":"Hi Ada,\r\n\r\nthanks\u2028\u2029again\nbye\u202e\tend","last_activity_at":"2026-10-16T08:41:00.000Z","unread":false},
+              {"external_id":"t_2","channel":"email","subject":"one\ntwo","preview":"ignored","last_activity_at":"2026-10-16T08:41:00.000Z","unread":false}],"has_more":false}
+            """;
+        using var cli = new CliRun(threads);
+
+        await cli.RunAsync("contact", "threads", "cnt_A", "--human");
+
+        Assert.Contains("Hi Ada, thanks again bye\uFFFD\tend", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("one\uFFFDtwo", cli.Text, StringComparison.Ordinal);
+        Assert.Equal(4, cli.Text.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
     }
 }

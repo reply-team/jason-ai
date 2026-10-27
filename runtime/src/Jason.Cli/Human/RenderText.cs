@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 
 namespace Jason.Cli.Human;
 
@@ -114,6 +116,50 @@ internal static class RenderText
     /// <summary>Appends the cursor that continues a listing, when the page has one.</summary>
     public static string WithCursor(string rendered, string? nextCursor) =>
         nextCursor is null ? rendered : rendered + Environment.NewLine + "next cursor: " + nextCursor;
+
+    /// <summary>
+    /// Text somebody else wrote, as a human view prints it: a character that changes how the line around it reads (see
+    /// <see cref="PreviewTemplate.ChangesTheLine"/>: an escape sequence, a backspace, a right-to-left override, a line
+    /// separator) is shown as U+FFFD, a mark that can be seen, rather than written; a tab, the joiners and the soft
+    /// hyphen stay (see <see cref="IsKept"/>). It is the one rule the human views hold for a person's text where that
+    /// text passes through it, so a name, a subject and a message are printed the same way wherever they do: the
+    /// approval's lines and its example, and the thread views. A view not named here still prints some of its text as it
+    /// came. A line break is such a character, so this is for a value that is one line; <see cref="ShownLines"/> is for
+    /// one that is not. The rule reads characters, not bytes: what the console's code page makes of a glyph that is not
+    /// marked is the writer's matter.
+    /// </summary>
+    public static string? Shown(string? text)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+
+        var shown = new StringBuilder(text.Length);
+        foreach (var character in text.EnumerateRunes())
+        {
+            shown.Append(!IsKept(character) && PreviewTemplate.ChangesTheLine(character) ? "\uFFFD" : character.ToString());
+        }
+
+        return shown.ToString();
+    }
+
+    /// <summary>
+    /// What <see cref="Shown"/> prints as it came although <see cref="PreviewTemplate.ChangesTheLine"/> is true or, for the
+    /// tab, would be turned into a space by the summary's rule: a tab, which is whitespace a person reads as such, and
+    /// the zero-width joiner, the zero-width non-joiner and the soft hyphen, which emoji sequences, Persian and Indic
+    /// spelling and HTML-made text are written with and which move no character and break no line. The summary's own
+    /// rule is a contract and keeps them marked.
+    /// </summary>
+    private static bool IsKept(Rune character) => character.Value is 0x09 or 0x200C or 0x200D or 0x00AD;
+
+    /// <summary>
+    /// A message's text split at its own line breaks (CR LF, CR and LF alike, so that no carriage return reaches the
+    /// terminal as one), each line shown by <see cref="Shown"/>. A caller with no text gives it an empty one, which is one
+    /// empty line, and text that ends in a line break ends in an empty line.
+    /// </summary>
+    public static IEnumerable<string> ShownLines(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n').Select(line => Shown(line)!);
 
     public static string Lines(IEnumerable<string> lines) => string.Join(Environment.NewLine, lines);
 }

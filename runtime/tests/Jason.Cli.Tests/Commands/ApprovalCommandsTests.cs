@@ -337,6 +337,102 @@ public class ApprovalCommandsTests
         Assert.DoesNotContain("Example:", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The hash of what is approved is not a subject in the sense a message has one, and the example above it prints
+    /// the message's own subject: the one unindented label that says what the hash is cannot read as the other, so
+    /// the only <c>Subject:</c> in the view is the example's, and it is indented under the example.
+    /// </summary>
+    [Fact]
+    public async Task Get_labels_the_hash_of_what_is_approved_as_a_content_hash_and_never_as_a_subject()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada", "unfilled": []}"""));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Contains("Content hash:  sha256:abc", lines);
+        Assert.Contains("  Subject:     Autumn outreach, Ada", lines);
+        Assert.DoesNotContain(lines, line => line.StartsWith("Subject", StringComparison.Ordinal));
+        Assert.True(Array.IndexOf(lines, "Content hash:  sha256:abc") < Array.FindIndex(lines, line => line.StartsWith("Id:", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// A campaign's name and a contact's name are not refused a control character when they are written, and either may
+    /// come from a provider's sync, so the lines that print them follow the rule the example does: a character that
+    /// changes how the line reads (an escape sequence, a backspace, a right-to-left override) is shown as U+FFFD and
+    /// never runs, and a tab stays.
+    /// </summary>
+    [Fact]
+    public async Task Get_shows_a_character_that_changes_the_line_in_a_campaign_name_and_a_contact_name_as_a_replacement_mark()
+    {
+        var hostile = System.Text.Json.Nodes.JsonNode.Parse(OneApproval)!;
+        hostile["preview"]!["campaign"]!["name"] = "Autumn\u001b[2J\b\b\u202eoutreach\tTabbed";
+        hostile["preview"]!["contact"]!["name"] = "Ada\u001b]0;owned\u0007\u202eLovelace\tTabbed";
+        using var cli = new CliRun(hostile.ToJsonString());
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var text = cli.Text;
+        foreach (var character in new[] { '\u001b', '\b', '\u0007', '\u202e' })
+        {
+            Assert.DoesNotContain(character, text);
+        }
+
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Contains("Campaign:      Autumn\uFFFD[2J\uFFFD\uFFFD\uFFFDoutreach\tTabbed (cmp_01K52JR0000000000000000003)", lines);
+        Assert.Contains("Contact:       Ada\uFFFD]0;owned\uFFFD\uFFFDLovelace\tTabbed (cnt_1) | email ada@example.test", lines);
+    }
+
+    /// <summary>
+    /// The reason a decision was given and the id of whoever decided are a person's words, held only to a length when
+    /// they are written, so the lines that print them follow the same rule as the names above them: a character that
+    /// changes how the line reads is shown as U+FFFD and never rewrites the lines before it, and a tab stays.
+    /// </summary>
+    [Fact]
+    public async Task Get_shows_a_character_that_changes_the_line_in_a_decision_note_and_a_decider_as_a_replacement_mark()
+    {
+        var decided = System.Text.Json.Nodes.JsonNode.Parse(OneApproval)!;
+        decided["status"] = "rejected";
+        decided["decided_at"] = "2026-09-14T11:00:00+00:00";
+        decided["decided_by"] = new System.Text.Json.Nodes.JsonObject { ["type"] = "human", ["id"] = "ada\u001b]0;t\u0007\b\u202ex\ttab" };
+        decided["decision_reason"] = "no\u001b[2J\b\b\u202ereason\tkept";
+        using var cli = new CliRun(decided.ToJsonString());
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var text = cli.Text;
+        foreach (var character in new[] { '\u001b', '\b', '\u0007', '\u202e' })
+        {
+            Assert.DoesNotContain(character, text);
+        }
+
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Contains("Decided by:    human:ada\uFFFD]0;t\uFFFD\uFFFD\uFFFDx\ttab", lines);
+        Assert.Contains("Note:          no\uFFFD[2J\uFFFD\uFFFD\uFFFDreason\tkept", lines);
+    }
+
+    /// <summary>
+    /// Three format characters are ordinary text: the zero-width joiner and non-joiner that emoji sequences and Persian and
+    /// Indic spelling are written with, and the soft hyphen that HTML-made text carries. None of them moves a character or
+    /// breaks a line, so a person's name prints them as it came, while a right-to-left override and a zero-width space,
+    /// which do not belong to any spelling, stay marked.
+    /// </summary>
+    [Fact]
+    public async Task Get_keeps_the_joiners_and_the_soft_hyphen_in_a_name_and_marks_the_rest_of_the_format_characters()
+    {
+        var named = System.Text.Json.Nodes.JsonNode.Parse(OneApproval)!;
+        named["preview"]!["contact"]!["name"] = "Ada\u200c\u200d\u00adLovelace\u200b\u202ex";
+        using var cli = new CliRun(named.ToJsonString());
+
+        await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Contains("Contact:       Ada\u200c\u200d\u00adLovelace\uFFFD\uFFFDx (cnt_1) | email ada@example.test", lines);
+    }
+
     private static string WithExample(string example) =>
         OneApproval.Replace("\"preview\": {", $"\"preview\": {{\"example\": {example},", StringComparison.Ordinal);
 

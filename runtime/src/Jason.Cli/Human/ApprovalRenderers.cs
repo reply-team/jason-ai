@@ -73,10 +73,10 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Parked:", approval.Reason));
         text.AppendLine(Line("Requested:", RenderText.Moment(approval.RequestedAt)));
         text.AppendLine(Line("Decided:", RenderText.Moment(approval.DecidedAt)));
-        text.AppendLine(Line("Decided by:", RenderText.Actor(approval.DecidedBy)));
-        text.AppendLine(Line("Note:", approval.DecisionReason));
+        text.AppendLine(Line("Decided by:", RenderText.Shown(RenderText.Actor(approval.DecidedBy))));
+        text.AppendLine(Line("Note:", RenderText.Shown(approval.DecisionReason)));
         text.AppendLine(Line("Work item:", approval.WorkItemId));
-        text.AppendLine(Line("Subject:", approval.SubjectHash));
+        text.AppendLine(Line("Content hash:", approval.SubjectHash));
         text.Append(Line("Id:", approval.Id));
         return text.ToString();
     }
@@ -84,10 +84,11 @@ public static class ApprovalRenderers
     /// <summary>
     /// The one reading of a template that the approval holds, printed as the runtime rendered it. It is somebody's
     /// message, so a character that changes how the line around it reads (see
-    /// <see cref="PreviewTemplate.ChangesTheLine"/>) is shown as U+FFFD, a mark that can be seen, and never runs; a
-    /// tab stays. The subject is one line and its line breaks are such characters; the body keeps its own, each
-    /// of its lines indented under the label so that none reads as a labelled line of the approval. An empty subject
-    /// says so. A preview without an example adds nothing.
+    /// <see cref="PreviewTemplate.ChangesTheLine"/>) is shown as U+FFFD, a mark that can be seen, rather than written;
+    /// a tab, the joiners and the soft hyphen stay (see <see cref="RenderText.Shown"/>, which also says what the rule
+    /// leaves to the writer). The subject is one line and its line breaks are such characters; the body keeps its own,
+    /// each of its lines indented under the label so that none reads as a labelled line of the approval. An empty
+    /// subject says so. A preview without an example adds nothing.
     /// </summary>
     private static void AppendExample(StringBuilder text, JsonNode? example)
     {
@@ -98,11 +99,11 @@ public static class ApprovalRenderers
 
         var subject = (string?)example["subject"];
         text.AppendLine(Line("Example:", "one reading of the template, as the runtime renders it"));
-        text.AppendLine(Indented("Subject:", subject is { Length: 0 } ? "(empty)" : Shown(subject)));
+        text.AppendLine(Indented("Subject:", subject is { Length: 0 } ? "(empty)" : RenderText.Shown(subject)));
         text.AppendLine("  Body:");
-        foreach (var line in ((string?)example["body"] ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        foreach (var line in RenderText.ShownLines((string?)example["body"] ?? string.Empty))
         {
-            text.AppendLine(line.Length == 0 ? string.Empty : "    " + Shown(line));
+            text.AppendLine(line.Length == 0 ? string.Empty : "    " + line);
         }
 
         if (example["unfilled"] is JsonArray { Count: > 0 } unfilled)
@@ -119,8 +120,10 @@ public static class ApprovalRenderers
             ? null
             : (string?)property["value"] + ((bool?)property["conditional"] == true ? " (conditional)" : string.Empty);
 
+    // A campaign's and a contact's names are not refused a control character when they are written, and either may
+    // arrive from a provider's sync, so every part of these two lines goes through the rule the example uses.
     private static string? Named(JsonNode? entity) =>
-        entity is null ? null : $"{(string?)entity["name"]} ({(string?)entity["id"]})";
+        entity is null ? null : $"{RenderText.Shown((string?)entity["name"])} ({RenderText.Shown((string?)entity["id"])})";
 
     private static string? Person(JsonNode? contact)
     {
@@ -129,10 +132,10 @@ public static class ApprovalRenderers
             return null;
         }
 
-        var where = (string?)contact["value"];
-        var channel = (string?)contact["channel"];
-        var name = (string?)contact["name"];
-        var id = (string?)contact["id"];
+        var where = RenderText.Shown((string?)contact["value"]);
+        var channel = RenderText.Shown((string?)contact["channel"]);
+        var name = RenderText.Shown((string?)contact["name"]);
+        var id = RenderText.Shown((string?)contact["id"]);
 
         // A contact known only by an address has no name to set its id apart from: the id stands where the name would.
         var who = string.IsNullOrEmpty(name) ? id : $"{name} ({id})";
@@ -140,23 +143,6 @@ public static class ApprovalRenderers
     }
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
-
-    private static string? Shown(string? text)
-    {
-        if (text is null)
-        {
-            return null;
-        }
-
-        var shown = new StringBuilder(text.Length);
-        foreach (var character in text.EnumerateRunes())
-        {
-            // A tab is whitespace a person reads as such; the rule of the summary would turn it into a space.
-            shown.Append(character.Value != '\t' && PreviewTemplate.ChangesTheLine(character) ? "\uFFFD" : character.ToString());
-        }
-
-        return shown.ToString();
-    }
 
     private static string Indented(string label, string? value) => "  " + label.PadRight(Label - 2) + (string.IsNullOrEmpty(value) ? "-" : value);
 }
