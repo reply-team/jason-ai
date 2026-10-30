@@ -3,6 +3,164 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.14.1
+
+- The README is corrected. `message.status` and `message.cancel` list `capability_not_offered` for a Reply whose API
+  has no route to read or cancel a direct send, and the bare 404 reply-cli passes through is listed on
+  `reply direct-send get` and `reply direct-send cancel` beside the sends. Reply consults its blacklist on a LinkedIn
+  send when it makes the send, not when it takes it: a person its blacklist holds is accepted, and the send fails
+  then, which `message.status` reads as `failed`.
+- No change in behaviour. The package still needs Jason 0.22.0 and reply-cli 0.17.2 or newer.
+
+## 0.14.0
+
+- A LinkedIn message and an InMail may be composed as a template, as an email may. Each goes by the command a final
+  message takes, in Reply's syntax: each construct and each name as on an email, `sender.first_name` and `sender.name`
+  as the LinkedIn account's `SendingLinkedIn.SenderFirstName` and `SendingLinkedIn.SenderName`, and the text as written,
+  which Reply converts from HTML to text after filling it in for the person when it sends.
+- The manifest says so: `templates` lists `message.send` on `email` and `linkedin`. A runtime from 0.22.0 reads the
+  list at the claim and refuses a template on a channel a package does not list, `template_not_offered`; so a Reply
+  package older than 0.14.0 under runtime 0.22.0 has its email templates refused `template_not_offered` at the claim
+  until the package is updated. Like 0.12.0, the package needs a runtime from 0.22.0, which an older one refuses with
+  `unknown_field`.
+- Reply has no variable on LinkedIn for the sending account's last name or address. Where a LinkedIn template names
+  `sender.address`, the package writes in its place the profile the arguments hold, as the approval's example shows
+  it: its fallback where they hold none, and a condition on it as the branch the profile takes. With no profile and no
+  fallback, and wherever a template names `sender.last_name`, it is refused `template_unsupported` (validation) before
+  anything is called, the message naming the name and the character it starts on. A template in a voice message is
+  refused `template_unsupported` as before: Reply speaks a voice message from a final script alone.
+- reply-cli's own codes for a template Reply could not fill in are read: `contact.missing_variables` and
+  `contact.rendering_failed` on an email, `linkedin.missing_variables` on LinkedIn. For a template they are
+  `template_unrendered`, final, as Reply's `contact.unknown` refusal explained by `RenderingFail` still is; for a final
+  text they are `message_invalid`. The names Reply lists as missing travel in the failure's details as
+  `missing_variables`, the first twenty, each to 64 characters, and a template's message names them.
+- A template Reply does not send within the call — one held for a later moment, or one that goes now which Reply
+  queues behind the account's other sends — is filled in by Reply when it goes, so a name it cannot fill then is not
+  refused when the send is made: the send fails at Reply, and `message.status` reads it as `failed`.
+- It still needs reply-cli 0.17.2 or newer.
+
+## 0.13.0
+
+- The package performs `message.status` and `message.cancel`, each by the reference the runtime keeps for the send
+  under `send.reference`, never by anything the caller wrote. `message.status` reads it with `reply direct-send get`
+  and answers Reply's state in the document's five words: `sent`, `cancelled` and `failed` as they are, but `unknown`
+  for a failed send whose code is Reply's `directSend.dispatchInterrupted`, which may have gone out, and any other
+  state that still holds the send `queued`, `cancelable` unless Reply is sending it now. Every other failed send, a
+  missed window (`directSend.dispatchWindowMissed`) among them, is `failed`: nothing went out. Reply's code is given as
+  `failure_code`, as Reply gave it. A send that went says when, in
+  UTC, and the message it became, with the text as it went where Reply kept that copy; one that failed says Reply's own
+  reason. A moment that cannot be read is given as none, and the state answers all the same. Nothing is pinned.
+- `message.cancel` takes the send back with `reply direct-send cancel` and answers it cancelled, with Reply's moment or none.
+  One cancelled before answers the same, so a lost answer is repeated, and the cancel carries no key. A send that went,
+  that Reply is sending or that failed is `send_not_pending` (permanent), with `state` `sent` or `failed`, and is never
+  reported as cancelled; an answer about another send, or in a state that still holds it, is `provider_answer_lost`.
+- A reference Reply holds no send under, or none this account may see, is `send_not_found` (permanent) on both; a
+  Reply whose API has no route for the call is `capability_not_offered` (permanent).
+- `message.send` reads the provider's own object beside its arguments: `provider.schedule_id`, the Reply sending
+  schedule an email is timed by, written as a string of its digits, goes on the send as `--schedule-id`, with
+  `send_after` where both are given, once Reply is read to keep direct sends. A Reply that does not answers
+  `capability_not_offered`, and nothing is sent. Any other shape is refused before anything is called with
+  `provider_input_invalid`, class `validation`, its message the shape the package reads and quoting nothing of what it
+  was given, and so is a schedule on a LinkedIn message, since Reply refuses a schedule on every LinkedIn direct send.
+  With a schedule the result names no `accepted_for`, since Reply only estimates when the schedule sends. Every other
+  operation still ignores the object.
+- Every call the package makes names the harness and the runtime it came through: the CLI it starts gets
+  `REPLY_CLIENT`, set to `jason-harness/<runtime version>`, beside `REPLY_NO_UPDATE_CHECK`, and reply-cli passes it
+  to Reply as the client the call came through. The version is the runtime version without its build metadata, the
+  shape the CLI takes. It names a build and nothing of the account, the person or the work.
+- The package needs reply-cli 0.17.2 or newer, the release that reads the variable. Under an older CLI the package is
+  `unavailable`: a reload runs `reply --version` and refuses it with `executable_incompatible`, and work routed to the
+  package fails at the claim, so the mark is a property of the package rather than of whichever CLI happens to be
+  installed.
+
+## 0.12.0
+
+- The package answers for the account's events: its manifest declares the events contract, `contracts.events: [1]`, and
+  the runtime's reader asks it `events.read`, which it answers from Reply's change feed, `reply inbox changes`, a page
+  at a time. Each item is one `thread_moved` — the thread, its contact and its sequence by Reply's identifiers, the
+  channel, the thread's last activity, Reply's judgement that it asks for a meeting — and who moved it is read from the
+  thread's last message and Reply's flag that the thread holds a reply: `other_side` where the last message is the
+  other side's; `account` where it was sent as the account on a thread with no reply; and `null` where it was sent as
+  the account on a thread that holds one, since the feed cannot say whether that reply is newer than the last read, and
+  where Reply gave no last message or one that does not say which way it went. `provider` is never said, since a thread
+  moves in the feed only when a message lands on it. `unread` is `null`; no other kind is produced, and Reply's flags
+  for a bounce, an automatic reply and an absence are not carried.
+- A move by the account is read and not kept: it is left out of the page's events, so a message sent as the account, by
+  Jason or anybody else, is never taken for a reply, and a later detector of sends made outside Jason needs a source of
+  its own. It still ends a span it is at or past the end of. A reply to a direct send names no sequence, so it reaches
+  the campaigns that hold its contact pinned, by `contact_pin`.
+- The cursor is the package's own, in three forms. `c|<Reply's cursor>` goes on from Reply's own cursor, with nothing
+  read twice, also where the runtime stopped at its page limit. `m|<moment>` is where a read reached the end of the feed,
+  and the next read asks for everything since an hour before that moment, so a reply Reply takes in late is still found;
+  what that hour reads again the runtime holds already and counts as held. `u|<moment>|<Reply's cursor>` is a span a
+  person asked to read again: it stops at the first item past its moment and reads no hour before its start, and one
+  read to its end hands back `u|<moment>|`, which no read goes on from. A moment in a cursor is only ever in the form
+  `toISOString` writes, and Reply's cursor is needed only where a read goes on from it.
+- The feed holds the last 30 days, so a read by date asks for no more than that, an hour inside it, which is room for
+  this machine's clock to trail Reply's. A cursor Reply no longer holds (`inbox.cursor_expired`), says it never issued
+  (`inbox.cursor_refused`) or refuses at status 400 with a code of its own, and a cursor in none of the three forms, are
+  `events_cursor_unknown`, and the runtime reads again by date. Any other refusal is `events_unreachable` and is read
+  again later, as is a page holding more items than the read asked for. An account whose Reply has no change feed yet
+  is `events_unsupported`, and the inbound sync keeps reading its threads page by page. So is a refusal the CLI makes
+  before asking Reply: with no code of its own, a CLI that lacks the command; with a `usage.*` code, a call built from
+  something it refused, which is reported rather than retried.
+- `message.send` and `social_invitation.send` take `send_after`, the moment a send should go out after, on email and
+  LinkedIn and on LinkedIn, as the manifest's `arguments` says. A moment still ahead goes to Reply as `--send-after`,
+  as written, and Reply holds the send for it; a moment already past goes as none. A moment this package cannot read
+  is never one already past: the send ends `provider_call_failed` (permanent), naming `send_after`, with nothing read
+  or sent.
+- Each send is made under the work item's key, as `--idempotency-key`, and no other command carries one: the key
+  travels only on the send command, and at most one send command per attempt reaches Reply's send, a person Reply
+  already held being named before it. A lost answer — no answer of Reply's at all, or one at 500 or above — is repeated
+  under the same key: Reply answers a send it already took with what it answered then, and a key
+  it holds for another request (`idempotency_key.reused`) with what it holds under it, which is the work item's send.
+  Both documents now say `after_recovery_read`, resting on the key, and the manifest lists both sends under
+  `settles_by_key`, the runtime's condition for repeating either after a lost answer.
+- Before a send that names a moment still ahead, and before a repeat after an attempt that may have sent, `reply
+  direct-send get` of `email-1` is read to see that the account's Reply keeps direct sends. One that does not ends the
+  send with nothing sent: a moment as `capability_not_offered` (permanent), naming `send_after`, and a repeat as
+  `send_not_settled` (permanent), since without the key it could reach the person twice.
+- A repeat is told by `context.unsettled_since`, the moment the earliest attempt that may have sent was claimed, and
+  goes under the key only within 23 hours of it, since Reply keeps the key for a day; one later is `send_not_settled`,
+  with nothing sent. A later attempt after attempts that all settled is a first send again.
+- Where the runtime names the send an earlier attempt that may have sent returned, `context.unsettled_reference`, a
+  repeat reads it first with `reply direct-send get`, inside the window and past it, and Reply's record answers the work
+  item with nothing sent: its status by the state, `failed` or `cancelled` final. A read that finds nothing, gets no
+  answer, or answers for another send leaves the repeat to the window; a read the CLI refuses for want of a working
+  credential (`auth.*`) is `unauthorized`, with nothing sent. A read Reply answers as another account's send
+  (`direct_send.not_owned`) is `send_not_settled` (permanent), with nothing sent: the key settles nothing from here.
+- A send answer refused as a lost one for the shape of another field still keeps a reference of the document's shape
+  that it names, as the work item's `send`, for the next attempt to read first.
+- Reply still finishing the send an earlier attempt made under the key (`idempotency_key.in_use`) is
+  `provider_unavailable` (transient), and nothing is sent.
+- A reference Reply names on a send's refusal or lost answer is kept on the attempt as the work item's `send`, whatever
+  the ending's class. A send Reply answered with a failure is never repeated, since Reply keeps no key for it: every
+  answer of Reply's at a status of 400 to 499 is final (`provider_call_failed`, permanent, Reply's sentence quoted), its
+  own `directLinkedIn.unknown` on a LinkedIn send in every shape and a 400 with no code of its own among them, from
+  reply-cli 0.17.1's `outcome.unknown` as from 0.17.0's `reply.refused`. A 409 and a 429 are not about the send and are
+  repeated under the key, however reply-cli passes them on.
+- The result's status is what happened, by Reply's state: `sent` for `sent`, and `accepted` for any other, a state
+  Reply adds later included; an answer with no state is `sent` where it names no send, and `accepted` where it names
+  one. `accepted_for` in UTC, its `reference` and whether it is `cancelable` come back under either status, each only
+  where reply-cli gave it, and a moment Reply only estimates is not read; the reference is the work item's `send`
+  identifier. A send is `cancelable` in every state but `sent` and `sending`. An answer that gives the send's state as
+  `failed` or `cancelled`, or a key Reply holds for another request whose send is in either, is final:
+  `provider_call_failed` (permanent), with Reply's reason where it gave one. A person who is a connection already still
+  answers `already_connected`, with nothing taken and none of the three.
+- It needs reply-cli 0.17.0 or newer, the release with `reply inbox changes` and with the direct sends' key, moment
+  and `reply direct-send get` — 0.17.0 carries both `--send-after` and `--idempotency-key` — and a runtime from 0.22.0, which admits the sends' result and codes. An older runtime
+  refuses the package's answer to a send as one the operation does not declare.
+
+## 0.11.0
+
+- Where Reply's API has no route for a call, the operation fails as `capability_not_offered` (permanent), its message
+  naming the operation, and nothing is repeated: Reply answers such a call `reply.refused` at status 404 with no code of
+  Reply's own, which reply-cli passes through as it is on the direct sends, `inbox categorize` and the membership check
+  of `sequence add-contact` and `sequence remove-contact`. A 404 Reply explains with a code of its own keeps the meaning
+  it had.
+- The code is admitted beside every operation by a runtime from 0.22.0. An older one ends these refusals
+  `result_invalid`, ambiguous and never repeated, as it ends any code the operation does not declare.
+
 ## 0.10.0
 
 - `message.send` sends an email composed as a `template` in Reply's own syntax, by the same `reply contact send-email`,

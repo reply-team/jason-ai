@@ -77,11 +77,13 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | `not_used` | who is in a campaign at the provider |
 | [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
-| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `never` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
+| [`message.cancel`](operations/message.cancel.md) | `scheduled_message.cancel` | `control` | `auto` | `safe` | `not_used` | stop a send the provider still holds for its moment |
+| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `after_recovery_read` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
+| [`message.status`](operations/message.status.md) | `scheduled_message.list` | `read` | `auto` | `safe` | `not_used` | read one send by the reference the provider gave it |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
 | [`schedule.list`](operations/schedule.list.md) | `schedule.resolve` | `read` | `auto` | `safe` | `not_used` | the provider's sending schedules, with the windows each one sets |
 | [`sender.list`](operations/sender.list.md) | `sender.list` | `read` | `auto` | `safe` | `not_used` | the provider's accounts a send can go from |
-| [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `never` | `find_or_create` | invite a person to connect, from one of the provider's accounts |
+| [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `after_recovery_read` | `find_or_create` | invite a person to connect, from one of the provider's accounts |
 
 <!-- END GENERATED operations -->
 
@@ -117,10 +119,33 @@ A failure of the class `blocked` says the provider refused the call for a reason
 money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did
 nothing for it. Every published operation declares it under one code, `provider_blocked`, and the failure carries a
 block: what is blocked, the account or one sender; why, from a closed list; where a person clears it; and, where the
-provider says, when it clears by itself. The block is written once, for every operation, in
-[`block/provider_block.json`](block/provider_block.json), explained on [its page](block/provider_block.md), embedded
-into the runtime the same way, and its value fixtures under [`fixtures/block/`](fixtures/block) are run by the same
-tests. The events and delivery families declare no block.
+provider says, when it clears by itself; an open block is cleared only by the provider's judgment of the work. The
+block is written once, for every operation, in [`block/provider_block.json`](block/provider_block.json), explained on
+[its page](block/provider_block.md), embedded into the runtime the same way, and its value fixtures under
+[`fixtures/block/`](fixtures/block) are run by the same tests. The events and delivery families declare no block.
+
+## A capability the provider does not offer yet
+
+A provider ships its API on its own cadence, and a plugin may already call a part of it the provider does not offer yet:
+an operation whose route the provider's API does not have, or an argument it does not take. Every operation answers that
+with one code, `capability_not_offered`, class `permanent`: a failure code reserved beside every operation and declared
+by none, which the runtime passes under that class alone. The work item ends `failed` as on any permanent failure, and
+the message names the operation or the argument that is missing. Being reserved, the code clears no [provider
+block](#the-provider-block). Nothing is detected in advance. For a route the provider's API does not have, the
+provider's answer to the call is the detection. For an argument, a provider that refuses what it does not know answers,
+and that answer is the detection; a provider that ignores it gives nothing to read, so a package sends a new argument
+only once it knows the provider takes it, by a read it makes before the call. The runtime falls back to nothing: the
+code is final, and what to do instead is the agent's to choose, another way or telling the person. When a plugin answers
+it is [the plugin guide, section 8](../plugins.md#8-failure-classes). Each capability a provider may lack for a while is
+a line below: the operation or the argument, and what an agent does instead where it is not offered.
+
+- `message.send` and `social_invitation.send` with `send_after`: where the provider does not offer it, leave it out and
+  create the item with `not_before` at the moment instead; it is claimed once the moment has passed and, being
+  `confirm_each`, waits for a person's approval then. A refusal recorded `ambiguous` says an earlier attempt of the
+  item may have reached the person: the new item is created only once the provider has said that attempt did not act.
+- `message.status` and `message.cancel`: where the provider does not offer them, a send that ended `accepted` is known
+  only as accepted. Say so rather than guess whether it went, and read the conversation for what the person received;
+  a send that cannot be cancelled is stopped, if at all, at the provider by a person.
 
 ## The named preferences
 
@@ -176,14 +201,16 @@ The second group is Jason's own, and it is about execution:
 | Field | What it says |
 |---|---|
 | `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them); and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used` — [`docs/plugins.md`](../plugins.md) §7, "The contact proxy rule", is the rule), which the loader holds to what each word implies: a way that finds the person declares `external_ids.contact`, `find_or_create` takes its channel `from_args`, `pinned_only` declares `contact_not_linked`, and `not_used` is said exactly where `contact` is `not_used` |
+| `channel_arguments` | the arguments a provider may offer on some of the operation's channels and not on others, which a plugin takes only where its manifest lists them per channel ([`docs/plugins.md`](../plugins.md) §3), and which the claim refuses on any other channel (`argument_unsupported`); null where there are none. The loader holds each name to be an argument the arguments declare and a caller may leave out, named once, of an operation whose `preflight.channel` is `from_args` |
+| `channel_templates` | the channels on which the operation's message may be a template the provider fills in for the person, which a plugin writes one on only where its manifest lists the channel under `templates` ([`docs/plugins.md`](../plugins.md) §3), the claim refusing a template elsewhere as `template_not_offered`: a non-empty list, or null where the message is never one. The loader holds each to be a channel the arguments offer, named once, of an operation whose `preflight.channel` is `from_args` and whose `message` declares `compose` |
 | `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm |
 | `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change. It names exactly what the operation's implementation reads, the least of a person that reaches a plugin's process, for the fields as for the channels |
 | `precondition` | what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence |
 | `preview` | what a person deciding on the operation reads first — a one-line summary rendered from the composed input, and the values in that input it highlights — or `null` where nobody is asked to decide |
 | `input_schema` | the whole composed input the plugin receives, in the dialect below |
 | `output_schema` | what a succeeded result must look like |
-| `external_ids` | the kinds of provider identifier the operation may return, and what each identifies |
-| `recovery_read` | what to read before repeating after a lost answer, and why the reading is worth the round trip |
+| `external_ids` | the kinds of provider identifier the operation may return, and what each identifies: a `contact` or a `campaign`, which the runtime pins, or the `work_item` itself — the reference of the act the item made the provider take, such as `send` on the two sends — which pins no entity, is kept on the attempt and in the item's result, and is said in the result at `items[0].reference` as the one value |
+| `recovery_read` | what to read before repeating after a lost answer, and why the reading is worth the round trip; a reading that rests on something the provider keeps for a while, such as an idempotency key, is bounded by the provider's own window, counted from `context.unsettled_since`, the moment the earliest attempt that may have acted was claimed. `by_key: true`, absent where it is false, says the reading settles a lost answer by the work item's key — today on `message.send` and `social_invitation.send` — which only an operation that repeats after its recovery read may say, and the runtime then repeats a lost answer only under a plugin whose manifest lists the operation under `settles_by_key` |
 | `repeat_after_ambiguous` | `safe`, `after_recovery_read` or `never` — what may be done when an attempt ends without a usable answer |
 | `failure_codes` | the codes a plugin may report, each under one of the five classes, with the moment it applies |
 | `timeout_ms` | the child's budget for this operation |
@@ -212,7 +239,13 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
   arguments the document declares. The runtime never reads it: it holds the key to being a JSON object whose own
   member names are distinct, as every object a request carries must be, and to nothing else, refusing any other kind
   with `type` at the key's own pointer, sets it aside before the operation's argument schema applies, and hands it to
-  the plugin exactly as written.
+  the plugin exactly as written. A package that reads it and cannot make sense of what it holds fails the item before
+  any call with **`provider_input_invalid`**, class `validation`: a failure code reserved beside every operation
+  and declared by none, which the runtime passes under that class alone, as it passes the plugin host's own codes
+  under theirs, and refuses under any other as a code the operation does not declare. A reserved code is not the
+  provider's judgment of the work, so it clears no [provider block](#the-provider-block). The code is for this key
+  only: a package that cannot read an argument the operation's document declares has a defect of its own, or has
+  found one in the document, and no code stands for either.
 - `contacts` appears when `preflight.contact` is `required`, or when it is `optional` and the work item names a
   contact. It carries exactly one person — an operation about a person addresses one person in this version, and a
   read about a person reads about one — and is cut to the declared projection: only the channel the operation consumes,
@@ -222,6 +255,9 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
   performs say the campaign may go unnamed.
 - `idempotency_key` appears only when the operation requires one, and it is the **work item's** identifier: stable
   across every attempt, which is what makes "the prior run under this key" answerable.
+- `send` appears where the operation's input schema declares it — today `message.status` and `message.cancel`. The
+  runtime composes it from the succeeded attempt of the send `args.send` names: that work item, its operation and the
+  provider's reference for the send. A caller never writes it.
 - Every `external_ids` object is filtered to the calling plugin's own pins. Another provider's identifier is never
   visible.
 
@@ -250,10 +286,10 @@ the input it singles out.
 - `highlights` lists pointers; each carries a copy of its value, or `null` where the input holds nothing there.
 - `example` is added wherever the input's message is a template (`/args/message/compose` is `template`): `{subject,
   body, unfilled}`, the template rendered by [the template standard](#the-template-standard) over the composed input,
-  each name read where the table of names says the input holds it. A name the input does not hold, and a name it holds
-  with no value, renders its fallback, or else itself in brackets, as `[sender.first_name]`; it is listed under
-  `unfilled` once, in the order it is read — a held name only when it had no fallback, since the provider then sends
-  nothing. A condition on a name the input does not hold takes its other branch in the example, where the provider
+  each name read where the table of names says the input holds it on the message's channel. A name the input does not
+  hold there, and a name it holds with no value, renders its fallback, or else itself in brackets, as
+  `[sender.first_name]`; it is listed under `unfilled` once, in the order it is read — a held name only when it had no
+  fallback, since the provider then sends nothing. A condition on a name the input does not hold takes its other branch in the example, where the provider
   may take the first, and the name is listed. The example renders text and escapes nothing. It is the runtime's
   rendering, not the provider's, which may differ — in what it counts as no value, and in what it makes of markup in a
   field.
@@ -431,15 +467,16 @@ the value has to meet. ECMA-262 has been the dialect all along; this table is ho
 
 ## The template standard
 
-A text the provider fills in for each person — today a `message.send` email whose `compose` is `template` — is written
-in this standard and in nothing else. It is Jason's own, so one template reads the same to every plugin that renders
-it, and a plugin turns it into its provider's own syntax. This section is the standard's only statement: the runtime
-holds a template to it wherever a schema names `"format": "jason-template"`, and a plugin parses the same grammar.
+A text the provider fills in for each person — today a `message.send` email, LinkedIn message or InMail whose `compose`
+is `template` — is written in this standard and in nothing else. It is Jason's own, so one template reads the same to
+every plugin that renders it, and a plugin turns it into its provider's own syntax. This section is the standard's
+only statement: the runtime holds a template to it wherever a schema names `"format": "jason-template"`, and a plugin
+parses the same grammar.
 
 - **The grammar is total.** Every template is accepted, or refused for the first tag that holds a refused construct,
   reading from the start, or for a refused construct in the text before it — with that construct's reason and the
   character it starts on: `format`, at the pointer of the string. Inside a combinator, as the `anyOf` that lets only
-  an email's message be a template, the refusal is the combinator's, at the combinator's pointer, and its message
+  some formats' messages be a template, the refusal is the combinator's, at the combinator's pointer, and its message
   names the string's pointer, the construct and the character. A refusal never quotes the template: a template is
   somebody's message.
 - **A tag is `{{` … `}}`, spelled exactly as the table writes it:** one space between its parts and none inside the
@@ -489,22 +526,23 @@ holds a template to it wherever a schema names `"format": "jason-template"`, and
 ### The names a template may use
 
 `contact.*` is the person the message goes to; `sender.*` is the account it goes from, as the provider holds that
-account — its identity at the provider, not a preference about how a sender signs. The last column says where the
-approval's example reads each name in the composed input; a name it does not hold is filled by the provider alone
+account — its identity at the provider, not a preference about how a sender signs. The last two columns say, for each
+channel a template is written on, what the composed input holds of each name: the pointer the approval's example reads
+it at, or `not held` where the input does not hold it, and the provider alone fills it from what it holds
 ([the preview a person reads](#the-preview-a-person-reads)).
 
-| Name | What it is | In the approval's example |
-|---|---|---|
-| `contact.first_name` | the person's first name | `/contacts/0/first_name` |
-| `contact.last_name` | the person's last name | `/contacts/0/last_name` |
-| `contact.company` | the person's company | `/contacts/0/company` |
-| `contact.title` | the person's title | `/contacts/0/title` |
-| `contact.email` | the address the message goes to | `/contacts/0/channels/0/value` |
-| `contact.custom.<key>` | the field the provider's account holds for the person under `<key>`: a letter or `_`, then at most 63 letters, digits and `_` | not held |
-| `sender.first_name` | the sending account's first name, as the provider holds the account | not held |
-| `sender.last_name` | the sending account's last name, as the provider holds the account | not held |
-| `sender.name` | the sending account's full name, as the provider holds the account | not held |
-| `sender.address` | the sending account's address | `/args/sender/address` |
+| Name | What it is | On an email | On LinkedIn |
+|---|---|---|---|
+| `contact.first_name` | the person's first name | `/contacts/0/first_name` | `/contacts/0/first_name` |
+| `contact.last_name` | the person's last name | `/contacts/0/last_name` | `/contacts/0/last_name` |
+| `contact.company` | the person's company | `/contacts/0/company` | `/contacts/0/company` |
+| `contact.title` | the person's title | `/contacts/0/title` | `/contacts/0/title` |
+| `contact.email` | the person's email address, which on an email is the address the message goes to | `/contacts/0/channels/0/value` | not held |
+| `contact.custom.<key>` | the field the provider's account holds for the person under `<key>`: a letter or `_`, then at most 63 letters, digits and `_` | not held | not held |
+| `sender.first_name` | the sending account's first name, as the provider holds the account | not held | not held |
+| `sender.last_name` | the sending account's last name, as the provider holds the account | not held | not held |
+| `sender.name` | the sending account's full name, as the provider holds the account | not held | not held |
+| `sender.address` | the sending account's address, which on LinkedIn is its profile | `/args/sender/address` | `/args/sender/address` |
 
 ## Versioning
 
@@ -546,10 +584,12 @@ runtime released with it agrees with. Read them as worked examples of the contra
 
 An **input fixture** is `{operation, version, case, input, expect}`, where `expect` is either the string `"valid"`
 or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case, outcome, expect}`, where `outcome`
-is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?, pinned?, block?}`.
+is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, package_settles_by_key?, retriable, invalid?, pinned?, block?}`.
 `status` is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the
 output schema, which pins an identifier of a kind the operation never declared, or whose failure carries a code the
-operation does not declare under that class. `pinned` is what the runtime
+operation does not declare under that class. `package_settles_by_key` says whether the package that answered lists the
+operation under `settles_by_key`; a failed fixture states it exactly where the operation settles a lost answer by the work
+item's key and the failure is `ambiguous`, since only there does `retriable` rest on it. `pinned` is what the runtime
 writes into its record of provider identifiers from that answer, as `{kind: value}`. A **preview fixture** is
 `{operation, version, case, input, expect}`, where `input` is a composed input the operation's schema accepts and
 `expect` is `{summary, highlights, example?}`: the line the template renders, the values it highlights and, where the
@@ -567,12 +607,17 @@ and where a fixture states the reason, a constraint that changes kind at that po
 passing while it no longer demonstrates what the case is named for.
 
 A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
-document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
-operation accepts, nor the same code under a class that would have the runtime repeat what the document calls final.
+document declares, under the class the document declares it with, or a code reserved beside every operation, under
+the class it is reserved with. A fixture may not teach a plugin author a code no operation accepts, nor the same code
+under a class that would have the runtime repeat what the document calls final.
 The runtime holds every failed answer to the same list: a code the document does not declare, or a declared code under
 another class, is `result_invalid`, with the detail at `/error/code` or `/error/class` — except the plugin host's own
 codes, which belong to no operation and pass under the class the host writes them with
 ([the plugin guide, section 8](../plugins.md#8-failure-classes)); the events family alone refuses those as well.
+The reserved `provider_input_invalid` passes the same way, under `validation` alone
+([the input a plugin receives](#the-input-a-plugin-receives)), and an events read refuses it too.
+The code of [a capability the provider does not offer yet](#a-capability-the-provider-does-not-offer-yet) passes the
+same way, under `permanent` alone, and an events read refuses it too.
 
 **A failure may still pin.** A failed outcome carries its identifiers on the error — `error.external_ids`, which is
 where `host.fail` puts them and the only place the runtime reads them — and a declared kind there is written down by

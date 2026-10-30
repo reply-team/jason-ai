@@ -21,6 +21,8 @@
   "invariants": [],
 
   "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" },
+  "channel_arguments": ["send_after"],
+  "channel_templates": null,
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
@@ -28,8 +30,8 @@
   },
   "precondition": "The person's contact at the provider carries no other LinkedIn profile than the one consumed, and the provider does not hold them as opted out; a contact that carries no profile is given the consumed one before anything is sent.",
   "preview": {
-    "summary": "Invite {/contacts/0/channels/0/value} to connect on LinkedIn, from the provider's account {/args/sender/external_id} ({/args/sender/address}), with the note: {/args/note}",
-    "highlights": ["/contacts/0/channels/0/value", "/args/sender", "/args/note"]
+    "summary": "Invite {/contacts/0/channels/0/value} to connect on LinkedIn, from the provider's account {/args/sender/external_id} ({/args/sender/address}), with the note: {/args/note}; send after: {/args/send_after}",
+    "highlights": ["/contacts/0/channels/0/value", "/args/sender", "/args/note", "/args/send_after"]
   },
 
   "input_schema": {
@@ -58,6 +60,13 @@
             "maxLength": 200,
             "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
             "description": "The note, exactly as the person approving it reads it and something other than white space, or null for an invitation without one; the note is at most 200 characters. Required: an invitation without a note is said, never assumed."
+          },
+          "send_after": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 64,
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9]([.][0-9]{1,3})?(Z|[+-][0-9]{2}:[0-9]{2})$",
+            "description": "The moment the provider sends it at, with its offset, written as `YYYY-MM-DDTHH:mm:ss` with a fraction of one to three digits where it names one and `Z` or `+hh:mm` or `-hh:mm`, `T` and `Z` in capitals. Absent, or a moment already past, means as soon as the provider can. Only a plugin whose manifest lists it for the channel takes it, and the claim refuses it on any other (`argument_unsupported`)."
           }
         }
       },
@@ -160,8 +169,24 @@
             "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
             "status": {
               "type": "string",
-              "enum": ["sent", "already_connected"],
-              "description": "`sent`: the provider took the invitation. `already_connected`: the person is a connection of the account already, so nothing was sent. A refusal is a failed outcome with its class."
+              "enum": ["sent", "accepted", "already_connected"],
+              "description": "`sent`: the provider sent the invitation inside the call. `accepted`: the provider took it, to send as soon as it can or at the moment `send_after` names; whether and when it went is learned later, and never by this work item. Either one is the item done. `already_connected`: the person is a connection of the account already, so nothing was sent. A refusal is a failed outcome with its class."
+            },
+            "accepted_for": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "maxLength": 64,
+              "description": "The moment the provider took the invitation to send at, in UTC, or null where it took it to send as soon as it can, or nothing was sent. Absent reads as null."
+            },
+            "reference": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The provider's reference for the send it took, by which it reads and cancels it, or null where it gives none — always when nothing was sent. Absent reads as null. It comes back under `external_ids.send` too, the one value in both places."
+            },
+            "cancelable": {
+              "type": "boolean",
+              "description": "Whether the provider holds the send waiting for its moment, so it can still be cancelled by its reference; false when nothing was sent. Absent reads as false."
             },
             "sender_external_id": {
               "type": "string",
@@ -183,7 +208,7 @@
                   "type": ["string", "null"],
                   "format": "date-time",
                   "maxLength": 64,
-                  "description": "When the invitation was sent, in UTC, or null when the provider gives no moment that is known to be UTC."
+                  "description": "When the invitation was sent, in UTC, or null when the provider gives no moment that is known to be UTC — always for an invitation taken for a later moment."
                 }
               }
             },
@@ -191,7 +216,10 @@
               "type": "object",
               "additionalProperties": false,
               "required": ["contact"],
-              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+              "properties": {
+                "contact": { "type": "string", "minLength": 1, "maxLength": 256 },
+                "send": { "type": "string", "minLength": 1, "maxLength": 256 }
+              }
             }
           }
         }
@@ -203,11 +231,19 @@
     "contact": {
       "entity": "contact",
       "description": "The provider's identifier for the person invited — found by the pin or by the consumed profile, or created from that profile when the provider held nobody under it — pinned so no later call has to match them again."
+    },
+    "send": {
+      "entity": "work_item",
+      "description": "The provider's reference for the send this work item made it take, the result's `items[0].reference`. One work item is one send, so it is kept on the attempt that learned it and in the item's result, and pinned to no contact and no campaign."
     }
   },
 
-  "recovery_read": null,
-  "repeat_after_ambiguous": "never",
+  "recovery_read": {
+    "reads": "The provider's record of the send under this work item's idempotency key, read by making the same send again under the same key: the provider answers a send it already took with what it answered then — the same reference — and sends nothing twice, and a send the provider answered with a failure is never repeated, since the provider keeps no key for it and a repeat would be a new send. Before the repeat the plugin reads whether the provider keeps such keys at all; where it does not, the repeat fails `send_not_settled` and nothing is sent.",
+    "justification": "A send is irreversible, and on a metered channel a blind repeat is a second charge as well as a second message in somebody's inbox. The key the provider keeps is what turns the repeat into a read: it is the one trace of this work item's own send, where a read of the thread cannot tell it from another send to the same person. The provider keeps it for a bounded time only.",
+    "by_key": true
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
 
   "failure_codes": [
     { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so nobody is matched by the consumed profile or created in its place. Nothing was sent." },
@@ -226,8 +262,9 @@
     { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing was sent. Repeating it runs the same call again." },
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it send invitations for this account. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now, and nothing was sent; it may be attempted again." },
-    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was sent." },
-    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the invitation may already have gone and the contact may already have been made. No read tells this work item's invitation from another one, so the item stops for a person to look." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was sent — or it is still finishing the send an earlier attempt of this work item made under the same key, and this attempt sent nothing." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the invitation may already have gone and the contact may already have been made. The repeat makes the same send under the same idempotency key, which the provider answers with the first send's own answer where it took it, so nothing goes twice." },
+    { "code": "send_not_settled", "class": "permanent", "when": "A repeat after an attempt that may have sent, which the plugin cannot settle: the provider keeps no key for this send, so repeating it could send the person a second invitation. Nothing was sent by this attempt; a person looks at whether the first one went." },
     { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
   ],
 
@@ -238,7 +275,9 @@
     "The invitation goes from the account `args.sender` names, and only when the provider holds that account under the address the arguments state — null only for an account it holds no address for; otherwise it fails `sender_mismatch` before anything is sent.",
     "The note goes out exactly as approved: one the provider would read as a placeholder of its own fails `message_invalid` before anything is sent.",
     "A person who is a connection of the account already answers `already_connected`, and nothing is sent.",
-    "An attempt sends at most once. One that may have sent and lost its answer fails `provider_answer_lost` and is never repeated.",
+    "A work item sends at most once. Every attempt makes its send under the work item's idempotency key, and no other call of it carries one, so a repeat after `provider_answer_lost` is answered with the first send's own answer — the same reference — where the provider took it. A repeat the plugin cannot settle that way fails `send_not_settled`, and nothing is sent.",
+    "An invitation that names `send_after` goes at that moment or not at all: a plugin whose provider does not offer it fails `capability_not_offered` before anything is sent, and never sends it now instead. A moment already past is no moment, and goes as one that names none.",
+    "The result says `sent` where the provider sent the invitation inside the call, and `accepted` where it took it to send later, never that it went. Its `reference` is the one under `external_ids.send`: both, or neither and a null or absent reference.",
     "The person's identifier comes back under `external_ids.contact`, on a failure too once the person was found or created.",
     "The result carries exactly one item, and its `contact_id` is the identifier the call was given."
   ]

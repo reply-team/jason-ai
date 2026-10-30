@@ -65,8 +65,9 @@ of each version the Reply package has had from 0.9.0 on, and of the earlier vers
 leading zero means nothing — `0644` is the integer 644, while `0o644` is octal and `0x1a4` is
 hexadecimal. Anchors and aliases, a duplicate key, a second document in the file and nesting
 deeper than 32 levels are all refused as `yaml_invalid`. **Unknown keys are errors anywhere in the
-file** (`unknown_field`): a typo is the common failure, and forward compatibility arrives with a new
-`manifest_version`. Every rule is checked and every problem reported, so a file with three mistakes
+file** (`unknown_field`): a typo is the common failure. Forward compatibility arrives with a new
+`manifest_version`, except for a key whose whole point is that an older runtime refuses it: such a key may arrive at
+version `1`, because the older runtime's `unknown_field` is the guard it was meant to meet. Every rule is checked and every problem reported, so a file with three mistakes
 is answered with three problems rather than one per reload.
 
 ```yaml
@@ -136,6 +137,9 @@ binding:                         # optional; a schema, in the published dialect,
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
 | `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` — including a pattern that cannot finish matching the short probe or the 64 KiB one within the dialect's 100 ms on a warm engine, twice | `field_invalid` |
 | a field a `binding` declares, at any depth | never named like a credential — any of `token`, `secret`, `password`, `passwd`, `api_key`, `apikey`, `credential`, `private_key`, `authorization`, `bearer`, `cookie`, matched case-insensitively anywhere in the name and with every separator ignored, so `x-api-key`, `API.KEY` and `api key` are all that same name | `binding_secret_like` |
+| `arguments` | optional, and only on a provider; a mapping of operations to the arguments the plugin takes on some of that operation's channels, each a non-empty list of channels without duplicates. An operation the plugin does not implement or this build publishes no document for, an argument the operation's document does not name under `channel_arguments`, and a channel the operation's arguments do not take are refused | `field_invalid`, `argument_invalid` |
+| `settles_by_key` | optional, and only on a provider; a non-empty list of the operations whose lost answer the plugin settles by the work item's key, without duplicates. An operation the plugin does not implement, one this build publishes no document for, and one whose document's recovery read does not rest on the key (`recovery_read.by_key`) are refused | `field_invalid`, `settles_by_key_invalid` |
+| `templates` | optional, and only on a provider; a mapping of operations to the channels the plugin writes that operation's message on as a template, each a non-empty list without duplicates. An operation the plugin does not implement or this build publishes no document for, one whose document names no channel under `channel_templates`, and a channel the document does not name there are refused | `field_invalid`, `template_invalid` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
 workspace, which mailbox. It never carries the credential: the plugin reaches that through the
@@ -148,6 +152,57 @@ exactly when its schema refuses `{}`. It is still a route of its own: it has no 
 so trading one for the other is a change of account in provenance, in event sources and in reads by the
 account a person was learned in. The key is optional and additive, so `manifest_version` stays `1`. §7 is the
 same key from the plugin's side: what a binding is for, and what reaches the code as `context.binding`.
+
+`arguments` says where the plugin takes an argument that a provider offers on some of an operation's channels and
+not on others. An operation's document names such arguments under `channel_arguments` — today `send_after` on
+`message.send` and `social_invitation.send` — and a plugin that takes one lists the channels it takes it on:
+
+```yaml
+arguments:
+  message.send:
+    send_after: [email, linkedin]
+  social_invitation.send:
+    send_after: [linkedin]
+```
+
+The claim reads the list before anything runs. Work that carries such an argument on a channel the routed plugin
+does not list is refused, `argument_unsupported`, so your code never meets an argument it would have to drop or
+ignore; work that does not carry it reaches your code as it always has. It asks for nothing a person grants, so it is
+no capability, and like `binding` the key is optional and additive: `manifest_version` stays `1`, and a runtime too
+old to read the key refuses the package rather than send it an argument it never checked.
+
+`settles_by_key` says which of the sends whose document settles a lost answer by the work item's key — today
+`message.send` and `social_invitation.send` — the plugin makes under that key on every attempt, so that a repeat is
+answered with what the provider took the first time:
+
+```yaml
+settles_by_key: [message.send, social_invitation.send]
+```
+
+It is the package's promise about its own code, so it is no capability and nobody grants it, and it is what the
+runtime reads before it repeats such a send after an ambiguous end (§7): a package that does not list the send has
+that end final. A name the list cannot mean — an operation the plugin does not implement, or one whose document does
+not rest its recovery read on the key — is a package problem, so a misplaced promise rejects the reload rather than
+sit unread. The same holds for this key as for `arguments`: it is optional and additive, `manifest_version` stays `1`,
+and a runtime too old to read it refuses the package with `unknown_field`, which is the guard it was meant to meet.
+
+`templates` says on which channels the plugin writes an operation's message as a template — one the provider fills in
+for the person — rather than only as final text. An operation's document names the channels its message may be a
+template on under `channel_templates` — today `email` and `linkedin` on `message.send` — and a plugin that writes one
+lists the channels it writes it on:
+
+```yaml
+templates:
+  message.send: [email, linkedin]
+```
+
+The claim reads the list before anything runs. A template on a channel the routed plugin does not list is refused,
+`template_not_offered`, `permanent`, so your code never meets a template it would have to send as written or turn
+down; a final message reaches your code as it always has. An absent key means none: a package written before the key
+existed writes a template nowhere as far as the claim knows, so the Reply package older than 0.14.0 has its email
+templates refused `template_not_offered` under this runtime until it is updated. A name the list cannot mean is a
+package problem, `template_invalid`, which rejects the reload; like `arguments` the key asks for nothing a person
+grants, is optional and additive, and leaves `manifest_version` at `1`.
 
 An invocation's effective timeout and memory are `min(what the manifest asks for, the installation's
 ceiling)`, and a caller's own budget may lower the timeout further, never raise it. A manifest with
@@ -383,15 +438,20 @@ no CLR**; `eval` and `new Function` do not compile. Everything a plugin can reac
 
 ```json
 { "invocation_id": "pin_01J4…", "correlation_id": "att_01J4…",
-  "attempt_id": null, "attempt_number": null, "work_item_id": null, "campaign_id": null,
-  "binding": null, "timeout_ms": 20000, "deadline": "2026-09-14T12:00:20.000Z",
+  "attempt_id": null, "attempt_number": null,
+  "work_item_id": null, "campaign_id": null, "binding": null, "timeout_ms": 20000, "deadline": "2026-09-14T12:00:20.000Z",
   "plugin": { "id": "fake-provider", "version": "1.0.0" }, "runtime_version": "0.1.0" }
 ```
 
 `binding` is the caller's non-secret note to the plugin, in the shape the manifest's `binding` schema
 declares (§3 and §7), or `null` when the route carries none, at most 64 KiB; `attempt_id`,
 `attempt_number`, `work_item_id` and `campaign_id` are filled once provider operations are routed —
-`attempt_number` is what tells a plugin it is being repeated. No secret is ever in `context`.
+`attempt_number` is what tells a plugin it is being repeated. `unsettled_since` is there only on a later attempt of a
+provider operation after one that may have acted: the moment the earliest such attempt of the work item was claimed, in
+UTC. It is absent where none did; read absent and `null` alike. An attempt may have acted when it ended `ambiguous`, whether you said so or no answer of the protocol
+came back; any other answer of yours settled it. `unsettled_reference` is there beside it where such an attempt returned
+the work item's own `send` identifier: the reference the latest one returned. It is absent where none did; read absent
+and `null` alike. No secret is ever in `context`.
 
 ## 6. The Host SDK
 
@@ -670,9 +730,10 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 - **`args`** is what the caller wrote under the work item's `context.input`, and nothing else from
   that context. It is always present — `{}` when the operation takes no arguments. Its one reserved member,
   `provider`, is the caller's object for your package ([the rule](contracts/README.md#the-input-a-plugin-receives)):
-  a package that reads it and cannot make sense of what it was given fails the item before any call, under a code the
-  operation declares, with a message that names the shape it expects and never quotes the text, and a package that
-  does not read it ignores it.
+  a package that reads it and cannot make sense of what it was given fails the item before any call with
+  `provider_input_invalid`, class `validation`, the one code reserved for that beside every operation, with a
+  message that names the shape it expects and never quotes what it was given, and a package that does not read it
+  ignores it.
 - **`contacts`** appears when the operation's pre-flight says a contact is `required`, or when it says
   `optional` and the work item names one. It carries exactly one person, and is cut to the **declared
   projection**: the fields the document names, and only the one channel the operation consumes, or none.
@@ -685,6 +746,10 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 - **`idempotency_key`** is the *work item's* own identifier, present when the operation requires one.
   It is stable across every attempt, which is what makes "what did the prior run under this key do"
   a question a provider's ledger can answer.
+- **`send`** appears where the operation's input schema declares it — today `message.status` and
+  `message.cancel`. The runtime composes it from the succeeded attempt of the send `args.send` names:
+  that work item, its operation and your reference for the send. A caller never writes it, so read the
+  send by `send.reference` and by nothing in `args`.
 - Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
   before. Another plugin's identifier for the same person is never visible to you.
 
@@ -769,6 +834,23 @@ happened. A plugin that skips the reading looks perfectly correct against a prov
 be idempotent, and bills twice against one that is not; performing it is what makes one crash cost one
 effect. `campaign.get` says `safe` instead, because a read may simply be asked again.
 
+Where the provider keeps the work item's idempotency key on the effect itself, the recovery read can be the same call
+made again under the same key, which the provider answers with what it took the first time: `message.send` and
+`social_invitation.send` read it that way. Where you cannot tell that the provider keeps the key, the repeat is not
+settled: fail `send_not_settled`, `permanent`, with nothing sent, rather than reach the person a second time. A
+provider keeps such a key for a bounded time only, so count that time from `context.unsettled_since`: a repeat after
+the provider's window from it is not settled either. Where `context.unsettled_reference` names the send an earlier
+attempt returned, read that send first, inside the window and past it: a read never makes a send twice, and what the
+provider says became of the send answers the work item without the key. A read the provider answers as another
+account's send is not settled either. Only where the read finds nothing, or gets no answer, does the window decide.
+Because that reading rests on your sending under the key, the runtime repeats such a send only where your manifest
+lists it under `settles_by_key` (§3): under a package that does not, an ambiguous end of the send is final, and a
+repeat already claimed is refused at the claim, `provider_answer_lost`, before your code runs. The claim refuses it the
+same way where the routed package, by its id and digest, or its binding is not the one the unsettled attempt ran under,
+since the key settles a send only at the provider and the account that took it, and where the item's arguments are not
+the ones that attempt ran with, since the key settles only the request it went with: a provider holding it answers a
+repeat with the earlier send.
+
 ### What to return
 
 ```json
@@ -785,6 +867,12 @@ receives back where that entity sits in its input — `contacts[0].external_ids`
 `campaign.external_ids` for a campaign. The `external_ids` inside each item
 of the result is the record of *who got what* — which person this identifier belongs to — and it stays
 right when a call addresses more than one person. They are not copies of each other; return both.
+
+A kind whose document says its entity is `work_item` is not a pin. `send`, on `message.send` and
+`social_invitation.send`, is the provider's reference for the send this work item made it take: one item is one send,
+so the runtime keeps it on the attempt's provenance and in the item's frozen result, and no later call receives it
+back. The result says it too, at `items[0].reference`, and the two are one value — both, or neither and a null
+reference; an answer that says them apart is `result_invalid`.
 
 **Say whether the provider found it or created it, when you know.** `external_id_origins` beside `external_ids`
 says, kind by kind, whether the provider already held the entity (`"found"`) or the call created it (`"created"`).
@@ -898,7 +986,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all twenty-two published
+`plugins/reply/` is the one to read: a marketplace package that implements all twenty-four published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -945,7 +1033,9 @@ reversible control that costs nothing, whose second performance changes nothing 
 closing a closed thread; `after_recovery_read` for a write that declares the reading which settles the question;
 `never` where nothing can settle it — `conversation.reply`, a send no read tells apart from another — and an item
 that ends that way waits for a human or a manager role. The
-runtime reads that field and nothing else when it decides; your half is to make the permission true:
+runtime reads that field when it decides, and nothing else but, where the document's recovery read rests on the work
+item's key (`recovery_read.by_key`), whether the package the attempt ran under lists the operation under
+`settles_by_key`; your half is to make the permission true:
 when you are handed an attempt number above 1, perform the declared recovery read before you write
 anything (§7). One exception belongs to neither of you: an answer that arrived and does not satisfy
 the operation's output schema is `result_invalid`, which is ambiguous and never repeated whatever the
@@ -961,8 +1051,26 @@ no block and pins nothing; what you reported — code, class, message and detail
 attempt's trace. A read made on a person's request outside any work item is held to the list by the same
 check, and answered `result_invalid` the same way. The host's own codes below belong to no operation, and
 pass beside every one under the class the host writes them with; the same code under another class is
-yours, and is refused like any other code the operation does not declare. The events family is the one
-exception: its reads refuse every code the events contract does not declare, the host's included (§15).
+yours, and is refused like any other code the operation does not declare. `provider_input_invalid`, the
+code reserved for a provider's object you cannot read (§7), passes the same way, under `validation` alone.
+`capability_not_offered`, the code reserved for a capability the provider does not offer yet (below),
+passes the same way, under `permanent` alone. The events family is the one exception: its reads refuse
+every code the events contract does not declare, the host's included (§15).
+
+**A capability the provider does not offer yet** is answered `capability_not_offered`, `permanent`. A package runs ahead
+of its provider: declaring an operation in the manifest says that the package knows how to call it, not that the
+provider offers it today. How a package tells that the provider does not offer what was asked is stated once, in [the
+contracts README](contracts/README.md#a-capability-the-provider-does-not-offer-yet), which also lists the capabilities a
+provider may lack for a while. Where it tells, report this code rather than your generic refusal, with a message that
+names what is missing: the operation, the argument by its name in the operation's document, or a member of the
+provider's own object. Quote nothing of the provider's text in the message beyond its own code; what it said belongs in `details`. It is reserved: no operation
+declares it, and every one passes it as `permanent` and under no other class, because asking again with the same
+arguments meets the same provider: the work item ends `failed`, as on any permanent failure, and what to do instead is
+the agent's to choose, never a fallback the runtime makes. It is not `plugin_operation_unsupported`, where your package
+does not implement the operation; not `capability_not_granted`, where the operator granted your package less than its
+manifest asks for (§9); and not an operation's own `feature_unavailable`, where the provider offers the thing and the
+account's plan or role does not include it. The events family keeps its own word for an account with no feed of events,
+`events_unsupported` (§15).
 
 **Protocol failures** mean the runtime never got an answer at all. They are classified by how much
 may already have run.

@@ -1,7 +1,7 @@
 {
   "operation": "message.send",
   "version": 1,
-  "case": "a LinkedIn message written as a template, which only an email may be, refused at the message",
+  "case": "a LinkedIn message written as a template: the text names the person's first name, which the provider fills in",
   "input": {
     "args": {
       "channel": "linkedin",
@@ -28,5 +28,5 @@
     },
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
-  "expect": { "invalid": [{ "pointer": "/args/message", "reason": "any_of" }] }
+  "expect": "valid"
 }

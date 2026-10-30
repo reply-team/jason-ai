@@ -1,0 +1,21 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a repeat after an answer that was lost, where the provider keeps no key for the send: nothing is sent, and a person looks at whether the first one went",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "send_not_settled",
+      "message": "The provider keeps no key for this send, so it was not repeated.",
+      "details": null,
+      "external_ids": { "contact": "p_88421" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

@@ -1,11 +1,11 @@
 // A message composed as a template, written in Reply's own syntax. The template is read by the template standard the
 // contracts README publishes ("The template standard"), the same reading the document holds it to, in one pass from its
 // start: a construct the standard refuses is refused by the standard's own name for it and the character it starts on.
-// What the standard accepts is written as Reply writes it, name by name, and Reply fills it in for the person when it
-// sends. Nothing here calls Reply.
+// What the standard accepts is written as Reply writes it, name by name for the channel it goes on, and Reply fills it in
+// for the person when it sends. Nothing here calls Reply.
 import { fail } from "./errors.js";
 
-// Each name the standard lists, as Reply names it. A custom field goes by its key alone.
+// Each name the standard lists, as Reply names it in an email. A custom field goes by its key alone.
 const NAMES = {
   "contact.first_name": "FirstName",
   "contact.last_name": "LastName",
@@ -17,6 +17,22 @@ const NAMES = {
   "sender.name": "SendingEmail.SenderName",
   "sender.address": "SendingEmail.Email",
 };
+
+// Each name as Reply names it in a LinkedIn text, null for one Reply holds no variable for there: Reply's LinkedIn
+// sending account carries a first name and a name, and neither a last name nor an address.
+const LINKEDIN = Object.assign({}, NAMES, {
+  "sender.first_name": "SendingLinkedIn.SenderFirstName",
+  "sender.last_name": null,
+  "sender.name": "SendingLinkedIn.SenderName",
+  "sender.address": null,
+});
+
+const CHANNELS = { "email": NAMES, "linkedin": LINKEDIN };
+
+// The names Reply holds no variable for on a channel whose value the arguments hold, written in its place as the text
+// the arguments hold: on LinkedIn the sending account's address, its profile. The address is the one Reply's list of
+// accounts holds, checked before the send (send.js).
+const WRITTEN = { "email": [], "linkedin": ["sender.address"] };
 
 const CUSTOM = "contact.custom.";
 const KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
@@ -83,36 +99,52 @@ const OPERATOR = "operator";
 const QUOTED = "quoted";
 
 /**
- * The subject or the body, `part`, as Reply reads a template: each run of text and each fallback passed through
- * `literal`, which writes text as the part carries it, and every tag in Reply's syntax. Refuses, before anything is
- * called, a template the standard refuses, a custom field under a key Reply keeps, a comparison with a character Reply's
- * comparison does not read, a template whose text and fallbacks spell a prompt to a model once Reply fills it in, and a
- * `<` in its text, a fallback or a comparison that starts a tag, or that stands right before a value; a comparison's
- * text is held because whether Reply sanitizes a template before or after it fills it in is not known.
+ * The subject or the body, `part`, of a message on `channel`, `email` or `linkedin`, as Reply reads a template: each run
+ * of text and each fallback passed through `literal`, which writes text as the part carries it, and every tag in Reply's
+ * syntax, each name as Reply names it on that channel. A name Reply holds no variable for whose value the arguments hold,
+ * `held` by name, is written as that value, or its fallback where the value is none, and a condition on it as the branch
+ * it takes, as the example a person approves renders them. Refuses, before anything is called, a template the standard
+ * refuses, such a name with no value and no fallback, a name Reply holds no field for on the channel, a custom field
+ * under a key Reply keeps, a comparison with a
+ * character Reply's comparison does not read, a template whose text and fallbacks spell a prompt to a model once Reply
+ * fills it in, and, in an email, a `<` in its text, a fallback or a comparison that starts a tag, or that stands right
+ * before a value; a comparison's text is held because whether Reply sanitizes a template before or after it fills it in
+ * is not known. A LinkedIn text is written as written, as a final one is, and Reply converts it from HTML to text after
+ * filling it in.
  */
-export function inReplySyntax(operation, part, template, literal) {
+export function inReplySyntax(operation, channel, part, template, literal, held) {
+  const names = CHANNELS[channel];
   const read = parse(template);
   if (read.refusal !== null) {
     refuse(operation, "template_refused", "The " + part + " writes " + REFUSED[read.refusal.key] + " at character " + read.refusal.position + ", which the template standard refuses.");
   }
 
-  const kept = keptKey(read.nodes);
+  const nodes = withHeld(operation, part, read.nodes, WRITTEN[channel], held || {});
+  const lacked = lackedName(nodes, names);
+  if (lacked !== null) {
+    refuse(operation, "template_names_a_field_reply_lacks", "The " + part + " names `" + lacked.name + "` at character " + lacked.at + ", which Reply holds no field for on " + (channel === "email" ? "email" : "LinkedIn") + ".");
+  }
+
+  const kept = keptKey(nodes);
   if (kept !== null) {
     refuse(operation, "template_names_a_key_reply_keeps", "The " + part + " names a custom field at character " + kept + " under a key Reply keeps for a value of its own, which Reply would write instead of the field.");
   }
 
-  const unread = unreadIn(read.nodes);
+  const unread = unreadIn(nodes);
   if (unread !== null) {
     refuse(operation, "template_compares_what_reply_cannot_read", "The " + part + " compares a value with a text holding, at character " + unread + ", a character Reply's comparison does not read.");
   }
 
-  const spelled = promptIn(read.nodes, [0]).at;
+  const spelled = promptIn(nodes, [0]).at;
   if (spelled !== null) {
     refuse(operation, "template_spells_a_prompt", "The " + part + " spells `@prompt[[` once Reply fills it in, complete at character " + spelled + ", which Reply would read as a prompt to a model.");
   }
 
-  refuseTag(operation, "template_tag_in_the_text", part, tagIn(read.nodes, []).at);
-  return written(read.nodes, literal);
+  if (channel === "email") {
+    refuseTag(operation, "template_tag_in_the_text", part, tagIn(nodes, []).at);
+  }
+
+  return written(nodes, literal, names);
 }
 
 /**
@@ -134,19 +166,19 @@ function refuse(operation, row, reason) {
   fail(operation, { call: null, row: row, reason: reason }, undefined);
 }
 
-// The nodes in Reply's syntax.
-function written(nodes, literal) {
+// The nodes in Reply's syntax, each name as `names` writes it.
+function written(nodes, literal, names) {
   let out = "";
   for (const node of nodes) {
     if (node.kind === "text") {
       out += literal(node.text);
     } else if (node.kind === "value") {
-      out += "{{" + replyName(node.name) + (node.fallback === null ? "" : " | '" + literal(node.fallback) + "'") + "}}";
+      out += "{{" + replyName(node.name, names) + (node.fallback === null ? "" : " | '" + literal(node.fallback) + "'") + "}}";
     } else {
       // Reply decodes the whole message before it reads it, so the text a comparison compares is written as the rest is.
-      out += "{{#if " + replyName(node.name) + (node.operator === null ? "" : " " + node.operator + " '" + literal(node.text) + "'") + "}}";
-      out += written(node.then, literal);
-      out += node.otherwise === null ? "" : "{{else}}" + written(node.otherwise, literal);
+      out += "{{#if " + replyName(node.name, names) + (node.operator === null ? "" : " " + node.operator + " '" + literal(node.text) + "'") + "}}";
+      out += written(node.then, literal, names);
+      out += node.otherwise === null ? "" : "{{else}}" + written(node.otherwise, literal, names);
       out += "{{/if}}";
     }
   }
@@ -154,8 +186,57 @@ function written(nodes, literal) {
   return out;
 }
 
-function replyName(name) {
-  return name.indexOf(CUSTOM) === 0 ? name.slice(CUSTOM.length) : NAMES[name];
+function replyName(name, names) {
+  return name.indexOf(CUSTOM) === 0 ? name.slice(CUSTOM.length) : names[name];
+}
+
+// The nodes with each name of `from` written as text: its value in `held`, else its fallback, and a condition on it as
+// the branch it takes, compared as the example compares, a value of nothing but white space being none. The text is
+// then read as the rest of the template is, for a prompt among the rest.
+function withHeld(operation, part, nodes, from, held) {
+  const out = [];
+  for (const node of nodes) {
+    if (node.name === undefined || from.indexOf(node.name) < 0) {
+      out.push(node.kind !== "if" ? node : Object.assign({}, node, {
+        then: withHeld(operation, part, node.then, from, held),
+        otherwise: node.otherwise === null ? null : withHeld(operation, part, node.otherwise, from, held),
+      }));
+    } else if (node.kind === "value") {
+      const value = valued(held[node.name]) ? held[node.name] : node.fallback;
+      if (value === null) {
+        refuse(operation, "template_names_a_field_reply_lacks", "The " + part + " names `" + node.name + "` at character " + node.at + " with no fallback: Reply has no variable for the sending account's address on LinkedIn, and the arguments hold none.");
+      }
+
+      out.push({ kind: "text", text: value, at: node.at });
+    } else {
+      const value = valued(held[node.name]) ? held[node.name] : "";
+      const holds = node.operator === null ? valued(held[node.name]) : (value === node.text) === (node.operator === "==");
+      out.push.apply(out, withHeld(operation, part, holds ? node.then : node.otherwise || [], from, held));
+    }
+  }
+
+  return out;
+}
+
+// Whether a value the arguments hold is one: a string with a character that is not white space.
+function valued(value) {
+  return typeof value === "string" && Array.from(value).some(character => !WHITE.test(character));
+}
+
+// The first name `names` holds no field for, with the character it starts on, or null.
+function lackedName(nodes, names) {
+  for (const node of nodes) {
+    if (node.name !== undefined && node.name.indexOf(CUSTOM) !== 0 && names[node.name] === null) {
+      return { name: node.name, at: node.at };
+    }
+
+    const inside = node.kind === "if" ? lackedName(node.then.concat(node.otherwise || []), names) : null;
+    if (inside !== null) {
+      return inside;
+    }
+  }
+
+  return null;
 }
 
 // Where the first custom field under a key Reply keeps starts, or null.

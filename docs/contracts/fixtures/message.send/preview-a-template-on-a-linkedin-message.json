@@ -1,0 +1,47 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a LinkedIn message written as a template: the example renders it over the composed input, and leaves to the provider the person's email address, which the input does not hold on LinkedIn, and the sending account's name",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "message": { "format": "linkedin_message", "compose": "template", "body": "Hi {{contact.first_name}}, glad we connected. I wrote to {{contact.email | 'your inbox'}} as well.\n{{sender.name}}" }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_message, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner), outside any campaign — subject: —; text: Hi {{contact.first_name}}, glad we connected. I wrote to {{contact.email | 'your inbox'}} as well. {{sender.name}}; send after: —",
+    "highlights": {
+      "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
+      "/args/channel": "linkedin",
+      "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "/args/message": { "format": "linkedin_message", "compose": "template", "body": "Hi {{contact.first_name}}, glad we connected. I wrote to {{contact.email | 'your inbox'}} as well.\n{{sender.name}}" },
+      "/args/message/compose": "template",
+      "/args/send_after": null
+    },
+    "example": {
+      "subject": null,
+      "body": "Hi Marta, glad we connected. I wrote to your inbox as well.\n[sender.name]",
+      "unfilled": ["contact.email", "sender.name"]
+    }
+  }
+}

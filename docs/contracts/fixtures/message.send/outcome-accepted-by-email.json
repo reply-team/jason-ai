@@ -1,0 +1,30 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "an email the provider took to send now, its Message-ID the message's identifier, its reference the one under the send's kind, and no moment",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "accepted",
+          "accepted_for": null,
+          "reference": "email-1001",
+          "cancelable": false,
+          "channel": "email",
+          "format": "email",
+          "sender_external_id": "s_12",
+          "message": { "external_id": "<60017.direct@mail.example.com>", "sent_at": null },
+          "external_ids": { "contact": "p_88421", "send": "email-1001" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_88421", "send": "email-1001" },
+    "error": null,
+    "diagnostics": { "duration_ms": 900, "exec_calls": 4, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

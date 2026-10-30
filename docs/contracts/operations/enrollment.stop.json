@@ -21,6 +21,8 @@
   "invariants": ["G1", "G3", "G6", "G8"],
 
   "preflight": { "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_only" },
+  "channel_arguments": null,
+  "channel_templates": null,
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],

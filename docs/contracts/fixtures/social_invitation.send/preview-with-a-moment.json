@@ -1,0 +1,41 @@
+{
+  "operation": "social_invitation.send",
+  "version": 1,
+  "case": "an invitation for a later moment: the summary carries the moment as the arguments name it",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "note": "Hi Marta, we met at the Lisbon meetup.",
+      "send_after": "2026-11-03T14:00:00Z"
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Invite https://www.linkedin.com/in/marta-example to connect on LinkedIn, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner), with the note: Hi Marta, we met at the Lisbon meetup.; send after: 2026-11-03T14:00:00Z",
+    "highlights": {
+      "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
+      "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "/args/note": "Hi Marta, we met at the Lisbon meetup.",
+      "/args/send_after": "2026-11-03T14:00:00Z"
+    }
+  }
+}

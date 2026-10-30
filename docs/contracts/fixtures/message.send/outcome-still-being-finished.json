@@ -1,0 +1,21 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a repeat while the provider is still finishing the send the first attempt made under the same key: nothing more is sent, and the repeat comes later",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "transient",
+      "code": "provider_unavailable",
+      "message": "The first attempt under this key is still being finished.",
+      "details": null,
+      "external_ids": { "contact": "p_88421" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "transient", "retriable": true, "pinned": { "contact": "p_88421" } }
+}

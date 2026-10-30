@@ -1,0 +1,32 @@
+{
+  "operation": "message.cancel",
+  "version": 1,
+  "case": "a send named by something other than a work item",
+  "input": {
+    "args": {
+      "send": "email-1001"
+    },
+    "send": {
+      "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "operation": "message.send",
+      "reference": "email-1001"
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/args/send",
+        "reason": "pattern"
+      }
+    ]
+  }
+}
