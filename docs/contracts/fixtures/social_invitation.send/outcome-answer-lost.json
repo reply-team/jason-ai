@@ -1,7 +1,7 @@
 {
   "operation": "social_invitation.send",
   "version": 1,
-  "case": "the invitation may already have gone: the item stops for a person rather than inviting twice, and the person is still pinned",
+  "case": "the invitation may already have gone: the person is still pinned, and the item is repeated, because the package lists the send under settles_by_key: the repeat makes the same send under the same key and the provider answers a send it took with its first answer",
   "outcome": {
     "protocol_version": 1,
     "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
@@ -17,5 +17,5 @@
     },
     "diagnostics": { "duration_ms": 900, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
   },
-  "expect": { "status": "failed", "class": "ambiguous", "retriable": false, "pinned": { "contact": "p_88421" } }
+  "expect": { "status": "failed", "class": "ambiguous", "package_settles_by_key": true, "retriable": true, "pinned": { "contact": "p_88421" } }
 }

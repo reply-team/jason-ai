@@ -20,7 +20,7 @@ The descriptor is `run/runtime.json` under the data directory: `~/.jason/run/run
 directory `JASON_DATA_DIR` names when that variable is set. It is one JSON object:
 
 ```json
-{"api_version":"v1","runtime_version":"0.21.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z"}
+{"api_version":"v1","runtime_version":"0.22.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z"}
 ```
 
 | Field | What it is |

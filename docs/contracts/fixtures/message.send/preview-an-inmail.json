@@ -29,13 +29,14 @@
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_inmail, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner), outside any campaign — subject: The Lisbon meetup; text: Hi Marta, we have not met yet, but the meetup came up.",
+    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_inmail, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner), outside any campaign — subject: The Lisbon meetup; text: Hi Marta, we have not met yet, but the meetup came up.; send after: —",
     "highlights": {
       "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
       "/args/channel": "linkedin",
       "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
       "/args/message": { "format": "linkedin_inmail", "subject": "The Lisbon meetup", "body": "Hi Marta, we have not met yet, but the meetup came up." },
-      "/args/message/compose": null
+      "/args/message/compose": null,
+      "/args/send_after": null
     }
   }
 }

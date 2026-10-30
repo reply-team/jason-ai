@@ -1,0 +1,47 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a LinkedIn template that names the sending account's address for an account the provider holds no address for: the address is null, so the example shows it by its name and lists it, since the provider then sends nothing",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "sender": { "external_id": "s_34", "address": null },
+      "message": { "format": "linkedin_message", "compose": "template", "body": "Hi {{contact.first_name}}, my profile is {{sender.address}}." }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_message, from the provider's account s_34 (—), outside any campaign — subject: —; text: Hi {{contact.first_name}}, my profile is {{sender.address}}.; send after: —",
+    "highlights": {
+      "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
+      "/args/channel": "linkedin",
+      "/args/sender": { "external_id": "s_34", "address": null },
+      "/args/message": { "format": "linkedin_message", "compose": "template", "body": "Hi {{contact.first_name}}, my profile is {{sender.address}}." },
+      "/args/message/compose": "template",
+      "/args/send_after": null
+    },
+    "example": {
+      "subject": null,
+      "body": "Hi Marta, my profile is [sender.address].",
+      "unfilled": ["sender.address"]
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "operation": "social_invitation.send",
+  "version": 1,
+  "case": "the provider took the invitation for a later moment: it holds the send waiting, so it can still be cancelled by its reference, and nothing has gone yet",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "accepted",
+          "accepted_for": "2026-11-03T14:00:00Z",
+          "reference": "linkedin-2002",
+          "cancelable": true,
+          "sender_external_id": "s_34",
+          "invitation": { "external_id": null, "sent_at": null },
+          "external_ids": { "contact": "p_88421", "send": "linkedin-2002" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_88421", "send": "linkedin-2002" },
+    "error": null,
+    "diagnostics": { "duration_ms": 900, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

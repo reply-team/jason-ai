@@ -37,6 +37,8 @@
   "invariants": ["A7", "D1", "D4", "E2", "F2", "G1", "G2", "G7", "G8"],
 
   "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" },
+  "channel_arguments": null,
+  "channel_templates": null,
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],

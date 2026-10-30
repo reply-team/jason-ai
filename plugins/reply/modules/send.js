@@ -21,16 +21,67 @@
 //   did not return it — it names as `contact.already_held` and sends nothing to, and that contact is then read like
 //   any other before the send is made to it by its identifier. No send reaches a contact Reply held without that read.
 //
+// The send itself is made under the work item's idempotency key, and no other command of the attempt carries one; a
+// moment the arguments name that is still ahead goes beside it as `--send-after`, as written, and Reply holds the send
+// for it. A moment already past is no moment: the send goes as one that names none. Reply keeps the key and the moment
+// only where it keeps direct sends, which `direct-send get` of a reference no send is held under tells — Reply's own
+// answer about the send it names, against no route at all — so that is read first wherever it matters: before a send
+// that names a moment, which goes at that moment or not at all (`capability_not_offered`), before a message that names
+// the sending schedule Reply times it by (provider.js), which goes by that schedule or not at all (the same code), and
+// before a repeat after an attempt that may have sent, which without the key could send the person a second message
+// (`send_not_settled`). The schedule goes beside the key as `--schedule-id`, with the moment where one is named too.
+// Nothing is sent in either case. The runtime says when the earliest such attempt was claimed, `context.unsettled_since`,
+// and null where none was; Reply keeps a key for a day, so a repeat 23 hours or more after that moment is not settled by
+// it either, and ends before anything is sent. A later attempt after attempts that all settled is a first send again.
+//
+// Where the runtime also names the send such an attempt returned, `context.unsettled_reference`, that send is read
+// first, by `direct-send get` of its reference, inside the window and past it: a read never makes a send twice. Reply's
+// record of it then answers the work item as the send under the key would, a state that says it failed or was cancelled
+// included, and nothing is sent. A read that finds nothing, gets no answer, or names another send or none in a shape
+// this package reads says nothing of it, and the window decides as it does without a reference. A read the CLI refuses
+// for want of a working credential is the profile's failure, not the send's, and fails as every such command does.
+//
 // A lost answer from the one write before a send is asked again as a read is: nothing was sent, and the next attempt
-// reads the contact first. A send's own lost answer is never repeated: Reply keeps no key on a send, and a command that
-// imported the person may have sent too.
-import { run, runOrHeld } from "./cli.js";
+// reads the contact first. A send's own lost answer — no answer of Reply's at all, or one at 500 or above — is repeated
+// under the same key: Reply answers a send it already took with what it answered then and sends nothing twice, and
+// answers the key held for another request — a repeat that names the person or the moment otherwise — with what it holds
+// under it. A send Reply answered with a failure is never repeated, since Reply keeps no key for it and a repeat would
+// be a new send. Either way the answer is the send the work item made Reply take. A command that imported the person
+// carries the key too, and Reply keeps it only where it took the send.
+import { offered, readOrNone, run, runOrHeld, runOrKept } from "./cli.js";
 import { describe, fail, lostAnswerRow } from "./errors.js";
 import { contactNumber, sameAddress, sameValue, toEnsure, writtenAsItIs } from "./contacts.js";
+import { scheduleOf } from "./provider.js";
 
 const SENDERS = "account list";
 const READ = "contact get";
 const PATCH = "contact update";
+
+// The read that tells whether the account's Reply keeps direct sends, of one reference in reply-cli's own spelling for
+// every channel, and the CLI's words for Reply's answer about the send it names, which only a Reply that keeps them gives.
+const CHECK = "direct-send get";
+const CHECKED = "email-1";
+const KEEPS = ["direct_send.not_found", "direct_send.not_owned"];
+
+// The row of a read of the send an earlier attempt returned that Reply answers as another account's (errors.js).
+const NOT_OWNED = "send_not_settled_not_owned";
+
+// Reply keeps a direct send's key for a day; a repeat goes under it only within 23 hours of the moment the earliest
+// attempt that may have sent was claimed, so the key Reply answers by is still the one it kept.
+const KEY_WINDOW_MS = 23 * 60 * 60 * 1000;
+
+// Reply's states for a send it no longer holds back: it went, or is going now, so it can no longer be cancelled. Every
+// other state it still holds the send in can be, whatever its name.
+const GOING = ["sent", "sending"];
+
+// Reply's states for a send that is not going at all: it failed, or was cancelled. Either is final.
+const UNTAKEN = ["failed", "cancelled"];
+
+// A moment as reply-cli takes one for `--send-after` and as Reply answers one: with its offset.
+const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+
+// The longest reference the document takes.
+const LONGEST_REFERENCE = 256;
 
 // The row for a contact this attempt was not pinned to that Reply named and then held nothing under (cli.js).
 const GONE = "contact_gone";
@@ -103,11 +154,36 @@ export function senderFor(operation, context, channel, sender) {
 }
 
 /**
+ * The send an earlier attempt that may have sent returned, as Reply's record of it says, read before anything else
+ * (`context.unsettled_reference`): `{ kept, learned, call }` as `sendTo` answers a key Reply holds for another request —
+ * `kept` holding the record as `details` and the contact it names as `ids` — and the read as `call`. Undefined where the
+ * context names no send, and where the read finds nothing, gets no answer, or answers for another send or in a shape that
+ * names no contact or that `taken` does not read: the repeat is then the window's (`keyedFlags`). A read Reply answers
+ * as another account's send (`direct_send.not_owned`) fails the operation as not settled: what Reply keeps under the
+ * key there settles nothing from this account, so nothing is sent. A read refused for want of a working credential
+ * fails the operation as `unauthorized` (`readOrNone`).
+ */
+export function recordedSend(operation, context) {
+  const reference = context && typeof context.unsettled_reference === "string" ? context.unsettled_reference : null;
+  if (reference === null) {
+    return undefined;
+  }
+
+  const record = readOrNone(context, { operation: operation, command: CHECK, operands: [reference], pins: false, final: { "direct_send.not_owned": NOT_OWNED } });
+  if (record === null || record.reference !== reference || contactNumber(record.contact_id) === null || taken(record, true) === undefined) {
+    return undefined;
+  }
+
+  return { kept: { details: record, ids: { contact_id: record.contact_id } }, learned: undefined, call: CHECK };
+}
+
+/**
  * Runs the send's one command for the person this send may reach, from `sender` — the account `senderFor` answered,
- * which a block the command meets is said for — with `flags` after the person's own and `text` — the command's own
- * input, or none — on stdin, and answers `{ sent, learned }`: what the command answered, and what this package knows
- * Reply calls the person, which travels out with every failure from here on. `variant` is `template` for a text
- * composed as one, which names the rows of the send's own refusals (errors.js), and undefined otherwise.
+ * which a block the command meets is said for — with `flags` after the person's own, then the work item's key and the
+ * moment (`keyedFlags`), and `text` — the command's own input, or none — on stdin, and answers `{ sent, learned }`: what
+ * the command answered, and what this package knows Reply calls the person, which travels out with every failure from
+ * here on — or `{ kept, learned }` where Reply holds the key for another request (cli.js). `variant` is `template` for a
+ * text composed as one, which names the rows of the send's own refusals (errors.js), and undefined otherwise.
  *
  * A person found by the pin or by the consumed value is read first and named by Reply's identifier. A person Reply holds
  * nobody for is named by their fields, for the command to import; where the command answers that Reply already held
@@ -115,18 +191,149 @@ export function senderFor(operation, context, channel, sender) {
  * identifier — one more command in that case, never a send to a contact nobody read.
  */
 export function sendTo(operation, context, input, command, sender, flags, text, variant) {
+  const keyed = flags.concat(keyedFlags(operation, context, input));
   const named = personFor(operation, context, input);
   if (named.stdin === undefined) {
-    return { sent: run(context, sendRequest(operation, command, sender, named, flags, text, variant)), learned: named.learned };
+    return answered(runOrKept(context, sendRequest(operation, command, sender, named, keyed, text, variant)), named.learned);
   }
 
-  const first = runOrHeld(context, sendRequest(operation, command, sender, named, flags, text, variant));
+  const first = runOrHeld(context, sendRequest(operation, command, sender, named, keyed, text, variant));
   if (first.held === undefined) {
-    return { sent: first.result, learned: named.learned };
+    return answered(first, named.learned);
   }
 
   const held = read(operation, context, input, { flags: ["--contact-id", first.held], learned: { contact: first.held } });
-  return { sent: run(context, sendRequest(operation, command, sender, held, flags, text, variant)), learned: held.learned };
+  return answered(runOrKept(context, sendRequest(operation, command, sender, held, keyed, text, variant)), held.learned);
+}
+
+function answered(ended, learned) {
+  return ended.kept !== undefined ? { kept: ended.kept, learned: learned } : { sent: ended.result, learned: learned };
+}
+
+/**
+ * The moment the arguments name in `send_after`, as `Date.parse` reads it, or null where they name none. A moment it
+ * cannot read is never one already past: the attempt ends final with nothing read or sent, since the send would
+ * otherwise go now where a later moment was approved. Each send asks it before its first call, as it holds its text,
+ * so neither the sender's read nor the read of the send an earlier attempt returned comes first; `keyedFlags` asks it
+ * again.
+ */
+export function readableMoment(operation, input) {
+  const moment = input.args.send_after === undefined || input.args.send_after === null ? null : input.args.send_after;
+  const at = typeof moment === "string" ? Date.parse(moment) : Number.NaN;
+  if (moment !== null && !Number.isFinite(at)) {
+    fail(operation, { call: null, row: "send_after_unreadable" }, undefined);
+  }
+
+  return moment === null ? null : at;
+}
+
+/**
+ * The flags a send carries beside its own: the work item's key, the moment it goes out after where the arguments name
+ * one still ahead, as written (`readableMoment`), and for a message the sending schedule the provider's object names
+ * (`scheduleOf`). A repeat after an attempt that may have sent goes only while Reply still keeps the key
+ * (`repeatStillSettleable`). Before a send that names a moment or a schedule, and before such a repeat, the account's
+ * Reply is read to keep direct sends; one that does not ends the attempt with nothing sent.
+ */
+function keyedFlags(operation, context, input) {
+  const at = readableMoment(operation, input);
+  const ahead = at !== null && at > Date.now();
+  const schedule = operation === "message.send" ? scheduleOf(operation, input) : null;
+  const repeat = Boolean(context) && typeof context.unsettled_since === "string";
+  if (repeat && !repeatStillSettleable(context)) {
+    fail(operation, { call: null, row: "send_not_settled_after_the_window" }, undefined);
+  }
+
+  if ((ahead || schedule !== null || repeat) && !offered(context, { operation: operation, command: CHECK, operands: [CHECKED], pins: false }, KEEPS)) {
+    fail(operation, { call: CHECK, row: repeat ? "send_not_settled" : ahead ? "send_after_not_offered" : "schedule_not_offered" }, undefined);
+  }
+
+  return ["--idempotency-key", input.idempotency_key]
+    .concat(ahead ? ["--send-after", input.args.send_after] : [])
+    .concat(schedule !== null ? ["--schedule-id", schedule] : []);
+}
+
+/** Whether Reply still keeps the key a repeat goes under: less than 23 hours since `context.unsettled_since`. */
+function repeatStillSettleable(context) {
+  const since = Date.parse(context.unsettled_since);
+  return Number.isFinite(since) && Date.now() < since + KEY_WINDOW_MS;
+}
+
+/**
+ * What Reply took, from what `sendTo` answered. Where Reply holds the key for another request, what it holds under it
+ * is the send, named by its reference.
+ */
+export function acceptance(done) {
+  return done.kept !== undefined ? taken(done.kept.details, true) : taken(done.sent, false);
+}
+
+/**
+ * What Reply says of a send it took, from an answer that names it: `{ status, given }`. The status is what happened:
+ * `sent` where Reply's state is `sent`, or where it gives no state and names no send, as a Reply that sends inside the
+ * call answers; `accepted` for any other state, one Reply adds later included, and for a send it names by a reference
+ * or a moment with no state. `given` holds each of `accepted_for` — the moment Reply holds the send for, in UTC —
+ * `reference` and `cancelable` — whether the send still waits, so it can be cancelled — only where reply-cli gave its
+ * source, a null being none given. A send Reply says failed or was cancelled is `{ ended, reason, given }`: the state,
+ * Reply's reason where it gave one, and the reference alone in `given`. Undefined where the answer names any of them in
+ * another shape, and, for a send Reply holds under the key (`named`), where it names no reference.
+ */
+export function taken(said, named) {
+  const given = {};
+  if (said.send_after !== undefined && said.send_after !== null) {
+    given.accepted_for = momentOf(said.send_after);
+  }
+
+  if (said.reference !== undefined && said.reference !== null) {
+    given.reference = referenceOf(said.reference);
+  }
+
+  const state = said.state === undefined || said.state === null ? null : said.state;
+  if (state !== null) {
+    given.cancelable = typeof state === "string" ? GOING.indexOf(state) < 0 : undefined;
+  }
+
+  const shaped = Object.keys(given).every((name) => given[name] !== undefined);
+  if (!shaped || (named && given.reference === undefined)) {
+    return undefined;
+  }
+
+  if (UNTAKEN.indexOf(state) >= 0) {
+    const reason = typeof said.failure_reason === "string" && said.failure_reason.length > 0 ? said.failure_reason : undefined;
+    return { ended: state, reason: reason, given: given.reference === undefined ? {} : { reference: given.reference } };
+  }
+
+  const went = state === null ? given.reference === undefined && given.accepted_for === undefined : state === "sent";
+  return { status: went ? "sent" : "accepted", given: given };
+}
+
+/**
+ * What `learned` pins, with the send an answer names beside it where it names one by a reference of the document's
+ * shape: an answer refused as a lost one for another field's shape still names the send, which the next attempt then
+ * reads first (`recordedSend`).
+ */
+export function withNamedSend(learned, said) {
+  const reference = said !== null && typeof said === "object" ? referenceOf(said.reference) : undefined;
+  return reference === undefined ? learned : Object.assign({}, learned, { send: reference });
+}
+
+/**
+ * Ends the attempt for a send Reply took and says is not going — it failed, or was cancelled — which is final: Reply's
+ * reason is quoted where it gave one, and the send it names is kept as the work item's beside what `learned` pins.
+ */
+export function endedAtReply(operation, call, took, learned) {
+  const pinned = took.given.reference === undefined ? learned : Object.assign({}, learned, { send: took.given.reference });
+  fail(operation, { call: call, row: took.ended === "failed" ? "send_failed_at_reply" : "send_cancelled_at_reply", provider_detail: took.reason }, pinned);
+}
+
+// A reference as the document takes one: a string of 1 to 256 characters, and undefined for anything else.
+function referenceOf(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= LONGEST_REFERENCE ? value : undefined;
+}
+
+// A moment with its offset, written in UTC to the second, or to the millisecond where it names one; undefined for
+// anything else.
+export function momentOf(value) {
+  const at = typeof value === "string" && MOMENT.test(value) ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(at) ? new Date(at).toISOString().replace(".000Z", "Z") : undefined;
 }
 
 // One run of the send's command: the person as `named` gives them, then `flags`, and on stdin the command's own input
@@ -144,6 +351,8 @@ function sendRequest(operation, command, sender, named, flags, text, variant) {
     learned: named.learned,
     gone: named.pinned ? undefined : GONE,
     variant: variant,
+    kept: true,
+    channel: command === "contact send-email" ? "email" : "linkedin",
   };
 }
 

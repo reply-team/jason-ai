@@ -1,0 +1,26 @@
+{
+  "operation": "message.status",
+  "version": 1,
+  "case": "an input without the send the runtime composes",
+  "input": {
+    "args": {
+      "send": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG"
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/send",
+        "reason": "required"
+      }
+    ]
+  }
+}

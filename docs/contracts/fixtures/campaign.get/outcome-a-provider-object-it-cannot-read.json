@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the package reads the provider's object, cannot make sense of it, and says so before any call under the one code reserved for that",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "provider_input_invalid",
+      "message": "args.provider.send_window is read as an object with days, a list of weekday names, and zone, an IANA time zone name; the object given is not that shape.",
+      "details": { "pointer": "/args/provider/send_window/days", "expected": "array of weekday names" },
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 4, "exec_calls": 0, "http_calls": 0, "log_lines": 1 }
+  },
+  "expect": { "status": "failed", "class": "validation", "retriable": false }
+}

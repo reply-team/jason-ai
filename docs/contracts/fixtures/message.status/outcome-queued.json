@@ -1,0 +1,35 @@
+{
+  "operation": "message.status",
+  "version": 1,
+  "case": "held for its moment and still cancelable",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "state": "queued",
+      "channel": "email",
+      "cancelable": true,
+      "accepted_for": "2026-11-03T14:00:00Z",
+      "sent_at": null,
+      "message_id": null,
+      "rendered_subject": null,
+      "rendered_body": null,
+      "failure_reason": null,
+      "failure_code": null,
+      "cancelled_at": null
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 1,
+      "http_calls": 0,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

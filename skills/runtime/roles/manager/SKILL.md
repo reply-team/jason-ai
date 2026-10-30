@@ -69,6 +69,42 @@ Read the error code before you decide anything. `no_route`, `plugin_unavailable`
 is an argument, and a corrected item might; `approval_required` and `suppressed` are answers rather than
 failures. A failed item is finished and is not reopened — if the work is still wanted, it is new work.
 
+**What the provider does not offer yet.** `capability_not_offered` says the provider does not offer an operation, or
+one argument of it, yet; its message names which. The code is final: it is nobody's configuration and no argument a
+corrected item could fix, and no repeat of the same item gets past it. Choose another way to do the work, or tell the
+person it cannot be done yet, and say which in your line. Where a capability has a way around it, that way is stated
+in the list of capabilities the contracts README (`docs/contracts/README.md`) keeps.
+
+**A send is done when the provider has taken it.** A `message.send` or a `social_invitation.send` that succeeds
+`sent` or `accepted` is done: `accepted` says the provider took it, for now or for a later moment, and never that it
+went. Whether it went arrives later, where the provider tells it, and never from that item; do not send it again to
+make sure.
+
+**Asking after one send.** A `message.status` item names the send's work item under `args.send` and reads that send by
+the reference the provider gave it; you never write the reference, the runtime takes it from the send's own attempt. A
+`message.cancel` item, named the same way, takes back a send the provider still holds, and one that went, that the
+provider is sending or that failed ends `send_not_pending`, final, its details saying which. Either ends
+`send_unknown`, `send_reference_absent` or `send_route_mismatch`, final, where the send is not this campaign's, kept no
+reference, or was made through another plugin or account than the item is routed to: a corrected item names another
+send, never the same one again. A `message.status` item answers one of five words: `queued`, `sent`, `cancelled`,
+`failed` or `unknown`. A `failed` send did not go; an `unknown` one may have: the provider attempted it and lost track
+of it. Never send again on `unknown` alone: before any new send to that person, find their thread with a
+`conversation.list` item for them, then read it with a `conversation.get` item, and say in the note what the thread
+showed.
+
+**A send for a later moment.** Where a `message.send` or a `social_invitation.send` that names a moment in
+`send_after` ends `capability_not_offered` or `argument_unsupported`, you may create a new item without it, with
+`not_before` set to the moment, unless the failure is `ambiguous`: then an earlier attempt of that item may have
+reached the person, and a new item is created only once the provider has said it did not. It is claimed once the
+moment has passed, and both sends are `confirm_each`, so it then waits for a person's approval; nothing goes out before
+they give it. The machine has to be awake for the item to be claimed at all.
+
+**A template the plugin does not write.** Where a `message.send` composed as a template ends `template_not_offered`,
+the plugin it is routed to writes no template on that channel. You may create a new item with the message written as
+final text, unless the failure is `ambiguous`: then an earlier attempt of that item may have reached the person, and a
+new item is created only once the provider has said it did not. Or raise one question asking a person to route the
+operation to a plugin that writes a template there: a route is somebody's configuration.
+
 **Stale and blocked work.** A `created` item the dispatcher would not claim right now is waiting on a
 `not_before` or a `retry_after`, or has passed its `due_at`; an item `awaiting_approval` is waiting on a
 person. Read one to see which:
@@ -223,6 +259,22 @@ alone where the line says `attributed_by` `contact_pin`. A hard bounce is a pers
 work waiting to write to them there is work the campaign may no longer need. An accepted invitation is a channel that
 opened. Whatever you do or leave, say it in your note; where the next step is a person's to choose, raise one
 question.
+
+## When a send that went woke you
+
+`trigger` is `message_sent_observed` only where this installation lists it under `Manager:Triggers`: it is not a
+default one. A `message.status` read found a send gone, and the line says so for any send a read finds gone, once,
+about the work item that made the send: it names that item, the `plugin`, the provider's `reference`, the `channel`,
+`sent_at` and `message_id` where the provider gave them, and the read that found it under `read_work_item` — never the
+text that went. The send's own result still says what it said when the provider took it; this line is the only place
+the runtime says it went. Read every line of the kind since your last review:
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_sent_observed --since 2026-09-18T09:00:00Z
+```
+
+A send that went is the course the campaign planned, so by itself it calls for nothing; what it can change is when the
+next step is due, where the campaign's plan waits on that message having gone. Say in your note what you did with it.
 
 ## When a provider block woke you
 

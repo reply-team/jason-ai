@@ -1,0 +1,47 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "an InMail written as a template: the example renders its subject and its text over the composed input, and leaves the sending account's first name to the provider",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "message": { "format": "linkedin_inmail", "compose": "template", "subject": "Growth at {{contact.company | 'your team'}}", "body": "Hi {{contact.first_name}}, a question about growth at {{contact.company}}.\n{{sender.first_name}}" }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-example", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_inmail, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner), outside any campaign — subject: Growth at {{contact.company | 'your team'}}; text: Hi {{contact.first_name}}, a question about growth at {{contact.company}}. {{sender.first_name}}; send after: —",
+    "highlights": {
+      "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
+      "/args/channel": "linkedin",
+      "/args/sender": { "external_id": "s_34", "address": "https://www.linkedin.com/in/ann-owner" },
+      "/args/message": { "format": "linkedin_inmail", "compose": "template", "subject": "Growth at {{contact.company | 'your team'}}", "body": "Hi {{contact.first_name}}, a question about growth at {{contact.company}}.\n{{sender.first_name}}" },
+      "/args/message/compose": "template",
+      "/args/send_after": null
+    },
+    "example": {
+      "subject": "Growth at Puerto Analytics",
+      "body": "Hi Marta, a question about growth at Puerto Analytics.\n[sender.first_name]",
+      "unfilled": ["sender.first_name"]
+    }
+  }
+}
