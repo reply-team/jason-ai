@@ -7,8 +7,8 @@
 // small record of what the account holds, so a test can plant a world and read back what happened. It never imitates
 // Reply's API: the plugin makes no raw call, so `api` is a command this program does not know, and a plugin that
 // reached for it fails here. A flag this program does not know is a usage error too, so a plugin that reached for
-// `--api-key`, `--verbose`, `--user-id`, `--user-email`, `--pretty` or `--idempotency-key` fails here, before any
-// assertion about the argument vector runs. Which account it works in is never on the command line: it finds its store
+// `--api-key`, `--verbose`, `--user-id`, `--user-email` or `--pretty`, or for `--idempotency-key` on anything but a direct
+// send, fails here, before any assertion about the argument vector runs. Which account it works in is never on the command line: it finds its store
 // the way the real CLI does, from the platform's own configuration directory and the profile name.
 
 // Read and written as reply-cli is, a node program: UTF-8 on every stream, whatever the console's code page, with no

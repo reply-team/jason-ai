@@ -89,12 +89,22 @@ On Windows, compare `Get-FileHash` of the archive with its line in `checksums.tx
 If you then put the executable in place by hand, keep `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named
 `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.
 
-## What is not here
+## What is signed
 
-Nothing in this release is signed or notarized. On Windows, an archive a browser downloaded carries the mark of
-the web, and the executable unpacked from it is stopped by SmartScreen the first time it runs: `install.ps1`
-clears that mark from what it unpacks. On macOS the quarantine flag is put there by the browser that downloaded
-the file, not by `curl`, so the one-liner's download has none and `install.sh` clears nothing; an archive
-fetched with a browser and unpacked by hand keeps the flag, and Gatekeeper asks about it the first time. Both
-scripts check the archive against `checksums.txt` before unpacking, and that check is the only provenance there
-is.
+The macOS executable is signed with Reply's Developer ID and notarized by Apple. The quarantine flag is put there
+by the browser that downloaded the file, not by `curl`, so the one-liner's download has none and `install.sh`
+clears nothing; an archive fetched with a browser and unpacked by hand keeps the flag, and Gatekeeper checks the
+notarization with Apple, online, the first time the executable runs. The ticket is not stapled to the file, which a
+bare executable has no place for, so that first run needs the network.
+
+Who signed it is yours to read: `codesign -dv --verbose=2` on the unpacked executable prints an
+`Authority=Developer ID Application:` line naming Reply and its team id in parentheses, the same id the
+`TeamIdentifier=` line gives. Gatekeeper accepts any notarized Developer ID, so it is that name and that team id, not
+the acceptance, that say the executable is Reply's.
+
+The Linux and Windows executables are not signed, and nothing else a release carries is either. On Windows, an
+archive a browser downloaded carries the mark of the web, and the executable unpacked from it is stopped by
+SmartScreen the first time it runs: `install.ps1` clears that mark from what it unpacks.
+
+Both scripts check the archive against `checksums.txt` before unpacking. On Linux and Windows that check is the only
+provenance there is; on macOS the signature says who built the executable as well.

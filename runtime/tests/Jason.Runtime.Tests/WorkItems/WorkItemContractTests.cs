@@ -346,10 +346,10 @@ public class WorkItemContractTests
 
     /// <summary>
     /// A template refused inside the message's alternatives is refused by the alternatives, at the message, and their
-    /// words are what a person reads: a LinkedIn message written as a template is told the format it would need.
+    /// words are what a person reads: a voice message written as a template is told the formats a template may be.
     /// </summary>
     [Fact]
-    public async Task A_template_on_a_linkedin_message_is_told_the_format_a_template_needs()
+    public async Task A_template_on_a_voice_message_is_told_the_formats_a_template_may_be()
     {
         using var database = new TestDatabase();
         using var db = database.Open();
@@ -361,7 +361,7 @@ public class WorkItemContractTests
             ["sender"] = new JsonObject { ["external_id"] = "s_34", ["address"] = "https://www.linkedin.com/in/ann-owner" },
             ["message"] = new JsonObject
             {
-                ["format"] = "linkedin_message",
+                ["format"] = "linkedin_voice",
                 ["compose"] = "template",
                 ["body"] = "Thanks for connecting, {{contact.first_name}}.",
             },
@@ -375,8 +375,8 @@ public class WorkItemContractTests
         var detail = Assert.Single(error.Details!);
         Assert.Equal("context.input/message", detail.Field);
         Assert.Equal(
-            "No alternative this schema allows accepts the value here; the first reported `const` at `/message/format`: "
-            + "The only value accepted here is \"email\".",
+            "No alternative this schema allows accepts the value here; the first reported `enum` at `/message/format`: "
+            + "The values accepted here are \"email\", \"linkedin_message\", \"linkedin_inmail\".",
             detail.Message);
     }
 

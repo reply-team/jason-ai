@@ -716,4 +716,19 @@ public partial class InteractiveSkillTests
             StringComparison.Ordinal);
         Assert.Contains("The block releases its items by itself, so do not resume, cancel or create them again.", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The managed path names what a failed item's code can say, so a provider that does not offer something yet is among
+    /// them: it is neither the caller's arguments nor an unreachable provider.
+    /// </summary>
+    [Fact]
+    public void The_managed_campaign_work_skill_names_a_provider_that_does_not_offer_what_was_asked_among_the_codes()
+    {
+        var skill = Flattened("managed-campaign-work");
+
+        Assert.Contains(
+            "your arguments, a provider that was unreachable, a provider that does not offer what you asked for yet, or a person who has not answered yet",
+            skill,
+            StringComparison.Ordinal);
+    }
 }

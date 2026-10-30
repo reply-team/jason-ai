@@ -111,7 +111,12 @@ the operation. Neither is fixed at execution time.
   named person. Show the artefact that will actually reach them: the rendered message, the
   recipient, the channel, the sending identity. `message.draft` produces that artefact, and the
   rendered message — not the template behind it — is what every check and every review binds to
-  (E14). Then wait.
+  (E14). A message composed as a template (`compose: template`) has no rendered message to show
+  before the provider fills it in: what is approved is the template and the example the preview
+  renders over the composed input, and the review binds to those. What went out is read
+  afterwards: `message.status` carries the sent text where the provider gives it, and the thread,
+  `conversation.get`, carries it where the provider does not, once the thread holds the message.
+  Then wait.
 
 ### A departure names its reason
 
@@ -357,7 +362,8 @@ What this means at a gate:
   exists. Record it with `editorial_review.record` at that moment, or the evidence is gone and
   the send is left carrying the disclosure obligation instead.
 - A review of a template is not a review of a message (E14). `template.publish` does not produce
-  one.
+  one. A message composed as a template is reviewed at its own approval, as the template and its
+  example.
 - `editorial_review.get` answers the question afterwards, and `none` is a first-class answer —
   the one an auditor most needs.
 

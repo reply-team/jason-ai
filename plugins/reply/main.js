@@ -22,6 +22,8 @@ import { senderList } from "./modules/senders.js";
 import { scheduleList } from "./modules/schedules.js";
 import { socialInvitationSend } from "./modules/invite.js";
 import { messageSend } from "./modules/message.js";
+import { messageCancel, messageStatus } from "./modules/directsend.js";
+import { eventsRead } from "./modules/events.js";
 
 export function invoke(operation, input, context) {
   switch (operation) {
@@ -90,6 +92,17 @@ export function invoke(operation, input, context) {
 
     case "message.send":
       return messageSend(input, context);
+
+    case "message.status":
+      return messageStatus(input, context);
+
+    case "message.cancel":
+      return messageCancel(input, context);
+
+    // Not an operation: the runtime's own reader asks for the account's events, under the events contract the manifest
+    // declares.
+    case "events.read":
+      return eventsRead(input, context);
 
     default:
       // A work item can only name an operation the manifest lists, so this is a call that should not exist. It

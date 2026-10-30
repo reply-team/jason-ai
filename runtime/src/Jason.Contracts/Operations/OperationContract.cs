@@ -36,6 +36,8 @@ public sealed record OperationContract(
     string? Meter,
     IReadOnlyList<string> Invariants,
     Preflight Preflight,
+    IReadOnlyList<string>? ChannelArguments,
+    IReadOnlyList<string>? ChannelTemplates,
     DispatchRule Dispatch,
     ContactProjection? ContactProjection,
     string Precondition,
@@ -243,6 +245,8 @@ public sealed record OperationContract(
             reader.OptionalText("meter"),
             reader.TextList("invariants"),
             ReadPreflight(reader.Object("preflight"), reader),
+            reader.OptionalTextList("channel_arguments"),
+            reader.OptionalTextList("channel_templates"),
             ReadDispatch(reader.Object("dispatch"), reader),
             ReadProjection(reader.OptionalObject("contact_projection"), reader),
             reader.Text("precondition"),
@@ -260,6 +264,9 @@ public sealed record OperationContract(
         RefuseUnknownApproval(source, contract);
         RefuseUnsupportedFloor(source, contract);
         RefuseUnpairedChannels(source, contract);
+        RefuseUncheckableChannelArguments(source, contract);
+        RefuseUncheckableChannelTemplates(source, contract);
+        RefuseKeyedReadWithoutRepeat(source, contract);
         RefuseUncheckedReach(source, contract);
         RefuseUnpausableWork(source, contract);
         RefuseUnaddressablePreview(source, contract);
@@ -394,6 +401,120 @@ public sealed record OperationContract(
     }
 
     /// <summary>
+    /// A recovery read that settles a lost answer by the work item's key is one a later attempt performs before it
+    /// repeats, so a document says so only where it repeats after its recovery read: elsewhere nothing would repeat, and
+    /// the claim would ask a manifest for a promise no attempt relies on.
+    /// </summary>
+    private static void RefuseKeyedReadWithoutRepeat(string source, OperationContract contract)
+    {
+        if (contract.RecoveryRead is { ByKey: true } && contract.RepeatAfterAmbiguous != RepeatAfterAmbiguous.AfterRecoveryRead)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `recovery_read.by_key` says a lost answer is settled by the work item's key, and a document says that only where it repeats after its recovery read; `repeat_after_ambiguous` is `{Word(RepeatAfterAmbiguousNames, contract.RepeatAfterAmbiguous)}`.");
+        }
+    }
+
+    /// <summary>
+    /// The arguments a plugin may take on some of an operation's channels and not on others are what a manifest lists per
+    /// channel and what the claim checks against that list, so each is one the claim can check: an argument the arguments
+    /// declare, named once, that a caller may leave out — a required one would be refused on every channel a plugin does
+    /// not list — of an operation whose arguments name the channel it is listed against. A document that names none
+    /// writes null.
+    /// </summary>
+    private static void RefuseUncheckableChannelArguments(string source, OperationContract contract)
+    {
+        if (contract.ChannelArguments is not { } names)
+        {
+            return;
+        }
+
+        if (names.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `channel_arguments` is an empty list; a document that names no argument a plugin takes per channel writes null.");
+        }
+
+        if (contract.Preflight.Channel != ChannelRequirement.FromArgs)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `channel_arguments` names arguments a plugin takes on some channels and not on others, but `preflight.channel` is not `from_args`, so the arguments name no channel to list them against.");
+        }
+
+        var declared = contract.ArgumentSchema["properties"] as JsonObject;
+        var required = (contract.ArgumentSchema["required"] as JsonArray)?.Select(name => name?.GetValue<string>()).ToHashSet(StringComparer.Ordinal) ?? [];
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            if (!seen.Add(name))
+            {
+                throw new InvalidOperationException($"{source}: `channel_arguments` names `{name}` twice.");
+            }
+
+            if (declared is null || !declared.ContainsKey(name))
+            {
+                throw new InvalidOperationException(
+                    $"{source}: `channel_arguments` names `{name}`, which `input_schema.properties.args` does not declare, so no call could carry it.");
+            }
+
+            if (required.Contains(name))
+            {
+                throw new InvalidOperationException(
+                    $"{source}: `channel_arguments` names `{name}`, which the arguments make required, so every channel a plugin does not list it for would be refused.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The channels an operation's message may be a template on are what a manifest lists and what the claim checks
+    /// against that list, so each is one the claim can check: a channel the arguments name, named once, of an operation
+    /// whose arguments name the channel and whose message says whether it is a template. A document whose message is
+    /// never a template writes null.
+    /// </summary>
+    private static void RefuseUncheckableChannelTemplates(string source, OperationContract contract)
+    {
+        if (contract.ChannelTemplates is not { } channels)
+        {
+            return;
+        }
+
+        if (channels.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `channel_templates` is an empty list; a document whose message is never a template writes null.");
+        }
+
+        if (contract.Preflight.Channel != ChannelRequirement.FromArgs)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `channel_templates` names channels a message may be a template on, but `preflight.channel` is not `from_args`, so the arguments name no channel to list them against.");
+        }
+
+        if (contract.ArgumentSchema["properties"]?["message"]?["properties"] is not JsonObject message || !message.ContainsKey("compose"))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `channel_templates` names channels a message may be a template on, but the arguments' `message` declares no `compose`, so no message says it is one.");
+        }
+
+        var offered = (contract.ArgumentSchema["properties"]?["channel"]?["enum"] as JsonArray)?
+            .Select(channel => channel?.GetValue<string>())
+            .ToHashSet(StringComparer.Ordinal) ?? [];
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var channel in channels)
+        {
+            if (!seen.Add(channel))
+            {
+                throw new InvalidOperationException($"{source}: `channel_templates` names `{channel}` twice.");
+            }
+
+            if (!offered.Contains(channel))
+            {
+                throw new InvalidOperationException(
+                    $"{source}: `channel_templates` names `{channel}`, which the arguments' `channel` does not offer, so no call could carry a template there.");
+            }
+        }
+    }
+
+    /// <summary>
     /// The protective floor is the catalogue's one lowering of an approval, and a checked one: the operation runs
     /// <c>auto</c>, says why, and nothing in Jason holds it back — neither the suppression register nor a paused
     /// campaign. Checked first, so a document that claims the floor is told what the floor requires.
@@ -518,6 +639,7 @@ public sealed record OperationContract(
         {
             ["contact"] = PinnedEntity.Contact,
             ["campaign"] = PinnedEntity.Campaign,
+            ["work_item"] = PinnedEntity.WorkItem,
         };
 
     private static readonly IReadOnlyDictionary<string, FailureClass> FailureClassNames =
@@ -622,7 +744,7 @@ public sealed record OperationContract(
         }
 
         var reader = outer.Into("recovery_read", recoveryRead);
-        var value = new RecoveryRead(reader.Text("reads"), reader.Text("justification"));
+        var value = new RecoveryRead(reader.Text("reads"), reader.Text("justification"), reader.OptionalFlag("by_key"));
         reader.RefuseAnythingElse();
         return value;
     }
@@ -711,6 +833,12 @@ public sealed record OperationContract(
             _ => throw Problem($"`{Named(name)}` is true or false."),
         };
 
+        /// <summary>
+        /// A flag a document may leave out, which then says false: the one kind of field here whose absence is a default,
+        /// kept for a promise only a few documents make.
+        /// </summary>
+        public bool OptionalFlag(string name) => fields.ContainsKey(name) && Flag(name);
+
         public JsonObject Object(string name) => Required(name) as JsonObject ?? throw Problem($"`{Named(name)}` is an object.");
 
         public JsonObject? OptionalObject(string name) => Required(name) switch
@@ -735,6 +863,13 @@ public sealed record OperationContract(
 
             return values;
         }
+
+        public IReadOnlyList<string>? OptionalTextList(string name) => Required(name) switch
+        {
+            null => null,
+            JsonArray => TextList(name),
+            _ => throw Problem($"`{Named(name)}` is an array of strings, or null where it does not apply."),
+        };
 
         public string Word(string name, IReadOnlyList<string> vocabulary)
         {
@@ -849,7 +984,12 @@ public sealed record ExternalIdKind(PinnedEntity Entity, string Description);
 /// What a plugin must read before repeating this operation after an answer was lost, and why the reading is worth
 /// the round trip — the justification is about money, because that is what a blind repeat costs.
 /// </summary>
-public sealed record RecoveryRead(string Reads, string Justification);
+/// <param name="ByKey">
+/// Whether the reading settles a lost answer by the work item's idempotency key, which only a plugin that makes every
+/// attempt under the key can keep: then the runtime repeats a lost answer only under a plugin whose manifest declares
+/// that it settles the operation by the key. Written <c>by_key</c>, and absent where it is false.
+/// </param>
+public sealed record RecoveryRead(string Reads, string Justification, bool ByKey = false);
 
 /// <summary>One failure a plugin may report for this operation, under the class the runtime reads.</summary>
 public sealed record FailureCode(string Code, FailureClass Class, string When);
@@ -940,4 +1080,11 @@ public enum PinnedEntity
 {
     Contact,
     Campaign,
+
+    /// <summary>
+    /// The act the work item's attempt made the provider take — a send it took, by the reference it is read and cancelled
+    /// by. One item is one act, so the identifier is kept on the attempt that learned it and in the item's result, and
+    /// pinned to no contact and no campaign.
+    /// </summary>
+    WorkItem,
 }

@@ -26,6 +26,45 @@ public class ReplyStubCommandTests
         Assert.Equal(ReplyCliRelease.Version, stdout.Trim());
     }
 
+    [Theory]
+    [InlineData("jason-harness/0.22.0")]
+    [InlineData("a/1")]
+    [InlineData("x9/1.0.0-rc.1+build.7")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/99999999999999999999999999999999")]
+    [InlineData("my-tool/V2")]
+    public void A_client_of_one_product_token_and_its_version_goes_before_the_cli_s_own(string client)
+    {
+        // The cases reply-cli's own tests hold its User-Agent to, so the stand-in drops what the CLI drops.
+        Assert.Equal(client + " reply-cli/" + ReplyCliRelease.Version, ReplyCliRelease.UserAgent(client));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("jason harness/0.22.0")]
+    [InlineData("jason-harness")]
+    [InlineData("jason-harness/")]
+    [InlineData("/0.22.0")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/1")]
+    [InlineData("a/999999999999999999999999999999999")]
+    [InlineData("Jason-harness/0.22.0")]
+    [InlineData("9jason/1")]
+    [InlineData("-jason/1")]
+    [InlineData("jason_harness/1")]
+    [InlineData("jason/harness/1")]
+    [InlineData("jason/1 ")]
+    [InlineData("jason/1\n")]
+    [InlineData("jason/1\r\nX-Evil: 1")]
+    [InlineData("jasön/1")]
+    [InlineData("jason-harness/0.22.0+0123456789abcdef0123456789abcdef01234567")]
+    public void A_client_of_any_other_shape_is_left_out_and_the_plain_one_is_sent(string? client)
+    {
+        // The last is a runtime's informational version, build metadata and all: forty-seven characters after the
+        // slash, where the CLI takes thirty-two.
+        Assert.Equal("reply-cli/" + ReplyCliRelease.Version, ReplyCliRelease.UserAgent(client));
+    }
+
     [Fact]
     public async Task A_sequence_is_read_as_reply_holds_it_and_one_the_account_does_not_hold_is_not_found()
     {

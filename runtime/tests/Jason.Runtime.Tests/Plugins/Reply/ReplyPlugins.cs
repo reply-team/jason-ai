@@ -29,6 +29,24 @@ public static class ReplyPlugins
     /// </summary>
     public static string PackageSource => Path.Combine(TestTree, "Fixtures", "plugins", PluginId);
 
+    /// <summary>
+    /// Whether the official package's own manifest lists <paramref name="operation"/> under <c>settles_by_key</c>: what
+    /// the claim hands the recorder from the package it pinned, read here from the same file, so a test that records an
+    /// answer of the package records it under the package's own word.
+    /// </summary>
+    public static bool SettlesByKey(string operation) => Shipped.Value.SettlesByKey(operation);
+
+    /// <summary>The operations the official package's manifest lists under <c>settles_by_key</c>, as it lists them.</summary>
+    public static IReadOnlyList<string> KeyedOperations => Shipped.Value.KeyedOperations;
+
+    /// <summary>The channels the official package's manifest lists under <c>templates</c>, by operation, as it lists them.</summary>
+    public static Jason.Runtime.Plugins.Manifest.ManifestTemplates Templates => Shipped.Value.Templates;
+
+    private static readonly Lazy<Jason.Runtime.Plugins.Manifest.PluginManifest> Shipped = new(() =>
+        Jason.Runtime.Plugins.Manifest.ManifestReader.Read(
+            File.ReadAllText(Path.Combine(PackageSource, "plugin.yaml")), PluginId, PackageSource, new Jason.Runtime.Plugins.Manifest.ManifestBounds(3_600_000, 512)).Manifest
+        ?? throw new InvalidOperationException("The official package's manifest does not read."));
+
     /// <summary>The package's error table, which is data and is read as data by the tests that hold it to the contracts.</summary>
     public static string ErrorTableModule => Path.Combine(PackageSource, "modules", "errors.js");
 

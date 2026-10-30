@@ -23,6 +23,27 @@ public static class ProblemCodes
     public const string OperationDuplicate = "operation_duplicate";
     public const string OperationsNotAllowed = "operations_not_allowed";
 
+    /// <summary>
+    /// An entry of <c>arguments</c> names what the claim could never read it against: an operation the plugin does not
+    /// implement or this build publishes no document for, an argument the operation's document does not name per
+    /// channel, a channel its arguments do not take, or any entry at all on a notification plugin.
+    /// </summary>
+    public const string ArgumentInvalid = "argument_invalid";
+
+    /// <summary>
+    /// An entry of <c>templates</c> names what the claim could never read it against: an operation the plugin does not
+    /// implement, one this build publishes no document for, one whose document names no channel its message may be a
+    /// template on, a channel the document does not name there, or any entry at all on a notification plugin.
+    /// </summary>
+    public const string TemplateInvalid = "template_invalid";
+
+    /// <summary>
+    /// An entry of <c>settles_by_key</c> names what no repeat would read it for: an operation the plugin does not
+    /// implement, one this build publishes no document for, one whose document's recovery read does not rest on the work
+    /// item's key, or any entry at all on a notification plugin.
+    /// </summary>
+    public const string SettlesByKeyInvalid = "settles_by_key_invalid";
+
     /// <summary>A notification plugin declares the events contract: it delivers pointers and reads no account.</summary>
     public const string EventsNotAllowed = "events_not_allowed";
     public const string EntryModuleMissing = "entry_module_missing";

@@ -5,6 +5,7 @@ using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
@@ -17,7 +18,7 @@ namespace Jason.Runtime.Tests.Routing;
 /// order, because a manager reading the failure should meet the reason the item cannot run at all before the
 /// reasons that need a planner's attention.
 /// </summary>
-public class ProviderOpPreflightTests
+public partial class ProviderOpPreflightTests
 {
     private const string Add = "list_membership.add";
     private const string Enroll = "campaign.enroll";
@@ -35,7 +36,7 @@ public class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the fourteen checks' order")]
+    [Critical(Family.W3, "the twenty checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -81,11 +82,51 @@ public class ProviderOpPreflightTests
         scenario.Suppressed = false;
         met.Add(Refused(scenario, FailureClass.Permanent));
 
+        // Twelfth to fourteenth: a read of a send acts by the reference the send's own attempt returned, so it is asked before the input
+        // that carries the reference is composed — a send the campaign does not hold, then one that kept no reference, then
+        // one made under another account than this route's.
+        var deleting = (scenario.Operation, scenario.Plugin, scenario.Arguments);
+        scenario.Operation = Status;
+        scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, Status], binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["send"] = SendItem };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Named = Made() with { Reference = null };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Named = Made();
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        (scenario.Operation, scenario.Plugin, scenario.Arguments) = deleting;
+        scenario.Named = null;
         scenario.ContactPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "48211" };
         met.Add(Refused(scenario, FailureClass.Validation));
         Assert.Equal("/args/contact", Assert.Single(scenario.Check().Details!).Field);
 
-        // Thirteenth, and the first that is not a refusal: an operation a person has to confirm is parked rather than
+        // Sixteenth: an argument the operation's document names per channel, on a channel the routed plugin's manifest
+        // does not list it for. It is asked once the document satisfies its schema, so a moment that is no moment is the
+        // planner's to fix first, and before anybody is asked to approve a send that could not go out as written.
+        scenario.Operation = Send;
+        scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, Send], binding: Scenario.BindingSchema);
+        scenario.Arguments = Scenario.Sending("snd-1").Arguments;
+        scenario.Arguments!["send_after"] = Later;
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        // Seventeenth: a message written as a template on a channel the routed plugin's manifest does not list under
+        // `templates`, asked beside the sixteenth and before anybody is asked to approve a message the plugin would not
+        // write.
+        scenario.Arguments.Remove("send_after");
+        scenario.Arguments["message"]!["compose"] = "template";
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        // Eighteenth: a repeat of a send an earlier attempt of which lost its answer, under a plugin whose manifest does
+        // not say it settles the send by the work item's key. The refusal keeps the class of the attempt that may have
+        // acted, and it is asked before anybody is asked to approve a repeat that could reach the person twice.
+        scenario.Arguments["message"]!["compose"] = "text";
+        scenario.Unsettled = true;
+        met.Add(Refused(scenario, FailureClass.Ambiguous));
+
+        // Nineteenth, and the first that is not a refusal: an operation a person has to confirm is parked rather than
         // failed, and it is asked here — after the input it would be approved for has been composed and held to its own
         // schema — rather than before any of that was known.
         scenario.Operation = Enroll;
@@ -97,7 +138,8 @@ public class ProviderOpPreflightTests
         Assert.Null(parked.Class);
         met.Add(parked.Code!);
 
-        // Fourteenth, and last: work nobody has to confirm, which a block the provider holds on this account still
+        // The unsettled attempt stays, and asks nothing of an operation whose repeat does not rest on the key.
+        // Twentieth, and last: work nobody has to confirm, which a block the provider holds on this account still
         // parks. It is asked after the approval because it says nothing about the work, so the block travels on the
         // approval's park as well, and work a person releases still waits for it.
         var block = Scenario.Block(binding: "sha256:west");
@@ -169,7 +211,7 @@ public class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the fourteen is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the twenty is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -180,12 +222,12 @@ public class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
-    /// The one answer two of the checks give that is not a refusal is named beside the fourteen rather than among them:
+    /// The one answer two of the checks give that is not a refusal is named beside the twenty rather than among them:
     /// the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What both checks answer when their pattern does not finish is that named outcome, and nothing else.
     /// </summary>
     [Fact]
-    public void The_claim_s_transient_outcome_is_what_checks_7_and_12_answer_and_is_not_among_the_fourteen()
+    public void The_claim_s_transient_outcome_is_what_checks_7_and_15_answer_and_is_not_among_the_twenty()
     {
         var schema = Scenario.BindingSchema;
         schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
@@ -205,6 +247,352 @@ public class ProviderOpPreflightTests
 
         Assert.Equal([ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.TransientOutcome], [atTheBinding.Code, atTheInput.Code]);
         Assert.DoesNotContain(ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.Codes);
+    }
+
+    /// <summary>
+    /// An argument a document names per channel reaches the plugin only where its manifest lists it for the channel the
+    /// arguments name. Anywhere else the item is refused before a person is asked to approve it, and the refusal says
+    /// what to do instead: leave the argument out and wait with the item, or route it to a plugin that takes it.
+    /// </summary>
+    [Theory]
+    [InlineData(null, AttemptErrors.ArgumentUnsupported)]
+    [InlineData("linkedin", AttemptErrors.ArgumentUnsupported)]
+    [InlineData("email", null)]
+    [InlineData("linkedin,email", null)]
+    public void A_moment_reaches_the_plugin_only_on_a_channel_its_manifest_lists_it_for(string? listed, string? expected)
+    {
+        var scenario = Scenario.Sending("snd-1");
+        scenario.Arguments!["send_after"] = Later;
+        scenario.Plugin = Scenario.Taking(listed?.Split(',') ?? []);
+
+        var verdict = scenario.Check();
+
+        Assert.Equal(expected ?? AttemptErrors.ApprovalRequired, verdict.Code);
+        if (expected is not null)
+        {
+            Assert.True(verdict.Refused);
+            Assert.Equal(FailureClass.Permanent, verdict.Class);
+            Assert.NotNull(verdict.Resolution);
+            Assert.Equal(
+                $"'{Scenario.PluginId}' takes no 'send_after' for 'message.send' on the 'email' channel: its manifest does not list it there. Leave the argument out and set not_before to the moment, or route the operation to a plugin that takes it.",
+                verdict.Message);
+        }
+    }
+
+    /// <summary>
+    /// A message written as a template reaches the plugin only on a channel its manifest lists for the send under
+    /// <c>templates</c>, and an absent key means none. Anywhere else the item is refused before a person is asked to
+    /// approve it, and the refusal says what to do instead: write the message as final text, or route it to a plugin
+    /// that writes a template there. A final message asks nothing of the list.
+    /// </summary>
+    [Theory]
+    [InlineData("email", null, "template", AttemptErrors.TemplateNotOffered)]
+    [InlineData("email", "linkedin", "template", AttemptErrors.TemplateNotOffered)]
+    [InlineData("linkedin", "email", "template", AttemptErrors.TemplateNotOffered)]
+    [InlineData("email", "email", "template", null)]
+    [InlineData("linkedin", "email,linkedin", "template", null)]
+    [InlineData("email", null, "text", null)]
+    public void A_template_reaches_the_plugin_only_on_a_channel_its_manifest_lists_it_for(string channel, string? listed, string compose, string? expected)
+    {
+        var scenario = Scenario.SendingATemplate(channel, channel == "email" ? "Hello" : null, "Hello, {{contact.first_name}}.");
+        scenario.Arguments!["message"]!["compose"] = compose;
+        scenario.Plugin = Scenario.Writing(listed?.Split(',') ?? []);
+
+        var verdict = scenario.Check();
+
+        Assert.Equal(expected ?? AttemptErrors.ApprovalRequired, verdict.Code);
+        if (expected is not null)
+        {
+            Assert.True(verdict.Refused);
+            Assert.Equal(FailureClass.Permanent, verdict.Class);
+            Assert.NotNull(verdict.Resolution);
+            Assert.Equal(
+                $"'{Scenario.PluginId}' writes no template of 'message.send' on the '{channel}' channel: its manifest does not list the channel under templates. Write the message as final text, or route the operation to a plugin that writes a template there.",
+                verdict.Message);
+        }
+    }
+
+    /// <summary>
+    /// A template may name the sending account's address on LinkedIn as on an email: the input holds it at
+    /// <c>/args/sender/address</c> on both, and on LinkedIn it is the account's profile. The claim reads no name of a
+    /// template, so the send waits for its approval on either channel, the address in its subject or in its text.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin", false, "Hi {{contact.first_name}}, my profile is {{sender.address}}.")]
+    [InlineData("linkedin", true, "{{#if contact.company}}From {{sender.address | 'my profile'}}{{/if}}")]
+    [InlineData("email", false, "Hi {{contact.first_name}}, write to me at {{sender.address}}.")]
+    public void A_template_naming_the_sending_account_s_address_is_claimed_on_either_channel(string channel, bool inTheSubject, string template)
+    {
+        var scenario = Scenario.SendingATemplate(
+            channel,
+            inTheSubject ? template : channel == "email" ? "Hello" : null,
+            inTheSubject ? "Hello." : template);
+
+        Assert.Equal(AttemptErrors.ApprovalRequired, scenario.Check().Code);
+    }
+
+    /// <summary>
+    /// A repeat of a send whose earlier attempt lost its answer is made only under a plugin whose manifest lists the send
+    /// under <c>settles_by_key</c>; under any other it is refused at the claim, ambiguous and final, with the attempt
+    /// kept, and nothing runs. A send no earlier attempt left unsettled asks nothing of the marker.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, AttemptErrors.ProviderAnswerLost)]
+    [InlineData(true, true, null)]
+    [InlineData(false, false, null)]
+    public void A_send_repeated_after_a_lost_answer_is_handed_only_to_a_plugin_that_settles_it_by_the_key(bool unsettled, bool listed, string? expected)
+    {
+        var scenario = Scenario.Sending("snd-1");
+        scenario.Unsettled = unsettled;
+        if (listed)
+        {
+            scenario.Plugin = scenario.Plugin with { Manifest = scenario.Plugin.Manifest with { KeyedOperations = [Send] } };
+        }
+
+        var verdict = scenario.Check();
+
+        Assert.Equal(expected ?? AttemptErrors.ApprovalRequired, verdict.Code);
+        if (expected is not null)
+        {
+            Assert.True(verdict.Refused);
+            Assert.Equal(FailureClass.Ambiguous, verdict.Class);
+            Assert.Null(verdict.Plan);
+            Assert.NotNull(verdict.Resolution);
+            Assert.Contains("settles_by_key", verdict.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The work item's key settles a send only at the provider and the account that took it: a repeat after a lost
+    /// answer is handed to the package, by its id and its digest, and the binding the attempt that lost it ran under,
+    /// by its provenance, and to no other, even one that lists the send under <c>settles_by_key</c>, since that provider
+    /// never saw the key, and another version of the package may keep another scheme of keys. An attempt whose
+    /// provenance does not say where it ran leaves nothing to compare, so the repeat is refused.
+    /// </summary>
+    [Theory]
+    [InlineData(Scenario.PluginId, Scenario.RoutedDigest, null, null)]
+    [InlineData(Scenario.PluginId, Scenario.RoutedDigest, "acct-2", AttemptErrors.ProviderAnswerLost)]
+    [InlineData("another-provider", Scenario.RoutedDigest, null, AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Scenario.PluginId, "sha256:1", null, AttemptErrors.ProviderAnswerLost)]
+    [InlineData(null, null, null, AttemptErrors.ProviderAnswerLost)]
+    public void A_send_repeated_after_a_lost_answer_goes_only_to_the_provider_and_account_that_took_it(string? ranUnder, string? digest, string? binding, string? expected)
+    {
+        var scenario = Scenario.Sending("snd-1");
+        scenario.Plugin = scenario.Plugin with { Manifest = scenario.Plugin.Manifest with { KeyedOperations = [Send] } };
+        Assert.Equal(Scenario.RoutedDigest, scenario.Plugin.Digest);
+        scenario.Unsettled = true;
+        scenario.UnsettledUnder = ranUnder is null ? Scenario.NoProvenance : (ranUnder, digest, binding);
+
+        var verdict = scenario.Check();
+
+        Assert.Equal(expected ?? AttemptErrors.ApprovalRequired, verdict.Code);
+        if (expected is not null)
+        {
+            Assert.True(verdict.Refused);
+            Assert.Equal(FailureClass.Ambiguous, verdict.Class);
+            Assert.Null(verdict.Plan);
+            Assert.NotNull(verdict.Resolution);
+            Assert.Contains(ranUnder is null ? "does not say" : "only at the provider and the account that took it", verdict.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The work item's key settles only the request it went with: a provider holding the key answers a repeat with the
+    /// send the first request made, whatever the repeat asks for. So a repeat after a lost answer is made only with the
+    /// arguments that attempt ran with, as its snapshot kept them; an item edited since — another subject, another
+    /// moment, an argument added — is refused, ambiguous and final, since a repeat would answer for a message the
+    /// person never got. The same arguments, in another order of their keys, are the same.
+    /// </summary>
+    [Theory]
+    [InlineData("the same arguments", null)]
+    [InlineData("the same arguments in another order", null)]
+    [InlineData("another subject", AttemptErrors.ProviderAnswerLost)]
+    [InlineData("a moment added", AttemptErrors.ProviderAnswerLost)]
+    [InlineData("no arguments kept", AttemptErrors.ProviderAnswerLost)]
+    public void A_send_repeated_after_a_lost_answer_goes_only_with_the_arguments_that_attempt_ran_with(string earlier, string? expected)
+    {
+        var scenario = Scenario.Sending("snd-1");
+        var taking = Scenario.Taking(["email"]);
+        scenario.Plugin = taking with { Manifest = taking.Manifest with { KeyedOperations = [Send] } };
+        scenario.Unsettled = true;
+        var ran = scenario.Arguments!.DeepClone().AsObject();
+        switch (earlier)
+        {
+            case "the same arguments":
+                break;
+            case "the same arguments in another order":
+                ran = new JsonObject { ["message"] = ran["message"]!.DeepClone(), ["sender"] = ran["sender"]!.DeepClone(), ["channel"] = "email" };
+                break;
+            case "another subject":
+                ran["message"]!["subject"] = "Hello again";
+                break;
+            case "a moment added":
+                scenario.Arguments!["send_after"] = Later;
+                break;
+            case "no arguments kept":
+                ran = null;
+                break;
+        }
+
+        scenario.UnsettledArguments = ran is null ? new JsonObject() : new JsonObject { [WorkItemService.InputKey] = ran };
+
+        var verdict = scenario.Check();
+
+        Assert.Equal(expected ?? AttemptErrors.ApprovalRequired, verdict.Code);
+        if (expected is not null)
+        {
+            Assert.True(verdict.Refused);
+            Assert.Equal(FailureClass.Ambiguous, verdict.Class);
+            Assert.Null(verdict.Plan);
+            Assert.Contains("other arguments than the work item carries now", verdict.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// While a send carries an earlier attempt that may have reached the person, every reason the claim refuses it for,
+    /// from the route to the arguments, keeps its own code and says that the earlier attempt may have acted: ambiguous
+    /// and final, as that attempt left the work. Read alone, "the route moved" or "the moment is not taken" would have a
+    /// planner create the send again. The same refusal of a send nothing left unsettled keeps its own class and words.
+    /// </summary>
+    [Theory]
+    [InlineData("no route", AttemptErrors.NoRoute, FailureClass.Permanent)]
+    [InlineData("a plugin not loaded", AttemptErrors.PluginNotLoaded, FailureClass.Permanent)]
+    [InlineData("a plugin unavailable", AttemptErrors.PluginUnavailable, FailureClass.Permanent)]
+    [InlineData("a plugin without the send", AttemptErrors.PluginOperationUnsupported, FailureClass.Permanent)]
+    [InlineData("another contract version", AttemptErrors.ContractIncompatible, FailureClass.Permanent)]
+    [InlineData("a binding the plugin refuses", AttemptErrors.BindingInvalid, FailureClass.Permanent)]
+    [InlineData("no contact", AttemptErrors.ContactRequired, FailureClass.Permanent)]
+    [InlineData("no email", AttemptErrors.NoChannelValue, FailureClass.Permanent)]
+    [InlineData("a suppressed address", AttemptErrors.Suppressed, FailureClass.Permanent)]
+    [InlineData("no sender", AttemptErrors.InputInvalid, FailureClass.Validation)]
+    [InlineData("a moment the plugin does not take", AttemptErrors.ArgumentUnsupported, FailureClass.Permanent)]
+    [InlineData("a template the plugin does not write", AttemptErrors.TemplateNotOffered, FailureClass.Permanent)]
+    public void Every_refusal_of_a_send_that_may_have_reached_the_person_says_so_and_stays_final(string wrong, string code, FailureClass own)
+    {
+        var settled = Mistaken(wrong);
+        var unsettled = Mistaken(wrong);
+        unsettled.Unsettled = true;
+
+        var plain = settled.Check();
+        var masked = unsettled.Check();
+
+        Assert.Equal((code, own), (plain.Code, plain.Class));
+        Assert.DoesNotContain(MayHaveActed, plain.Message, StringComparison.Ordinal);
+        Assert.Equal((code, FailureClass.Ambiguous), (masked.Code, masked.Class));
+        Assert.True(masked.Refused);
+        Assert.Null(masked.Plan);
+        Assert.StartsWith(plain.Message!, masked.Message, StringComparison.Ordinal);
+        Assert.Contains(MayHaveActed, masked.Message, StringComparison.Ordinal);
+        Assert.Equal(plain.Details?.Count, masked.Details?.Count);
+    }
+
+    /// <summary>
+    /// What is not a refusal is left as it is: a pattern that could not finish puts the send back in the queue, transient,
+    /// for the claim to ask again, and an operation whose repeat does not rest on the key keeps its refusal's class.
+    /// </summary>
+    [Fact]
+    public void Only_the_refusals_of_a_send_the_key_settles_carry_the_earlier_attempt()
+    {
+        var schema = Scenario.BindingSchema;
+        schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
+        var timedOut = Scenario.Sending("snd-1");
+        timedOut.Route = new Route(Scenario.PluginId, new JsonObject { ["workspace"] = "west" }, "sha256:west");
+        timedOut.Plugin = Scenario.Package(operations: [Send], binding: schema);
+        timedOut.Unsettled = true;
+        timedOut.Timing = TimingOut.Always();
+        var transient = timedOut.Check();
+
+        var add = new Scenario { Operation = Add, Contact = Scenario.Person(("email", "ada@example.test")), Arguments = Scenario.CompleteArguments, Unsettled = true };
+        var unrouted = add.Check();
+
+        Assert.Equal((AttemptErrors.ValidationTimedOut, FailureClass.Transient), (transient.Code, transient.Class));
+        Assert.DoesNotContain(MayHaveActed, transient.Message, StringComparison.Ordinal);
+        Assert.Equal((AttemptErrors.NoRoute, FailureClass.Permanent), (unrouted.Code, unrouted.Class));
+        Assert.DoesNotContain(MayHaveActed, unrouted.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>What a refusal of a send that may have reached the person says beside its own reason.</summary>
+    private const string MayHaveActed = "An earlier attempt of this work item may have reached the person";
+
+    /// <summary>The send of <see cref="Scenario.Sending"/>, with the one thing wrong with it that <paramref name="wrong"/> names.</summary>
+    private static Scenario Mistaken(string wrong)
+    {
+        var scenario = Scenario.Sending("snd-1");
+        switch (wrong)
+        {
+            case "no route":
+                scenario.Route = null;
+                break;
+            case "a plugin not loaded":
+                scenario.Route = new Route("ghost-provider", null, null);
+                break;
+            case "a plugin unavailable":
+                scenario.Plugin = Scenario.Package(operations: [Send], status: PluginStatus.Unavailable);
+                break;
+            case "a plugin without the send":
+                scenario.Plugin = Scenario.Package(operations: [Add]);
+                break;
+            case "another contract version":
+                scenario.Plugin = Scenario.Package(operations: [Send], contractVersions: [2]);
+                break;
+            case "a binding the plugin refuses":
+                scenario.Plugin = Scenario.Package(operations: [Send], binding: Scenario.BindingSchema);
+                break;
+            case "no contact":
+                scenario.Contact = null;
+                break;
+            case "no email":
+                scenario.Contact = Scenario.Person(("phone", "+15555550100"));
+                break;
+            case "a suppressed address":
+                scenario.Suppressed = true;
+                break;
+            case "no sender":
+                scenario.Arguments!.Remove("sender");
+                break;
+            case "a moment the plugin does not take":
+                scenario.Arguments!["send_after"] = Later;
+                break;
+            case "a template the plugin does not write":
+                scenario.Arguments!["message"]!["compose"] = "template";
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(wrong), wrong, "No such mistake.");
+        }
+
+        return scenario;
+    }
+
+    /// <summary>
+    /// The marker is asked only where the operation's document rests the repeat on the key: an operation that repeats
+    /// after a recovery read of its own runs after a lost answer under a plugin that lists nothing, as it always has.
+    /// </summary>
+    [Fact]
+    public void A_repeat_whose_document_does_not_rest_on_the_key_asks_nothing_of_the_marker()
+    {
+        var contract = OperationCatalog.Find(Add)!;
+        Assert.Equal(RepeatAfterAmbiguous.AfterRecoveryRead, contract.RepeatAfterAmbiguous);
+        Assert.False(OutcomeContract.SettlesByKey(contract));
+        var scenario = new Scenario
+        {
+            Operation = Add,
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+            Unsettled = true,
+        };
+
+        Assert.True(scenario.Check().Passed);
+    }
+
+    /// <summary>An argument the work does not carry asks nothing of the manifest: a send for now runs wherever it ran before.</summary>
+    [Fact]
+    public void A_send_that_names_no_moment_asks_nothing_of_the_manifest()
+    {
+        var scenario = Scenario.Sending("snd-1");
+        scenario.Plugin = Scenario.Taking([]);
+
+        Assert.Equal(AttemptErrors.ApprovalRequired, scenario.Check().Code);
     }
 
     /// <summary>
@@ -679,6 +1067,9 @@ public class ProviderOpPreflightTests
         Assert.Equal("/workspace", Assert.Single(verdict.Details!).Field);
     }
 
+    /// <summary>A moment far ahead, with its offset, as a planner writes one: no clock these rows run under reaches it.</summary>
+    private const string Later = "2099-11-02T09:00:00+01:00";
+
     /// <summary>The code this state is refused with, having first said that the class travels with it.</summary>
     private static string Refused(Scenario scenario, FailureClass expected)
     {
@@ -742,6 +1133,40 @@ public class ProviderOpPreflightTests
             Blocks = blocks,
         };
 
+        /// <summary>
+        /// A send to Ada written as a template on <paramref name="channel"/>: an email, an InMail where it has a subject, a
+        /// LinkedIn message where it has none, through the installed package writing a template on that channel. The
+        /// sending account's address on LinkedIn is its profile.
+        /// </summary>
+        public static Scenario SendingATemplate(string channel, string? subject, string body)
+        {
+            var email = channel == "email";
+            var message = new JsonObject
+            {
+                ["format"] = email ? "email" : subject is null ? "linkedin_message" : "linkedin_inmail",
+                ["compose"] = "template",
+                ["body"] = body,
+            };
+            if (subject is not null)
+            {
+                message["subject"] = subject;
+            }
+
+            return new Scenario
+            {
+                Operation = Send,
+                Route = ToTheInstalledPackage,
+                Plugin = Writing([channel]),
+                Contact = Person(email ? ("email", "ada@example.test") : ("linkedin", "https://www.linkedin.com/in/ada-example")),
+                Arguments = new JsonObject
+                {
+                    ["channel"] = channel,
+                    ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = email ? "marta@example.com" : "https://www.linkedin.com/in/marta-owner" },
+                    ["message"] = message,
+                },
+            };
+        }
+
         /// <summary>An open block the provider said it holds, on the account as a whole or on one sending account under it.</summary>
         public static ProviderBlock Block(
             ProviderBlockScope scope = ProviderBlockScope.Account,
@@ -801,6 +1226,28 @@ public class ProviderOpPreflightTests
         /// <summary>The open blocks of the routed plugin the claim would have read, and null where it read none.</summary>
         public IReadOnlyList<ProviderBlock>? Blocks { get; set; }
 
+        /// <summary>Whether an earlier attempt of the item ended ambiguous, as the claim would have read it.</summary>
+        public bool Unsettled { get; set; }
+
+        /// <summary>The send the arguments name under <c>args.send</c>, as the claim would have read it; null where it found none.</summary>
+        public NamedSend? Named { get; set; }
+
+        /// <summary>
+        /// The package, by its id and digest, and the account that attempt ran under, as its provenance kept them; null
+        /// where it ran under the route and the package this claim resolves, and <see cref="NoProvenance"/> where the
+        /// attempt kept none.
+        /// </summary>
+        public (string? PluginId, string? PluginDigest, string? BindingIdentity)? UnsettledUnder { get; set; }
+
+        /// <summary>The context that attempt's snapshot kept; null where it ran with the item's context as it is now.</summary>
+        public JsonObject? UnsettledArguments { get; set; }
+
+        /// <summary>An earlier attempt whose provenance says nothing of where it ran.</summary>
+        public static (string? PluginId, string? PluginDigest, string? BindingIdentity) NoProvenance => (null, null, null);
+
+        /// <summary>The digest every package of these scenarios is loaded with.</summary>
+        public const string RoutedDigest = "sha256:0";
+
         public static LoadedPlugin Package(
             string id = PluginId,
             PluginKind kind = PluginKind.Provider,
@@ -809,6 +1256,29 @@ public class ProviderOpPreflightTests
             JsonObject? binding = null,
             PluginStatus status = PluginStatus.Valid) =>
             TestPlugins.Loaded(id, operations ?? [Add, Enroll, Get, Delete], kind, contractVersions, binding, status);
+
+        /// <summary>The installed package performing the send, its manifest listing <c>send_after</c> on <paramref name="channels"/> and nothing where they are none.</summary>
+        public static LoadedPlugin Taking(IReadOnlyList<string> channels)
+        {
+            var plugin = Package(operations: [Send]);
+            var arguments = channels.Count == 0
+                ? ManifestArguments.None
+                : new ManifestArguments(new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyList<string>>>(StringComparer.Ordinal)
+                {
+                    [Send] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal) { ["send_after"] = channels },
+                });
+            return plugin with { Manifest = plugin.Manifest with { Arguments = arguments } };
+        }
+
+        /// <summary>The installed package performing the send, its manifest listing <paramref name="channels"/> under <c>templates</c> and nothing where they are none.</summary>
+        public static LoadedPlugin Writing(IReadOnlyList<string> channels)
+        {
+            var plugin = Package(operations: [Send]);
+            var templates = channels.Count == 0
+                ? ManifestTemplates.None
+                : new ManifestTemplates(new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal) { [Send] = channels });
+            return plugin with { Manifest = plugin.Manifest with { Templates = templates } };
+        }
 
         public static Contact Person(params (string Channel, string Value)[] channels)
         {
@@ -821,6 +1291,27 @@ public class ProviderOpPreflightTests
             return contact;
         }
 
+        /// <summary>
+        /// The earlier attempt that ended ambiguous, under the plugin and account <see cref="UnsettledUnder"/> names, with
+        /// the context <see cref="UnsettledArguments"/> names or the item's own.
+        /// </summary>
+        private Attempt Earlier(JsonObject context)
+        {
+            var routed = CampaignRoute ?? Route;
+            var (pluginId, digest, binding) = UnsettledUnder ?? (routed?.PluginId, Plugin.Digest, routed?.BindingIdentity);
+            return new Attempt
+            {
+                PublicId = PublicId.New("att"),
+                Number = 1,
+                Status = AttemptStatus.Failed,
+                ContextSnapshot = (UnsettledArguments ?? context).DeepClone().AsObject(),
+                Error = new AttemptErrorDto(AttemptErrors.ProviderAnswerLost, "The plugin's answer was lost.", true, Class: FailureClass.Ambiguous),
+                Provenance = pluginId is null
+                    ? null
+                    : new AttemptProvenanceDto(pluginId, "1.0.0", digest, 1, 1, Operation, 1, null, null, RouteScope.GlobalDefault, binding),
+            };
+        }
+
         public PreflightVerdict Check()
         {
             var campaign = WorkItemFactory.NewCampaign();
@@ -831,7 +1322,7 @@ public class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled ? Earlier(item.Context) : null, Named);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);

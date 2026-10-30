@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Jason.Cli.Autostart;
 using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
@@ -74,10 +75,6 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// The two sentences this page exists to make checkable: what a check sends, and that nothing is signed.
-    /// Both are promises to a person who is deciding whether to let a runtime talk to the internet at all.
-    /// </summary>
-    /// <summary>
     /// Both callers of the feed wait exactly as long as this build says they do, and the page prints that
     /// number from the constant rather than from somebody's memory of it.
     /// </summary>
@@ -106,14 +103,21 @@ public class ReleaseAndUpdateDocTests
         }
     }
 
+    /// <summary>
+    /// The two sentences this page exists to make checkable: what a check sends, and which half of a release is signed.
+    /// Both are promises to a person who is deciding whether to let a runtime talk to the internet at all, and whether to
+    /// run what it downloads.
+    /// </summary>
     [Fact]
-    public void The_page_says_what_is_sent_and_what_is_not_signed()
+    public void The_page_says_what_is_sent_and_which_half_is_signed()
     {
-        var page = Read();
+        var page = Regex.Replace(Read(), @"\s+", " ");
 
         Assert.Contains("User-Agent", page, StringComparison.Ordinal);
         Assert.Contains("jason/<version>", page, StringComparison.Ordinal);
-        Assert.Contains("signed", page, StringComparison.Ordinal);
+        Assert.Contains("**The macOS executable is signed with Reply's Developer ID and notarized by Apple; the Linux and Windows executables are not signed.**", page, StringComparison.Ordinal);
+        Assert.Contains("On Linux and Windows it is the only provenance there is", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("Nothing in a release is signed", page, StringComparison.Ordinal);
     }
 
     /// <summary>

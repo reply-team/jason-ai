@@ -46,6 +46,9 @@ public sealed class Claimer(
     /// <summary>How the claim matches a schema's patterns: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
+    /// <summary>The kind an operation names the send it made the provider take by.</summary>
+    private const string SendKind = "send";
+
     private static readonly Action<ILogger, string, Exception?> ClaimSkipped = LoggerMessage.Define<string>(
         LogLevel.Information,
         new EventId(1, nameof(ClaimSkipped)),
@@ -137,7 +140,7 @@ public sealed class Claimer(
                 continue;
             }
 
-            // Held by a provider block, whether the fourteenth check said so or a person released work the block still
+            // Held by a provider block, whether the twentieth check said so or a person released work the block still
             // holds: the item waits on the block, with no attempt, unless it is the block's trial.
             if (verdict is { Block: { } block } && (released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
                 && !await TrialAsync(db, block, item, now, ct).ConfigureAwait(false))
@@ -307,6 +310,39 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// When the earliest earlier attempt of the item that may have acted was claimed, or null where none did. An attempt
+    /// may have acted when it ended ambiguous, which is how the plugin says so and how the runtime ends one that lost its
+    /// answer: a timeout, a crash, a host failure, a lease or a restart. A provider's own answer of any other class settled
+    /// its attempt, and an attempt that never started ran nothing, whatever it ended as: one a restart found never started,
+    /// or one the claim refused while the item was unsettled, which keeps the earlier attempt's class.
+    /// </summary>
+    private static DateTimeOffset? UnsettledSince(WorkItem item, Attempt attempt) =>
+        item.Attempts
+            .Where(earlier => earlier.Number < attempt.Number && MayHaveActed(earlier))
+            .OrderBy(earlier => earlier.Number)
+            .Select(earlier => (DateTimeOffset?)new DateTimeOffset(DateTime.SpecifyKind(earlier.ClaimedAt, DateTimeKind.Utc)))
+            .FirstOrDefault();
+
+    /// <summary>
+    /// The provider's reference for the work item's send that the latest earlier attempt of the item that may have acted
+    /// returned, or null where none did: the attempts <see cref="UnsettledSince"/> reads, newest first, and the first of
+    /// them whose provenance holds a <c>send</c> — a kind the operation declares for the work item itself. A read of a
+    /// send never makes it twice, so this is what a repeat reads before anything else.
+    /// </summary>
+    internal static string? UnsettledReference(OperationContract contract, WorkItem item, Attempt attempt) =>
+        contract.ExternalIds.TryGetValue(SendKind, out var kind) && kind.Entity == PinnedEntity.WorkItem
+            ? item.Attempts
+                .Where(earlier => earlier.Number < attempt.Number && MayHaveActed(earlier))
+                .OrderByDescending(earlier => earlier.Number)
+                .Select(earlier => earlier.Provenance?.ExternalIdsReturned is { } returned && returned.TryGetValue(SendKind, out var reference) ? reference : null)
+                .FirstOrDefault(reference => reference is not null)
+            : null;
+
+    /// <summary>Whether an earlier attempt may have acted: it started, and it ended ambiguous.</summary>
+    private static bool MayHaveActed(Attempt earlier) =>
+        earlier.StartedAt is not null && earlier.Error?.Class == FailureClass.Ambiguous;
+
+    /// <summary>
     /// Work the runtime cannot perform fails where it is noticed, with the attempt and its snapshot kept so the
     /// manager can see what would have run. A silent skip would leave the item looking claimable forever.
     /// </summary>
@@ -369,7 +405,9 @@ public sealed class Claimer(
             // Work a block holds reaches here only as the block's trial: it runs, and what it answers decides the block.
             if (verdict.Passed || released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
             {
-                return verdict.Plan;
+                return verdict.Plan is { } plan
+                    ? plan with { UnsettledSince = UnsettledSince(item, attempt), UnsettledReference = UnsettledReference(plan.Contract, item, attempt) }
+                    : null;
             }
 
             outcomes.Fail(
@@ -524,9 +562,16 @@ public sealed class Claimer(
         var campaign = item.Campaign!;
         var contract = item.Operation is { } operation ? OperationCatalog.Find(operation) : null;
         var resolution = contract is null ? null : RouteResolver.Resolve(routing, campaign.PublicId, contract.Id);
+
+        // The latest attempt this claim would repeat that may have acted: the attempts loaded with the item are all
+        // earlier ones, since the claim's own does not exist yet. It is read before the route is, so a refusal for a
+        // route that is gone says that attempt may have reached the person, as every later refusal does.
+        var unsettled = item.Attempts
+            .Where(MayHaveActed)
+            .MaxBy(earlier => earlier.Number);
         if (contract is null || resolution is null)
         {
-            return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false);
+            return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Unsettled: unsettled);
         }
 
         var pluginId = resolution.Route.PluginId;
@@ -536,9 +581,10 @@ public sealed class Claimer(
         var blocks = OperationCatalog.HeldByProviderBlock.Contains(contract.Id)
             ? await ProviderBlocks.OpenAsync(db, pluginId, ProviderBlocks.Identity(resolution.Route.BindingIdentity), ct).ConfigureAwait(false)
             : null;
+        var send = await SendAsync(db, contract, item, ct).ConfigureAwait(false);
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks);
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send);
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -555,7 +601,41 @@ public sealed class Claimer(
             await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false),
             campaignPins,
             await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false),
-            blocks);
+            blocks,
+            unsettled,
+            send);
+    }
+
+    /// <summary>
+    /// The send the work names under <c>args.send</c>, read only for an operation whose input carries one, and only in the
+    /// work's own campaign: another campaign's work is not this one's to name. What it kept of where it went is its
+    /// succeeded attempt's, the one that returned the reference.
+    /// </summary>
+    private static async Task<NamedSend?> SendAsync(JasonDbContext db, OperationContract contract, WorkItem item, CancellationToken ct)
+    {
+        if (!CanonicalInput.NamesASend(contract) || CanonicalInput.NamedSend(item) is not { } named)
+        {
+            return null;
+        }
+
+        var send = await db.WorkItems
+            .AsNoTracking()
+            .Include(candidate => candidate.Attempts.Where(attempt => attempt.Status == AttemptStatus.Succeeded))
+            .SingleOrDefaultAsync(candidate => candidate.PublicId == named && candidate.CampaignId == item.CampaignId, ct)
+            .ConfigureAwait(false);
+        if (send is null)
+        {
+            return null;
+        }
+
+        var made = send.Attempts.MaxBy(attempt => attempt.Number)?.Provenance;
+        return new NamedSend(
+            send.PublicId,
+            send.Operation,
+            send.Status,
+            made?.ExternalIdsReturned is { } returned && returned.TryGetValue(SendKind, out var reference) ? reference : null,
+            made?.PluginId,
+            made?.BindingIdentity);
     }
 
     /// <summary>

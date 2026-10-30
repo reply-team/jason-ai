@@ -26,6 +26,18 @@ public class TemplateGrammarPageTests
     }
 
     /// <summary>
+    /// The table of names says what the composed input holds of each name on every channel a document offers a template
+    /// on, and on no other: a channel it did not speak of would leave the example without an answer there.
+    /// </summary>
+    [Fact]
+    public void The_names_speak_of_exactly_the_channels_a_template_is_offered_on()
+    {
+        var offered = OperationCatalog.All.SelectMany(contract => contract.ChannelTemplates ?? []).Distinct().Order(StringComparer.Ordinal);
+
+        Assert.Equal(offered, TemplateGrammar.Channels.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// What counts as no value, and how two values compare, is the provider's: the standard says so and leaves Reply's to
     /// the Reply package's README, the rule the runtime's own example follows is stated as the example's, not the
     /// standard's, and the standard says what that means for the message sent.
@@ -80,6 +92,107 @@ public class TemplateGrammarPageTests
         Assert.Contains("as the Reply package before 0.10.0 refused any `{{`; otherwise it is breaking.", contracts, StringComparison.Ordinal);
         Assert.DoesNotContain("every template", operation, StringComparison.Ordinal);
         Assert.DoesNotContain("refuses every template", contracts, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A plugin is handed a template only on a channel its manifest lists under <c>templates</c>, because the claim
+    /// refuses one on any other channel before a child exists; so no plugin written before <c>compose</c> ever reads a
+    /// template as a final message. The page says so, and says in one sentence what was offered before.
+    /// </summary>
+    [Fact]
+    public void The_page_says_a_plugin_receives_a_template_only_on_a_channel_its_manifest_lists()
+    {
+        var operation = Flat(File.ReadAllText(Path.Combine(ContractFiles.Operations, "message.send.md")));
+
+        Assert.Contains(
+            "A plugin receives a template only on a channel its manifest lists under `templates`; on any other channel the claim refuses it, `template_not_offered`, before a child exists. Until Jason 0.22.0 only an email could be a template.",
+            operation,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("reads a template as a final message", operation, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A send that goes now is not always made within the call: a provider may queue it behind the account's other sends
+    /// and answer it accepted. What is filled in before anything goes is a send made within the call, so the page and the
+    /// document say that of it, and that a template's length is its length once filled in, within the call or later.
+    /// </summary>
+    [Fact]
+    public void A_template_the_provider_does_not_send_within_the_call_is_filled_in_when_it_goes()
+    {
+        var operation = Flat(File.ReadAllText(Path.Combine(ContractFiles.Operations, "message.send.md")));
+        var compose = OperationCatalog.Find("message.send")!
+            .InputSchema["properties"]!["args"]!["properties"]!["message"]!["properties"]!["compose"]!["description"]!.GetValue<string>();
+
+        Assert.Contains(
+            "A send the provider does not make within the call — held for a later moment, or queued by the provider behind the account's other sends — is filled in when it goes, and a template it cannot fill fails it then, which `message.status` shows as `failed` with the provider's reason — not `template_unrendered` at the send.",
+            operation,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("A send held for later is filled in by the provider when it goes", operation, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "The bounds below hold a template as written. Its length is the length once the provider fills it in, within the call or later: a text found too long within the call fails `message_too_long`, and one found too long later fails the send then.",
+            compose,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The text a template went out as is the provider's to fill in, after the approval: the page says where that text is
+    /// read afterwards, from the provider's read of the send, where the provider gives it.
+    /// </summary>
+    [Fact]
+    public void The_page_says_where_the_text_the_provider_filled_in_is_read()
+    {
+        var operation = Flat(File.ReadAllText(Path.Combine(ContractFiles.Operations, "message.send.md")));
+
+        Assert.Contains(
+            "The text as the provider filled it in is read afterwards from `message.status`, as its `rendered_subject` and `rendered_body`, where the provider gives it.",
+            operation,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The loader refuses an empty <c>channel_templates</c>, since a document whose message is never a template writes
+    /// null, so the contracts README's row says the field is a non-empty list or null.
+    /// </summary>
+    [Fact]
+    public void The_contracts_readme_says_channel_templates_is_a_non_empty_list_or_null()
+    {
+        var row = Assert.Single(File.ReadAllLines(Path.Combine(ContractFiles.Package, "README.md")), line => line.StartsWith("| `channel_templates` |", StringComparison.Ordinal));
+
+        Assert.Contains(
+            "the claim refusing a template elsewhere as `template_not_offered`: a non-empty list, or null where the message is never one.",
+            row,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The example leaves to the provider every name the composed input does not hold, and on LinkedIn the input holds no
+    /// email address, so the page names that among them.
+    /// </summary>
+    [Fact]
+    public void The_page_names_the_person_s_email_on_linkedin_among_the_names_left_to_the_provider()
+    {
+        var operation = Flat(File.ReadAllText(Path.Combine(ContractFiles.Operations, "message.send.md")));
+
+        Assert.Contains(
+            "with the names the input does not hold — a custom field, the sending account's names, and on LinkedIn the person's email address — left for the provider",
+            operation,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The names table has no category for a name the channel carries no value for, so the example rule names none:
+    /// a name the input does not hold, and one it holds with no value, are the two the example lists.
+    /// </summary>
+    [Fact]
+    public void The_example_rule_names_no_category_the_names_table_does_not_have()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ContractFiles.Package, "README.md")));
+
+        Assert.DoesNotContain("the channel carries no value for", readme, StringComparison.Ordinal);
+        Assert.Contains(
+            "A name the input does not hold there, and a name it holds with no value, renders its fallback, or else itself in brackets",
+            readme,
+            StringComparison.Ordinal);
     }
 
     private static string Flat(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

@@ -53,6 +53,8 @@ line. These kinds summon a review:
 successful step is cost without judgment, and the work that needs looking at is the work that did not
 go well. `workitem_expired` and `workitem_cancelled` are out: the cadence catches them soon enough.
 `provider_block_cleared` is out: what the block held runs again by itself, and the manager was told when it began.
+`message_sent_observed` is out by default, and a campaign's installation may add it: a send the provider took for later
+going out is the course the campaign planned, and it is worth a review only where the plan waits on that moment.
 Everything about profiles, plugins, routes and roles is operator maintenance, not campaign meaning.
 
 **The rules are settings, never a skill.** `Manager:Triggers` is a list of chronicle kinds, and every

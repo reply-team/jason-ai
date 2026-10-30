@@ -307,6 +307,22 @@ public class GeneratedBlockTests
             block,
             "pre-flight",
             $"contact `{Name(contract.Preflight.Contact)}`, channel `{Name(contract.Preflight.Channel)}`, suppression `{Name(contract.Preflight.Suppression)}`, provider contact `{Name(contract.Preflight.ProviderContact)}`");
+        if (contract.ChannelArguments is { } perChannel)
+        {
+            Row(
+                block,
+                "arguments a plugin takes per channel",
+                string.Join(", ", perChannel.Select(name => $"`{name}`")) + ", only on a channel the routed plugin's manifest lists it for");
+        }
+
+        if (contract.ChannelTemplates is { } templated)
+        {
+            Row(
+                block,
+                "channels its message may be a template on",
+                string.Join(", ", templated.Select(channel => $"`{channel}`")) + ", each only where the routed plugin's manifest lists it under `templates`");
+        }
+
         Row(block, "in a paused campaign", $"`{Name(contract.Dispatch.InPausedCampaign)}`");
         Row(block, "contact projection", Projection(contract));
         Row(block, "precondition", contract.Precondition);
@@ -434,6 +450,8 @@ public class GeneratedBlockTests
     private static string Ambiguous(OperationContract contract) => contract.RepeatAfterAmbiguous switch
     {
         RepeatAfterAmbiguous.Safe => "`safe` — repeating changes nothing and costs nothing, so the item is handed out again",
+        RepeatAfterAmbiguous.AfterRecoveryRead when OutcomeContract.SettlesByKey(contract) =>
+            "`after_recovery_read`, by the work item's key — a later attempt performs the recovery read above and answers from it when the effect already happened, and only under a plugin whose manifest lists the operation under `settles_by_key`",
         RepeatAfterAmbiguous.AfterRecoveryRead =>
             "`after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened",
         _ => "`never` — the item ends for a person to look at",

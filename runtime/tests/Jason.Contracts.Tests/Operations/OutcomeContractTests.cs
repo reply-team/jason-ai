@@ -14,6 +14,7 @@ public class OutcomeContractTests
 {
     private static readonly OperationContract Add = OperationCatalog.Find("list_membership.add")!;
     private static readonly OperationContract Get = OperationCatalog.Find("campaign.get")!;
+    private static readonly OperationContract Send = OperationCatalog.Find("message.send")!;
 
     private static JsonNode Result(string json) => JsonNode.Parse(json)!;
 
@@ -122,6 +123,55 @@ public class OutcomeContractTests
         Assert.Empty(OutcomeContract.CheckExternalIds(Add, new JsonObject()));
     }
 
+    private static JsonNode Taken(string reference) => Result($$"""{"items":[{"reference":{{reference}}}]}""");
+
+    [Fact]
+    public void A_send_s_reference_is_one_kind_of_identifier_the_send_declares_and_pins_to_nothing()
+    {
+        Assert.Equal(PinnedEntity.WorkItem, Send.ExternalIds["send"].Entity);
+        Assert.Empty(OutcomeContract.CheckExternalIds(Send, new JsonObject { ["contact"] = "p_88421", ["send"] = "email-1001" }));
+    }
+
+    [Fact]
+    public void A_send_s_reference_said_beside_the_result_and_in_it_as_one_value_passes()
+    {
+        Assert.Empty(OutcomeContract.CheckReference(Send, Taken("\"email-1001\""), new JsonObject { ["contact"] = "p_88421", ["send"] = "email-1001" }));
+    }
+
+    [Fact]
+    public void A_send_the_provider_gave_no_reference_for_says_none_in_either_place()
+    {
+        Assert.Empty(OutcomeContract.CheckReference(Send, Taken("null"), new JsonObject { ["contact"] = "p_88421" }));
+        Assert.Empty(OutcomeContract.CheckReference(Send, Taken("null"), null));
+    }
+
+    /// <summary>
+    /// The reference is said twice so a person reading the result and a later call working by the identifier read one
+    /// value. Said once, or said as two, one of them would be acting on something the other never saw.
+    /// </summary>
+    [Theory]
+    [InlineData("\"email-1001\"", null)]
+    [InlineData("null", "email-1001")]
+    [InlineData("\"email-1001\"", "email-1002")]
+    public void A_send_s_reference_said_in_one_place_only_or_as_two_values_is_refused(string carried, string? returned)
+    {
+        var externalIds = new JsonObject { ["contact"] = "p_88421" };
+        if (returned is not null)
+        {
+            externalIds["send"] = returned;
+        }
+
+        var problem = Assert.Single(OutcomeContract.CheckReference(Send, Taken(carried), externalIds));
+
+        Assert.Equal(("/external_ids/send", "const"), (problem.Pointer, problem.Reason));
+    }
+
+    [Fact]
+    public void An_operation_that_declares_no_reference_has_none_to_hold()
+    {
+        Assert.Empty(OutcomeContract.CheckReference(Add, Taken("\"email-1001\""), new JsonObject { ["contact"] = "p_88421" }));
+    }
+
     private static OutcomeError Failure(FailureClass failureClass, string code) => new(failureClass, code, "the provider said no", null, null);
 
     /// <summary>
@@ -190,5 +240,97 @@ public class OutcomeContractTests
         var problem = OutcomeContract.CheckFailure(OperationCatalog.Find(operation)!, Failure(FailureClass.Permanent, code));
 
         Assert.True(problem is null, $"'{code}' under permanent was refused beside '{operation}': {problem?.Pointer} {problem?.Message}");
+    }
+
+    /// <summary>
+    /// The code passes as it is spelled and in no other spelling: a near one is a code no operation declares, refused
+    /// like any other, so a plugin that misspells it learns so instead of being read as meaning it.
+    /// </summary>
+    [Theory]
+    [InlineData("Capability_Not_Offered")]
+    [InlineData("capability_not_offered ")]
+    [InlineData("capability-not-offered")]
+    [InlineData("capability_not_offered_yet")]
+    public void A_near_spelling_of_the_code_is_refused_at_the_code(string code)
+    {
+        var problem = OutcomeContract.CheckFailure(Add, Failure(FailureClass.Permanent, code));
+
+        Assert.Equal(("/error/code", "enum"), (problem?.Pointer, problem?.Reason));
+    }
+
+    public static TheoryData<string, string> EveryReservedCodeBesideEveryOperation()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var contract in OperationCatalog.All)
+        {
+            foreach (var code in UnjudgedOutcomeCodes.Reserved.Keys.Order(StringComparer.Ordinal))
+            {
+                data.Add(contract.Id, code);
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// A code reserved beside every operation is declared by none, and passes beside every one of them under the class it
+    /// is reserved with: a package that reads the provider's slot and cannot make sense of it answers the code reserved for
+    /// that under <c>validation</c>.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryReservedCodeBesideEveryOperation))]
+    public void A_reserved_code_passes_under_its_class_beside_every_operation(string operation, string code)
+    {
+        var failureClass = UnjudgedOutcomeCodes.Reserved[code];
+        var problem = OutcomeContract.CheckFailure(OperationCatalog.Find(operation)!, Failure(failureClass, code));
+
+        Assert.True(problem is null, $"'{code}' under {failureClass} was refused beside '{operation}': {problem?.Pointer} {problem?.Message}");
+    }
+
+    public static TheoryData<string, FailureClass> EveryReservedCodeUnderEveryOtherClass()
+    {
+        var data = new TheoryData<string, FailureClass>();
+        foreach (var (code, reserved) in UnjudgedOutcomeCodes.Reserved.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            foreach (var failureClass in Enum.GetValues<FailureClass>().Where(failureClass => failureClass != reserved))
+            {
+                data.Add(code, failureClass);
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// Under any other class a reserved code is the plugin's word for something the contract does not admit, and it is
+    /// refused exactly as a code the operation does not declare is, at the code.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryReservedCodeUnderEveryOtherClass))]
+    public void A_reserved_code_under_another_class_is_refused_at_the_code(string code, FailureClass failureClass)
+    {
+        var problem = OutcomeContract.CheckFailure(Get, Failure(failureClass, code));
+        var undeclared = OutcomeContract.CheckFailure(Get, Failure(failureClass, "quota_exceeded"));
+
+        Assert.Equal(("/error/code", "enum"), (problem?.Pointer, problem?.Reason));
+        Assert.Equal(
+            undeclared!.Message.Replace("quota_exceeded", code, StringComparison.Ordinal),
+            problem!.Message);
+    }
+
+    /// <summary>
+    /// Each admission is one word under one class, matched as written: a near spelling, or a validation code the operation
+    /// does not declare, is still refused, so the rule cannot widen into "any validation failure passes".
+    /// </summary>
+    [Theory]
+    [InlineData("Provider_Input_Invalid")]
+    [InlineData("provider_input_invalid ")]
+    [InlineData("provider_invalid")]
+    [InlineData("input_invalid")]
+    public void A_validation_code_that_is_neither_declared_nor_reserved_is_refused(string code)
+    {
+        var problem = OutcomeContract.CheckFailure(Get, Failure(FailureClass.Validation, code));
+
+        Assert.Equal(("/error/code", "enum"), (problem?.Pointer, problem?.Reason));
     }
 }

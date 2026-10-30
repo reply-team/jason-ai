@@ -127,6 +127,12 @@ internal static class Workflows
 
     internal static string Read(string[] relative) => File.ReadAllText(Path.Combine([RepositoryRoot(), .. relative]));
 
+    /// <summary>Every step of a workflow that packages through the shared action.</summary>
+    internal static List<YamlMappingNode> PackagingCalls(string[] workflow) =>
+        [.. Mapping(Parse(Read(workflow)), "jobs").Children.Values.Cast<YamlMappingNode>()
+            .SelectMany(job => Node(job, "steps") is YamlSequenceNode steps ? steps.Children.Cast<YamlMappingNode>() : [])
+            .Where(step => Scalar(step, "uses") == "./.github/actions/package")];
+
     /// <summary>
     /// One job of a workflow, as the text between its name and the next job at the same indentation. Read as
     /// text rather than through the parser because what these guards are about is what the job's script says.

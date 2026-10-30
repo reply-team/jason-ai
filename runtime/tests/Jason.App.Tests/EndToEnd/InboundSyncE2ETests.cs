@@ -9,7 +9,8 @@ namespace Jason.App.Tests.EndToEnd;
 /// conversations through the official package against the stand-in Reply account, says the thread that moved in one
 /// line naming the thread and the person, and that line wakes the campaign's manager. The provider is only read, and
 /// the person's words — the subject, the preview, the name the provider shows — reach neither the chronicle nor the
-/// runtime's own log.
+/// runtime's own log. Where the account's Reply has a change feed, the same reply is read from it instead, and the read
+/// of the campaign's conversations steps aside.
 /// </summary>
 public class InboundSyncE2ETests
 {
@@ -29,51 +30,16 @@ public class InboundSyncE2ETests
         // One mark for the run, in every word of the person's that must stay at the provider.
         var mark = "zq" + Guid.NewGuid().ToString("N");
         using var it = GoldenPath.Create("inbound");
+
+        // The account's Reply has no change feed yet, so the conversations are what the runtime reads.
         it.Account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(Person, Address, "Marta");
+            .WithContact(Person, Address, "Marta")
+            .NotOffering("inbox_changes");
 
         // The read is off while the campaign is linked and its person pinned, so the first read the test waits for is
         // the one that finds the reply rather than one that found the campaign not linked yet.
         await WriteSettingsAsync(it, inbound: false);
-        await GoldenPath.StartAsync(it);
-        GoldenPath.InstallReplyPackage(it);
-        await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
-
-        var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, "campaign", "create", "--name", "Q3 LatAm founders")))["id"]!;
-        var contactsFile = Path.Combine(it.Root, "contacts.json");
-        await File.WriteAllTextAsync(
-            contactsFile,
-            new JsonArray(new JsonObject
-            {
-                ["first_name"] = "Marta",
-                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address }),
-            }).ToJsonString(JasonJson.Options),
-            Ct);
-        await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "add-contacts", campaign, "--file", contactsFile, "--match-by", "email"));
-        var contact = (string)Assert.Single(GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, "campaign", "list-contacts", campaign)))["items"]!.AsArray())!["contact"]!["id"]!;
-
-        // The enrolment links the campaign to the sequence and pins the person, once a person has approved it.
-        var enrolment = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
-            it,
-            "workitem",
-            "create",
-            campaign,
-            "--kind",
-            "provider_op",
-            "--operation",
-            "campaign.enroll",
-            "--contact",
-            contact,
-            "--input",
-            Enrolment().ToJsonString(JasonJson.Options))))["id"]!;
-        await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "start", campaign));
-        await GoldenPath.PollAsync(it, enrolment, read => (string?)read["status"] == "awaiting_approval");
-        var approval = (string)Assert.Single(GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, "approval", "list")))["items"]!.AsArray())!["id"]!;
-        await GoldenPath.Ok(GoldenPath.JasonAsync(it, "approval", "approve", approval, "--actor", "human:ada", "--reason", "checked"));
-        GoldenPath.AssertSucceeded(await GoldenPath.PollAsync(it, enrolment, read => GoldenPath.Finished((string?)read["status"])));
+        var (campaign, contact) = await LiveCampaignAsync(it);
 
         // Marta answers, after the campaign went live.
         var replied = DateTime.UtcNow.AddSeconds(5);
@@ -134,8 +100,10 @@ public class InboundSyncE2ETests
             it, "journal", "list", "--campaign", campaign, "--kind", "inbound_reply_observed")))["items"]!.AsArray();
         Assert.Single(lines);
 
-        // 4. The provider was only read: every call since the reply is the inbox list for this sequence, from a moment.
-        var calls = it.Account.CallsSince(beforeTheRead);
+        // 4. The provider was only read: every call since the reply is the inbox list for this sequence, from a moment,
+        //    but for the feed the runtime asked for the account's events, which Reply answered it does not have.
+        Assert.Contains(it.Account.Calls, call => call.Command == "inbox changes");
+        var calls = GoldenPath.Asked(it.Account.CallsSince(beforeTheRead));
         Assert.NotEmpty(calls);
         Assert.All(calls, call =>
         {
@@ -163,6 +131,130 @@ public class InboundSyncE2ETests
             Assert.DoesNotContain("The inbound sync of campaign", text, StringComparison.Ordinal);
             Assert.DoesNotContain("The inbound read of campaign", text, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task A_reply_read_from_the_account_s_event_feed_is_said_once_and_the_conversations_are_not_read()
+    {
+        var mark = "zq" + Guid.NewGuid().ToString("N");
+        using var it = GoldenPath.Create("inbound-feed");
+        it.Account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(Person, Address, "Marta");
+
+        // Both reads are on from the start. The account's events are read once its route is bound, and from then on the
+        // read of a campaign linked to one of its sequences is left to them.
+        await WriteSettingsAsync(it, inbound: true);
+        var (campaign, contact) = await LiveCampaignAsync(it);
+
+        // Marta answers, after the campaign went live, and a restart catches the account's events up at once.
+        var replied = DateTime.UtcNow.AddSeconds(5);
+        var beforeTheReply = it.Account.Mark();
+        it.Account.WithThread(Thread(Conversation, replied, mark));
+        await GoldenPath.StopAsync(it);
+        await GoldenPath.StartAsync(it);
+
+        // 1. The reply is said from the feed: the same line the conversations' read writes, naming the stored event and
+        //    the rule that found the campaign — its sequence, pinned when the person was enrolled.
+        var line = await LineAsync(it, campaign, Patience);
+        var said = line["new"]!;
+        Assert.Equal("dispatcher", (string?)line["actor"]!["id"]);
+        Assert.Equal(GoldenPath.PluginId, (string?)said["plugin"]);
+        Assert.Equal(Conversation.ToString(CultureInfo.InvariantCulture), (string?)said["thread"]);
+        Assert.Equal(contact, (string?)said["contact_id"]);
+        Assert.Equal("email", (string?)said["channel"]);
+        Assert.Equal(Moment(replied), (string?)said["last_activity_at"]);
+        Assert.True((bool)said["has_meeting_intent"]!);
+        Assert.Null(said["unread"]);
+        Assert.Equal("campaign_pin", (string?)said["attributed_by"]);
+        Assert.StartsWith("evt_", (string?)said["event_id"], StringComparison.Ordinal);
+        Assert.Null(line["work_item_id"]);
+
+        // 2. It woke the manager, as the conversations' line does.
+        var checkIn = await CheckInAsync(it, campaign, (string)line["id"]!);
+        Assert.Contains("inbound_reply_observed", checkIn["context"]!.ToJsonString(), StringComparison.Ordinal);
+
+        // 3. Said once, and the campaign's conversations were never read: no read of them was made, and every call
+        //    since the reply is a read of the feed, from an hour before the moment the last read reached its end.
+        await Task.Delay(TimeSpan.FromSeconds(4), Ct);
+        Assert.Single(await LinesAsync(it, campaign));
+        Assert.Empty(await ReadsAsync(it, campaign));
+        var calls = it.Account.CallsSince(beforeTheReply);
+        Assert.NotEmpty(calls);
+        Assert.All(calls, call =>
+        {
+            Assert.Equal("inbox changes", call.Command);
+            Assert.NotNull(call.Option("--since"));
+            Assert.Null(call.Option("--cursor"));
+            Assert.Null(call.Body);
+        });
+
+        // 3a. The next read reads that hour again and finds the reply once more: the runtime holds it already, counts it
+        //     as held, and says nothing a second time.
+        await GoldenPath.StopAsync(it);
+        await GoldenPath.StartAsync(it);
+        await WaitAsync(
+            async () => (await ReadsLoggedAsync(it)).Any(read => (int?)read["Stored"] == 0 && (int?)read["Duplicates"] >= 1),
+            Patience,
+            "No read of the account's events counted the reply as already held.");
+        Assert.Single(await LinesAsync(it, campaign));
+
+        // 4. The person's words stayed at the provider.
+        var chronicle = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "journal", "list", "--campaign", campaign, "--limit", "500")));
+        Assert.DoesNotContain(mark, chronicle.ToJsonString(), StringComparison.Ordinal);
+        await GoldenPath.StopAsync(it);
+        foreach (var log in Directory.GetFiles(it.Paths.LogsDirectory))
+        {
+            Assert.DoesNotContain(mark, await File.ReadAllTextAsync(log, Ct), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A campaign live in Jason and linked to the sequence: the package installed and routed, the person added, and an
+    /// enrolment a person approved, which links the campaign to the sequence and pins the person.
+    /// </summary>
+    private static async Task<(string Campaign, string Contact)> LiveCampaignAsync(Installation it)
+    {
+        await GoldenPath.StartAsync(it);
+        GoldenPath.InstallReplyPackage(it);
+        await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
+
+        var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, "campaign", "create", "--name", "Q3 LatAm founders")))["id"]!;
+        var contactsFile = Path.Combine(it.Root, "contacts.json");
+        await File.WriteAllTextAsync(
+            contactsFile,
+            new JsonArray(new JsonObject
+            {
+                ["first_name"] = "Marta",
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address }),
+            }).ToJsonString(JasonJson.Options),
+            Ct);
+        await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "add-contacts", campaign, "--file", contactsFile, "--match-by", "email"));
+        var contact = (string)Assert.Single(GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, "campaign", "list-contacts", campaign)))["items"]!.AsArray())!["contact"]!["id"]!;
+
+        // The enrolment links the campaign to the sequence and pins the person, once a person has approved it.
+        var enrolment = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it,
+            "workitem",
+            "create",
+            campaign,
+            "--kind",
+            "provider_op",
+            "--operation",
+            "campaign.enroll",
+            "--contact",
+            contact,
+            "--input",
+            Enrolment().ToJsonString(JasonJson.Options))))["id"]!;
+        await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "start", campaign));
+        await GoldenPath.PollAsync(it, enrolment, read => (string?)read["status"] == "awaiting_approval");
+        var approval = (string)Assert.Single(GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, "approval", "list")))["items"]!.AsArray())!["id"]!;
+        await GoldenPath.Ok(GoldenPath.JasonAsync(it, "approval", "approve", approval, "--actor", "human:ada", "--reason", "checked"));
+        GoldenPath.AssertSucceeded(await GoldenPath.PollAsync(it, enrolment, read => GoldenPath.Finished((string?)read["status"])));
+
+        return (campaign, contact);
     }
 
     /// <summary>A moment as the runtime writes every timestamp: ISO-8601 UTC to the millisecond.</summary>
@@ -196,6 +288,16 @@ public class InboundSyncE2ETests
             "No inbound_reply_observed line appeared: the live edit may not have reached the runtime, or no read listed the reply.");
         return line!;
     }
+
+    private static async Task<JsonArray> LinesAsync(Installation it, string campaign) =>
+        GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it, "journal", "list", "--campaign", campaign, "--kind", "inbound_reply_observed")))["items"]!.AsArray();
+
+    /// <summary>The log's lines for every read of an account's events that stored or met an event.</summary>
+    private static async Task<List<JsonObject>> ReadsLoggedAsync(Installation it) =>
+        [.. GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "logs", "--limit", "10000")))["events"]!.AsArray()
+            .Select(evt => evt!.AsObject())
+            .Where(evt => (string?)evt["@mt"] == "Events read of source {SourceId}: {Pages} pages, {Stored} events stored, {Duplicates} already held")];
 
     /// <summary>The check-in the line summoned, waited for: the item whose brief names the line.</summary>
     private static async Task<JsonObject> CheckInAsync(Installation it, string campaign, string lineId)

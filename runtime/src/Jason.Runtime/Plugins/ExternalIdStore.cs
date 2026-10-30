@@ -82,6 +82,13 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
                 continue;
             }
 
+            if (declared.Entity == PinnedEntity.WorkItem)
+            {
+                // The reference of the act this attempt made the provider take pins no entity of ours: the attempt's
+                // provenance keeps it as returned, and the item's frozen result keeps it as answered.
+                continue;
+            }
+
             var pins = declared.Entity == PinnedEntity.Contact ? contact?.ExternalIds : campaign.ExternalIds;
             if (pins is null)
             {

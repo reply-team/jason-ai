@@ -39,7 +39,8 @@
         "20261024194108_ProviderBlocks",
         "20261025010407_ProviderBlockClearedBy",
         "20261025231527_ProviderBlockListingIndex",
-        "20261026142432_ProfileTools"
+        "20261026142432_ProfileTools",
+        "20261029150321_SentFacts"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -69,7 +70,8 @@
         "20261024194108_ProviderBlocks",
         "20261025010407_ProviderBlockClearedBy",
         "20261025231527_ProviderBlockListingIndex",
-        "20261026142432_ProfileTools"
+        "20261026142432_ProfileTools",
+        "20261029150321_SentFacts"
       ],
       "backup_file": null
     },

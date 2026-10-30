@@ -1604,12 +1604,6 @@ public class CiRunsTests
             .Where(line => line.Contains('=', StringComparison.Ordinal))
             .ToDictionary(line => line[..line.IndexOf('=', StringComparison.Ordinal)], line => line[(line.IndexOf('=', StringComparison.Ordinal) + 1)..], StringComparer.Ordinal);
 
-    /// <summary>Every step of a workflow that packages through the shared action.</summary>
-    private static List<YamlMappingNode> PackagingCalls(string[] workflow) =>
-        [.. Mapping(Parse(Read(workflow)), "jobs").Children.Values.Cast<YamlMappingNode>()
-            .SelectMany(job => Node(job, "steps") is YamlSequenceNode steps ? steps.Children.Cast<YamlMappingNode>() : [])
-            .Where(step => Scalar(step, "uses") == "./.github/actions/package")];
-
     /// <summary>The legs of a matrix the version job decided: <c>{"include":[{"rid":…,"os":…}]}</c>, or the checks it skips.</summary>
     private static List<Dictionary<string, string>> Legs(string matrix)
     {

@@ -2,7 +2,7 @@
 
 /// <summary>
 /// The grammar reply-cli documents, as of the release <see cref="Jason.ReplyCliStub.ReplyCliRelease"/> names, for the
-/// twenty-nine work commands the official package runs, and for <c>auth whoami</c>, the one command it runs that is not
+/// thirty-two work commands the official package runs, and for <c>auth whoami</c>, the one command it runs that is not
 /// a work command: how many ids each takes, which options take a value, and which are switches. An option outside a
 /// command's own list is commander's usage error, exit 2. <c>contact update</c> takes its id as an optional argument, or
 /// the contact by the contact options instead.
@@ -11,6 +11,12 @@ internal static class Commands
 {
     private static readonly string[] ContactOptions =
         ["--contact-id", "--email", "--first-name", "--last-name", "--company", "--title", "--contact"];
+
+    /// <summary>
+    /// What every direct send takes beside the person, the account and the text: the moment it goes out after, the sending
+    /// schedule Reply times it by, and its key.
+    /// </summary>
+    private static readonly string[] SendOptions = ["--send-after", "--schedule-id", "--idempotency-key"];
 
     /// <summary>The count of a command whose one id may be left out: <c>contact update [contact-id]</c>.</summary>
     private const int OptionalId = -1;
@@ -35,16 +41,19 @@ internal static class Commands
             ["contact opt-out"] = (0, ContactOptions, []),
             ["inbox list"] = (0, ["--contact-id", "--sequence-id", "--source", "--channel", "--category-id", "--since", "--limit", "--offset"], []),
             ["inbox get"] = (1, ["--limit", "--offset"], []),
+            ["inbox changes"] = (0, ["--cursor", "--since", "--top"], []),
             ["inbox reply"] = (1, ["--message"], []),
             ["inbox categories"] = (0, [], []),
             ["inbox categorize"] = (1, ["--category-id"], ["--clear"]),
             ["inbox mark-read"] = (1, [], []),
             ["inbox mark-unread"] = (1, [], []),
-            ["contact linkedin-connect"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
-            ["contact send-email"] = (0, [.. ContactOptions, "--email-account-id", "--message"], []),
-            ["contact linkedin-message"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
-            ["contact linkedin-inmail"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
-            ["contact linkedin-voice"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message"], []),
+            ["contact linkedin-connect"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),
+            ["contact send-email"] = (0, [.. ContactOptions, "--email-account-id", "--message", .. SendOptions], []),
+            ["contact linkedin-message"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),
+            ["contact linkedin-inmail"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),
+            ["contact linkedin-voice"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),
+            ["direct-send get"] = (1, [], []),
+            ["direct-send cancel"] = (1, [], []),
             ["account list"] = (0, ["--channel"], []),
             ["schedule list"] = (0, [], []),
             ["auth whoami"] = (0, [], []),

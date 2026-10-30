@@ -30,6 +30,12 @@ public static class CanonicalInput
     /// <summary>The arguments key of a contact-facing operation: which of the person's channels the call consumes.</summary>
     private const string ChannelArgument = "channel";
 
+    /// <summary>
+    /// The key, in the arguments and at the root alike, of the send an operation acts on by its reference: the caller names
+    /// the work item under <c>args.send</c>, and the runtime composes the send under <c>send</c>.
+    /// </summary>
+    private const string SendKey = "send";
+
     private static readonly IReadOnlyDictionary<string, Func<Contact, JsonNode?>> Fields =
         new Dictionary<string, Func<Contact, JsonNode?>>(StringComparer.Ordinal)
         {
@@ -51,6 +57,18 @@ public static class CanonicalInput
         ArgumentNullException.ThrowIfNull(facts);
 
         var input = new JsonObject { ["args"] = Arguments(facts.Item) };
+
+        // The send is the runtime's to name, from the attempt that made it: nothing the caller wrote is read for its
+        // reference, and a send the claim did not find travels as none, which the schema then refuses.
+        if (NamesASend(contract) && facts.Send is { Reference: { } reference } send)
+        {
+            input[SendKey] = new JsonObject
+            {
+                ["work_item"] = JsonValue.Create(send.WorkItem),
+                ["operation"] = JsonValue.Create(send.Operation),
+                ["reference"] = JsonValue.Create(reference),
+            };
+        }
 
         // A required contact is always here by the time anything is composed — the pre-flight refused the item
         // otherwise — and an optional one travels exactly when the work item names somebody.
@@ -98,6 +116,39 @@ public static class CanonicalInput
         ArgumentNullException.ThrowIfNull(item);
 
         return item.Context[WorkItemService.InputKey]?.DeepClone() ?? new JsonObject();
+    }
+
+    /// <summary>Whether the operation acts on a send by its reference: its input carries the send the runtime composes.</summary>
+    public static bool NamesASend(OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+
+        return contract.InputSchema["properties"] is JsonObject properties && properties.ContainsKey(SendKey);
+    }
+
+    /// <summary>
+    /// Whether the operation makes a send a later read or take-back can name: it declares the provider's reference for the
+    /// send as an identifier of the work item itself.
+    /// </summary>
+    public static bool MakesASend(string? operation) =>
+        operation is not null
+        && OperationCatalog.Find(operation) is { } contract
+        && contract.ExternalIds.TryGetValue(SendKey, out var kind)
+        && kind.Entity == PinnedEntity.WorkItem;
+
+    /// <summary>
+    /// The work item the arguments name under <c>args.send</c>, or null where they name none: creation held the arguments
+    /// to the operation's schema, so a value there is a work item's id.
+    /// </summary>
+    public static string? NamedSend(WorkItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        return item.Context[WorkItemService.InputKey] is JsonObject arguments
+            && arguments[SendKey] is JsonValue named
+            && named.GetValueKind() == JsonValueKind.String
+            ? named.GetValue<string>()
+            : null;
     }
 
     /// <summary>

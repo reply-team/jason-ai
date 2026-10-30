@@ -58,8 +58,8 @@ public static class DispatcherModule
         // module depends on but never states is one a smaller composition silently lacks.
         services.TryAddSingleton<ISearchPath, EnvironmentSearchPath>();
 
-        // The rule is a pure function over the published catalog: one per process, like the catalog itself.
-        services.AddSingleton(new UnansweredEnd(OperationCatalog.Find));
+        // The rule is a pure function over the published catalog and the frozen plugin snapshot: one per process, like both.
+        services.AddSingleton(provider => new UnansweredEnd(OperationCatalog.Find, UnansweredEnd.RanUnder(provider.GetRequiredService<PluginRegistry>())));
 
         // What the loop and system.info both read the settings through, so the last value that validated is one
         // value and the complaint about an edit that did not is said once. The roles section is guarded beside

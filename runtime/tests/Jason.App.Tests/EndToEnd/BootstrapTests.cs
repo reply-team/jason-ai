@@ -112,7 +112,8 @@ public class BootstrapTests
 
         await GoldenPath.StopAsync(it);
 
-        // Nothing was asked of the provider by any of this: a bootstrap configures, it does not act.
-        Assert.Empty(it.Account.Calls);
+        // Nothing was asked of the provider by any of this but what moved in the account the route binds, which the
+        // runtime reads of every bound account: a bootstrap configures, it does not act.
+        Assert.Empty(GoldenPath.Asked(it.Account.Calls));
     }
 }

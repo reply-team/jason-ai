@@ -38,6 +38,42 @@ inputs:
     required: false
     default: '0'
 
+  sign-macos:
+    description: >
+      'true' signs the osx-arm64 executable with the Developer ID the apple-* inputs carry, has Apple notarize it and
+      Gatekeeper assess it, between the publish and the staging, so that the archive and the caller's smoke test carry
+      the signed file. Any other platform ignores it. The default, 'false', keeps the ad hoc signature the SDK writes at
+      publish, which is what a pull request's build wants: ci.yml never signs, and never holds the identity.
+    required: false
+    default: 'false'
+
+  # The six Apple secrets. A composite action is handed a secret only as an input, so the caller passes each one under
+  # the input of its name; inside, they reach the steps that use them through env alone, and none is ever printed.
+  apple-developer-id-p12-base64:
+    description: The Developer ID Application certificate and its private key, as a base64 .p12. Read only when signing.
+    required: false
+    default: ''
+  apple-developer-id-p12-password:
+    description: The .p12's password. Read only when signing.
+    required: false
+    default: ''
+  apple-notary-key-p8:
+    description: The text of the App Store Connect API key (.p8) the notary is asked with. Read only when signing.
+    required: false
+    default: ''
+  apple-notary-key-id:
+    description: That key's id. Read only when signing.
+    required: false
+    default: ''
+  apple-notary-issuer-id:
+    description: That key's issuer. Read only when signing.
+    required: false
+    default: ''
+  apple-team-id:
+    description: The team the identity must belong to. The identity is found by it, never by a name written here.
+    required: false
+    default: ''
+
 outputs:
   executable:
     description: The published executable, for the caller's smoke test.
@@ -104,6 +140,261 @@ runs:
       env:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
       run: ./.github/scripts/Assert-ApplicationManifest.ps1 -Executable $env:EXECUTABLE
+
+    # The macOS executable is signed between the publish and the staging, so that the staged copy, the archive and the
+    # caller's smoke test all carry the one signed file. Only a release asks for it. The identity lives in a keychain of
+    # this job's own, from the first of these steps to the last, which forgets it whatever happened in between. No step
+    # here traces its commands or prints a secret: each reaches its step through env, never written into the script.
+    - name: Import the Developer ID identity into a keychain of this job's own
+      id: identity
+      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      shell: bash
+      env:
+        P12_BASE64: ${{ inputs.apple-developer-id-p12-base64 }}
+        P12_PASSWORD: ${{ inputs.apple-developer-id-p12-password }}
+        TEAM_ID: ${{ inputs.apple-team-id }}
+      run: |
+        # Every file this step writes, the decoded .p12 among them, is for the runner's own user alone.
+        umask 077
+
+        # Names, never values: which of the secrets this step needs was not given.
+        for name in P12_BASE64 P12_PASSWORD TEAM_ID; do
+          if [ -z "${!name}" ]; then echo "::error title=Signing::$name is empty: signing was asked for without every Apple secret."; exit 1; fi
+        done
+
+        keychain="$RUNNER_TEMP/jason-signing.keychain-db"
+        p12="$RUNNER_TEMP/jason-signing.p12"
+        searchlist="$RUNNER_TEMP/jason-signing.search-list"
+
+        # GitHub's pattern for an Apple certificate on a macOS runner: a keychain with a password made here and kept
+        # nowhere, the .p12 imported with -A and a key partition list so that codesign reads the key without a prompt,
+        # and the keychain put first on the user's search list, before the ones already there, which stay.
+        password="$(openssl rand -base64 32)"
+        echo "::add-mask::$password"
+        printf '%s' "$P12_BASE64" | base64 --decode > "$p12"
+
+        # Before the keychain sees it, the .p12 is opened with the password secret, so that a refusal says what is wrong;
+        # security import says only that a passphrase was not correct. macOS's own openssl, LibreSSL, reads the legacy
+        # encodings a keychain imports, which OpenSSL 3 refuses without -legacy. The password goes by its environment
+        # variable, never on a command line. LibreSSL's -info goes to stderr, kept in a file: the MAC's iteration count,
+        # whether the MAC verified, and each bag's PBE with its iteration count, of which only those lines are printed;
+        # stdout, where the bags' attributes would go, is dropped. LibreSSL does not name the MAC's algorithm, so it is
+        # read from the file's structure: the last object a PKCS#12 file holds is its MAC's digest.
+        echo "The decoded .p12 is $(wc -c < "$p12" | tr -d ' ') bytes."
+        opened="$RUNNER_TEMP/jason-signing.opened"
+        info=0
+        /usr/bin/openssl pkcs12 -in "$p12" -info -noout -passin env:P12_PASSWORD > /dev/null 2> "$opened" || info=$?
+        grep -E '^(MAC |MAC:|PKCS7 Encrypted data:|Shrouded Keybag:)' "$opened" || true
+        mac="$({ /usr/bin/openssl asn1parse -inform DER -in "$p12" 2> /dev/null || true; } | sed -n 's/.*prim: *OBJECT *://p' | tail -n 1)"
+        echo "The MAC's digest, by the file's structure: ${mac:-(none)}."
+
+        advice="rebuild it with -legacy -macalg sha1 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES"
+        refused=""
+        if grep -q 'Mac verify error' "$opened"; then
+          case "$P12_PASSWORD" in
+            *[[:space:]]) echo "::notice title=Signing::The password secret ends with whitespace, which a value pasted or piped into a secret often carries." ;;
+          esac
+          refused="The password secret does not open the .p12."
+        elif [ "$info" -ne 0 ] && ! grep -q 'MAC verified OK' "$opened"; then
+          refused="The decoded secret is not a PKCS#12 file."
+        else
+          # Opened. Its encoding is said and refused by nobody but the keychain: how LibreSSL words its lines differs
+          # between releases, and a check by name could refuse a file macOS imports. macOS imports a MAC of sha1 with
+          # bags under pbeWithSHA1And3-KeyTripleDES-CBC, and reads a certificate bag under pbeWithSHA1And40BitRC2-CBC,
+          # as Keychain Access itself exports one; anything else carries the rebuild line. A PBES2 (AES) encoding
+          # LibreSSL cannot read shows as the MAC verifying and reading the bags then failing.
+          bags=""
+          legacy=yes
+          rc2=""
+          if [ "$info" -ne 0 ] || [ "$mac" != sha1 ]; then legacy=no; fi
+          while IFS='|' read -r bag pbe; do
+            bags="${bags:+$bags, }$bag under $pbe"
+            if [ "$pbe" = pbeWithSHA1And3-KeyTripleDES-CBC ]; then
+              :
+            elif [ "$bag" = "PKCS7 Encrypted data" ] && [ "$pbe" = pbeWithSHA1And40BitRC2-CBC ]; then
+              rc2=yes
+            else
+              legacy=no
+            fi
+          done < <(sed -n -E 's/^(PKCS7 Encrypted data|Shrouded Keybag): *([^,]*).*/\1|\2/p' "$opened")
+          described="The .p12 opens with the password secret. Its MAC's digest: ${mac:-(none)}. Its bags: ${bags:-none read}."
+          if [ "$info" -ne 0 ]; then described="$described LibreSSL could not read every bag."; fi
+          if [ -n "$rc2" ]; then described="$described A certificate bag under pbeWithSHA1And40BitRC2-CBC is one macOS reads."; fi
+          if [ "$legacy" != yes ]; then described="$described If the keychain refuses it, $advice."; fi
+          echo "::notice title=Signing::$described"
+        fi
+        rm -f "$opened"
+        if [ -n "$refused" ]; then
+          rm -f "$p12"
+          echo "::error title=Signing::$refused"
+          exit 1
+        fi
+
+        security list-keychains -d user | sed -e 's/^ *"//' -e 's/" *$//' > "$searchlist"
+        security create-keychain -p "$password" "$keychain"
+        security set-keychain-settings -lut 21600 "$keychain"
+        security unlock-keychain -p "$password" "$keychain"
+        if ! security import "$p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"; then
+          rm -f "$p12"
+          echo "::error title=Signing::The keychain refused to import the .p12, which the password secret opens: what security said is above. If the notice above names an encoding other than sha1 and 3DES, $advice."
+          exit 1
+        fi
+        rm -f "$p12"
+        security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" > /dev/null
+        set -- "$keychain"
+        while IFS= read -r listed; do set -- "$@" "$listed"; done < "$searchlist"
+        security list-keychains -d user -s "$@"
+
+        # The identity of the team the secret names, by its SHA-1, as find-identity lists the valid ones. The .p12 holds
+        # the certificate and its key alone; the runner's own keychains carry Apple's Developer ID intermediate, which
+        # builds the chain to Apple's root, so nothing is fetched here.
+        identity() {
+          { security find-identity -v -p codesigning "$keychain" || true; } \
+            | awk -v team="($TEAM_ID)\"" 'index($0, "\"Developer ID Application: ") && index($0, team) && !found { print $2; found = 1 }'
+        }
+        security find-identity -v -p codesigning "$keychain" || true
+        sha="$(identity)"
+        if [ -z "$sha" ]; then
+          case "$TEAM_ID" in
+            *[[:space:]]) echo "::notice title=Signing::The team id secret ends with whitespace, which a value pasted or piped into a secret often carries." ;;
+          esac
+          echo "::error title=Signing::The keychain holds no valid Developer ID Application identity of the team the secret names: what find-identity listed is above."
+          exit 1
+        fi
+
+        echo "identity=$sha" >> "$GITHUB_OUTPUT"
+        echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
+
+    - name: Sign the macOS executable with the hardened runtime
+      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      shell: bash
+      env:
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        IDENTITY: ${{ steps.identity.outputs.identity }}
+        KEYCHAIN: ${{ steps.identity.outputs.keychain }}
+      run: |
+        # --force replaces the ad hoc signature the SDK wrote at publish, and the new one covers the whole file, the
+        # bundle's payload with it. The hardened runtime is what notarization requires, and the entitlements say what
+        # it must still let .NET do; the timestamp, from Apple's service, keeps the signature valid after the
+        # certificate expires.
+        entitlements=runtime/src/Jason.App/jason.entitlements
+        plutil -lint "$entitlements"
+        codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" --options runtime --timestamp --entitlements "$entitlements" "$EXECUTABLE"
+
+        codesign --verify --strict --verbose=2 "$EXECUTABLE"
+        codesign --display --verbose=2 "$EXECUTABLE"
+
+        # What the system will hold the program to, read back out of the signed file and held to the file it was signed
+        # with. plutil writes both in one form, without the file's comments, so only a key or a value tells them apart.
+        signed="$RUNNER_TEMP/jason-signed.entitlements"
+        carried="$RUNNER_TEMP/jason-carried.entitlements"
+        expected="$RUNNER_TEMP/jason-expected.entitlements"
+        codesign --display --entitlements - --xml "$EXECUTABLE" > "$signed"
+        plutil -convert xml1 -o "$carried" "$signed"
+        plutil -convert xml1 -o "$expected" "$entitlements"
+        plutil -p "$carried"
+        if ! diff "$expected" "$carried"; then
+          echo "::error title=Signing::The signed executable carries entitlements other than $entitlements: the difference is above."
+          exit 1
+        fi
+
+    - name: Notarize the macOS executable
+      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      shell: bash
+      env:
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        NOTARY_KEY: ${{ inputs.apple-notary-key-p8 }}
+        NOTARY_KEY_ID: ${{ inputs.apple-notary-key-id }}
+        NOTARY_ISSUER: ${{ inputs.apple-notary-issuer-id }}
+      run: |
+        # The key is written to a file for the runner's own user alone.
+        umask 077
+
+        for name in NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER; do
+          if [ -z "${!name}" ]; then echo "::error title=Notarization::$name is empty: signing was asked for without every Apple secret."; exit 1; fi
+        done
+
+        key="$RUNNER_TEMP/jason-notary.p8"
+        zip="$RUNNER_TEMP/jason-notarize.zip"
+        answer="$RUNNER_TEMP/jason-notary.json"
+
+        # The notary takes a zip, not a bare executable, and ditto writes the one Apple documents. --wait holds the
+        # step until the service answers, for thirty minutes at most; anything but Accepted fails it, with the
+        # service's own log of the submission. Nothing is stapled: a bare executable has no place for the ticket,
+        # which Gatekeeper fetches online at the first run of a copy a browser downloaded.
+        printf '%s\n' "$NOTARY_KEY" > "$key"
+        ditto -c -k --keepParent "$EXECUTABLE" "$zip"
+        submitted=0
+        xcrun notarytool submit "$zip" --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait --timeout 30m --output-format json > "$answer" || submitted=$?
+        cat "$answer"
+
+        id="$(sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' "$answer")"
+        status="$(sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p' "$answer")"
+        echo "notarytool exited $submitted: submission ${id:-(none)}, status ${status:-(none)}"
+        if [ "$status" != "Accepted" ]; then
+          if [ -n "$id" ]; then
+            xcrun notarytool log "$id" --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" || true
+          fi
+          echo "::error title=Notarization::The notary did not accept the executable: ${status:-no answer}."
+          exit 1
+        fi
+
+    - name: Assess the macOS executable as Gatekeeper does
+      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      shell: bash
+      env:
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+      run: |
+        # Gatekeeper's own question, asked now that the notary holds the ticket: accepted, from the source "Notarized
+        # Developer ID". A command-line tool is not an app, and the execute assessment may refuse it as one ("does not
+        # seem to be an app"); the assessment of a tool's own signature is asked then, and wants the same source.
+        # Apple's service may not yet answer for a ticket it has just issued, so the question is asked three times at
+        # most, twenty seconds apart.
+        said="$RUNNER_TEMP/jason-assessment.txt"
+        accepted() {
+          assessed=0
+          spctl --assess --type execute --verbose=2 "$EXECUTABLE" > "$said" 2>&1 || assessed=$?
+          cat "$said"
+          if [ "$assessed" -eq 0 ] && grep -q 'source=Notarized Developer ID' "$said"; then return 0; fi
+
+          if grep -q 'does not seem to be an app' "$said"; then
+            assessed=0
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$EXECUTABLE" > "$said" 2>&1 || assessed=$?
+            cat "$said"
+            if [ "$assessed" -eq 0 ] && grep -q 'source=Notarized Developer ID' "$said"; then return 0; fi
+          fi
+          return 1
+        }
+
+        for try in 1 2 3; do
+          if accepted; then exit 0; fi
+          if [ "$try" -lt 3 ]; then
+            echo "Not accepted as Notarized Developer ID at try $try of 3; asking again in twenty seconds."
+            sleep 20
+          fi
+        done
+
+        echo "::error title=Gatekeeper::The executable was not accepted as Notarized Developer ID, asked three times twenty seconds apart."
+        exit 1
+
+    - name: Forget the Developer ID identity
+      if: always() && inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      shell: bash
+      run: |
+        # Whatever happened above: every file a secret was written to removed first, then the search list as it was
+        # and the keychain off the disk. A keychain command that fails is warned of rather than failing the step, so
+        # that nothing after it is skipped.
+        rm -f "$RUNNER_TEMP/jason-signing.p12" "$RUNNER_TEMP/jason-signing.opened" "$RUNNER_TEMP/jason-notary.p8" "$RUNNER_TEMP/jason-notarize.zip"
+        searchlist="$RUNNER_TEMP/jason-signing.search-list"
+        if [ -s "$searchlist" ]; then
+          set --
+          while IFS= read -r listed; do set -- "$@" "$listed"; done < "$searchlist"
+          security list-keychains -d user -s "$@" || echo "::warning title=Signing::The user's keychain search list could not be put back as it was."
+        fi
+        if [ -e "$RUNNER_TEMP/jason-signing.keychain-db" ]; then
+          security delete-keychain "$RUNNER_TEMP/jason-signing.keychain-db" || echo "::warning title=Signing::This job's keychain could not be deleted."
+        fi
+        rm -f "$searchlist"
 
     - name: Put LICENSE and THIRD-PARTY-NOTICES beside the executable
       shell: pwsh

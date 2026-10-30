@@ -23,7 +23,8 @@ public class OperationCatalogTests
 
     /// <summary>
     /// What a provider block holds is read from the documents and nowhere else: every operation of reach <c>act</c>, and
-    /// the protective ones, which run in a paused campaign. Every read and every other control runs through a block.
+    /// the protective ones, which run in a paused campaign — three by name, a pause, an opt-out and the take-back of a
+    /// send. Every read and every other control runs through a block, a read of one send among them.
     /// </summary>
     [Fact]
     public void A_provider_block_holds_every_act_and_the_protective_operations_and_nothing_else()
@@ -39,6 +40,11 @@ public class OperationCatalogTests
         Assert.Contains("message.send", OperationCatalog.HeldByProviderBlock);
         Assert.Contains("campaign.pause", OperationCatalog.HeldByProviderBlock);
         Assert.Contains("optout.record", OperationCatalog.HeldByProviderBlock);
+        Assert.Contains("message.cancel", OperationCatalog.HeldByProviderBlock);
+        Assert.DoesNotContain("message.status", OperationCatalog.HeldByProviderBlock);
+        Assert.Equal(
+            ["campaign.pause", "message.cancel", "optout.record"],
+            OperationCatalog.HeldByProviderBlock.Where(id => !string.Equals(OperationCatalog.Find(id)!.Reach.Value, "act", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
         Assert.DoesNotContain("conversation.list", OperationCatalog.HeldByProviderBlock);
         Assert.Contains(OperationCatalog.All, contract => string.Equals(contract.Reach.Value, "control", StringComparison.Ordinal) && !OperationCatalog.HeldByProviderBlock.Contains(contract.Id));
     }
@@ -150,6 +156,8 @@ public class OperationCatalogTests
     [InlineData("approval_reason")]
     [InlineData("preview")]
     [InlineData("dispatch")]
+    [InlineData("channel_arguments")]
+    [InlineData("channel_templates")]
     public void A_document_that_leaves_out_a_field_added_since_the_first_three_is_refused_by_name(string field)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -174,6 +182,12 @@ public class OperationCatalogTests
     [InlineData("dispatch", "{}")]
     [InlineData("dispatch", "{\"in_paused_campaign\": \"sometimes\"}")]
     [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"in_draft_campaign\": \"waits\"}")]
+    [InlineData("channel_arguments", "\"send_after\"")]
+    [InlineData("channel_arguments", "[1]")]
+    [InlineData("channel_arguments", "{}")]
+    [InlineData("channel_templates", "\"email\"")]
+    [InlineData("channel_templates", "[1]")]
+    [InlineData("channel_templates", "{}")]
     public void A_new_field_of_the_wrong_shape_is_refused_by_name(string field, string value)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -194,6 +208,25 @@ public class OperationCatalogTests
 
         Assert.NotNull(contract.Preview);
         Assert.Equal(["/campaign/name"], contract.Preview.Highlights);
+    }
+
+    /// <summary>
+    /// The loader reads a document's codes as words and knows no reserved ones: a document that declares the plugin
+    /// host's own code, or the code reserved for a provider's object, loads, and the declared class is then the one the
+    /// outcome check holds it to. What keeps the published documents clear of both is a test over them, not the reading.
+    /// </summary>
+    [Fact]
+    public void A_document_that_declares_a_reserved_code_loads_and_its_declared_class_is_the_one_held()
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["failure_codes"]!.AsArray().Add(JsonNode.Parse($$"""{ "code": "{{Jason.Contracts.Plugins.UnjudgedOutcomeCodes.ProviderInputInvalid}}", "class": "permanent", "when": "A document that claims the word." }"""));
+        document["failure_codes"]!.AsArray().Add(JsonNode.Parse($$"""{ "code": "{{Jason.Contracts.Plugins.HostOutcomeCodes.PluginException}}", "class": "transient", "when": "A document that claims the host's word." }"""));
+
+        var contract = OperationContract.Parse("campaign.get.json", document);
+
+        Assert.Null(OutcomeContract.CheckFailure(contract, new(Jason.Contracts.Plugins.FailureClass.Permanent, Jason.Contracts.Plugins.UnjudgedOutcomeCodes.ProviderInputInvalid, "m", null, null)));
+        Assert.Equal("/error/class", OutcomeContract.CheckFailure(contract, new(Jason.Contracts.Plugins.FailureClass.Validation, Jason.Contracts.Plugins.UnjudgedOutcomeCodes.ProviderInputInvalid, "m", null, null))?.Pointer);
+        Assert.Equal("/error/class", OutcomeContract.CheckFailure(contract, new(Jason.Contracts.Plugins.FailureClass.Permanent, Jason.Contracts.Plugins.HostOutcomeCodes.PluginException, "m", null, null))?.Pointer);
     }
 
     /// <summary>
@@ -279,6 +312,139 @@ public class OperationCatalogTests
 
         Assert.Contains("campaign.get.json", error.Message, StringComparison.Ordinal);
         Assert.Contains("preflight.suppression", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An argument a plugin may take on some of an operation's channels and not on others is named by the document, so a
+    /// manifest can say where its plugin takes it and the claim can refuse it everywhere else. The name is read as the
+    /// document writes it.
+    /// </summary>
+    [Fact]
+    public void A_document_names_the_arguments_a_plugin_takes_on_some_channels_and_not_on_others()
+    {
+        var contract = OperationContract.Parse("message.send.json", ChannelArguments("""["send_after"]"""));
+
+        Assert.Equal(["send_after"], contract.ChannelArguments);
+        Assert.Null(OperationContract.Parse("campaign.get.json", (JsonObject)JsonNode.Parse(Minimal())!).ChannelArguments);
+    }
+
+    /// <summary>
+    /// What a manifest lists per channel has to be an argument the document declares, one a caller may leave out, of an
+    /// operation whose arguments name the channel: a name the arguments do not carry could never be checked, a required
+    /// one would be refused on every channel a plugin does not list, and without a channel in the arguments there is
+    /// nothing to list it against.
+    /// </summary>
+    [Theory]
+    [InlineData("""["send_at"]""", "from_args", false, "`send_at`")]
+    [InlineData("""["send_after"]""", "none", false, "`from_args`")]
+    [InlineData("""["send_after"]""", "from_args", true, "required")]
+    [InlineData("""["channel"]""", "from_args", false, "`channel`")]
+    [InlineData("""["send_after", "send_after"]""", "from_args", false, "twice")]
+    [InlineData("""[]""", "from_args", false, "null")]
+    public void An_argument_per_channel_that_the_arguments_cannot_carry_is_refused(string names, string channel, bool required, string expected)
+    {
+        var document = ChannelArguments(names, required);
+        document["preflight"]!["channel"] = channel;
+        if (channel == "none")
+        {
+            document["contact_projection"]!["channels"] = "none";
+            document["preflight"]!["provider_contact"] = "find_only";
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("message.send.json", document));
+
+        Assert.Contains("message.send.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("channel_arguments", error.Message, StringComparison.Ordinal);
+        Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The channels a message may be a template on are named by the document, so a manifest can say where its plugin
+    /// writes one and the claim can refuse one everywhere else. They are read as the document writes them.
+    /// </summary>
+    [Fact]
+    public void A_document_names_the_channels_its_message_may_be_a_template_on()
+    {
+        var contract = OperationContract.Parse("message.send.json", ChannelTemplates("""["linkedin"]"""));
+
+        Assert.Equal(["linkedin"], contract.ChannelTemplates);
+        Assert.Null(OperationContract.Parse("campaign.get.json", (JsonObject)JsonNode.Parse(Minimal())!).ChannelTemplates);
+    }
+
+    /// <summary>
+    /// What a manifest lists as the channels its plugin writes a template on has to be a channel the arguments name, named
+    /// once, of an operation whose message says whether it is a template: a channel the arguments never name could never
+    /// be checked, without a channel in the arguments there is nothing to list it against, and a message with no
+    /// `compose` is never a template.
+    /// </summary>
+    [Theory]
+    [InlineData("""["fax"]""", "from_args", true, "`fax`")]
+    [InlineData("""["email"]""", "none", true, "`from_args`")]
+    [InlineData("""["email", "email"]""", "from_args", true, "twice")]
+    [InlineData("""[]""", "from_args", true, "null")]
+    [InlineData("""["email"]""", "from_args", false, "`compose`")]
+    public void A_channel_a_template_is_offered_on_that_the_arguments_cannot_carry_is_refused(string names, string channel, bool compose, string expected)
+    {
+        var document = ChannelTemplates(names, compose);
+        document["preflight"]!["channel"] = channel;
+        if (channel == "none")
+        {
+            document["contact_projection"]!["channels"] = "none";
+            document["preflight"]!["provider_contact"] = "find_only";
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("message.send.json", document));
+
+        Assert.Contains("message.send.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("channel_templates", error.Message, StringComparison.Ordinal);
+        Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The smallest document about one person whose arguments name the channel and whose message may be a template, with
+    /// <paramref name="names"/> as the channels it may be one on; without <paramref name="compose"/> the message never
+    /// says whether it is one.
+    /// </summary>
+    private static JsonObject ChannelTemplates(string names, bool compose = true)
+    {
+        var document = ChannelArguments("null");
+        document["input_schema"]!["properties"]!["args"]!["properties"]!["message"] = JsonNode.Parse(
+            compose
+                ? """{ "type": "object", "properties": { "compose": { "type": "string", "enum": ["text", "template"] } } }"""
+                : """{ "type": "object", "properties": { "body": { "type": "string" } } }""");
+        document["channel_templates"] = JsonNode.Parse(names);
+        return document;
+    }
+
+    /// <summary>
+    /// The smallest document about one person whose arguments name the channel and may carry a moment, with
+    /// <paramref name="names"/> as its arguments per channel.
+    /// </summary>
+    private static JsonObject ChannelArguments(string names, bool required = false)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" }""");
+        document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+        document["input_schema"] = JsonNode.Parse(
+            $$"""
+            {
+              "type": "object",
+              "properties": {
+                "args": {
+                  "type": "object",
+                  "required": {{(required ? """["channel", "send_after"]""" : """["channel"]""")}},
+                  "properties": {
+                    "channel": { "type": "string", "enum": ["email", "linkedin"] },
+                    "send_after": { "type": "string", "format": "date-time" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+            """);
+        document["channel_arguments"] = JsonNode.Parse(names);
+        DeclaresAContactIdentifier(document);
+        return document;
     }
 
     /// <summary>
@@ -459,6 +625,53 @@ public class OperationCatalogTests
         document["cost"] = new JsonObject { ["value"] = "metered", ["conditional"] = true };
 
         Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", document));
+    }
+
+    /// <summary>
+    /// A recovery read says whether it settles a lost answer by the work item's key, and says nothing where it does not:
+    /// absent is false, so a document that recovers by a read that never sends is written as it always was.
+    /// </summary>
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData(null, false)]
+    public void A_recovery_read_says_whether_it_settles_a_lost_answer_by_the_key(string? byKey, bool expected)
+    {
+        var contract = OperationContract.Parse("campaign.get.json", RecoveredBy(byKey, "after_recovery_read"));
+
+        Assert.Equal(expected, contract.RecoveryRead!.ByKey);
+    }
+
+    /// <summary>
+    /// The key settles a lost answer only for an operation that repeats after its recovery read: where nothing repeats,
+    /// the promise asks a manifest for something no attempt relies on, so it is refused; and it is a flag, nothing else.
+    /// </summary>
+    [Theory]
+    [InlineData("true", "safe", "`safe`")]
+    [InlineData("true", "never", "`never`")]
+    [InlineData("[1]", "after_recovery_read", "true or false")]
+    public void A_recovery_read_by_the_key_is_refused_where_the_operation_does_not_repeat_after_it(string byKey, string repeat, string expected)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", RecoveredBy(byKey, repeat)));
+
+        Assert.Contains("campaign.get.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("by_key", error.Message, StringComparison.Ordinal);
+        Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The smallest document with a recovery read, its <c>by_key</c> as written or left out, and its repeat rule.</summary>
+    private static JsonObject RecoveredBy(string? byKey, string repeat)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        var recoveryRead = new JsonObject { ["reads"] = "the provider's record", ["justification"] = "a second effect costs" };
+        if (byKey is not null)
+        {
+            recoveryRead["by_key"] = JsonNode.Parse(byKey);
+        }
+
+        document["recovery_read"] = recoveryRead;
+        document["repeat_after_ambiguous"] = repeat;
+        return document;
     }
 
     [Fact]
@@ -740,6 +953,8 @@ public class OperationCatalogTests
           "meter": null,
           "invariants": [],
           "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+          "channel_arguments": null,
+          "channel_templates": null,
           "dispatch": { "in_paused_campaign": "waits" },
           "contact_projection": null,
           "precondition": "none",

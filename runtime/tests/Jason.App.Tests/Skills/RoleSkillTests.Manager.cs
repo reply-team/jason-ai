@@ -223,4 +223,128 @@ public partial class RoleSkillTests
         Assert.Contains("**You never clear a block yourself**: a clear is a person's word that the cause is gone, and it is theirs to give.", skill, StringComparison.Ordinal);
         Assert.Contains("the campaign is told `provider_block_cleared`, and that line wakes nobody", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A capability the provider does not offer yet is the manager's to work around, never to repeat: the skill names the
+    /// code, and for each capability a provider may lack for a while it says what to do instead — the harness's own moment
+    /// for a send the provider cannot defer, the runtime's own walk of the pages for a feed of inbound events, and what the
+    /// provider said when it took a message for a status it cannot be asked.
+    /// </summary>
+    [Fact]
+    public void The_manager_takes_a_capability_the_provider_does_not_offer_yet_as_final()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("`capability_not_offered` says the provider does not offer an operation, or one argument of it, yet", skill, StringComparison.Ordinal);
+        Assert.Contains("The code is final: it is nobody's configuration and no argument a corrected item could fix, and no repeat of the same item gets past it.", skill, StringComparison.Ordinal);
+        Assert.Contains("Choose another way to do the work, or tell the person it cannot be done yet, and say which in your line.", skill, StringComparison.Ordinal);
+        Assert.Contains("is stated in the list of capabilities the contracts README (`docs/contracts/README.md`) keeps", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("create the message again as a new item without the moment", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("the runtime's own walk of the conversation pages", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("as the fact to keep: never send it again to learn more", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A send ends when the provider has taken it, and an older plugin says so as `sent` where a newer one says
+    /// `accepted`. The manager reads either as the item done and never sends again to learn whether it went.
+    /// </summary>
+    [Fact]
+    public void The_manager_reads_a_send_sent_or_accepted_as_done()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains(
+            "**A send is done when the provider has taken it.** A `message.send` or a `social_invitation.send` that succeeds `sent` or `accepted` is done: `accepted` says the provider took it, for now or for a later moment, and never that it went.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Whether it went arrives later, where the provider tells it, and never from that item; do not send it again to make sure.",
+            skill,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// One send is read or taken back by naming the work item that made it, never its reference, and a refusal of the
+    /// send named is final. The line that says a send taken for later went wakes the manager only where the installation
+    /// lists it, names the send and the read and never the text, and calls for nothing by itself.
+    /// </summary>
+    [Fact]
+    public void The_manager_names_a_send_by_its_work_item_and_is_told_one_went_only_where_it_asked()
+    {
+        var skill = Flattened("manager");
+
+        var events = skill.IndexOf("## When a provider event woke you", StringComparison.Ordinal);
+        var went = skill.IndexOf("## When a send that went woke you", StringComparison.Ordinal);
+        var block = skill.IndexOf("## When a provider block woke you", StringComparison.Ordinal);
+        Assert.True(
+            events >= 0 && went > events && block > went,
+            $"Provider events open at {events}, a send that went at {went} and the block at {block}: it comes between them.");
+        Assert.Contains("A `message.status` item names the send's work item under `args.send`", skill, StringComparison.Ordinal);
+        Assert.Contains("you never write the reference, the runtime takes it from the send's own attempt", skill, StringComparison.Ordinal);
+        Assert.Contains("ends `send_not_pending`, final, its details saying which", skill, StringComparison.Ordinal);
+        Assert.Contains("Either ends `send_unknown`, `send_reference_absent` or `send_route_mismatch`, final", skill, StringComparison.Ordinal);
+        Assert.Contains("`trigger` is `message_sent_observed` only where this installation lists it under `Manager:Triggers`: it is not a default one.", skill, StringComparison.Ordinal);
+        Assert.Contains("never the text that went", skill, StringComparison.Ordinal);
+        Assert.Contains("this line is the only place the runtime says it went", skill, StringComparison.Ordinal);
+        Assert.Contains("by itself it calls for nothing", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_sent_observed --since 2026-09-18T09:00:00Z",
+            SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("manager").File)));
+    }
+
+    /// <summary>
+    /// A read of one send answers one of five words, and the manager is told the two final ones that are not a send that
+    /// went apart: a failed send did not go, an unknown one may have. Whether it went is learned from the person's thread,
+    /// found and read before any new send to them, never by sending again, and the note says what the thread showed.
+    /// </summary>
+    [Fact]
+    public void The_manager_reads_the_thread_before_sending_again_after_a_send_that_may_have_gone()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("answers one of five words: `queued`, `sent`, `cancelled`, `failed` or `unknown`", skill, StringComparison.Ordinal);
+        Assert.Contains("A `failed` send did not go; an `unknown` one may have", skill, StringComparison.Ordinal);
+        Assert.Contains("Never send again on `unknown` alone", skill, StringComparison.Ordinal);
+        Assert.Contains("before any new send to that person, find their thread with a `conversation.list` item for them, then read it with a `conversation.get` item", skill, StringComparison.Ordinal);
+        Assert.Contains("say in the note what the thread showed", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A send for a later moment that the provider cannot hold has a way around it: the same send without the moment,
+    /// created to be claimed only once the moment has passed. The manager is told that the person still approves it then,
+    /// and that a machine asleep at the moment claims nothing, so it never promises a send at an exact time. Where the
+    /// refusal is ambiguous, an earlier attempt of the item may have reached the person, so the new item waits until the
+    /// provider has said it did not.
+    /// </summary>
+    [Fact]
+    public void The_manager_is_told_how_to_send_at_a_moment_the_provider_cannot_hold()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains(
+            "**A send for a later moment.** Where a `message.send` or a `social_invitation.send` that names a moment in `send_after` ends `capability_not_offered` or `argument_unsupported`, you may create a new item without it, with `not_before` set to the moment, unless the failure is `ambiguous`: then an earlier attempt of that item may have reached the person, and a new item is created only once the provider has said it did not.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "It is claimed once the moment has passed, and both sends are `confirm_each`, so it then waits for a person's approval; nothing goes out before they give it. The machine has to be awake for the item to be claimed at all.",
+            skill,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A message composed as a template on a channel the routed plugin does not write a template on is refused at the claim,
+    /// and the refusal has two ways round it, beside the one for a moment the provider cannot hold: the same message as final
+    /// text, held back as that one is while an earlier attempt may have reached the person, or a person's route to a plugin
+    /// that writes a template there, which the manager asks for rather than makes.
+    /// </summary>
+    [Fact]
+    public void The_manager_is_told_what_to_do_with_a_template_the_plugin_does_not_write()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains(
+            "**A template the plugin does not write.** Where a `message.send` composed as a template ends `template_not_offered`, the plugin it is routed to writes no template on that channel. You may create a new item with the message written as final text, unless the failure is `ambiguous`: then an earlier attempt of that item may have reached the person, and a new item is created only once the provider has said it did not. Or raise one question asking a person to route the operation to a plugin that writes a template there: a route is somebody's configuration.",
+            skill,
+            StringComparison.Ordinal);
+    }
 }

@@ -21,7 +21,7 @@ public class PluginContractsShapeTests
         "echo.run",
         PluginProtocol.OperationContractVersion,
         new JsonObject { ["value"] = "hello" },
-        new InvocationContext(new JsonObject { ["account"] = "a1" }, "att_01J", 2, "wi_01J", "cmp_01J", "0.1.0"),
+        new InvocationContext(new JsonObject { ["account"] = "a1" }, "att_01J", 2, "wi_01J", "cmp_01J", "0.1.0", new DateTimeOffset(2026, 9, 14, 7, 30, 0, TimeSpan.Zero), "email-1007"),
         new InvocationGrants(
             new ExecGrants([new ExecutableGrant("provider-cli", "/usr/local/bin/provider-cli")]),
             new HttpGrants(["api.example.test"]),
@@ -48,6 +48,8 @@ public class PluginContractsShapeTests
         Assert.Contains("\"kind\":\"provider\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"runtime_version\":\"0.1.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"unsettled_since\":\"2026-09-14T07:30:00.000Z\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"unsettled_reference\":\"email-1007\"", json, StringComparison.Ordinal);
         // A name the runtime resolved to a program and nothing more says so, rather than leaving the child to
         // wonder: the dialect writes its nulls.
         Assert.Contains("\"executables\":[{\"name\":\"provider-cli\",\"path\":\"/usr/local/bin/provider-cli\",\"launch\":null}]", json, StringComparison.Ordinal);
@@ -60,6 +62,42 @@ public class PluginContractsShapeTests
     /// is a program <em>plus</em> leading arguments. The child starts what the runtime resolved and nothing of
     /// its own, which means both halves have to survive the wire between them.
     /// </summary>
+    /// <summary>
+    /// Since when an earlier attempt is unsettled travels only where one is: an envelope with none carries no key at all,
+    /// and one written with the key as null reads exactly as one without it.
+    /// </summary>
+    [Fact]
+    public void The_unsettled_moment_travels_only_where_an_earlier_attempt_is_unsettled()
+    {
+        var none = new InvocationContext(null, "att_01J", 1, "wi_01J", "cmp_01J", "0.1.0");
+
+        var json = JsonSerializer.Serialize(none, JasonJson.Options);
+        Assert.DoesNotContain("unsettled_since", json, StringComparison.Ordinal);
+
+        var asNull = JsonSerializer.Deserialize<InvocationContext>(json.Replace("\"runtime_version\"", "\"unsettled_since\":null,\"runtime_version\"", StringComparison.Ordinal), JasonJson.Options)!;
+        var absent = JsonSerializer.Deserialize<InvocationContext>(json, JasonJson.Options)!;
+        Assert.Null(asNull.UnsettledSince);
+        Assert.Equal(absent, asNull);
+    }
+
+    /// <summary>
+    /// The send an earlier unsettled attempt returned travels only where one did, as the moment does: an envelope with
+    /// none carries no key at all, and one written with the key as null reads exactly as one without it.
+    /// </summary>
+    [Fact]
+    public void The_unsettled_reference_travels_only_where_an_earlier_unsettled_attempt_returned_one()
+    {
+        var none = new InvocationContext(null, "att_01J", 2, "wi_01J", "cmp_01J", "0.1.0", new DateTimeOffset(2026, 9, 14, 7, 30, 0, TimeSpan.Zero));
+
+        var json = JsonSerializer.Serialize(none, JasonJson.Options);
+        Assert.DoesNotContain("unsettled_reference", json, StringComparison.Ordinal);
+
+        var asNull = JsonSerializer.Deserialize<InvocationContext>(json.Replace("\"runtime_version\"", "\"unsettled_reference\":null,\"runtime_version\"", StringComparison.Ordinal), JasonJson.Options)!;
+        var absent = JsonSerializer.Deserialize<InvocationContext>(json, JasonJson.Options)!;
+        Assert.Null(asNull.UnsettledReference);
+        Assert.Equal(absent, asNull);
+    }
+
     [Fact]
     public void An_executable_resolved_to_a_program_plus_arguments_travels_as_both()
     {
@@ -87,6 +125,8 @@ public class PluginContractsShapeTests
         Assert.Equal("hello", back.Input["value"]!.GetValue<string>());
         Assert.Equal("a1", back.Context.Binding!["account"]!.GetValue<string>());
         Assert.Equal(2, back.Context.AttemptNumber);
+        Assert.Equal(new DateTimeOffset(2026, 9, 14, 7, 30, 0, TimeSpan.Zero), back.Context.UnsettledSince);
+        Assert.Equal("email-1007", back.Context.UnsettledReference);
         Assert.Equal("/usr/local/bin/provider-cli", back.Grants.Exec!.Executables[0].Path);
         Assert.Equal(30_000, back.Limits.Http.TimeoutMs);
     }

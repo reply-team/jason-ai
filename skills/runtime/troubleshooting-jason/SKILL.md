@@ -1,6 +1,6 @@
 ---
 name: troubleshooting-jason
-description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the eleven states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
+description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
 metadata:
   status: draft
 ---
@@ -66,15 +66,23 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
 ```
 
-## The eleven states
+## The twelve states
 
-Eleven things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
-anybody: five of them are not failures at all, four of them nobody can fix from a session, and only two are
+Twelve things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
+anybody: five of them are not failures at all, five of them nobody can fix from a session, and only two are
 about the work you asked for.
 
 **The codes named below are the common ones, not all of them.** The runtime publishes more than two dozen
 attempt error codes, and one you do not find here is not a code that means nothing — read what it says, and
 if it names something to change, that is the answer.
+
+**A refusal recorded `ambiguous` is state 8 first, whatever its code.** While an earlier attempt of a send may
+have reached the person, the claim refuses a repeat under the code of the state it would name alone — a missing
+route, a suppressed value, arguments to correct, an argument the route does not take — and records it `ambiguous`
+and final, its message saying that an earlier attempt of this work item may have reached the person. What those
+states say of themselves — nothing started, nothing attempted, nothing spent or done, a corrected new item as the
+repair — is true of the refusal, not of the attempt before it. Nobody creates the send again, corrected or not,
+until the provider has said the earlier attempt did not act.
 
 ### 1. Waiting for its time
 
@@ -174,6 +182,16 @@ fail in the same way. The operation's own document is what the runtime enforces,
 project's source under `docs/contracts/operations/`; **no verb prints one**, so on a machine with no copy of
 the source, ask the operator for it rather than guessing at the correction.
 
+One permanent code is about neither the arguments nor the account: `capability_not_offered` is classed
+`permanent` as well, and is state 12.
+
+One validation code is about the provider's own object rather than the operation's arguments:
+`provider_input_invalid` says the plugin could not read the `provider` object the item carries beside its
+arguments in `context.input`, and refused it before any call. Its message, in the item's `last_error.message`,
+names the shape the plugin reads, or what in the object it cannot take, and never quotes what was given, and the
+provider's own skill teaches what goes there. The role that wrote the object corrects it on its next attempt: a corrected new work item, with the object
+in that shape.
+
 **A failure classed `blocked` is final too, and its repair is elsewhere.** Its code is `provider_blocked`: the
 provider refused the account, or one sender under it, rather than this item's arguments — money or a plan, an
 allowance it counts, a key it no longer accepts, a channel disconnected or paused — and did nothing for the call.
@@ -185,7 +203,9 @@ proposed again. Work a block holds does not end here: it waits on the block, whi
 
 ### 8. An attempt that was interrupted
 
-**How you recognise it.** The failure was recorded as `ambiguous`.
+**How you recognise it.** The failure was recorded as `ambiguous`. So is a refusal whose code names another state,
+classed `ambiguous`, whose message says that an earlier attempt of this work item may have reached the person: the
+claim refused to repeat a send that may already have gone.
 
 **What it means.** It means exactly one thing: **nobody can say whether the provider acted**. The attempt was
 cut off somewhere between sending and hearing back, or its answer could not be measured, so the effect may
@@ -222,7 +242,7 @@ check, and an unavailable notification plugin delivers nothing.
 
 **How you recognise it.** The status is `waiting`: a run of the item raised other work and ended by waiting for
 it, for a moment, or both. Its `wait` block says on which items, whether all of them or any one, and until when.
-A park on a provider block reads as this same `waiting` state with its block named, not as a twelfth.
+A park on a provider block reads as this same `waiting` state with its block named, not as a state of its own.
 
 ```
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
@@ -265,13 +285,30 @@ A clear is their word that the cause is gone, not a mute, and where the provider
 new block. Do not cancel, recreate or resume a parked item: the block releases it by itself, and the same work, asked
 again or resumed, parks on the same block.
 
+### 12. A capability the provider does not offer yet
+
+**How you recognise it.** `capability_not_offered`, classed `permanent`. The item is `failed`, and the message
+names what is not offered: the operation, or the one argument of it the provider does not take.
+
+**What it means.** The plugin knows how to ask, and the provider does not offer what was asked yet: its API has
+no route for the call, or does not take the argument. Nothing was done there. It is final like state 7, but no
+correction of the arguments gets past it, and it is nobody's configuration: no route, grant or setting changes
+what the provider offers. Asking again meets the same answer, and nothing in the runtime falls back to something
+else. How a plugin tells is stated once in the contracts README (`docs/contracts/README.md`), beside the list of
+capabilities a provider may lack for a while.
+
+What to do instead is a decision about the work, not a repair of the item — in a managed campaign, the
+manager's. Report what is not offered, in the message's own words, and that nothing was done. Once the provider
+offers it, the same work asked again as a new item goes through.
+
 ## The repairs that are safe
 
 Five. Nothing else on this list, and nothing off it.
 
 **A corrected new work item.** The ordinary repair for state 7: read the contract, fix the arguments, ask
 again. When state 6 runs out of attempts the item fails final the same way, and the repair is the same work
-asked again as a new item once the provider is back; nothing in the arguments changes.
+asked again as a new item once the provider is back; nothing in the arguments changes. It is no repair for
+state 12: the same work goes through as a new item only once the provider offers it.
 
 **Writing or fixing a route.** The repair for `no_route`, and an operator's act rather than a session's.
 
@@ -319,7 +356,7 @@ over, and a package whose contents no longer match its digest stops running rath
 
 ## What a useful report carries when it is none of these
 
-When the eleven states do not explain it, the useful thing to produce is a description somebody else can act
+When the twelve states do not explain it, the useful thing to produce is a description somebody else can act
 on, not a theory — and `jason doctor` collects the installation's half of it into one file, whether or not
 the runtime answers.
 

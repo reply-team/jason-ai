@@ -108,6 +108,32 @@ public sealed partial class CampaignPlanningSkillTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A provider may take an object of its own beside an operation's arguments, and what goes in it is that provider's
+    /// skill's to say. The planning craft says exactly that, where work items are decomposed, and names no provider: a
+    /// plan that composed the object from this skill would hold a second copy of a provider's rule, and one that named a
+    /// provider here would make a vendor-neutral pack teach one vendor.
+    /// </summary>
+    [Fact]
+    public void A_provider_may_offer_a_slot_of_its_own_and_its_skill_is_the_authority()
+    {
+        const string Bullet = "- **A provider may offer a slot of its own** beside an operation's arguments, for what it knows about the work that the contract does not hold. What goes in it, and when, is the provider's own skill's to say, and that skill is the authority.";
+        var text = Text();
+
+        var decompose = text.IndexOf("4. **Decompose into work items**", StringComparison.Ordinal);
+        var checkpoints = text.IndexOf("5. **Decide the checkpoints and the replan triggers.**", StringComparison.Ordinal);
+        var section = Flat(text[decompose..checkpoints]);
+        Assert.Contains(Bullet, section, StringComparison.Ordinal);
+
+        var start = section.IndexOf(Bullet, StringComparison.Ordinal);
+        var next = section.IndexOf(" - ", start + Bullet.Length, StringComparison.Ordinal);
+        var bullet = section[start..(next > start ? next : section.Length)];
+        Assert.DoesNotContain("Reply", bullet, StringComparison.Ordinal);
+        Assert.DoesNotContain("schedule", bullet, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("- 2.5.0 (2026-10-29): a provider may offer a slot of its own beside an operation's arguments, and the provider's own skill is the authority on what goes in it.", Flat(text), StringComparison.Ordinal);
+    }
+
     private static string Text() =>
         File.ReadAllText(SkillPack.Business().Single(skill => skill.Name == "campaign-planning").File)
             .Replace("\r\n", "\n", StringComparison.Ordinal);

@@ -274,7 +274,7 @@ public partial class InteractiveSkillTests
             headings is ["### 11. Waiting"],
             $"The troubleshooting skill heads state 11 as [{string.Join(" | ", headings)}]; it is headed '### 11. Waiting'.");
         Assert.Contains(
-            "A park on a provider block reads as this same `waiting` state with its block named, not as a twelfth.",
+            "A park on a provider block reads as this same `waiting` state with its block named, not as a state of its own.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("**How you recognise it.** The status is `waiting`", skill, StringComparison.Ordinal);
@@ -288,6 +288,95 @@ public partial class InteractiveSkillTests
         Assert.True(
             resumes.Count == 1 && resumes[0].StartsWith("jason --actor human:", StringComparison.Ordinal),
             $"The troubleshooting skill prints [{string.Join(" | ", resumes)}] to end a wait; it prints one, naming the person.");
+    }
+
+    /// <summary>
+    /// A capability the provider does not offer yet is a state of its own: final like a permanent problem, but no
+    /// correction of the arguments gets past it and nothing falls back on its own, so state 7, the one a reader reaches
+    /// first, points at it, and the summary counts it among the ones nobody can fix where the work was asked.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_tells_a_capability_the_provider_does_not_offer_apart()
+    {
+        var file = SkillPack.Find("troubleshooting-jason").File;
+        var skill = Flattened("troubleshooting-jason");
+
+        var headings = File.ReadAllLines(file).Where(line => line.StartsWith("### 12. ", StringComparison.Ordinal)).ToList();
+        Assert.True(
+            headings is ["### 12. A capability the provider does not offer yet"],
+            $"The troubleshooting skill heads state 12 as [{string.Join(" | ", headings)}].");
+        Assert.Contains("**How you recognise it.** `capability_not_offered`, classed `permanent`.", skill, StringComparison.Ordinal);
+        Assert.Contains("no correction of the arguments gets past it", skill, StringComparison.Ordinal);
+        Assert.Contains("nothing in the runtime falls back to something else", skill, StringComparison.Ordinal);
+        Assert.Contains("its API has no route for the call, or does not take the argument. Nothing was done there.", skill, StringComparison.Ordinal);
+        Assert.Contains("How a plugin tells is stated once in the contracts README (`docs/contracts/README.md`)", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("does not support the request", skill, StringComparison.Ordinal);
+        Assert.Contains("`capability_not_offered` is classed `permanent` as well, and is state 12.", skill, StringComparison.Ordinal);
+        Assert.Contains("five of them nobody can fix from a session", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A plugin that cannot read the provider's own object an item carries refuses it before any call, and that refusal
+    /// is state 7's, with a repair of its own kind: the message in the item's last error names the shape the plugin
+    /// reads, and the role that wrote the object corrects it in a new item. A skill that left the code out would send a
+    /// reader to the operation's document, which says nothing of that object.
+    /// </summary>
+    [Fact]
+    public void State_seven_names_the_refusal_of_the_provider_object_and_its_repair()
+    {
+        var text = File.ReadAllText(SkillPack.Find("troubleshooting-jason").File).ReplaceLineEndings("\n");
+        var start = text.IndexOf("### 7. A permanent or validation problem", StringComparison.Ordinal);
+        var end = text.IndexOf("### 8. ", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "The troubleshooting skill has no state 7 before state 8.");
+        var state = Regex.Replace(text[start..end], @"\s+", " ");
+
+        Assert.Contains(
+            "One validation code is about the provider's own object rather than the operation's arguments: `provider_input_invalid` says the plugin could not read the `provider` object the item carries beside its arguments in `context.input`, and refused it before any call.",
+            state,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Its message, in the item's `last_error.message`, names the shape the plugin reads, or what in the object it cannot take, and never quotes what was given, and the provider's own skill teaches what goes there.",
+            state,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "The role that wrote the object corrects it on its next attempt: a corrected new work item, with the object in that shape.",
+            state,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// While an earlier attempt of a send may have reached the person, a refusal at the claim keeps the code of the
+    /// state it would name alone — a missing route, a suppressed value, arguments to correct — and is recorded
+    /// ambiguous. Each of those states says nothing was started or sent and points at a new item, so an agent reading
+    /// the code alone would create the send again before anyone knew whether the first one went. The rule is stated
+    /// once, where the states are told apart, and state 8 says how such a refusal looks.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_reads_a_refusal_recorded_ambiguous_as_an_interrupted_attempt_first()
+    {
+        var skill = Flattened("troubleshooting-jason");
+
+        const string rule = "**A refusal recorded `ambiguous` is state 8 first, whatever its code.**";
+        var states = skill.IndexOf("## The twelve states", StringComparison.Ordinal);
+        var at = skill.IndexOf(rule, StringComparison.Ordinal);
+        var first = skill.IndexOf("### 1. Waiting for its time", StringComparison.Ordinal);
+        Assert.True(
+            states >= 0 && at > states && first > at,
+            $"The states open at {states}, the rule at {at} and state 1 at {first}: the rule belongs where the states are told apart.");
+        Assert.Single(Regex.Matches(skill, Regex.Escape(rule)));
+        Assert.Contains(
+            "Nobody creates the send again, corrected or not, until the provider has said the earlier attempt did not act.",
+            skill,
+            StringComparison.Ordinal);
+
+        var interrupted = skill.IndexOf("### 8. An attempt that was interrupted", StringComparison.Ordinal);
+        var shape = skill.IndexOf(
+            "So is a refusal whose code names another state, classed `ambiguous`, whose message says that an earlier attempt of this work item may have reached the person",
+            StringComparison.Ordinal);
+        var meaning = skill.IndexOf("**What it means.** It means exactly one thing", StringComparison.Ordinal);
+        Assert.True(
+            interrupted >= 0 && shape > interrupted && meaning > shape,
+            $"State 8 opens at {interrupted}, the refusal's shape at {shape} and its meaning at {meaning}: the shape belongs under how you recognise it.");
     }
 
     private static readonly string[] Counted =

@@ -101,7 +101,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   override, global default, with exact masking and no fallback to another plugin. Routes are frozen
   by the same reload that freezes plugins: the `Routes` section of `settings.json` is read only
   there and at startup, `route.set`/`route.unset` copy the global half from the active snapshot, and
-  a bad route rejects the whole reload. The claim is fail-closed: fourteen checks in one published
+  a bad route rejects the whole reload. The claim is fail-closed: twenty checks in one published
   order, one code per reason, decided before a child exists, with the attempt kept. A binding names
   an account and never a credential. A provider identifier is pinned once and never overwritten — a
   different value is recorded beside it as a divergence and the attempt still succeeds. Provenance

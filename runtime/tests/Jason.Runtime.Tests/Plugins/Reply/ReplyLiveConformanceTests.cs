@@ -121,7 +121,7 @@ public class ReplyLiveConformanceTests
     /// <summary>
     /// The flags A1 forbids, held to here as well as offline: a key on a command line, a verbose mode that
     /// would print the whole request and response, an impersonation the binding has no field for, a
-    /// pretty-printer nothing parses, and a key the API does not honour.
+    /// pretty-printer nothing parses, and a key, which only a direct send carries, and this run makes none.
     /// </summary>
     private static readonly string[] Forbidden = ["-k", "--api-key", "--verbose", "--user-id", "--user-email", "--pretty", "--idempotency-key"];
 

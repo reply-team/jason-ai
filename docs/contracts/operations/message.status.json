@@ -1,0 +1,179 @@
+{
+  "id": "message.status",
+  "version": 1,
+  "l1": { "name": "scheduled_message.list", "contract_version": "2.0.0", "family": 7, "core": false },
+  "intent": "\"What is queued to go out, to whom, and when?\" — by person, campaign, sender, or everything",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["K4"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "channel_arguments": null,
+  "channel_templates": null,
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:message.status:1:input",
+    "title": "message.status input",
+    "description": "One send an earlier work item of this campaign made, read by the reference the provider gave it. The caller names the work item; the runtime supplies the reference it kept, so no caller can name one.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "send", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["send"],
+        "properties": {
+          "send": {
+            "type": "string",
+            "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+            "description": "The work item of this campaign whose send is read: a `message.send` or a `social_invitation.send` that succeeded with a reference."
+          }
+        }
+      },
+      "send": { "$ref": "#/$defs/send" },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "send": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["work_item", "operation", "reference"],
+        "description": "The send `args.send` names, composed by the runtime from the attempt that made it: never written by a caller.",
+        "properties": {
+          "work_item": { "type": "string", "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$", "description": "The work item that made the send, as `args.send` names it." },
+          "operation": { "type": "string", "enum": ["message.send", "social_invitation.send"], "description": "The operation that made it." },
+          "reference": { "type": "string", "minLength": 1, "maxLength": 256, "description": "The provider's reference for the send, as that work item's succeeded attempt returned it under `external_ids.send`." }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:message.status:1:output",
+    "title": "message.status result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["state", "channel", "cancelable", "accepted_for", "sent_at", "message_id", "rendered_subject", "rendered_body", "failure_reason", "failure_code", "cancelled_at"],
+    "properties": {
+      "state": {
+        "type": "string",
+        "enum": ["queued", "sent", "cancelled", "failed", "unknown"],
+        "description": "`queued`: the provider holds the send and it has not gone yet. `sent`: it went. `cancelled`: it was cancelled before it went. `failed`: the provider took it and it did not go. `unknown`: the provider attempted the send and lost track of it, so it may have gone. The last four are final."
+      },
+      "channel": { "type": "string", "enum": ["email", "linkedin"] },
+      "cancelable": {
+        "type": "boolean",
+        "description": "Whether the send can still be cancelled by its reference: only a queued send the provider is not already sending."
+      },
+      "accepted_for": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "maxLength": 64,
+        "description": "The moment the provider holds the send for, in UTC, or null where it holds it for none."
+      },
+      "sent_at": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "maxLength": 64,
+        "description": "When the send went, in UTC, or null where it has not gone or the provider gives no moment known to be UTC."
+      },
+      "message_id": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 998,
+        "description": "The provider's identifier for the message that went, or null where none went or it gives none."
+      },
+      "rendered_subject": {
+        "type": ["string", "null"],
+        "maxLength": 998,
+        "description": "The subject as it went, or null where the provider gives none."
+      },
+      "rendered_body": {
+        "type": ["string", "null"],
+        "maxLength": 100000,
+        "description": "The body as it went, the provider's signature and tracking applied, or null where the provider gives none."
+      },
+      "failure_reason": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 512,
+        "description": "The provider's own sentence for why a failed send did not go, or null where it gives none."
+      },
+      "failure_code": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 128,
+        "description": "The provider's own code for a failure, as it gives it and uninterpreted, or null where it gives none."
+      },
+      "cancelled_at": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "maxLength": 64,
+        "description": "When the send was cancelled, in UTC, or null where it was not or the provider gives no moment."
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "send_not_found", "class": "permanent", "when": "The provider holds no send under the reference, or not one this account may see. Nothing was read." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read this account's sends." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing, so the next attempt simply asks again." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "The send read is the one the runtime names under `send.reference`; the plugin reads by nothing the caller wrote.",
+    "A send the provider is already sending is `queued` and not `cancelable`; a state the provider adds later that still holds the send is `queued`.",
+    "A send the provider attempted and lost track of is `unknown`, final and not `cancelable`: it may have gone, and is never told as `failed`, which says it did not.",
+    "A send that went is `sent` whether or not the provider names the moment or the message; the runtime says it went once, in the journal, and never rewrites the send's own result.",
+    "An answer larger than the plugin may read from a program fails `provider_answer_too_large` as permanent: asking again would cut it at the same place.",
+    "Nothing is pinned."
+  ]
+}

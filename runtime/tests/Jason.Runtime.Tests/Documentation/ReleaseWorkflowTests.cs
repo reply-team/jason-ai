@@ -706,22 +706,200 @@ public partial class ReleaseWorkflowTests
             }
         }
 
-        // Every mention of a secret is the publication token's, every one of them stands inside the expression that
-        // gives a dry run this run's own token instead, and every one of them lies inside the publishing job.
-        var everywhere = Scalars(release).Where(scalar => scalar.Contains("secrets.", StringComparison.Ordinal)).ToList();
-        Assert.NotEmpty(everywhere);
-        Assert.All(everywhere, scalar => Assert.Equal(DryRunToken, scalar));
+        // Every mention of a secret stands in its place, which SecretsOutOfPlace says: the publication token inside
+        // the expression that gives a dry run this run's own token instead, in one job; the six Apple secrets in the
+        // package call of the job that builds osx-arm64 and tests nothing, and nowhere else.
+        Assert.Empty(SecretsOutOfPlace(text));
         Assert.Equal(
             Regex.Matches(text, Regex.Escape(DryRunToken)).Count,
             Regex.Matches(text, Regex.Escape("secrets.PUBLISH_TOKEN")).Count);
-        var holders = jobs.Children.Where(job => Scalars(job.Value).Any(scalar => scalar.Contains("secrets.", StringComparison.Ordinal))).ToList();
-        var holder = Assert.Single(holders);
-        Assert.Equal(everywhere.Count, Scalars(holder.Value).Count(scalar => scalar.Contains("secrets.", StringComparison.Ordinal)));
+        var holder = jobs.Children.Single(job => Scalars(job.Value).Contains(DryRunToken));
 
-        // It runs after every matrix leg, and nothing is published when one of them failed: `needs` is exactly that.
-        var building = jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Key.ToString();
-        Assert.Contains(building, Assert.IsType<YamlSequenceNode>(Node((YamlMappingNode)holder.Value, "needs")).Children.Select(need => need.ToString()));
+        // It runs after every job that packages a platform, and nothing is published when one of them failed: `needs`
+        // is exactly that.
+        var packaging = jobs.Children.Where(job => JobSteps((YamlMappingNode)job.Value).Any(step => Scalar(step, "uses") == "./.github/actions/package"))
+            .Select(job => job.Key.ToString())
+            .ToList();
+        Assert.Equal(2, packaging.Count);
+        Assert.All(packaging, job => Assert.Contains(job, Assert.IsType<YamlSequenceNode>(Node((YamlMappingNode)holder.Value, "needs")).Children.Select(need => need.ToString())));
         Assert.Contains("gh release create", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Each mention of a secret in a release workflow that stands outside its place, as a line saying where it stands;
+    /// empty when every one is where it belongs.
+    /// </summary>
+    private static List<string> SecretsOutOfPlace(string text)
+    {
+        var problems = new List<string>();
+        var release = Parse(text);
+        var jobs = Mapping(release, "jobs");
+
+        // The package call that names osx-arm64 itself, in a job none of whose steps runs a test. A runner is handed
+        // every secret its job names, whatever the steps then do with them, so the six stand in a job that builds that
+        // platform alone and runs no test code and no test-only package beside them: never in a matrix shared with
+        // another platform, never where a test runs. There is exactly one, and each of the six stands there under the
+        // input of its own name, its only place.
+        var arm = jobs.Children.Values.Cast<YamlMappingNode>()
+            .Where(job => !JobSteps(job).Any(step => Scalar(step, "run") is { } run && RunsTests().IsMatch(run)))
+            .SelectMany(job => JobSteps(job)
+                .Where(step => Scalar(step, "uses") == "./.github/actions/package")
+                .Where(step => Node(step, "with") is YamlMappingNode with && Scalar(with, "rid") == "osx-arm64"))
+            .ToList();
+        var placed = new HashSet<YamlNode>(ReferenceEqualityComparer.Instance);
+        if (arm.Count != 1)
+        {
+            problems.Add($"{arm.Count} package calls name osx-arm64 in a job that runs no test, where exactly one holds the Apple secrets");
+        }
+        else
+        {
+            var with = Mapping(arm[0], "with");
+            foreach (var (input, secret) in AppleSecrets)
+            {
+                if (Node(with, input) is YamlScalarNode value && value.Value == $"${{{{ secrets.{secret} }}}}")
+                {
+                    placed.Add(value);
+                }
+                else
+                {
+                    problems.Add($"the osx-arm64 package call's {input} is not secrets.{secret}");
+                }
+            }
+        }
+
+        // Every other mention of a secret, anywhere in the workflow, is the publication token inside the expression
+        // that gives a dry run this run's own token instead, and those stand in one job. A mention is the secrets
+        // context named inside an expression, however it is read: by a name after a dot, by index, or whole. A
+        // placed node is its place once: the parser hands an alias back as the node it names, so a second sight of
+        // one is that secret standing somewhere else as well.
+        var holders = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<YamlNode>(ReferenceEqualityComparer.Instance);
+        foreach (var (where, scalar) in release.Children.SelectMany(pair => ScalarNodes(pair.Value).Select(node =>
+            (Where: pair.Key.ToString() == "jobs" ? null : pair.Key.ToString(), Node: node))))
+        {
+            if (scalar.Value is null || !NamesSecrets().IsMatch(scalar.Value))
+            {
+                continue;
+            }
+
+            if (placed.Contains(scalar))
+            {
+                if (!seen.Add(scalar))
+                {
+                    problems.Add($"'{scalar.Value}' stands a second time, through an alias of its place");
+                }
+
+                continue;
+            }
+
+            var standing = jobs.Children.Where(pair => ScalarNodes(pair.Value).Any(node => ReferenceEquals(node, scalar))).Select(pair => pair.Key.ToString()).ToList();
+            var job = where ?? string.Join(" and ", standing);
+            if (where is null && scalar.Value == DryRunToken)
+            {
+                holders.UnionWith(standing);
+            }
+            else
+            {
+                problems.Add($"'{scalar.Value}' stands in {(where is null ? $"the {job} job" : $"the workflow's {where}")}, outside its place");
+            }
+        }
+
+        if (holders.Count != 1)
+        {
+            problems.Add($"the publication token stands in {holders.Count} jobs");
+        }
+
+        return problems;
+    }
+
+    /// <summary>Every scalar node under a node, keys and values alike.</summary>
+    private static IEnumerable<YamlScalarNode> ScalarNodes(YamlNode node) => node switch
+    {
+        YamlScalarNode scalar => [scalar],
+        YamlSequenceNode sequence => sequence.Children.SelectMany(ScalarNodes),
+        YamlMappingNode mapping => mapping.Children.SelectMany(pair => ScalarNodes(pair.Key).Concat(ScalarNodes(pair.Value))),
+        _ => [],
+    };
+
+    /// <summary>A job's steps, none for a job that calls a workflow instead.</summary>
+    private static IEnumerable<YamlMappingNode> JobSteps(YamlMappingNode job) =>
+        Node(job, "steps") is YamlSequenceNode steps ? steps.Children.Cast<YamlMappingNode>() : [];
+
+    /// <summary>A script that runs tests.</summary>
+    [GeneratedRegex(@"\bdotnet\s+test\b")]
+    private static partial Regex RunsTests();
+
+    /// <summary>An expression that names the secrets context, as a word: <c>secrets.X</c>, <c>secrets['X']</c>, <c>toJSON(secrets)</c>.</summary>
+    [GeneratedRegex(@"\$\{\{(?:(?!\}\}).)*\bsecrets\b", RegexOptions.Singleline)]
+    private static partial Regex NamesSecrets();
+
+    /// <summary>
+    /// The place of each secret, held against release.yml as it is and against copies of it that move one: a seventh
+    /// name beside the six, two of them swapped, a secret that is not Apple's in the package call, the six in another
+    /// step of the macOS job, in another job's environment, in another job's package call or in the matrix's package
+    /// call, which builds the other platforms beside the tests, a test run in the macOS job, the publication token in
+    /// the macOS job; and a secret read elsewhere without its name after a dot, the whole context or by index, and one
+    /// of the six reached through a YAML alias of the node in the call, which the parser hands back as that node itself.
+    /// Each copy is refused, and release.yml itself is not.
+    /// </summary>
+    [Theory]
+    [InlineData("as it is", false)]
+    [InlineData("a seventh name", true)]
+    [InlineData("two swapped", true)]
+    [InlineData("a secret not Apple's in the call", true)]
+    [InlineData("another step of the macOS job", true)]
+    [InlineData("another job's environment", true)]
+    [InlineData("another job's package call", true)]
+    [InlineData("the matrix's package call", true)]
+    [InlineData("a test in the macOS job", true)]
+    [InlineData("the token in the macOS job", true)]
+    [InlineData("the whole context in another job", true)]
+    [InlineData("a secret by index in another job", true)]
+    [InlineData("an alias of the call's team id", true)]
+    public void Only_the_package_call_that_builds_osx_arm64_holds_the_apple_secrets(string copy, bool refused)
+    {
+        var text = Read(Release).ReplaceLineEndings("\n");
+        const string TeamId = "          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}\n";
+        const string Archive = "          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
+        const string PluginSteps = "  plugin:\n    name: The Reply plugin's package\n    needs: version\n    runs-on: ubuntu-latest\n";
+        var six = string.Concat(AppleSecrets.Select(secret => $"          {secret.Input}: ${{{{ secrets.{secret.Secret} }}}}\n"));
+
+        const string MacosPackage = "      - name: Package\n        id: package\n        uses: ./.github/actions/package\n        with:\n          rid: osx-arm64\n";
+        const string MatrixPackage = "          rid: ${{ matrix.rid }}\n          version: ${{ needs.version.outputs.version }}\n";
+
+        string Moved(string from, string to, string? within = null)
+        {
+            within ??= text;
+            Assert.Equal(1, Regex.Count(within, Regex.Escape(from)));
+            return within.Replace(from, to, StringComparison.Ordinal);
+        }
+
+        var moved = copy switch
+        {
+            "as it is" => text,
+            "a seventh name" => Moved(TeamId, TeamId + "          apple-extra-key: ${{ secrets.APPLE_EXTRA_KEY }}\n"),
+            "two swapped" => Moved(TeamId, "          apple-team-id: ${{ secrets.APPLE_NOTARY_KEY_ID }}\n"),
+            "a secret not Apple's in the call" => Moved(TeamId, TeamId + "          extra: ${{ secrets.SOME_OTHER_TOKEN }}\n"),
+            "another step of the macOS job" => Moved(Archive, Archive + "          KEY: ${{ secrets.APPLE_NOTARY_KEY_P8 }}\n"),
+            "another job's environment" => Moved(PluginSteps, PluginSteps + "    env:\n      KEY: ${{ secrets.APPLE_NOTARY_KEY_P8 }}\n"),
+            "another job's package call" => Moved(
+                "    steps:\n      - uses: actions/checkout@v7\n\n      - name: Archive plugins/reply\n",
+                "    steps:\n      - uses: actions/checkout@v7\n\n      - uses: ./.github/actions/package\n        with:\n          rid: linux-x64\n" + six +
+                "\n      - name: Archive plugins/reply\n"),
+            "the matrix's package call" => Moved(MatrixPackage, MatrixPackage + six, Moved(six, string.Empty)),
+            "a test in the macOS job" => Moved(MacosPackage, "      - run: dotnet test --solution runtime/Jason.slnx\n\n" + MacosPackage),
+            "the token in the macOS job" => Moved(Archive, Archive + $"          TOKEN: {DryRunToken}\n"),
+            "the whole context in another job" => Moved(PluginSteps, PluginSteps + "    env:\n      ALL: ${{ toJSON(secrets) }}\n"),
+            "a secret by index in another job" => Moved(PluginSteps, PluginSteps + "    env:\n      KEY: ${{ secrets['APPLE_NOTARY_KEY_P8'] }}\n"),
+            "an alias of the call's team id" => Moved(
+                PluginSteps,
+                PluginSteps + "    env:\n      TEAM: *team\n",
+                Moved(TeamId, "          apple-team-id: &team ${{ secrets.APPLE_TEAM_ID }}\n")),
+            _ => throw new ArgumentOutOfRangeException(nameof(copy)),
+        };
+
+        var problems = SecretsOutOfPlace(moved);
+        Assert.True(refused == (problems.Count > 0), $"{copy}: {string.Join("; ", problems)}");
     }
 
     /// <summary>Every scalar under a node, keys and values alike.</summary>
@@ -1079,9 +1257,21 @@ public partial class ReleaseWorkflowTests
         Assert.DoesNotContain("--no-restore", publish, StringComparison.Ordinal);
         Assert.All(ranOnLinuxAlone, step => Assert.True(Scalar(step, "if") == OnLinux, $"'{Scalar(step, "name")}' has the condition '{Scalar(step, "if")}', not '{OnLinux}'"));
 
-        var everywhere = steps.Where(step => Scalar(step, "uses") == "./.github/actions/package" || Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true).ToList();
-        Assert.Equal(2, everywhere.Count);
-        Assert.All(everywhere, step => Assert.True(Scalar(step, "if") is null, $"'{Scalar(step, "name") ?? Scalar(step, "uses")}' runs only when '{Scalar(step, "if")}'"));
+        // macOS packages in a job of its own, which builds and tests nothing else; both jobs package and smoke-test
+        // every platform they build, the two smoke tests one text.
+        var macos = JobSteps(MacosJob()).ToList();
+        foreach (var platform in new[] { steps, macos })
+        {
+            var everywhere = platform.Where(step => Scalar(step, "uses") == "./.github/actions/package" || Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true).ToList();
+            Assert.Equal(2, everywhere.Count);
+            Assert.All(everywhere, step => Assert.True(Scalar(step, "if") is null, $"'{Scalar(step, "name") ?? Scalar(step, "uses")}' runs only when '{Scalar(step, "if")}'"));
+        }
+
+        static YamlMappingNode Smoke(IEnumerable<YamlMappingNode> steps) => steps.Single(step => Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true);
+        Assert.Equal(Scalar(Smoke(steps), "run"), Scalar(Smoke(macos), "run"));
+        Assert.Equal(
+            Mapping(Smoke(steps), "env").Children.Select(pair => $"{pair.Key}={pair.Value}"),
+            Mapping(Smoke(macos), "env").Children.Select(pair => $"{pair.Key}={pair.Value}"));
     }
 
     [Fact]
@@ -1277,11 +1467,1031 @@ public partial class ReleaseWorkflowTests
         A_tag_that_is_not_a_version_is_refused_before_anything_is_built("push", "v1.2.3+build", "", null);
     }
 
+    // --- the macOS signature ---------------------------------------------------------------------------
+
+    /// <summary>The six Apple secrets, each under the package action's input of its own name.</summary>
+    private static readonly (string Input, string Secret)[] AppleSecrets =
+    [
+        ("apple-developer-id-p12-base64", "APPLE_DEVELOPER_ID_P12_BASE64"),
+        ("apple-developer-id-p12-password", "APPLE_DEVELOPER_ID_P12_PASSWORD"),
+        ("apple-notary-key-p8", "APPLE_NOTARY_KEY_P8"),
+        ("apple-notary-key-id", "APPLE_NOTARY_KEY_ID"),
+        ("apple-notary-issuer-id", "APPLE_NOTARY_ISSUER_ID"),
+        ("apple-team-id", "APPLE_TEAM_ID"),
+    ];
+
+    /// <summary>What every step that signs, notarizes or assesses runs on: osx-arm64, and only when it is asked to.</summary>
+    private const string Signing = "inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'";
+
+    private const string Entitlements = "runtime/src/Jason.App/jason.entitlements";
+
+    private static List<YamlMappingNode> ActionSteps() =>
+        [.. Assert.IsType<YamlSequenceNode>(Node(Mapping(Parse(Read(Action)), "runs"), "steps")).Children.Cast<YamlMappingNode>()];
+
+    private static YamlMappingNode ActionStep(string name) => Assert.Single(ActionSteps(), step => Scalar(step, "name") == name);
+
+    /// <summary>The release's job that builds osx-arm64: the one whose package call names it.</summary>
+    private static YamlMappingNode MacosJob() =>
+        Assert.Single(
+            Mapping(Parse(Read(Release)), "jobs").Children.Values.Cast<YamlMappingNode>(),
+            job => JobSteps(job).Any(step => Scalar(step, "uses") == "./.github/actions/package" && Scalar(Mapping(step, "with"), "rid") == "osx-arm64"));
+
+    /// <summary>The release's job that builds the other platforms: its matrix.</summary>
+    private static YamlMappingNode MatrixJob() =>
+        Assert.Single(Mapping(Parse(Read(Release)), "jobs").Children.Values.Cast<YamlMappingNode>(), job => Node(job, "strategy") is not null);
+
+    private static YamlMappingNode MacosStep(Func<YamlMappingNode, bool> which) => Assert.Single(JobSteps(MacosJob()), step => which(step));
+
+    /// <summary>
+    /// A release's macOS executable carries Reply's Developer ID; a pull request's carries the ad hoc signature the SDK
+    /// writes at publish. The package action signs only when it is told to, and <c>release.yml</c> tells it so in one
+    /// call alone, the one that names osx-arm64 in a job of its own, with the six Apple secrets each under the input of
+    /// its own name; its other call, the matrix's, tells it nothing. That job runs on macOS, builds that platform alone
+    /// and runs no test, so no test code shares a runner with the identity. <c>ci.yml</c> tells the action nothing and
+    /// names no Apple secret at all: a pull request's build never holds the identity.
+    /// </summary>
+    [Fact]
+    public void A_release_signs_the_macos_executable_and_ci_never_does()
+    {
+        var inputs = Mapping(Parse(Read(Action)), "inputs");
+        Assert.Equal("false", Scalar(Mapping(inputs, "sign-macos"), "default"));
+        foreach (var (input, _) in AppleSecrets)
+        {
+            Assert.Equal("false", Scalar(Mapping(inputs, input), "required"));
+            Assert.Equal(string.Empty, Scalar(Mapping(inputs, input), "default"));
+        }
+
+        var release = PackagingCalls(Release);
+        Assert.Equal(2, release.Count);
+        var signing = Assert.Single(release, call => Node(Mapping(call, "with"), "sign-macos") is not null);
+        var with = Mapping(signing, "with");
+        Assert.Equal("osx-arm64", Scalar(with, "rid"));
+        Assert.Equal("true", Scalar(with, "sign-macos"));
+        foreach (var (input, secret) in AppleSecrets)
+        {
+            Assert.Equal($"${{{{ secrets.{secret} }}}}", Scalar(with, input));
+        }
+
+        Assert.Null(Node(signing, "continue-on-error"));
+        Assert.All(release.Where(call => call != signing), call => Assert.DoesNotContain(
+            Mapping(call, "with").Children.Keys.Select(key => key.ToString()),
+            key => key == "sign-macos" || key.StartsWith("apple-", StringComparison.Ordinal)));
+
+        var macos = MacosJob();
+        Assert.Equal("macos-latest", Scalar(macos, "runs-on"));
+        Assert.Null(Node(macos, "strategy"));
+        Assert.DoesNotContain(JobSteps(macos), step => Scalar(step, "run") is { } run && Regex.IsMatch(run, @"\bdotnet\s+(test|build|restore)\b"));
+        Assert.DoesNotContain("osx-arm64", Scalars(Mapping(MatrixJob(), "strategy")));
+
+        var ci = PackagingCalls(Ci);
+        Assert.NotEmpty(ci);
+        Assert.All(ci, call => Assert.DoesNotContain(
+            Mapping(call, "with").Children.Keys.Select(key => key.ToString()),
+            key => key == "sign-macos" || key.StartsWith("apple-", StringComparison.Ordinal)));
+        Assert.DoesNotContain("APPLE_", Read(Ci), StringComparison.Ordinal);
+        Assert.DoesNotContain("codesign", Read(Ci), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The executable is signed after the publish and before the staging, so that the staged copy, the archive and the
+    /// caller's smoke test all carry the one signed file: the identity first, then the signature, the notary, Gatekeeper's
+    /// assessment and the identity forgotten. The signature replaces the SDK's own (<c>--force</c>), carries the hardened
+    /// runtime notarization requires, a timestamp that outlives the certificate and the entitlements file, and is verified
+    /// and read back into the log before anything else is done with the file.
+    /// </summary>
+    [Fact]
+    public void The_macos_executable_is_signed_between_the_publish_and_the_staging_with_the_hardened_runtime()
+    {
+        var steps = ActionSteps();
+        int At(Func<YamlMappingNode, bool> which) => steps.FindIndex(step => which(step));
+
+        var published = At(step => Scalar(step, "id") == "publish");
+        var imported = At(step => Scalar(step, "id") == "identity");
+        var signed = At(step => Scalar(step, "name") == "Sign the macOS executable with the hardened runtime");
+        var notarized = At(step => Scalar(step, "name") == "Notarize the macOS executable");
+        var assessed = At(step => Scalar(step, "name") == "Assess the macOS executable as Gatekeeper does");
+        var forgotten = At(step => Scalar(step, "name") == "Forget the Developer ID identity");
+        var staged = At(step => Scalar(step, "name") == "Put LICENSE and THIRD-PARTY-NOTICES beside the executable");
+
+        Assert.True(published >= 0 && imported > published, "The identity is not imported after the publish.");
+        Assert.True(signed > imported, "The executable is not signed after the identity is imported.");
+        Assert.True(notarized > signed, "The executable is not notarized after it is signed.");
+        Assert.True(assessed > notarized, "The executable is not assessed after it is notarized.");
+        Assert.True(forgotten > assessed, "The identity is not forgotten after the last step that needs it.");
+        Assert.True(staged > forgotten, "The executable is staged before it is signed.");
+
+        foreach (var step in new[] { steps[imported], steps[signed], steps[notarized], steps[assessed] })
+        {
+            Assert.Equal(Signing, Scalar(step, "if"));
+            Assert.Null(Node(step, "continue-on-error"));
+        }
+
+        var sign = steps[signed];
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(sign, "env"), "EXECUTABLE"));
+        Assert.Equal("${{ steps.identity.outputs.identity }}", Scalar(Mapping(sign, "env"), "IDENTITY"));
+        var run = Scalar(sign, "run")!;
+        Assert.Contains($"entitlements={Entitlements}", run, StringComparison.Ordinal);
+        var codesign = Assert.Single(run.Split('\n'), line => line.TrimStart().StartsWith("codesign --force ", StringComparison.Ordinal));
+        foreach (var flag in (string[])["--sign \"$IDENTITY\"", "--options runtime", "--timestamp", "--entitlements \"$entitlements\"", "\"$EXECUTABLE\""])
+        {
+            Assert.Contains(flag, codesign, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("codesign --verify --strict --verbose=2 \"$EXECUTABLE\"", run, StringComparison.Ordinal);
+        Assert.Contains("codesign --display --entitlements - --xml \"$EXECUTABLE\" > \"$signed\"", run, StringComparison.Ordinal);
+        Assert.True(
+            run.IndexOf("codesign --force ", StringComparison.Ordinal) < run.IndexOf("codesign --verify ", StringComparison.Ordinal),
+            "The signature is verified before it is made.");
+        Assert.True(
+            run.IndexOf("codesign --force ", StringComparison.Ordinal) < run.IndexOf("codesign --display --entitlements ", StringComparison.Ordinal),
+            "The entitlements are read back before the file is signed.");
+
+        // The entitlements read back are held to the file they were signed with, both in the one form plutil writes.
+        foreach (var part in (string[])
+                 [
+                     "plutil -convert xml1 -o \"$carried\" \"$signed\"", "plutil -convert xml1 -o \"$expected\" \"$entitlements\"",
+                     "if ! diff \"$expected\" \"$carried\"; then",
+                     "echo \"::error title=Signing::The signed executable carries entitlements other than $entitlements: the difference is above.\"",
+                 ])
+        {
+            Assert.Contains(part, run, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The signing step itself, run as GitHub runs a bash step, against a codesign that signs nothing and reads back the
+    /// entitlements this row says the signed file carries, and a plutil that writes its input unchanged. The step passes
+    /// on exactly the entitlements of <c>jason.entitlements</c> and fails, saying so, on one key more, one key fewer and
+    /// none at all.
+    /// </summary>
+    [Theory]
+    [InlineData("the file's own", 0)]
+    [InlineData("one key more", 1)]
+    [InlineData("one key fewer", 1)]
+    [InlineData("none", 1)]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void The_signing_step_fails_on_entitlements_other_than_the_file_s_own(string carried, int exit)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
+
+        var own = File.ReadAllText(Path.Combine([RepositoryRoot(), .. Entitlements.Split('/')]));
+        const string Dyld = "  <key>com.apple.security.cs.allow-dyld-environment-variables</key>\n  <true/>\n";
+        Assert.Contains(Dyld, own, StringComparison.Ordinal);
+        var readBack = carried switch
+        {
+            "the file's own" => own,
+            "one key more" => own.Replace("</dict>", "  <key>com.apple.security.get-task-allow</key>\n  <true/>\n</dict>", StringComparison.Ordinal),
+            "one key fewer" => own.Replace(Dyld, string.Empty, StringComparison.Ordinal),
+            _ => string.Empty,
+        };
+
+        using var tree = new TempTree();
+        var bin = Path.Combine(tree.Root, "bin");
+        Directory.CreateDirectory(bin);
+        Directory.CreateDirectory(Path.Combine([tree.Root, .. Entitlements.Split('/')[..^1]]));
+        File.WriteAllText(Path.Combine([tree.Root, .. Entitlements.Split('/')]), own);
+        File.WriteAllText(Path.Combine(tree.Root, "carried.txt"), readBack);
+
+        // macOS's plutil writes a property list in one form; this one writes its input as it is, so the two files are
+        // told apart by what they hold and nothing else.
+        File.WriteAllText(Path.Combine(bin, "codesign"), $$"""
+            #!/bin/bash
+            if [ "$1 $2 $3 $4" = "--display --entitlements - --xml" ]; then cat '{{Path.Combine(tree.Root, "carried.txt")}}'; fi
+            exit 0
+            """.ReplaceLineEndings("\n"));
+        File.WriteAllText(Path.Combine(bin, "plutil"), """
+            #!/bin/bash
+            case "$1" in
+              -convert) cp "$5" "$4" ;;
+              -p) cat "$2" ;;
+            esac
+            exit 0
+            """.ReplaceLineEndings("\n"));
+        foreach (var stub in (string[])["codesign", "plutil"])
+        {
+            File.SetUnixFileMode(Path.Combine(bin, stub), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = bin + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+            ["RUNNER_TEMP"] = tree.Root,
+            ["EXECUTABLE"] = Path.Combine(tree.Root, "jason"),
+            ["IDENTITY"] = TeamIdentity,
+            ["KEYCHAIN"] = Path.Combine(tree.Root, "jason-signing.keychain-db"),
+        };
+
+        var ran = Bash(environment, tree.Root, Scalar(ActionStep("Sign the macOS executable with the hardened runtime"), "run")!);
+
+        Assert.True(ran.Exit == exit, $"exit {ran.Exit}\n{ran.Stdout}\n{ran.Stderr}");
+        Assert.Equal(
+            exit,
+            ran.Stdout.Split('\n').Count(line => line == "::error title=Signing::The signed executable carries entitlements other than " + Entitlements + ": the difference is above."));
+    }
+
+    /// <summary>
+    /// The entitlements are the set Microsoft documents for .NET under the hardened runtime, and nothing else: the JIT,
+    /// the executable memory it writes, the <c>DYLD_</c> variables the dynamic loader reads, which the hardened runtime
+    /// would otherwise drop, and the native libraries the bundle unpacks, which our team did not sign. Each key says why
+    /// it is there, in a comment just above it. The file sits beside the Windows manifest, and the stray-file check of
+    /// the publish keeps it out of the archive.
+    /// </summary>
+    [Fact]
+    public void The_entitlements_file_holds_exactly_the_four_keys_and_says_why_each_is_there()
+    {
+        var path = Path.Combine([RepositoryRoot(), .. Entitlements.Split('/')]);
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(path)!, "jason.manifest")), "The entitlements file is not beside jason.manifest.");
+
+        var plist = System.Xml.Linq.XDocument.Load(path, System.Xml.Linq.LoadOptions.None).Root!;
+        Assert.Equal("plist", plist.Name.LocalName);
+        var dict = Assert.Single(plist.Elements());
+        Assert.Equal("dict", dict.Name.LocalName);
+
+        var keys = dict.Elements("key").ToList();
+        Assert.Equal(
+            [
+                "com.apple.security.cs.allow-dyld-environment-variables",
+                "com.apple.security.cs.allow-jit",
+                "com.apple.security.cs.allow-unsigned-executable-memory",
+                "com.apple.security.cs.disable-library-validation",
+            ],
+            keys.Select(key => key.Value).Order(StringComparer.Ordinal));
+        Assert.Equal(keys.Count * 2, dict.Elements().Count());
+        Assert.All(keys, key =>
+        {
+            Assert.Equal("true", (key.NextNode as System.Xml.Linq.XElement)?.Name.LocalName);
+            var why = key.PreviousNode as System.Xml.Linq.XComment;
+            Assert.True(why is not null && why.Value.Trim().Length > 0, $"{key.Value} has no comment above it saying why it is there.");
+        });
+
+        Assert.DoesNotContain("jason.entitlements", Read(["runtime", "src", "Jason.App", "Jason.App.csproj"]), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The six secrets reach the package action by name, as inputs, and inside it only the steps that use them, through
+    /// their <c>env</c>: never interpolated into a script, which GitHub prints into the log before it runs it. No step that
+    /// holds one prints its environment or traces its commands, and none echoes a secret's variable anywhere but into a
+    /// pipe or a file that is not one of the runner's own. <c>release.yml</c> names them only where it calls the action.
+    /// </summary>
+    [Fact]
+    public void The_apple_secrets_reach_only_the_steps_that_use_them_and_none_of_those_prints_them()
+    {
+        var action = Read(Action);
+        var inputs = Mapping(Parse(action), "inputs").Children.Keys.Select(key => key.ToString()).ToList();
+        Assert.All(AppleSecrets, secret => Assert.Contains(secret.Input, inputs));
+
+        var holding = 0;
+        foreach (var step in ActionSteps())
+        {
+            var run = Scalar(step, "run") ?? string.Empty;
+            Assert.DoesNotContain("inputs.apple-", run, StringComparison.Ordinal);
+            Assert.DoesNotContain("secrets.", run, StringComparison.Ordinal);
+            if (Node(step, "with") is YamlMappingNode with)
+            {
+                Assert.DoesNotContain(with.Children.Values.SelectMany(Scalars), value => value.Contains("inputs.apple-", StringComparison.Ordinal));
+            }
+
+            var secrets = Node(step, "env") is YamlMappingNode env
+                ? env.Children.Where(pair => pair.Value.ToString().Contains("inputs.apple-", StringComparison.Ordinal)).Select(pair => pair.Key.ToString()).ToList()
+                : [];
+            if (secrets.Count == 0)
+            {
+                continue;
+            }
+
+            holding++;
+            var name = Scalar(step, "name");
+            var lines = run.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
+            Assert.DoesNotContain(lines, line => PrintsTheEnvironment().IsMatch(line));
+            foreach (var line in lines.Where(line => Regex.IsMatch(line, @"^(echo|printf|cat)\b")))
+            {
+                var named = secrets.Where(secret => line.Contains("$" + secret, StringComparison.Ordinal) || line.Contains("${" + secret, StringComparison.Ordinal)).ToList();
+                if (named.Count == 0)
+                {
+                    continue;
+                }
+
+                var piped = line.Contains('|', StringComparison.Ordinal);
+                var redirected = Regex.IsMatch(line, @">\s*""\$[a-z]") && !line.Contains("GITHUB_", StringComparison.Ordinal);
+                Assert.True(piped || redirected, $"'{name}' prints {string.Join(", ", named)}: {line}");
+            }
+        }
+
+        Assert.Equal(2, holding);
+
+        var release = Read(Release);
+        foreach (var (_, secret) in AppleSecrets)
+        {
+            Assert.Equal(1, Regex.Count(release, $@"\bsecrets\.{secret}\b"));
+        }
+
+        var runs = Mapping(Parse(release), "jobs").Children.Values.Cast<YamlMappingNode>()
+            .SelectMany(job => Node(job, "steps") is YamlSequenceNode sequence ? sequence.Children.Cast<YamlMappingNode>() : [])
+            .Select(step => Scalar(step, "run") ?? string.Empty);
+        Assert.All(runs, run => Assert.DoesNotContain("APPLE_", run, StringComparison.Ordinal));
+        Assert.DoesNotContain("set -x", action + release, StringComparison.Ordinal);
+    }
+
+    /// <summary>A line of a script that prints its environment or traces its commands, whatever it does with the output.</summary>
+    [GeneratedRegex(@"^(set\s+-[a-z]*x|set\s+-o\s+xtrace|env\s*($|[|>])|printenv\b|export\s+-p|declare\s+-p|set\s*($|[|>]))")]
+    private static partial Regex PrintsTheEnvironment();
+
+    /// <summary>
+    /// The lines that print a step's environment, read as a step holding a secret is read: bare, or into a pipe or a
+    /// file, which the log shows as surely, and the lines that only look like one.
+    /// </summary>
+    [Theory]
+    [InlineData("env", true)]
+    [InlineData("env | sort", true)]
+    [InlineData("env|grep APPLE", true)]
+    [InlineData("env > \"$RUNNER_TEMP/environment\"", true)]
+    [InlineData("env >> environment.txt", true)]
+    [InlineData("printenv", true)]
+    [InlineData("printenv P12_PASSWORD", true)]
+    [InlineData("set", true)]
+    [InlineData("set | grep P12", true)]
+    [InlineData("set -x", true)]
+    [InlineData("set -eux", true)]
+    [InlineData("set -o xtrace", true)]
+    [InlineData("export -p", true)]
+    [InlineData("declare -p", true)]
+    [InlineData("env -i PATH=/usr/bin codesign --version", false)]
+    [InlineData("envsubst < template", false)]
+    [InlineData("environment=\"$RUNNER_TEMP/x\"", false)]
+    [InlineData("set -e", false)]
+    [InlineData("set -- \"$keychain\"", false)]
+    [InlineData("settings=1", false)]
+    public void A_line_that_prints_the_environment_is_told_apart(string line, bool prints) =>
+        Assert.Equal(prints, PrintsTheEnvironment().IsMatch(line));
+
+    /// <summary>
+    /// The identity lives in a keychain of this job's own under <c>RUNNER_TEMP</c>, unlocked by a password made in the step
+    /// and kept nowhere, imported as GitHub documents for Apple certificates on a macOS runner, and found by the team the
+    /// secret names, never by a name typed here. The runner's own keychains carry Apple's Developer ID intermediate, so
+    /// nothing is fetched to build the chain: an identity that is not valid stops the step, said plainly. Whatever
+    /// happened, the last step takes the keychain off the search list and the disk and removes every file a secret was
+    /// written to.
+    /// </summary>
+    [Fact]
+    public void The_identity_lives_in_a_keychain_of_the_job_s_own_and_is_forgotten_whatever_happened()
+    {
+        var import = Scalar(ActionStep("Import the Developer ID identity into a keychain of this job's own"), "run")!;
+        foreach (var part in (string[])
+                 [
+                     "keychain=\"$RUNNER_TEMP/", "p12=\"$RUNNER_TEMP/", "openssl rand", "security create-keychain -p \"$password\" \"$keychain\"",
+                     "security unlock-keychain", "-A -t cert -f pkcs12 -k \"$keychain\"", "security set-key-partition-list -S apple-tool:,apple:",
+                     "security list-keychains -d user -s", "security find-identity -v -p codesigning \"$keychain\"", "$TEAM_ID",
+                     "if [ -z \"$sha\" ]; then", "echo \"::error title=Signing::The keychain holds no valid Developer ID Application identity of the team the secret names: what find-identity listed is above.\"",
+                 ])
+        {
+            Assert.Contains(part, import, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("Developer ID Application: Reply", import, StringComparison.Ordinal);
+        foreach (var fetch in (string[])["curl", "wget", "https://", "DeveloperIDG2CA", "-t cert -k"])
+        {
+            Assert.DoesNotContain(fetch, import, StringComparison.Ordinal);
+        }
+
+        Assert.Single(Regex.Matches(import, "sha=\"\\$\\(identity\\)\""));
+
+        var forget = ActionStep("Forget the Developer ID identity");
+        Assert.Equal($"always() && {Signing}", Scalar(forget, "if"));
+        var run = Scalar(forget, "run")!;
+        Assert.Contains("security delete-keychain", run, StringComparison.Ordinal);
+        Assert.Contains("security list-keychains -d user -s", run, StringComparison.Ordinal);
+
+        // Every file the steps write a secret to, by the path they write it to.
+        var notarize = Scalar(ActionStep("Notarize the macOS executable"), "run")!;
+        foreach (var (step, variable) in new[] { (import, "keychain"), (import, "p12"), (import, "opened"), (notarize, "key") })
+        {
+            var written = Regex.Match(step, $@"^\s*{variable}=""\$RUNNER_TEMP/([^""]+)""", RegexOptions.Multiline);
+            Assert.True(written.Success, $"No {variable}=\"$RUNNER_TEMP/...\" line.");
+            Assert.Contains("$RUNNER_TEMP/" + written.Groups[1].Value, run, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The two steps that write a secret to a file write it for the runner's own user alone: each begins with
+    /// <c>umask 077</c>. The keychain's password, made in the import step, is masked in the log the moment it exists, as
+    /// a secret is.
+    /// </summary>
+    [Fact]
+    public void The_steps_holding_a_secret_write_it_for_the_runner_s_user_alone_and_mask_the_keychain_password()
+    {
+        foreach (var name in (string[])["Import the Developer ID identity into a keychain of this job's own", "Notarize the macOS executable"])
+        {
+            var commands = Scalar(ActionStep(name), "run")!.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#'));
+            Assert.Equal("umask 077", commands.First());
+        }
+
+        var import = Scalar(ActionStep("Import the Developer ID identity into a keychain of this job's own"), "run")!.Split('\n').Select(line => line.Trim()).ToList();
+        var made = import.IndexOf("password=\"$(openssl rand -base64 32)\"");
+        Assert.True(made >= 0, "The keychain's password is not made in the import step.");
+        Assert.Equal("echo \"::add-mask::$password\"", import[made + 1]);
+    }
+
+    /// <summary>
+    /// The step that forgets the identity, run as GitHub runs a bash step, against a security that records whether a
+    /// file holding a secret was still on the disk when it was called, and that succeeds or fails as the row says. Every
+    /// such file is removed before any keychain command runs, so a keychain command that fails cannot leave one behind;
+    /// such a failure is warned of, and the step still succeeds.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void The_forget_step_removes_every_secret_file_first_and_only_warns_of_a_keychain_command_that_fails(bool fails)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
+
+        using var tree = new TempTree();
+        var bin = Path.Combine(tree.Root, "bin");
+        Directory.CreateDirectory(bin);
+        var calls = Path.Combine(tree.Root, "calls.txt");
+        string[] secrets = ["jason-signing.p12", "jason-signing.opened", "jason-notary.p8", "jason-notarize.zip"];
+        foreach (var file in secrets)
+        {
+            File.WriteAllText(Path.Combine(tree.Root, file), "made-up");
+        }
+
+        File.WriteAllText(Path.Combine(tree.Root, "jason-signing.keychain-db"), "made-up");
+        File.WriteAllText(Path.Combine(tree.Root, "jason-signing.search-list"), "/made/up/login.keychain-db\n/made/up/other.keychain-db\n");
+
+        File.WriteAllText(Path.Combine(bin, "security"), $$"""
+            #!/bin/bash
+            if {{string.Join(" || ", secrets.Select(file => $"[ -e '{Path.Combine(tree.Root, file)}' ]"))}}; then
+              echo "security $1 with a secret on the disk" >> '{{calls}}'
+            else
+              echo "security $1 $*" >> '{{calls}}'
+            fi
+            exit {{(fails ? 1 : 0)}}
+            """.ReplaceLineEndings("\n"));
+        File.SetUnixFileMode(Path.Combine(bin, "security"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = bin + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+            ["RUNNER_TEMP"] = tree.Root,
+        };
+
+        var ran = Bash(environment, tree.Root, Scalar(ActionStep("Forget the Developer ID identity"), "run")!);
+
+        Assert.True(ran.Exit == 0, $"exit {ran.Exit}\n{ran.Stdout}\n{ran.Stderr}");
+        Assert.Equal(
+            [
+                "security list-keychains list-keychains -d user -s /made/up/login.keychain-db /made/up/other.keychain-db",
+                "security delete-keychain delete-keychain " + Path.Combine(tree.Root, "jason-signing.keychain-db"),
+            ],
+            File.ReadAllLines(calls));
+        foreach (var file in secrets.Append("jason-signing.search-list"))
+        {
+            Assert.False(File.Exists(Path.Combine(tree.Root, file)), $"{file} was left on the disk.");
+        }
+
+        Assert.Equal(fails ? 2 : 0, ran.Stdout.Split('\n').Count(line => line.StartsWith("::warning title=Signing::", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The .p12 is opened with the password secret before the keychain sees it, by macOS's own openssl and with the
+    /// password read from its environment variable. Two cases stop the step before the keychain is made: a secret that
+    /// is not a PKCS#12 file, and a password that does not open it. A .p12 that opens is described in a notice — the
+    /// MAC's digest and each bag's PBE, with the rebuild line when they are not sha1 and 3DES — and the keychain's
+    /// import decides; nothing is refused by name, and a refusal there carries the rebuild line too. What openssl
+    /// reports is kept in a file and only its lines of names and iteration counts are printed; its stdout, where the
+    /// bags' attributes go, is dropped, and no line prints either secret.
+    /// </summary>
+    [Fact]
+    public void The_p12_is_opened_with_the_password_before_it_is_imported_and_neither_secret_is_printed()
+    {
+        var import = Scalar(ActionStep("Import the Developer ID identity into a keychain of this job's own"), "run")!;
+        const string Opens = "/usr/bin/openssl pkcs12 -in \"$p12\" -info -noout -passin env:P12_PASSWORD > /dev/null 2> \"$opened\"";
+        var opens = import.IndexOf(Opens, StringComparison.Ordinal);
+        Assert.True(opens >= 0, "The .p12 is not opened with the password secret, its stdout dropped.");
+        Assert.True(opens < import.IndexOf("security create-keychain", StringComparison.Ordinal), "The .p12 is opened after the keychain is made.");
+        Assert.True(opens < import.IndexOf("security import \"$p12\"", StringComparison.Ordinal), "The .p12 is opened after it is imported.");
+        Assert.Contains("/usr/bin/openssl asn1parse -inform DER -in \"$p12\" 2> /dev/null", import, StringComparison.Ordinal);
+        Assert.Contains("grep -E '^(MAC |MAC:|PKCS7 Encrypted data:|Shrouded Keybag:)' \"$opened\"", import, StringComparison.Ordinal);
+        foreach (var said in (string[])
+                 [
+                     "The decoded secret is not a PKCS#12 file.",
+                     "The password secret does not open the .p12.",
+                     "advice=\"rebuild it with -legacy -macalg sha1 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES\"",
+                     "echo \"::notice title=Signing::$described\"",
+                     "::error title=Signing::The keychain refused to import the .p12, which the password secret opens: what security said is above. If the notice above names an encoding other than sha1 and 3DES, $advice.",
+                 ])
+        {
+            Assert.Contains(said, import, StringComparison.Ordinal);
+        }
+
+        // The encoding is said, never refused: the notice comes before the keychain is made, and no refusal names it.
+        Assert.True(
+            import.IndexOf("::notice title=Signing::$described", StringComparison.Ordinal) < import.IndexOf("security create-keychain", StringComparison.Ordinal),
+            "The notice is printed after the keychain is made.");
+        Assert.DoesNotContain("encoding macOS refuses", import, StringComparison.Ordinal);
+
+        // The secrets reach a command only as an argument it does not print, or through the environment: never in an
+        // echo, never as pass:, never after cat.
+        Assert.DoesNotContain("pass:", import, StringComparison.Ordinal);
+        Assert.DoesNotContain("cat \"$opened\"", import, StringComparison.Ordinal);
+        foreach (var line in import.Split('\n').Where(line => Regex.IsMatch(line, @"\b(echo|printf)\b")))
+        {
+            Assert.True(
+                !Regex.IsMatch(line, @"\$\{?P12_(BASE64|PASSWORD)\b") || line.Trim() == "printf '%s' \"$P12_BASE64\" | base64 --decode > \"$p12\"",
+                $"A line prints a secret: {line.Trim()}");
+        }
+    }
+
+    // The rebuild line the import step gives, and its last word when the keychain refuses a .p12 the password opens.
+    private const string Rebuild = "rebuild it with -legacy -macalg sha1 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES";
+
+    private const string Refused =
+        "The keychain refused to import the .p12, which the password secret opens: what security said is above. If the notice above names an encoding other than sha1 and 3DES, " + Rebuild + ".";
+
+    /// <summary>
+    /// The import step itself, run as GitHub runs a bash step, up to the keychain's import, against an openssl that
+    /// answers <c>pkcs12 -info</c> and <c>asn1parse</c> as LibreSSL does — the report on stderr, the bags' attributes and
+    /// a certificate on stdout, a hex dump among the objects — and a security that refuses every import. A secret that
+    /// is not a PKCS#12 file and a password that does not open it are said in their own words and stop the step before
+    /// anything is imported. A .p12 that opens goes on to the keychain whatever its encoding, after a notice that names
+    /// its MAC's digest and each bag's PBE, carrying the rebuild line only when they are not sha1 and 3DES; a
+    /// certificate bag under RC2-40 is said to be one macOS reads. The keychain's refusal carries the rebuild line. The
+    /// report's lines of names and iteration counts are printed, nothing else openssl wrote, and none of the made-up
+    /// secret values.
+    /// </summary>
+    [Theory]
+    [InlineData("not a p12", "The decoded secret is not a PKCS#12 file.", null, false)]
+    [InlineData("wrong password", "The password secret does not open the .p12.", null, false)]
+    [InlineData("wrong password ending in a space", "The password secret does not open the .p12.", null, false)]
+    [InlineData("aes under pbes2", Refused, "Its MAC's digest: sha256. Its bags: PKCS7 Encrypted data under PBES2, Shrouded Keybag under PBES2.", true)]
+    [InlineData("a sha256 mac", Refused, "Its MAC's digest: sha256. Its bags: PKCS7 Encrypted data under pbeWithSHA1And3-KeyTripleDES-CBC, Shrouded Keybag under pbeWithSHA1And3-KeyTripleDES-CBC.", true)]
+    [InlineData("an rc2 certificate bag", Refused, "Its MAC's digest: sha1. Its bags: PKCS7 Encrypted data under pbeWithSHA1And40BitRC2-CBC, Shrouded Keybag under pbeWithSHA1And3-KeyTripleDES-CBC. A certificate bag under pbeWithSHA1And40BitRC2-CBC is one macOS reads.", false)]
+    [InlineData("bags libressl cannot read", Refused, "Its MAC's digest: sha1. Its bags: none read. LibreSSL could not read every bag.", true)]
+    [InlineData("sha1 and 3des", Refused, "Its MAC's digest: sha1. Its bags: PKCS7 Encrypted data under pbeWithSHA1And3-KeyTripleDES-CBC, Shrouded Keybag under pbeWithSHA1And3-KeyTripleDES-CBC.", false)]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void The_import_step_tells_apart_why_the_p12_cannot_be_imported(string answer, string said, string? described, bool rebuild)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
+
+        const string TripleDes = "pbeWithSHA1And3-KeyTripleDES-CBC, Iteration 2048";
+        const string Verified = "MAC Iteration 2048\nMAC verified OK\n";
+        var (report, exit, mac) = answer switch
+        {
+            "not a p12" => ("error:0D07207B:asn1 encoding routines:ASN1_get_object:header too long\n", 1, ""),
+            "aes under pbes2" => (Verified + "PKCS7 Encrypted data: PBES2, Iteration 2048\nShrouded Keybag: PBES2, Iteration 2048\n", 0, "sha256"),
+            "a sha256 mac" => (Verified + $"PKCS7 Encrypted data: {TripleDes}\nShrouded Keybag: {TripleDes}\n", 0, "sha256"),
+            "an rc2 certificate bag" => (Verified + $"PKCS7 Encrypted data: pbeWithSHA1And40BitRC2-CBC, Iteration 2048\nShrouded Keybag: {TripleDes}\n", 0, "sha1"),
+            "bags libressl cannot read" => (Verified + "error:06074079:digital envelope routines:EVP_PBE_CipherInit:unknown pbe algorithm\n", 1, "sha1"),
+            "sha1 and 3des" => (Verified + $"PKCS7 Encrypted data: {TripleDes}\nShrouded Keybag: {TripleDes}\n", 0, "sha1"),
+            _ => ("MAC Iteration 2048\nMac verify error: invalid password?\n", 1, "sha1"),
+        };
+
+        using var tree = new TempTree();
+        var bin = Path.Combine(tree.Root, "bin");
+        Directory.CreateDirectory(bin);
+        var calls = Path.Combine(tree.Root, "calls.txt");
+        File.WriteAllText(Path.Combine(tree.Root, "report.txt"), report);
+        File.WriteAllText(Path.Combine(tree.Root, "objects.txt"), mac.Length == 0 ? string.Empty : $"""
+                0:d=0  hl=4 l=1000 cons: SEQUENCE
+               19:d=2  hl=2 l=   9 prim: OBJECT            :pkcs7-data
+               32:d=3  hl=4 l= 900 prim: OCTET STRING      [HEX DUMP]:MADEUPHEXOFAKEY
+              960:d=4  hl=2 l=   5 prim: OBJECT            :{mac}
+
+            """.ReplaceLineEndings("\n"));
+
+        // An openssl and a security that record what they are asked and answer as this row says; openssl writes the bags'
+        // attributes and a certificate on stdout, as LibreSSL would, which the step must never print.
+        File.WriteAllText(Path.Combine(bin, "openssl"), $$"""
+            #!/bin/bash
+            echo "openssl $*" >> '{{calls}}'
+            if [ "$1" = rand ]; then echo made-up-keychain-password; exit 0; fi
+            if [ "$1" = pkcs12 ]; then
+              printf 'Bag Attributes\n    friendlyName: Developer ID Application: Made Up (MADEUPTEAM)\n-----BEGIN CERTIFICATE-----\nMADEUPCERTIFICATETEXT\n'
+              cat '{{Path.Combine(tree.Root, "report.txt")}}' >&2
+              exit {{exit}}
+            fi
+            if [ "$1" = asn1parse ]; then
+              if [ -s '{{Path.Combine(tree.Root, "objects.txt")}}' ]; then cat '{{Path.Combine(tree.Root, "objects.txt")}}'; exit 0; fi
+              echo 'Error: offset too large' >&2; exit 1
+            fi
+            exit 2
+            """.ReplaceLineEndings("\n"));
+        File.WriteAllText(Path.Combine(bin, "security"), $$"""
+            #!/bin/bash
+            echo "security $1" >> '{{calls}}'
+            if [ "$1" = import ]; then echo 'security: SecKeychainItemImport: The user name or passphrase you entered is not correct.' >&2; exit 1; fi
+            exit 0
+            """.ReplaceLineEndings("\n"));
+        foreach (var stub in (string[])["openssl", "security"])
+        {
+            File.SetUnixFileMode(Path.Combine(bin, stub), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var password = answer.EndsWith("space", StringComparison.Ordinal) ? "made-up-p12-password " : "made-up-p12-password";
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = bin + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+            ["RUNNER_TEMP"] = tree.Root,
+            ["P12_BASE64"] = Convert.ToBase64String(Encoding.ASCII.GetBytes("made-up-p12-bytes")),
+            ["P12_PASSWORD"] = password,
+            ["TEAM_ID"] = "MADEUPTEAM",
+        };
+
+        // macOS's openssl is named by its path; the stub stands there for this run alone.
+        var step = Scalar(ActionStep("Import the Developer ID identity into a keychain of this job's own"), "run")!;
+        var ran = Bash(environment, tree.Root, step.Replace("/usr/bin/openssl ", "openssl ", StringComparison.Ordinal));
+        var printed = ran.Stdout + ran.Stderr;
+
+        Assert.True(ran.Exit == 1, $"exit {ran.Exit}\n{ran.Stdout}\n{ran.Stderr}");
+        Assert.Contains("The decoded .p12 is 17 bytes.", ran.Stdout, StringComparison.Ordinal);
+        Assert.Contains("::error title=Signing::" + said, ran.Stdout, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(ran.Stdout, "::error "));
+        Assert.Equal(answer.EndsWith("space", StringComparison.Ordinal), ran.Stdout.Contains("ends with whitespace", StringComparison.Ordinal));
+
+        // A .p12 that opens is described before the keychain is made, and the keychain decides.
+        var notices = ran.Stdout.Split('\n').Where(line => line.StartsWith("::notice title=Signing::The .p12 opens", StringComparison.Ordinal)).ToArray();
+        if (described is null)
+        {
+            Assert.Empty(notices);
+        }
+        else
+        {
+            var notice = Assert.Single(notices);
+            Assert.Equal("::notice title=Signing::The .p12 opens with the password secret. " + described + (rebuild ? " If the keychain refuses it, " + Rebuild + "." : string.Empty), notice);
+            Assert.True(
+                ran.Stdout.IndexOf(notice, StringComparison.Ordinal) < ran.Stdout.IndexOf("::error ", StringComparison.Ordinal),
+                "The notice is printed after the keychain's refusal.");
+        }
+        Assert.Contains($"The MAC's digest, by the file's structure: {(mac.Length == 0 ? "(none)" : mac)}.", ran.Stdout, StringComparison.Ordinal);
+        foreach (var line in report.Split('\n').Where(line => Regex.IsMatch(line, "^(MAC |PKCS7 Encrypted data:|Shrouded Keybag:)")))
+        {
+            Assert.Contains(line, ran.Stdout, StringComparison.Ordinal);
+        }
+
+        var asked = File.ReadAllLines(calls);
+        Assert.Contains("openssl pkcs12 -in " + Path.Combine(tree.Root, "jason-signing.p12") + " -info -noout -passin env:P12_PASSWORD", asked);
+        Assert.Equal(described is not null, asked.Contains("security import"));
+        Assert.False(File.Exists(Path.Combine(tree.Root, "jason-signing.p12")), "The decoded .p12 was left on the disk.");
+        Assert.False(File.Exists(Path.Combine(tree.Root, "jason-signing.opened")), "What openssl reported was left on the disk.");
+
+        foreach (var never in (string[])["made-up-p12-password", environment["P12_BASE64"], "made-up-p12-bytes", "MADEUPTEAM", "friendlyName", "BEGIN CERTIFICATE", "MADEUPCERTIFICATETEXT", "MADEUPHEXOFAKEY"])
+        {
+            Assert.DoesNotContain(never, printed, StringComparison.Ordinal);
+        }
+    }
+
+    // The made-up SHA-1 of the Developer ID identity of the team the rows' secret names.
+    private const string TeamIdentity = "0A1B2C3D4E5F60718293A4B5C6D7E8F901234567";
+
+    /// <summary>
+    /// The identity the import step hands to the signing step, by the import step itself run as GitHub runs a bash step,
+    /// against a keychain that imports the .p12 and a find-identity that lists as this row says: the first valid
+    /// Developer ID Application identity of the team the secret names, by its SHA-1, and nothing else. No identity,
+    /// another team's alone and an identity of the team that is not Developer ID Application stop the step, said plainly;
+    /// a team id secret that ends with whitespace matches no identity, and the step says it ends so, as it says of the
+    /// password.
+    /// </summary>
+    [Theory]
+    [InlineData("none", null)]
+    [InlineData("another team's", null)]
+    [InlineData("an apple development identity of the team", null)]
+    [InlineData("another team's, then the team's", TeamIdentity)]
+    [InlineData("the team's", TeamIdentity)]
+    [InlineData("two of the team's", TeamIdentity)]
+    [InlineData("the team's, with a team id ending in a space", null)]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void The_import_step_hands_on_the_first_developer_id_identity_of_the_team(string listed, string? identity)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
+
+        const string Theirs = "FEDCBA9876543210FEDCBA9876543210FEDCBA98";
+        const string Second = "1111111111111111111111111111111111111111";
+        var ours = $"  1) {TeamIdentity} \"Developer ID Application: Made Up Ltd (MADEUPTEAM)\"\n";
+        var theirs = $"  1) {Theirs} \"Developer ID Application: Someone Else Ltd (OTHERTEAM1)\"\n";
+        var listing = listed switch
+        {
+            "none" => "     0 valid identities found\n",
+            "another team's" => theirs + "     1 valid identities found\n",
+            "an apple development identity of the team" => $"  1) {Theirs} \"Apple Development: Made Up Ltd (MADEUPTEAM)\"\n     1 valid identities found\n",
+            "another team's, then the team's" => theirs + ours.Replace("  1) ", "  2) ", StringComparison.Ordinal) + "     2 valid identities found\n",
+            "two of the team's" => ours + $"  2) {Second} \"Developer ID Application: Made Up Ltd (MADEUPTEAM)\"\n     2 valid identities found\n",
+            _ => ours + "     1 valid identities found\n",
+        };
+
+        using var tree = new TempTree();
+        var bin = Path.Combine(tree.Root, "bin");
+        Directory.CreateDirectory(bin);
+        var calls = Path.Combine(tree.Root, "calls.txt");
+        var output = Path.Combine(tree.Root, "github-output.txt");
+        File.WriteAllText(output, string.Empty);
+        File.WriteAllText(Path.Combine(tree.Root, "listing.txt"), listing);
+
+        // An openssl that opens the .p12 as sha1 and 3DES, and a security that imports it and lists as this row says.
+        File.WriteAllText(Path.Combine(bin, "openssl"), $$"""
+            #!/bin/bash
+            if [ "$1" = rand ]; then echo made-up-keychain-password; exit 0; fi
+            if [ "$1" = pkcs12 ]; then
+              printf 'MAC Iteration 2048\nMAC verified OK\nPKCS7 Encrypted data: pbeWithSHA1And3-KeyTripleDES-CBC, Iteration 2048\nShrouded Keybag: pbeWithSHA1And3-KeyTripleDES-CBC, Iteration 2048\n' >&2
+              exit 0
+            fi
+            if [ "$1" = asn1parse ]; then echo '  960:d=4  hl=2 l=   5 prim: OBJECT            :sha1'; exit 0; fi
+            exit 2
+            """.ReplaceLineEndings("\n"));
+        File.WriteAllText(Path.Combine(bin, "security"), $$"""
+            #!/bin/bash
+            echo "security $1" >> '{{calls}}'
+            if [ "$1" = find-identity ]; then cat '{{Path.Combine(tree.Root, "listing.txt")}}'; fi
+            exit 0
+            """.ReplaceLineEndings("\n"));
+        foreach (var stub in (string[])["openssl", "security"])
+        {
+            File.SetUnixFileMode(Path.Combine(bin, stub), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = bin + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+            ["RUNNER_TEMP"] = tree.Root,
+            ["GITHUB_OUTPUT"] = output,
+            ["P12_BASE64"] = Convert.ToBase64String(Encoding.ASCII.GetBytes("made-up-p12-bytes")),
+            ["P12_PASSWORD"] = "made-up-p12-password",
+            ["TEAM_ID"] = listed.EndsWith("space", StringComparison.Ordinal) ? "MADEUPTEAM " : "MADEUPTEAM",
+        };
+
+        var step = Scalar(ActionStep("Import the Developer ID identity into a keychain of this job's own"), "run")!;
+        var ran = Bash(environment, tree.Root, step.Replace("/usr/bin/openssl ", "openssl ", StringComparison.Ordinal));
+
+        Assert.True(ran.Exit == (identity is null ? 1 : 0), $"exit {ran.Exit}\n{ran.Stdout}\n{ran.Stderr}");
+        Assert.Contains("security import", File.ReadAllLines(calls));
+        var handed = File.ReadAllLines(output);
+        if (identity is null)
+        {
+            Assert.Empty(handed);
+            Assert.Equal(
+                "::error title=Signing::The keychain holds no valid Developer ID Application identity of the team the secret names: what find-identity listed is above.",
+                Assert.Single(ran.Stdout.Split('\n'), line => line.StartsWith("::error ", StringComparison.Ordinal)));
+        }
+        else
+        {
+            Assert.Equal(["identity=" + identity, "keychain=" + Path.Combine(tree.Root, "jason-signing.keychain-db")], handed);
+            Assert.DoesNotContain("::error ", ran.Stdout, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(
+            listed.EndsWith("space", StringComparison.Ordinal),
+            ran.Stdout.Contains("::notice title=Signing::The team id secret ends with whitespace", StringComparison.Ordinal));
+        foreach (var never in (string[])["made-up-p12-password", environment["P12_BASE64"], "made-up-p12-bytes"])
+        {
+            Assert.DoesNotContain(never, ran.Stdout + ran.Stderr, StringComparison.Ordinal);
+        }
+
+        // The keychain's password reaches the log once, as the command that masks it.
+        Assert.Equal(
+            "::add-mask::made-up-keychain-password",
+            Assert.Single((ran.Stdout + ran.Stderr).Split('\n'), line => line.Contains("made-up-keychain-password", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The notary is asked with the executable zipped as Apple documents, and waited for, for thirty minutes at most:
+    /// anything but <c>Accepted</c> prints the service's own log of the submission and fails the step. Nothing is stapled:
+    /// a bare executable has no place for the ticket, which Gatekeeper fetches online at the first run of a downloaded copy.
+    /// </summary>
+    [Fact]
+    public void The_notarization_waits_for_the_notary_and_fails_on_anything_but_accepted()
+    {
+        var notarize = ActionStep("Notarize the macOS executable");
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(notarize, "env"), "EXECUTABLE"));
+        var run = Scalar(notarize, "run")!;
+
+        Assert.Contains("ditto -c -k --keepParent \"$EXECUTABLE\" \"$zip\"", run, StringComparison.Ordinal);
+        var submit = Assert.Single(run.Split('\n'), line => line.Contains("notarytool submit", StringComparison.Ordinal));
+        foreach (var flag in (string[])["\"$zip\"", "--key \"$key\"", "--key-id \"$NOTARY_KEY_ID\"", "--issuer \"$NOTARY_ISSUER\"", "--wait", "--timeout 30m"])
+        {
+            Assert.Contains(flag, submit, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("notarytool log \"$id\"", run, StringComparison.Ordinal);
+        Assert.Contains("!= \"Accepted\"", run, StringComparison.Ordinal);
+        Assert.DoesNotContain("stapler", Read(Action) + Read(Release), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The notarization step itself, run as GitHub runs a bash step, against a notary that answers as told: only an
+    /// accepted submission passes; a refused one has its log asked for and fails, as does a wait that ran out and an answer
+    /// that is not one. And none of the made-up secret values reaches what the step printed.
+    /// </summary>
+    [Theory]
+    [InlineData("Accepted", 0, 0, false)]
+    [InlineData("Invalid", 1, 1, true)]
+    [InlineData("In Progress", 0, 1, true)]
+    [InlineData(null, 1, 1, false)]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void The_notarization_step_passes_an_accepted_submission_alone(string? status, int notary, int exit, bool logAsked)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
+
+        using var tree = new TempTree();
+        var bin = Path.Combine(tree.Root, "bin");
+        Directory.CreateDirectory(bin);
+        var calls = Path.Combine(tree.Root, "calls.txt");
+        var answer = status is null ? "notarytool could not reach the service" : $$"""{"id":"0f1e2d3c-made-up","message":"Processing complete","status":"{{status}}"}""";
+
+        // A notary that records what it is asked, never on stdout, and answers as this row says.
+        File.WriteAllText(Path.Combine(bin, "xcrun"), $$"""
+            #!/bin/bash
+            echo "$*" >> '{{calls}}'
+            if [ "$2" = submit ]; then printf '%s\n' '{{answer}}'; exit {{notary}}; fi
+            if [ "$2" = log ]; then echo "the notary's log of $3"; fi
+            """.ReplaceLineEndings("\n"));
+        File.WriteAllText(Path.Combine(bin, "ditto"), "#!/bin/bash\necho \"$*\" >> '" + calls + "'\n: > \"$5\"\n");
+        File.SetUnixFileMode(Path.Combine(bin, "xcrun"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        File.SetUnixFileMode(Path.Combine(bin, "ditto"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+        var executable = Path.Combine(tree.Root, "jason");
+        File.WriteAllText(executable, "not really an executable");
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = bin + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+            ["RUNNER_TEMP"] = tree.Root,
+            ["EXECUTABLE"] = executable,
+            ["NOTARY_KEY"] = "-----BEGIN PRIVATE KEY-----\nmade-up-key-material\n-----END PRIVATE KEY-----",
+            ["NOTARY_KEY_ID"] = "MADEUPKEYID",
+            ["NOTARY_ISSUER"] = "00000000-made-up-issuer",
+        };
+
+        var ran = Bash(environment, tree.Root, Scalar(ActionStep("Notarize the macOS executable"), "run")!);
+
+        Assert.True(ran.Exit == exit, $"exit {ran.Exit}\n{ran.Stdout}\n{ran.Stderr}");
+        var asked = File.ReadAllLines(calls);
+        Assert.Contains(asked, line => line.StartsWith("notarytool submit ", StringComparison.Ordinal) && line.Contains("--wait", StringComparison.Ordinal));
+        Assert.Equal(logAsked, asked.Any(line => line.StartsWith("notarytool log 0f1e2d3c-made-up ", StringComparison.Ordinal)));
+        Assert.Equal(environment["NOTARY_KEY"] + "\n", File.ReadAllText(Path.Combine(tree.Root, "jason-notary.p8")));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(Path.Combine(tree.Root, "jason-notary.p8")));
+
+        foreach (var secret in (string[])["made-up-key-material", "MADEUPKEYID", "00000000-made-up-issuer"])
+        {
+            Assert.DoesNotContain(secret, ran.Stdout + ran.Stderr, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Gatekeeper's own question, asked of Apple's service once the notary holds the ticket: the file must be accepted
+    /// from the source "Notarized Developer ID". A command-line tool is not an app, and the execute assessment may refuse
+    /// it as one ("does not seem to be an app"); the assessment Gatekeeper applies to a tool's own signature is asked then,
+    /// and must be accepted from the same source. Any other answer fails the step.
+    /// </summary>
+    [Fact]
+    public void The_assessment_wants_the_executable_accepted_as_notarized_developer_id()
+    {
+        var assess = ActionStep("Assess the macOS executable as Gatekeeper does");
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(assess, "env"), "EXECUTABLE"));
+        var run = Scalar(assess, "run")!;
+
+        Assert.Contains("spctl --assess --type execute --verbose=2 \"$EXECUTABLE\"", run, StringComparison.Ordinal);
+        Assert.Contains("spctl --assess --type open --context context:primary-signature --verbose=2 \"$EXECUTABLE\"", run, StringComparison.Ordinal);
+        Assert.Contains("does not seem to be an app", run, StringComparison.Ordinal);
+        Assert.Contains("source=Notarized Developer ID", run, StringComparison.Ordinal);
+        Assert.EndsWith("exit 1", run.TrimEnd(), StringComparison.Ordinal);
+        Assert.Null(Scalar(assess, "continue-on-error"));
+    }
+
+    /// <summary>
+    /// The assessment step itself, run as GitHub runs a bash step, against an spctl that answers as this row says and a
+    /// sleep that only records how long it was asked to wait. Accepted from the source "Notarized Developer ID" passes,
+    /// on the execute assessment or, for a tool the execute assessment calls no app, on the assessment of its own
+    /// signature. Apple's service may not yet answer for a ticket it has just issued, so anything else is asked again,
+    /// three times in all and twenty seconds apart, before the step fails: accepted from the source "Developer ID" alone,
+    /// which is a signature without a ticket, and rejected.
+    /// </summary>
+    [Theory]
+    [InlineData("accepted on execute", 0, "spctl execute")]
+    [InlineData("not an app, then accepted on open", 0, "spctl execute, spctl open")]
+    [InlineData("rejected, then accepted on execute", 0, "spctl execute, sleep 20, spctl execute")]
+    [InlineData("accepted from developer id alone", 1, "spctl execute, sleep 20, spctl execute, sleep 20, spctl execute")]
+    [InlineData("not an app, then developer id alone on open", 1, "spctl execute, spctl open, sleep 20, spctl execute, spctl open, sleep 20, spctl execute, spctl open")]
+    [InlineData("rejected", 1, "spctl execute, sleep 20, spctl execute, sleep 20, spctl execute")]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void The_assessment_step_asks_three_times_and_passes_notarized_developer_id_alone(string answers, int exit, string asked)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
+
+        const string Notarized = "printf 'jason: accepted\\nsource=Notarized Developer ID\\n'; exit 0";
+        const string Signed = "printf 'jason: accepted\\nsource=Developer ID\\n'; exit 0";
+        const string Rejected = "printf 'jason: rejected\\nsource=Unnotarized Developer ID\\n' >&2; exit 3";
+        const string NotAnApp = "printf 'jason: rejected (the code is valid but does not seem to be an app)\\n' >&2; exit 3";
+        var said = answers switch
+        {
+            "accepted on execute" => $"execute:*) {Notarized} ;;",
+            "not an app, then accepted on open" => $"execute:*) {NotAnApp} ;;\n  open:*) {Notarized} ;;",
+            "rejected, then accepted on execute" => $"execute:1) {Rejected} ;;\n  execute:*) {Notarized} ;;",
+            "accepted from developer id alone" => $"execute:*) {Signed} ;;",
+            "not an app, then developer id alone on open" => $"execute:*) {NotAnApp} ;;\n  open:*) {Signed} ;;",
+            _ => $"execute:*) {Rejected} ;;",
+        };
+
+        using var tree = new TempTree();
+        var bin = Path.Combine(tree.Root, "bin");
+        Directory.CreateDirectory(bin);
+        var calls = Path.Combine(tree.Root, "calls.txt");
+        File.WriteAllText(calls, string.Empty);
+
+        // The assessment's kind is its third argument; the answer is this row's for that kind and that try.
+        File.WriteAllText(Path.Combine(bin, "spctl"), $$"""
+            #!/bin/bash
+            echo "spctl $3" >> '{{calls}}'
+            case "$3:$(grep -c "^spctl $3\$" '{{calls}}')" in
+              {{said}}
+            esac
+            exit 9
+            """.ReplaceLineEndings("\n"));
+        File.WriteAllText(Path.Combine(bin, "sleep"), "#!/bin/bash\necho \"sleep $*\" >> '" + calls + "'\n");
+        foreach (var stub in (string[])["spctl", "sleep"])
+        {
+            File.SetUnixFileMode(Path.Combine(bin, stub), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = bin + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+            ["RUNNER_TEMP"] = tree.Root,
+            ["EXECUTABLE"] = Path.Combine(tree.Root, "jason"),
+        };
+
+        var ran = Bash(environment, tree.Root, Scalar(ActionStep("Assess the macOS executable as Gatekeeper does"), "run")!);
+
+        Assert.True(ran.Exit == exit, $"exit {ran.Exit}\n{ran.Stdout}\n{ran.Stderr}");
+        Assert.Equal(asked, string.Join(", ", File.ReadAllLines(calls)));
+        Assert.Equal(exit, ran.Stdout.Split('\n').Count(line => line.StartsWith("::error title=Gatekeeper::", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The file the smoke test runs is the file the action signed, and the archive's copy is read for its signature on
+    /// the leg: unpacked from the archive a person downloads, verified, and its Developer ID authority required, rather
+    /// than trusted to be the same file. And after the smoke test, a step lists who signed each native library the bundle
+    /// unpacked: a reading that decides whether <c>disable-library-validation</c> can go, which never fails the job.
+    /// </summary>
+    [Fact]
+    public void The_smoke_test_runs_the_signed_file_and_the_archived_copy_is_read_for_its_signature()
+    {
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(Mapping(Parse(Read(Action)), "outputs"), "executable"), "value"));
+
+        var steps = JobSteps(MacosJob()).ToList();
+        var smoke = MacosStep(step => Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true);
+        Assert.Equal("${{ steps.package.outputs.executable }}", Scalar(Mapping(smoke, "env"), "EXECUTABLE"));
+        Assert.EndsWith("exit 0", Scalar(smoke, "run")!.TrimEnd(), StringComparison.Ordinal);
+
+        var libraries = MacosStep(step => Scalar(step, "name") == "Read who signed each native library the bundle unpacked");
+        Assert.True(steps.IndexOf(libraries) > steps.IndexOf(smoke), "The native libraries are read before the smoke test unpacks them.");
+        var listed = Scalar(libraries, "run")!;
+        Assert.Contains("'.net/jason'", listed, StringComparison.Ordinal);
+        Assert.Contains("codesign -dv", listed, StringComparison.Ordinal);
+        Assert.Contains("catch", listed, StringComparison.Ordinal);
+
+        var archived = MacosStep(step => Scalar(step, "name") == "Read the signature of the archived macOS executable");
+        Assert.Null(Node(archived, "if"));
+        Assert.Null(Node(archived, "continue-on-error"));
+        Assert.Equal("${{ steps.package.outputs.archive }}", Scalar(Mapping(archived, "env"), "ARCHIVE"));
+        var run = Scalar(archived, "run")!;
+        foreach (var part in (string[])["tar -xzf \"$ARCHIVE\"", "codesign --verify --strict --verbose=2", "codesign --display --verbose=4", "Authority=Developer ID Application: "])
+        {
+            Assert.Contains(part, run, StringComparison.Ordinal);
+        }
+    }
+
     // --- the notes --------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Which half of a release is signed, said where a person downloading it reads: the macOS executable carries Reply's
+    /// Developer ID and is notarized, and Gatekeeper fetches the ticket online at the first run of a copy a browser
+    /// downloaded, which is all the notes claim of that run; what a reader checks to know the signature is Reply's is
+    /// named, the Authority line and the team id, since Gatekeeper accepts any notarized Developer ID. The Linux and
+    /// Windows executables are not signed, SmartScreen stops the Windows one as before, and on both the checksum is the
+    /// only provenance. The sentence that nothing is signed is gone from every page that said it.
+    /// </summary>
     [Fact]
-    public void The_notes_say_plainly_that_nothing_is_signed() =>
-        Assert.Contains("Nothing in this release is signed or notarized.", Read(Notes), StringComparison.Ordinal);
+    public void The_notes_say_which_half_of_a_release_is_signed()
+    {
+        var notes = Regex.Replace(Read(Notes), @"\s+", " ");
+        Assert.Contains("The macOS executable is signed with Reply's Developer ID and notarized by Apple.", notes, StringComparison.Ordinal);
+        Assert.Contains("checks the notarization with Apple, online, the first time", notes, StringComparison.Ordinal);
+        Assert.Contains("The Linux and Windows executables are not signed, and nothing else a release carries is either.", notes, StringComparison.Ordinal);
+        Assert.Contains("stopped by SmartScreen the first time it runs", notes, StringComparison.Ordinal);
+        Assert.Contains("On Linux and Windows that check is the only provenance there is", notes, StringComparison.Ordinal);
+        foreach (var checkable in (string[])["`codesign -dv --verbose=2`", "`Authority=Developer ID Application:`", "`TeamIdentifier=`"])
+        {
+            Assert.Contains(checkable, notes, StringComparison.Ordinal);
+        }
+
+        // What no run has shown: a quarantined launch was never made, so the notes do not say how it ends.
+        Assert.DoesNotContain("lets it start", notes, StringComparison.Ordinal);
+        Assert.DoesNotContain("On Windows that check is the only provenance", notes, StringComparison.Ordinal);
+        Assert.Contains("the Linux executable is not signed", Regex.Replace(Read(["docs", "architecture.md"]), @"\s+", " "), StringComparison.Ordinal);
+
+        foreach (var page in (string[][])[Notes, ["README.md"], ["docs", "INSTALL.md"], ["docs", "release-and-update.md"], ["docs", "architecture.md"]])
+        {
+            Assert.DoesNotMatch(@"(?i)nothing (in (this|a) release )?is signed", Regex.Replace(Read(page), @"\s+", " "));
+        }
+    }
 
     /// <summary>
     /// PB7: the fact a dry run's reader needs, where they will read it — the template, which is where whoever

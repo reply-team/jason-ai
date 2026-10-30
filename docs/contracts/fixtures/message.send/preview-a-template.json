@@ -29,13 +29,14 @@
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Send marta@example.com a message by email, from the provider's account s_12 (ann@example.com), outside any campaign — subject: The Lisbon meetup, {{contact.first_name}}; text: Hi {{contact.first_name}}, {{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing? {{sender.first_name}}",
+    "summary": "Send marta@example.com a message by email, from the provider's account s_12 (ann@example.com), outside any campaign — subject: The Lisbon meetup, {{contact.first_name}}; text: Hi {{contact.first_name}}, {{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing? {{sender.first_name}}; send after: —",
     "highlights": {
       "/contacts/0/channels/0/value": "marta@example.com",
       "/args/channel": "email",
       "/args/sender": { "external_id": "s_12", "address": "ann@example.com" },
       "/args/message": { "format": "email", "compose": "template", "subject": "The Lisbon meetup, {{contact.first_name}}", "body": "Hi {{contact.first_name}},\n{{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing?\n{{sender.first_name}}" },
-      "/args/message/compose": "template"
+      "/args/message/compose": "template",
+      "/args/send_after": null
     },
     "example": {
       "subject": "The Lisbon meetup, Marta",

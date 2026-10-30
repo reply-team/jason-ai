@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace Jason.Contracts.Plugins;
 
@@ -14,7 +15,10 @@ public sealed record InvocationPlugin(string Id, string Version, PluginKind Kind
 
 /// <summary>
 /// What the plugin is allowed to know about why it is running. Opaque to the runtime, non-secret by contract,
-/// and the only place a caller can pass something of its own (the binding).
+/// and the only place a caller can pass something of its own (the binding). <c>UnsettledSince</c> is when the
+/// earliest earlier attempt of the work item that may have acted was claimed, in UTC; where none did it is null, and the
+/// envelope carries no key for it. <c>UnsettledReference</c> is the provider's reference for the work item's send that the
+/// latest such attempt to return one returned, null and without a key where none did: a provider identifier only.
 /// </summary>
 public sealed record InvocationContext(
     JsonObject? Binding,
@@ -22,7 +26,9 @@ public sealed record InvocationContext(
     int? AttemptNumber,
     string? WorkItemId,
     string? CampaignId,
-    string RuntimeVersion);
+    string RuntimeVersion,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? UnsettledSince = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? UnsettledReference = null);
 
 /// <summary>
 /// One executable the plugin may start, named in the manifest and resolved to a path by the runtime.

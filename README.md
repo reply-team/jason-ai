@@ -149,7 +149,7 @@ performs it in its own process, and what ran is pinned to the attempt — the pa
 the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh runtime routes nothing
 anywhere until somebody writes a route: work with no route fails at the claim with `no_route`. An operation that
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
-such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twenty-two published
+such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twenty-four published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
 CLI, signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program,
 and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of

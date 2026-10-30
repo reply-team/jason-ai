@@ -504,6 +504,7 @@ public static class RuntimeHost
         builder.Services.AddHostedService<PatternWarmUp>();
         builder.Services.AddScoped<JournalWriter>();
         builder.Services.AddScoped<AttemptOutcomes>();
+        builder.Services.AddScoped<SentFacts>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
         builder.Services.AddSystemModule().AddCampaignModule().AddProjectModule().AddPreferenceModule().AddContactModule();
         builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddEventsModule().AddNotificationsModule().AddCommandModule().AddUiModule();

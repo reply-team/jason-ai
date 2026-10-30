@@ -36,6 +36,10 @@ export const COMMANDS = {
     "kind": "read",
     "note": "One thread, its subject, and one page of its messages: what conversation.get answers from, and the read conversation.reply makes of the thread's channel and person, one message long, before it sends anything."
   },
+  "inbox changes": {
+    "kind": "read",
+    "note": "One page of Reply's change feed: the threads that moved in the account, oldest first, from a cursor or from a moment within the last 30 days, each with its identifiers, its moment and who moved it. What events.read answers from."
+  },
   "inbox categories": {
     "kind": "read",
     "note": "The account's inbox categories, Reply's reserved ones included: what conversation.classify matches the category it was given against, by identifier or by name, before it files anything."
@@ -108,6 +112,14 @@ export const COMMANDS = {
     "kind": "read",
     "note": "Who the credential signs in as: the one Reply user whose accounts sender.list offers under `own`. Only the user's id is read; the login name beside it is the operator's and is not kept."
   },
+  "direct-send get": {
+    "kind": "read",
+    "note": "A direct send Reply keeps, by its reference. Asked for two things. Of `email-1`, for every channel, before a send that names a moment and before a repeat after an attempt that may have sent: whether the account's Reply keeps direct sends — its own answer about the send it names, against no route at all. And first on a repeat, of the send an earlier attempt that may have sent returned (`context.unsettled_reference`): Reply's record of it, whose state answers the work item with nothing sent. And of the send the runtime names under `send.reference`: what message.status answers from."
+  },
+  "direct-send cancel": {
+    "kind": "write",
+    "note": "Takes back a direct send Reply still holds for its moment, by its reference, and answers with Reply's record of it. One cancelled before answers as it stands, so a repeat after a lost answer changes nothing; one that went, that Reply is sending or that failed is refused, and nothing is changed. What message.cancel answers from."
+  },
   "account list": {
     "kind": "read",
     "note": "The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what sender.list answers from."
@@ -118,23 +130,23 @@ export const COMMANDS = {
   },
   "contact linkedin-connect": {
     "kind": "write",
-    "note": "Invites the contact to connect on LinkedIn from the account named, with the note on stdin or with none. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Invites the contact to connect on LinkedIn from the account named, with the note on stdin or with none. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice."
   },
   "contact send-email": {
     "kind": "write",
-    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice."
   },
   "contact linkedin-message": {
     "kind": "write",
-    "note": "Sends the contact one LinkedIn message from the account named, outside any sequence, with the text on stdin; the contact has to be a connection of the account. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one LinkedIn message from the account named, outside any sequence, with the text on stdin; the contact has to be a connection of the account. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice."
   },
   "contact linkedin-inmail": {
     "kind": "write",
-    "note": "Sends the contact one InMail from the account named, outside any sequence, with the subject and the text on stdin. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one InMail from the account named, outside any sequence, with the subject and the text on stdin. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice."
   },
   "contact linkedin-voice": {
     "kind": "write",
-    "note": "Sends the contact one voice message from the account named, outside any sequence, which Reply speaks from the script on stdin; the contact has to be a connection of the account. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. A send Reply keeps no key on, so a lost answer is never repeated."
+    "note": "Sends the contact one voice message from the account named, outside any sequence, which Reply speaks from the script on stdin; the contact has to be a connection of the account. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice."
   }
 };
 
@@ -144,8 +156,19 @@ export const COMMANDS = {
 // `reply.invalid_request:message` one whose fields name a send's text — and
 // `reply.refused:inboxThread.invalidInput:RenderingFail` the row for a refusal Reply explained by its own code and by the
 // first word of its sentence, up to the first colon or white space. A key that starts `template:` is that row only for a
-// send composed as a template: Reply answers a template it could not fill in under the code it gives a mailbox that
-// failed, so the same refusal of a final text keeps the row it has.
+// send composed as a template, before the code alone: Reply answers a template it could not fill in under the code it
+// gives a mailbox that failed, and a LinkedIn text it could not fill in under the code it gives a final text holding a
+// placeholder, so the same refusal of a final text keeps the row it has. A key `cursor:reply.refused:400` is that row only
+// for a read handed a cursor, and only for a refusal at that status Reply explained by a code of its own.
+//
+// `usage` alone is an exit 2 the CLI gave no code for: commander's own refusal of a command or a flag it does not know,
+// written as text. An operation without that key reports it as `call_refused_before_it_was_sent`, as it reports every
+// `usage.*`.
+//
+// `reply.refused:404` is a refusal at 404 with no code of Reply's own, which is how Reply's API answers a route it does
+// not have. The CLI passes such a 404 through as it is only on the direct sends, `inbox categorize` and the membership
+// check of `sequence add-contact` and `sequence remove-contact`; its other commands read a 404 as the thing they asked
+// for not being found. A 404 Reply explains with a code keeps the row that code has.
 //
 // `outcome.unknown` is never looked up here for a work command: the CLI answers it with exit 3, and `cli.js` reads an
 // exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
@@ -164,6 +187,7 @@ export const CODES = {
     "outcome.unknown": "answer_lost_on_a_write",
     "sequence.busy": "reply_busy",
     "reply.refused": "refusal_this_version_has_no_word_for",
+    "reply.refused:404": "route_not_offered",
     "reply.invalid_request": "refusal_this_version_has_no_word_for"
   },
   "per_operation": {
@@ -281,6 +305,12 @@ export const CODES = {
     "schedule.list": {
       "network": "reply_not_reached"
     },
+    "events.read": {
+      "inbox.cursor_expired": "cursor_not_held",
+      "inbox.cursor_refused": "cursor_not_held",
+      "cursor:reply.refused:400": "cursor_not_held",
+      "usage": "command_not_known"
+    },
     "social_invitation.send": {
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
@@ -297,10 +327,28 @@ export const CODES = {
       "reply.invalid_request:message": "note_too_long",
       "linkedin.missing_variables": "text_would_render",
       "linkedin.feature_disabled": "feature_not_included",
-      "access.feature_unavailable": "feature_not_included"
+      "access.feature_unavailable": "feature_not_included",
+      "idempotency_key.in_use": "key_in_use"
+    },
+    "message.status": {
+      "direct_send.not_found": "send_not_found",
+      "direct_send.not_owned": "send_not_found",
+      "usage.reference": "send_not_found"
+    },
+    "message.cancel": {
+      "direct_send.not_found": "send_not_found",
+      "direct_send.not_owned": "send_not_found",
+      "usage.reference": "send_not_found",
+      "direct_send.already_sent": "send_already_sent",
+      "direct_send.already_failed": "send_already_failed"
     },
     "message.send": {
       "template:reply.refused:contact.unknown:RenderingFail": "template_not_filled",
+      "template:contact.missing_variables": "template_not_filled",
+      "template:contact.rendering_failed": "template_not_filled",
+      "template:linkedin.missing_variables": "template_not_filled",
+      "contact.missing_variables": "text_would_render",
+      "contact.rendering_failed": "text_would_render",
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
       "contact.invalid_email": "invalid_channel_value",
@@ -325,14 +373,16 @@ export const CODES = {
       "linkedin.voice_too_long": "text_too_long",
       "linkedin.missing_variables": "text_would_render",
       "linkedin.feature_disabled": "feature_not_included",
-      "access.feature_unavailable": "feature_not_included"
+      "access.feature_unavailable": "feature_not_included",
+      "idempotency_key.in_use": "key_in_use"
     }
   }
 };
 
 // The table itself. `shared` holds the rows every operation this package performs declares; `per_operation` holds
 // the rows one operation declares and another does not — the documents do not publish the same failure codes,
-// and a shared row naming a code an operation never declared would be a code the runtime refuses. Each row says
+// and a shared row naming a code an operation never declared would be a code the runtime refuses. The one exception
+// is `capability_not_offered`, which no document declares and the runtime admits beside every operation. Each row says
 // `when` it applies, the `code` and `class` it reports, and the `note` an operator reads, which is also the
 // message the failure carries.
 export const ROWS = {
@@ -390,6 +440,13 @@ export const ROWS = {
       "code": "provider_call_failed",
       "class": "permanent",
       "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
+    },
+    "route_not_offered": {
+      "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's API has no route for the call, so the account's Reply does not offer it yet. The CLI passes such a 404 through as it is only on the direct sends, `inbox categorize` and the membership check of `sequence add-contact` and `sequence remove-contact`.",
+      "code": "capability_not_offered",
+      "class": "permanent",
+      "quotes": "operation",
+      "note": "Reply does not offer this operation yet — its API has no route for the call — so nothing was done there. Asking again meets the same answer, so the attempt is not repeated; what to do instead is the agent's to choose."
     },
     "account_or_sender_blocked": {
       "when": "Not reported yet for the account. The CLI publishes no code that says Reply refused a call for the account's money or plan or a revoked key, and did nothing for it; this row is where such a code lands once it does (see the README, \"Endings every operation can meet\"). A sending account Reply refused for its own state is the sender's block, on the two sends' own rows.",
@@ -966,7 +1023,7 @@ export const ROWS = {
         "when": "The input carries no `first_name`, `last_name`, `company`, `title` or `time_zone` for the person at all — absent, not null — which only a runtime older than 0.14.0, whose documents projected the person's identifier and channel alone, composes, so it is reported in a code that runtime's documents already declare. Decided before any call; the cause and the fields it lacks travel in the trace.",
         "code": "invalid_channel_value",
         "class": "validation",
-        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.14.0 or newer; the attempt's trace names the fields."
+        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.22.0 or newer; the attempt's trace names the fields."
       },
       "feature_not_included": {
         "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not change a contact.",
@@ -1138,7 +1195,7 @@ export const ROWS = {
         "when": "The input carries no `first_name`, `last_name`, `company`, `title` or `time_zone` for the person at all — absent, not null — which only a runtime older than 0.14.0, whose documents projected the person's identifier and channel alone, composes, so it is reported in a code that runtime's documents already declare. Decided before any call; the cause and the fields it lacks travel in the trace.",
         "code": "invalid_channel_value",
         "class": "validation",
-        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.14.0 or newer; the attempt's trace names the fields."
+        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.22.0 or newer; the attempt's trace names the fields."
       },
       "patch_answer_lost": {
         "when": "Writing the consumed profile onto a contact that held none timed out, exited 3 or answered something that is not a result. Nothing was sent, and the next attempt reads the contact again first.",
@@ -1151,6 +1208,70 @@ export const ROWS = {
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "Reply's list of accounts did not end, so the sender could not be found in it and nothing was sent."
+      },
+      "key_in_use": {
+        "when": "The CLI answered `idempotency_key.in_use`: Reply is still finishing the send an earlier attempt of this work item made under the same key, and this one sent nothing.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply says the first attempt under this key is still being finished, so this one sent nothing. The runtime repeats the attempt, which Reply then answers with the send the first one made, or lets go through where that one failed."
+      },
+      "linkedin_send_failed": {
+        "when": "The CLI answered Reply's own `directLinkedIn.unknown` at status 400 — reply-cli from 0.17.1 as `outcome.unknown`, 0.17.0 as `reply.refused` — in any shape: naming the invitation by its reference or not, in the state `failed` or another. It is a failure Reply answered, and Reply releases the key of a send it answered so, so a repeat under the key would be a new send. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "quotes": "reply",
+        "note": "Reply answered the invitation with a failure on LinkedIn: it lost track of it, or says it did not go. It is not repeated, since a repeat could send it twice. Whether it went is a person's to find out at Reply, and whether to propose it again a person's to decide."
+      },
+      "send_answered_with_a_failure": {
+        "when": "Reply answered the send with a failure at a status of 400 to 499, other than a 409 or a 429, that the CLI passes on as a lost answer (`outcome.unknown`, exit 3): Reply releases the key of a send it answered so, so a repeat under the key would be a new send. Only an ending with no answer of Reply's, none at all or one at 500 or above, is the lost answer. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "quotes": "reply",
+        "note": "Reply answered the invitation with a failure, and keeps no key for a send it answered so, so a repeat could send it twice; it is not repeated. Whether it went is a person's to find out at Reply, and whether to propose it again a person's to decide."
+      },
+      "send_failed_at_reply": {
+        "when": "The send's answer, what Reply holds under the key for another request (`idempotency_key.reused`), or Reply's record of the send an earlier attempt returned (`context.unsettled_reference`, read by `reply direct-send get`) gives the invitation's state as `failed`: Reply took it and says it did not go. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "quotes": "reply",
+        "note": "Reply took the invitation and says it did not go. Whether to propose it again is a person's to decide."
+      },
+      "send_cancelled_at_reply": {
+        "when": "The send's answer, what Reply holds under the key for another request (`idempotency_key.reused`), or Reply's record of the send an earlier attempt returned (`context.unsettled_reference`, read by `reply direct-send get`) gives the invitation's state as `cancelled`: it was cancelled at Reply before it went. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The invitation was cancelled at Reply before it went, so nothing was sent. Whether to propose it again is a person's to decide."
+      },
+      "send_after_not_offered": {
+        "when": "The arguments name a moment still ahead in `send_after`, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not keep a direct send for a later moment. Decided before the send; nothing is sent.",
+        "code": "capability_not_offered",
+        "class": "permanent",
+        "quotes": "operation",
+        "note": "The account's Reply does not keep a direct send for a later moment, so the invitation that names one in `send_after` was not sent: it goes at that moment or not at all. Asking again meets the same answer; what to do instead is the agent's to choose."
+      },
+      "send_after_unreadable": {
+        "when": "The arguments name a moment in `send_after` that this package's `Date.parse` cannot read — the claim refuses any form but the one the document names, so this is a moment that form admits and the runtime does not read, or one given past the claim. It is never read as a moment already past. Decided before anything is read; nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The moment in `send_after` is not one this package can read, so the invitation was not sent: it goes at the moment a person approved or not at all. Asking again meets the same answer; the moment is the agent's to write again."
+      },
+      "send_not_settled": {
+        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — where `reply direct-send get` answered that Reply's API has no route for it: the account's Reply keeps no key on a direct send, so the repeat could send the person a second invitation. Decided before the send; nothing is sent.",
+        "code": "send_not_settled",
+        "class": "permanent",
+        "note": "The account's Reply keeps no key on a direct send, so repeating this invitation could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
+      },
+      "send_not_settled_after_the_window": {
+        "when": "A repeat 23 hours or more after `context.unsettled_since`, the moment the earliest attempt that may have sent was claimed: Reply keeps a direct send's key for a day, so the key may no longer settle the repeat. Where the runtime names the send such an attempt returned (`context.unsettled_reference`), Reply's record of it was read first and said nothing of it. Decided before the send; nothing is sent.",
+        "code": "send_not_settled",
+        "class": "permanent",
+        "note": "An earlier attempt of this invitation may have sent it 23 hours or more ago, longer than Reply surely keeps the key it went under, so repeating it could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
+      },
+      "send_not_settled_not_owned": {
+        "when": "A repeat told the send an earlier attempt returned (`context.unsettled_reference`), and `reply direct-send get` of it answered `direct_send.not_owned`: Reply holds that send for an account this one is not, so what Reply keeps under the key there settles nothing from here. Decided before the send, inside the window and past it; nothing is sent.",
+        "code": "send_not_settled",
+        "class": "permanent",
+        "note": "An earlier attempt of this invitation may have sent it from an account of Reply's this one is not, so repeating it here could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
       },
       "feature_not_included": {
         "when": "The CLI answered `linkedin.feature_disabled` — Reply's code travels in the trace — or `access.feature_unavailable`: the account's plan or role does not include LinkedIn sends outside a sequence, or its LinkedIn accounts.",
@@ -1244,14 +1365,21 @@ export const ROWS = {
         "quotes": "reason",
         "note": "Nothing was sent. Write the text the comparison compares without that character, or send the message as final text, and propose it again."
       },
-      "template_off_email": {
-        "when": "The message is composed as a template in a LinkedIn format: only an email may be one. The document refuses it first; this is the package's own check behind it. Decided before any call.",
+      "template_names_a_field_reply_lacks": {
+        "when": "The message is composed as a template on LinkedIn that names `sender.last_name`, or names `sender.address` with no fallback where the arguments hold no address: Reply has no variable for either on LinkedIn, and the package writes in its place only the address the arguments hold, so there is nothing to write. Decided before any call.",
         "code": "template_unsupported",
         "class": "validation",
-        "note": "Only an email is sent as a template, so nothing was sent. Write the LinkedIn message as final text, and propose it again."
+        "quotes": "reason",
+        "note": "Nothing was sent. Name the sender by `sender.first_name` or `sender.name`, give `sender.address` a fallback, or write the name out, and propose the message again."
+      },
+      "template_on_a_voice_script": {
+        "when": "The message is composed as a template in a voice message: Reply speaks a voice message from a final script alone. The document refuses it first; this is the package's own check behind it. Decided before any call.",
+        "code": "template_unsupported",
+        "class": "validation",
+        "note": "A voice message is spoken from a final script, so nothing was sent. Write the script as final text, and propose it again."
       },
       "template_not_filled": {
-        "when": "The message is composed as a template, and Reply refused the send because it could not fill the template in for this person: reply-cli's `reply.refused` with Reply's code `contact.unknown` and a sentence that starts `RenderingFail`. Reply fills a template in before it sends anything, so nothing was sent.",
+        "when": "The message is composed as a template, and Reply refused the send because it could not fill the template in for this person: reply-cli's `contact.missing_variables`, with the names Reply could not fill where it lists them, or `contact.rendering_failed` on an email, `linkedin.missing_variables` on LinkedIn, or `reply.refused` with Reply's code `contact.unknown` and a sentence that starts `RenderingFail`. Reply fills a template in before it sends a message that goes now, so nothing was sent.",
         "code": "template_unrendered",
         "class": "validation",
         "quotes": "reply",
@@ -1264,7 +1392,7 @@ export const ROWS = {
         "note": "The message's format belongs to another channel than the one the call named, so it could not go as a person approved it. Nothing was sent. Name the format of the channel, or the channel of the format, and propose the message again."
       },
       "text_would_render": {
-        "when": "The CLI answered `linkedin.missing_variables`: Reply read part of a LinkedIn text as a placeholder of its own and could not fill it in.",
+        "when": "The CLI answered `linkedin.missing_variables`, or on an email `contact.missing_variables` or `contact.rendering_failed`, to a message written as final text: Reply read part of the text as a placeholder of its own and could not fill it in.",
         "code": "message_invalid",
         "class": "validation",
         "note": "Reply read part of the text as a placeholder it fills in for each person and could not fill it in, so nothing was sent: what would have gone out was not the message a person approved. Write it without anything Reply reads as a placeholder and propose the message again."
@@ -1373,7 +1501,7 @@ export const ROWS = {
         "when": "The input carries no `first_name`, `last_name`, `company`, `title` or `time_zone` for the person at all — absent, not null — which only a runtime older than 0.14.0, whose documents projected the person's identifier and channel alone, composes, so it is reported in a code that runtime's documents already declare. Decided before any call; the cause and the fields it lacks travel in the trace.",
         "code": "invalid_channel_value",
         "class": "validation",
-        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.14.0 or newer; the attempt's trace names the fields."
+        "note": "This installation's Jason handed the package less of the person than the operation's document projects, so a person Reply holds nobody for could not be created under the name Jason holds, and nothing was called. Update Jason to 0.22.0 or newer; the attempt's trace names the fields."
       },
       "patch_answer_lost": {
         "when": "Writing the consumed profile onto a contact that held none timed out, exited 3 or answered something that is not a result. Nothing was sent, and the next attempt reads the contact again first.",
@@ -1387,11 +1515,210 @@ export const ROWS = {
         "class": "permanent",
         "note": "Reply's list of accounts did not end, so the sender could not be found in it and nothing was sent."
       },
+      "key_in_use": {
+        "when": "The CLI answered `idempotency_key.in_use`: Reply is still finishing the send an earlier attempt of this work item made under the same key, and this one sent nothing.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply says the first attempt under this key is still being finished, so this one sent nothing. The runtime repeats the attempt, which Reply then answers with the send the first one made, or lets go through where that one failed."
+      },
+      "linkedin_send_failed": {
+        "when": "The CLI answered Reply's own `directLinkedIn.unknown` at status 400 — reply-cli from 0.17.1 as `outcome.unknown`, 0.17.0 as `reply.refused` — in any shape: naming the LinkedIn message by its reference or not, in the state `failed` or another. It is a failure Reply answered, and Reply releases the key of a send it answered so, so a repeat under the key would be a new send. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "quotes": "reply",
+        "note": "Reply answered the message with a failure on LinkedIn: it lost track of it, or says it did not go. It is not repeated, since a repeat could send it twice. Whether it went is a person's to find out at Reply, and whether to propose it again a person's to decide."
+      },
+      "send_answered_with_a_failure": {
+        "when": "Reply answered the send with a failure at a status of 400 to 499, other than a 409 or a 429, that the CLI passes on as a lost answer (`outcome.unknown`, exit 3): Reply releases the key of a send it answered so, so a repeat under the key would be a new send. Only an ending with no answer of Reply's, none at all or one at 500 or above, is the lost answer. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "quotes": "reply",
+        "note": "Reply answered the message with a failure, and keeps no key for a send it answered so, so a repeat could send it twice; it is not repeated. Whether it went is a person's to find out at Reply, and whether to propose it again a person's to decide."
+      },
+      "send_failed_at_reply": {
+        "when": "The send's answer, what Reply holds under the key for another request (`idempotency_key.reused`), or Reply's record of the send an earlier attempt returned (`context.unsettled_reference`, read by `reply direct-send get`) gives the message's state as `failed`: Reply took it and says it did not go. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "quotes": "reply",
+        "note": "Reply took the message and says it did not go. Whether to propose it again is a person's to decide."
+      },
+      "send_cancelled_at_reply": {
+        "when": "The send's answer, what Reply holds under the key for another request (`idempotency_key.reused`), or Reply's record of the send an earlier attempt returned (`context.unsettled_reference`, read by `reply direct-send get`) gives the message's state as `cancelled`: it was cancelled at Reply before it went. The reference, where Reply names one, is kept on the attempt.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The message was cancelled at Reply before it went, so nothing was sent. Whether to propose it again is a person's to decide."
+      },
+      "send_after_not_offered": {
+        "when": "The arguments name a moment still ahead in `send_after`, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not keep a direct send for a later moment. Decided before the send; nothing is sent.",
+        "code": "capability_not_offered",
+        "class": "permanent",
+        "quotes": "operation",
+        "note": "The account's Reply does not keep a direct send for a later moment, so the message that names one in `send_after` was not sent: it goes at that moment or not at all. Asking again meets the same answer; what to do instead is the agent's to choose."
+      },
+      "schedule_not_offered": {
+        "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not time a direct send by a schedule. Decided before the send; nothing is sent.",
+        "code": "capability_not_offered",
+        "class": "permanent",
+        "quotes": "operation",
+        "note": "The account's Reply does not time a direct send by a schedule, so the message that names one in `provider.schedule_id` was not sent: it goes by the schedule or not at all. Asking again meets the same answer; what to do instead is the agent's to choose."
+      },
+      "provider_unreadable": {
+        "when": "The work item carries the provider's own object beside the arguments (`args.provider`), and it is not an object whose one member is `schedule_id`: it names another member beside it or instead, or none. Decided before anything is read; nothing is sent.",
+        "code": "provider_input_invalid",
+        "class": "validation",
+        "note": "`args.provider` is read on message.send as `{\"schedule_id\": \"<id>\"}` and nothing else, the id of a Reply sending schedule written as a string of its digits; the object given is not that shape."
+      },
+      "provider_schedule_unreadable": {
+        "when": "The provider's own object names a schedule in `provider.schedule_id` that is not a string of a Reply id's digits — a positive whole number up to 2147483647, written without a sign, a space or a leading zero — such as a JSON number, or nothing. Decided before anything is read; nothing is sent.",
+        "code": "provider_input_invalid",
+        "class": "validation",
+        "note": "`args.provider` is read on message.send as `{\"schedule_id\": \"<id>\"}` and nothing else, the id of a Reply sending schedule written as a string of its digits; the object given is not that shape."
+      },
+      "provider_schedule_off_email": {
+        "when": "The provider's own object names a schedule in `provider.schedule_id` for a message on LinkedIn. Reply refuses a schedule on every LinkedIn direct send in this version (scheduleId is not supported for LinkedIn sends in this version, a 400 on each LinkedIn route), so a schedule on a LinkedIn message is refused before any call. Decided before anything is read; nothing is sent.",
+        "code": "provider_input_invalid",
+        "class": "validation",
+        "note": "Reply refuses a schedule on every LinkedIn direct send in this version (scheduleId is not supported for LinkedIn sends in this version, a 400 on each LinkedIn route), so a schedule on a LinkedIn message is refused before any call. Send it without the schedule, or by email."
+      },
+      "send_after_unreadable": {
+        "when": "The arguments name a moment in `send_after` that this package's `Date.parse` cannot read — the claim refuses any form but the one the document names, so this is a moment that form admits and the runtime does not read, or one given past the claim. It is never read as a moment already past. Decided before anything is read; nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The moment in `send_after` is not one this package can read, so the message was not sent: it goes at the moment a person approved or not at all. Asking again meets the same answer; the moment is the agent's to write again."
+      },
+      "send_not_settled": {
+        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — where `reply direct-send get` answered that Reply's API has no route for it: the account's Reply keeps no key on a direct send, so the repeat could send the person a second message. Decided before the send; nothing is sent.",
+        "code": "send_not_settled",
+        "class": "permanent",
+        "note": "The account's Reply keeps no key on a direct send, so repeating this message could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
+      },
+      "send_not_settled_after_the_window": {
+        "when": "A repeat 23 hours or more after `context.unsettled_since`, the moment the earliest attempt that may have sent was claimed: Reply keeps a direct send's key for a day, so the key may no longer settle the repeat. Where the runtime names the send such an attempt returned (`context.unsettled_reference`), Reply's record of it was read first and said nothing of it. Decided before the send; nothing is sent.",
+        "code": "send_not_settled",
+        "class": "permanent",
+        "note": "An earlier attempt of this message may have sent it 23 hours or more ago, longer than Reply surely keeps the key it went under, so repeating it could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
+      },
+      "send_not_settled_not_owned": {
+        "when": "A repeat told the send an earlier attempt returned (`context.unsettled_reference`), and `reply direct-send get` of it answered `direct_send.not_owned`: Reply holds that send for an account this one is not, so what Reply keeps under the key there settles nothing from here. Decided before the send, inside the window and past it; nothing is sent.",
+        "code": "send_not_settled",
+        "class": "permanent",
+        "note": "An earlier attempt of this message may have sent it from an account of Reply's this one is not, so repeating it here could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
+      },
       "feature_not_included": {
         "when": "The CLI answered `linkedin.feature_disabled` — Reply's code travels in the trace — or `access.feature_unavailable`: the account's plan or role does not include LinkedIn sends outside a sequence, or the accounts of the channel.",
         "code": "feature_unavailable",
         "class": "permanent",
         "note": "Reply says this account's plan or role does not include messages outside a sequence on this channel, so nothing was sent. Signing in again would not change it; a plan or a role that includes them would."
+      }
+    },
+    "message.status": {
+      "send_not_found": {
+        "when": "The CLI answered `direct_send.not_found`, or `direct_send.not_owned` for a send Reply holds for an account this one is not, or refused the reference without a call (`usage.reference`).",
+        "code": "send_not_found",
+        "class": "permanent",
+        "note": "Reply holds no send under the reference the runtime keeps for this send, or none this account may see, so nothing was read. No later attempt will find it."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on `direct-send get`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated; raising `Plugins:Exec:OutputBytes` is what lets it through."
+      }
+    },
+    "message.cancel": {
+      "send_not_found": {
+        "when": "The CLI answered `direct_send.not_found`, or `direct_send.not_owned` for a send Reply holds for an account this one is not, or refused the reference without a call (`usage.reference`).",
+        "code": "send_not_found",
+        "class": "permanent",
+        "note": "Reply holds no send under the reference the runtime keeps for this send, or none this account may see, so nothing was cancelled. No later attempt will find it."
+      },
+      "send_already_sent": {
+        "when": "The CLI answered `direct_send.already_sent`, for a send that went or that Reply is sending now, or the cancel answered with a send in the state `sent` or `sending`. Nothing was changed.",
+        "code": "send_not_pending",
+        "class": "permanent",
+        "state": "sent",
+        "note": "The send already went, or Reply is sending it now, so there is nothing left to cancel and nothing was changed. What it became is message.status's to read."
+      },
+      "send_already_failed": {
+        "when": "The CLI answered `direct_send.already_failed`, or the cancel answered with a send in the state `failed`. Nothing was changed.",
+        "code": "send_not_pending",
+        "class": "permanent",
+        "state": "failed",
+        "note": "The send already failed at Reply, so there is nothing left to cancel and nothing was changed. Reply's reason is message.status's to read."
+      }
+    },
+    "events.read": {
+      "program_never_started": {
+        "when": "The CLI could not be started at all: exit code -1, and nothing was read.",
+        "code": "events_unreachable",
+        "class": "transient",
+        "note": "The Reply CLI could not be started, so the account's events were not read. Install it, make sure the runtime's grant names it, and reload the plugins; the runtime reads again later."
+      },
+      "command_not_known": {
+        "when": "The CLI exited 2 with no code of its own, decided before any request was made: commander refused `inbox changes` or one of its flags as one it does not know. A reload refuses a reply-cli older than 0.17.0, so this is one that reports 0.17.0 or newer and lacks the command.",
+        "code": "events_unsupported",
+        "class": "permanent",
+        "note": "The Reply CLI does not know `reply inbox changes` as this package calls it, although the version it reports has the command, so nothing was read. Install a published release of reply-cli and reload the plugins; the inbound sync keeps reading the account's threads page by page, and the runtime asks again after a day."
+      },
+      "call_refused_before_it_was_sent": {
+        "when": "The CLI exited 2 with a usage error it gave a code to (`usage.*`), decided before any request was made: it refused what the call was built from, a moment, a count or a pair of flags this package wrote, or the profile the route names.",
+        "code": "events_unsupported",
+        "class": "permanent",
+        "note": "The Reply CLI refused the call before making it. Nothing reached the account, and a repeat would build the same call, so this is reported rather than retried; it is no sign of an old reply-cli. The CLI's code is in the attempt's trace: a profile is the route's binding to correct, anything else is a defect of this package. The inbound sync keeps reading the account's threads page by page, and the runtime asks again after a day."
+      },
+      "answer_lost_on_a_read": {
+        "when": "The read timed out, exited without an error the CLI explained, printed something that is not a page of the feed — one holding more items than it asked for, or saying more follows with no cursor of Reply's to go on from, among them — or had its answer cut off at `Plugins:Exec:OutputBytes`.",
+        "code": "events_unreachable",
+        "class": "transient",
+        "note": "Reply could not be reached, or did not answer with a page of its change feed. Reading again costs nothing, so the runtime reads again later."
+      },
+      "reply_not_reached": {
+        "when": "The CLI answered `reply.unavailable`: Reply could not be reached, or did not answer after the CLI's own retries.",
+        "code": "events_unreachable",
+        "class": "transient",
+        "note": "Reply could not be reached, so the account's events were not read. The runtime reads again later."
+      },
+      "rate_limited": {
+        "when": "The CLI answered `rate_limited`: Reply asked to wait longer than the CLI waits on its own, and the wait it asked for travels in the trace as `retry_after`.",
+        "code": "events_unreachable",
+        "class": "transient",
+        "note": "Reply asked for the account's events to be read later. The runtime reads again on its own cadence."
+      },
+      "unauthorized": {
+        "when": "The CLI refused for want of a working credential (`auth.*`, exit 2), or answered `access.denied` or `access.feature_unavailable`.",
+        "code": "events_unauthorized",
+        "class": "permanent",
+        "note": "The profile this route names is not signed in, or its key may not read the account's inbox. Sign in with `reply auth login` for that profile, or issue a key with the scope; the runtime tries again after a day."
+      },
+      "refusal_this_version_has_no_word_for": {
+        "when": "The CLI answered `reply.refused`, `reply.invalid_request` naming no cursor, or a code this version does not know.",
+        "code": "events_unreachable",
+        "class": "transient",
+        "note": "Reply refused the read in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing changes at Reply by reading, so the runtime reads again later, at a cadence that doubles while the refusal lasts."
+      },
+      "route_not_offered": {
+        "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's API has no route for the change feed, so the account's Reply does not offer it yet.",
+        "code": "events_unsupported",
+        "class": "permanent",
+        "note": "This account's Reply has no change feed yet, so nothing was read; the inbound sync keeps reading the account's threads page by page. The runtime asks again after a day."
+      },
+      "cursor_not_held": {
+        "when": "The CLI answered `inbox.cursor_expired`, the cursor or the moment older than the 30 days Reply's feed holds, or `inbox.cursor_refused`, a cursor Reply says it never issued, one ahead of its clock among them; or, to a read handed a cursor, `reply.refused` at status 400 with a code of Reply's own.",
+        "code": "events_cursor_unknown",
+        "class": "permanent",
+        "note": "Reply's change feed cannot be read from the point this read started from: it keeps 30 days, and takes only cursors it issued. The runtime reads again by date at once."
+      },
+      "cursor_not_written_here": {
+        "when": "The cursor is none of the three this package writes: `c|` and Reply's cursor, `m|` and a moment, or `u|`, a moment, `|` and Reply's cursor, each moment as `toISOString` writes one. A spent span's `u|` with no cursor of Reply's is among them. Decided before any call.",
+        "code": "events_cursor_unknown",
+        "class": "permanent",
+        "note": "The cursor handed back is not one this version of the package wrote, so it cannot be read from. The runtime reads again by date."
+      },
+      "item_unreadable": {
+        "when": "A page of the feed held an item with no thread identifier or no moment of last activity this package can read. The whole page is refused rather than the item passed over, because the cursor would move past it for good.",
+        "code": "events_unreachable",
+        "class": "transient",
+        "note": "Reply's change feed answered with a thread this package could not read, so the page was not taken and the cursor stays where it was. The runtime reads again later. Should the same thread come back on every read, the source stops being healthy, and the inbound sync reads the campaigns it covers again, so a stuck feed loses no reply."
       }
     }
   }
@@ -1463,6 +1790,22 @@ export function rowOf(operation, error, variant) {
     }
   }
 
+  // A refusal the variant has a row of its own for, by the CLI's code alone: a template Reply could not fill in.
+  if (typeof variant === "string" && has(own, variant + ":" + code)) {
+    return own[variant + ":" + code];
+  }
+
+  // A refusal Reply explained by a code of its own, at a status the variant has a row for whatever the code: a read
+  // handed a cursor, refused at 400, was refused for that cursor.
+  if (typeof variant === "string" && typeof error.reply_code === "string" && has(own, variant + ":" + code + ":" + error.status)) {
+    return own[variant + ":" + code + ":" + error.status];
+  }
+
+  const unknown = unknownKey(code, error);
+  if (unknown !== null && has(CODES.shared, unknown)) {
+    return CODES.shared[unknown];
+  }
+
   if (has(own, code)) {
     return own[code];
   }
@@ -1480,6 +1823,18 @@ export function rowOf(operation, error, variant) {
   }
 
   return "refusal_this_version_has_no_word_for";
+}
+
+// The row of an exit 2 the CLI explained with no code at all, for this operation.
+export function unexplainedRefusalRow(operation) {
+  const own = has(CODES.per_operation, operation) ? CODES.per_operation[operation] : {};
+  return has(own, "usage") ? own["usage"] : "call_refused_before_it_was_sent";
+}
+
+// The key of a refusal that says Reply's API has no route for the call, or null: a refusal at 404 with no code of
+// Reply's own.
+function unknownKey(code, error) {
+  return code === "reply.refused" && typeof error.reply_code !== "string" && error.status === 404 ? code + ":404" : null;
 }
 
 // The canonical code a row reports, for the one decision that turns on it: a campaign Reply has just denied is never
@@ -1507,7 +1862,7 @@ export function describe(value) {
 
 // What a result of an unexpected shape may say in a failure: the identifiers and words reply-cli's results are
 // documented to carry, and nothing else, because anything else a result held could be part of a person's record.
-const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active", "thread_id", "channel", "category_id", "activity_id", "reply_status"];
+const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active", "thread_id", "channel", "category_id", "activity_id", "reply_status", "reference", "state", "send_after"];
 
 export function evidence(result) {
   const kept = {};
@@ -1544,14 +1899,21 @@ export function fail(operation, observed, learned) {
     provider_item: observed.provider_item,
     // Reply's own reason for a message it took and could not deliver, where it recorded one.
     provider_status_code: observed.provider_status_code,
+    // The names of a template Reply could not fill in, as Reply names them, where it listed them.
+    missing_variables: observed.missing_variables,
     // What this package itself could not do, for the endings that are its own refusal.
     reason: observed.reason,
     retry_after: observed.retry_after,
     // Which of a sender's allowances is spent, where the provider said: daily or weekly.
     limit: observed.limit,
-    // The two numbers a person's decision was about and the one found at execution, where a population moved.
+    // Where in the provider's own object this package could not read what it holds (provider.js), and what it reads there.
+    pointer: observed.pointer,
+    // The two numbers a person's decision was about and the one found at execution, where a population moved; for the
+    // provider's object, the shape this package reads at the pointer.
     expected: observed.expected,
     actual: observed.actual,
+    // What became of a send that can no longer be cancelled, where the row says: `sent` or `failed`.
+    state: row.state,
     exit_code: observed.exit_code,
     timed_out: observed.timed_out,
   });
@@ -1559,7 +1921,7 @@ export function fail(operation, observed, learned) {
   throw host.fail(compact({
     class: row.class,
     code: row.code,
-    message: messageOf(row, observed),
+    message: messageOf(row, observed, operation),
     details: Object.keys(details).length === 0 ? undefined : details,
     external_ids: learned,
     block: row.block === undefined ? undefined : blockOf(row.block, observed),
@@ -1567,14 +1929,22 @@ export function fail(operation, observed, learned) {
 }
 
 // The failure's message: the row's note, and for a row that `quotes`, what would otherwise reach only the trace — this
-// package's own reason before the note, or Reply's own sentence after it.
-function messageOf(row, observed) {
+// package's own reason before the note, or Reply's own sentence after it — or the operation it is about, which a row
+// every operation shares cannot name itself.
+function messageOf(row, observed, operation) {
+  if (row.quotes === "operation" && typeof operation === "string") {
+    return operation + ": " + row.note;
+  }
+
   if (row.quotes === "reason" && typeof observed.reason === "string") {
     return observed.reason + " " + row.note;
   }
 
-  if (row.quotes === "reply" && typeof observed.provider_detail === "string") {
-    return row.note + " Reply said: " + describe(observed.provider_detail);
+  const names = Array.isArray(observed.missing_variables) && observed.missing_variables.length > 0
+    ? " Reply could not fill " + describe(observed.missing_variables.join(", ")) + "."
+    : "";
+  if (row.quotes === "reply" && (typeof observed.provider_detail === "string" || names.length > 0)) {
+    return row.note + (typeof observed.provider_detail === "string" ? " Reply said: " + describe(observed.provider_detail) : "") + names;
   }
 
   return row.note;

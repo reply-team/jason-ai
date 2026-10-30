@@ -22,9 +22,10 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Eleven of the fourteen are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// Sixteen of the twenty are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
 /// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
-/// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead. <c>approval_required</c> and
+/// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead, and so is <c>provider_answer_lost</c>,
+/// which needs an earlier attempt that lost its answer and is met through the real claim in <c>ClaimerTests</c>. <c>approval_required</c> and
 /// <c>provider_blocked</c> are not in this matrix at all, because they are the two answers that do not fail an item: work
 /// whose operation needs a person's approval is parked for one, and work a provider block holds waits on the block, which
 /// <c>ClaimerTests</c> is where to read about.
@@ -40,6 +41,8 @@ public class PreflightMatrixTests
     private const string HeldBack = "held-back-provider";
     private const string Ghost = "ghost-provider";
     private const string Deleting = "deleting-provider";
+    private const string SendingNow = "sending-now-provider";
+    private const string ReadingSends = "reading-sends-provider";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -69,7 +72,7 @@ public class PreflightMatrixTests
                 scenario.Install(paths);
             },
             // The reference package names the stand-in vendor program itself, so without its directory on the
-            // search path the plugin loads as unavailable — which is one of the fourteen answers this matrix is
+            // search path the plugin loads as unavailable — which is one of the twenty answers this matrix is
             // about, and would silently stand in for the others.
             configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
 
@@ -208,6 +211,37 @@ public class PreflightMatrixTests
             AttemptErrors.ContactNotLinked,
             FailureClass.Permanent),
 
+        // A read of a send names one this campaign does not hold: the send is real, and another campaign's, which this
+        // campaign's work does not act on.
+        [AttemptErrors.SendUnknown] = new(
+            ReadsSends,
+            _ => new Route(ReadingSends, null, null),
+            async (api, campaign, ct) =>
+            {
+                var other = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Elsewhere" }, ct);
+                return await ItemAsync(api, campaign, "message.status", Naming(await SendRowAsync(api, other.Id, WorkItemStatus.Succeeded, ReadingSends, ct)), ct);
+            },
+            AttemptErrors.SendUnknown,
+            FailureClass.Permanent),
+
+        // A read of a send that failed: the provider kept no reference to read it by.
+        [AttemptErrors.SendReferenceAbsent] = new(
+            ReadsSends,
+            _ => new Route(ReadingSends, null, null),
+            async (api, campaign, ct) =>
+                await ItemAsync(api, campaign, "message.status", Naming(await SendRowAsync(api, campaign, WorkItemStatus.Failed, ReadingSends, ct)), ct),
+            AttemptErrors.SendReferenceAbsent,
+            FailureClass.Permanent),
+
+        // A read of a send made through another plugin: its reference is that provider account's.
+        [AttemptErrors.SendRouteMismatch] = new(
+            ReadsSends,
+            _ => new Route(ReadingSends, null, null),
+            async (api, campaign, ct) =>
+                await ItemAsync(api, campaign, "message.status", Naming(await SendRowAsync(api, campaign, WorkItemStatus.Succeeded, "another-provider", ct)), ct),
+            AttemptErrors.SendRouteMismatch,
+            FailureClass.Permanent),
+
         // Creation checks the caller's own arguments; that the campaign is named at all — by an argument or by a
         // pin — is a rule over the whole composed document, and only the claim composes it.
         [AttemptErrors.InputInvalid] = new(
@@ -216,10 +250,77 @@ public class PreflightMatrixTests
             (api, campaign, ct) => ItemAsync(api, campaign, "campaign.get", null, ct),
             AttemptErrors.InputInvalid,
             FailureClass.Validation),
+
+        // A send for a later moment, routed to a package whose manifest lists no moment for it on any channel: refused at
+        // the claim, before a person is asked to approve a send that would have gone out at once.
+        [AttemptErrors.ArgumentUnsupported] = new(
+            paths => TestPlugins.Write(
+                paths,
+                SendingNow,
+                TestPlugins.Manifest(SendingNow, "[message.send]"),
+                "export function invoke() { return { result: {} }; }"),
+            _ => new Route(SendingNow, null, null),
+            async (api, campaign, ct) =>
+            {
+                var contact = await ContactAsync(api, campaign, "email", "ada@example.test", ct);
+                return await ItemAsync(api, campaign, "message.send", Later(), ct, contact);
+            },
+            AttemptErrors.ArgumentUnsupported,
+            FailureClass.Permanent),
+
+        // A message written as a template, routed to a package whose manifest lists no channel it writes one on: refused
+        // at the claim, before a person is asked to approve a template the package would have sent as written.
+        [AttemptErrors.TemplateNotOffered] = new(
+            paths => TestPlugins.Write(
+                paths,
+                SendingNow,
+                TestPlugins.Manifest(SendingNow, "[message.send]"),
+                "export function invoke() { return { result: {} }; }"),
+            _ => new Route(SendingNow, null, null),
+            async (api, campaign, ct) =>
+            {
+                var contact = await ContactAsync(api, campaign, "email", "ada@example.test", ct);
+                return await ItemAsync(api, campaign, "message.send", Template(), ct, contact);
+            },
+            AttemptErrors.TemplateNotOffered,
+            FailureClass.Permanent),
     };
 
     private static void Nothing(JasonPaths paths)
     {
+    }
+
+    private static void ReadsSends(JasonPaths paths) => TestPlugins.Write(
+        paths,
+        ReadingSends,
+        TestPlugins.Manifest(ReadingSends, "[message.status]"),
+        "export function invoke() { return { result: {} }; }");
+
+    private static JsonObject Naming(string send) => new() { ["send"] = send };
+
+    /// <summary>
+    /// A send a build made earlier, written where a caller cannot: a <c>message.send</c> work item of the campaign, ended
+    /// <paramref name="status"/>, whose one attempt ran under <paramref name="pluginId"/> and, where it succeeded, returned
+    /// its reference.
+    /// </summary>
+    private static async Task<string> SendRowAsync(RuntimeApiFixture api, string campaign, WorkItemStatus status, string pluginId, CancellationToken ct)
+    {
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var now = api.Resolve<TimeProvider>().GetUtcNow().UtcDateTime;
+        var owner = await db.Campaigns.SingleAsync(c => c.PublicId == campaign, ct);
+        var send = WorkItemFactory.NewProviderOp(owner, "message.send", now);
+        send.Status = status;
+        var succeeded = status == WorkItemStatus.Succeeded;
+        var attempt = WorkItemFactory.NewAttempt(send, 1, succeeded ? AttemptStatus.Succeeded : AttemptStatus.Failed, now);
+        attempt.Provenance = new AttemptProvenanceDto(
+            pluginId, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion, "message.send", 1,
+            null, null, RouteScope.GlobalDefault, BindingIdentity: null,
+            ExternalIdsReturned: succeeded ? new Dictionary<string, string>(StringComparer.Ordinal) { ["send"] = "email-1001" } : null);
+        db.WorkItems.Add(send);
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(ct);
+        return send.PublicId;
     }
 
     private static Route ToTheReferenceProvider(PluginSnapshot plugins) =>
@@ -247,6 +348,21 @@ public class PreflightMatrixTests
     {
         ["list"] = new JsonObject { ["external_id"] = "L-1129" },
         ["channel"] = "email",
+    };
+
+    private static JsonObject Later() => new()
+    {
+        ["channel"] = "email",
+        ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+        ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
+        ["send_after"] = "2026-11-02T09:00:00+01:00",
+    };
+
+    private static JsonObject Template() => new()
+    {
+        ["channel"] = "email",
+        ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+        ["message"] = new JsonObject { ["format"] = "email", ["compose"] = "template", ["subject"] = "Hello", ["body"] = "Hello, {{contact.first_name}}." },
     };
 
     private static async Task<string> CampaignAsync(RuntimeApiFixture api)

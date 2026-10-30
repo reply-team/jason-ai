@@ -61,7 +61,11 @@ public sealed class ProviderOpCommand(PluginInvoker invoker) : ICommand
             WorkItemId: context.WorkItemId,
             CampaignId: context.CampaignId,
             Timeout: TimeSpan.FromMilliseconds(plan.Contract.TimeoutMs),
-            Pinned: new PinnedPlugin(plan.Plugin, plan.PluginSnapshotId));
+            Pinned: new PinnedPlugin(plan.Plugin, plan.PluginSnapshotId),
+
+            // Since when an earlier try may have acted unsettled, as the claim read it from the attempts.
+            UnsettledSince: plan.UnsettledSince,
+            UnsettledReference: plan.UnsettledReference);
     }
 
     /// <summary>

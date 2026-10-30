@@ -50,7 +50,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("the runtime takes only the route's half of the claim: the plugin is loaded and available, it performs the operation, and the route's binding passes its checks.")]
     [InlineData("It skips the claim's other half, and with it the attempt, provenance, the journal, pins, approval and retry, so nothing is recorded about the read, no identifier you return is pinned, and the invocation's `context` carries no attempt, work item or campaign.")]
     [InlineData("Such a read has no bound of its own: it runs outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.")]
-    [InlineData("Its one reserved member, `provider`, is the caller's object for your package ([the rule](contracts/README.md#the-input-a-plugin-receives)): a package that reads it and cannot make sense of what it was given fails the item before any call, under a code the operation declares, with a message that names the shape it expects and never quotes the text, and a package that does not read it ignores it.")]
+    [InlineData("Its one reserved member, `provider`, is the caller's object for your package ([the rule](contracts/README.md#the-input-a-plugin-receives)): a package that reads it and cannot make sense of what it was given fails the item before any call with `provider_input_invalid`, class `validation`, the one code reserved for that beside every operation, with a message that names the shape it expects and never quotes what it was given, and a package that does not read it ignores it.")]
     public void The_plugin_authors_page_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/plugins.md")), StringComparison.Ordinal);
 
@@ -150,7 +150,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| What a metered write consumed |")]
     [InlineData("| A send bound to a thread |")]
     [InlineData("| Nobody else on a reply |")]
-    [InlineData("| A lost send is never repeated |")]
+    [InlineData("| A lost send is repeated only under its own key |")]
     [InlineData("| Closing a thread is reading it |")]
     [InlineData("| `channel_mismatch`, `thread_contact_mismatch` and `delivery_refused` |")]
     [InlineData("| `message_invalid` |")]
@@ -265,6 +265,7 @@ public sealed partial class CanonicalReadsDocTests
     [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two",
+        "twenty-three", "twenty-four",
     ];
 
     [Fact]
@@ -332,7 +333,7 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
-    /// The table of the claim's fourteen answers says, at row 10, which operations the suppression register does not
+    /// The table of the claim's twenty answers says, at row 10, which operations the suppression register does not
     /// refuse — every one the catalog marks `not_applicable`, and the field that marks it.
     /// </summary>
     [Fact]
@@ -542,7 +543,7 @@ public sealed partial class CanonicalReadsDocTests
     /// published" names a subset, and is not a count.
     /// </summary>
     [GeneratedRegex(
-        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-two|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-two|twenty-one|twenty)\b",
+        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-four|twenty-three|twenty-two|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-four|twenty-three|twenty-two|twenty-one|twenty)\b",
         RegexOptions.IgnoreCase)]
     private static partial Regex CountPhrase();
 

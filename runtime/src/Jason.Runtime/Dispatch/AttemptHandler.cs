@@ -266,11 +266,14 @@ public static class AttemptHandler
 
                 // What a plugin answered means something only against the operation it was asked to perform, and
                 // the claim is what decided which operation and which plugin that was. The handler carries the
-                // plan here and reads none of it: how an answer becomes an outcome is the recorder's alone.
+                // plan here and reads none of it: how an answer becomes an outcome is the recorder's alone. Whether the
+                // package settles the operation by the key is asked as every other end asks it, of the registry by the
+                // package the attempt ran under, since one replaced while the child ran no longer answers for it.
                 var plan = work.Plan ?? throw new InvalidOperationException(
                     $"Attempt {attempt.PublicId} answered as a provider operation without the plan its claim built.");
+                var keyed = services.GetRequiredService<UnansweredEnd>().SettlesByKey(attempt, plan.Contract.Id);
                 await services.GetRequiredService<ProviderOutcomeRecorder>()
-                    .RecordAsync(db, item, attempt, plan.Contract, plan.Plugin.Manifest.Id, provider.Result, CancellationToken.None, plan.Input)
+                    .RecordAsync(db, item, attempt, plan.Contract, plan.Plugin.Manifest.Id, keyed, provider.Result, CancellationToken.None, plan.Input)
                     .ConfigureAwait(false);
                 break;
             case CommandOutcome.Exited exited:
@@ -322,7 +325,7 @@ public static class AttemptHandler
         string code,
         string message)
     {
-        var end = services.GetRequiredService<UnansweredEnd>().Verdict(item);
+        var end = services.GetRequiredService<UnansweredEnd>().Verdict(item, attempt);
         outcomes.Fail(
             db,
             item,

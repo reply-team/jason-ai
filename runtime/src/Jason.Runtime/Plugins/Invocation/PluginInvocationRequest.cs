@@ -22,7 +22,9 @@ public sealed record PinnedPlugin(LoadedPlugin Plugin, string SnapshotId);
 /// One thing a caller wants a plugin to do. The input is the operation's own arguments; the binding is the
 /// caller's opaque note to the plugin; the correlation id is what ties the invocation to whatever caused it, and
 /// it is one of only four values a process listing will show. <see cref="Pinned"/> is the package the caller has
-/// already chosen; absent, the invoker chooses it from the active snapshot itself.
+/// already chosen; absent, the invoker chooses it from the active snapshot itself. <see cref="UnsettledSince"/> is when
+/// the earliest earlier attempt of the work item that may have acted was claimed, or null where none did, and
+/// <see cref="UnsettledReference"/> the work item's send the latest such attempt to return one returned.
 /// </summary>
 /// <remarks>
 /// Nothing here carries a secret. A plugin reaches its credentials through the environment variables the user
@@ -40,7 +42,9 @@ public sealed record PluginInvocationRequest(
     string? CampaignId = null,
     TimeSpan? Timeout = null,
     PinnedPlugin? Pinned = null,
-    InvocationPurpose Purpose = InvocationPurpose.CanonicalOperation);
+    InvocationPurpose Purpose = InvocationPurpose.CanonicalOperation,
+    DateTimeOffset? UnsettledSince = null,
+    string? UnsettledReference = null);
 
 /// <summary>
 /// What a plugin is invoked for, which decides the kind of plugin that may answer: a provider performs a canonical

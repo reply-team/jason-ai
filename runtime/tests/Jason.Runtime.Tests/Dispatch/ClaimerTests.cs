@@ -302,7 +302,137 @@ public class ClaimerTests
         Assert.Equal("sha256:west", plan.BindingIdentity);
         Assert.Equal("c-7714", (string?)plan.Input["args"]!["campaign"]!["external_id"]);
         Assert.Equal(campaign.PublicId, (string?)plan.Input["campaign"]!["id"]);
+
+        // A first attempt follows nothing that may have acted.
+        Assert.Null(plan.UnsettledSince);
     }
+
+    /// <summary>
+    /// A later attempt is told when the earliest earlier attempt that may have acted was claimed: one that ended
+    /// ambiguous, which is how every attempt that lost its answer ends. A provider's own answer of any other class
+    /// settled its attempt, so a settled attempt after an unsettled one does not move the moment, and attempts that were
+    /// all settled leave it null. An attempt that ended ambiguous and never started, as a claim refusal of an unsettled
+    /// send does, ran nothing, so it is not the earliest. The moment travels beside the input and never in it, so what a
+    /// person approved is unchanged.
+    /// </summary>
+    [Theory]
+    [InlineData(FailureClass.Ambiguous, FailureClass.Transient, 1, true)]
+    [InlineData(FailureClass.Transient, FailureClass.Ambiguous, 2, true)]
+    [InlineData(FailureClass.Ambiguous, FailureClass.Ambiguous, 1, true)]
+    [InlineData(FailureClass.Transient, FailureClass.Transient, null, true)]
+    [InlineData(FailureClass.Ambiguous, FailureClass.Ambiguous, 2, false)]
+    [InlineData(FailureClass.Ambiguous, FailureClass.Transient, null, false)]
+    public async Task A_later_attempt_is_told_when_the_earliest_attempt_that_may_have_acted_was_claimed(
+        FailureClass first, FailureClass second, int? unsettled, bool firstStarted)
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.get"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "c-7714" } },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        var claimedAt = new[] { Noon.AddHours(-5), Noon.AddHours(-2) };
+        foreach (var (failure, index) in new[] { first, second }.Select((failure, index) => (failure, index)))
+        {
+            Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+            var attempt = await db.Attempts.SingleAsync(a => a.Number == index + 1, Ct);
+            attempt.Status = AttemptStatus.Failed;
+            attempt.ClaimedAt = claimedAt[index];
+            attempt.StartedAt = index == 0 && !firstStarted ? null : claimedAt[index];
+            attempt.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: failure);
+            item.Status = WorkItemStatus.Created;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(3, (await db.Attempts.SingleAsync(a => a.PublicId == work.AttemptPublicId, Ct)).Number);
+        Assert.Equal(
+            unsettled is { } number ? (DateTimeOffset?)new DateTimeOffset(claimedAt[number - 1]) : null,
+            work.Plan!.UnsettledSince);
+        Assert.False(work.Plan!.Input.ContainsKey("unsettled_since"));
+        Assert.Null(work.Plan!.UnsettledReference);
+    }
+
+    /// <summary>
+    /// A later attempt is told the send the latest earlier attempt that may have acted returned, so it can read that send
+    /// before it repeats anything: only an attempt that ended ambiguous counts, as for the moment, so a send an attempt
+    /// that settled returned is not taken, and an unsettled attempt that returned none leaves the latest one that did.
+    /// An attempt that never started ran nothing, so one ended ambiguous at its claim is not taken either. Each row is the
+    /// earlier attempts in order, as their class, or <c>unstarted</c> for one ambiguous and never started, and the send
+    /// each returned.
+    /// </summary>
+    [Theory]
+    [InlineData("", null)]
+    [InlineData("ambiguous/", null)]
+    [InlineData("ambiguous/email-1007", "email-1007")]
+    [InlineData("ambiguous/email-1007 ambiguous/email-1009", "email-1009")]
+    [InlineData("ambiguous/email-1007 ambiguous/", "email-1007")]
+    [InlineData("ambiguous/email-1007 permanent/email-1009", "email-1007")]
+    [InlineData("transient/email-1007 ambiguous/", null)]
+    [InlineData("transient/email-1007 ambiguous/email-1009", "email-1009")]
+    [InlineData("ambiguous/email-1007 unstarted/email-1009", "email-1007")]
+    public void A_later_attempt_is_told_the_send_the_latest_attempt_that_may_have_acted_returned(string earlier, string? reference)
+    {
+        var item = WorkItemFactory.NewProviderOp(WorkItemFactory.NewCampaign(now: Noon), "message.send", Noon);
+        foreach (var said in earlier.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var (failure, returned) = (said.Split('/')[0], said.Split('/')[1]);
+            var attempt = AttemptOf(item, item.Attempts.Count + 1);
+            attempt.Status = AttemptStatus.Failed;
+            var unstarted = failure == "unstarted";
+            attempt.StartedAt = unstarted ? null : attempt.StartedAt;
+            attempt.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: unstarted ? FailureClass.Ambiguous : Enum.Parse<FailureClass>(failure, ignoreCase: true));
+            attempt.Provenance = Returned(returned.Length == 0 ? null : new Dictionary<string, string> { ["contact"] = "1001", ["send"] = returned });
+            item.Attempts.Add(attempt);
+        }
+
+        var next = AttemptOf(item, item.Attempts.Count + 1);
+
+        Assert.Equal(reference, Claimer.UnsettledReference(OperationCatalog.Find("message.send")!, item, next));
+    }
+
+    /// <summary>
+    /// The send is the work item's own identifier of that kind, as its operation declares it: an operation that declares
+    /// none is told none, whatever an earlier attempt of it returned under that name.
+    /// </summary>
+    [Fact]
+    public void An_operation_that_declares_no_send_of_its_own_is_told_none()
+    {
+        var item = WorkItemFactory.NewProviderOp(WorkItemFactory.NewCampaign(now: Noon), "campaign.get", Noon);
+        var earlier = AttemptOf(item, 1);
+        earlier.Status = AttemptStatus.Failed;
+        earlier.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: FailureClass.Ambiguous);
+        earlier.Provenance = Returned(new Dictionary<string, string> { ["send"] = "email-1007" });
+        item.Attempts.Add(earlier);
+
+        Assert.Null(Claimer.UnsettledReference(OperationCatalog.Find("campaign.get")!, item, AttemptOf(item, 2)));
+        Assert.Equal("email-1007", Claimer.UnsettledReference(OperationCatalog.Find("social_invitation.send")!, item, AttemptOf(item, 2)));
+    }
+
+    private static Attempt AttemptOf(WorkItem item, int number) => new()
+    {
+        PublicId = PublicId.New("att"),
+        WorkItem = item,
+        Number = number,
+        Command = item.Kind,
+        Status = AttemptStatus.Scheduled,
+        ClaimedAt = Noon.AddHours(number - 10),
+        StartedAt = Noon.AddHours(number - 10),
+        LockUntil = Noon,
+    };
+
+    private static AttemptProvenanceDto Returned(IReadOnlyDictionary<string, string>? identifiers) =>
+        new(null, null, null, null, null, null, null, null, null, null, null, ExternalIdsReturned: identifiers);
 
     /// <summary>
     /// The pins are read inside the claim and they decide the claim: this item names the campaign by nothing but
@@ -1193,7 +1323,7 @@ public class ClaimerTests
     /// is let back into the queue. These tests are about what the claim does with that, not about the verb.
     /// </summary>
     /// <summary>
-    /// The fourteenth check parks protective work an open block holds: no attempt, a wait on the block, and the campaign
+    /// The twentieth check parks protective work an open block holds: no attempt, a wait on the block, and the campaign
     /// told once — whichever of its items parks next, the line is not written again, and the block's link is never in it.
     /// </summary>
     [Fact]
@@ -1426,6 +1556,193 @@ public class ClaimerTests
             Assert.Equal(WorkItemStatus.Failed, item.Status);
             Assert.Equal(refused, (await db.Attempts.AsNoTracking().SingleAsync(Ct)).Error!.Code);
         }
+    }
+
+    /// <summary>
+    /// A send an earlier attempt of which lost its answer is claimed again only under a plugin whose manifest lists it
+    /// under <c>settles_by_key</c>. Under any other the claim refuses it: the attempt is made and kept with the reason, it
+    /// ends ambiguous and final, and nothing is handed out; under the plugin that lists it the repeat is claimed. The
+    /// key settles the send only at the account that took it, so a route moved to another account of the same plugin
+    /// since the attempt that lost its answer is refused the same way. The send stays unsettled while any earlier
+    /// attempt ended ambiguous, so a transient attempt after it, made under the route of today, changes neither answer. And
+    /// the key settles only the request it went with, so an item whose arguments were edited since is refused too. An
+    /// attempt the claim refused never started, so it ran nothing: one after the lost answer, under another account and
+    /// ended ambiguous, is not the attempt a repeat is held to.
+    /// </summary>
+    [Theory]
+    [InlineData(false, null, "settles_by_key")]
+    [InlineData(true, null, null)]
+    [InlineData(true, "acct-2", "only at the provider and the account that took it")]
+    [InlineData(true, null, null, true)]
+    [InlineData(true, "acct-2", "only at the provider and the account that took it", true)]
+    [InlineData(true, null, "other arguments than the work item carries now", false, true)]
+    [InlineData(true, null, null, false, false, true)]
+    public async Task A_send_that_lost_its_answer_is_claimed_again_only_under_a_plugin_that_settles_it_by_the_key(bool listed, string? ranUnder, string? refusal, bool thenTransient = false, bool edited = false, bool thenRefused = false)
+    {
+        var plugin = TestPlugins.Loaded("stand-in-provider", ["message.send"]);
+        if (listed)
+        {
+            plugin = plugin with { Manifest = plugin.Manifest with { KeyedOperations = ["message.send"] } };
+        }
+
+        using var harness = new Harness(plugin: plugin, route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
+            },
+        };
+        db.WorkItems.Add(item);
+        var lost = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, Noon.AddHours(-1));
+        lost.StartedAt = Noon.AddHours(-1);
+        lost.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: FailureClass.Ambiguous);
+        lost.Provenance = new AttemptProvenanceDto("stand-in-provider", "1.0.0", plugin.Digest, 1, 1, "message.send", 1, null, null, RouteScope.GlobalDefault, ranUnder);
+        db.Attempts.Add(lost);
+        item.AttemptCount = 1;
+        if (edited)
+        {
+            item.Context = new JsonObject
+            {
+                [WorkItemService.InputKey] = new JsonObject
+                {
+                    ["channel"] = "email",
+                    ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                    ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello again", ["body"] = "Hello, Ada." },
+                },
+            };
+        }
+
+        if (thenTransient)
+        {
+            var transient = WorkItemFactory.NewAttempt(item, 2, AttemptStatus.Failed, Noon.AddMinutes(-30));
+            transient.Error = new AttemptErrorDto("provider_unavailable", "The provider did not answer in time.", Retriable: true, Class: FailureClass.Transient);
+            transient.Provenance = lost.Provenance with { BindingIdentity = null };
+            db.Attempts.Add(transient);
+            item.AttemptCount = 2;
+        }
+
+        if (thenRefused)
+        {
+            // Refused at its claim while the route bound another account, and so ended ambiguous: it never started.
+            var refused = WorkItemFactory.NewAttempt(item, 2, AttemptStatus.Failed, Noon.AddMinutes(-30));
+            refused.Error = new AttemptErrorDto("provider_answer_lost", "The key settles the send only at the account that took it.", Retriable: false, Class: FailureClass.Ambiguous);
+            refused.Provenance = lost.Provenance with { BindingIdentity = "acct-2" };
+            db.Attempts.Add(refused);
+            item.AttemptCount = 2;
+        }
+
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        if (refusal is null)
+        {
+            // The send is approved per item, so past the refusal the claim parks it for a person and makes no attempt.
+            Assert.NotEqual(WorkItemStatus.Failed, item.Status);
+            Assert.Equal(thenTransient || thenRefused ? 2 : 1, await db.Attempts.AsNoTracking().CountAsync(Ct));
+            return;
+        }
+
+        Assert.Equal(WorkItemStatus.Failed, item.Status);
+        var kept = thenTransient ? 3 : 2;
+        var attempt = await db.Attempts.AsNoTracking().SingleAsync(a => a.Number == kept, Ct);
+        Assert.Equal((AttemptErrors.ProviderAnswerLost, FailureClass.Ambiguous, false), (attempt.Error!.Code, attempt.Error.Class, attempt.Error.Retriable));
+        Assert.Contains(refusal, attempt.Error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A send whose earlier attempt lost its answer, routed since to a plugin that does not perform it, is refused for
+    /// that reason, and the refusal says the earlier attempt may have reached the person: ambiguous and final, so nobody
+    /// reads "the plugin has no such operation" as leave to create the send again before finding out at the provider.
+    /// </summary>
+    [Fact]
+    public async Task A_send_routed_after_a_lost_answer_to_a_plugin_without_it_is_refused_as_one_that_may_have_reached_the_person()
+    {
+        var plugin = TestPlugins.Loaded("stand-in-provider", ["list_membership.add"]);
+        using var harness = new Harness(plugin: plugin, route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
+            },
+        };
+        db.WorkItems.Add(item);
+        var lost = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, Noon.AddHours(-1));
+        lost.StartedAt = Noon.AddHours(-1);
+        lost.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: FailureClass.Ambiguous);
+        lost.Provenance = new AttemptProvenanceDto("stand-in-provider", "1.0.0", "sha256:earlier", 1, 1, "message.send", 1, null, null, RouteScope.GlobalDefault, null);
+        db.Attempts.Add(lost);
+        item.AttemptCount = 1;
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        Assert.Equal(WorkItemStatus.Failed, item.Status);
+        var attempt = await db.Attempts.AsNoTracking().SingleAsync(a => a.Number == 2, Ct);
+        Assert.Equal((AttemptErrors.PluginOperationUnsupported, FailureClass.Ambiguous, false), (attempt.Error!.Code, attempt.Error.Class, attempt.Error.Retriable));
+        Assert.Contains("An earlier attempt of this work item may have reached the person", attempt.Error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A send whose earlier attempt lost its answer, and whose route is gone since, is refused no_route, and the refusal
+    /// says the earlier attempt may have reached the person: the claim reads the attempt that may have acted before it
+    /// knows there is no route, so the refusal is ambiguous and final like every other one from the route to the arguments.
+    /// </summary>
+    [Fact]
+    public async Task A_send_whose_route_is_gone_after_a_lost_answer_is_refused_as_one_that_may_have_reached_the_person()
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        item.Contact = contact;
+        db.WorkItems.Add(item);
+        var lost = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, Noon.AddHours(-1));
+        lost.StartedAt = Noon.AddHours(-1);
+        lost.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: FailureClass.Ambiguous);
+        lost.Provenance = new AttemptProvenanceDto("stand-in-provider", "1.0.0", "sha256:earlier", 1, 1, "message.send", 1, null, null, RouteScope.GlobalDefault, null);
+        db.Attempts.Add(lost);
+        item.AttemptCount = 1;
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        Assert.Equal(WorkItemStatus.Failed, item.Status);
+        var attempt = await db.Attempts.AsNoTracking().SingleAsync(a => a.Number == 2, Ct);
+        Assert.Equal((AttemptErrors.NoRoute, FailureClass.Ambiguous, false), (attempt.Error!.Code, attempt.Error.Class, attempt.Error.Retriable));
+        Assert.Contains("An earlier attempt of this work item may have reached the person", attempt.Error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

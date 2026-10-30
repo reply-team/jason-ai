@@ -53,6 +53,7 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/routing.md", "rows 7 and (?<n>\\w+) below", "row of input_invalid")]
     [InlineData("docs/routing.md", "The (?<n>\\w+) is not a refusal at all", "row of approval_required")]
     [InlineData("docs/routing.md", "The (?<n>\\w+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
+    [InlineData("docs/routing.md", "every refusal from check 2 to check (?<n>\\w+) keeps its code", "row of template_not_offered")]
     [InlineData("docs/work-execution.md", "whichever of the (?<n>\\w+) pre-flight reasons applies", "all")]
     [InlineData("docs/work-execution.md", "the same rule the (?<n>\\w+) provider checks follow", "all")]
     [InlineData("docs/work-execution.md", "\\| the (?<n>\\w+) pre-flight codes \\|", "all")]
@@ -61,6 +62,7 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/work-execution.md", "all of them are final: (?<n>\\w+) are `permanent`", "permanent")]
     [InlineData("docs/work-execution.md", "The (?<n>\\w+) is not a refusal: `approval_required`", "row of approval_required")]
     [InlineData("docs/work-execution.md", "The (?<n>\\w+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
+    [InlineData("docs/work-execution.md", "every refusal of the claim from check 2 to check (?<n>\\w+) keeps its code", "row of template_not_offered")]
     [InlineData("CLAUDE.md", "The claim is fail-closed: (?<n>\\w+) checks in one published order", "all")]
     public void Each_count_of_the_claim_s_checks_is_the_number_the_code_asks(string relative, string sentence, string counted)
     {
@@ -69,9 +71,12 @@ public sealed partial class ClaimOrderDocTests
         {
             "all" => codes.Count,
             "refusals" => IndexOf(codes, "approval_required"),
-            "permanent" => IndexOf(codes, "approval_required") - 1,
+            // Every refusal but two: input_invalid is validation and provider_answer_lost is ambiguous.
+            "permanent" => IndexOf(codes, "approval_required") - 2,
             "after binding_invalid" => codes.Count - (IndexOf(codes, "binding_invalid") + 1),
             "row of input_invalid" => IndexOf(codes, "input_invalid") + 1,
+            // The last refusal an unsettled send turns ambiguous: the row just before provider_answer_lost's own.
+            "row of template_not_offered" => IndexOf(codes, "template_not_offered") + 1,
             "row of approval_required" => IndexOf(codes, "approval_required") + 1,
             "row of provider_blocked" => IndexOf(codes, "provider_blocked") + 1,
             _ => throw new ArgumentOutOfRangeException(nameof(counted), counted, "No such count."),

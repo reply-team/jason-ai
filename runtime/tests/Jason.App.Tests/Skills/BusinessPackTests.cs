@@ -241,6 +241,28 @@ public class BusinessPackTests
         }
     }
 
+    /// <summary>
+    /// A rendered message is what a review of a message binds to, but a message composed as a template has none before the
+    /// provider fills it in. The approval boundaries say what is approved and reviewed then, at its own approval, and where
+    /// what went out is read afterwards, in vendor-neutral words.
+    /// </summary>
+    [Fact]
+    public void The_approval_boundaries_say_what_is_approved_of_a_message_composed_as_a_template()
+    {
+        var skill = string.Join(' ', File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), "approval-boundaries", "SKILL.md"))
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        Assert.Contains(
+            "A message composed as a template (`compose: template`) has no rendered message to show before the provider fills it in: what is approved is the template and the example the preview renders over the composed input, and the review binds to those. What went out is read afterwards: `message.status` carries the sent text where the provider gives it, and the thread, `conversation.get`, carries it where the provider does not, once the thread holds the message.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "`template.publish` does not produce one. A message composed as a template is reviewed at its own approval, as the template and its example. - ",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("`editorial_review.record` is written at that approval", skill, StringComparison.Ordinal);
+    }
+
     private static IEnumerable<string> Files() =>
         Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
 }

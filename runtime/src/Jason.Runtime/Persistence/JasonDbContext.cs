@@ -677,6 +677,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .IsUnique()
                 .HasFilter("kind = 'provider_event_observed'");
 
+            // A send seen to have gone out is said once, under the key of the work item that accepted it, in an index of
+            // its own: the reads that find it look the key up first, and a second line is refused.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_sends")
+                .IsUnique()
+                .HasFilter("kind = 'message_sent_observed'");
+
             // A gap in an account's events is said once. Its line names no campaign, and SQLite keeps every null apart from
             // every other in a unique index, so the index is on the kind and the key alone.
             entry.HasIndex(e => new { e.Kind, e.Key }, "ix_journal_kind_key_gaps")

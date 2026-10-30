@@ -22,6 +22,27 @@ public class TemplateExampleTests
         Assert.Empty(example["unfilled"]!.AsArray());
     }
 
+    /// <summary>
+    /// On LinkedIn the sending account's address is its profile, held where it is held on an email: the example fills it
+    /// in, and where the provider holds the account no address it is shown by its name and listed, since the provider then
+    /// sends nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("https://www.linkedin.com/in/ann-owner", "Hi Marta, my profile is https://www.linkedin.com/in/ann-owner.", "[]")]
+    [InlineData(null, "Hi Marta, my profile is [sender.address].", "[\"sender.address\"]")]
+    public void A_linkedin_template_names_the_sending_account_s_profile_by_its_address(string? profile, string expected, string unfilled)
+    {
+        var input = Input(null, "Hi {{contact.first_name}}, my profile is {{sender.address}}.", "Head of Growth", "Puerto Analytics");
+        input["args"]!["channel"] = "linkedin";
+        input["args"]!["message"]!["format"] = "linkedin_message";
+        input["args"]!["sender"]!["address"] = profile;
+
+        var example = Preview.Example(input)!;
+
+        Assert.Equal(expected, (string?)example["body"]);
+        Assert.Equal(unfilled, example["unfilled"]!.ToJsonString());
+    }
+
     [Fact]
     public void A_name_with_no_value_and_no_fallback_is_shown_by_its_name_and_listed()
     {

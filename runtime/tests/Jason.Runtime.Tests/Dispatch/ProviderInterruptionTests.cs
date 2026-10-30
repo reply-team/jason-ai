@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
@@ -6,7 +8,12 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Plugins;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -22,6 +29,14 @@ public class ProviderInterruptionTests
 
     /// <summary>The published operation whose contract forbids a repeat: a reply that may have gone is never sent again.</summary>
     private const string NeverRepeated = "conversation.reply";
+
+    /// <summary>The published operation whose repeat rests on the work item's key.</summary>
+    private const string Send = "message.send";
+
+    /// <summary>The package a send's attempt ran under, as its provenance names it.</summary>
+    private const string Sender = "fake-sender";
+
+    private static readonly string RanDigest = "sha256:" + new string('a', 64);
 
     private static readonly DateTime Start = new(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc);
 
@@ -50,6 +65,108 @@ public class ProviderInterruptionTests
         Assert.Equal(FailureClass.Ambiguous, attempt.Error.Class);
         Assert.Equal(retriable, attempt.Error.Retriable);
         Assert.Equal(expected, item.Status);
+    }
+
+    /// <summary>
+    /// A send settles a lost answer by the work item's key, so a lease that ran out on one is repeated only where the
+    /// package the attempt ran under, as its provenance names it, is the one the registry still holds and lists the send
+    /// under <c>settles_by_key</c>. A package without the marker, one replaced since, or none at all, answers no, and
+    /// the end is final.
+    /// </summary>
+    [Theory]
+    [InlineData(Keyed.Listed, WorkItemStatus.Created, true)]
+    [InlineData(Keyed.Unlisted, WorkItemStatus.Failed, false)]
+    [InlineData(Keyed.Replaced, WorkItemStatus.Failed, false)]
+    [InlineData(Keyed.Gone, WorkItemStatus.Failed, false)]
+    public async Task A_lease_that_ran_out_on_a_send_is_repeated_only_under_the_package_that_settles_it_by_the_key(
+        Keyed package,
+        WorkItemStatus expected,
+        bool retriable)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var harness = new Harness(settlesByKey: UnansweredEnd.RanUnder(Registry(package)));
+        var (item, attempt) = await SeedAsync(db, WorkItemKind.ProviderOp, Send, WorkItemStatus.Scheduled, AttemptStatus.Scheduled);
+        attempt.Provenance = new AttemptProvenanceDto(Sender, "1.0.0", RanDigest, null, null, Send, null, null, null, null, null);
+        await db.SaveChangesAsync(Ct);
+        harness.Clock.Now = Start.AddSeconds(61);
+
+        Assert.Equal(1, await harness.Enforcer.EnforceAsync(db, Ct));
+
+        await db.Entry(item).ReloadAsync(Ct);
+        await db.Entry(attempt).ReloadAsync(Ct);
+        Assert.Equal(FailureClass.Ambiguous, attempt.Error!.Class);
+        Assert.Equal(retriable, attempt.Error.Retriable);
+        Assert.Equal(expected, item.Status);
+    }
+
+    /// <summary>
+    /// The rule the runtime composes asks the plugin registry the runtime holds: a send that lost its answer is not
+    /// worth repeating while the registry holds no package, and is once its snapshot holds the package the attempt ran
+    /// under, listing the send under <c>settles_by_key</c>.
+    /// </summary>
+    [Fact]
+    public void The_composed_end_asks_the_registry_the_runtime_holds()
+    {
+        using var harness = new DispatchHarness(Start);
+        var end = harness.Resolve<UnansweredEnd>();
+        var item = WorkItemFactory.NewProviderOp(WorkItemFactory.NewCampaign(), Send);
+        var attempt = new Attempt
+        {
+            PublicId = PublicId.New("att"),
+            Number = 1,
+            Provenance = new AttemptProvenanceDto(Sender, "1.0.0", RanDigest, null, null, Send, null, null, null, null, null),
+        };
+
+        Assert.Equal((FailureClass.Ambiguous, false), end.Verdict(item, attempt));
+
+        harness.Resolve<PluginRegistry>().Replace(
+            Registry(Keyed.Listed).Snapshot,
+            new ReloadReport(Start, SnapshotSource.Startup, true, [], []));
+
+        Assert.Equal((FailureClass.Ambiguous, true), end.Verdict(item, attempt));
+    }
+
+    /// <summary>
+    /// The same rule at a restart, and with no word from any package at all: a send found past its start is final
+    /// unless the package it ran under says it settles the send by the key, while an operation whose repeat does not
+    /// rest on the key is repeated as it always was.
+    /// </summary>
+    [Theory]
+    // Critical: a send no package settles by its key is never repeated.
+    [InlineData(Send, WorkItemStatus.Failed, false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W5)])]
+    [InlineData(Safe, WorkItemStatus.Created, true)]
+    public async Task A_restart_repeats_a_send_only_on_the_word_of_the_package_it_ran_under(string operation, WorkItemStatus expected, bool retriable)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var harness = new Harness();
+        var (item, attempt) = await SeedAsync(db, WorkItemKind.ProviderOp, operation, WorkItemStatus.Scheduled, AttemptStatus.Running);
+
+        Assert.Equal(1, await harness.Recovery.RunAsync(db, Ct));
+
+        await db.Entry(item).ReloadAsync(Ct);
+        await db.Entry(attempt).ReloadAsync(Ct);
+        Assert.Equal(AttemptErrors.Interrupted, attempt.Error!.Code);
+        Assert.Equal(FailureClass.Ambiguous, attempt.Error.Class);
+        Assert.Equal(retriable, attempt.Error.Retriable);
+        Assert.Equal(expected, item.Status);
+    }
+
+    /// <summary>What the registry holds for the package a send's attempt ran under.</summary>
+    public enum Keyed
+    {
+        /// <summary>The same package, listing the send under <c>settles_by_key</c>.</summary>
+        Listed,
+
+        /// <summary>The same package, listing nothing.</summary>
+        Unlisted,
+
+        /// <summary>A package of the same id that lists the send, under another digest: not the one the attempt ran under.</summary>
+        Replaced,
+
+        /// <summary>No package of that id.</summary>
+        Gone,
     }
 
     /// <summary>
@@ -240,6 +357,135 @@ public class ProviderInterruptionTests
         Assert.False(attempt.Error.Retriable);
     }
 
+    /// <summary>
+    /// The yes way of the same restart: a send found past its start is repeated where the package its provenance names
+    /// is the one the registry still holds and lists the send under <c>settles_by_key</c>, and is final under a package
+    /// without the marker, one replaced since, or none at all.
+    /// </summary>
+    [Theory]
+    [InlineData(Keyed.Listed, WorkItemStatus.Created, true)]
+    [InlineData(Keyed.Unlisted, WorkItemStatus.Failed, false)]
+    [InlineData(Keyed.Replaced, WorkItemStatus.Failed, false)]
+    [InlineData(Keyed.Gone, WorkItemStatus.Failed, false)]
+    public async Task A_restart_repeats_a_send_under_the_package_that_settles_it_by_the_key(
+        Keyed package,
+        WorkItemStatus expected,
+        bool retriable)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var harness = new Harness(settlesByKey: UnansweredEnd.RanUnder(Registry(package)));
+        var (item, attempt) = await SeedAsync(db, WorkItemKind.ProviderOp, Send, WorkItemStatus.Scheduled, AttemptStatus.Running);
+        attempt.Provenance = new AttemptProvenanceDto(Sender, "1.0.0", RanDigest, null, null, Send, null, null, null, null, null);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(1, await harness.Recovery.RunAsync(db, Ct));
+
+        await db.Entry(item).ReloadAsync(Ct);
+        await db.Entry(attempt).ReloadAsync(Ct);
+        Assert.Equal(AttemptErrors.Interrupted, attempt.Error!.Code);
+        Assert.Equal(FailureClass.Ambiguous, attempt.Error.Class);
+        Assert.Equal(retriable, attempt.Error.Retriable);
+        Assert.Equal(expected, item.Status);
+    }
+
+    /// <summary>
+    /// The two ends the handler reaches for a send that may have reached the person — the plugin answered that its
+    /// answer was lost, or nothing answered at all — ask one question of the registry the runtime holds: whether the
+    /// package the attempt ran under, as its provenance names it, is still the one held, under the same digest, and lists
+    /// the send under <c>settles_by_key</c>. The package the claim's plan carries is not that word: one replaced or
+    /// removed between the claim and the answer cannot answer for the attempt that ran under it.
+    /// </summary>
+    [Theory]
+    [InlineData(true, Keyed.Listed, WorkItemStatus.Created, true)]
+    [InlineData(true, Keyed.Unlisted, WorkItemStatus.Failed, false)]
+    [InlineData(true, Keyed.Replaced, WorkItemStatus.Failed, false)]
+    [InlineData(true, Keyed.Gone, WorkItemStatus.Failed, false)]
+    [InlineData(false, Keyed.Listed, WorkItemStatus.Created, true)]
+    [InlineData(false, Keyed.Unlisted, WorkItemStatus.Failed, false)]
+    [InlineData(false, Keyed.Replaced, WorkItemStatus.Failed, false)]
+    [InlineData(false, Keyed.Gone, WorkItemStatus.Failed, false)]
+    public async Task A_send_that_lost_its_answer_in_the_handler_is_repeated_only_under_the_package_that_settles_it_by_the_key(
+        bool answered,
+        Keyed package,
+        WorkItemStatus expected,
+        bool retriable)
+    {
+        var lost = new PluginInvocationResult(
+            new InvocationOutcome.Failed(
+                new OutcomeError(FailureClass.Ambiguous, AttemptErrors.ProviderAnswerLost, "No answer came back.", null, null),
+                new OutcomeDiagnostics(12, 1, 0, 1)),
+            new InvocationProvenance(
+                Sender,
+                "1.0.0",
+                RanDigest,
+                PluginProtocol.CurrentVersion,
+                PluginProtocol.OperationContractVersion,
+                PluginProtocol.InvocationIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC",
+                "att_01K5B7Q2WE5X3M9T0YH4C6RDND",
+                PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNE"),
+            Launch: null);
+        var command = new FakeCommand(
+            WorkItemKind.ProviderOp,
+            _ => Task.FromResult<CommandOutcome>(answered ? new CommandOutcome.Provider(lost, null) : new CommandOutcome.Killed(null)));
+        using var harness = new DispatchHarness(Start, o => o.RetryDelaySeconds = 0, commands: command);
+        harness.Resolve<PluginRegistry>().Replace(
+            Registry(package).Snapshot,
+            new ReloadReport(Start, SnapshotSource.Startup, true, [], []));
+
+        // The plan as the claim built it: the package the attempt ran under, which listed the send unless it never did.
+        var ran = TestPlugins.Loaded(Sender, [Send]) with { Digest = RanDigest };
+        if (package != Keyed.Unlisted)
+        {
+            ran = ran with { Manifest = ran.Manifest with { KeyedOperations = [Send] } };
+        }
+
+        ClaimedWork work;
+        await using (var db = harness.Open())
+        {
+            var (seeded, attempt) = await SeedAsync(db, WorkItemKind.ProviderOp, Send, WorkItemStatus.Scheduled, AttemptStatus.Scheduled);
+            attempt.Provenance = new AttemptProvenanceDto(Sender, "1.0.0", RanDigest, null, null, Send, null, null, null, null, null);
+            await db.SaveChangesAsync(Ct);
+            var plan = new ProviderOpPlan(
+                ran,
+                PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNA",
+                RouteSnapshot.IdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNB",
+                RouteScope.GlobalDefault,
+                null,
+                null,
+                OperationCatalog.Find(Send)!,
+                new JsonObject());
+            work = new ClaimedWork(seeded.Id, attempt.Id, seeded.PublicId, attempt.PublicId, seeded.Campaign!.PublicId, plan);
+        }
+
+        await AttemptHandler.RunAsync(harness.Scopes, work, harness.Registry, NullLogger.Instance);
+
+        await using var read = harness.Open();
+        var item = await read.WorkItems.AsNoTracking().Include(w => w.Attempts).SingleAsync(w => w.Id == work.WorkItemId, Ct);
+        var ended = Assert.Single(item.Attempts);
+        Assert.Equal(FailureClass.Ambiguous, ended.Error!.Class);
+        Assert.True(
+            (ended.Error.Retriable, item.Status) == (retriable, expected),
+            $"The send ended {item.Status} with retriable {ended.Error.Retriable} ({ended.Error.Code}).");
+    }
+
+    private static PluginRegistry Registry(Keyed package)
+    {
+        var registry = new PluginRegistry(new FixedClock(Start));
+        var loaded = TestPlugins.Loaded(Sender, [Send]);
+        loaded = package switch
+        {
+            Keyed.Listed => loaded with { Digest = RanDigest, Manifest = loaded.Manifest with { KeyedOperations = [Send] } },
+            Keyed.Unlisted => loaded with { Digest = RanDigest },
+            Keyed.Replaced => loaded with { Digest = "sha256:" + new string('b', 64), Manifest = loaded.Manifest with { KeyedOperations = [Send] } },
+            _ => TestPlugins.Loaded("other-provider", [Send]),
+        };
+        registry.Replace(
+            new PluginSnapshot("plg_interrupted", Start, SnapshotSource.Startup, [loaded]),
+            new ReloadReport(Start, SnapshotSource.Startup, true, [], []));
+        return registry;
+    }
+
     private static async Task<(WorkItem Item, Attempt Attempt)> SeedAsync(
         JasonDbContext db,
         WorkItemKind kind,
@@ -270,7 +516,7 @@ public class ProviderInterruptionTests
 
     private sealed class Harness
     {
-        public Harness(Action<DispatcherOptions>? configure = null)
+        public Harness(Action<DispatcherOptions>? configure = null, Func<AttemptProvenanceDto?, string, bool>? settlesByKey = null)
         {
             Clock = new FixedClock(Start);
             Options = TestOptions.Dispatcher(o =>
@@ -281,7 +527,7 @@ public class ProviderInterruptionTests
             });
             Settings = TestOptions.Settings(Options);
             Outcomes = new AttemptOutcomes(new JournalWriter(Clock), Clock, Settings);
-            var unanswered = new UnansweredEnd(ContractFor);
+            var unanswered = new UnansweredEnd(ContractFor, settlesByKey);
             Enforcer = new LeaseEnforcer(Outcomes, Clock, Settings, new RunningAttemptRegistry(), new DispatcherStatus(), unanswered);
             Recovery = new StartupRecovery(Outcomes, unanswered);
         }

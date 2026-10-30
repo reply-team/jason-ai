@@ -69,11 +69,15 @@ public class PluginInvokerTests
             AttemptId: "att_01K0CONTEXT",
             AttemptNumber: 2,
             WorkItemId: "wi_01K0",
-            CampaignId: "cmp_01K0"),
+            CampaignId: "cmp_01K0",
+            UnsettledSince: new DateTimeOffset(2026, 9, 14, 7, 30, 0, TimeSpan.Zero),
+            UnsettledReference: "email-1007"),
             Ct);
 
         var context = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Result!;
         Assert.Equal(2, context["attempt_number"]!.GetValue<int>());
+        Assert.Equal("2026-09-14T07:30:00.000Z", context["unsettled_since"]!.GetValue<string>());
+        Assert.Equal("email-1007", context["unsettled_reference"]!.GetValue<string>());
         Assert.Equal("att_01K0CONTEXT", context["correlation_id"]!.GetValue<string>());
         Assert.Equal("wi_01K0", context["work_item_id"]!.GetValue<string>());
         Assert.Equal("default", context["binding"]!["profile"]!.GetValue<string>());

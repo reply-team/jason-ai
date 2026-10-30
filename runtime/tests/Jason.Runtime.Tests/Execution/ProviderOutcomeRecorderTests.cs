@@ -36,6 +36,27 @@ public class ProviderOutcomeRecorderTests
 
     private static OperationContract Pause => OperationCatalog.Find("campaign.pause")!;
 
+    private static OperationContract Send => OperationCatalog.Find("message.send")!;
+
+    private static JsonNode Taken(string contact, string? reference) => new JsonObject
+    {
+        ["items"] = new JsonArray(new JsonObject
+        {
+            ["contact_id"] = contact,
+            ["status"] = "accepted",
+            ["accepted_for"] = "2026-11-03T14:00:00Z",
+            ["reference"] = reference,
+            ["cancelable"] = true,
+            ["channel"] = "email",
+            ["format"] = "email",
+            ["sender_external_id"] = "s_12",
+            ["message"] = new JsonObject { ["external_id"] = null, ["sent_at"] = null },
+            ["external_ids"] = reference is null
+                ? new JsonObject { ["contact"] = "p_1001" }
+                : new JsonObject { ["contact"] = "p_1001", ["send"] = reference },
+        }),
+    };
+
     private static JsonNode Added(string contact) => new JsonObject
     {
         ["items"] = new JsonArray(new JsonObject
@@ -67,6 +88,168 @@ public class ProviderOutcomeRecorderTests
         var provenance = await scene.ProvenanceAsync(db);
         Assert.Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "p_1001" }, provenance.ExternalIdsReturned);
         Assert.Null(provenance.RejectedResult);
+    }
+
+    /// <summary>
+    /// The reference of the send a work item made the provider take is an identifier of the item itself: one item is one
+    /// send. It is kept where the item's own record is — the attempt's provenance, as returned, and the frozen result, as
+    /// answered — and pinned to no contact and no campaign, so no later call of another item receives it back.
+    /// </summary>
+    [Fact]
+    public async Task A_send_s_reference_is_kept_on_the_attempt_and_in_the_result_and_pins_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.send");
+
+        await scene.RecordAsync(db, Send, Succeeded(Taken(scene.Contact.PublicId, "email-1001"), new JsonObject { ["contact"] = "p_1001", ["send"] = "email-1001" }));
+
+        Assert.Equal(WorkItemStatus.Succeeded, scene.Item.Status);
+        Assert.Equal("email-1001", (string?)scene.Item.Result!["items"]![0]!["reference"]);
+        var pin = Assert.Single(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(("contact", "p_1001"), (pin.Kind, pin.Value));
+        Assert.Equal(
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "p_1001", ["send"] = "email-1001" },
+            (await scene.ProvenanceAsync(db)).ExternalIdsReturned);
+    }
+
+    /// <summary>
+    /// A read of a send that finds it gone says so about the work item that made the send, in the change set that ends the
+    /// read: the line and the read's success commit together. The send's own result stays as it was frozen.
+    /// </summary>
+    [Fact]
+    public async Task A_read_that_finds_the_send_gone_says_so_about_the_send_as_it_succeeds()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.status");
+        var send = WorkItemFactory.NewProviderOp(scene.Campaign, "message.send", Noon);
+        db.WorkItems.Add(send);
+        await db.SaveChangesAsync(Ct);
+
+        await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, Status, TestPlugins.FakeProviderId, false, Succeeded(Read("sent"), null), Ct, ReadOf(send));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Succeeded, scene.Item.Status);
+        var line = await db.Journal.AsNoTracking().SingleAsync(entry => entry.Kind == JournalKinds.MessageSentObserved, Ct);
+        Assert.Equal((send.PublicId, send.PublicId), (line.WorkItemId, line.Key));
+        Assert.Equal((TestPlugins.FakeProviderId, "email-1001", scene.Item.PublicId), ((string?)line.New!["plugin"], (string?)line.New["reference"], (string?)line.New["read_work_item"]));
+        Assert.Null((await db.WorkItems.AsNoTracking().SingleAsync(item => item.Id == send.Id, Ct)).Result);
+    }
+
+    /// <summary>
+    /// A read that finds the send still held, or one the provider lost track of and that may have gone, says nothing of it:
+    /// the line is only ever about a send that went.
+    /// </summary>
+    [Theory]
+    [InlineData("queued")]
+    [InlineData("unknown")]
+    public async Task A_read_that_finds_the_send_still_held_or_unknown_says_nothing_of_it(string state)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.status");
+        var send = WorkItemFactory.NewProviderOp(scene.Campaign, "message.send", Noon);
+        db.WorkItems.Add(send);
+        await db.SaveChangesAsync(Ct);
+
+        await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, Status, TestPlugins.FakeProviderId, false, Succeeded(Read(state), null), Ct, ReadOf(send));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Succeeded, scene.Item.Status);
+        Assert.False(await db.Journal.AnyAsync(entry => entry.Kind == JournalKinds.MessageSentObserved, Ct));
+    }
+
+    private static OperationContract Status => OperationCatalog.Find("message.status")!;
+
+    /// <summary>What a read of a send answers, in one of the document's words.</summary>
+    private static JsonNode Read(string state) => new JsonObject
+    {
+        ["state"] = state,
+        ["channel"] = "email",
+        ["cancelable"] = state == "queued",
+        ["accepted_for"] = "2026-09-15T11:55:00Z",
+        ["sent_at"] = state == "sent" ? "2026-09-15T11:58:00Z" : null,
+        ["message_id"] = state == "sent" ? "msg-7001" : null,
+        ["rendered_subject"] = null,
+        ["rendered_body"] = null,
+        ["failure_reason"] = null,
+        ["failure_code"] = null,
+        ["cancelled_at"] = null,
+    };
+
+    /// <summary>The input the claim composes for a read of <paramref name="send"/>, with the reference its attempt returned.</summary>
+    private static JsonObject ReadOf(WorkItem send) => new()
+    {
+        ["args"] = new JsonObject { ["send"] = send.PublicId },
+        ["send"] = new JsonObject { ["work_item"] = send.PublicId, ["operation"] = send.Operation, ["reference"] = "email-1001" },
+    };
+
+    /// <summary>
+    /// The reference is said beside the result and in it, and the two are one value. An answer that says it in one place
+    /// only would leave a person reading the result and a later call working by the identifier on two different things, so
+    /// it is a shape error like any other, and nothing in it is written down.
+    /// </summary>
+    [Fact]
+    public async Task A_send_s_reference_said_in_the_result_alone_is_a_result_the_operation_refuses()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.send");
+
+        await scene.RecordAsync(db, Send, Succeeded(Taken(scene.Contact.PublicId, "email-1001"), new JsonObject { ["contact"] = "p_1001" }));
+
+        var error = scene.Attempt.Error!;
+        Assert.Equal((AttemptErrors.ResultInvalid, FailureClass.Ambiguous, false), (error.Code, error.Class, error.Retriable));
+        Assert.Equal(("/external_ids/send", "const"), (Assert.Single(error.Details!).Field, error.Details![0].Code));
+        Assert.Empty(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+    }
+
+    /// <summary>
+    /// A send that lost its answer is repeated only under a package that says it settles it by the key: such a package
+    /// makes every attempt's send under the work item's idempotency key, so the repeat is answered with the first send's
+    /// own answer where the provider took it, and the item goes back to be claimed. Under any other package nothing
+    /// says the first send carried a key, so a repeat could reach the person twice and the end is final. Either way the
+    /// contact the plugin learned is still written down.
+    /// </summary>
+    [Theory]
+    [InlineData(true, WorkItemStatus.Created)]
+    // Critical: a send no package settles by its key is never repeated.
+    [InlineData(false, WorkItemStatus.Failed, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W5)])]
+    public async Task A_send_that_lost_its_answer_is_repeated_only_under_a_package_that_settles_it_by_the_key(bool settlesByKey, WorkItemStatus expected)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.send");
+
+        Assert.Equal(RepeatAfterAmbiguous.AfterRecoveryRead, Send.RepeatAfterAmbiguous);
+        await scene.RecordAsync(db, Send, Failed(new OutcomeError(FailureClass.Ambiguous, "provider_answer_lost", "no answer", null, new JsonObject { ["contact"] = "p_1001" })), settlesByKey);
+
+        Assert.Equal(expected, scene.Item.Status);
+        Assert.Equal((FailureClass.Ambiguous, settlesByKey), (scene.Attempt.Error!.Class, scene.Attempt.Error.Retriable));
+        Assert.Equal("p_1001", Assert.Single(await db.ExternalIds.AsNoTracking().ToListAsync(Ct)).Value);
+    }
+
+    /// <summary>
+    /// The marker is asked only where the contract rests the repeat on the key: an operation whose recovery read stands
+    /// on its own is repeated after a lost answer under a package that lists nothing, exactly as before.
+    /// </summary>
+    [Theory]
+    [InlineData("contact.update")]
+    [InlineData("campaign.create")]
+    public async Task An_operation_whose_repeat_does_not_rest_on_the_key_is_repeated_under_a_package_that_lists_nothing(string operation)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: operation);
+        var contract = OperationCatalog.Find(operation)!;
+
+        Assert.Equal(RepeatAfterAmbiguous.AfterRecoveryRead, contract.RepeatAfterAmbiguous);
+        Assert.False(OutcomeContract.SettlesByKey(contract));
+        await scene.RecordAsync(db, contract, Failed(new OutcomeError(FailureClass.Ambiguous, "provider_answer_lost", "no answer", null, null)), settlesByKey: false);
+
+        Assert.Equal(WorkItemStatus.Created, scene.Item.Status);
+        Assert.Equal((FailureClass.Ambiguous, true), (scene.Attempt.Error!.Class, scene.Attempt.Error.Retriable));
     }
 
     /// <summary>
@@ -661,13 +844,18 @@ public class ProviderOutcomeRecorderTests
         { "succeeded", true },
         { "campaign_not_found", true },
         { HostOutcomeCodes.PluginException, false },
+        { UnjudgedOutcomeCodes.ProviderInputInvalid, false },
+        { UnjudgedOutcomeCodes.CapabilityNotOffered, false },
         { "rate_limited", false },
         { "provider_answer_lost", false },
     };
 
     /// <summary>
     /// A call to held work that the provider judged on the work — it succeeded, or failed permanent or validation — got
-    /// past the block, which clears; a transient or ambiguous failure, or the host's own ending, says nothing about it.
+    /// past the block, which clears; a transient or ambiguous failure, the host's own ending, the package's refusal of
+    /// the provider's object, answered before any call, or the provider's answer that it does not offer the operation yet,
+    /// which judges nothing of the work, says nothing about it. Each failure is recorded as it was given:
+    /// one refused as an answer outside the contract would leave the block open too, for another reason.
     /// </summary>
     [Theory]
     [MemberData(nameof(WhatAnAnswerSaysOfAnOpenBlock))]
@@ -684,13 +872,20 @@ public class ProviderOutcomeRecorderTests
         db.ProviderBlocks.Add(block);
         await db.SaveChangesAsync(Ct);
 
-        var result = answer switch
+        var given = answer switch
         {
-            "succeeded" => Succeeded(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["campaign_external_id"] = "sq-1129", ["status"] = "paused" }) }, null),
-            HostOutcomeCodes.PluginException => Failed(new OutcomeError(FailureClass.Permanent, answer, "the host stopped the plugin", null, null)),
-            _ => Failed(new OutcomeError(OperationCatalog.Find(Pause.Id)!.FailureCodes.Single(c => c.Code == answer).Class, answer, "the provider said so", null, null)),
+            "succeeded" => null,
+            HostOutcomeCodes.PluginException => new OutcomeError(FailureClass.Permanent, answer, "the host stopped the plugin", null, null),
+            UnjudgedOutcomeCodes.ProviderInputInvalid => new OutcomeError(FailureClass.Validation, answer, "args.provider is read as an object with a schedule; the object given is not that shape", null, null),
+            UnjudgedOutcomeCodes.CapabilityNotOffered => new OutcomeError(FailureClass.Permanent, answer, "campaign.pause: the provider does not offer this operation yet", null, null),
+            _ => new OutcomeError(OperationCatalog.Find(Pause.Id)!.FailureCodes.Single(c => c.Code == answer).Class, answer, "the provider said so", null, null),
         };
-        await scene.RecordAsync(db, Pause, result);
+        await scene.RecordAsync(
+            db,
+            Pause,
+            given is null
+                ? Succeeded(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["campaign_external_id"] = "sq-1129", ["status"] = "paused" }) }, null)
+                : Failed(given));
 
         var row = await db.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == block.Id, Ct);
         Assert.True(
@@ -698,6 +893,13 @@ public class ProviderOutcomeRecorderTests
             $"After '{answer}' the block is {row.Status}, cleared by attempt {row.ClearedByAttemptId}.");
         Assert.Equal(clears ? (int?)scene.Attempt.Id : null, row.ClearedByAttemptId);
         Assert.NotEqual(WorkItemStatus.Waiting, scene.Item.Status);
+        if (given is not null)
+        {
+            var error = scene.Attempt.Error!;
+            Assert.Equal(
+                (given.Code, (FailureClass?)given.Class, OutcomeContract.Retriable(given.Class, Pause)),
+                (error.Code, error.Class, error.Retriable));
+        }
     }
 
     /// <summary>
@@ -902,6 +1104,7 @@ public class ProviderOutcomeRecorderTests
         var recorder = new ProviderOutcomeRecorder(
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             new ExternalIdStore(new JournalWriter(clock), clock),
+            new SentFacts(new JournalWriter(clock)),
             options,
             timing);
         return new Scene(recorder, campaign, contact, item, attempt);
@@ -911,9 +1114,9 @@ public class ProviderOutcomeRecorderTests
 
     private sealed record Scene(ProviderOutcomeRecorder Recorder, Campaign Campaign, Contact Contact, WorkItem Item, Attempt Attempt)
     {
-        public async Task RecordAsync(JasonDbContext db, OperationContract contract, PluginInvocationResult result)
+        public async Task RecordAsync(JasonDbContext db, OperationContract contract, PluginInvocationResult result, bool settlesByKey = false)
         {
-            await Recorder.RecordAsync(db, Item, Attempt, contract, TestPlugins.FakeProviderId, result, Ct);
+            await Recorder.RecordAsync(db, Item, Attempt, contract, TestPlugins.FakeProviderId, settlesByKey, result, Ct);
             await db.SaveChangesAsync(Ct);
         }
 

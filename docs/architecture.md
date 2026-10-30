@@ -1384,15 +1384,18 @@ default.
 
 A tagged version, not every merge to `main`, is the conceptual release trigger for
 distributable binaries. CI builds and tests supported self-contained assets and publishes
-versioned GitHub Release artifacts with integrity metadata, release notes, and the platform
-signing or notarization required for Windows and macOS. GitHub Releases can serve as the
-binary store. The product's own address, `jasonharness.ai`, stands in front of it: the feed,
-the install lines and the release page name the address, which redirects every request under
-`/releases/` to the same path in the public repository, so the store behind it can change
-while those paths stay the same. This mechanism describes artifact integrity and update
-compatibility; it does not impose a roadmap, and source increments are not atomic product
-releases. The private repository's pipeline publishes each release in the public repository,
-together with the open set at that version, through a pull request a person reviews.
+versioned GitHub Release artifacts with integrity metadata, release notes, and each
+platform's signature where it has one: the macOS executable is signed with Reply's Developer
+ID and notarized, the Linux executable is not signed, and signing the Windows executable is
+deferred (DEF-DIST-001). GitHub
+Releases can serve as the binary store. The product's own address, `jasonharness.ai`, stands
+in front of it: the feed, the install lines and the release page name the address, which
+redirects every request under `/releases/` to the same path in the public repository, so the
+store behind it can change while those paths stay the same. This mechanism describes
+artifact integrity and update compatibility; it does not impose a roadmap, and source
+increments are not atomic product releases. The private repository's pipeline publishes each
+release in the public repository, together with the open set at that version, through a pull
+request a person reviews.
 
 ### 15.8 Update responsibility
 
@@ -1884,7 +1887,7 @@ are visible — none of them should be read as settled or implemented.
 | DEF-ADP-002 | Direct HTTP capability and its destination, credential, retry, redaction policy. | `host.exec` is the selected minimum; unrestricted network access is not assumed. |
 | DEF-ADP-003 | Plugin installation, update, removal, signing, publisher identity, warnings, marketplace/discovery. | Plugin packages are executable local code; official/community mechanism remains shared. |
 | DEF-ADP-004 | OS-level sandboxing, resource limits, executable/environment allowlists, log redaction. | Jint/process isolation is not represented as a complete sandbox. |
-| DEF-DIST-001 | Exact supported OS/architecture matrix, signing/notarization pipeline, installer behavior. | Platform-specific self-contained builds and GitHub release assets remain selected. |
+| DEF-DIST-001 | Exact supported OS/architecture matrix, signing the Windows executable, a stapled macOS installer package, installer behavior. | Platform-specific self-contained builds and GitHub release assets remain selected; the macOS executable is signed with a Developer ID and notarized. |
 | DEF-UPDATE-001 | Staging layout, drain timeout, backup format, migration health checks, rollback, repair. | Runtime does not self-replace; a short-lived control process owns updates. |
 | DEF-PRODUCT-001 | Golden path, onboarding narrative, product success criteria, demonstration flow. | The complete architecture remains independent of delivery order. |
 | DEF-PLAN-001 | Backlog decomposition, implementation sequence, technical spikes, testing strategy, delivery governance. | This vision is the source input and contains no roadmap. |

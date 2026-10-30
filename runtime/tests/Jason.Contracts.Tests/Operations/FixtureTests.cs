@@ -238,8 +238,17 @@ public class FixtureTests
         var contract = Operation(fixture, relative);
 
         var resultProblems = outcome.Status == OutcomeStatus.Succeeded
-            ? [.. OutcomeContract.CheckResult(contract, outcome.Result), .. OutcomeContract.CheckExternalIds(contract, outcome.ExternalIds)]
+            ?
+            [
+                .. OutcomeContract.CheckResult(contract, outcome.Result),
+                .. OutcomeContract.CheckExternalIds(contract, outcome.ExternalIds),
+                .. OutcomeContract.CheckReference(contract, outcome.Result, outcome.ExternalIds),
+            ]
             : new List<SchemaProblem>();
+
+        Assert.True(
+            status == "failed" || !expected.ContainsKey("package_settles_by_key"),
+            $"{relative} names package_settles_by_key on an outcome that did not fail, where no package is asked anything.");
 
         switch (status)
         {
@@ -249,8 +258,19 @@ public class FixtureTests
                 Assert.False((bool)expected["retriable"]!, "A succeeded outcome is never repeated.");
                 if (expected["pinned"] is JsonObject pins)
                 {
-                    // A success's identifiers are beside its result, every one of a declared kind, so all of them are written down.
-                    Assert.Equal(pins.ToJsonString(), (outcome.ExternalIds ?? []).ToJsonString());
+                    // A success's identifiers are beside its result, every one of a declared kind, so all of them are written
+                    // down — on the contact or the campaign they name, except the reference of the act the work item made the
+                    // provider take, which pins no entity and is kept on the attempt and in the result alone.
+                    var written = new JsonObject();
+                    foreach (var (kind, value) in outcome.ExternalIds ?? [])
+                    {
+                        if (contract.ExternalIds[kind].Entity != PinnedEntity.WorkItem)
+                        {
+                            written[kind] = value?.DeepClone();
+                        }
+                    }
+
+                    Assert.Equal(pins.ToJsonString(), written.ToJsonString());
                 }
 
                 break;
@@ -259,11 +279,33 @@ public class FixtureTests
                 Assert.Equal(OutcomeStatus.Failed, outcome.Status);
                 Assert.NotNull(outcome.Error);
                 TheFailureTheOperationDeclares(relative, contract, outcome.Error);
+                var passed = OutcomeContract.CheckFailure(contract, outcome.Error);
+                Assert.True(passed is null, $"{relative} shows a failure the runtime's check refuses: {passed?.Pointer} {passed?.Message}");
                 var recorded = OutcomeContract.Recorded(outcome.Error, out var blockProblems);
                 Assert.Equal(Class(expected), recorded);
                 TheBlockTheFailureCarries(relative, expected, outcome.Error, blockProblems);
-                Assert.Equal(OutcomeContract.Retriable(recorded, contract), (bool)expected["retriable"]!);
+
+                // Where the operation settles a lost answer by the work item's key, a repeat rests on the package's word,
+                // so the fixture says which package answered; no other failure names one.
+                var keyed = OutcomeContract.SettlesByKey(contract) && recorded == FailureClass.Ambiguous;
+                Assert.True(
+                    keyed == expected.ContainsKey("package_settles_by_key"),
+                    $"{relative} {(keyed ? "leaves out" : "names")} package_settles_by_key, which a failure states exactly where its operation settles a lost answer by the key.");
+                var listed = keyed && (bool)expected["package_settles_by_key"]!;
+                Assert.Equal(OutcomeContract.Retriable(recorded, contract, listed), (bool)expected["retriable"]!);
                 TheIdentifiersTheFailureLeaves(relative, contract, expected, outcome);
+                break;
+
+            case "result_invalid" when outcome.Status == OutcomeStatus.Failed:
+
+                // A failure outside the declared codes is refused at the half of it that is wrong, by the check the
+                // runtime holds every failed answer to.
+                Assert.NotNull(outcome.Error);
+                var outside = OutcomeContract.CheckFailure(contract, outcome.Error);
+                Assert.True(outside is not null, $"{relative} expects `result_invalid` of a failure its operation's check passes.");
+                TheStatedProblemsAndNoOthers(relative, expected, [outside]);
+                Assert.Equal(FailureClass.Ambiguous, Class(expected));
+                Assert.False((bool)expected["retriable"]!, "A failure outside the contract is deterministic, so a repeat would only fail the same way again.");
                 break;
 
             case "result_invalid":
@@ -354,6 +396,24 @@ public class FixtureTests
     }
 
     /// <summary>
+    /// A refusal of the provider's object points into it from the input's root, as every pointer the runtime writes about
+    /// the slot does: <c>/args/provider/…</c> in the composed input the package was handed, never a path relative to the
+    /// object itself, which would read as a key of the input.
+    /// </summary>
+    [Fact]
+    public void A_refusal_of_the_provider_s_object_points_from_the_input_s_root()
+    {
+        var pointers = ContractFiles.FixtureFiles("outcome").Select(Read)
+            .Select(fixture => fixture["outcome"]?["error"])
+            .Where(error => (string?)error?["code"] == UnjudgedOutcomeCodes.ProviderInputInvalid && error?["details"]?["pointer"] is not null)
+            .Select(error => (string)error!["details"]!["pointer"]!)
+            .ToList();
+
+        Assert.NotEmpty(pointers);
+        Assert.All(pointers, pointer => Assert.StartsWith($"/args/{OperationContract.ProviderSlot}/", pointer, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The blocked answer is published for a send, an invitation, a reply and a read, and a block outside its contract
     /// beside them, so a plugin author sees both what is kept and what is refused.
     /// </summary>
@@ -376,10 +436,17 @@ public class FixtureTests
     /// A failure a fixture shows is one its operation declares, filed under the class the document files it under.
     /// The class is what the runtime reads, so a code the document never listed teaches a plugin author to report
     /// something no operation accepts, and a code shown under the wrong class teaches the opposite of the document:
-    /// repeat where the contract says stop, or stop where it says repeat.
+    /// repeat where the contract says stop, or stop where it says repeat. The exceptions are the codes reserved beside
+    /// every operation (<see cref="UnjudgedOutcomeCodes.Reserved"/>), which no operation declares and which a fixture
+    /// shows under the one class each passes under.
     /// </summary>
     private static void TheFailureTheOperationDeclares(string relative, OperationContract contract, OutcomeError error)
     {
+        if (UnjudgedOutcomeCodes.Reserves(error.Class, error.Code))
+        {
+            return;
+        }
+
         var declared = contract.FailureCodes.SingleOrDefault(code => string.Equals(code.Code, error.Code, StringComparison.Ordinal));
 
         Assert.True(

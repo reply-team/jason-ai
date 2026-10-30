@@ -47,6 +47,11 @@ internal static partial class Account
             return await PrintAsync(Refused("auth.required", "Not authenticated.", exit: 2));
         }
 
+        if (UnknownCapability(root) is { } misnamed)
+        {
+            return await PrintAsync(misnamed);
+        }
+
         if (line.UsageError is { } usage)
         {
             await Console.Error.WriteLineAsync("error: " + usage);
@@ -112,6 +117,7 @@ internal static partial class Account
         "contact opt-out" => ContactOptOut(root, line, stdin),
         "inbox list" => InboxList(root, line),
         "inbox get" => InboxGet(root, line),
+        "inbox changes" => InboxChanges(root, line),
         "inbox reply" => InboxReply(root, line, stdin),
         "inbox categories" => InboxCategories(root),
         "inbox categorize" => InboxCategorize(root, line),
@@ -119,6 +125,8 @@ internal static partial class Account
         "inbox mark-unread" => InboxMark(root, line, read: false),
         "contact linkedin-connect" or "contact send-email" or "contact linkedin-message" or "contact linkedin-inmail" or "contact linkedin-voice"
             => DirectSendCommand(root, command, line, stdin),
+        "direct-send get" => DirectSendGet(root, line),
+        "direct-send cancel" => DirectSendCancel(root, line),
         "account list" => AccountList(root, line),
         "schedule list" => ScheduleList(root),
         "auth whoami" => AuthWhoami(root),
@@ -1307,6 +1315,7 @@ internal static partial class Account
             ["body"] = stdin,
             ["args"] = new JsonArray([.. argv.Select(argument => (JsonNode)JsonValue.Create(argument))]),
             ["env"] = VendorVariables(),
+            ["user_agent"] = Jason.ReplyCliStub.ReplyCliRelease.UserAgent(Environment.GetEnvironmentVariable("REPLY_CLIENT")),
         };
 
         Append(Path.Combine(root, CallsFile), entry.ToJsonString() + "\n");

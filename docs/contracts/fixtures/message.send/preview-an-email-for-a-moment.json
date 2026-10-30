@@ -1,0 +1,43 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "an email for a later moment: the summary carries the moment as the arguments name it",
+  "input": {
+    "args": {
+      "channel": "email",
+      "sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "message": { "format": "email", "subject": "The Lisbon meetup", "body": "Hi Marta, thanks for the chat at the meetup." },
+      "send_after": "2026-11-03T09:00:00-05:00"
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Send marta@example.com a message by email, from the provider's account s_12 (ann@example.com), outside any campaign — subject: The Lisbon meetup; text: Hi Marta, thanks for the chat at the meetup.; send after: 2026-11-03T09:00:00-05:00",
+    "highlights": {
+      "/contacts/0/channels/0/value": "marta@example.com",
+      "/args/channel": "email",
+      "/args/sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "/args/message": { "format": "email", "subject": "The Lisbon meetup", "body": "Hi Marta, thanks for the chat at the meetup." },
+      "/args/message/compose": null,
+      "/args/send_after": "2026-11-03T09:00:00-05:00"
+    }
+  }
+}

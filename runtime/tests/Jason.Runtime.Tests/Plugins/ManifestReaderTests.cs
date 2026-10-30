@@ -170,6 +170,211 @@ public class ManifestReaderTests : IDisposable
         Assert.NotEmpty(problem.Message);
     }
 
+    /// <summary>The two sends, which name an argument a plugin may take per channel, and what follows in each row.</summary>
+    private const string Sends = "operations: [message.send, social_invitation.send]\narguments:\n";
+
+    /// <summary>
+    /// What a provider takes on some of an operation's channels and not on others is listed per operation, argument and
+    /// channel, and each name is read against the operation's own document: an operation the plugin does not implement,
+    /// one this build publishes no document for, an argument its document does not name per channel, or a channel its
+    /// arguments do not take, is a package problem, because the claim would read the list against nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(Sends + "  message.send:\n    send_after: [email, linkedin]\n  social_invitation.send:\n    send_after: [linkedin]\n", null, null)]
+    [InlineData(Sends + "  message.send:\n    send_after: [linkedin]\n", null, null)]
+    [InlineData("operations: [message.send]\narguments: send_after\n", "field_invalid", "arguments")]
+    [InlineData(Sends + "  message.send: [send_after]\n", "field_invalid", "arguments.message.send")]
+    [InlineData(Sends + "  message.send:\n    send_after: []\n", "field_invalid", "arguments.message.send.send_after")]
+    [InlineData(Sends + "  message.send:\n    send_after: email\n", "field_invalid", "arguments.message.send.send_after")]
+    [InlineData(Sends + "  message.send:\n    send_after: [email, email]\n", "field_invalid", "arguments.message.send.send_after[1]")]
+    [InlineData(Sends + "  message.send:\n    send_after: [fax]\n", "argument_invalid", "arguments.message.send.send_after[0]")]
+    [InlineData(Sends + "  social_invitation.send:\n    send_after: [email]\n", "argument_invalid", "arguments.social_invitation.send.send_after[0]")]
+    [InlineData(Sends + "  message.send:\n    sender: [email]\n", "argument_invalid", "arguments.message.send.sender")]
+    [InlineData(Sends + "  conversation.reply:\n    send_after: [email]\n", "argument_invalid", "arguments.conversation.reply")]
+    [InlineData("operations: [echo.run]\narguments:\n  echo.run:\n    send_after: [email]\n", "argument_invalid", "arguments.echo.run")]
+    public void An_argument_taken_per_channel_answers_with_its_own_code_at_its_own_path(string manifest, string? code, string? path)
+    {
+        var result = Read(Merge(manifest));
+
+        if (code is null)
+        {
+            Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+            return;
+        }
+
+        Assert.Null(result.Manifest);
+        var problem = Assert.Single(result.Problems, p => p.Code == code && p.Path == path);
+        Assert.NotEmpty(problem.Message);
+    }
+
+    /// <summary>
+    /// The list is what the claim reads: an argument is taken on exactly the channels listed for it, and a manifest that
+    /// lists nothing takes no such argument anywhere.
+    /// </summary>
+    [Fact]
+    public void A_manifest_takes_an_argument_on_exactly_the_channels_it_lists_it_for()
+    {
+        var listed = Read(Merge(Sends + "  message.send:\n    send_after: [linkedin]\n")).Manifest!;
+        var silent = Read(Merge("operations: [message.send]\n")).Manifest!;
+
+        Assert.True(listed.Arguments.Takes("message.send", "send_after", "linkedin"));
+        Assert.False(listed.Arguments.Takes("message.send", "send_after", "email"));
+        Assert.False(listed.Arguments.Takes("social_invitation.send", "send_after", "linkedin"));
+        Assert.False(silent.Arguments.Takes("message.send", "send_after", "linkedin"));
+    }
+
+    /// <summary>A notification plugin implements no canonical operation, so it takes no argument of one.</summary>
+    [Fact]
+    public void A_notification_plugin_lists_no_argument_per_channel()
+    {
+        var refused = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+            arguments:
+              message.send:
+                send_after: [email]
+            """);
+
+        var problem = Assert.Single(refused.Problems);
+        Assert.Equal(("argument_invalid", "arguments"), (problem.Code, problem.Path));
+    }
+
+    /// <summary>
+    /// The channels a plugin writes an operation's message as a template on are listed per operation, and each name is
+    /// read against the operation's own document: an operation the plugin does not implement, one this build publishes no
+    /// document for, one whose document names no channel its message may be a template on, or a channel the document
+    /// does not name there, is a package problem, because the claim would read the list against nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("operations: [message.send]\ntemplates:\n  message.send: [email, linkedin]\n", null, null)]
+    [InlineData("operations: [message.send]\ntemplates:\n  message.send: [email]\n", null, null)]
+    [InlineData("operations: [message.send]\ntemplates: [message.send]\n", "field_invalid", "templates")]
+    [InlineData("operations: [message.send]\ntemplates:\n  message.send: email\n", "field_invalid", "templates.message.send")]
+    [InlineData("operations: [message.send]\ntemplates:\n  message.send: []\n", "field_invalid", "templates.message.send")]
+    [InlineData("operations: [message.send]\ntemplates:\n  message.send: [[email]]\n", "field_invalid", "templates.message.send[0]")]
+    [InlineData("operations: [message.send]\ntemplates:\n  message.send: [email, email]\n", "field_invalid", "templates.message.send[1]")]
+    [InlineData("operations: [message.send]\ntemplates:\n  message.send: [phone]\n", "template_invalid", "templates.message.send[0]")]
+    [InlineData("operations: [message.send]\ntemplates:\n  social_invitation.send: [linkedin]\n", "template_invalid", "templates.social_invitation.send")]
+    [InlineData("operations: [message.send, social_invitation.send]\ntemplates:\n  social_invitation.send: [linkedin]\n", "template_invalid", "templates.social_invitation.send")]
+    [InlineData("operations: [echo.run]\ntemplates:\n  echo.run: [email]\n", "template_invalid", "templates.echo.run")]
+    public void A_template_written_per_channel_answers_with_its_own_code_at_its_own_path(string manifest, string? code, string? path)
+    {
+        var result = Read(Merge(manifest));
+
+        if (code is null)
+        {
+            Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+            return;
+        }
+
+        Assert.Null(result.Manifest);
+        var problem = Assert.Single(result.Problems, p => p.Code == code && p.Path == path);
+        Assert.NotEmpty(problem.Message);
+    }
+
+    /// <summary>
+    /// The list is what the claim reads: a plugin writes a template on exactly the channels it lists for the operation,
+    /// and a manifest that lists nothing writes a template nowhere — an absent key means none.
+    /// </summary>
+    [Fact]
+    public void A_manifest_writes_a_template_on_exactly_the_channels_it_lists()
+    {
+        var listed = Read(Merge("operations: [message.send]\ntemplates:\n  message.send: [email]\n")).Manifest!;
+        var silent = Read(Merge("operations: [message.send]\n")).Manifest!;
+
+        Assert.True(listed.Templates.Writes("message.send", "email"));
+        Assert.False(listed.Templates.Writes("message.send", "linkedin"));
+        Assert.False(listed.Templates.Writes("social_invitation.send", "linkedin"));
+        Assert.False(silent.Templates.Writes("message.send", "email"));
+    }
+
+    /// <summary>A notification plugin implements no canonical operation, so it writes no template of one.</summary>
+    [Fact]
+    public void A_notification_plugin_writes_no_template()
+    {
+        var refused = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+            templates:
+              message.send: [email]
+            """);
+
+        var problem = Assert.Single(refused.Problems);
+        Assert.Equal(("template_invalid", "templates"), (problem.Code, problem.Path));
+    }
+
+    /// <summary>
+    /// A plugin lists the operations whose lost answer it settles by the work item's key, and each name is read against
+    /// the operation's own document: one the plugin does not implement, one this build publishes no document for, or one
+    /// whose recovery read does not rest on the key, is a package problem, because no repeat would ever read it there.
+    /// </summary>
+    [Theory]
+    [InlineData("operations: [message.send, social_invitation.send]\nsettles_by_key: [message.send, social_invitation.send]\n", null, null)]
+    [InlineData("operations: [message.send, contact.update]\nsettles_by_key: [message.send]\n", null, null)]
+    [InlineData("operations: [message.send]\nsettles_by_key: message.send\n", "field_invalid", "settles_by_key")]
+    [InlineData("operations: [message.send]\nsettles_by_key: []\n", "field_invalid", "settles_by_key")]
+    [InlineData("operations: [message.send]\nsettles_by_key: [[message.send]]\n", "field_invalid", "settles_by_key[0]")]
+    [InlineData("operations: [message.send]\nsettles_by_key: [message.send, message.send]\n", "field_invalid", "settles_by_key[1]")]
+    [InlineData("operations: [message.send, contact.update]\nsettles_by_key: [contact.update]\n", "settles_by_key_invalid", "settles_by_key[0]")]
+    [InlineData("operations: [message.send]\nsettles_by_key: [social_invitation.send]\n", "settles_by_key_invalid", "settles_by_key[0]")]
+    [InlineData("operations: [echo.run]\nsettles_by_key: [echo.run]\n", "settles_by_key_invalid", "settles_by_key[0]")]
+    public void An_operation_settled_by_the_key_answers_with_its_own_code_at_its_own_path(string manifest, string? code, string? path)
+    {
+        var result = Read(Merge(manifest));
+
+        if (code is null)
+        {
+            Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+            return;
+        }
+
+        Assert.Null(result.Manifest);
+        var problem = Assert.Single(result.Problems, p => p.Code == code && p.Path == path);
+        Assert.NotEmpty(problem.Message);
+    }
+
+    /// <summary>
+    /// The list is what a repeat reads: a plugin settles a lost answer by the key for exactly the operations it lists,
+    /// and a manifest that lists nothing settles none, whatever it implements.
+    /// </summary>
+    [Fact]
+    public void A_manifest_settles_by_the_key_exactly_the_operations_it_lists()
+    {
+        var listed = Read(Merge("operations: [message.send, social_invitation.send]\nsettles_by_key: [message.send]\n")).Manifest!;
+        var silent = Read(Merge("operations: [message.send, social_invitation.send]\n")).Manifest!;
+
+        Assert.True(listed.SettlesByKey("message.send"));
+        Assert.False(listed.SettlesByKey("social_invitation.send"));
+        Assert.False(silent.SettlesByKey("message.send"));
+        Assert.Empty(silent.KeyedOperations);
+    }
+
+    /// <summary>A notification plugin implements no canonical operation, so it settles none by a key.</summary>
+    [Fact]
+    public void A_notification_plugin_settles_nothing_by_a_key()
+    {
+        var refused = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+            settles_by_key: [message.send]
+            """);
+
+        var problem = Assert.Single(refused.Problems);
+        Assert.Equal(("settles_by_key_invalid", "settles_by_key"), (problem.Code, problem.Path));
+    }
+
     /// <summary>
     /// A binding schema is a stranger's, so the dialect's time is a property of its patterns, decided where its author
     /// can fix it: each is probed on a warm engine, and one that cannot finish within the timeout, twice, refuses the

@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.10.0
+version: 0.14.1
 kind: provider
 name: Reply
 description: >-
@@ -10,7 +10,9 @@ homepage: https://reply.io
 contracts:
   protocol: [1]
   operations: [1]
-operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, schedule.list, social_invitation.send, message.send]
+  # The runtime's own reader asks the account's events of this package, from Reply's change feed (`reply inbox changes`).
+  events: [1]
+operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, schedule.list, social_invitation.send, message.send, message.status, message.cancel]
 entry:
   module: main.js
   function: invoke
@@ -26,9 +28,14 @@ capabilities:
         # `reply contact linkedin-connect`, `reply contact send-email` and the rest — with the results and the error
         # codes this package reads, a LinkedIn URL matched by its lowercased slug, a start that says the state it left,
         # the Reply user whose each account is, and the contact options on the direct sends and on `reply contact
-        # update`, which import a person Reply holds nobody for, and `reply schedule list`, the account's sending schedules
-        # with their windows. This package makes no raw call. A reload runs the version command and refuses an older one.
-        min_version: 0.16.0
+        # update`, which import a person Reply holds nobody for, `reply schedule list`, the account's sending schedules
+        # with their windows, and `reply inbox changes`, Reply's change feed — and, on the direct sends, the moment a send
+        # goes out after (`--send-after`), the key it is made under (`--idempotency-key`), the sending schedule an email is
+        # timed by (`--schedule-id`) and the reference, the moment and the state Reply answers, with `reply direct-send
+        # get`, which also reads a send by its reference, and `reply direct-send cancel`, which takes one back — and the
+        # client a call came through, which the CLI reads from `REPLY_CLIENT` from 0.17.2. This package makes no raw
+        # call. A reload runs the version command and refuses an older one.
+        min_version: 0.17.2
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak
@@ -50,6 +57,20 @@ capabilities:
 # ambiguous, because the provider may already have enrolled someone.
 limits:
   memory_mb: 256
+# The moment a send goes out after: Reply keeps a direct send for a later moment on email and on LinkedIn, and an
+# invitation goes only on LinkedIn.
+arguments:
+  message.send:
+    send_after: [email, linkedin]
+  social_invitation.send:
+    send_after: [linkedin]
+# The channels a message goes on as a template Reply fills in for the person: an email, and on LinkedIn a message and an
+# InMail. A voice message is spoken from a final script, and Reply's LinkedIn sending account carries no last name.
+templates:
+  message.send: [email, linkedin]
+# A send that lost its answer is settled by the work item's key: the send carries it to Reply, and a repeat first asks
+# Reply what it already holds under that key, so the runtime may repeat these two.
+settles_by_key: [message.send, social_invitation.send]
 binding:
   type: object
   additionalProperties: false

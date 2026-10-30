@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 
 namespace Jason.Runtime.Tests.Documentation;
@@ -36,6 +37,42 @@ public sealed partial class HostCodesDocTests
     {
         var text = Flat(Source(page));
         Assert.True(text.Contains(sentence, StringComparison.Ordinal), $"{page} no longer says: {sentence}");
+    }
+
+    /// <summary>
+    /// The code reserved for a provider's object a package cannot read passes beside every operation as the host's codes
+    /// do, under one class. The contracts page states it once, beside the slot, with its limit; the plugin page names it
+    /// where it says which codes pass beside the declared ones (the sentence that tells an author what to answer is held
+    /// by <see cref="CanonicalReadsDocTests"/>). The contracts page says once that a reserved code is not the provider's
+    /// judgment of the work, so it clears no block, and the provider-block rule lists it among the answers that say
+    /// nothing about the block.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/contracts/README.md", $"fails the item before any call with **`{UnjudgedOutcomeCodes.ProviderInputInvalid}`**, class `validation`: a failure code reserved beside every operation and declared by none, which the runtime passes under that class alone")]
+    [InlineData("docs/contracts/README.md", "the code its error carries is one the document declares, under the class the document declares it with, or a code reserved beside every operation, under the class it is reserved with.")]
+    [InlineData("docs/contracts/README.md", "The code is for this key only: a package that cannot read an argument the operation's document declares has a defect of its own, or has found one in the document, and no code stands for either.")]
+    [InlineData("docs/contracts/README.md", $"The reserved `{UnjudgedOutcomeCodes.ProviderInputInvalid}` passes the same way, under `validation` alone ([the input a plugin receives](#the-input-a-plugin-receives)), and an events read refuses it too.")]
+    [InlineData("docs/contracts/README.md", "A reserved code is not the provider's judgment of the work, so it clears no [provider block](#the-provider-block). The code is for this key only")]
+    [InlineData("docs/contracts/README.md", "and, where the provider says, when it clears by itself; an open block is cleared only by the provider's judgment of the work.")]
+    [InlineData("docs/work-execution.md", $"**anything else** — `transient`, `ambiguous`, an answer outside the contract, the host's own ending, or a code reserved beside every operation, which no provider judgment of the work stands behind (`{UnjudgedOutcomeCodes.ProviderInputInvalid}`, which a package answers before any call, [the input a plugin receives](contracts/README.md#the-input-a-plugin-receives); `{UnjudgedOutcomeCodes.CapabilityNotOffered}`, the provider's answer that it does not offer what was asked yet, [a capability the provider does not offer yet](contracts/README.md#a-capability-the-provider-does-not-offer-yet)) — says nothing about the block: it stays open")]
+    [InlineData("docs/plugins.md", $"`{UnjudgedOutcomeCodes.ProviderInputInvalid}`, the code reserved for a provider's object you cannot read (§7), passes the same way, under `validation` alone.")]
+    public void The_pages_say_where_the_reserved_provider_input_code_passes(string page, string sentence)
+    {
+        var text = Flat(Source(page));
+        Assert.True(text.Contains(sentence, StringComparison.Ordinal), $"{page} no longer says: {sentence}");
+    }
+
+    /// <summary>
+    /// The provider-block rule is one list, and a reader who stops at it reads the whole rule: the reserved code is named
+    /// once on that page, inside the list, and not again in a paragraph of its own below it.
+    /// </summary>
+    [Fact]
+    public void The_provider_block_rule_names_the_reserved_code_once_inside_its_list()
+    {
+        var text = Flat(Source("docs/work-execution.md"));
+        var named = text.Split($"`{UnjudgedOutcomeCodes.ProviderInputInvalid}`").Length - 1;
+
+        Assert.True(named == 1, $"docs/work-execution.md names `{UnjudgedOutcomeCodes.ProviderInputInvalid}` {named} times.");
     }
 
     [GeneratedRegex(@"The other codes the host itself writes into a failed outcome — as opposed to your own vocabulary — are (?<list>.+?)\. All of them are `permanent`")]

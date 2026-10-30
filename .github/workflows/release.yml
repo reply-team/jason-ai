@@ -1,7 +1,8 @@
 # A tag named v<version> builds the release: three native runners, each packaging one platform through the same action
 # ci.yml runs on every pull request, and smoke-testing what it published, the Linux one first running the critical tier
-# at the tag, and one job that archives the Reply plugin's package from the tag's tree; then one job — the only one that
-# holds the publication token — assembles the manifest and the checksums, creates the release as a draft in
+# at the tag and the macOS one, in a job of its own that runs no test, signing and notarizing its executable, and one
+# job that archives the Reply plugin's package from the tag's tree; then one job — the only one that holds the
+# publication token — assembles the manifest and the checksums, creates the release as a draft in
 # reply-team/jason-ai, and opens the pull request that brings that repository to this version. Merging that pull request
 # is what tags the release there and publishes it.
 #
@@ -122,8 +123,8 @@ jobs:
             rid: linux-x64
           - os: windows-latest
             rid: win-x64
-          - os: macos-latest
-            rid: osx-arm64
+    # macOS is not a leg here: its job, below, holds the Apple identity, and a runner is handed every secret its job
+    # names, so the job that runs the tests names none.
     steps:
       - uses: actions/checkout@v7
 
@@ -149,8 +150,8 @@ jobs:
       # patch the executable carries, that the whole suite never ran on. What runs here, before anything is published, is
       # the critical tier on Linux, stamped with the version the tag names, and it is the run on that SDK: a release is a
       # build of a tree the suite passed, whose tier passes under its own version, on the SDK it is built with. The same
-      # tier on Windows and macOS would repeat a run this tree already passed there, on the dearest runners, so those two
-      # legs go straight to packaging.
+      # tier on Windows and macOS would repeat a run this tree already passed there, on the dearest runners, so the
+      # Windows leg and the macOS job go straight to packaging.
       - name: Test the critical tier (offline)
         if: matrix.rid == 'linux-x64'
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
@@ -188,7 +189,7 @@ jobs:
           # And it opens the database. Everything above passes on a build that cannot: a single-file publish
           # leaves SQLite's native library beside the executable unless it is told to bundle it, `--version`
           # and a status with no runtime never touch it, and the archive carries the executable alone — so the
-          # one build this whole wave exists to deliver would have gone out green. Starting the runtime is what
+          # one build a release exists to deliver would have gone out green. Starting the runtime is what
           # loads it.
           & $exe runtime start | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "jason runtime start exited with $LASTEXITCODE; the published executable cannot open its database" }
@@ -203,6 +204,120 @@ jobs:
 
           # The last command of this step is expected to exit 3, and pwsh would hand that on as the step's
           # own exit code. Everything asserted above passed, so the step succeeded.
+          exit 0
+
+  macos:
+    name: osx-arm64
+    needs: version
+    runs-on: macos-latest
+    # The one job that holds the Apple identity. It builds this platform alone, and the package action signs and
+    # notarizes its executable; it runs no test, so no test code and no test-only package shares a runner with the
+    # identity. The tier at the tag is the Linux leg's, above; this job publishes on its own, as the Windows leg does.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
+
+      - name: Package
+        id: package
+        uses: ./.github/actions/package
+        with:
+          rid: osx-arm64
+          version: ${{ needs.version.outputs.version }}
+          # A release signs the macOS executable with Reply's Developer ID and has it notarized. ci.yml passes none of
+          # these, so a pull request's build keeps the SDK's ad hoc signature.
+          sign-macos: true
+          apple-developer-id-p12-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          apple-developer-id-p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          apple-notary-key-p8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
+          apple-notary-key-id: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          apple-notary-issuer-id: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
+
+      # The archive is what a person downloads, so its executable is the one whose signature counts: unpacked here and
+      # read, rather than trusted to be the file the action signed. The Developer ID authority is required, not only a
+      # valid signature, which the SDK's ad hoc one would be.
+      - name: Read the signature of the archived macOS executable
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          unpacked="$RUNNER_TEMP/archived"
+          rm -rf "$unpacked"
+          mkdir -p "$unpacked"
+          tar -xzf "$ARCHIVE" -C "$unpacked"
+          ls -l "$unpacked"
+          codesign --verify --strict --verbose=2 "$unpacked/jason"
+          codesign --display --verbose=4 "$unpacked/jason"
+          signature="$(codesign --display --verbose=2 "$unpacked/jason" 2>&1)"
+          if ! grep -q '^Authority=Developer ID Application: ' <<< "$signature"; then
+            echo "::error title=Signature::The archived executable does not carry a Developer ID Application signature."
+            exit 1
+          fi
+
+      - name: Smoke-test the published executable
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+          VERSION: ${{ needs.version.outputs.version }}
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          $exe = $env:EXECUTABLE
+          $env:JASON_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke"
+
+          $elapsed = Measure-Command { & $exe --version | Tee-Object -Variable version }
+          if ($LASTEXITCODE -ne 0) { throw "jason --version exited with $LASTEXITCODE" }
+          Write-Host "jason --version -> $version ($([int]$elapsed.TotalMilliseconds) ms cold start)"
+
+          # What it prints is the tag's version plus build metadata (+<commit>), which SemVer says to ignore.
+          if (($version -split '\+')[0] -ne $env:VERSION) { throw "jason --version says '$version', and the tag says $env:VERSION" }
+
+          $elapsed = Measure-Command { & $exe runtime status | Tee-Object -Variable status }
+          $statusExit = $LASTEXITCODE
+          Write-Host "jason runtime status -> exit $statusExit in $([int]$elapsed.TotalMilliseconds) ms: $status"
+          if ($statusExit -ne 3) { throw "expected exit code 3 without a running runtime, got $statusExit" }
+          if ($status -notmatch '"code":"no_descriptor"') { throw "expected a no_descriptor error envelope" }
+
+          # And it opens the database. Everything above passes on a build that cannot: a single-file publish
+          # leaves SQLite's native library beside the executable unless it is told to bundle it, `--version`
+          # and a status with no runtime never touch it, and the archive carries the executable alone — so the
+          # one build a release exists to deliver would have gone out green. Starting the runtime is what
+          # loads it.
+          & $exe runtime start | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime start exited with $LASTEXITCODE; the published executable cannot open its database" }
+
+          & $exe runtime status | Tee-Object -Variable running | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime status exited with $LASTEXITCODE while a runtime was running" }
+          if ($running -notmatch '"applied_migrations":\["') { throw "runtime status reported no applied migrations: $running" }
+          Write-Host "the runtime started, migrated and answered"
+
+          & $exe runtime stop | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime stop exited with $LASTEXITCODE" }
+
+          # The last command of this step is expected to exit 3, and pwsh would hand that on as the step's
+          # own exit code. Everything asserted above passed, so the step succeeded.
+          exit 0
+
+      # Who signed each native library the bundle unpacked on its first run, in the smoke test above: the reading that
+      # decides whether the entitlement disabling library validation can go. A reading, so it never fails the job.
+      - name: Read who signed each native library the bundle unpacked
+        shell: pwsh
+        run: |
+          try {
+            $unpacked = Join-Path $HOME '.net/jason'
+            $libraries = @(Get-ChildItem -LiteralPath $unpacked -Recurse -File -Filter '*.dylib' -ErrorAction Stop)
+            Write-Host "$($libraries.Count) native libraries unpacked under $unpacked"
+            foreach ($library in $libraries) {
+              Write-Host "--- $($library.FullName)"
+              & codesign -dv --verbose=2 $library.FullName 2>&1 | ForEach-Object { Write-Host "$_" }
+            }
+          } catch {
+            Write-Host "::warning title=Native libraries::The unpacked native libraries could not be read: $($_.Exception.Message)"
+          }
+
+          # codesign exits 1 for a library that carries no signature, and pwsh would hand that on as the step's own.
           exit 0
 
   plugin:
@@ -274,11 +389,11 @@ jobs:
 
   release:
     name: Assemble and publish
-    needs: [version, build, plugin, ui]
+    needs: [version, build, macos, plugin, ui]
     runs-on: ubuntu-latest
     # The only job that holds the publication token, which reaches the public repository and nothing else. It builds
     # and runs nothing that was built, so a test on a matrix runner cannot publish anything, and nothing is published
-    # when a matrix leg or the plugin's job failed. It writes nothing here but a dry run's artifact: the draft release,
+    # when a platform's job or the plugin's job failed. It writes nothing here but a dry run's artifact: the draft release,
     # the branch and the pull request are all in reply-team/jason-ai. Under a dry run it holds this run's own read-only
     # token in place of the publication token: the job's token and the public checkout's are this run's own, which
     # reads reply-team/jason-ai because that repository is public and can write nothing there, so a step that forgot

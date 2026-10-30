@@ -36,7 +36,7 @@ public sealed class StartupRecovery(AttemptOutcomes outcomes, UnansweredEnd unan
 
             // The claim is not the launch: the handler commits the item processing and the attempt started
             // before it runs anything, so an attempt still holding no start ran nothing and asked nobody.
-            if (attempt.StartedAt is not null && unanswered.Verdict(item) is { } end)
+            if (attempt.StartedAt is not null && unanswered.Verdict(item, attempt) is { } end)
             {
                 outcomes.Fail(
                     db,

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 
@@ -47,10 +48,18 @@ public partial class ReplyErrorTableTests
         foreach (var (key, row) in rows)
         {
             var code = Text(row, "code");
-            var declared = Assert.Single(contract.FailureCodes, failure => failure.Code == code);
             Assert.True(
                 Enum.TryParse<FailureClass>(Text(row, "class"), ignoreCase: true, out var mapped),
                 $"row '{key}' of {operation} reports class '{Text(row, "class")}', which is not a failure class.");
+
+            // A code reserved beside every operation is declared by none, and passes under the one class it is reserved with.
+            if (UnjudgedOutcomeCodes.Reserved.TryGetValue(code, out var reserved))
+            {
+                Assert.True(UnjudgedOutcomeCodes.Reserves(mapped, code), $"row '{key}' of {operation} reports {code} as {mapped}, and it is reserved as {reserved}.");
+                continue;
+            }
+
+            var declared = Assert.Single(contract.FailureCodes, failure => failure.Code == code);
             Assert.Equal(declared.Class, mapped);
         }
     }
@@ -139,6 +148,25 @@ public partial class ReplyErrorTableTests
                 cell.Contains("details", StringComparison.OrdinalIgnoreCase),
                 $"README line {line} sends its reader to the details, which never reach a work item's last error.");
         }
+    }
+
+    /// <summary>
+    /// "Every 4xx is final" read literally would end the two answers in that range that sent nothing and are repeated
+    /// safely. The README says which answers of Reply's at 400 to 499 are final and why, names both exceptions with the
+    /// reason each is safe, and the sends' own rows for both stay transient.
+    /// </summary>
+    [Fact]
+    public void The_readme_names_the_two_answers_at_400_to_499_that_are_repeated_and_why()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings(" ");
+        var lines = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "README.md"));
+
+        Assert.Contains("about the send it took or refused is final, since Reply's guard released the key", readme, StringComparison.Ordinal);
+        Assert.Contains("`idempotency_key.in_use` (409) is the one where the key is still held", readme, StringComparison.Ordinal);
+        Assert.Contains("A 429 (`rate_limited`) is refused before the guard runs, so nothing was taken and no key was touched", readme, StringComparison.Ordinal);
+        var held = lines.Where(line => line.StartsWith('|') && line.Contains("(`idempotency_key.in_use`)", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, held.Count);
+        Assert.All(held, line => Assert.Equal(" transient ", line.Split('|')[3]));
     }
 
     [Fact]
@@ -235,7 +263,8 @@ public partial class ReplyErrorTableTests
     /// An input without the person's own fields comes only from a runtime older than 0.14.0, whose documents projected
     /// the identifier and the channel alone, so it is refused in a code those documents already declare rather than in one
     /// of its own: a runtime that knew a new code would never compose such an input, and one that does not know it would
-    /// refuse it as a protocol failure. The row is `invalid_channel_value`, and it says that it is the older runtime's case.
+    /// refuse it as a protocol failure. The row is `invalid_channel_value`, and it says that it is the older runtime's case;
+    /// its repair names 0.22.0, the first runtime that reads this package's manifest at all.
     /// </summary>
     [Fact]
     public void An_input_without_the_person_s_fields_is_the_older_runtime_s_case_of_invalid_channel_value()
@@ -248,7 +277,7 @@ public partial class ReplyErrorTableTests
                 (Text(row, "code"), Text(row, "class")) == ("invalid_channel_value", "validation"),
                 $"{operation} reports an input without the person's fields as {Text(row, "code")} ({Text(row, "class")}).");
             Assert.Contains("older than 0.14.0", Text(row, "when"), StringComparison.Ordinal);
-            Assert.Contains("Update Jason to 0.14.0 or newer", Text(row, "note"), StringComparison.Ordinal);
+            Assert.Contains("Update Jason to 0.22.0 or newer", Text(row, "note"), StringComparison.Ordinal);
         }
     }
 
@@ -307,13 +336,40 @@ public partial class ReplyErrorTableTests
 
         foreach (var (operation, mapping) in ReplyErrorTable.Codes["per_operation"]!.AsObject())
         {
-            Assert.Contains(operation, ReplyErrorTable.Performed());
+            Assert.Contains(operation, ReplyErrorTable.Performed().Concat(ReplyErrorTable.Answered()));
             var rows = ReplyErrorTable.Rows(operation).Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
             foreach (var (code, row) in mapping!.AsObject())
             {
                 Assert.True(rows.Contains(row!.GetValue<string>()), $"{operation} maps '{code}' to '{row}', which it has no row for.");
             }
         }
+    }
+
+    /// <summary>
+    /// The runtime's own reader asks the package for the account's events under the events contract, which publishes four
+    /// codes of its own and none of the operations'. So every row an events read can end in is the read's own, naming a
+    /// code that contract declares under its class, and every code it declares has a row. The shared rows a read never
+    /// reaches — a write's lost answer, a sequence still activating, a block — are the only ones it leaves to the shared
+    /// table, and those would end in a code the reader refuses as an answer outside the contract.
+    /// </summary>
+    [Fact]
+    public void Every_row_an_events_read_can_end_in_names_a_code_the_events_contract_declares()
+    {
+        Assert.Equal(["events.read"], ReplyErrorTable.Answered());
+        var contract = EventsCatalog.Find("events.read")!;
+        var own = ReplyErrorTable.Own("events.read");
+
+        foreach (var (key, row) in own)
+        {
+            var declared = Assert.Single(contract.FailureCodes, failure => failure.Code == Text(row!.AsObject(), "code"));
+            Assert.Equal(declared.Class.ToString(), Text(row!.AsObject(), "class"), ignoreCase: true);
+            Assert.False(string.IsNullOrWhiteSpace(key));
+        }
+
+        var unreached = ReplyErrorTable.Shared.Select(row => row.Key).Where(key => !own.ContainsKey(key)).Order(StringComparer.Ordinal);
+        Assert.Equal(["account_or_sender_blocked", "answer_lost_on_a_write", "reply_busy"], unreached);
+        Assert.All(contract.FailureCodes, failure => Assert.Contains(failure.Code, own.Select(row => Text(row.Value!.AsObject(), "code"))));
+        Assert.Equal("read", Text(ReplyErrorTable.Commands["inbox changes"]!.AsObject(), "kind"));
     }
 
     /// <summary>
@@ -449,6 +505,29 @@ public partial class ReplyErrorTableTests
     }
 
     /// <summary>
+    /// What says Reply does not offer what was asked is told where the table maps it: a route Reply's API does not have, in
+    /// the README's table of endings every operation can meet, under the code and the class the row gives it, and only on
+    /// the commands reply-cli passes that 404 through on, since the others read a 404 as a thing not found.
+    /// </summary>
+    [Theory]
+    [InlineData("Endings every operation can meet", "status 404 and no code of Reply's own")]
+    [InlineData("Endings every operation can meet", "which reply-cli passes through as it is only on the direct sends")]
+    public void The_readme_says_when_reply_does_not_offer_what_was_asked(string section, string when)
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var heading = $"\n### {section}\n";
+        var start = readme.IndexOf(heading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"The README has no section '{section}'.");
+        var end = readme.IndexOf("\n#", start + heading.Length, StringComparison.Ordinal);
+        var row = Assert.Single(
+            readme[start..(end < 0 ? readme.Length : end)].Split('\n'),
+            line => line.StartsWith("| ", StringComparison.Ordinal) && line.Contains(when, StringComparison.Ordinal));
+        var columns = row.Split('|');
+
+        Assert.Equal(($"`{UnjudgedOutcomeCodes.CapabilityNotOffered}`", "permanent"), (columns[2].Trim(), columns[3].Trim()));
+    }
+
+    /// <summary>
     /// The rows are not the only place the package fails. A row a module names and the table does not hold falls back to
     /// a failed call, and an operation the manifest does not list ends <c>unknown_operation</c>. The fallback is
     /// reachable from every operation, so every one declares it under the class it is written with; the other is
@@ -504,6 +583,16 @@ internal static class ReplyErrorTable
         var manifest = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "plugin.yaml"));
         var line = Assert.Single(manifest, entry => entry.StartsWith("operations: [", StringComparison.Ordinal));
         return [.. line["operations: [".Length..].TrimEnd(']').Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
+    }
+
+    /// <summary>
+    /// The events contracts the package answers, from the manifest's <c>contracts</c>: <c>events.read</c> where it declares
+    /// <c>events: [1]</c>, and none where it does not.
+    /// </summary>
+    public static IReadOnlyList<string> Answered()
+    {
+        var manifest = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "plugin.yaml"));
+        return manifest.Any(entry => entry == "  events: [1]") ? ["events.read"] : [];
     }
 
     /// <summary>The rows every operation the package performs shares.</summary>

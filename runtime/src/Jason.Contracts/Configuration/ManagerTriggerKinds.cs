@@ -30,7 +30,7 @@ public static class ManagerTriggerKinds
         "external_id_pinned", "external_id_diverged", "external_id_origin", "external_effect_reported",
         "decision_raised", "decision_answered", "decision_cancelled",
         "notification_sent",
-        "inbound_reply_observed", "provider_event_observed",
+        "inbound_reply_observed", "provider_event_observed", "message_sent_observed",
         "events_read", "events_gap_observed", "events_backfill_requested",
         "provider_blocked", "provider_block_cleared",
         "project_created", "project_updated", "project_linked",

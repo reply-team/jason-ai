@@ -42,7 +42,8 @@ public static class OutcomeContract
     /// Ambiguous says the provider may already have acted, and what that costs is the operation's own business:
     /// a read may simply be repeated, a write whose contract obliges a recovery read first may be repeated
     /// because of that obligation, and one that declares <c>never</c> ends for a person rather than risking a
-    /// second send. This is the only place the question is answered, so nothing can answer half of it.
+    /// second send. This is the only place the question is answered, so nothing can answer half of it: this is what
+    /// the contract allows, and the overload beside it adds the package's half, which the runtime asks.
     /// </remarks>
     public static bool Retriable(FailureClass failureClass, OperationContract contract)
     {
@@ -58,6 +59,24 @@ public static class OutcomeContract
             FailureClass.Blocked => false,
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// The same question with the package's half of it: an ambiguous end of an operation whose recovery read settles a
+    /// lost answer by the work item's key is worth another attempt only where the package that ran it says it makes every
+    /// attempt under that key and settles the operation by it — <paramref name="packageSettlesByKey"/>, from its manifest.
+    /// Without it a repeat could be a second send, so the end is final, as <c>never</c> would make it. Every other answer
+    /// is the contract's alone.
+    /// </summary>
+    public static bool Retriable(FailureClass failureClass, OperationContract contract, bool packageSettlesByKey) =>
+        Retriable(failureClass, contract)
+        && (failureClass != FailureClass.Ambiguous || !SettlesByKey(contract) || packageSettlesByKey);
+
+    /// <summary>Whether <paramref name="contract"/> settles a lost answer by the work item's key (<c>recovery_read.by_key</c>).</summary>
+    public static bool SettlesByKey(OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        return contract.RecoveryRead is { ByKey: true };
     }
 
     /// <summary>
@@ -83,7 +102,12 @@ public static class OutcomeContract
     /// <remarks>
     /// The host's own endings (<see cref="HostOutcomeCodes"/>) belong to no operation and pass beside every one of
     /// them, but only under the class the host itself writes: a plugin can say any code, and a host code under
-    /// another class is the plugin's word, not the host's.
+    /// another class is the plugin's word, not the host's. The codes reserved beside every operation
+    /// (<see cref="UnjudgedOutcomeCodes.Reserved"/>) pass beside every one the same way, each under the one class it is
+    /// reserved with: what a package could not read in the provider's object
+    /// (<see cref="UnjudgedOutcomeCodes.ProviderInputInvalid"/>) is no operation's argument, so no operation's list
+    /// could declare it, and which of an operation's parts a provider has not shipped yet
+    /// (<see cref="UnjudgedOutcomeCodes.CapabilityNotOffered"/>) is no list's to say in advance.
     /// </remarks>
     public static SchemaProblem? CheckFailure(OperationContract contract, OutcomeError error)
     {
@@ -101,7 +125,7 @@ public static class OutcomeContract
                     $"`{contract.Id}` declares `{error.Code}` as `{Word(declared.Class)}`, and the plugin reported it `{Word(error.Class)}`.");
         }
 
-        return HostOutcomeCodes.Writes(error.Class, error.Code)
+        return HostOutcomeCodes.Writes(error.Class, error.Code) || UnjudgedOutcomeCodes.Reserves(error.Class, error.Code)
             ? null
             : new SchemaProblem(
                 OnTheCode,
@@ -121,6 +145,48 @@ public static class OutcomeContract
         ArgumentNullException.ThrowIfNull(contract);
 
         return SchemaValidator.Validate(result, contract.OutputSchema, timing);
+    }
+
+    /// <summary>Where a result carries the reference of the act a work item made the provider take.</summary>
+    public const string ReferencePointer = "/items/0/reference";
+
+    /// <summary>
+    /// The reference of the act a work item made the provider take is said twice in a succeeded answer: beside the result,
+    /// under the kind the operation declares for its <see cref="PinnedEntity.WorkItem"/>, and in the result at
+    /// <see cref="ReferencePointer"/>. The two are one value, or both are absent and the result's reference is null: a
+    /// reference said once, or two that differ, would leave a person reading one and a later call working by the other.
+    /// </summary>
+    public static IReadOnlyList<SchemaProblem> CheckReference(OperationContract contract, JsonNode? result, JsonObject? externalIds)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+
+        var problems = new List<SchemaProblem>();
+        foreach (var (kind, declared) in contract.ExternalIds)
+        {
+            if (declared.Entity != PinnedEntity.WorkItem)
+            {
+                continue;
+            }
+
+            var returned = externalIds?[kind] is JsonValue said && said.TryGetValue(out string? text) ? text : null;
+            var carried = result is JsonObject answer
+                && answer["items"] is JsonArray { Count: > 0 } items
+                && items[0] is JsonObject item
+                && item["reference"] is JsonValue reference
+                && reference.TryGetValue(out string? written)
+                ? written
+                : null;
+            if (!string.Equals(returned, carried, StringComparison.Ordinal))
+            {
+                var pointer = "/external_ids/" + kind;
+                problems.Add(new SchemaProblem(
+                    pointer,
+                    "const",
+                    $"The identifier under `{kind}` is the result's `items[0].reference`, said in both places or in neither, and this answer says them apart."));
+            }
+        }
+
+        return problems;
     }
 
     /// <summary>Every returned external-id key must be a kind the contract declares, carrying a string value.</summary>

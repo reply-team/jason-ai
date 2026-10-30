@@ -195,9 +195,9 @@ internal static partial class Account
     /// <summary>
     /// Every vendor-named variable this process was given, by name and value. Only the ones named after this
     /// vendor, because that is the whole of the question: an operator's own <c>REPLY_API_KEY</c> or
-    /// <c>REPLY_TEAM_ID</c> must not reach a child, and the one name that legitimately does is the one the
-    /// package itself sets on the call. Copying the rest of a machine's environment into a file would answer
-    /// nothing and would put whatever a developer exported into it.
+    /// <c>REPLY_TEAM_ID</c> must not reach a child, and the only names that legitimately do are the two the
+    /// package itself sets on the call, <c>REPLY_NO_UPDATE_CHECK</c> and <c>REPLY_CLIENT</c>. Copying the rest of a
+    /// machine's environment into a file would answer nothing and would put whatever a developer exported into it.
     /// </summary>
     private static JsonObject VendorVariables()
     {

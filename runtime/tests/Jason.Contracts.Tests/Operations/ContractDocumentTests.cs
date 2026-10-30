@@ -16,7 +16,8 @@ public class ContractDocumentTests
         "id", "version", "l1", "intent",
         "reach", "reversibility", "approval", "approval_artefact", "approval_departs", "protective_floor",
         "approval_reason", "before_repeating", "idempotency_key", "per_item_results", "accepts_collection", "cost",
-        "cost_basis", "meter", "invariants", "preflight", "dispatch", "contact_projection", "precondition", "preview",
+        "cost_basis", "meter", "invariants", "preflight", "channel_arguments", "channel_templates", "dispatch", "contact_projection",
+        "precondition", "preview",
         "input_schema", "output_schema", "external_ids",
         "recovery_read", "repeat_after_ambiguous", "failure_codes", "timeout_ms", "conformance",
     ];
@@ -65,7 +66,8 @@ public class ContractDocumentTests
                 "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete",
                 "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list",
                 "conversation.reopen", "conversation.reply",
-                "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record",
+                "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.cancel", "message.send",
+                "message.status", "optout.record",
                 "schedule.list", "sender.list", "social_invitation.send",
             ],
             OperationCatalog.All.Select(c => c.Id));
@@ -115,6 +117,21 @@ public class ContractDocumentTests
         var taken = Contract(id).FailureCodes.Select(code => code.Code).Where(Jason.Contracts.Plugins.HostOutcomeCodes.All.Contains).ToList();
 
         Assert.True(taken.Count == 0, $"'{id}' declares the host's own code(s): {string.Join(", ", taken)}.");
+    }
+
+    /// <summary>
+    /// A code reserved beside every operation passes under the class it is reserved with, and the loader does not refuse
+    /// a document that declares one, as it does not refuse one that declares a host code. A document that did would file
+    /// it under a class of its own and leave two meanings for one code, so the published documents are held to declaring
+    /// none of them.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void No_operation_declares_a_code_reserved_beside_every_operation(string id)
+    {
+        var taken = Contract(id).FailureCodes.Select(code => code.Code).Where(Jason.Contracts.Plugins.UnjudgedOutcomeCodes.Reserved.ContainsKey).ToList();
+
+        Assert.True(taken.Count == 0, $"'{id}' declares the code(s) reserved beside every operation: {string.Join(", ", taken)}.");
     }
 
     [Theory]
@@ -188,27 +205,29 @@ public class ContractDocumentTests
     }
 
     /// <summary>
-    /// Pausing a Jason campaign holds its work, and exactly two operations run past that: the provider's own pause,
-    /// which is the incident response, and the record that somebody said stop. A third would be a change to what a
-    /// pause means, and it is made here or not at all.
+    /// Pausing a Jason campaign holds its work, and exactly three operations run past that: the provider's own pause,
+    /// which is the incident response, the record that somebody said stop, and the cancel of a send the provider still
+    /// holds, which is wanted most just when a campaign is paused. A fourth would be a change to what a pause means, and
+    /// it is made here or not at all.
     /// </summary>
     [Fact]
-    public void Exactly_the_incident_response_and_the_record_of_a_stop_run_in_a_paused_campaign()
+    public void Exactly_the_incident_response_the_record_of_a_stop_and_the_cancel_of_a_send_run_in_a_paused_campaign()
     {
-        Assert.Equal(["campaign.pause", "optout.record"], OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
+        Assert.Equal(["campaign.pause", "message.cancel", "optout.record"], OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// The suppression register refuses what would reach a person, and exactly two operations only take a person out:
-    /// the record that somebody said stop, and taking somebody out of a campaign. Every other document says the
-    /// register applies, and a third that set it aside would be a change to what the register protects.
+    /// The suppression register refuses what would reach a person, and exactly three operations only hold a person back:
+    /// the record that somebody said stop, taking somebody out of a campaign, and cancelling a send the provider still
+    /// holds for its moment. Every other document says the register applies, and a fourth that set it aside would be a
+    /// change to what the register protects.
     /// </summary>
     [Fact]
-    [Critical(Family.S1, "only taking a person out bypasses the register")]
-    public void Exactly_the_two_operations_that_take_a_person_out_set_the_suppression_register_aside()
+    [Critical(Family.S1, "only holding a person back bypasses the register")]
+    public void Exactly_the_three_operations_that_hold_a_person_back_set_the_suppression_register_aside()
     {
         Assert.Equal(
-            ["enrollment.stop", "optout.record"],
+            ["enrollment.stop", "message.cancel", "optout.record"],
             OperationCatalog.All
                 .Where(contract => contract.Preflight.Suppression == SuppressionCheck.NotApplicable)
                 .Select(contract => contract.Id)
@@ -324,8 +343,9 @@ public class ContractDocumentTests
 
     /// <summary>
     /// A repeat is handed out blind only where a second performance changes nothing and costs nothing: a read, or a
-    /// reversible control whose repeat is a no-op — pausing a paused campaign. Anything that may reach somebody, or
-    /// that cannot be taken back, is repeated only after a recovery read, or never.
+    /// control whose repeat is a no-op — pausing a paused campaign, or cancelling a cancelled send, which is compensated
+    /// by sending again and never by cancelling twice. Anything that may reach somebody, or that cannot be taken back, is
+    /// repeated only after a recovery read, or never.
     /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
@@ -339,51 +359,109 @@ public class ContractDocumentTests
 
         Assert.Equal("none", contract.Cost.Value);
         Assert.True(
-            contract.Reach.Value == "read" || (contract.Reach.Value == "control" && contract.Reversibility.Value == "reversible"),
+            contract.Reach.Value == "read" || (contract.Reach.Value == "control" && contract.Reversibility.Value is "reversible" or "compensatable"),
             $"{id} repeats blind, but its reach is `{contract.Reach.Value}` and it is `{contract.Reversibility.Value}`.");
     }
 
     /// <summary>
     /// The rule above admits a reversible control, which an add to a list also is; so the writes that repeat blind are
     /// held to an exact set as well. Each one sets a state outright rather than adding to one: pausing a paused campaign
-    /// is the provider's own documented no-op, and filing a thread under a category, or marking it closed or open again,
-    /// leaves the thread exactly as the first performance left it. Any other write that repeated blind would be a choice
-    /// made here and nowhere else.
+    /// is the provider's own documented no-op, filing a thread under a category, or marking it closed or open again,
+    /// leaves the thread exactly as the first performance left it, and a cancelled send answers a second cancel as
+    /// cancelled. Any other write that repeated blind would be a choice made here and nowhere else.
     /// </summary>
     [Fact]
     public void The_writes_that_repeat_blind_are_the_ones_that_set_a_state_outright()
     {
         Assert.Equal(
-            ["campaign.pause", "conversation.classify", "conversation.close", "conversation.reopen"],
+            ["campaign.pause", "conversation.classify", "conversation.close", "conversation.reopen", "message.cancel"],
             OperationCatalog.All
                 .Where(contract => contract.Reach.Value != "read" && contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Safe)
                 .Select(contract => contract.Id));
     }
 
     /// <summary>
-    /// The catalogue's one send verb reaches a person with a message, and no read can tell this work item's lost send
-    /// from another one to the same person — so a document seeded from it never repeats an ambiguous end, and declares no
-    /// recovery read that would pretend to settle it. And <c>never</c> is kept for what reaches somebody: an operation
-    /// that only reads or controls has a repeat rule that settles it.
+    /// The catalogue's one send verb reaches a person with a message, and no read of a thread can tell this work item's
+    /// lost send from another one to the same person. So a document seeded from it repeats an ambiguous end only where
+    /// its recovery read is the provider's record of the send under the work item's own idempotency key, which only a
+    /// document that requires the key has; otherwise it says <c>never</c> and declares no recovery read that would pretend
+    /// to settle it. And <c>never</c> is kept for what reaches somebody: an operation that only reads or controls has a
+    /// repeat rule that settles it.
     /// </summary>
     [Theory]
     [MemberData(nameof(CriticalPublishedForTheSendRule))]
-    public void A_send_is_never_repeated_after_an_ambiguous_end_and_only_a_send_says_never(string id)
+    public void A_send_is_repeated_after_an_ambiguous_end_only_under_its_own_key_and_only_a_send_says_never(string id)
     {
         var contract = Contract(id);
 
-        if (contract.L1.Name == "message.send")
+        if (contract.L1.Name == "message.send" && contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Never)
+        {
+            Assert.Null(contract.RecoveryRead);
+        }
+        else if (contract.L1.Name == "message.send")
         {
             Assert.True(
-                contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Never,
+                contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.AfterRecoveryRead,
                 $"{id} is the catalogue's send, and its repeat rule is `{contract.RepeatAfterAmbiguous}`.");
-            Assert.Null(contract.RecoveryRead);
+            Assert.Equal("required", contract.IdempotencyKey.Value);
+            Assert.Contains("idempotency key", contract.RecoveryRead!.Reads, StringComparison.Ordinal);
         }
 
         if (contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Never)
         {
             Assert.True(contract.Reach.Value == "act", $"{id} says `never`, but its reach is `{contract.Reach.Value}`.");
         }
+    }
+
+    /// <summary>
+    /// The two sends take a moment to go out at, and a provider may take it on one of its channels and not yet on
+    /// another, so they are the documents that name an argument per channel; no other document names one, in this
+    /// version, and each says so with a null.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void Only_the_two_sends_name_an_argument_a_plugin_takes_per_channel(string id)
+    {
+        var expected = id is "message.send" or "social_invitation.send" ? new[] { "send_after" } : null;
+
+        Assert.Equal(expected, Contract(id).ChannelArguments);
+    }
+
+    /// <summary>
+    /// A message the provider fills in for the person is written by one operation in this version, on its email and on
+    /// LinkedIn; every other document says it writes none with a null.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void Only_message_send_names_the_channels_its_message_may_be_a_template_on(string id)
+    {
+        var expected = id is "message.send" ? new[] { "email", "linkedin" } : null;
+
+        Assert.Equal(expected, Contract(id).ChannelTemplates);
+    }
+
+    /// <summary>
+    /// The document says twice where its message may be a template: once as the channels a manifest and the claim read,
+    /// and once as the formats the schema's template branch admits. The two are one statement, so the channels are those
+    /// formats' channels, as the arguments pair each format with its channel; a voice message stays text, so a template
+    /// on LinkedIn is a message or an InMail.
+    /// </summary>
+    [Fact]
+    public void Message_send_offers_a_template_on_the_channels_of_the_formats_its_template_branch_admits()
+    {
+        var args = Contract("message.send").ArgumentSchema;
+        var branch = Assert.Single(
+            ((JsonArray)args["properties"]!["message"]!["anyOf"]!).OfType<JsonObject>(),
+            candidate => candidate["properties"]?["compose"]?["const"]?.GetValue<string>() == "template");
+        var formats = ((JsonArray)branch["properties"]!["format"]!["enum"]!).Select(format => format!.GetValue<string>()).ToList();
+        var channels = ((JsonArray)args["anyOf"]!).OfType<JsonObject>()
+            .Where(pair => formats.Contains(pair["properties"]!["message"]!["properties"]!["format"]!["const"]!.GetValue<string>()))
+            .Select(pair => pair["properties"]!["channel"]!["const"]!.GetValue<string>())
+            .Distinct()
+            .ToList();
+
+        Assert.Equal(["email", "linkedin_message", "linkedin_inmail"], formats);
+        Assert.Equal(Contract("message.send").ChannelTemplates, channels);
     }
 
     /// <summary>
@@ -405,8 +483,9 @@ public class ContractDocumentTests
     /// <summary>
     /// A message outside any thread goes to the work item's own person and to nobody else, from the one account named: an
     /// added recipient would be somebody the suppression register was never asked about. So the arguments are exactly the
-    /// channel, the sender and the message, the message is exactly its format, how it is composed, its subject and its
-    /// text, both closed, and no copy, blind copy, attachment or recording can be named in this version.
+    /// channel, the sender, the message and the moment it may go out at, the message is exactly its format, how it is
+    /// composed, its subject and its text, both closed, and no copy, blind copy, attachment or recording can be named in
+    /// this version.
     /// </summary>
     [Fact]
     public void A_message_names_no_recipient_of_its_own()
@@ -414,7 +493,7 @@ public class ContractDocumentTests
         var arguments = (JsonObject)Contract("message.send").InputSchema["properties"]!["args"]!;
         var message = (JsonObject)arguments["properties"]!["message"]!;
 
-        Assert.Equal(["channel", "message", "sender"], ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(["channel", "message", "send_after", "sender"], ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
         Assert.False((bool)arguments["additionalProperties"]!);
         Assert.Equal(["body", "compose", "format", "subject"], ((JsonObject)message["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
         Assert.False((bool)message["additionalProperties"]!);
@@ -540,6 +619,16 @@ public class ContractDocumentTests
         var end = text.IndexOf("\n## ", start + heading.Length, StringComparison.Ordinal);
         return System.Text.RegularExpressions.Regex.Replace(text[start..(end < 0 ? text.Length : end)], @"\s+", " ");
     }
+
+    /// <summary>
+    /// The two sends settle a lost answer by the work item's key, and no other document does: the nine other writes that
+    /// repeat after their recovery read settle it by a read that never sends, so their repeat asks nothing of a package.
+    /// </summary>
+    [Fact]
+    public void Only_the_two_sends_settle_a_lost_answer_by_the_work_item_s_key() =>
+        Assert.Equal(
+            ["message.send", "social_invitation.send"],
+            OperationCatalog.All.Where(OutcomeContract.SettlesByKey).Select(contract => contract.Id).Order(StringComparer.Ordinal));
 
     [Theory]
     [MemberData(nameof(Published))]

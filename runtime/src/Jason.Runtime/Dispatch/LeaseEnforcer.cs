@@ -55,7 +55,7 @@ public sealed class LeaseEnforcer(
 
             // A1. A lease that ran out says nothing about whether a provider acted, and neither does silence,
             // so for provider work both are the same fact as a lost answer and the contract decides the repeat.
-            var end = unanswered.Verdict(item);
+            var end = unanswered.Verdict(item, attempt);
             outcomes.Fail(
                 db,
                 item,

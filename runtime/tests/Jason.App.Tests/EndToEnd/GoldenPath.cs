@@ -112,6 +112,12 @@ internal static class GoldenPath
     /// <summary>How long a claim, a child process and an answer may take between them.</summary>
     public static TimeSpan Patience { get; } = TimeSpan.FromSeconds(90);
 
+    /// <summary>
+    /// The calls a step asked of the provider: every call but the reads of the account's change feed, which the runtime
+    /// makes of every account a route binds, on a cadence of its own and whatever else is happening.
+    /// </summary>
+    public static List<ReplyCall> Asked(IEnumerable<ReplyCall> calls) => [.. calls.Where(call => call.Command != "inbox changes")];
+
     /// <summary>Where the tests and everything referenced by them live: the one tree a program may come from.</summary>
     public static string TestTree => AppContext.BaseDirectory;
 

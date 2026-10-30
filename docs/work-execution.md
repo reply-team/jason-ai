@@ -180,8 +180,8 @@ An item is **eligible** — the dispatcher would claim it right now — when all
 2. its campaign is `active` (a draft campaign is a backlog, a paused one stops) — or `paused`, for a
    `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs`
    ([docs/contracts/README.md](contracts/README.md)): an operation whose not running is the harm, which must still
-   reach the provider after somebody paused Jason's campaign first. Today those are `campaign.pause` and
-   `optout.record`;
+   reach the provider after somebody paused Jason's campaign first. Today those are `campaign.pause`,
+   `optout.record` and `message.cancel`;
 3. `not_before` is unset or already past;
 4. `due_at` is unset or still ahead;
 5. `retry_after` is unset or already past.
@@ -222,7 +222,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the fourteen pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the twenty pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -442,7 +442,7 @@ Every one of these is decided **before a child process exists**, and the first t
 the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the fourteen provider checks follow.
+existed. It is the same rule the twenty provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -743,7 +743,7 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| the fourteen pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the twenty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -758,27 +758,32 @@ campaign, the identifiers that plugin itself pinned, and the work item's own id 
 — and validates the whole composed document against the operation's input schema at the claim. A
 plugin never sees a work item's context.
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Fourteen checks,
+**Everything that can stop it is decided at the claim, before a child process exists.** Twenty checks,
 in this order, and the first that answers is the one that decides:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
-contact_not_linked → input_invalid → approval_required → provider_blocked
+contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → input_invalid →
+argument_unsupported → template_not_offered → provider_answer_lost → approval_required →
+provider_blocked
 ```
 
-The first twelve are refusals and all of them are final: eleven are `permanent` and `input_invalid` is
-`validation`, because it is the one a planner can fix by editing the item. The attempt is kept with its
+The first eighteen are refusals and all of them are final: sixteen are `permanent`, `input_invalid` is
+`validation`, because it is the one a planner can fix by editing the item, and `provider_answer_lost` is
+`ambiguous`, because it refuses to repeat a send whose earlier attempt lost its answer, either under a plugin whose
+manifest does not say it settles the send by the work item's key, or where the routed package, by its id and digest, or
+its binding is not the one the unsettled attempt ran under, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
-nothing ever falls back to another plugin. The thirteenth is not a refusal: `approval_required` parks the
+nothing ever falls back to another plugin. The nineteenth is not a refusal: `approval_required` parks the
 item for a person (§Approvals above), and it is asked after every refusal so that nobody is asked to approve work
-that would have been refused anyway. The fourteenth, `provider_blocked`, is not a refusal either: it parks work an
+that would have been refused anyway. The twentieth, `provider_blocked`, is not a refusal either: it parks work an
 open provider block holds — `reach: act` work and the protective operations, nothing else — as `waiting`, with no
 attempt, until the block clears or a trial gets past it (§Provider blocks below). [docs/routing.md](routing.md) says what each one means and what to
 change.
 
 Two of those checks measure a document against a schema — the binding against the plugin's (7), the
-composed input against the operation's (12) — and one answer they can give is not a refusal. Where a
+composed input against the operation's (15) — and one answer they can give is not a refusal. Where a
 pattern of that schema did not finish matching, twice, nothing was found wrong and nothing has run, so
 the attempt ends `validation_timed_out`, `transient`, and the dispatcher retries it under the ordinary
 retry rule — never `input_invalid` or `binding_invalid`, which would send a planner to edit an item that
@@ -790,7 +795,17 @@ account or a sender and did nothing — parks work a block holds on that block, 
 counted, and is final with its block kept on the item's `last_error` for any other operation (§Provider blocks
 below), and `ambiguous` — the
 provider may already have acted — is repeated only where the operation's own contract says a repeat is
-`safe` or is answerable `after_recovery_read`. An answer that arrived and does not satisfy the
+`safe` or is answerable `after_recovery_read` — and where that recovery read rests on the work item's key
+(`recovery_read.by_key`, the two sends), only under a package whose manifest lists the operation under `settles_by_key`,
+read for the package the attempt ran under, so a package replaced since has the end final; and while the item carries an
+unsettled send — an earlier attempt of it started and ended ambiguous, whatever ended after it — a repeat is claimed
+only under the package, by its id and digest, and the binding the latest such attempt ran under, and with the arguments
+that attempt ran with: a route, a binding or a package changed in between ends it `provider_answer_lost` at the claim,
+since the key settles a send only at the provider and the account that took it, and so does an item edited since,
+since the key settles only the request it went with and a provider holding it answers a repeat with the earlier send.
+While the item carries one, every refusal of the claim from check 2 to check 17 keeps its code and is recorded
+`ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
+(`docs/routing.md`). An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code
 the operation does not declare, or declares under another class. An answer a pattern of
 that schema could not finish measuring, twice, is a lost answer instead: `validation_timed_out`,
@@ -806,6 +821,25 @@ the identifiers the plugin returned, whether the provider found or created what 
 (`external_id_origins`), and — after a `result_invalid` — the answer that was refused.
 Nothing rewrites it afterwards. `jason workitem get <id> --human` prints it as a block per attempt.
 
+**A later attempt is told since when an earlier one is unsettled.** The plugin's `context` carries
+`unsettled_since`: the moment the earliest earlier attempt of the item that may have acted was claimed. It is absent
+where none did, and a plugin reads absent and null alike. An attempt may have acted when it ended `ambiguous`: the plugin said so, or no answer of the protocol came
+back — a timeout, a crash, a host failure, a lease that ran out or a restart. A provider's own answer of any other
+class settled its attempt. The claim reads the moment from the item's attempts and writes it beside `attempt_number`.
+It is never in the composed input, so what a person approved does not change with it. A plugin whose provider keeps an
+idempotency key for a bounded time counts that time from it ([docs/plugins.md](plugins.md) §7).
+
+**A later attempt is told which send an earlier one may have made.** Where the operation declares a `send` identifier
+for the work item itself, the plugin's `context` also carries `unsettled_reference`: the reference the latest earlier
+attempt that may have acted returned for it, at or after `unsettled_since`. It is absent where none returned one, and a
+plugin reads absent and null alike. The claim reads it from the identifiers each attempt's provenance kept as returned,
+and it is never in the composed input either. It is a provider identifier and nothing else. A plugin reads the send by
+it before it repeats anything, since a read never makes a send twice ([docs/plugins.md](plugins.md) §7).
+
+**A send ends when the provider has taken it.** Its item succeeds `sent`, where the provider sent it inside the call,
+or `accepted`, where it took it for now or for the moment `send_after` names; the fact that an accepted send went is
+learned later, never from this item.
+
 ## Provider blocks
 
 A `blocked` failure is the provider saying no to the account, or to one sending account under it, rather than to
@@ -814,7 +848,7 @@ paused. The provider did nothing, and nothing the item says would change its ans
 per plugin and binding identity, the account's or one sender's — and holds the work it concerns until it clears.
 
 **What a block holds.** A block holds `reach: act` work and the protective operations — the ones the catalogue runs
-in a paused campaign, today `campaign.pause` and `optout.record`, read from the catalogue's own property — and every
+in a paused campaign, today `campaign.pause`, `optout.record` and `message.cancel`, read from the catalogue's own property — and every
 other `control` operation and every read runs through it and fails on its own, if it fails at all: a block is about
 what the provider refuses to let reach a person or protect them, a control operation may still succeed, and a read
 tells the truth. An account's block covers every sending account under it. A sender's block holds the work whose
@@ -824,7 +858,7 @@ sender parks alone, on that block.
 **Two ways in, one wait.** An attempt of held work that answers `blocked` ends `blocked` — over, and never counted
 toward `max_attempts` — and its item waits on the block the answer names, which that attempt opens where none of its
 grain is open and which is seen again where one is: counted, with the latest reason, link and `clears_at`. And the
-claim's fourteenth check parks held work an open block already holds, before an attempt exists
+claim's twentieth check parks held work an open block already holds, before an attempt exists
 ([docs/routing.md](routing.md) §7). Either way the item moves to `waiting` on the same wait row a role's wait uses,
 naming the block with no `mode`, `until` or `deadline`; the item's `due_at` bounds it, an item past its due date
 expires, and cancelling the item closes the wait. A person's approval stays as they gave it: approved work the block
@@ -853,8 +887,12 @@ answers decides the block:
   a trial clears the block that let it through whether or not its input names a sender;
 - **it answered `blocked` again** — the trial parks once more on the block, which is seen again and its next trial
   put off; nobody is told twice;
-- **anything else** — `transient`, `ambiguous`, an answer outside the contract or the host's own ending — says nothing
-  about the block: it stays open, its next trial is due a cadence from now, and the item follows its own retry rule.
+- **anything else** — `transient`, `ambiguous`, an answer outside the contract, the host's own ending, or a code
+  reserved beside every operation, which no provider judgment of the work stands behind (`provider_input_invalid`, which
+  a package answers before any call, [the input a plugin receives](contracts/README.md#the-input-a-plugin-receives);
+  `capability_not_offered`, the provider's answer that it does not offer what was asked yet, [a capability the provider
+  does not offer yet](contracts/README.md#a-capability-the-provider-does-not-offer-yet)) — says nothing about the block:
+  it stays open, its next trial is due a cadence from now, and the item follows its own retry rule.
 
 While an account's block of a binding is open, the blocks of its senders hold no trial of their own and an item that
 names a blocked sender parks on the account's block: the account's trial answers first, and it is drawn from the items

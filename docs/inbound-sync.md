@@ -51,10 +51,13 @@ leaves a campaign to a source before that source's first read that succeeded, an
 all. A source that fails, or that is not read for that long, hands its campaigns back at the next due read, which starts
 at the watermark — the moment of the last skip less the look-back, so never later than the start of the source's last
 read that succeeded, and nothing is missed in the hand-back — and the inbound read is the fallback for as long as it
-lasts. A move both reads find is said once: they say it under the same key. The step aside rests on a promise every
-plugin that reads events makes, to name under `campaign` the provider campaign a moved thread belongs to. A move that
-names no campaign reaches, by the person, every campaign that is not archived and holds the contact as a member
-([events](events.md) §3), rather than the one campaign whose thread it is alone.
+lasts. A source whose reads end in `events_unsupported` — an account whose provider has no event feed yet — never turns
+healthy, so the inbound read keeps its campaigns for as long as that lasts; `jason events sources` shows it, as how many
+reads in a row failed, `events_unsupported` as how the last one did, and not healthy. A move both reads find is said
+once: they say it under the same key. The step aside rests on a promise every plugin that reads events makes, to name
+under `campaign` the provider campaign a moved thread belongs to. A move that names no campaign reaches, by the person,
+every campaign that is not archived and holds the contact as a member ([events](events.md) §3), rather than the one
+campaign whose thread it is alone.
 
 A skip is logged once for its campaign and reason in the life of the process, not once a cadence.
 

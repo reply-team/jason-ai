@@ -39,10 +39,10 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.10.0", plugin.Version);
+        Assert.Equal("0.14.1", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
-            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.send", "optout.record", "schedule.list", "sender.list", "social_invitation.send"],
+            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.cancel", "message.send", "message.status", "optout.record", "schedule.list", "sender.list", "social_invitation.send"],
             plugin.Operations.Order());
 
         // Declaration is not permission, and this package declares nothing it does not use: one program, no
@@ -53,6 +53,27 @@ public class ReplyPackageTests
         Assert.Equal([ReplyPlugins.ExecutableName], plugin.Capabilities.Exec.Granted);
         Assert.Null(plugin.Capabilities.Env);
         Assert.Null(plugin.Capabilities.Http);
+    }
+
+    /// <summary>
+    /// The package lists under <c>settles_by_key</c> exactly the two sends it makes under the work item's key and reads
+    /// back by it, so the runtime repeats them after a lost answer, and nothing else on that word.
+    /// </summary>
+    [Fact]
+    public void The_package_settles_the_two_sends_by_the_key_and_nothing_else() =>
+        Assert.Equal(["message.send", "social_invitation.send"], ReplyPlugins.KeyedOperations.Order(StringComparer.Ordinal));
+
+    /// <summary>
+    /// The package lists a message written as a template on an email and on LinkedIn, the channels Reply fills one in on,
+    /// so the claim lets such a template through to it there, and nothing else on that word.
+    /// </summary>
+    [Fact]
+    public void The_package_writes_a_message_as_a_template_on_email_and_on_linkedin_and_nothing_else()
+    {
+        var templates = ReplyPlugins.Templates.ByOperation;
+
+        Assert.Equal(["message.send"], templates.Keys);
+        Assert.Equal(["email", "linkedin"], templates["message.send"]);
     }
 
     /// <summary>
@@ -261,7 +282,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.10.0", result.Provenance.Version);
+        Assert.Equal("0.14.1", result.Provenance.Version);
     }
 
     /// <summary>
@@ -428,20 +449,68 @@ public class ReplyPackageTests
             Operations.RouteResolve, new { campaign_id = campaign, operation = "list_membership.add" }, Ct);
 
     /// <summary>
-    /// The package reads named arguments only, so the provider's reserved slot is ignored, and the README says so where
-    /// it says what the package does.
+    /// The schedule's flag is named wherever the package lists what it passes the CLI: the manifest's account of the
+    /// release it needs, the README's paragraph on that release, and the command table's row for an email.
     /// </summary>
     [Fact]
-    public void The_readme_says_the_provider_slot_is_ignored()
+    public void The_manifest_and_the_readme_name_the_schedule_flag_among_the_cli_s()
+    {
+        var manifest = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "plugin.yaml")).Replace("#", " ", StringComparison.Ordinal));
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.Contains("the sending schedule an email is timed by (`--schedule-id`)", manifest, StringComparison.Ordinal);
+        Assert.Contains("are timed by a sending schedule (`--schedule-id`)", readme, StringComparison.Ordinal);
+        Assert.Contains("| `contact send-email --contact-id --email-account-id --idempotency-key [--send-after] [--schedule-id] --message -` |", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The read of a direct send that tells whether the account's Reply keeps them guards the schedule as it guards the
+    /// key: the routes, the key and the schedule arrived in one Reply release, and the README's row for the read says so.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_the_direct_send_read_guards_the_routes_the_key_and_the_schedule()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.Contains(
+            "The routes, the key and the schedule arrived in one Reply release, so the read guards all three: a Reply that answers a direct send holds its key and times a send by a schedule.",
+            readme,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("guards the route's presence, not the key's", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The package reads one member of the provider's reserved object, on <c>message.send</c> alone, and ignores it
+    /// everywhere else; the README says so where it says what the package does, and the section of the send states the
+    /// shape it reads, the sentence a refusal of another says, what a schedule and a moment do together and what the
+    /// package does not read first.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_which_operation_reads_the_provider_object_and_the_shape_it_reads()
     {
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
         var section = Flat(readme[readme.IndexOf("## What it does", StringComparison.Ordinal)..readme.IndexOf("## What you need", StringComparison.Ordinal)]);
+        var send = Flat(readme[readme.IndexOf("### `message.send`", StringComparison.Ordinal)..readme.IndexOf("## What it cannot do", StringComparison.Ordinal)]);
 
         Assert.Contains(
-            "This package ignores the reserved `provider` object a work item may carry beside an operation's arguments: it reads none of it, passes none of it to the CLI, and an operation runs the same with it or without it.",
+            "This package reads the reserved `provider` object a work item may carry beside an operation's arguments on `message.send` alone, where it names the sending schedule an email is timed by ([`message.send`](#messagesend)). Every other operation ignores it: it reads none of it, passes none of it to the CLI, and runs the same with it or without it.",
             section,
             StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "```json { \"schedule_id\": \"4021\" } ```",
+                "> " + ProviderShape,
+                "the send goes at the schedule's first opening at or after `send_after`; the answer is `accepted` with `cancelable` true, and `accepted_for` is absent, since Reply only estimates the moment",
+                "The package does not read `reply schedule list` before the send",
+                "Reply refuses a schedule on every LinkedIn direct send in this version (scheduleId is not supported for LinkedIn sends in this version, a 400 on each LinkedIn route), so a schedule on a LinkedIn message is refused before any call.",
+            },
+            word => Assert.Contains(word, send, StringComparison.Ordinal));
     }
+
+    /// <summary>The sentence every refusal of the provider's object on <c>message.send</c> says, as the error table writes it.</summary>
+    private const string ProviderShape =
+        "`args.provider` is read on message.send as `{\"schedule_id\": \"<id>\"}` and nothing else, the id of a Reply sending schedule written as a string of its digits; the object given is not that shape.";
 
     /// <summary>
     /// The rule a person reads before they route a campaign to Reply: how a first name is derived, the switch that
@@ -500,7 +569,7 @@ public class ReplyPackageTests
         var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
         Assert.True(start >= 0, "The README has no section on what the package cannot do.");
         var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
-        var entry = Flat(ChangelogSection(9));
+        var entry = Flat(ChangelogSection(14));
 
         Assert.All(
             new[]
@@ -524,13 +593,207 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// Reply takes a LinkedIn send without consulting its blacklist and consults it when it makes the send, so a person the
+    /// blacklist holds is accepted and the send fails later, which only Jason's own register stops before it is made. And a
+    /// Reply without the route to read or cancel a direct send answers both with the bare 404 reply-cli passes through,
+    /// which the README lists beside the sends and the two operations' tables carry as the capability not offered.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_when_reply_consults_its_blacklist_on_linkedin_and_what_a_read_or_cancel_without_the_route_answers()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The README has no section on what the package cannot do.");
+        var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
+
+        Assert.All(
+            new[]
+            {
+                "nor consult its blacklist when it takes a LinkedIn send", "On LinkedIn it consults it when it makes the send",
+                "is accepted, and fails when Reply makes it, which `message.status` reads as `failed` with Reply's reason",
+                "record the stop with `jason suppression add` as well, so the send is refused at the claim",
+            },
+            words => Assert.Contains(words, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("blacklist on an email alone", section, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "on reading and cancelling one (`direct-send get`, `direct-send cancel`)", Flat(readme), StringComparison.Ordinal);
+        foreach (var (operation, command) in new[] { ("message.status", "get"), ("message.cancel", "cancel") })
+        {
+            var table = readme.IndexOf($"### `{operation}`", StringComparison.Ordinal);
+            Assert.True(table >= 0, $"The README has no section for {operation}.");
+            var rows = readme[table..readme.IndexOf("\n\n", readme.IndexOf("| When |", table, StringComparison.Ordinal), StringComparison.Ordinal)];
+            Assert.Contains(
+                rows.Split('\n'),
+                row => row.StartsWith($"| `reply direct-send {command}` answered that Reply's API has no route for it", StringComparison.Ordinal)
+                    && row.Contains("| `capability_not_offered` | permanent |", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// The release that corrects the README alone: what it says of a send a Reply without the route answers, and of
+    /// Reply's blacklist on a LinkedIn send; nothing the package does changes, and it needs what 0.14.0 needs.
+    /// </summary>
+    [Fact]
+    public void The_changelog_opens_with_0_14_1_the_readme_corrected_and_nothing_the_package_does_changed()
+    {
+        var section = Flat(ChangelogSection(0));
+
+        Assert.StartsWith(" ## 0.14.1 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "The README is corrected", "`message.status` and `message.cancel`", "`capability_not_offered`",
+                "`reply direct-send get` and `reply direct-send cancel`", "its blacklist", "No change in behaviour",
+                "Jason 0.22.0", $"reply-cli {ReplyCliRelease.Version} or newer",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The release in which a LinkedIn message and an InMail may be templates: the names Reply gives the sender there and
+    /// the two it lacks, the voice message still refused, the manifest's list and what the claim makes of a package older
+    /// than it, reply-cli's own codes for a template Reply could not fill in with the names it lists, and the send held for
+    /// later that Reply fills in when it goes.
+    /// </summary>
+    [Fact]
+    public void The_changelog_keeps_0_14_0_templates_on_linkedin_and_the_codes_for_one_reply_could_not_fill_in()
+    {
+        var section = Flat(ChangelogSection(1));
+
+        Assert.StartsWith(" ## 0.14.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "A LinkedIn message and an InMail may be composed as a template", "`SendingLinkedIn.SenderFirstName`",
+                "`SendingLinkedIn.SenderName`", "which Reply converts from HTML to text after filling it in", "`templates` lists `message.send` on `email` and `linkedin`",
+                "a Reply package older than 0.14.0 under runtime 0.22.0 has its email templates refused `template_not_offered` at the claim until the package is updated",
+                "`unknown_field`", "the package writes in its place the profile the arguments hold", "`template_unsupported` (validation)",
+                "A template in a voice message", "`contact.missing_variables`", "`contact.rendering_failed`",
+                "`linkedin.missing_variables`", "`template_unrendered`", "`message_invalid`", "`missing_variables`",
+                "the first twenty, each to 64 characters", "filled in by Reply when it goes",
+                $"reply-cli {ReplyCliRelease.Version} or newer",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The release in which a send the runtime keeps a reference for is read and taken back by it: the two commands, the
+    /// state in the document's five words, what a cancel that cannot stop the send answers, the repeat after a lost answer,
+    /// and the endings both share; in which <c>message.send</c> is timed by the provider's own schedule, and a schedule on
+    /// LinkedIn is refused for Reply's reason; and in which every call the package makes names the harness and the runtime
+    /// it came through, with the CLI it needs for that.
+    /// </summary>
+    [Fact]
+    public void The_changelog_keeps_0_13_0_the_send_read_and_taken_back_the_schedule_and_the_calls_marked_as_the_harness_s()
+    {
+        var section = Flat(ChangelogSection(2));
+
+        Assert.StartsWith(" ## 0.13.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "`message.status`", "`message.cancel`", "`send.reference`", "never by anything the caller wrote",
+                "`reply direct-send get`", "`reply direct-send cancel`", "`queued`", "`cancelable` unless Reply is sending it now",
+                "One cancelled before answers the same", "the cancel carries no key", "`send_not_pending` (permanent)",
+                "never reported as cancelled", "`provider_answer_lost`", "`send_not_found` (permanent)",
+                "`capability_not_offered` (permanent)", "Nothing is pinned.",
+                "`REPLY_CLIENT`", "`jason-harness/<runtime version>`", "the runtime version without its build metadata",
+                "`REPLY_NO_UPDATE_CHECK`",
+                $"reply-cli {ReplyCliRelease.Version} or newer", "Under an older CLI the package is `unavailable`",
+                "`provider.schedule_id`", "`--schedule-id`", "`provider_input_invalid`", "`capability_not_offered`",
+                "since Reply refuses a schedule on every LinkedIn direct send",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("ignores the variable", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("dropped unread", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every vendor-named variable the package sets on the CLI is named where the README says what reaches the child:
+    /// the update check it turns off, and the name that tells Reply the call came through the harness, with the runtime
+    /// version it carries.
+    /// </summary>
+    [Fact]
+    public void The_readme_names_the_two_variables_the_package_sets_on_the_cli()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.Contains("The two variables this package sets are `REPLY_NO_UPDATE_CHECK=1` and `REPLY_CLIENT`", readme, StringComparison.Ordinal);
+        Assert.Contains("`REPLY_CLIENT=jason-harness/<runtime version>`", readme, StringComparison.Ordinal);
+        Assert.Contains("the runtime version without its build metadata", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("The one variable this package sets", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The release in which the package answers for the account's events and a direct send says when it should go out
+    /// and ends with what Reply took. The events: the contract it declares, the feed it reads, the one kind and who moved
+    /// it, the lines a move says, the three cursors and the hour read again, the window a read by date keeps inside, and
+    /// the endings a reader acts on. The sends: the moment and the key the send carries, the read before a send that
+    /// names a moment and before a repeat after an attempt that may have sent, the window a repeat goes under the key in,
+    /// the result it answers and the lost answer repeated under the key. Then the CLI it needs, and what a runtime before
+    /// the one that admits the sends' result makes of it.
+    /// </summary>
+    [Fact]
+    public void The_changelog_keeps_0_12_0_the_event_feed_it_reads_and_the_send_reply_takes()
+    {
+        var section = Flat(ChangelogSection(3));
+
+        Assert.StartsWith(" ## 0.12.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "`contracts.events: [1]`", "`events.read`", "`reply inbox changes`", "Reply's own cursor", "one `thread_moved`",
+                "`other_side` where the last message is the other side's", "on a thread that holds one", "`provider` is never said", "`unread` is `null`", "the last 30 days", "an hour inside it",
+                "`events_cursor_unknown`", "`c|<Reply's cursor>`", "`m|<moment>`", "`u|<moment>|<Reply's cursor>`",
+                "an hour before that moment", "counts as held", "`inbox.cursor_expired`", "`inbox.cursor_refused`",
+                "A move by the account is read and not kept", "a source of its own", "`contact_pin`", "`events_unreachable`", "`events_unsupported`",
+                "page by page", "reply-cli 0.17.0 or newer",
+                "`send_after`", "`--send-after`", "`--idempotency-key`", "`reply direct-send get`", "`accepted`", "`accepted_for`",
+                "`reference`", "`cancelable`", "`capability_not_offered` (permanent)", "`send_not_settled` (permanent)",
+                "`idempotency_key.in_use`", "`provider_unavailable` (transient)", "`idempotency_key.reused`",
+                "repeated under the same key", "a runtime from 0.22.0", "`email-1`",
+                "`context.unsettled_since`", "within 23 hours",
+                "the key travels only on the send command, and at most one send command per attempt reaches Reply's send",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("sendAfter", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("subject", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("without the command", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The release in which a route Reply's API does not have is said as such: the answer it reads that way, the commands
+    /// that answer can reach it on, the code and its class, the 404 that keeps its meaning, and what a runtime before the
+    /// one that admits the code makes of it.
+    /// </summary>
+    [Fact]
+    public void The_changelog_keeps_0_11_0_and_the_route_reply_does_not_have()
+    {
+        var section = Flat(ChangelogSection(4));
+
+        Assert.StartsWith(" ## 0.11.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "`capability_not_offered` (permanent)", "naming the operation", "nothing is repeated",
+                "`reply.refused` at status 404 with no code of Reply's own", "the direct sends, `inbox categorize`",
+                "A 404 Reply explains with a code of its own keeps the meaning it had.", "a runtime from 0.22.0",
+                "`result_invalid`, ambiguous and never repeated",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("sendAfter", section, StringComparison.Ordinal);
+        Assert.DoesNotContain(".notSupported", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The release in which an email composed as a template goes in Reply's syntax and Reply fills it in: what is refused
     /// before anything is called, what Reply's own refusal is, and a final text sent as before, save the prompt marker.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_10_0_and_the_template_it_sends()
+    public void The_changelog_keeps_0_10_0_and_the_template_it_sends()
     {
-        var section = Flat(ChangelogSection(0));
+        var section = Flat(ChangelogSection(5));
 
         Assert.StartsWith(" ## 0.10.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -553,7 +816,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_9_1_and_the_install_verb_its_readme_names()
     {
-        var section = Flat(ChangelogSection(1));
+        var section = Flat(ChangelogSection(6));
 
         Assert.StartsWith(" ## 0.9.1 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -569,7 +832,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_9_0_and_whether_the_contact_was_found_or_created()
     {
-        var section = Flat(ChangelogSection(2));
+        var section = Flat(ChangelogSection(7));
 
         Assert.StartsWith(" ## 0.9.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -611,7 +874,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_8_1_and_where_the_projected_fields_come_from()
     {
-        var section = Flat(ChangelogSection(3));
+        var section = Flat(ChangelogSection(8));
 
         Assert.StartsWith(" ## 0.8.1 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -627,13 +890,13 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_8_0_and_the_schedules_it_lists()
     {
-        var section = Flat(ChangelogSection(4));
+        var section = Flat(ChangelogSection(9));
 
         Assert.StartsWith(" ## 0.8.0 ", section, StringComparison.Ordinal);
         Assert.All(
             new[]
             {
-                "`schedule.list`", "`reply schedule list`", $"reply-cli {ReplyCliRelease.Version}", "the lowest first",
+                "`schedule.list`", "`reply schedule list`", "reply-cli 0.16.0", "the lowest first",
                 "Windows time zone identifier", "`windows`", "never converted", "no calendar", "`unauthorized`",
             },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
@@ -647,7 +910,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_7_0_and_the_sender_s_block()
     {
-        var section = Flat(ChangelogSection(5));
+        var section = Flat(ChangelogSection(10));
 
         Assert.StartsWith(" ## 0.7.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -667,7 +930,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_6_1_and_says_no_reply_answer_reaches_the_block_row()
     {
-        var section = Flat(ChangelogSection(6));
+        var section = Flat(ChangelogSection(11));
 
         Assert.StartsWith(" ## 0.6.1 ", section, StringComparison.Ordinal);
         Assert.Contains(
@@ -685,7 +948,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_6_0_and_the_three_operations_that_now_create_the_person()
     {
-        var section = Flat(ChangelogSection(7));
+        var section = Flat(ChangelogSection(12));
 
         Assert.StartsWith(" ## 0.6.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -700,19 +963,26 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The plugin needs the person's own fields in what a write that may create them is handed, and the first Jason release
-    /// that projects them is named where an operator reads what the package needs.
+    /// The Jason release the package needs is the one that reads its manifest's lists and admits what its sends answer, and
+    /// it is named where an operator reads what the package needs, with what an older runtime does with the package, and
+    /// with the person's own fields the package is handed, which only a runtime older than 0.14.0 leaves out.
     /// </summary>
     [Fact]
-    public void The_readme_names_the_jason_release_that_projects_the_person_s_fields()
+    public void The_readme_names_the_jason_release_that_reads_the_package_s_manifest()
     {
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
         var start = readme.IndexOf("## What you need", StringComparison.Ordinal);
         Assert.True(start >= 0, "The README has no section on what the package needs.");
         var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
 
-        Assert.Contains("**Jason 0.14.0 or newer.**", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("Jason 0.13.0 or newer", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "**Jason 0.22.0 or newer.**", "(`arguments`)", "(`templates`)", "`unknown_field`", "reads the list at the claim",
+                "the person's own fields", "only a runtime older than 0.14.0 composes",
+            },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("Jason 0.14.0 or newer", section, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -723,7 +993,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_5_0_and_the_three_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(8));
+        var section = Flat(ChangelogSection(13));
 
         Assert.StartsWith(" ## 0.5.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -739,7 +1009,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_4_0_and_the_four_inbox_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(9));
+        var section = Flat(ChangelogSection(14));
 
         Assert.StartsWith(" ## 0.4.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -756,7 +1026,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_2_and_the_operation_it_added()
     {
-        var section = ChangelogSection(10);
+        var section = ChangelogSection(15);
 
         Assert.StartsWith("\n## 0.3.2\n", section, StringComparison.Ordinal);
         Assert.Contains("`campaign.create`", section, StringComparison.Ordinal);
@@ -767,7 +1037,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_1_and_the_rule()
     {
-        var section = ChangelogSection(11);
+        var section = ChangelogSection(16);
 
         Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
         Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);
@@ -851,7 +1121,8 @@ public class ReplyPackageTests
     /// <summary>
     /// What Reply counts as no value and how it compares are Reply's, and the README states them as Reply's rendering reads
     /// a template, beside the sentence the package reads Reply's refusal by and the tag Reply drops with what follows it,
-    /// which the package refuses before anything is called.
+    /// which the package refuses before anything is called; a LinkedIn template goes as written, without the sender's
+    /// two names Reply lacks there, and one Reply does not send within the call is filled in when it goes.
     /// </summary>
     [Fact]
     public void The_readme_states_how_reply_reads_a_template_as_reply_s()
@@ -871,7 +1142,17 @@ public class ReplyPackageTests
                 "The subject goes as written, and a character reference in it is not read.",
                 "**A `<` that starts a tag is refused in a direct email, `message.send`.**",
                 "A reply on a thread, `conversation.reply`, is not held to this yet, and its text goes as written.",
-                "The refusals come in one order: a final text is read for a placeholder or a prompt, then its subject for a tag's start, then its body; a template is read part by part, its subject first, each for a construct the standard refuses, then a key Reply keeps, then a comparison Reply cannot read, then a prompt, then a tag's start.",
+                "The refusals come in one order: a final text is read for a placeholder or a prompt, then its subject for a tag's start, then its body; a template is read part by part, its subject first, each for a construct the standard refuses, then, on LinkedIn, the sending account's address named with neither a value nor a fallback, then a name Reply holds no field for on the channel, then a key Reply keeps, then a comparison Reply cannot read, then a prompt, then, on an email, a tag's start.",
+                "**A LinkedIn message or InMail composed as a template goes in Reply's syntax as written.**",
+                "Reply has no variable on LinkedIn for the sending account's last name or address. The arguments hold the address, the account's profile, so where a template names `sender.address` the package writes the profile they hold in its place, as the example a person approves shows it: its fallback where they hold none, and a condition on it as the branch the profile takes, compared as the example compares. With no profile and no fallback it is refused `template_unsupported` before anything is called, and so is a template naming `sender.last_name`, which neither Reply nor the arguments hold.",
+                "The package writes the template's text as written around the tags and inside them",
+                "On LinkedIn the package writes a text as written, and Reply converts it from HTML to text after filling it in; an invitation's note goes as written.",
+                "After filling a LinkedIn text in, Reply converts it from HTML to text, so markup written in it does not reach the person as written, and what it makes of a `<` that starts a tag has not been seen; the package does not refuse one on LinkedIn.",
+                "the package reads those codes as a template's only when the message is one: for a final text they are `message_invalid`.",
+                "On an email reply-cli answers one as `contact.missing_variables` or `contact.rendering_failed`, which are `message_invalid` too; an answer under `contact.unknown`, as a reply-cli older than 0.17.2 gave it, says nothing of it, so one that got past this check there would be reported as `provider_call_failed`, Reply's code in the trace.",
+                "**A template Reply does not send within the call is filled in when it goes.**",
+                "A send held for a later moment, or one that goes now which Reply queues behind the account's other sends and answers as accepted, is taken as written and filled in at the moment Reply sends it",
+                "which fills in a template it sends within the call before it sends anything",
                 "its text, the text of a fallback and the text a comparison compares reach Reply escaped as a final text's are",
                 "so a comparison compares the value with the text as the template wrote it",
                 "So the package refuses, before anything is called, an email whose subject or body holds a `<` followed by an ASCII letter, `/`, `!` or `?`, as `message_invalid` in a final text and as `template_unsupported` in a template, and names the character without quoting the text.",

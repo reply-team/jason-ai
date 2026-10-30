@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts;
+using Jason.ReplyCliStub;
 using Jason.Runtime.Plugins.Invocation;
 
 namespace Jason.Runtime.Tests.Plugins.Reply;
@@ -33,8 +35,13 @@ public class ReplyPrivacyTests
 
     private const string ExportedTeam = "reply-exported-team-marker-5d30";
 
-    /// <summary>The one vendor-named variable a child may see: the package's own, and not a credential.</summary>
+    /// <summary>The two vendor-named variables a child may see, both the package's own and neither a credential.</summary>
     private const string UpdateCheck = "REPLY_NO_UPDATE_CHECK";
+
+    private const string Client = "REPLY_CLIENT";
+
+    /// <summary>The runtime's version without its build metadata, which is what the package names the harness by.</summary>
+    private static readonly string Released = JasonVersion.Current.Split('+')[0];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -148,11 +155,17 @@ public class ReplyPrivacyTests
         Assert.Equal(ReplyOperations.EveryCall, Paths(account));
         foreach (var call in account.Calls)
         {
-            // Read from the child's own environment as it saw it: the only vendor-named variable there is the
-            // one the package sets on the call, and it switches off an update check rather than carrying a
-            // credential.
-            Assert.Equal([UpdateCheck], call.Environment.Keys.Order());
+            // Read from the child's own environment as it saw it: the only vendor-named variables there are the
+            // two the package sets on the call. One switches off an update check, the other names the harness and
+            // the runtime the call came through, and neither carries a credential.
+            Assert.Equal([Client, UpdateCheck], call.Environment.Keys.Order(StringComparer.Ordinal));
             Assert.Equal("1", call.Environment[UpdateCheck]);
+            Assert.Equal("jason-harness/" + Released, call.Environment[Client]);
+
+            // And the CLI takes it: the runtime's informational version carries its build metadata, a "+" and the
+            // source revision, which makes the value longer than the version the CLI accepts after the slash, and a
+            // value it does not accept it leaves out without a word.
+            Assert.Equal("jason-harness/" + Released + " reply-cli/" + ReplyCliRelease.Version, call.UserAgent);
         }
 
         // And neither value reached anything else either: not an argument, not an outcome, not a log.
@@ -744,7 +757,8 @@ public class ReplyPrivacyTests
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var answers = string.Empty;
-        foreach (var format in new[] { "email", "linkedin_message", "linkedin_inmail", "linkedin_voice" })
+        // Four work items, each under its own key: Reply answers a repeat under one key with the send it took.
+        foreach (var (format, key) in new[] { ("email", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRV"), ("linkedin_message", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRW"), ("linkedin_inmail", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRX"), ("linkedin_voice", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRY") })
         {
             var email = format == "email";
             var message = new JsonObject { ["format"] = format, ["body"] = Text };
@@ -779,7 +793,7 @@ public class ReplyPrivacyTests
                     ["status"] = "active",
                     ["external_ids"] = new JsonObject(),
                 },
-                ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRY",
+                ["idempotency_key"] = key,
             };
 
             var sent = await ReplyOperations.InvokeAsync(api, "message.send", input, Ct);

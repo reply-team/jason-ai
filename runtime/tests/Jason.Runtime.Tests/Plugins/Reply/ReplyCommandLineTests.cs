@@ -32,7 +32,6 @@ public class ReplyCommandLineTests
     [InlineData("--user-id")]
     [InlineData("--user-email")]
     [InlineData("--pretty")]
-    [InlineData("--idempotency-key")]
     public async Task A_flag_this_plugin_must_never_pass_appears_in_no_call(string flag)
     {
         // `--verbose` prints the whole request and response to stderr, which is where a contact's address would
@@ -326,11 +325,17 @@ internal static class ReplyOperations
         CancellationToken kill,
         JsonObject? binding = null,
         int attempt = 1,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        DateTimeOffset? unsettledSince = null,
+        string? unsettledReference = null,
+        IReadOnlyList<string>? claimRefuses = null)
     {
         // The input is what the document says it is before anything runs: a test that sent nonsense would prove
-        // nothing about whether the operation is implementable.
-        Assert.Empty(SchemaValidator.Validate(input, OperationCatalog.Find(operation)!.InputSchema));
+        // nothing about whether the operation is implementable. A test of a package's own floor beneath the claim names
+        // the pointers the claim refuses instead, and exactly those. The check is the claim's own, which sets the
+        // provider's object aside before the document's schema applies.
+        var problems = OperationCatalog.Find(operation)!.CheckInput(input, PatternTiming.Default);
+        Assert.Equal(claimRefuses ?? [], problems.Select(problem => problem.Pointer).ToList());
 
         return await PluginInvokerTests.InvokeAsync(
             api,
@@ -344,7 +349,9 @@ internal static class ReplyOperations
                 AttemptNumber: attempt,
                 WorkItemId: WorkItemId,
                 CampaignId: CampaignId,
-                Timeout: timeout),
+                Timeout: timeout,
+                UnsettledSince: unsettledSince,
+                UnsettledReference: unsettledReference),
             kill);
     }
 
@@ -419,6 +426,14 @@ internal static class ReplyOperations
         }
 
         var failed = (InvocationOutcome.Failed)result.Outcome;
+
+        // A code reserved beside every operation is declared by none, and passes under the one class it is reserved with.
+        if (UnjudgedOutcomeCodes.Reserved.ContainsKey(failed.Error.Code))
+        {
+            Assert.True(UnjudgedOutcomeCodes.Reserves(failed.Error.Class, failed.Error.Code), $"{operation} reported {failed.Error.Code} as {failed.Error.Class}: {failed.Error.Message}");
+            return failed.Error;
+        }
+
         var contract = OperationCatalog.Find(operation)!;
         var declared = contract.FailureCodes.SingleOrDefault(code => code.Code == failed.Error.Code);
 

@@ -9,8 +9,10 @@ yes.
 `jason runtime autostart enable` registers the runtime to start at logon (§8). An update keeps that
 registration working, and whatever you wrote yourself, for the reason §7 gives.
 
-**Nothing in a release is signed or notarized.** Integrity is a SHA-256 you can check yourself, published beside
-the files and inside the manifest. Signing and notarization are their own story, before 1.0.0.
+**The macOS executable is signed with Reply's Developer ID and notarized by Apple; the Linux and Windows executables
+are not signed.** Integrity is a SHA-256 you can check yourself, published beside the files and inside the manifest.
+On Linux and Windows it is the only provenance there is; on macOS the signature says who built the executable as
+well. Signing the Windows executable is its own story, before 1.0.0.
 
 ## 1. What a release is
 

@@ -99,6 +99,29 @@ public class PluginLoaderTests
         Assert.Equal(CandidateStatus.Valid, Assert.Single(load.Report.Candidates, candidate => candidate.Directory == TestPlugins.FakeProviderId).Status);
     }
 
+    /// <summary>
+    /// A package that promises to settle by the work item's key an operation whose document does not rest on the key
+    /// is a package problem like any other: the reload is refused and the previous set stays.
+    /// </summary>
+    [Fact]
+    public async Task A_package_settling_by_the_key_what_no_document_settles_so_keeps_the_whole_set_out()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        TestPlugins.InstallFakeProvider(dir.Paths);
+        TestPlugins.Write(dir.Paths, "misplaced", TestPlugins.Manifest("misplaced", "[message.send, contact.update]", "settles_by_key: [contact.update]"), "export function invoke() {}");
+
+        var load = await NewLoader(dir.Paths, programs).LoadAsync(SnapshotSource.Reload, Ct);
+
+        Assert.Null(load.Snapshot);
+        Assert.False(load.Report.Activated);
+        var misplaced = Assert.Single(load.Report.Candidates, candidate => candidate.Directory == "misplaced");
+        Assert.Equal(CandidateStatus.Invalid, misplaced.Status);
+        var problem = Assert.Single(misplaced.Problems);
+        Assert.Equal((ProblemCodes.SettlesByKeyInvalid, "settles_by_key[0]"), (problem.Code, problem.Path));
+    }
+
     [Fact]
     [Critical(Family.R1, "environmental problems are local")]
     public async Task A_plugin_whose_program_is_missing_holds_back_only_itself()

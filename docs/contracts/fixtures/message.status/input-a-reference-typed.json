@@ -1,0 +1,32 @@
+{
+  "operation": "message.status",
+  "version": 1,
+  "case": "a caller that names the reference itself, which only the runtime supplies",
+  "input": {
+    "args": {
+      "send": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "reference": "email-1001"
+    },
+    "send": {
+      "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "operation": "message.send",
+      "reference": "email-1001"
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/args/reference",
+        "reason": "additional_properties"
+      }
+    ]
+  }
+}

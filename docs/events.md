@@ -233,7 +233,9 @@ within the shorter of two cadences and `Inbound:LookbackSeconds`, and never befo
 | `Dispatcher:EventsCadenceSeconds` | `600` | 60..86400 | how long after one read of an account starts the next is due |
 
 It applies at the next scan, without a restart. **What it costs:** one read per bound account per cadence, 144 a day at
-the default, most of them one child that finds nothing and writes no line.
+the default, most of them one child that stores nothing and journals nothing. A plugin that reads a stretch again, as
+an overlap that finds a late arrival does, hands back events the store already holds; those are counted as held, and a
+read that finds only those writes one line to the runtime's log saying how many, and nothing to the journal.
 
 ## 6. Reading a span again
 

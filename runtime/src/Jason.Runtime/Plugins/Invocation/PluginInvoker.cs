@@ -278,7 +278,9 @@ public sealed partial class PluginInvoker(
                 request.AttemptNumber,
                 request.WorkItemId,
                 request.CampaignId,
-                info.RuntimeVersion),
+                info.RuntimeVersion,
+                request.UnsettledSince,
+                request.UnsettledReference),
             grants,
             Limits(settings, plugin, timeoutMs));
 

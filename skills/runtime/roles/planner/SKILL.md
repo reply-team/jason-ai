@@ -60,8 +60,9 @@ connect. Either send names one person Jason already holds as a contact. Each sen
 and each waits for a person to approve exactly what it would send: that fits the few people of a pilot or a single
 follow-up, and a population is a campaign's. Which account a send goes from is the person's to say: `sender.list`
 reads the accounts it can go from, and a colleague's account is used only when the person names it.
-A `message.send` item for an email that carries a template, as the copywriter's answer gives it, has `compose`
-`template` in its `message`, with the subject and the body both templates. A send that
+A `message.send` item that carries a template, as the copywriter's answer gives it, has `compose` `template` in its
+`message`, with each text of its format a template: the subject and the body of an email or an InMail, the body of a
+LinkedIn message. A voice message is never a template. A send that
 ended without knowing whether it went out is not planned again: a new item for the same message is a second
 message, so it goes back to the person.
 

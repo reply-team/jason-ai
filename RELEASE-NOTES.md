@@ -19,165 +19,113 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.21.0
 
-## What is new since 0.20.0
+# Jason 0.22.0
 
-- **`jason update apply` now brings the Reply plugin up to date with the release.** Until now an update left every
-  plugin package where it was, so the new runtime could start with the old plugin. The update has a new step,
-  `plugins`, after the new executable is in place and before any runtime starts, so the first load reads the new
-  package. Only a package an earlier release placed, and that is behind this one, is replaced; a package edited or
-  built on this machine is left alone. The package it replaces is kept under the data directory's
-  `update/previous/plugins/<id>`, and `jason update rollback` puts it back where the place still holds the package the
-  update put there. The step never fails the update: a package it cannot replace stays as it was, with a line that
-  says why. `jason update check` reads the same plan, and under a package manager it names
-  `jason plugin install <id> --replace` for after the upgrade.
-- **`jason plugin install reply` places the Reply plugin in one command.** It downloads the package this release
-  publishes, checks it against its line in `checksums.txt`, unpacks it aside, checks the result against the content
-  digest the release's `manifest.json` gives, and only then moves it in whole into `~/.jason/plugins/reply`; a runtime
-  that answers is asked to reload. A package that fails a check is never placed, and the verb exits 1 saying why; a
-  runtime that answers and refuses the reload leaves the package placed, and the verb exits 1 as well. A different
-  package already there is kept unless you add `--replace`. It never starts a runtime. Step 3 of the
-  [golden path](https://github.com/reply-team/jason-ai/blob/v0.21.0/docs/golden-path.md) is now this command, in place
-  of the shell lines a person used to type.
-- **Homebrew follows a release on its own.** The tap is asked to move as soon as a release is published; its six-hour
-  schedule stays as the fallback.
-- **An email may be a template the provider fills in for each person.** A `message.send` work item takes `compose`:
-  `text`, or no `compose` at all, keeps the message final, sent exactly as approved; `template` makes the subject and
-  the text templates, for an email only. Every plugin reads a template by one standard, set out once in
-  [the template standard](https://github.com/reply-team/jason-ai/blob/v0.21.0/docs/contracts/README.md#the-template-standard):
-  a value, a value with a quoted fallback, and `#if`, `else` and `/if`, on a value or on a comparison with quoted text.
-  The runtime checks a template when the work item is written, so one it refuses never waits for an approval, and the
-  refusal names the construct and where it starts without quoting the template. The approval carries one example
-  rendered for the person the message goes to, and `jason approval get --human` prints it under `Example:`. You
-  approve the template as written; the example is Jason's rendering, and the provider's may differ. A plugin that
-  cannot write a template in its provider's syntax refuses it with `template_unsupported`, and a template the provider
-  could not fill in for a person is `template_unrendered`; both are final, and nothing is sent.
-- **Reply 0.10.0 sends an email template in Reply's own syntax.** This release publishes the Reply plugin 0.10.0. It
-  writes each construct and name of the standard as Reply writes it, and refuses before anything is called what Reply
-  would read otherwise: a custom field under a key Reply keeps for a value of its own, a template whose text could
-  spell a prompt to a model, a comparison with a character Reply's comparison does not read, and a template on
-  LinkedIn. Reply drops a tag it does not know with everything after it, in the subject and the body alike, so a
-  direct email whose subject or body holds a `<` that starts a tag, such as `<name@example.com>`, is refused before
-  anything is called, in a final text and in a template; write an address without its angle brackets. A value Reply
-  puts in is not escaped, so markup in a contact's field becomes markup in the mail; the
-  [plugin's page](https://github.com/reply-team/jason-ai/blob/v0.21.0/plugins/reply/README.md) says how Reply reads a
-  template.
-- **An execution profile can grant its agents web search and web fetch, and denies them otherwise.**
-  `jason profile create` and `jason profile update` take `--tool web_search` and `--tool web_fetch`; a profile's
-  revisions report `tools`, and each agent attempt's provenance records the grant it was launched with. A web tool the
-  profile does not grant is denied to the agent it launches. A grant of `web_fetch` reaches every address the host will
-  fetch. A grant is withdrawn by an update that sends an empty `tools` list through `--file`.
-- **The CLI says plainly what it will not do, and writes in your name.**
-  - An option the verb does not take is refused, `'<option>' is not an option of 'jason <verb>'`, instead of being read
-    as a value; a value that really starts with a dash is given after `--`.
-  - An option with a fixed list of values, such as a status, an order or a kind, refuses any other value before a
-    request is made, naming the values it takes.
-  - A write you make without `--actor` is recorded as `human:<this account's name>`, the name the paired browser writes
-    as, where it used to name nobody; the eight verbs that are a person's own word take no default, as listed under
-    upgrading below.
-  - `jason campaign summary --human` and `jason campaign activity --human` name each campaign.
-  - `jason campaign list` run inside a project's folder lists that project's campaigns, and now says on stderr that
-    `--all-projects` lists every project's.
-- **A page for programs written against the Runtime API.**
-  [The Runtime API](https://github.com/reply-team/jason-ai/blob/v0.21.0/docs/runtime-api.md) describes finding the
-  runtime and authorising, the form of a request, every operation by noun, reading the journal and reporting an effect,
-  serving pages of your own beside the UI, and which parts are stable.
-- **A work item's arguments may carry the provider's own object.** Beside the arguments an operation declares, they
-  may hold one reserved key, `provider`, for what one provider can do beyond the shared arguments. The runtime never
-  reads it: it holds it to being a JSON object and hands it to the plugin exactly as written. A plugin that does not
-  read it ignores it, and the Reply plugin does. The rule is under
-  [the input a plugin receives](https://github.com/reply-team/jason-ai/blob/v0.21.0/docs/contracts/README.md#the-input-a-plugin-receives).
-- **The skills say more of what a campaign needs.** An answer to a role's question is recorded as the person's, and the
-  campaign manager's next check-in creates the work it implies; a campaign is never split only to give some of its
-  people another tone of voice; a draft greets a person by the name in Jason's own contact record; `enrolled` in
-  `jason campaign list-contacts` is membership in the Jason campaign, not an enrolment at the provider; the copywriter
-  may answer with a template when one message serves a whole audience; the roles that write messages say which
-  operations reach a person, `message.send`, `social_invitation.send` and `conversation.reply`, each approved with a
-  preview; and the performance analysis dates each failure against where the sends are routed now, so an old failure
-  is not read as a current one.
-- **The release page says what this release brings,** in notes written for it, where earlier releases carried only
-  the common text.
+## What is new since 0.21.0
 
-## Fixed since 0.20.0
+- **A send can wait for its moment.** `message.send` and `social_invitation.send` take an optional `send_after`: the
+  moment the message goes out after, with its offset, such as `2026-11-03T09:00:00-05:00`. A moment without an offset
+  is refused when the work item is written. The approval shows it, after `send after:`. A send's work item now
+  succeeds once the provider has taken the send: its result's `status` is `sent` where the provider sent it within the
+  call, and `accepted` where it took it, for now or for the moment named. Whether the message went is read afterwards,
+  never from that item. A plugin that does not list `send_after` on the send's channel is never handed it: the claim
+  refuses the work with `argument_unsupported` before anything runs, so a moment is never dropped and sent at once.
+  Through Reply, a moment goes on an email or any LinkedIn message, an InMail and a voice message among them, and on a
+  LinkedIn invitation.
+- **A send the provider holds can be read and taken back.** Two new operations, `message.status` and `message.cancel`,
+  name a send by the work item that made it, `{"send": "wi_…"}`; the runtime supplies the reference the provider gave
+  that send, so neither reaches a send another campaign or another route made. `message.status` answers `queued`,
+  `sent`, `cancelled`, `failed` or `unknown`, the last for a send the provider attempted and lost track of, which may
+  have gone; with it, when the send went, the message it became, and the provider's reason and code for a failure.
+  `message.cancel` takes back a send still held; a second cancel succeeds as well, and a send that went or failed is
+  refused with `send_not_pending`. A cancel runs in a paused campaign, as stopping is the protective half of the work.
+  When a read finds a send gone, the chronicle says so once, as `message_sent_observed`; the campaign manager is woken
+  by it only where `Manager:Triggers` lists it. Twenty-four operations are published now.
+- **A send whose answer was lost is repeated only where that is safe.** Until now such a send was final. A plugin that
+  sends under the work item's key, and says so in its manifest's `settles_by_key`, may now be asked again: a provider
+  that keeps the key answers a send it already took with that send, and sends nothing twice. The claim makes the repeat
+  only under the package, the account and the arguments of the attempt that may have sent, and otherwise refuses it
+  with `provider_answer_lost`, final, saying that an earlier attempt may have reached the person. Through Reply both
+  sends are repeated this way within 23 hours of the first attempt that may have sent; past that, or where Reply
+  cannot be asked, the repeat is `send_not_settled` and nothing is sent.
+- **An email through Reply can be timed by one of the account's sending schedules.** `message.send` takes, in the
+  provider's own object, `"provider": {"schedule_id": "<id>"}`: the `id` of a schedule `schedule.list` names, written
+  as a string of its digits. Reply holds the email for the schedule's next opening, or its first opening at or after
+  `send_after` where both are given, and since Reply only estimates that moment the result's `accepted_for` is null.
+  Any other shape of the object is refused before anything is called, with `provider_input_invalid`. A LinkedIn
+  message cannot be timed this way, as the known issues below say. The
+  [Reply plugin's page](https://github.com/reply-team/jason-ai/blob/v0.22.0/plugins/reply/README.md) says how.
+- **Replies through Reply are read from Reply's change feed.** One read per account lists the threads that moved, in
+  place of walking every thread of every campaign page by page, once per cadence. The walk stays as the fallback, and
+  takes an account back whenever its feed is not offered or stops answering; `jason events sources` shows each
+  account's source and whether it is healthy. What the feed gives Jason is identifiers, moments and Reply's flags,
+  never a subject, a preview or a name.
+- **A LinkedIn message and an InMail can be templates the provider fills in, as an email already could.**
+  `compose: template` now covers a LinkedIn message's text and an InMail's subject and text. A plugin is handed a
+  template only on a channel its manifest lists under `templates`; on any other channel the claim refuses it, with
+  `template_not_offered`, before anything runs. The Reply plugin writes all three in Reply's syntax: the sender's
+  first name and full name become Reply's LinkedIn variables, and `sender.address` is written in as the sending
+  profile. A template naming `sender.last_name`, which Reply's LinkedIn account does not carry, is refused with
+  `template_unsupported`, and a voice message stays a final text. You approve the template and its example, as for an
+  email; the text as Reply filled it in is read afterwards from `message.status`, where Reply gives it. The copywriter
+  and both planners now write a template for any of the three.
+- **The macOS executable is signed with Reply's Developer ID and notarized by Apple.** A browser-downloaded archive
+  runs on its first start without Gatekeeper refusing it; that first start needs the network, as the section on what
+  is signed below says. The Linux and Windows executables are not signed, and the checksum stays their only
+  provenance.
+- **This release publishes the Reply plugin 0.14.1, which needs reply-cli 0.17.2.** Every call it makes tells Reply it
+  came through Jason: reply-cli puts `jason-harness/<version>` at the front of its User-Agent, the runtime's version
+  without its build metadata, and nothing that names the machine or the person. Where an account's Reply does not offer
+  what a work item asks for, the plugin answers `capability_not_offered`: final, nothing done, and the manager skill
+  takes it as a reason to do the work another way or tell you.
+- **For plugin authors.** Two codes are reserved beside every operation, and no document declares them:
+  `provider_input_invalid` (`validation`), for a provider object the package cannot read, and `capability_not_offered`
+  (`permanent`), for what the provider does not offer yet. Neither clears a provider block. The manifest takes three
+  new keys at `manifest_version` 1: `arguments`, the channels each argument is taken on; `settles_by_key`; and
+  `templates`. A runtime older than 0.22.0 refuses all three with `unknown_field`. Every operation document now names
+  its `channel_arguments` and `channel_templates`, and the claim has twenty checks in one published order.
+  [The plugin guide](https://github.com/reply-team/jason-ai/blob/v0.22.0/docs/plugins.md) and
+  [the contracts](https://github.com/reply-team/jason-ai/blob/v0.22.0/docs/contracts/README.md) set them out.
+- **The skills know the new answers.** The campaign manager asks after one send and takes one back, reads the
+  person's thread before any new send when a send is `unknown`, and treats `capability_not_offered` and
+  `template_not_offered` as final; the troubleshooting skill tells apart a capability the provider does not offer, a
+  provider object it refused, and a refusal of a send that may already have reached the person, which nobody repeats
+  until the provider has said the earlier attempt did not act.
 
-- **A new terminal finds `jason` after `install.sh`.** The installer wrote the PATH line to the login profile only, so
-  under bash or zsh a terminal that is not a login shell, such as GNOME's, did not find the program just installed. It
-  now also writes it to `~/.bashrc` or `~/.zshrc`, and any other shell is told to sign out and in again. The repair
-  `jason status` names and `jason uninstall` follow the same rule, and both installers end by naming `jason status`.
-  On Linux, a runtime started at sign-in reads no shell profile; the
-  [install guide](https://github.com/reply-team/jason-ai/blob/v0.21.0/docs/INSTALL.md) says how a directory reaches its
-  PATH.
-- **An update stopped part-way is said, and nothing runs around it.** Before the update moves the installed build
-  aside, nothing has been replaced: `jason runtime start` starts the installed build and says that an update waits and
-  that `jason update apply` resumes it, and `jason status` names the waiting update. From that step on,
-  `jason runtime start` and `jason runtime restart` start nothing and say why, `jason status` fails its runtime check
-  with `jason update apply` as the repair, and a runtime registered to start at sign-in starts nothing either. Before,
-  each of them could start the new build outside the update and leave its last steps undone without a word. An update
-  ledger that cannot be read is refused the same way, naming the file.
-- **The update's own start of the runtime ends at once when that runtime exits,** where it used to wait out the whole
-  minute, and says what the runtime said; `jason update apply` then resumes at that start. An apply killed during its
-  health check resumes from the start of the runtime, where it used to fail every time with nothing running.
-- **A role of your own with no skill is reported by `jason status`, not failed.** The check requires skills only for
-  the roles Jason ships. A skill of another role that the runtime refuses still fails the check, and the message names
-  the directory to correct it in.
-- **`jason skills install` and `jason skills update` write around a file you edited,** file by file, instead of
-  refusing the whole deployment; `--force` overwrites it. A file a later release dropped goes with its skill.
-- **`jason status` reads the files a skills record names,** so a pack whose files are gone fails `harness_skills`, with
-  `jason skills update` as the repair, where it used to be reported as deployed.
-- **`jason uninstall` on Windows removes what other builds of Jason unpacked** beside this one, keeping and naming any
-  directory a running copy holds.
-- **`jason update apply --version <version>` installs that version or refuses.** A feed that offered another release
-  could make it refuse for a floor that was not the one asked about, or install the version the feed named; it now
-  refuses with `update_artifact_unexpected`, naming both versions.
-- **A profile's program is never a script a shell would run.** A `.cmd`, `.bat` or `.ps1` could only fail later; it is
-  now refused when the profile is written, and a profile stored with one is refused when its work is claimed, before
-  anything is started, with a message that says how to fix the profile.
-- **A move refused for want of permission fails at once.** `jason plugin install`, `jason update apply` and
-  `jason update rollback` wait up to ten seconds for a file another program holds open; a move this account is not
-  permitted to make now fails without that wait, and says so.
-- **Pages that said what the code no longer does now say what it does:** who may clear a provider block, and what
-  `jason update check` answers on 0.18.x or earlier. The `THIRD-PARTY-NOTICES` file names each runtime pack by its
-  major and minor version only, since the patch the executable carries is the publishing machine's.
-
-## Upgrading from 0.20.0
+## Upgrading from 0.21.0
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
-  lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`; then
-  `jason skills update`, `jason ui install` and `jason plugin install reply --replace`. The update from 0.20.0 is
-  finished by this release's own executable, so the new `plugins` step is taken whichever build began it.
-- **The data directory:** this release adds one database migration, which lets a profile revision hold the tools it
-  grants. The first start on 0.21.0 runs it after taking a backup, as every migration does; revisions written before it
-  grant no tools. Your projects, campaigns, work items and chronicle stay as they were.
-- **The Reply plugin:** with 0.9.0, the package 0.20.0 published, installed as it came, `jason update apply` replaces
-  it with 0.10.0 and keeps 0.9.0 under the data directory's `update/previous/plugins/reply`. A package edited on this
-  machine is left as it is; `jason plugin install reply --replace` swaps it for 0.10.0.
-- **What is refused now that was not:**
-  - An option the verb does not take, and a value outside an option's fixed list, exit 2 before any request.
-  - The eight verbs that are a person's own word take no default actor: `jason approval approve`,
-    `jason approval reject`, `jason decision answer`, `jason preference set`, `jason preference unset`,
-    `jason block clear`, `jason workitem resume` and `jason report submit`. Without `--actor` they exit 2 before any
-    request, naming the form to write, where the runtime used to refuse them with exit 1 (`actor_required`, or
-    `validation_failed` for `jason workitem resume`).
-  - A profile whose `program` is a `.cmd`, `.bat` or `.ps1` is refused with `shell_script`; one stored before is
-    refused when its work is claimed, with `host_not_available`. A profile that passes `--disallowed-tools` among its
-    arguments is refused when it is written; its `deny` list is the way to deny.
-  - An agent launched under a profile that grants no web tool has web search and web fetch denied. Grant them with
-    `jason profile update <name> --tool web_search --tool web_fetch`.
-  - Through Reply, a final text or an invitation's note that holds `@prompt[[` is refused as `message_invalid`, as a
-    double opening brace already is.
-  - Through Reply, a direct email whose subject or body holds a `<` followed by an ASCII letter, `/`, `!` or `?` is
-    refused before anything is called, as `message_invalid` in a final text and as `template_unsupported` in a
-    template, and the message names the character without quoting the text. `a < b` and `<3` go as written.
-  - `jason runtime start`, `jason runtime restart` and a start at sign-in refuse with `update_in_progress` while an
-    update is stopped part-way from the moment it moves the installed build aside; `jason update apply` finishes it
-    and `jason update rollback` undoes it.
-- **Skills:** the update redeploys them wherever a deployment was recorded; after `brew upgrade jason`, run
-  `jason skills update`.
+  lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
+  install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
+  and `jason plugin install reply --replace` follow.
+- **The Reply plugin:** with the package a release published installed as it came, 0.10.0 from 0.21.0,
+  `jason update apply` replaces it with 0.14.1 and keeps the package it replaced under the data directory's
+  `update/previous/plugins/reply`. A package edited on this
+  machine is left as it is, and so is the package under the install line and Homebrew:
+  `jason plugin install reply --replace` swaps it for 0.14.1. Until it is replaced, the old package under 0.22.0 has
+  its email templates refused with `template_not_offered` at the claim, since it lists no `templates`, and offers none
+  of `message.status`, `message.cancel` and `send_after`.
+- **reply-cli 0.17.2 or newer:** the Reply plugin 0.14.1 asks for it, and an older CLI makes the plugin `unavailable`
+  with `executable_incompatible`, so work routed to it fails at the claim with `plugin_unavailable` and runs nothing.
+  Update it with `npm install -g reply-cli`, then `jason plugin reload`.
+- **The data directory:** this release adds one database migration, an index that lets the chronicle say once that a
+  send went. The first start on 0.22.0 runs it after taking a backup, as every migration does. Your projects,
+  campaigns, work items and chronicle stay as they were.
+- **What reads or is refused differently:**
+  - Through Reply, a send's work item ends with `status` `accepted` where Reply holds the send rather than sending it
+    within the call. Both `sent` and `accepted` are done; neither is a reason to send again.
+  - Through Reply, a `message.send` whose `provider` object is anything but `{"schedule_id": "<id>"}` is refused with
+    `provider_input_invalid` before anything is called; the package 0.21.0 published, 0.10.0, ignored the object.
+    The other operations still ignore it.
+  - A template on a channel the routed plugin's manifest does not list under `templates` is refused with
+    `template_not_offered` before anything runs.
+- **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
+  `brew upgrade jason`, run `jason skills update`.
 
-From 0.19.x the same applies, and the update is one apply. From 0.18.x or earlier, Jason's own installation updates
-through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build older than 0.18.0, the
-first of the two can stop at `started`, as the first known issue below says.
+From 0.19.x and 0.20.x the same applies, and the update is one apply. From 0.18.x or earlier, Jason's own installation
+updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build older than
+0.18.0, the first of the two can stop at `started`, as the first known issue below says.
 
 ## Known issues
 
@@ -186,12 +134,38 @@ That update is still performed by the older build, and it happens when the two b
 Type `jason update apply` again: it runs 0.19.0, which finishes the update, and one more `jason update apply` then
 takes the newest release. From 0.18.x this does not happen: 0.19.0 is built on the same .NET patch as 0.18.0.
 
+Reply's routes behind this release's send features - a send's moment and its sending schedule, reading and cancelling
+a send by its reference, and the inbox change feed - reach Reply's accounts on Reply's own schedule. Until an account's
+Reply has a route, the Reply package answers `capability_not_offered` for that operation or argument, and the account's
+replies are read thread by thread in place of the feed, as its README says; nothing in Jason needs updating when the
+route arrives.
+
 Through Reply, Jason sees only a contact's first reply. Reply marks a contact who replied as finished and stops
 detecting that contact's later replies, so a later reply from the same contact never reaches Jason.
 
-A send or an invitation through Reply carries no sending time: `sent_at` is null, because Reply's answer to a LinkedIn
-send gives a local time marked as UTC and its answer to an email gives none. A message's own moment is read afterwards
-from its thread, where it is true UTC.
+A send or an invitation through Reply carries no sending time in its own result: `sent_at` is null, because Reply's
+answer to a LinkedIn send gives a local time marked as UTC and its answer to an email gives none. `message.status`
+reports when a send went, and a message's own moment is read from its thread, where it is true UTC.
+
+Through Reply, a sending schedule times an email only: Reply refuses a schedule on every LinkedIn direct send in this
+version, so a LinkedIn message that names one is refused before anything is called, with `provider_input_invalid`.
+
+The approval preview shows a send's `send_after` and not the provider object beside the arguments, so a send that also
+names a sending schedule goes at the schedule's first opening at or after that moment, which may be later than the
+moment the approver read.
+
+A template held for a later moment, or queued by Reply behind the account's other sends, is filled in when it goes: a
+name Reply cannot fill then fails the send after a person approved it, which `message.status` reads as `failed` with
+Reply's reason.
+
+Reply converts a LinkedIn text from HTML to text after filling it in, so markup in a LinkedIn message or InMail, a
+final text or a template, does not reach the person as written; what Reply makes of a `<` that starts a tag there is
+not known yet, and the Reply package does not refuse one on LinkedIn as it does on email.
+
+Reply does not consult its blacklist when it takes a LinkedIn direct send, and does when it makes it: a send to a
+person its blacklist holds is accepted, and fails when Reply makes it, which `message.status` reads as `failed` with
+Reply's reason. Jason's own do-not-contact register is checked at the claim as before; record such a stop there with
+`jason suppression add` as well, so the send is refused before it is made.
 
 Through Reply, `schedule.list` does not say which campaign runs on which schedule: `campaign.get` names no schedule,
 so which one a campaign sends on is read at Reply.

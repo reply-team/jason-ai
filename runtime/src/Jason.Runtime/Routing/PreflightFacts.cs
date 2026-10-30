@@ -23,6 +23,14 @@ namespace Jason.Runtime.Routing;
 /// The open provider blocks of the routed plugin and binding, read only for an operation a block holds, and null for
 /// every other: a read or a control runs through a block and fails on its own.
 /// </param>
+/// <param name="Unsettled">
+/// The latest earlier attempt of the item that may have acted, or null where none did: one started and ended ambiguous, so
+/// this claim would repeat an effect nobody knows the fate of, and its provenance says at which provider and account.
+/// </param>
+/// <param name="Send">
+/// The send the work names under <c>args.send</c>, read only for an operation whose input carries one, and null where the
+/// campaign holds no work item under that id.
+/// </param>
 public sealed record PreflightFacts(
     WorkItem Item,
     Campaign Campaign,
@@ -30,7 +38,9 @@ public sealed record PreflightFacts(
     IReadOnlyDictionary<string, string> ContactPins,
     IReadOnlyDictionary<string, string> CampaignPins,
     bool Suppressed,
-    IReadOnlyList<ProviderBlock>? Blocks = null)
+    IReadOnlyList<ProviderBlock>? Blocks = null,
+    Attempt? Unsettled = null,
+    NamedSend? Send = null)
 {
     /// <summary>What an entity no plugin has pinned yet has: nothing, stated once rather than allocated per claim.</summary>
     public static IReadOnlyDictionary<string, string> NoPins { get; } = new Dictionary<string, string>(StringComparer.Ordinal);

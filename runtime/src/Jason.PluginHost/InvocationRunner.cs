@@ -189,7 +189,7 @@ public sealed class InvocationRunner : IInvocationRunner
     private static JsonObject ContextObject(PluginInvocation invocation)
     {
         var context = invocation.Context;
-        return new JsonObject
+        var known = new JsonObject
         {
             ["invocation_id"] = invocation.InvocationId,
             ["correlation_id"] = invocation.CorrelationId,
@@ -210,6 +210,20 @@ public sealed class InvocationRunner : IInvocationRunner
             },
             ["runtime_version"] = context.RuntimeVersion,
         };
+
+        // Since when an earlier attempt may have acted unsettled, only where one may have: absent otherwise.
+        if (context.UnsettledSince is { } since)
+        {
+            known.Insert(known.IndexOf("work_item_id"), "unsettled_since", since.UtcDateTime.ToString(DeadlineFormat, CultureInfo.InvariantCulture));
+        }
+
+        // The send such an attempt returned, right after the moment and only where one did.
+        if (context.UnsettledReference is { } reference)
+        {
+            known.Insert(known.IndexOf("work_item_id"), "unsettled_reference", reference);
+        }
+
+        return known;
     }
 
     private static TimeSpan Remaining(InvocationLimits limits, Stopwatch watch)

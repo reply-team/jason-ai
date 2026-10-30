@@ -23,8 +23,24 @@ internal static class TemplateGrammar
     /// <summary>A refused construct: its row, and the character it starts on (from 1).</summary>
     internal sealed record Refusal(Row Row, int Position);
 
-    /// <summary>One name a template may use, what it stands for, and where the approval's example reads it, if anywhere.</summary>
-    internal sealed record NameRow(string Name, string What, string? Pointer);
+    /// <summary>
+    /// One name a template may use, what it stands for, and on each channel a template is written on what the composed
+    /// input holds of it: the pointer the approval's example reads it at, or null where the input does not hold it and the
+    /// provider fills it from what it holds.
+    /// </summary>
+    internal sealed record NameRow(string Name, string What, string? Email, string? Linkedin)
+    {
+        /// <summary>What the composed input holds of the name on <paramref name="channel"/>; on a channel no template is written on, nothing.</summary>
+        internal string? On(string? channel) => channel switch
+        {
+            "email" => Email,
+            "linkedin" => Linkedin,
+            _ => null,
+        };
+    }
+
+    /// <summary>The channels a template is written on, in the order the table of names lists them.</summary>
+    internal static IReadOnlyList<string> Channels { get; } = ["email", "linkedin"];
 
     /// <summary>The deepest a condition may sit inside others.</summary>
     internal const int MaxDepth = 8;
@@ -67,16 +83,16 @@ internal static class TemplateGrammar
     /// <summary>The names a template may use, in the order the README lists them.</summary>
     internal static IReadOnlyList<NameRow> Names { get; } =
     [
-        new("contact.first_name", "the person's first name", "/contacts/0/first_name"),
-        new("contact.last_name", "the person's last name", "/contacts/0/last_name"),
-        new("contact.company", "the person's company", "/contacts/0/company"),
-        new("contact.title", "the person's title", "/contacts/0/title"),
-        new("contact.email", "the address the message goes to", "/contacts/0/channels/0/value"),
-        new(CustomPrefix + "<key>", "the field the provider's account holds for the person under `<key>`: a letter or `_`, then at most 63 letters, digits and `_`", null),
-        new("sender.first_name", "the sending account's first name, as the provider holds the account", null),
-        new("sender.last_name", "the sending account's last name, as the provider holds the account", null),
-        new("sender.name", "the sending account's full name, as the provider holds the account", null),
-        new("sender.address", "the sending account's address", "/args/sender/address"),
+        new("contact.first_name", "the person's first name", "/contacts/0/first_name", "/contacts/0/first_name"),
+        new("contact.last_name", "the person's last name", "/contacts/0/last_name", "/contacts/0/last_name"),
+        new("contact.company", "the person's company", "/contacts/0/company", "/contacts/0/company"),
+        new("contact.title", "the person's title", "/contacts/0/title", "/contacts/0/title"),
+        new("contact.email", "the person's email address, which on an email is the address the message goes to", "/contacts/0/channels/0/value", null),
+        new(CustomPrefix + "<key>", "the field the provider's account holds for the person under `<key>`: a letter or `_`, then at most 63 letters, digits and `_`", null, null),
+        new("sender.first_name", "the sending account's first name, as the provider holds the account", null, null),
+        new("sender.last_name", "the sending account's last name, as the provider holds the account", null, null),
+        new("sender.name", "the sending account's full name, as the provider holds the account", null, null),
+        new("sender.address", "the sending account's address, which on LinkedIn is its profile", "/args/sender/address", "/args/sender/address"),
     ];
 
     private const string Prompt = "@prompt[[";
@@ -113,7 +129,7 @@ internal static class TemplateGrammar
             "|---|---|---|",
         };
         lines.AddRange(Rows.Select(row =>
-            $"| {Cell(row.Construct)} | {(row.Kind == Kind.Accepted ? "accepted" : "refused")} | {Cell(row.Why)} |"));
+            $"| {Escaped(row.Construct)} | {(row.Kind == Kind.Accepted ? "accepted" : "refused")} | {Escaped(row.Why)} |"));
         return lines;
     }
 
@@ -122,11 +138,11 @@ internal static class TemplateGrammar
     {
         var lines = new List<string>
         {
-            "| Name | What it is | In the approval's example |",
-            "|---|---|---|",
+            "| Name | What it is | On an email | On LinkedIn |",
+            "|---|---|---|---|",
         };
         lines.AddRange(Names.Select(row =>
-            $"| `{row.Name}` | {Cell(row.What)} | {(row.Pointer is null ? "not held" : $"`{row.Pointer}`")} |"));
+            $"| `{row.Name}` | {Escaped(row.What)} | {string.Join(" | ", Channels.Select(channel => Held(row.On(channel))))} |"));
         return lines;
     }
 
@@ -506,7 +522,14 @@ internal static class TemplateGrammar
 
     private static Refusal Refused(string key, int index) => new(ByKey[key], index + 1);
 
-    private static string Cell(string text) => text.Replace("|", @"\|", StringComparison.Ordinal);
+    /// <summary>What the table of names writes for what the input holds of a name on one channel.</summary>
+    private static string Held(string? pointer) => pointer switch
+    {
+        null => "not held",
+        _ => $"`{pointer}`",
+    };
+
+    private static string Escaped(string text) => text.Replace("|", @"\|", StringComparison.Ordinal);
 
     private enum TokenKind
     {

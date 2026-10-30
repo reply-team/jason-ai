@@ -331,10 +331,10 @@ nothing acts on the answer until it is. If it is active and no new work has appe
 yet and create nothing in its place. Read the work items the check-in makes before you offer any, and create work
 yourself only where the person asks for something the answer did not cover.
 
-**It may stop with a code.** A work item that failed carries an error, and the code is the answer: it says
-whether this is somebody's configuration, your arguments, a provider that was unreachable, or a person who has
-not answered yet. Reading one, telling the states apart and naming the repair that is safe is
-**`troubleshooting-jason`**.
+**It may stop with a code.** A work item that failed carries an error, and the code is the answer: it says whether
+this is somebody's configuration, your arguments, a provider that was unreachable, a provider that does not offer
+what you asked for yet, or a person who has not answered yet. Reading one, telling the states apart and naming the
+repair that is safe is **`troubleshooting-jason`**.
 
 **The effect may happen somewhere else.** If you or somebody else sends, enrols or replies by hand — through
 the provider's own CLI, or because the managed path was not available — Jason does not know, and until it is

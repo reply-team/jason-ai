@@ -1273,6 +1273,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_journal_campaign_kind_key_events")
                         .HasFilter("kind = 'provider_event_observed'");
 
+                    b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_sends")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_campaign_kind_key_sends")
+                        .HasFilter("kind = 'message_sent_observed'");
+
                     b.HasIndex(new[] { "CampaignId", "Ts" }, "ix_journal_contacts_added_campaign_ts")
                         .HasDatabaseName("ix_journal_contacts_added_campaign_ts")
                         .HasFilter("kind = 'contacts_added'");

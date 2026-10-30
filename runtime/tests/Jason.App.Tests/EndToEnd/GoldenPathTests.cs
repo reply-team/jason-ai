@@ -93,7 +93,7 @@ public class GoldenPathTests
         var parked = await GoldenPath.PollAsync(it, item, read => (string?)read["status"] == "awaiting_approval");
         Assert.Empty(parked["attempts"]!.AsArray());
         Assert.Equal(0, (int)parked["attempt_count"]!);
-        Assert.Empty(it.Account.Calls);
+        Assert.Empty(GoldenPath.Asked(it.Account.Calls));
 
         // 3. What a person is shown before they decide: what it would do, to whom, through which account — and
         //    the account by identity, never a credential and never the store it lives in.

@@ -46,8 +46,9 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// One message for a whole audience may be a template in Jason's own standard. The skill points at the standard's page
-    /// rather than restating a rule of it, because that page is the standard's only statement, and says that a template is
-    /// for an email only, since a LinkedIn message is refused.
+    /// rather than restating a rule of it, because that page is the standard's only statement, and says which formats a
+    /// template is for — an email, a LinkedIn message and an InMail, never a voice message — and that a template names a
+    /// sender's value only where the provider holds it.
     /// </summary>
     [Fact]
     public void The_copywriter_may_answer_with_a_template_where_the_brief_asks_for_one_message_per_audience()
@@ -59,9 +60,19 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "A template is for an email only: a LinkedIn message written as a template is refused, so write one as final text.",
+            "A template is for an email, a LinkedIn message or an InMail; a voice message is spoken from a final script, so write one as final text.",
             skill,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "A plugin refuses a sender's name or address its provider holds no field for on the message's channel: where you are not sure the provider holds it, write it out.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("has no address", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "the subject and the body of an email or an InMail, the body of a LinkedIn message",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("A template is for an email only", skill, StringComparison.Ordinal);
         Assert.Contains("`docs/contracts/README.md`, in the section \"The template standard\"", skill, StringComparison.Ordinal);
         Assert.Contains("There is no message store and no template store in this build.", skill, StringComparison.Ordinal);
         Assert.Contains("A template is the text of one message, written once for an audience", skill, StringComparison.Ordinal);
@@ -93,17 +104,18 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// A template serves an audience as one <c>message.send</c> item per person, each carrying it, and <c>compose</c> makes
-    /// the subject a template too. The role answers with both together as its result and says who carries them into each
-    /// person's item, each parked for its own approval; a body template beside a subject written as final text would be
-    /// refused when the item is created, and nobody would be told to copy the result at all.
+    /// every text of the format a template: an email's and an InMail's subject too. The role answers with them together as
+    /// its result and says who carries them into each person's item, each parked for its own approval; a body template
+    /// beside a subject written as final text would be refused when the item is created, and nobody would be told to copy
+    /// the result at all.
     /// </summary>
     [Fact]
-    public void The_copywriter_answers_with_a_subject_template_and_a_body_template_together_for_whoever_raises_the_sends()
+    public void The_copywriter_answers_with_every_text_of_the_format_as_a_template_together_for_whoever_raises_the_sends()
     {
         var skill = Flattened("copywriter");
 
         Assert.Contains(
-            "Answer with a subject template and a body template together, as this work item's result: whoever raises the sends copies them into each person's `message.send` item, and each of those parks for its own approval.",
+"Answer with each text the format has as a template together, as this work item's result — the subject and the body of an email or an InMail, the body of a LinkedIn message: whoever raises the sends copies them into each person's `message.send` item, and each of those parks for its own approval.",
             skill,
             StringComparison.Ordinal);
     }
@@ -119,7 +131,7 @@ public partial class RoleSkillTests
         var skill = Flattened("copywriter");
 
         Assert.Contains(
-            "The example cannot show `sender.*` or `contact.custom.*`, which only the provider fills in, and `sender.*` is the provider account's identity, not the `sender.identity` preference you write by below.",
+            "The example cannot show the sender's names or `contact.custom.*`, which only the provider fills in, and `sender.*` is the provider account's identity, not the `sender.identity` preference you write by below.",
             skill,
             StringComparison.Ordinal);
     }

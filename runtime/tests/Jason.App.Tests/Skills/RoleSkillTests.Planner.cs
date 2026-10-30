@@ -213,9 +213,9 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// The planner's judgement on a template, which the session file shares byte for byte. Pinned here once; the craft guard
-    /// carries it to the other file. A <c>message.send</c> item for an email that carries a template has <c>compose</c>
-    /// <c>template</c> and both the subject and the body as templates; a planner that raised it as final text would send the
-    /// braces, or have the item refused.
+    /// carries it to the other file. A <c>message.send</c> item that carries a template has <c>compose</c> <c>template</c>
+    /// and each text of its format as a template, on an email, a LinkedIn message or an InMail and never a voice message; a
+    /// planner that raised it as final text would send the braces, or have the item refused.
     /// </summary>
     [Fact]
     public void The_planners_judgement_gives_a_message_send_that_carries_a_template_compose_template()
@@ -223,7 +223,7 @@ public partial class RoleSkillTests
         var skill = Flattened("planner");
 
         Assert.Contains(
-            "A `message.send` item for an email that carries a template, as the copywriter's answer gives it, has `compose` `template` in its `message`, with the subject and the body both templates.",
+"A `message.send` item that carries a template, as the copywriter's answer gives it, has `compose` `template` in its `message`, with each text of its format a template: the subject and the body of an email or an InMail, the body of a LinkedIn message. A voice message is never a template.",
             skill,
             StringComparison.Ordinal);
     }

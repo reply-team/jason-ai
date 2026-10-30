@@ -13,7 +13,9 @@ using System.Text.Json.Nodes;
 /// given a person's fields goes only to a contact it creates: one a lookup finds, or one the import matched, is
 /// <c>contact.already_held</c>, named and not sent to. Every answer names the contact it went to and whether the command
 /// made it. A send that goes out is appended to the account's record of what was sent, which is how a test says whether
-/// anything went; an email's entry carries its text as written and as Reply rendered it for the person. Reply's own checks are kept in the order a live account was seen to make them: a note too long is
+/// anything went; an entry carries its text as written and, for an email and for a LinkedIn message or InMail that goes
+/// now, as Reply rendered it for the person, and a send held for a later moment the moment it is held for. What a Reply
+/// that keeps direct sends adds — the moment, the key and the reference — is in Account.DirectSends.cs. Reply's own checks are kept in the order a live account was seen to make them: a note too long is
 /// refused before the ids are looked at. Reply does not refuse a contact it holds as opted out on these sends, and
 /// neither does this; it consults its blacklist on an email alone.
 /// </summary>
@@ -133,6 +135,24 @@ internal static partial class Account
             return BadId(send.AccountOption);
         }
 
+        var (sendAfter, badMoment) = SendAfterOf(line);
+        if (badMoment is not null)
+        {
+            return badMoment;
+        }
+
+        var (schedule, badSchedule) = ScheduleOf(line);
+        if (badSchedule is not null)
+        {
+            return badSchedule;
+        }
+
+        var (key, badKey) = KeyOf(line);
+        if (badKey is not null)
+        {
+            return badKey;
+        }
+
         JsonObject? text = null;
         if (line.Option("--message") is not null || !send.TextOptional)
         {
@@ -156,10 +176,40 @@ internal static partial class Account
         }
 
         var ids = new JsonObject { ["contact_id"] = contactId, [AccountKey(send)] = accountId };
+
+        // The contact is held, or was just imported, by a route Reply offers; the send's own route may be one it does not.
+        if (send.Channel == "email" && !Offered(root, "send_direct_email"))
+        {
+            return NotOffered("send_direct_email", contactId, ids);
+        }
+
+        // A Reply that keeps direct sends reads the moment, the schedule and the key; one that does not reads none, and sends now.
+        var keeps = Offered(root, "direct_send");
+        var moment = keeps ? sendAfter : null;
+        var timedBy = keeps ? schedule : null;
+        var request = new JsonObject
+        {
+            ["command"] = command,
+            ["contactId"] = contactId,
+            ["accountId"] = accountId,
+            ["text"] = text?.DeepClone(),
+            ["sendAfter"] = moment is { } named ? Utc(named) : null,
+            ["scheduleId"] = timedBy,
+        }.ToJsonString();
+        if (key is not null)
+        {
+            Arrived(root, command, key);
+        }
+
+        if (keeps && key is not null && KeptUnder(root, send, key, request, ids) is { } answered)
+        {
+            return answered;
+        }
+
         JsonObject? rendered = null;
         var refused = send.Channel == "email"
             ? EmailRefusal(root, contactId, accountId, text!, ids, out rendered)
-            : LinkedInRefusal(root, command, send, contactId, accountId, text, ids);
+            : LinkedInRefusal(root, command, send, contactId, accountId, text, moment, ids, out rendered);
         if (refused is not null)
         {
             return refused;
@@ -170,20 +220,22 @@ internal static partial class Account
             return Done(new JsonObject { ["status"] = "already_connected", ["contact_id"] = contactId, ["contact_created"] = created, ["activity_id"] = null, ["sent_at"] = null });
         }
 
-        var sent = Read(root, SentFile);
-        var entry = new JsonObject { ["command"] = command, ["contactId"] = contactId, ["accountId"] = accountId, ["text"] = text?.DeepClone() };
-        if (rendered is not null)
+        if (FailedSend(root, send, contactId, moment, ids, keeps, out var went) is { } failed)
         {
-            entry["rendered"] = rendered;
+            if (went)
+            {
+                // Planted as a send that went before Reply answered its failure: the worst such an answer can hide.
+                Recorded(root, command, contactId, accountId, text, rendered, moment, timedBy);
+            }
+
+            return failed;
         }
 
-        sent.Add(entry);
-        Write(root, SentFile, sent);
+        var sent = Recorded(root, command, contactId, accountId, text, rendered, moment, timedBy);
 
-        if (send.Channel == "email")
-        {
-            // Reply's answer to a direct email carries no moment, so the CLI answers none.
-            return Done(new JsonObject
+        // Reply's answer to a direct email carries no moment, so the CLI answers none.
+        var answer = send.Channel == "email"
+            ? new JsonObject
             {
                 ["status"] = "sent",
                 ["contact_id"] = contactId,
@@ -191,17 +243,42 @@ internal static partial class Account
                 ["message_id"] = $"<{60_000 + sent.Count}.direct@mail.example.com>",
                 ["sent_at"] = null,
                 ["reply_status"] = "sent",
-            });
+            }
+            : new JsonObject
+            {
+                ["status"] = "sent",
+                ["contact_id"] = contactId,
+                ["contact_created"] = created,
+                ["activity_id"] = 70_000 + sent.Count,
+                ["sent_at"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            };
+        return Done(keeps ? Kept(root, send, contactId, moment, timedBy, key, request, answer) : answer);
+    }
+
+    /// <summary>A send as it went, recorded in the order sends went; every send recorded so far.</summary>
+    private static JsonArray Recorded(
+        string root, string command, int contactId, long accountId, JsonNode? text, JsonObject? rendered, DateTimeOffset? moment, int? schedule)
+    {
+        var sent = Read(root, SentFile);
+        var entry = new JsonObject { ["command"] = command, ["contactId"] = contactId, ["accountId"] = accountId, ["text"] = text?.DeepClone() };
+        if (rendered is not null)
+        {
+            entry["rendered"] = rendered;
         }
 
-        return Done(new JsonObject
+        if (moment is { } held)
         {
-            ["status"] = "sent",
-            ["contact_id"] = contactId,
-            ["contact_created"] = created,
-            ["activity_id"] = 70_000 + sent.Count,
-            ["sent_at"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
-        });
+            entry["sendAfter"] = Utc(held);
+        }
+
+        if (schedule is { } timed)
+        {
+            entry["scheduleId"] = timed;
+        }
+
+        sent.Add(entry);
+        Write(root, SentFile, sent);
+        return sent;
     }
 
     /// <summary>
@@ -237,10 +314,15 @@ internal static partial class Account
         return refusal;
     }
 
-    /// <summary>Reply's refusals of a LinkedIn send, in the order this stand-in makes them.</summary>
+    /// <summary>
+    /// Reply's refusals of a LinkedIn send, in the order this stand-in makes them; and, when none refuses, the text as Reply
+    /// rendered it, for a send that goes now.
+    /// </summary>
     private static Ending? LinkedInRefusal(
-        string root, string command, DirectSend send, int contactId, long accountId, JsonObject? text, JsonObject ids)
+        string root, string command, DirectSend send, int contactId, long accountId, JsonObject? text, DateTimeOffset? moment, JsonObject ids,
+        out JsonObject? rendered)
     {
+        rendered = null;
         if (!Enabled(root, "directLinkedIn"))
         {
             return Refused(
@@ -307,14 +389,27 @@ internal static partial class Account
                 details: new JsonObject { ["limit"] = spent });
         }
 
-        if (text is not null && HoldsPlaceholder(text))
+        // An invitation's note and a voice script fill nothing in: a double opening brace there is a variable Reply refuses.
+        if (command is not ("contact linkedin-message" or "contact linkedin-inmail"))
         {
-            return Refused(
-                "linkedin.missing_variables", "The text holds a template variable Reply could not fill, so nothing was sent.",
-                status: 400, replyCode: "directLinkedIn.missingVariables", ids: ids);
+            return text is not null && HoldsPlaceholder(text)
+                ? Refused(
+                    "linkedin.missing_variables", "The text holds a template variable Reply could not fill, so nothing was sent.",
+                    status: 400, replyCode: "directLinkedIn.missingVariables", ids: ids)
+                : null;
         }
 
-        return null;
+        // Reply reads a message or an InMail as a template of its own, and fills in one it sends within the call before it
+        // sends it: one it cannot fill or read is refused. A send held for later, or one Reply queues behind the account's
+        // other sends, which this stand-in does not do, is filled in when it goes.
+        if (text is null || (moment is { } held && held > DateTimeOffset.UtcNow))
+        {
+            return null;
+        }
+
+        var (filled, refusal) = RenderedLinkedIn(text, contact, account, ids);
+        rendered = filled;
+        return refusal;
     }
 
     /// <summary>Whether any field of the text holds a double opening brace, which Reply reads as the start of a template variable.</summary>

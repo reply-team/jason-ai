@@ -361,8 +361,9 @@ public class ReplyContactDeleteTests
         var recorder = new ProviderOutcomeRecorder(
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             store,
+            new SentFacts(new JournalWriter(clock)),
             TestOptions.PluginSettings(_ => { }));
-        await recorder.RecordAsync(db, item, attempt, OperationCatalog.Find(Operation)!, ReplyPlugins.PluginId, result, Ct);
+        await recorder.RecordAsync(db, item, attempt, OperationCatalog.Find(Operation)!, ReplyPlugins.PluginId, ReplyPlugins.SettlesByKey(Operation), result, Ct);
         await db.SaveChangesAsync(Ct);
 
         Assert.True(attempt.Status == AttemptStatus.Succeeded, $"The attempt ended {attempt.Status}: {attempt.Error?.Code} {attempt.Error?.Message}");

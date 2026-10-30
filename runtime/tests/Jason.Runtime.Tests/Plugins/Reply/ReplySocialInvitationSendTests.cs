@@ -12,7 +12,7 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// <c>reply contact linkedin-connect</c>, with the note on stdin. What went out is read back from the account.
 /// </summary>
 [Collection(ProcessEnvironmentCollection.Name)]
-public class ReplySocialInvitationSendTests
+public partial class ReplySocialInvitationSendTests
 {
     private const string Operation = "social_invitation.send";
     private const string ContactId = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
@@ -38,16 +38,18 @@ public class ReplySocialInvitationSendTests
 
         var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!.AsObject();
         Assert.Equal(("sent", "34", "1001"), ((string?)item["status"], (string?)item["sender_external_id"], (string?)item["external_ids"]!["contact"]));
+        Assert.Equal(("linkedin-1001", false), ((string?)item["reference"], (bool)item["cancelable"]!));
+        Assert.Null(item["accepted_for"]);
         Assert.Equal(ContactId, (string?)item["contact_id"]);
         Assert.Equal("70001", (string?)item["invitation"]!["external_id"]);
 
         // The stand-in answers a moment, and nothing has shown Reply's to be UTC, so none is passed on.
         Assert.Null(item["invitation"]!["sent_at"]);
-        Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal("""{"contact":"1001","send":"linkedin-1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
 
         Assert.Equal(["account list", "contact get 1001", "contact linkedin-connect"], Lines(account));
         var send = account.Calls[^1];
-        Assert.Equal(["--json", "-q", "contact", "linkedin-connect", "--contact-id", "1001", "--linkedin-account-id", "34", "--message", "-"], send.Args);
+        Assert.Equal(["--json", "-q", "contact", "linkedin-connect", "--contact-id", "1001", "--linkedin-account-id", "34", "--message", "-", "--idempotency-key", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK"], send.Args);
         Assert.Equal($$"""{"note":"{{Note}}"}""", send.Body);
         Assert.Equal("linkedin", account.Calls[0].Option("--channel"));
         var went = Assert.Single(account.Sent)!;
@@ -105,7 +107,7 @@ public class ReplySocialInvitationSendTests
         Assert.Equal(["account list", "contact find", "contact linkedin-connect"], Lines(account));
         var send = account.Calls[^1];
         Assert.Equal(
-            ["--json", "-q", "contact", "linkedin-connect", "--contact", "-", "--linkedin-account-id", "34", .. withNote ? new[] { "--message", "-" } : []],
+            ["--json", "-q", "contact", "linkedin-connect", "--contact", "-", "--linkedin-account-id", "34", .. withNote ? new[] { "--message", "-" } : [], "--idempotency-key", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK"],
             send.Args);
         var person = $$"""{"linkedin_url":"{{Profile}}","first_name":"Marta","last_name":"Alvarez","company":"Puerto Analytics","title":"Head of Growth"}""";
         Assert.Equal(withNote ? $$$"""{"contact":{{{person}}},"message":{"note":"{{{Note}}}"}}""" : person, JsonNode.Parse(send.Body!)!.ToJsonString());
@@ -166,6 +168,29 @@ public class ReplySocialInvitationSendTests
     }
 
     /// <summary>
+    /// A route Reply's API does not have answers 404 with no code of Reply's own, which reply-cli passes through on a direct
+    /// send as it is: the invitation is a capability Reply does not offer yet, the message names the operation and quotes
+    /// nothing of Reply's sentence, and nothing is sent.
+    /// </summary>
+    [Fact]
+    public async Task An_invitation_reply_s_api_has_no_route_for_is_a_capability_not_offered_naming_the_operation()
+    {
+        using var account = new ReplyAccount().WithSender(34, "linkedin", "Ann Owner", SenderProfile);
+        account.Refuses(
+            "contact linkedin-connect", "reply.refused", status: 404,
+            detail: "No endpoint matches POST /v3/contacts/1001/linkedin-connect.");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
+
+        Assert.Equal((UnjudgedOutcomeCodes.CapabilityNotOffered, FailureClass.Permanent), (error.Code, error.Class));
+        Assert.StartsWith("social_invitation.send: ", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("No endpoint", error.Message, StringComparison.Ordinal);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
     /// The lookup found nobody, and the command's own import matched a contact Reply already held, so the command sent
     /// nothing and named it. That contact is read first, as every contact Reply holds is, and the invitation then goes to
     /// it by its identifier, which is pinned.
@@ -180,10 +205,10 @@ public class ReplySocialInvitationSendTests
         var result = await InvokeAsync(api, Input());
 
         ReplyOperations.Succeeded(Operation, result);
-        Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal("""{"contact":"1001","send":"linkedin-1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
         Assert.Equal(["account list", "contact find", "contact linkedin-connect", "contact get 1001", "contact linkedin-connect"], Lines(account));
         Assert.Equal("-", account.Calls[2].Option("--contact"));
-        Assert.Equal(["--json", "-q", "contact", "linkedin-connect", "--contact-id", "1001", "--linkedin-account-id", "34", "--message", "-"], account.Calls[^1].Args);
+        Assert.Equal(["--json", "-q", "contact", "linkedin-connect", "--contact-id", "1001", "--linkedin-account-id", "34", "--message", "-", "--idempotency-key", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK"], account.Calls[^1].Args);
         Assert.Equal($$"""{"note":"{{Note}}"}""", account.Calls[^1].Body);
         Assert.Single(account.Contacts);
         Assert.Equal(1001, (int)Assert.Single(account.Sent)!["contactId"]!);
@@ -278,6 +303,8 @@ public class ReplySocialInvitationSendTests
 
         Assert.Equal("already_connected", (string?)item["status"]);
         Assert.Equal("""{"external_id":null,"sent_at":null}""", item["invitation"]!.ToJsonString());
+        Assert.Equal("", string.Join(",", Taken.Where(item.AsObject().ContainsKey)));
+        Assert.Equal("""{"contact":"1001"}""", item["external_ids"]!.ToJsonString());
         Assert.Empty(account.Sent);
     }
 
@@ -788,10 +815,14 @@ public class ReplySocialInvitationSendTests
         Assert.Empty(account.Sent);
     }
 
-    /// <summary>An invitation whose answer was lost may have gone, and no read tells it from another: it stops for a person.</summary>
+    /// <summary>
+    /// An invitation whose answer was lost may have gone, so it is ambiguous, with the person pinned; and it is repeated,
+    /// because the repeat is made under the same key: Reply answers an invitation it already took with what it answered
+    /// then, and sends nothing twice.
+    /// </summary>
     [Fact]
-    [Critical(Family.W5, "a lost invitation is never repeated")]
-    public async Task A_lost_invitation_is_ambiguous_never_repeated_and_the_person_stays_pinned()
+    [Critical(Family.W5, "a lost invitation is repeated only under its own key")]
+    public async Task A_lost_invitation_is_repeated_under_its_key_and_goes_once()
     {
         using var account = Planted();
         account.LosesTheOutcome("contact linkedin-connect");
@@ -801,8 +832,15 @@ public class ReplySocialInvitationSendTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
 
         Assert.Equal(("provider_answer_lost", FailureClass.Ambiguous), (error.Code, error.Class));
-        Assert.False(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
+        Assert.True(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
         Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Single(account.Sent);
+
+        var mark = account.Mark();
+        var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(pinned: "1001"), attempt: 2, unsettledSince: Unsettled))["items"]![0]!;
+
+        Assert.Equal(("sent", "linkedin-1001"), ((string?)item["status"], (string?)item["reference"]));
+        Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", "contact linkedin-connect"], account.CallsSince(mark).Select(call => call.Line));
         Assert.Single(account.Sent);
     }
 
@@ -842,8 +880,9 @@ public class ReplySocialInvitationSendTests
         Assert.Equal(("provider_answer_lost", FailureClass.Ambiguous), (error.Code, error.Class));
     }
 
-    private static Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, JsonObject input, int attempt = 1) =>
-        ReplyOperations.InvokeAsync(api, Operation, input, Ct, attempt: attempt);
+    private static Task<PluginInvocationResult> InvokeAsync(
+        RuntimeApiFixture api, JsonObject input, int attempt = 1, DateTimeOffset? unsettledSince = null, string? unsettledReference = null) =>
+        ReplyOperations.InvokeAsync(api, Operation, input, Ct, attempt: attempt, unsettledSince: unsettledSince, unsettledReference: unsettledReference);
 
     private static IReadOnlyList<string> Lines(ReplyAccount account) => [.. account.Calls.Select(call => call.Line)];
 

@@ -372,7 +372,7 @@ public class ReplyContactProxyRuleTests
         var result = await ReplyOperations.InvokeAsync(api, operation, Input(operation, driver.Channel, Value(driver), pin: "1001", contactId: scene.Contact.PublicId), Ct, attempt: 2);
         Assert.Equal("1002", PinnedContact(result));
 
-        await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, OperationCatalog.Find(operation)!, ReplyPlugins.PluginId, result, Ct);
+        await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, OperationCatalog.Find(operation)!, ReplyPlugins.PluginId, ReplyPlugins.SettlesByKey(operation), result, Ct);
         await db.SaveChangesAsync(Ct);
 
         Assert.True(scene.Attempt.Status == AttemptStatus.Succeeded, $"The attempt ended {scene.Attempt.Status}: {scene.Attempt.Error?.Code} {scene.Attempt.Error?.Message}");
@@ -748,6 +748,7 @@ public class ReplyContactProxyRuleTests
         var recorder = new ProviderOutcomeRecorder(
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             store,
+            new SentFacts(new JournalWriter(clock)),
             TestOptions.PluginSettings(_ => { }));
         return new Scene(recorder, contact, item, second);
     }

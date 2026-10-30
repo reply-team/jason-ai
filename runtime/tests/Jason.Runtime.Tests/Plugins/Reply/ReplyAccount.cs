@@ -12,15 +12,20 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// <param name="Args">The whole argument vector, which is what makes "this flag never appears" assertable.</param>
 /// <param name="Environment">
 /// Every vendor-named variable the stand-in was started with. No <c>REPLY_*</c> name enters the runtime, so what
-/// an operator exported in their own shell must not reach a child; the only one that may be here is the one the
+/// an operator exported in their own shell must not reach a child; the only ones that may be here are the two the
 /// package sets on the call itself, and this is where that is read rather than assumed.
+/// </param>
+/// <param name="UserAgent">
+/// The User-Agent the call would have reached Reply with, decided from <c>REPLY_CLIENT</c> by the rule the CLI itself
+/// applies, so a value the CLI would silently leave out shows here as the plain one.
 /// </param>
 public sealed record ReplyCall(
     string Command,
     IReadOnlyList<string> Operands,
     string? Body,
     IReadOnlyList<string> Args,
-    IReadOnlyDictionary<string, string> Environment)
+    IReadOnlyDictionary<string, string> Environment,
+    string UserAgent)
 {
     /// <summary>The call as one line: <c>sequence get 7</c>, or <c>contact find</c> for a command that takes no id.</summary>
     public string Line => Operands.Count == 0 ? Command : Command + " " + string.Join(' ', Operands);
@@ -71,8 +76,12 @@ public sealed class ReplyAccount : IDisposable
     public const string IdentityFile = "identity.json";
     public const string ConnectionsFile = "connections.json";
     public const string FeaturesFile = "features.json";
+    public const string CapabilitiesFile = "capabilities.json";
     public const string SentFile = "sent.json";
     public const string SchedulesFile = "schedules.json";
+    public const string KeysFile = "keys.json";
+    public const string DirectSendsFile = "direct-sends.json";
+    public const string FeedFile = "feed.json";
 
     /// <summary>The Reply user the stand-in's credential signs in as, unless a test plants another.</summary>
     public const int Caller = 501;
@@ -601,6 +610,104 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
+    /// <summary>The change feed hands back an empty cursor on every page, which reply-cli passes on as Reply wrote it.</summary>
+    public ReplyAccount WithEmptyFeedCursors()
+    {
+        Write(FeedFile, new JsonObject { ["empty_cursor"] = true });
+        return this;
+    }
+
+    /// <summary>
+    /// A capability of Reply's API this account's Reply does not offer yet: <c>send_direct_email</c>, the route <c>contact
+    /// send-email</c> calls. The stand-in then answers the command that calls it the way reply-cli answers a route Reply's
+    /// API does not have. A name the stand-in does not know fails every command, so a misspelt switch passes for nothing.
+    /// </summary>
+    public ReplyAccount NotOffering(string capability) => Offering(capability, offered: false);
+
+    /// <summary>The same switch either way: a capability named and offered is what one never named is.</summary>
+    public ReplyAccount Offering(string capability, bool offered = true)
+    {
+        var capabilities = Read(CapabilitiesFile) as JsonObject ?? [];
+        capabilities[capability] = offered;
+        Write(CapabilitiesFile, capabilities);
+        return this;
+    }
+
+    /// <summary>
+    /// The next send that reaches Reply's send route fails there, once, as reply-cli answers it: <paramref name="code"/>
+    /// and <paramref name="exit"/>, with Reply's <paramref name="status"/>, <paramref name="replyCode"/> and
+    /// <paramref name="detail"/>. Where <paramref name="named"/>, Reply names the send — a record in
+    /// <paramref name="state"/>, failed unless said, its reference on the refusal — and a <paramref name="state"/> alone
+    /// goes on the refusal without one. The key is not kept, so the same key goes through again. Where
+    /// <paramref name="went"/>, the send is also recorded as sent: the worst a failure Reply answered can hide.
+    /// </summary>
+    public ReplyAccount FailsTheNextSend(
+        string code, int exit, int? status = null, string? replyCode = null, string? detail = null, bool named = false, string? state = null,
+        bool went = false)
+    {
+        Write("send-fails.json", new JsonObject
+        {
+            ["code"] = code, ["exit"] = exit, ["status"] = status, ["reply_code"] = replyCode, ["detail"] = detail,
+            ["named"] = named, ["state"] = state, ["went"] = went,
+        });
+        return this;
+    }
+
+    /// <summary>Each request that reached Reply's send route carrying a key, in order: its command and the key.</summary>
+    public JsonArray KeyedArrivals => ReadArray("keyed-arrivals.json");
+
+    /// <summary>
+    /// A direct send Reply kept, under <paramref name="reference"/>, in <paramref name="state"/>: what <c>direct-send
+    /// get</c> reads back and <c>direct-send cancel</c> takes back. The members left null are none given; a rendered
+    /// subject names the rendered body beside it, and a failure's code is printed only where one is given.
+    /// </summary>
+    public ReplyAccount WithDirectSend(
+        string reference, string state, string? sendAfter = null, string? sentAt = null, string? messageId = null,
+        string? failureReason = null, string? cancelledAt = null, string? renderedSubject = null, string? renderedBody = null,
+        string? failureCode = null)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        var sends = ReadArray(DirectSendsFile);
+        var record = new JsonObject
+        {
+            ["reference"] = reference,
+            ["channel"] = reference.StartsWith("email-", StringComparison.Ordinal) ? "email" : "linkedIn",
+            ["contactId"] = 1001,
+            ["state"] = state,
+            ["sendAfter"] = sendAfter,
+            ["sentAt"] = sentAt,
+            ["messageId"] = messageId,
+            ["failureReason"] = failureReason,
+            ["cancelledAt"] = cancelledAt,
+        };
+        if (renderedSubject is not null)
+        {
+            record["renderedSubject"] = renderedSubject;
+            record["renderedBody"] = renderedBody;
+        }
+
+        if (failureCode is not null)
+        {
+            record["failureCode"] = failureCode;
+        }
+
+        sends.Add(record);
+        Write(DirectSendsFile, sends);
+        return this;
+    }
+
+    /// <summary>
+    /// A key Reply is still finishing the first request made under: a direct send made under it is refused
+    /// <c>idempotency_key.in_use</c>, and nothing is sent.
+    /// </summary>
+    public ReplyAccount WithKeyInUse(string key)
+    {
+        var keys = ReadArray(KeysFile);
+        keys.Add(new JsonObject { ["key"] = key, ["pending"] = true });
+        Write(KeysFile, keys);
+        return this;
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // What it can be told to do instead, through the directory and never through a flag
     // -------------------------------------------------------------------------------------------------------
@@ -743,7 +850,8 @@ public sealed class ReplyAccount : IDisposable
                     (call["env"] as JsonObject ?? []).ToDictionary(
                         variable => variable.Key,
                         variable => variable.Value?.GetValue<string>() ?? string.Empty,
-                        StringComparer.Ordinal)));
+                        StringComparer.Ordinal),
+                    call["user_agent"]!.GetValue<string>()));
             }
 
             return calls;
@@ -787,6 +895,9 @@ public sealed class ReplyAccount : IDisposable
     /// only honest answer to "was anything sent".
     /// </summary>
     public JsonArray Sent => ReadArray(SentFile);
+
+    /// <summary>Reply's record of each direct send it kept, in order: its reference, channel, contact, state and moment.</summary>
+    public JsonArray DirectSends => ReadArray(DirectSendsFile);
 
     /// <summary>Who is on a list right now, which is the only honest answer to "did the add happen at all".</summary>
     public IReadOnlyList<int> MembersOf(int listId) =>

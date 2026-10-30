@@ -17,7 +17,7 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// from the account.
 /// </summary>
 [Collection(ProcessEnvironmentCollection.Name)]
-public class ReplyMessageSendTests
+public partial class ReplyMessageSendTests
 {
     private const string Operation = "message.send";
     private const string ContactId = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
@@ -68,12 +68,14 @@ public class ReplyMessageSendTests
         Assert.Equal((ContactId, "sent", channel, format, sender), ((string?)item["contact_id"], (string?)item["status"], (string?)item["channel"], (string?)item["format"], (string?)item["sender_external_id"]));
         Assert.Equal(identifier, (string?)item["message"]!["external_id"]);
         Assert.Null(item["message"]!["sent_at"]);
-        Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        var reference = channel + "-1001";
+        Assert.Equal(reference, (string?)item["reference"]);
+        Assert.Equal($$"""{"contact":"1001","send":"{{reference}}"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
 
         Assert.Equal(["account list", "contact get 1001", command], Lines(account));
         Assert.Equal(channel, account.Calls[0].Option("--channel"));
         var send = account.Calls[^1];
-        Assert.Equal(["--json", "-q", .. command.Split(' '), "--contact-id", "1001", option, sender, "--message", "-"], send.Args);
+        Assert.Equal(["--json", "-q", .. command.Split(' '), "--contact-id", "1001", option, sender, "--message", "-", "--idempotency-key", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK"], send.Args);
         Assert.Equal(stdin, JsonNode.Parse(send.Body!)!.ToJsonString());
         var went = Assert.Single(account.Sent)!;
         Assert.Equal((command, 1001, long.Parse(sender, System.Globalization.CultureInfo.InvariantCulture)), ((string?)went["command"], (int)went["contactId"]!, (long)went["accountId"]!));
@@ -427,23 +429,204 @@ public class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// The document holds a template to an email, since Reply fills in no template sent on LinkedIn here; the package holds
-    /// it too, behind the document.
+    /// The document holds a voice message to a final script, since Reply speaks it as written; the package holds it too,
+    /// behind the document.
     /// </summary>
     [Fact]
-    public async Task A_template_on_linkedin_is_refused_before_anything_is_called_though_the_document_was_not_read()
+    public async Task A_template_in_a_voice_message_is_refused_before_anything_is_called_though_the_document_was_not_read()
     {
         using var account = OnLinkedIn();
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var input = Input("linkedin_message", pinned: "1001", body: "Hi {{contact.first_name}}");
+        var input = Input("linkedin_voice", pinned: "1001", body: "Hi {{contact.first_name}}");
         input["args"]!["message"]!["compose"] = "template";
         var error = ReplyOperations.Failed(Operation, await InvokeUnreadAsync(api, input));
 
         Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Contains("voice message is spoken from a final script", error.Message, StringComparison.Ordinal);
         Assert.Empty(account.Calls);
         Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A LinkedIn message or an InMail composed as a template reaches Reply in Reply's own syntax, by the same command,
+    /// and Reply fills it in for the person: the sender's names as Reply names them on LinkedIn, inside a condition and a
+    /// fallback too. Its text goes as written, a line break included; Reply's conversion from HTML to text after filling it
+    /// in is Reply's, so no row here writes markup in it.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "linkedin_message",
+        null,
+        "Hi {{contact.first_name}} {{contact.custom.nickname | 'there'}}, {{sender.first_name}} ({{sender.name}})\nbye",
+        null,
+        "Hi {{FirstName}} {{nickname | 'there'}}, {{SendingLinkedIn.SenderFirstName}} ({{SendingLinkedIn.SenderName}})\nbye",
+        null,
+        "Hi Marta there, Ann (Ann Owner)\nbye")]
+    [InlineData(
+        "linkedin_inmail",
+        "For {{contact.first_name}}",
+        "{{#if contact.title == 'Head of Growth'}}Hi{{else}}Hello{{/if}} {{contact.last_name}} of {{contact.company}}, tier {{contact.custom.tier}}",
+        "For {{FirstName}}",
+        "{{#if Title == 'Head of Growth'}}Hi{{else}}Hello{{/if}} {{LastName}} of {{Company}}, tier {{tier}}",
+        "For Marta",
+        "Hi Alvarez of Puerto Analytics, tier gold")]
+    public async Task A_linkedin_template_reaches_reply_in_reply_s_syntax_as_written_and_reply_fills_it_in(
+        string format, string? subject, string body, string? sentSubject, string sentBody, string? renderedSubject, string renderedBody)
+    {
+        using var account = FilledOnLinkedIn();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(format, pinned: "1001", subject: subject, body: body);
+        input["args"]!["message"]!["compose"] = "template";
+        var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, input))["items"]![0]!;
+
+        Assert.Equal("sent", (string?)item["status"]);
+        Assert.Equal(FormatCommand(format), Lines(account)[^1]);
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal((sentSubject, sentBody), ((string?)went["text"]!["subject"], (string?)went["text"]!["body"]));
+        Assert.Equal((renderedSubject, renderedBody), ((string?)went["rendered"]!["subject"], (string?)went["rendered"]!["body"]));
+    }
+
+    /// <summary>
+    /// Reply has no variable for the sending account's address on LinkedIn, its profile, and the arguments hold it: the
+    /// package writes the profile they hold in its place, as the example a person approved shows it, a condition on it
+    /// decided by it and the branch taken written, and Reply fills in the rest.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "linkedin_message",
+        null,
+        "Hi, my profile is {{sender.address}}.",
+        null,
+        "Hi, my profile is " + SenderProfile + ".",
+        null,
+        "Hi, my profile is " + SenderProfile + ".")]
+    [InlineData(
+        "linkedin_inmail",
+        "From {{sender.address | 'us'}}",
+        "{{#if sender.address}}See {{sender.address}}{{else}}No profile{{/if}}, {{contact.first_name}}",
+        "From " + SenderProfile,
+        "See " + SenderProfile + ", {{FirstName}}",
+        "From " + SenderProfile,
+        "See " + SenderProfile + ", Marta")]
+    [InlineData(
+        "linkedin_message",
+        null,
+        "{{#if sender.address == '" + SenderProfile + "'}}Mine{{else}}Other{{/if}} {{#if sender.address != 'x'}}{{sender.first_name}}{{/if}}",
+        null,
+        "Mine {{SendingLinkedIn.SenderFirstName}}",
+        null,
+        "Mine Ann")]
+    public async Task A_linkedin_template_naming_the_sender_s_address_reaches_reply_with_the_profile_the_arguments_hold_written_in(
+        string format, string? subject, string body, string? sentSubject, string sentBody, string? renderedSubject, string renderedBody)
+    {
+        using var account = FilledOnLinkedIn();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(format, pinned: "1001", subject: subject, body: body);
+        input["args"]!["message"]!["compose"] = "template";
+        var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, input))["items"]![0]!;
+
+        Assert.Equal("sent", (string?)item["status"]);
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal((sentSubject, sentBody), ((string?)went["text"]!["subject"], (string?)went["text"]!["body"]));
+        Assert.Equal((renderedSubject, renderedBody), ((string?)went["rendered"]!["subject"], (string?)went["rendered"]!["body"]));
+    }
+
+    /// <summary>
+    /// A LinkedIn account Reply holds no profile for, named with none in the arguments: a template naming its address
+    /// writes the fallback, and a condition on it takes the branch for no value, as the example shows them.
+    /// </summary>
+    [Theory]
+    [InlineData("Hi from {{sender.address | 'our team'}}", "Hi from our team")]
+    [InlineData("{{#if sender.address}}See {{sender.address}}{{else}}No profile{{/if}}", "No profile")]
+    [InlineData("{{#if sender.address == ''}}None{{else}}Some{{/if}}", "None")]
+    public async Task A_linkedin_template_naming_an_address_the_arguments_hold_none_of_writes_its_fallback(string body, string sent)
+    {
+        using var account = FilledOnLinkedIn().WithSender(34, "linkedin", "Ann Owner", null);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("linkedin_message", pinned: "1001", body: body);
+        input["args"]!["sender"]!["address"] = null;
+        input["args"]!["message"]!["compose"] = "template";
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(sent, (string?)Assert.Single(account.Sent)!["text"]!["body"]);
+    }
+
+    /// <summary>
+    /// The same address named with no fallback, where the arguments hold none: Reply has no variable for it and there is
+    /// nothing to write in its place, so it is refused before anything is called.
+    /// </summary>
+    [Fact]
+    public async Task A_linkedin_template_naming_an_address_the_arguments_hold_none_of_without_a_fallback_is_refused_before_anything_is_called()
+    {
+        using var account = FilledOnLinkedIn().WithSender(34, "linkedin", "Ann Owner", null);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("linkedin_message", pinned: "1001", body: "Hi, {{sender.address}} here");
+        input["args"]!["sender"]!["address"] = null;
+        input["args"]!["message"]!["compose"] = "template";
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(
+            "The body names `sender.address` at character 5 with no fallback: Reply has no variable for the sending account's address on LinkedIn, and the arguments hold none.",
+            (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// Reply's LinkedIn sending account carries a first name and a name, and no last name, nor does the input hold one,
+    /// so a LinkedIn template naming it is refused before anything is called, by the name and the character it starts on,
+    /// inside a condition as well.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin_message", "Hi, {{sender.last_name}} here", "body", "sender.last_name", 5)]
+    [InlineData("linkedin_inmail", "{{#if contact.title}}Hi{{else}}{{sender.last_name}}{{/if}}", "body", "sender.last_name", 32)]
+    public async Task A_linkedin_template_naming_a_sender_field_reply_lacks_there_is_refused_before_anything_is_called(
+        string format, string body, string part, string name, int position)
+    {
+        using var account = FilledOnLinkedIn();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(format, pinned: "1001", body: body);
+        input["args"]!["message"]!["compose"] = "template";
+        var error = ReplyOperations.Failed(Operation, await InvokeUnreadAsync(api, input));
+
+        Assert.Equal(("template_unsupported", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal($"The {part} names `{name}` at character {position}, which Reply holds no field for on LinkedIn.", (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A LinkedIn template held for a later moment goes to Reply as it stands, to be filled in when it goes: a name Reply
+    /// has no value for is not refused now.
+    /// </summary>
+    [Fact]
+    public async Task A_linkedin_template_held_for_later_is_accepted_and_filled_in_when_it_goes()
+    {
+        using var account = FilledOnLinkedIn();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input("linkedin_message", pinned: "1001", body: "Hi {{contact.custom.nickname}}");
+        input["args"]!["message"]!["compose"] = "template";
+        var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, WithMoment(input, "2099-11-03T09:00:00-05:00")))["items"]![0]!;
+
+        Assert.Equal("accepted", (string?)item["status"]);
+        var went = Assert.Single(account.Sent)!;
+        Assert.Equal("Hi {{nickname}}", (string?)went["text"]!["body"]);
+        Assert.Null(went["rendered"]);
     }
 
     /// <summary>
@@ -595,24 +778,42 @@ public class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// A template Reply could not fill in for the person is refused by Reply before anything is sent, under a code that
-    /// says nothing of it and a sentence that does: it is reported as the template unrendered, final, with Reply's own
-    /// words in the message. The same refusal of a final text is not a template's, and keeps the word it has; and a
-    /// refusal under the same code with another sentence is not this one.
+    /// A template naming a custom field the person has no value for is refused by Reply before anything is sent, and
+    /// reply-cli 0.17.2 names it by its own code with the name as Reply spells it: it is reported as the template
+    /// unrendered, final, the name in the details and in the message.
     /// </summary>
-    [Theory]
-    [InlineData("template", "Hi {{contact.custom.nickname}}", null, "template_unrendered", "validation")]
-    [InlineData("template", "Hi {{contact.first_name}}", "SendFail: the mailbox did not take the message.", "provider_call_failed", "permanent")]
-    [InlineData("text", Body, "RenderingFail: One or more values for variables are missing or incorrect.", "provider_call_failed", "permanent")]
-    public async Task A_template_reply_could_not_fill_in_is_unrendered_in_reply_s_words(string compose, string body, string? detail, string code, string klass)
+    [Fact]
+    public async Task A_template_reply_could_not_fill_in_is_unrendered_naming_what_it_could_not_fill()
     {
         using var account = Filled();
-        if (detail is not null)
-        {
-            account.Refuses(
-                "contact send-email", "reply.refused", status: 400, replyCode: "contact.unknown", detail: detail,
-                ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
-        }
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Template(Subject, "Hi {{contact.custom.nickname}}")));
+
+        Assert.Equal(("template_unrendered", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal("contact.missingVariables", (string?)error.Details!["provider_code"]);
+        Assert.Equal("""["nickname"]""", error.Details["missing_variables"]?.ToJsonString());
+        Assert.EndsWith(" Reply could not fill nickname.", error.Message, StringComparison.Ordinal);
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A template Reply could not fill in, as a reply-cli older than 0.17.2 answered it: under a code that says nothing of
+    /// it and a sentence that does, it is still reported as the template unrendered, final, with Reply's own words in the
+    /// message. The same refusal of a final text is not a template's, and keeps the word it has; and a refusal under the
+    /// same code with another sentence is not this one.
+    /// </summary>
+    [Theory]
+    [InlineData("template", "Hi {{contact.custom.nickname}}", "RenderingFail: One or more values for variables are missing or incorrect.", "template_unrendered", "validation")]
+    [InlineData("template", "Hi {{contact.first_name}}", "SendFail: the mailbox did not take the message.", "provider_call_failed", "permanent")]
+    [InlineData("text", Body, "RenderingFail: One or more values for variables are missing or incorrect.", "provider_call_failed", "permanent")]
+    public async Task A_template_reply_could_not_fill_in_is_unrendered_in_reply_s_words(string compose, string body, string detail, string code, string klass)
+    {
+        using var account = Filled();
+        account.Refuses(
+            "contact send-email", "reply.refused", status: 400, replyCode: "contact.unknown", detail: detail,
+            ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
 
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
@@ -664,6 +865,90 @@ public class ReplyMessageSendTests
 
         Assert.Single(Lines(account), line => line == "contact send-email");
         Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// reply-cli names a template Reply could not fill in by a code of its own on each channel, and lists the names Reply
+    /// could not fill where Reply does: in template mode it is the template unrendered, final, the names in the details and
+    /// in the message. The same codes for a final text are a text Reply read as a placeholder, and keep that word, the
+    /// names in the details alone.
+    /// </summary>
+    [Theory]
+    [InlineData("email", "template", "contact.missing_variables", "contact.missingVariables", "nickname,tier", "template_unrendered")]
+    [InlineData("email", "template", "contact.rendering_failed", "contact.renderingFailed", null, "template_unrendered")]
+    [InlineData("linkedin_message", "template", "linkedin.missing_variables", "directLinkedIn.missingVariables", null, "template_unrendered")]
+    [InlineData("linkedin_inmail", "template", "linkedin.missing_variables", "directLinkedIn.missingVariables", null, "template_unrendered")]
+    [InlineData("email", "text", "contact.missing_variables", "contact.missingVariables", "nickname", "message_invalid")]
+    [InlineData("email", "text", "contact.rendering_failed", "contact.renderingFailed", null, "message_invalid")]
+    public async Task A_template_reply_cli_says_reply_could_not_fill_in_is_unrendered_with_the_names_reply_lists(
+        string format, string compose, string cliCode, string replyCode, string? names, string code)
+    {
+        var channel = format == "email" ? "email" : "linkedin";
+        using var account = channel == "email" ? Filled() : FilledOnLinkedIn();
+        account.Refuses(
+            FormatCommand(format), cliCode, status: 400, replyCode: replyCode,
+            details: names is null ? null : new JsonObject { ["missing_variables"] = new JsonArray([.. names.Split(',').Select(name => JsonValue.Create(name))]) },
+            ids: channel == "email"
+                ? new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 }
+                : new JsonObject { ["contact_id"] = 1001, ["linkedin_account_id"] = 34 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(format, pinned: "1001", body: compose == "template" ? "Hi {{contact.first_name}}" : Body);
+        input["args"]!["message"]!["compose"] = compose;
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal((code, FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(replyCode, (string?)error.Details!["provider_code"]);
+        Assert.Equal(
+            names is null ? null : new JsonArray([.. names.Split(',').Select(name => JsonValue.Create(name))]).ToJsonString(),
+            error.Details["missing_variables"]?.ToJsonString());
+        if (code == "template_unrendered" && names is not null)
+        {
+            Assert.EndsWith(" Reply could not fill " + names.Replace(",", ", ", StringComparison.Ordinal) + ".", error.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// The names Reply lists are bounded as they travel: the first twenty, each to 64 characters, and a list holding
+    /// anything but texts is not carried at all.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_names_reply_could_not_fill_travel_bounded(bool mixed)
+    {
+        using var account = Filled();
+        var listed = new JsonArray([.. Enumerable.Range(1, 25).Select(n => JsonValue.Create(Listed(n) + "-and-more"))]);
+        if (mixed)
+        {
+            listed.Add(7);
+        }
+
+        account.Refuses(
+            "contact send-email", "contact.missing_variables", status: 400, replyCode: "contact.missingVariables",
+            details: new JsonObject { ["missing_variables"] = listed },
+            ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Template(Subject, "Hi {{contact.first_name}}")));
+
+        Assert.Equal("template_unrendered", error.Code);
+        if (mixed)
+        {
+            Assert.Null(error.Details!["missing_variables"]);
+            return;
+        }
+
+        var carried = error.Details!["missing_variables"]!.AsArray();
+        Assert.Equal(20, carried.Count);
+        Assert.Equal(Enumerable.Range(1, 20).Select(Listed), carried.Select(name => (string?)name));
+
+        // The first 64 characters of the nth name Reply lists, which runs on past them.
+        static string Listed(int n) => new string('n', 62) + n.ToString("D2", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>A message composed as final text is the text as before: a double opening brace in it is still refused as invalid.</summary>
@@ -828,10 +1113,10 @@ public class ReplyMessageSendTests
 
         var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!;
         Assert.Equal("1001", (string?)item["external_ids"]!["contact"]);
-        Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal("""{"contact":"1001","send":"email-1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
         Assert.Equal(["account list", "contact find", "contact send-email"], Lines(account));
         var send = account.Calls[^1];
-        Assert.Equal(["--json", "-q", "contact", "send-email", "--contact", "-", "--email-account-id", "12", "--message", "-"], send.Args);
+        Assert.Equal(["--json", "-q", "contact", "send-email", "--contact", "-", "--email-account-id", "12", "--message", "-", "--idempotency-key", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK"], send.Args);
         Assert.Equal(
             $$$"""{"contact":{"email":"{{{Address}}}","first_name":"Marta","last_name":"Alvarez","company":"Puerto Analytics","title":"Head of Growth"},"message":{"subject":"{{{Subject}}}","body":"{{{Body}}}"}}""",
             JsonNode.Parse(send.Body!)!.ToJsonString());
@@ -955,10 +1240,10 @@ public class ReplyMessageSendTests
         var result = await InvokeAsync(api, Input("email"));
 
         ReplyOperations.Succeeded(Operation, result);
-        Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal("""{"contact":"1001","send":"email-1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
         Assert.Equal(["account list", "contact find", "contact send-email", "contact get 1001", "contact send-email"], Lines(account));
         Assert.Equal("-", account.Calls[2].Option("--contact"));
-        Assert.Equal(["--json", "-q", "contact", "send-email", "--contact-id", "1001", "--email-account-id", "12", "--message", "-"], account.Calls[^1].Args);
+        Assert.Equal(["--json", "-q", "contact", "send-email", "--contact-id", "1001", "--email-account-id", "12", "--message", "-", "--idempotency-key", "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK"], account.Calls[^1].Args);
         Assert.Equal($$"""{"subject":"{{Subject}}","body":"{{Body}}"}""", account.Calls[^1].Body);
         Assert.Single(account.Contacts);
         Assert.Equal(1001, (int)Assert.Single(account.Sent)!["contactId"]!);
@@ -1282,7 +1567,10 @@ public class ReplyMessageSendTests
     [InlineData("email", "email_account.not_found", 400, "contact.emailAccountNotFound", null, "sender_not_found", "permanent")]
     [InlineData("email", "contact.not_found", 404, "contact.notFound", null, "contact_not_found", "permanent")]
     [InlineData("email", "reply.invalid_request", 400, null, "body", "provider_call_failed", "permanent")]
+    [InlineData("email", "reply.invalid_request", 400, null, "sendAfter", "provider_call_failed", "permanent")]
     [InlineData("email", "reply.refused", 400, "contact.unknown", null, "provider_call_failed", "permanent")]
+    [InlineData("email", "reply.refused", 400, "contact.notSupported", null, "provider_call_failed", "permanent")]
+    [InlineData("email", "reply.refused", 404, "emailAccount.notFound", null, "provider_call_failed", "permanent")]
     public async Task A_refusal_reply_makes_of_the_message_is_reported_in_the_operation_s_words(
         string format, string cliCode, int status, string? replyCode, string? field, string code, string klass)
     {
@@ -1447,14 +1735,18 @@ public class ReplyMessageSendTests
     // A lost answer
     // -------------------------------------------------------------------------------------------------------
 
-    /// <summary>A message whose answer was lost may have gone, and no read tells it from another: it stops for a person, on every format.</summary>
+    /// <summary>
+    /// A message whose answer was lost may have gone, so it is ambiguous, with the person pinned; and it is repeated,
+    /// because the repeat is made under the same key: Reply answers a send it already took with what it answered then,
+    /// and sends nothing twice. On every format.
+    /// </summary>
     [Theory]
-    // Critical: a lost send is never repeated.
+    // Critical: a lost send is repeated only under its own key, and nothing goes twice.
     [InlineData("email", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W5)])]
     [InlineData("linkedin_message")]
     [InlineData("linkedin_inmail")]
     [InlineData("linkedin_voice")]
-    public async Task A_lost_message_is_ambiguous_never_repeated_and_the_person_stays_pinned(string format)
+    public async Task A_lost_message_is_repeated_under_its_key_and_goes_once(string format)
     {
         using var account = format == "email" ? ByEmail() : OnLinkedIn();
         account.LosesTheOutcome(FormatCommand(format));
@@ -1464,8 +1756,16 @@ public class ReplyMessageSendTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(format)));
 
         Assert.Equal(("provider_answer_lost", FailureClass.Ambiguous), (error.Code, error.Class));
-        Assert.False(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
+        Assert.True(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
         Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Single(account.Sent);
+
+        var mark = account.Mark();
+        var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(format, pinned: "1001"), attempt: 2, unsettledSince: Unsettled))["items"]![0]!;
+
+        var reference = (format == "email" ? "email" : "linkedin") + "-1001";
+        Assert.Equal(("sent", reference), ((string?)item["status"], (string?)item["reference"]));
+        Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", FormatCommand(format)], account.CallsSince(mark).Select(call => call.Line));
         Assert.Single(account.Sent);
     }
 
@@ -1534,8 +1834,9 @@ public class ReplyMessageSendTests
         _ => "contact linkedin-voice",
     };
 
-    private static Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, JsonObject input, int attempt = 1) =>
-        ReplyOperations.InvokeAsync(api, Operation, input, Ct, attempt: attempt);
+    private static Task<PluginInvocationResult> InvokeAsync(
+        RuntimeApiFixture api, JsonObject input, int attempt = 1, DateTimeOffset? unsettledSince = null, string? unsettledReference = null) =>
+        ReplyOperations.InvokeAsync(api, Operation, input, Ct, attempt: attempt, unsettledSince: unsettledSince, unsettledReference: unsettledReference);
 
     /// <summary>The input as it stands, the document not read: the package's own checks, which hold behind the document's.</summary>
     private static Task<PluginInvocationResult> InvokeUnreadAsync(RuntimeApiFixture api, JsonObject input) =>
@@ -1559,6 +1860,14 @@ public class ReplyMessageSendTests
             .WithContact(1001, Address, "Marta", lastName: "Alvarez", company: "Puerto Analytics", title: "Head of Growth")
             .WithCustomValue(1001, "tier", "gold")
             .WithSender(12, "email", "Ann Owner", Mailbox);
+
+    /// <summary>A person reached on LinkedIn whose fields Reply holds, connected to the caller's LinkedIn account.</summary>
+    private static ReplyAccount FilledOnLinkedIn() =>
+        new ReplyAccount()
+            .WithContact(1001, null, "Marta", lastName: "Alvarez", company: "Puerto Analytics", title: "Head of Growth", linkedIn: Profile)
+            .WithCustomValue(1001, "tier", "gold")
+            .WithSender(34, "linkedin", "Ann Owner", SenderProfile)
+            .WithConnection(1001, 34);
 
     /// <summary>An email composed as a template, to the pinned person.</summary>
     private static JsonObject Template(string subject, string body)

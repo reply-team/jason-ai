@@ -430,6 +430,55 @@ public sealed class InvocationRunnerTests
         Assert.Equal(10_000, context["timeout_ms"]!.GetValue<int>());
         var deadline = DateTimeOffset.Parse(context["deadline"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
         Assert.InRange(deadline, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMilliseconds(11_000));
+
+        // No earlier attempt is unsettled: the keys are absent, which a plugin reads as it reads null.
+        Assert.False(context.AsObject().ContainsKey("unsettled_since"));
+        Assert.False(context.AsObject().ContainsKey("unsettled_reference"));
+    }
+
+    /// <summary>
+    /// A later attempt after one that may have acted and returned the work item's send is told that send's reference,
+    /// beside the moment, so a plugin can read the send back before it repeats anything.
+    /// </summary>
+    [Fact]
+    public void The_context_names_the_send_the_latest_unsettled_attempt_returned()
+    {
+        var outcome = Run(
+            "export function invoke(operation, input, context) { return { result: context }; }",
+            configure: builder => builder.Context = new InvocationContext(
+                null,
+                "att_1",
+                3,
+                "wi_1",
+                "cmp_1",
+                "0.1.0",
+                new DateTimeOffset(2026, 9, 14, 7, 30, 0, TimeSpan.Zero),
+                "email-1007"));
+
+        var context = outcome.Result!.AsObject();
+        Assert.Equal("email-1007", context["unsettled_reference"]!.GetValue<string>());
+        Assert.Equal(context.IndexOf("unsettled_since") + 1, context.IndexOf("unsettled_reference"));
+    }
+
+    /// <summary>
+    /// A later attempt after one that may have acted is told when that one was claimed, in UTC to the millisecond, so a
+    /// plugin whose provider keeps an idempotency key for a bounded time can tell whether it still does.
+    /// </summary>
+    [Fact]
+    public void The_context_says_when_the_earliest_unsettled_attempt_was_claimed()
+    {
+        var outcome = Run(
+            "export function invoke(operation, input, context) { return { result: context }; }",
+            configure: builder => builder.Context = new InvocationContext(
+                null,
+                "att_1",
+                3,
+                "wi_1",
+                "cmp_1",
+                "0.1.0",
+                new DateTimeOffset(2026, 9, 14, 9, 30, 0, TimeSpan.FromHours(2))));
+
+        Assert.Equal("2026-09-14T07:30:00.000Z", outcome.Result!["unsettled_since"]!.GetValue<string>());
     }
 
     [Fact]

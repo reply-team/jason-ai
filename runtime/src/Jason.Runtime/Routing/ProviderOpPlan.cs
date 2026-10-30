@@ -19,6 +19,14 @@ namespace Jason.Runtime.Routing;
 /// <param name="BindingIdentity">The binding's hash, which is what an attempt records instead of the value.</param>
 /// <param name="Contract">The operation's published contract: the budget, the schemas and the repeat rule.</param>
 /// <param name="Input">The document the plugin receives, composed and already validated against that contract.</param>
+/// <param name="UnsettledSince">
+/// When the earliest earlier attempt of this item that may have acted was claimed, or null where none did. It travels
+/// beside the input and never in it, so what a person approved is the same document on every attempt.
+/// </param>
+/// <param name="UnsettledReference">
+/// The provider's reference for the work item's send that the latest such attempt to return one returned, or null where
+/// none did. It travels beside the input too, so a repeat can read the send before it does anything else.
+/// </param>
 public sealed record ProviderOpPlan(
     LoadedPlugin Plugin,
     string PluginSnapshotId,
@@ -27,4 +35,6 @@ public sealed record ProviderOpPlan(
     JsonObject? Binding,
     string? BindingIdentity,
     OperationContract Contract,
-    JsonObject Input);
+    JsonObject Input,
+    DateTimeOffset? UnsettledSince = null,
+    string? UnsettledReference = null);

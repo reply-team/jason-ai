@@ -29,12 +29,14 @@ namespace Jason.Runtime.Execution;
 /// </para>
 /// <para>
 /// Whether a failure is worth another attempt is never decided here: the class comes from the plugin or from how
-/// far the protocol got, and <see cref="OutcomeContract.Retriable"/> reads the operation's own contract.
+/// far the protocol got, and <see cref="OutcomeContract.Retriable"/> reads the operation's own contract, beside what the
+/// package that answered says of a lost answer the contract settles by the work item's key.
 /// </para>
 /// </remarks>
 public sealed class ProviderOutcomeRecorder(
     AttemptOutcomes outcomes,
     ExternalIdStore identifiers,
+    SentFacts sent,
     LiveSettings<PluginsOptions> plugins,
     PatternTiming? timing = null)
 {
@@ -50,6 +52,10 @@ public sealed class ProviderOutcomeRecorder(
     /// </summary>
     /// <param name="contract">The operation's published contract, as the claim resolved it.</param>
     /// <param name="pluginId">Which plugin answered — the package the claim pinned, never a name from elsewhere.</param>
+    /// <param name="settlesByKey">
+    /// Whether that package's manifest lists the operation under <c>settles_by_key</c>: where the contract settles a lost
+    /// answer by the work item's key, an ambiguous end is repeated only under a package that says it does.
+    /// </param>
     /// <param name="input">
     /// The input the claim composed, where a provider block holds the operation: the sending account it names is what
     /// a sender's block is matched by.
@@ -60,6 +66,7 @@ public sealed class ProviderOutcomeRecorder(
         Attempt attempt,
         OperationContract contract,
         string pluginId,
+        bool settlesByKey,
         PluginInvocationResult result,
         CancellationToken cancellationToken,
         JsonObject? input = null)
@@ -101,7 +108,7 @@ public sealed class ProviderOutcomeRecorder(
                     ErrorDetail.From(problems),
                     Actors.Dispatcher,
                     failureClass: FailureClass.Ambiguous,
-                    retriable: OutcomeContract.Retriable(FailureClass.Ambiguous, contract));
+                    retriable: OutcomeContract.Retriable(FailureClass.Ambiguous, contract, settlesByKey));
                 break;
 
             case InvocationOutcome.Succeeded succeeded when problems.Count > 0:
@@ -128,6 +135,13 @@ public sealed class ProviderOutcomeRecorder(
                 await PinAsync(db, contract, pluginId, item, attempt, succeeded.ExternalIds, succeeded.ExternalIdOrigins, cancellationToken)
                     .ConfigureAwait(false);
                 outcomes.Succeed(db, item, attempt, succeeded.Result, Actors.Dispatcher);
+                if (string.Equals(contract.Id, SentFacts.Operation, StringComparison.Ordinal))
+                {
+                    // A read that finds the send gone says so in the change set that ends the read, so the line and the
+                    // read's success commit together or not at all.
+                    await sent.SayAsync(db, item, pluginId, input, succeeded.Result, cancellationToken).ConfigureAwait(false);
+                }
+
                 answer = BlockAnswer.GotPast;
                 break;
 
@@ -171,7 +185,7 @@ public sealed class ProviderOutcomeRecorder(
                     var blocked = new AttemptErrorDto(
                         failed.Error.Code,
                         failed.Error.Message,
-                        OutcomeContract.Retriable(recorded, contract),
+                        OutcomeContract.Retriable(recorded, contract, settlesByKey),
                         failed.Error.Details?.ToJsonString(),
                         Refused(contract, failed.Error.ExternalIds, blockProblems),
                         recorded,
@@ -184,9 +198,10 @@ public sealed class ProviderOutcomeRecorder(
 
                 // A permanent or validation failure is the provider's judgement of the work itself, so the call got
                 // past whatever block was open; a class the contract changed on the way is not the plugin's word, and a
-                // host's own ending says what became of the plugin, not what the provider answered.
+                // code answered without the provider judging the work (a host's own ending, or a code reserved beside
+                // every operation) says nothing of what the provider answered.
                 if (recorded == failed.Error.Class && recorded is FailureClass.Permanent or FailureClass.Validation
-                    && !HostOutcomeCodes.All.Contains(failed.Error.Code))
+                    && !UnjudgedOutcomeCodes.All.Contains(failed.Error.Code))
                 {
                     answer = BlockAnswer.GotPast;
                 }
@@ -201,7 +216,7 @@ public sealed class ProviderOutcomeRecorder(
                     Refused(contract, failed.Error.ExternalIds, blockProblems),
                     Actors.Dispatcher,
                     failureClass: recorded,
-                    retriable: OutcomeContract.Retriable(recorded, contract),
+                    retriable: OutcomeContract.Retriable(recorded, contract, settlesByKey),
                     block: recorded == FailureClass.Blocked ? failed.Error.Block : null);
                 break;
 
@@ -217,7 +232,7 @@ public sealed class ProviderOutcomeRecorder(
                     details: null,
                     Actors.Dispatcher,
                     failureClass: failureClass,
-                    retriable: OutcomeContract.Retriable(failureClass, contract));
+                    retriable: OutcomeContract.Retriable(failureClass, contract, settlesByKey));
                 break;
 
             default:
@@ -241,7 +256,11 @@ public sealed class ProviderOutcomeRecorder(
 
     /// <summary>Everything the operation refuses about this answer, result and identifiers together.</summary>
     private static IReadOnlyList<SchemaProblem> Problems(OperationContract contract, InvocationOutcome.Succeeded succeeded, PatternTiming timing) =>
-        [.. OutcomeContract.CheckResult(contract, succeeded.Result, timing), .. OutcomeContract.CheckExternalIds(contract, succeeded.ExternalIds)];
+        [
+            .. OutcomeContract.CheckResult(contract, succeeded.Result, timing),
+            .. OutcomeContract.CheckExternalIds(contract, succeeded.ExternalIds),
+            .. OutcomeContract.CheckReference(contract, succeeded.Result, succeeded.ExternalIds),
+        ];
 
     /// <summary>
     /// Which of a failed answer's identifiers were not written down, and what is wrong with a block that was not

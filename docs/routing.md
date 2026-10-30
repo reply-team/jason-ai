@@ -154,14 +154,15 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the fourteen answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the twenty answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last seven are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last thirteen are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
 value is suppressed, whether the routed plugin has pinned the person an operation that works by the pin
-alone acts on, whether the composed input satisfies the schema, whether the operation needs a
-person's approval, and whether an open provider block holds it — which turns on the sending account the input names. So `route resolve --operation campaign.enroll` answers `usable: true` against a
+alone acts on, whether the send a read or a take-back names is this campaign's, whether it kept the provider's reference, whether it was
+made under the route the item is routed to, whether the composed input satisfies the schema, whether the routed plugin takes an argument
+the operation names per channel on the channel the input names, whether it writes a template on that channel where the message is one, whether an earlier attempt that lost its answer may be repeated under the routed plugin, whether the operation needs a person's approval, and whether an open provider block holds it — which turns on the sending account the input names. So `route resolve --operation campaign.enroll` answers `usable: true` against a
 plugin that implements it, and every item of that operation is still parked for a person at the
 claim.
 
@@ -305,26 +306,26 @@ Nothing falls back. An operation the routed plugin cannot perform ends the work 
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the fourteen, in the order they are checked
+### At the claim — the twenty, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
 as far as the decision got, so a manager can see what would have run. None of them is retried. One answer two of
 them can give does come back, because it refuses nothing: a schema pattern that did not finish matching, twice —
-rows 7 and 12 below.
+rows 7 and 15 below.
 
-The thirteenth is not a refusal at all: it is the gate the runtime owes a person, and an item that reaches
+The nineteenth is not a refusal at all: it is the gate the runtime owes a person, and an item that reaches
 it is **parked** rather than failed — no attempt, nothing spent, and `approval.list` is where it waits.
 It is asked after every refusal on purpose. What a person is asked to approve is the composed input, so it has to be
 composed and to satisfy the operation's own schema before anybody can be shown it; and nobody is ever
 asked to approve reaching somebody the suppression register already protects, or acting on somebody the
-routed plugin does not know.
+routed plugin does not know, or sending at a moment the routed plugin would not keep, or a template it does not write.
 
-The fourteenth, `provider_blocked`, is not a refusal either, and it is the one answer that says nothing about the
+The twentieth, `provider_blocked`, is not a refusal either, and it is the one answer that says nothing about the
 work: the routed plugin's provider has said it refuses such work on this account, or on one sending account under
 it, for now. It holds the work that reaches a person or protects one — an operation of `reach: act`, and the
-protective operations, the ones whose contract says they run in a paused campaign, today `campaign.pause` and
-`optout.record` — and every other `control` operation and every read runs through it and succeeds or fails on its
+protective operations, the ones whose contract says they run in a paused campaign, today `campaign.pause`,
+`optout.record` and `message.cancel` — and every other `control` operation and every read runs through it and succeeds or fails on its
 own, because a control operation may still succeed and a read tells the truth. An item it holds **waits** on the
 block, with no attempt, until the block clears or a trial gets past it. It is asked after the approval, so a person
 is asked about work while the provider refuses it, and work a person releases still waits for the block.
@@ -340,14 +341,26 @@ is asked about work while the provider refuses it, and work a person releases st
 | 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one, which is a plugin whose schema refuses `{}`. Fix the binding. A pattern of that schema that did not finish matching, twice, is not `binding_invalid`: nothing was found wrong, so the attempt ends `validation_timed_out`, `transient`, and comes back |
 | 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
-| 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out declares `preflight.suppression: not_applicable` — today `optout.record` and `enrollment.stop` — and meets neither the check nor the read: a suppressed person is exactly who it is for |
-| 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item |
-| 12 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each. A pattern of that schema that did not finish matching, twice, is not `input_invalid`: nothing was found wrong and nothing has run, so the attempt ends `validation_timed_out`, `transient`, and comes back under the ordinary retry rule |
-| 13 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
-| 14 | `provider_blocked` | — | **not a failure**: an open block of the routed plugin and binding holds the work — the account's, which covers every sending account under it, or the block of the sending account the input names at `/args/sender/external_id`. Only `reach: act` work and the protective operations are held. The item waits as `waiting`, its `wait.blocked_by` naming the block, with no attempt; one item at a time is the block's trial and runs, and what it answers decides the block. Nothing is to change on the item: what clears a block is on the provider's side. `docs/work-execution.md` §Provider blocks |
+| 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out, or takes back a send to them, declares `preflight.suppression: not_applicable` — today `optout.record`, `enrollment.stop` and `message.cancel` — and meets neither the check nor the read: a suppressed person is exactly who it is for |
+| 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act) |
+| 12 | `send_unknown` | permanent | the operation reads or takes back one send — its input schema names `send`, today `message.status` and `message.cancel` — and the work item `args.send` names is not one of this campaign's, or is not an operation that makes a send: `message.send` or `social_invitation.send`. Name the work item that made the send, in this campaign; then create a new item. An operation that names no send never meets this check, nor the two after it |
+| 13 | `send_reference_absent` | permanent | the send named has no reference to act by: it has not succeeded, or the provider gave it none. The runtime composes `send.reference` from the send's own attempt and from nothing a caller writes, so there is nothing to read or take back yet. Wait for the send to succeed, or create a new item for another one |
+| 14 | `send_route_mismatch` | permanent | the send was made through another plugin, or under another binding, than this item is routed to: a reference names a send only at the provider and account that took it. Plugin and binding are compared by the plugin's id and the binding's identity, never the package's digest, so an upgraded package still reads its own sends. Route the operation the way the send was routed, then create a new item |
+| 15 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each. A pattern of that schema that did not finish matching, twice, is not `input_invalid`: nothing was found wrong and nothing has run, so the attempt ends `validation_timed_out`, `transient`, and comes back under the ordinary retry rule |
+| 16 | `argument_unsupported` | permanent | the input carries an argument the operation's document names per channel — its `channel_arguments`, today `send_after` on `message.send` and `social_invitation.send` — on a channel the routed plugin's manifest does not list it for under `arguments` (`docs/plugins.md` §3). Leave the argument out and give the item `not_before` at the moment instead, or route the operation to a plugin that takes it on that channel; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act). An item that does not carry the argument never meets this check |
+| 17 | `template_not_offered` | permanent | the message is a template — `compose: template` — on a channel the operation's document names under `channel_templates`, today `email` and `linkedin` on `message.send`, and the routed plugin's manifest does not list that channel for the operation under `templates` (`docs/plugins.md` §3). A manifest without the key writes a template nowhere. Write the message as final text, or route the operation to a plugin that writes a template on that channel; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act). A final message never meets this check |
+| 18 | `provider_answer_lost` | ambiguous | the item carries an unsettled send — an earlier attempt of it started and ended ambiguous, whatever ended after it — so it may have reached the person, and the operation's document settles a lost answer by the work item's key — `recovery_read.by_key`, today `message.send` and `social_invitation.send` — while the routed plugin's manifest does not list the operation under `settles_by_key` (`docs/plugins.md` §3), or the routed package, by its id and digest, or its binding is not the one the latest such attempt's provenance names, or that provenance names none, or the item's arguments are not the ones that attempt's snapshot kept: a route, a binding or a package changed in between makes the ending final, since the key settles a send only at the provider and the account that took it, and so does an item edited since, since the key settles only the request it went with and the provider answers a repeat with the earlier send. Nothing says the repeat would be settled by the key, so it is not made: the item is as unsettled as the attempt that may have acted, and it is final. Find out from the provider whether the first attempt acted, and create a new item only if it did not. An item no earlier attempt left ambiguous never meets this check |
+| 19 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
+| 20 | `provider_blocked` | — | **not a failure**: an open block of the routed plugin and binding holds the work — the account's, which covers every sending account under it, or the block of the sending account the input names at `/args/sender/external_id`. Only `reach: act` work and the protective operations are held. The item waits as `waiting`, its `wait.blocked_by` naming the block, with no attempt; one item at a time is the block's trial and runs, and what it answers decides the block. Nothing is to change on the item: what clears a block is on the provider's side. `docs/work-execution.md` §Provider blocks |
 
 Two of these are worth a second sentence. `input_invalid` is the only one classed `validation` — it is
-the one a planner can fix by editing the item; everything else is structural. And an argument that
+the one a planner can fix by editing the item; `provider_answer_lost` is the only one classed `ambiguous`, because
+it keeps what the attempt before it left unknown; everything else is structural. Structural, that is, while nothing
+before it may have reached the person: while the item carries an unsettled send of an operation the work item's key
+settles, every refusal from check 2 to check 17 keeps its code and is recorded `ambiguous` and final, its message saying
+that an earlier attempt of the item may have reached the person. A route moved since the lost answer to a plugin
+without the operation is `plugin_operation_unsupported` so. Whatever a row above says to change, new work for that
+send is created only once the provider has said the earlier attempt did not act. And an argument that
 disagrees with a pin is refused rather than resolved either way: the rule is to work by the pin, so the
 message names the pinned value.
 
@@ -592,12 +605,12 @@ person's is refused as `thread_not_this_contact`.
   standing approvals, no bulk decisions over a population, no expiry windows and no anomaly stop rules
   (DEF-APPROVAL-001). Nothing notifies anybody either, so a person finds out what is waiting by asking
   — `jason approval list` is the floor this version ships.
-- **Twenty-two operations, not a catalog.** The documents under `docs/contracts/operations/` — fifteen that write,
+- **Twenty-four operations, not a catalog.** The documents under `docs/contracts/operations/` — sixteen that write,
   `campaign.create`, `list_membership.add`, `campaign.enroll`, `campaign.pause`, `campaign.activate`, `optout.record`,
   `enrollment.stop`, `conversation.reply`, `conversation.classify`, `conversation.close`, `conversation.reopen`,
-  `contact.update`, `contact.delete`, `social_invitation.send` and `message.send`, and seven reads — are the whole
-  published set; an operation outside it cannot be routed, created or named, and adding one is a deliberate act with
-  its own document, fixtures and version (DEF-OPS-001).
+  `contact.update`, `contact.delete`, `social_invitation.send`, `message.send` and `message.cancel`, and eight reads —
+  are the whole published set; an operation outside it cannot be routed, created or named, and adding one is a
+  deliberate act with its own document, fixtures and version (DEF-OPS-001).
 - **No compatibility window and no deprecation policy.** Every published operation is at version 1, and a
   plugin declares which contract family versions it implements. What happens when version 2 arrives — how
   long version 1 keeps being served, and how a plugin is told — is not settled and is deliberately not

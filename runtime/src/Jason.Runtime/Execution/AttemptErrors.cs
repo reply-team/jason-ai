@@ -105,8 +105,45 @@ public static class AttemptErrors
     /// </summary>
     public const string ContactNotLinked = "contact_not_linked";
 
+    /// <summary>
+    /// The work names a send under <c>args.send</c> that its campaign does not hold: no work item of the campaign under that
+    /// id, or one that makes no send.
+    /// </summary>
+    public const string SendUnknown = "send_unknown";
+
+    /// <summary>
+    /// The send the work names has not succeeded, or came back with no reference: the provider kept nothing to find it by.
+    /// </summary>
+    public const string SendReferenceAbsent = "send_reference_absent";
+
+    /// <summary>
+    /// The work is routed to another plugin, or under another binding, than the send it names was made with: the reference
+    /// is that provider account's, so it is acted on there or not at all.
+    /// </summary>
+    public const string SendRouteMismatch = "send_route_mismatch";
+
     /// <summary>The composed input does not satisfy the operation's own schema.</summary>
     public const string InputInvalid = "input_invalid";
+
+    /// <summary>
+    /// The input carries an argument its operation's document names per channel, on a channel the routed plugin's
+    /// manifest does not list it for.
+    /// </summary>
+    public const string ArgumentUnsupported = "argument_unsupported";
+
+    /// <summary>
+    /// The input's message is a template, on a channel the routed plugin's manifest does not list for the operation under
+    /// <c>templates</c>.
+    /// </summary>
+    public const string TemplateNotOffered = "template_not_offered";
+
+    /// <summary>
+    /// An earlier attempt of a send lost its answer, and either the routed plugin's manifest does not list the send under
+    /// <c>settles_by_key</c>, or the routed package, by its id and digest, or its binding is not the one the unsettled
+    /// attempt ran under: nothing says the repeat would be settled by the work item's key, so the claim does not make
+    /// it, and the work stays as ambiguous as the attempt that may have acted.
+    /// </summary>
+    public const string ProviderAnswerLost = "provider_answer_lost";
 
     /// <summary>The plugin answered, and the answer is not the shape the operation publishes.</summary>
     public const string ResultInvalid = "result_invalid";

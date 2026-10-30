@@ -1,0 +1,24 @@
+{
+  "operation": "message.status",
+  "version": 1,
+  "case": "one send, named by the work item that made it, its reference composed by the runtime",
+  "input": {
+    "args": {
+      "send": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG"
+    },
+    "send": {
+      "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "operation": "message.send",
+      "reference": "email-1001"
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": "valid"
+}

@@ -66,6 +66,31 @@ public class RetriabilityTests
             OutcomeContract.Retriable(FailureClass.Ambiguous, contract)));
 
     /// <summary>
+    /// A recovery read that settles a lost answer by the work item's key asks the package as well: an ambiguous end is
+    /// repeated only where the package that ran it says it settles the operation by the key, since a package that sends
+    /// without the key would send twice. A recovery read by any other reading, and every other class, is the contract's
+    /// alone, whatever the package says.
+    /// </summary>
+    [Theory]
+    [InlineData(true, FailureClass.Ambiguous, true, true)]
+    // Critical: a send no package settles by its key is never repeated after a lost answer.
+    [InlineData(true, FailureClass.Ambiguous, false, false, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W5)])]
+    [InlineData(true, FailureClass.Transient, false, true)]
+    [InlineData(true, FailureClass.Permanent, true, false)]
+    [InlineData(false, FailureClass.Ambiguous, false, true)]
+    [InlineData(false, FailureClass.Ambiguous, true, true)]
+    public void A_repeat_settled_by_the_key_asks_the_package_too(bool byKey, FailureClass failureClass, bool packageSettlesByKey, bool expected)
+    {
+        var contract = ContractWith(RepeatAfterAmbiguous.AfterRecoveryRead) with
+        {
+            RecoveryRead = new RecoveryRead("the provider's record under the key", "a second send costs twice", byKey),
+        };
+
+        Assert.Equal(byKey, OutcomeContract.SettlesByKey(contract));
+        Assert.Equal(expected, OutcomeContract.Retriable(failureClass, contract, packageSettlesByKey));
+    }
+
+    /// <summary>
     /// A reply in a thread is the published operation that says <c>never</c>: no read tells this work item's lost send
     /// from another one to the same person, so an ambiguous end stops it for a person, while a failure that says
     /// nothing was sent is still worth another attempt.

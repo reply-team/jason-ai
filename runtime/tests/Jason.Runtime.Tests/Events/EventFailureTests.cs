@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Events;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Events;
 using Jason.Runtime.Plugins.Invocation;
@@ -146,6 +147,11 @@ public class EventFailureTests
     // The events family declares no block, so a blocked answer is outside it whatever its code.
     [InlineData("provider_blocked", FailureClass.Blocked, false)]
     [InlineData("events_unreachable", FailureClass.Blocked, false)]
+
+    // The codes passed beside every operation are no events read's: neither a host's own ending nor a reserved code.
+    [InlineData(HostOutcomeCodes.PluginException, FailureClass.Permanent, false)]
+    [InlineData(UnjudgedOutcomeCodes.ProviderInputInvalid, FailureClass.Validation, false)]
+    [InlineData(UnjudgedOutcomeCodes.CapabilityNotOffered, FailureClass.Permanent, false)]
     public async Task A_failure_the_contract_does_not_declare_as_it_came_is_an_answer_outside_it(string code, FailureClass failureClass, bool pinned)
     {
         using var harness = Create();

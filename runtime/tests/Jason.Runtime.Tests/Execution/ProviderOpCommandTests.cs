@@ -84,6 +84,33 @@ public class ProviderOpCommandTests
     }
 
     /// <summary>
+    /// The moment the claim found an earlier attempt unsettled reaches the invocation beside the attempt number, as the
+    /// plan holds it; a plan with none makes an invocation with none.
+    /// </summary>
+    [Fact]
+    public void The_invocation_carries_the_moment_the_earliest_unsettled_attempt_was_claimed()
+    {
+        var since = new DateTimeOffset(2026, 9, 14, 7, 0, 0, TimeSpan.Zero);
+        var plan = PlanFor("campaign.get") with { UnsettledSince = since };
+
+        Assert.Equal(since, ProviderOpCommand.RequestFor(ContextWith(plan, secondsLeft: 600)).UnsettledSince);
+        Assert.Null(ProviderOpCommand.RequestFor(ContextWith(PlanFor("campaign.get"), secondsLeft: 600)).UnsettledSince);
+    }
+
+    /// <summary>
+    /// The send the claim found an earlier unsettled attempt returned reaches the invocation beside the moment, as the
+    /// plan holds it; a plan with none makes an invocation with none.
+    /// </summary>
+    [Fact]
+    public void The_invocation_carries_the_send_the_latest_unsettled_attempt_returned()
+    {
+        var plan = PlanFor("campaign.get") with { UnsettledReference = "email-1007" };
+
+        Assert.Equal("email-1007", ProviderOpCommand.RequestFor(ContextWith(plan, secondsLeft: 600)).UnsettledReference);
+        Assert.Null(ProviderOpCommand.RequestFor(ContextWith(PlanFor("campaign.get"), secondsLeft: 600)).UnsettledReference);
+    }
+
+    /// <summary>
     /// A route that binds no account is a plan whose binding is null, and the invocation carries it as null: the
     /// command does not stand an empty object in for the absence, which a plugin could not tell from an account
     /// that holds nothing.

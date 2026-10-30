@@ -25,7 +25,8 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     private static readonly string[] TopLevelFields =
     [
         "manifest_version", "id", "version", "kind", "name", "description", "homepage",
-        "contracts", "operations", "entry", "capabilities", "limits", "binding",
+        "contracts", "operations", "entry", "capabilities", "limits", "binding", "arguments",
+        "settles_by_key", "templates",
     ];
 
     /// <summary>Where a schema problem is, spelled as the document and a pointer into it.</summary>
@@ -46,20 +47,277 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
         var id = ReadId();
         var version = ReadVersion();
         var kind = ReadKind();
+        var name = ReadText("name", MaxNameLength);
+        var description = ReadText("description", MaxDescriptionLength);
+        var homepage = ReadHomepage();
+        var contracts = ReadContracts(kind);
+        var operations = ReadOperations(kind);
 
         return new PluginManifest(
             id ?? directoryName,
             version ?? "0.0.0",
             kind ?? PluginKind.Provider,
-            ReadText("name", MaxNameLength),
-            ReadText("description", MaxDescriptionLength),
-            ReadHomepage(),
-            ReadContracts(kind),
-            ReadOperations(kind),
+            name,
+            description,
+            homepage,
+            contracts,
+            operations,
             ReadEntry(),
             ReadCapabilities(),
             ReadLimits(),
-            ReadBinding());
+            ReadBinding())
+        {
+            Arguments = ReadArguments(kind, operations),
+            Templates = ReadTemplates(kind, operations),
+            KeyedOperations = ReadSettlesByKey(kind, operations),
+        };
+    }
+
+    /// <summary>
+    /// The operations whose lost answer the plugin settles by the work item's key: it makes every attempt under the key,
+    /// and repeats only under it, so the runtime may hand it a lost answer again. It is the package's own promise about
+    /// its code, not something a person grants, so it is no capability; and each name is read against the operation's
+    /// own document, since only a document whose recovery read rests on the key (<c>recovery_read.by_key</c>) asks for it.
+    /// </summary>
+    private List<string> ReadSettlesByKey(PluginKind? kind, IReadOnlyList<string> operations)
+    {
+        const string Field = "settles_by_key";
+        var keyed = new List<string>();
+        if (!Has(root, Field))
+        {
+            return keyed;
+        }
+
+        if (kind == PluginKind.Notification)
+        {
+            Add(ProblemCodes.SettlesByKeyInvalid, Field, "a notification plugin implements no canonical operations, so it settles none by a key.");
+            return keyed;
+        }
+
+        if (root[Field] is not JsonArray listed || listed.Count == 0)
+        {
+            Add(ProblemCodes.FieldInvalid, Field, $"{Field} is a non-empty list of the operations the plugin settles a lost answer of by the work item's key.");
+            return keyed;
+        }
+
+        for (var index = 0; index < listed.Count; index++)
+        {
+            var at = string.Create(CultureInfo.InvariantCulture, $"{Field}[{index}]");
+            if (!TryText(listed[index], out var operation))
+            {
+                Add(ProblemCodes.FieldInvalid, at, "an operation is a name, such as 'message.send'.");
+            }
+            else if (keyed.Contains(operation, StringComparer.Ordinal))
+            {
+                Add(ProblemCodes.FieldInvalid, at, $"'{operation}' is listed twice.");
+            }
+            else if (!operations.Contains(operation, StringComparer.Ordinal))
+            {
+                Add(ProblemCodes.SettlesByKeyInvalid, at, $"'{operation}' is not among the operations this plugin implements.");
+            }
+            else if (OperationCatalog.Find(operation) is not { } contract)
+            {
+                Add(ProblemCodes.SettlesByKeyInvalid, at, $"this build publishes no document for '{operation}', so nothing says its lost answer is settled by a key.");
+            }
+            else if (!OutcomeContract.SettlesByKey(contract))
+            {
+                Add(ProblemCodes.SettlesByKeyInvalid, at, $"'{operation}' does not settle a lost answer by the work item's key: its document's recovery read says no `by_key`, so nothing would read the promise.");
+            }
+            else
+            {
+                keyed.Add(operation);
+            }
+        }
+
+        return keyed;
+    }
+
+    /// <summary>
+    /// The arguments the provider takes on some of an operation's channels and not on others: optional, additive, and
+    /// read against each operation's own document, which names the arguments a plugin may take per channel and the
+    /// channels its arguments take. It asks for nothing a person grants, so it is no capability.
+    /// </summary>
+    private ManifestArguments ReadArguments(PluginKind? kind, IReadOnlyList<string> operations)
+    {
+        if (!Has(root, "arguments"))
+        {
+            return ManifestArguments.None;
+        }
+
+        if (kind == PluginKind.Notification)
+        {
+            Add(ProblemCodes.ArgumentInvalid, "arguments", "a notification plugin implements no canonical operations, so it takes no argument of one.");
+            return ManifestArguments.None;
+        }
+
+        if (root["arguments"] is not JsonObject byOperation)
+        {
+            Add(ProblemCodes.FieldInvalid, "arguments", "arguments is a mapping of operation names to the arguments the plugin takes per channel.");
+            return ManifestArguments.None;
+        }
+
+        var read = new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyList<string>>>(StringComparer.Ordinal);
+        foreach (var (operation, node) in byOperation)
+        {
+            var path = Join("arguments", operation);
+            var contract = OperationCatalog.Find(operation);
+            if (!operations.Contains(operation, StringComparer.Ordinal))
+            {
+                Add(ProblemCodes.ArgumentInvalid, path, $"'{operation}' is not among the operations this plugin implements.");
+                continue;
+            }
+
+            if (contract is null)
+            {
+                Add(ProblemCodes.ArgumentInvalid, path, $"this build publishes no document for '{operation}', so nothing names an argument of it per channel.");
+                continue;
+            }
+
+            if (node is not JsonObject byArgument)
+            {
+                Add(ProblemCodes.FieldInvalid, path, $"{path} is a mapping of argument names to the channels the plugin takes each on.");
+                continue;
+            }
+
+            var arguments = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            foreach (var (argument, listed) in byArgument)
+            {
+                var channels = ReadArgumentChannels(contract, Join(path, argument), argument, listed);
+                if (channels is not null)
+                {
+                    arguments[argument] = channels;
+                }
+            }
+
+            read[operation] = arguments;
+        }
+
+        return new ManifestArguments(read);
+    }
+
+    /// <summary>
+    /// The channels the provider writes an operation's message as a template on: optional, additive, and read against
+    /// each operation's own document, which names the channels its message may be a template on. An absent key means
+    /// none, so a template reaches only a plugin that says it writes one there. It asks for nothing a person grants, so it
+    /// is no capability.
+    /// </summary>
+    private ManifestTemplates ReadTemplates(PluginKind? kind, IReadOnlyList<string> operations)
+    {
+        const string Field = "templates";
+        if (!Has(root, Field))
+        {
+            return ManifestTemplates.None;
+        }
+
+        if (kind == PluginKind.Notification)
+        {
+            Add(ProblemCodes.TemplateInvalid, Field, "a notification plugin implements no canonical operations, so it writes no template of one.");
+            return ManifestTemplates.None;
+        }
+
+        if (root[Field] is not JsonObject byOperation)
+        {
+            Add(ProblemCodes.FieldInvalid, Field, $"{Field} is a mapping of operation names to the channels the plugin writes a template on.");
+            return ManifestTemplates.None;
+        }
+
+        var read = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var (operation, node) in byOperation)
+        {
+            var path = Join(Field, operation);
+            var contract = OperationCatalog.Find(operation);
+            if (!operations.Contains(operation, StringComparer.Ordinal))
+            {
+                Add(ProblemCodes.TemplateInvalid, path, $"'{operation}' is not among the operations this plugin implements.");
+                continue;
+            }
+
+            if (contract is null)
+            {
+                Add(ProblemCodes.TemplateInvalid, path, $"this build publishes no document for '{operation}', so nothing names a channel its message may be a template on.");
+                continue;
+            }
+
+            if (contract.ChannelTemplates is not { } offered)
+            {
+                Add(ProblemCodes.TemplateInvalid, path, $"'{operation}' names no channel its message may be a template on.");
+                continue;
+            }
+
+            if (node is not JsonArray listed || listed.Count == 0)
+            {
+                Add(ProblemCodes.FieldInvalid, path, $"{path} is a non-empty list of the channels the plugin writes a template of '{operation}' on.");
+                continue;
+            }
+
+            var channels = new List<string>();
+            for (var index = 0; index < listed.Count; index++)
+            {
+                var at = string.Create(CultureInfo.InvariantCulture, $"{path}[{index}]");
+                if (!TryText(listed[index], out var channel))
+                {
+                    Add(ProblemCodes.FieldInvalid, at, "a channel is a name, such as 'email'.");
+                }
+                else if (channels.Contains(channel, StringComparer.Ordinal))
+                {
+                    Add(ProblemCodes.FieldInvalid, at, $"channel '{channel}' is listed twice.");
+                }
+                else if (!offered.Contains(channel, StringComparer.Ordinal))
+                {
+                    Add(ProblemCodes.TemplateInvalid, at, $"'{operation}' offers no template on channel '{channel}'; its channels are {string.Join(", ", offered.Select(word => $"'{word}'"))}.");
+                }
+                else
+                {
+                    channels.Add(channel);
+                }
+            }
+
+            read[operation] = channels;
+        }
+
+        return new ManifestTemplates(read);
+    }
+
+    private List<string>? ReadArgumentChannels(OperationContract contract, string path, string argument, JsonNode? listed)
+    {
+        if (contract.ChannelArguments is not { } named || !named.Contains(argument, StringComparer.Ordinal))
+        {
+            Add(ProblemCodes.ArgumentInvalid, path, $"'{contract.Id}' names no argument '{argument}' that a plugin takes per channel.");
+            return null;
+        }
+
+        if (listed is not JsonArray array || array.Count == 0)
+        {
+            Add(ProblemCodes.FieldInvalid, path, $"{path} is a non-empty list of the channels the plugin takes '{argument}' on.");
+            return null;
+        }
+
+        var offered = (contract.ArgumentSchema["properties"]?["channel"]?["enum"] as JsonArray)?
+            .Select(channel => channel?.GetValue<string>())
+            .ToList() ?? [];
+        var channels = new List<string>();
+        for (var index = 0; index < array.Count; index++)
+        {
+            var at = string.Create(CultureInfo.InvariantCulture, $"{path}[{index}]");
+            if (!TryText(array[index], out var channel))
+            {
+                Add(ProblemCodes.FieldInvalid, at, "a channel is a name, such as 'email'.");
+            }
+            else if (channels.Contains(channel, StringComparer.Ordinal))
+            {
+                Add(ProblemCodes.FieldInvalid, at, $"channel '{channel}' is listed twice.");
+            }
+            else if (!offered.Contains(channel, StringComparer.Ordinal))
+            {
+                Add(ProblemCodes.ArgumentInvalid, at, $"'{contract.Id}' takes no channel '{channel}'; its channels are {string.Join(", ", offered.Select(word => $"'{word}'"))}.");
+            }
+            else
+            {
+                channels.Add(channel);
+            }
+        }
+
+        return channels;
     }
 
     /// <summary>

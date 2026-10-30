@@ -153,6 +153,14 @@ public static partial class JournalKinds
     public const string ProviderEventObserved = "provider_event_observed";
 
     /// <summary>
+    /// Any send a read finds gone, once, whether it went inside the send's own call or later: keyed by the work item that
+    /// made it, with the plugin, the provider's reference, the channel, the moment it went and the message's identifier in
+    /// the thread, and the read that saw it. Never a subject, a body or a name. Said once per send, which the database
+    /// holds. Not a default manager trigger: the thread is where a send's consequences arrive.
+    /// </summary>
+    public const string MessageSentObserved = "message_sent_observed";
+
+    /// <summary>
     /// A read of an account's events that stored something, failed, or read by date: the source, the plugin, how it read,
     /// how many pages and events, how it ended, and which package and snapshots it ran under. Never a cursor, a binding or
     /// anything an event holds. It names no campaign, so it never wakes a manager; a read of a cursor that found nothing
@@ -267,6 +275,7 @@ public static partial class JournalKinds
         NotificationSent,
         InboundReplyObserved,
         ProviderEventObserved,
+        MessageSentObserved,
         EventsRead,
         EventsGapObserved,
         EventsBackfillRequested,

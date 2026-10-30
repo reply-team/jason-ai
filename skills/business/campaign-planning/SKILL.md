@@ -115,6 +115,9 @@ an invention from a name they simply have not met.
      `operation.preview` as the call that resolves it, never an assumption. A preview never
      acts and never spends (`N4`), and it is also where a result an order of magnitude off the
      expectation becomes visible while it is still free.
+   - **A provider may offer a slot of its own** beside an operation's arguments, for what it
+     knows about the work that the contract does not hold. What goes in it, and when, is the
+     provider's own skill's to say, and that skill is the authority.
 5. **Decide the checkpoints and the replan triggers.** When to measure, and what would make
    the plan wrong: an assumption refuted, priorities changed, results contradicting the
    premise. A plan with no replan trigger gets followed past the point where it stopped
@@ -229,6 +232,8 @@ in `approval-boundaries`.
 
 ## Changelog
 
+- 2.5.0 (2026-10-29): a provider may offer a slot of its own beside an operation's arguments, and
+  the provider's own skill is the authority on what goes in it.
 - 2.4.0 (2026-10-23): with Jason, the campaign the brief becomes goes under a project named from
   what is sold, one project per product.
 - 2.3.0 (2026-10-18): the brief is taken as the person gives it, in their own words, and with

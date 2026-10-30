@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Twenty-two operations — the whole set this build publishes: fifteen that write and seven that only read.
+Twenty-four operations — the whole set this build publishes: sixteen that write and eight that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -31,6 +31,8 @@ Twenty-two operations — the whole set this build publishes: fifteen that write
 | `schedule.list` | Reads the account's sending schedules, ordered by Reply's identifier: each with its time zone, its windows by weekday as authored, the windows of later steps where Reply keeps them, and whether it is the caller's default. Reply holds a time zone as a Windows time zone identifier, and this package carries it as written under the scheme `windows`, always — never converted. No calendar is worked out from the windows. |
 | `social_invitation.send` | Invites one person to connect on LinkedIn from one of the account's LinkedIn accounts, with a note or without one, once a person approves it. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 | `message.send` | Sends one person one message outside any sequence, once a person approves it: an email, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the address or the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
+| `message.status` | Reads one direct send by the reference Reply gave it when it took it, which the runtime keeps for the send: whether Reply still holds it, it went or it failed, and whether a cancel can still stop it. Reply lists no pending sends, so one send is all it reads. |
+| `message.cancel` | Takes back one direct send Reply still holds for its moment, by that same reference. One cancelled before answers the same; one that went, that Reply is sending or that failed is refused, and nothing changes. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**. Each operation runs the Reply CLI command made
 for it — `reply contact find`, `reply sequence add-contact`, `reply inbox list` and the rest, listed under
@@ -39,33 +41,49 @@ the command's result into the operation's answer, and the CLI's error code into 
 Reply's endpoints to call, in what order, and how to tell its answers apart is the CLI's to know, and the package
 never makes the CLI's raw call, `reply api`: every request it makes has a command made for it.
 
-This package ignores the reserved `provider` object a work item may carry beside an operation's arguments: it reads
-none of it, passes none of it to the CLI, and an operation runs the same with it or without it.
+Beside the operations, the package answers for the account's events. Its manifest declares the events contract,
+`contracts.events: [1]`, so the runtime's own reader asks it what moved in each account a route binds —
+[`events.read`](../../docs/contracts/events/events.read.md), which no work item names — and it answers from Reply's
+change feed: see [The account's events](#the-accounts-events).
+
+This package reads the reserved `provider` object a work item may carry beside an operation's arguments on
+`message.send` alone, where it names the sending schedule an email is timed by ([`message.send`](#messagesend)). Every
+other operation ignores it: it reads none of it, passes none of it to the CLI, and runs the same with it or without it.
 
 **The CLI owns the credential, and Jason never sees it.** Signing in is something you do in your own
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a
 person reaches an argument either — a person's details travel on stdin, and so do the name a sequence is given,
 the text of a reply, the note of an invitation and the subject and text of a message —
-so what `~/.jason/logs/` records
-of a call is the command line, which carries only Reply's identifiers and flags, the exit code and how long it took.
+so what Jason keeps of a call, one line in the invocation's `stderr.log` under `~/.jason/work/plugins/` and nothing
+under `~/.jason/logs/`, is the command line, the exit code and how long it took. The command line carries Reply's
+identifiers and flags, and on a send the work item's own identifier as the key and the moment the send is to go at.
+An invocation that ends without an outcome, a protocol failure, has the tail of that file copied onto the attempt's
+trace, the key and the moment included.
 
 ## What you need
 
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
-- **Version 0.16.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
-  the answer. 0.16.0 is the release with `reply schedule list`, which `schedule.list` answers from; 0.15.0 was the one
-  whose direct sends and `reply contact update` take the person by their fields and import one Reply holds nobody
-  for. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
-  routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
-  does not have, or answers differently.
-- **Jason 0.14.0 or newer.** The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, which a
-  runtime older than 0.13.0 does not have; and 0.14.0 is the first release whose `message.send`,
-  `social_invitation.send` and `contact.update` hand the package the person's own fields — their names, company, title
-  and time zone — to create a person Reply holds nobody for. Given an input without those fields at all, which only an
-  older runtime composes, the three refuse the work before anything is called, naming the fields.
+- **Version 0.17.2 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+  the answer. 0.17.2 is the release that reads `REPLY_CLIENT`, the name a call says it came through; 0.17.0
+  the one whose direct sends are made under a key (`--idempotency-key`), go out after a moment
+  (`--send-after`) or are timed by a sending schedule (`--schedule-id`), and answer the send's reference, the one with `reply direct-send get`, and the one with
+  `reply inbox changes`, Reply's change feed, which the account's events are read from; 0.16.0 was the one with `reply
+  schedule list`, which `schedule.list` answers from, and 0.15.0 the one whose direct sends and `reply contact update`
+  take the person by their fields and import one Reply holds nobody for. An older CLI makes this plugin `unavailable`
+  with `executable_incompatible`, and work routed to it fails at the claim with `plugin_unavailable` rather than
+  running commands an older CLI does not have, or answers differently.
+- **Jason 0.22.0 or newer.** The manifest lists the arguments a send takes on each channel (`arguments`) and the
+  channels a message goes on as a template (`templates`), which a runtime older than 0.22.0 does not read: it refuses
+  the package at the reload, `unknown_field`. 0.22.0 is also the release that admits what the sends answer — their
+  reference, their state and the codes they end with — and reads the list at the claim, so a template goes only on a
+  channel the package lists. The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, and the
+  runtime hands `message.send`, `social_invitation.send` and `contact.update` the person's own fields — their names,
+  company, title and time zone — to create a person Reply holds nobody for. Given an input without those fields at
+  all, which only a runtime older than 0.14.0 composes, the three refuse the work before anything is called, naming
+  the fields.
 - **A runtime that can find it.** The name `reply` is resolved on the search path the *runtime* sees, at
   every reload — which is not always the path your shell sees, least of all for a runtime started in the
   background. `executable_missing` in `jason plugin list --human` means that and nothing else.
@@ -209,10 +227,15 @@ profile store and the route's binding are the two ways an account is chosen, and
 somewhere a person can read them.
 
 What the child does get is the user's own configuration directory — `APPDATA` on Windows, `HOME` and
-`XDG_CONFIG_HOME` everywhere else — because that is where the CLI keeps its profile store. The one
-variable this package sets is `REPLY_NO_UPDATE_CHECK=1`, on the CLI it starts. reply-cli 0.11.0 looks for
-a newer release only under `--version`, which this package never runs, so the variable only keeps a later
-release from spending an operation's budget on a version check nobody asked for.
+`XDG_CONFIG_HOME` everywhere else — because that is where the CLI keeps its profile store. The two
+variables this package sets are `REPLY_NO_UPDATE_CHECK=1` and `REPLY_CLIENT`, on the CLI it starts. reply-cli
+0.11.0 looks for a newer release only under `--version`, which this package never runs, so the first only keeps a
+later release from spending the time an operation is allowed on a version check nobody asked for. The second,
+`REPLY_CLIENT=jason-harness/<runtime version>`, is the name every call says it came through: from reply-cli 0.17.2
+the CLI tells Reply which client made a call, so Reply can tell the harness's calls, and the runtime version they
+came through, from the rest. The version is the runtime version without its build metadata — `0.22.0`, never
+`0.22.0+` and the source revision — because the CLI takes a version of at most thirty-two characters and leaves out,
+without a word, a value it does not take. It names a build and nothing of the account, the person or the work.
 
 ## Contacts at Reply
 
@@ -270,6 +293,78 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
 - **Fields and lists travel with the operation that needs them.** Nothing is copied to Reply in the background, and
   nothing of Reply's contact is kept in Jason beyond its identifier.
 
+## The account's events
+
+`reply inbox changes` reads Reply's change feed: the threads that moved in the account, oldest first, a page at a time,
+from a cursor or from a moment. Each item is read as one event of one kind, `thread_moved` — the thread, its contact
+and its sequence by Reply's identifiers, the channel, when it moved, and Reply's judgement that it asks for a meeting.
+Its moment is the thread's last activity, written as `conversation.list` writes `last_activity_at`, to the millisecond,
+so a move both reads find is said once. Who moved it is read from the thread's last message and Reply's flag that the
+thread holds a reply (`flags.hasReply`):
+
+- `other_side` — the last message is the other side's, whatever the flag says;
+- `account` — the last message was sent as the account, by Jason, by a sequence or by a person in Reply's own screens,
+  on a thread Reply does not flag as holding a reply;
+- `null` — the last message was sent as the account on a thread that holds a reply; or Reply gave no last message, or
+  one that does not say which way it went.
+
+The direction of the last message alone does not decide the account's move. The feed shows the account's message on top
+of a thread that holds a reply and cannot say whether that reply is newer than the last read, so that move names nobody,
+and nobody's move says the line a reply says. Each later message the account sends on a thread that holds a reply says
+that line again; the read of the account's threads, `conversation.list`, does the same today.
+
+`provider` is never said: a thread moves in this feed only when a message lands on it — a category, Reply's judgement
+of meeting intent or a deletion moves nothing — so there is no move of Reply's own to name, and the thread's last
+activity is never compared with its last message's date.
+
+A move by the account is read and not kept: the package leaves it out of the page's events, so it says no line in any
+campaign, while the cursor moves past it and a move at or past the end of a span still ends that span. A page of
+nothing but the account's moves hands back no events, and its cursor and whether more follows as Reply said them. A
+later detector of sends made outside Jason therefore needs a source of its own. The other side's move, or one that
+names nobody, says `inbound_reply_observed`. A thread outside every sequence — the reply to a direct send — names no
+sequence, so it reaches the campaigns that hold its contact pinned, by `contact_pin`.
+
+`unread` is always `null`: the feed does not say. The other three kinds the contract names — `reply_detected`,
+`invitation_accepted` and `bounce` — are never produced, and Reply's flags for a bounce, an automatic reply and an
+absence are not carried. Nothing anybody wrote travels: no subject, no preview, no name. A thread Reply deleted is not in
+the feed, and a read pins nothing.
+
+The cursor is the package's own, in one of three forms, each from 1 to 2048 printable characters with no space:
+
+- `c|<Reply's cursor>` — the read goes on: more follows, and the next page is asked for from Reply's cursor, with
+  nothing read twice. A read the runtime stops at its page limit goes on from it the same way.
+- `m|<moment>` — the read reached the end of the feed, at that moment of the package's clock. The next read asks for
+  everything since an hour before it, and never further back than the feed holds.
+- `u|<moment>|<Reply's cursor>` — a span a person asked to read again, which ends at that moment. The pages after the
+  first are asked for by the cursor alone, so the moment is kept beside it: the first item at or past it ends the read.
+  A span reads from where it was asked to start, with no hour before it, and one that has read to its end hands back
+  `u|<moment>|` with no cursor of Reply's, which no read goes on from.
+
+A moment in a cursor is written only as `toISOString` writes one, to the millisecond in UTC, and a cursor whose moment
+is in any other form is none this package wrote. Reply's cursor is needed only where a read goes on from it: a page
+that ends a read may hand back an empty one, and a page that says more follows without one has lost its place.
+
+The hour is there for a reply Reply takes in late: a thread's last activity is when its last message was sent, so a
+message that reaches Reply after the feed has passed that moment lands behind the point a read stopped at, and the next
+read still finds it. What the hour reads again the runtime already holds, by the event's key, and counts as held.
+
+The feed holds the last 30 days, so a read by date asks for no more than that, an hour inside it, and what is older is
+what Reply no longer holds. The hour is room for this machine's clock to trail Reply's, which is the clock the window is
+checked by. Reply is handed its own cursor, never the package's. An item without a thread or a moment fails the whole
+page rather than being passed over, because the cursor would move past it for good, and so does a page holding more
+items than the read asked for, because cutting it short would. Should the same item come back on every read, the
+source stops being healthy and the inbound sync reads the campaigns it covers again, so a stuck feed loses no reply.
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| Reply's API has no change feed for the account: `reply.refused` at status 404 and no code of Reply's own. The account's Reply does not offer it yet. | `events_unsupported` | permanent | Nothing. The inbound sync keeps reading the account's threads page by page, and the runtime asks again after a day. |
+| The CLI refused the read before making it with no code of its own: commander does not know `inbox changes` or one of its flags. A reload takes no reply-cli older than 0.17.0, so this is one that reports a newer version and lacks the command. | `events_unsupported` | permanent | Install a published release of reply-cli and reload the plugins. The inbound sync keeps reading the account's threads page by page, and the runtime asks again after a day. |
+| The CLI refused the read before making it with a usage code (`usage.*`): it refused what the call was built from, a value this package wrote or the profile the route names. | `events_unsupported` | permanent | Correct the route's profile where the code is `usage.profile`; anything else is a defect of this package to report. A repeat would build the same call. The inbound sync keeps reading the account's threads page by page. |
+| The profile is not signed in, Reply refused the credential (`access.denied`), or the key may not read the inbox (`access.feature_unavailable`). | `events_unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope; the runtime asks again after a day. |
+| Reply's cursor is older than the 30 days the feed holds (`inbox.cursor_expired`), is one Reply says it never issued or one ahead of its clock (`inbox.cursor_refused`), or Reply refused a read from it at status 400 with a code of its own (`reply.refused`). | `events_cursor_unknown` | permanent | Nothing. The runtime reads again by date at once. |
+| The cursor is none of the three forms this package writes, a spent span's among them. Nothing is asked. | `events_cursor_unknown` | permanent | Nothing. The runtime reads again by date at once. |
+| Reply could not be reached (`reply.unavailable`), asked to wait (`rate_limited`), or refused the read in a word this version does not know, a refusal without a code of Reply's own among them; or the read timed out, exited without an error the CLI explained, printed something that is not a page of the feed, held more items than it asked for, said more follows with no cursor to go on from, or held an item without a thread or a moment. | `events_unreachable` | transient | Nothing. A read changes nothing at Reply, and the runtime reads again later, at a cadence that doubles while the failure lasts. |
+
 ## What can go wrong
 
 Every failure carries a code the operation's own contract publishes and a class the runtime acts on:
@@ -301,6 +396,7 @@ route's binding names them.
 | `inbox list --contact-id` or `--sequence-id`, `--source --since --channel --category-id --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
 | `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from, and the read `conversation.reply` makes of the thread's channel and person, one message long, before it sends anything. |
 | `inbox categories` | read | The account's inbox categories, Reply's reserved ones included: what `conversation.classify` matches the category it was given against, by identifier or by name, before it files anything. |
+| `inbox changes` with `--cursor` or `--since`, and `--top` | read | One page of Reply's change feed: the threads that moved in the account, oldest first, from a cursor or from a moment within the last 30 days, each with its identifiers, its moment and who moved it. What `events.read` answers from. |
 | `contact get <contact>` | read | One contact by its id, as Reply holds it: the read `contact.delete` makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out, and the read a send makes of the same, and of the address or profile the contact is reached at. Nothing else is read and nothing is kept. |
 | `contact find --contact -` | read | Reply's exact lookup of one address — an email, or a LinkedIn URL by its lowercased slug — read to its end and creating nobody: how every operation about a person with no pin finds Reply's contact for them before anything is written. The address is on stdin. |
 | `sequence list --name -` | read | Every sequence whose whole name is this one, ignoring case, read to its end: what `campaign.create` compares with the name it is to give, before it makes anything. The name is on stdin. |
@@ -318,9 +414,11 @@ route's binding names them.
 | `auth whoami` | read | Who the credential signs in as: the Reply user whose accounts `sender.list` offers under `own`. Only the user's id is read; the login name beside it is the operator's and is not kept. |
 | `account list --channel` | read | The mailboxes or the LinkedIn accounts a send can go from, one channel at a time, teammates' included, each with the Reply user whose it is: what `sender.list` answers from, and the read a send makes of its sender. |
 | `schedule list` | read | Every sending schedule the team can use, in one answer, each with its Windows time zone and its windows by weekday: what `schedule.list` answers from. |
-| `contact linkedin-connect --contact-id --linkedin-account-id [--message -]` | write | Invites the contact to connect on LinkedIn from the account named, with the note on stdin, or with none when there is no `--message`. A send that Reply keeps no key on, so a lost answer is never repeated. |
-| `contact send-email --contact-id --email-account-id --message -` | write | Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. A send that Reply keeps no key on, so a lost answer is never repeated. |
-| `contact linkedin-message`, `contact linkedin-inmail`, `contact linkedin-voice`, each `--contact-id --linkedin-account-id --message -` | write | Sends the contact one LinkedIn message, InMail or voice message from the account named, outside any sequence, with the text on stdin — `{body}`, `{subject, body}`, or the `{script}` Reply speaks. A send that Reply keeps no key on, so a lost answer is never repeated. |
+| `contact linkedin-connect --contact-id --linkedin-account-id --idempotency-key [--send-after] [--message -]` | write | Invites the contact to connect on LinkedIn from the account named, with the note on stdin, or with none when there is no `--message`. Made under the work item's key, and with `--send-after` where the arguments name a moment still ahead, which Reply holds the send for; it answers the send's reference, its moment and its state. A lost answer is repeated under the same key, which Reply answers with the send it took, sending nothing twice. |
+| `contact send-email --contact-id --email-account-id --idempotency-key [--send-after] [--schedule-id] --message -` | write | Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. Made under the work item's key, with `--send-after` where the arguments name a moment still ahead, which Reply holds the send for, and with `--schedule-id` where the provider's own object names a sending schedule, which Reply holds the send for until the schedule opens; it answers the send's reference, its moment and its state. A lost answer is repeated under the same key, which Reply answers with the send it took, sending nothing twice. |
+| `contact linkedin-message`, `contact linkedin-inmail`, `contact linkedin-voice`, each `--contact-id --linkedin-account-id --idempotency-key [--send-after] --message -` | write | Sends the contact one LinkedIn message, InMail or voice message from the account named, outside any sequence, with the text on stdin — `{body}`, `{subject, body}`, or the `{script}` Reply speaks: the text a person approved, as written, or for a message and an InMail a template in Reply's syntax, which Reply fills in when it sends. Made under the work item's key, and with `--send-after` where the arguments name a moment still ahead, which Reply holds the send for; it answers the send's reference, its moment and its state. A lost answer is repeated under the same key, which Reply answers with the send it took, sending nothing twice. |
+| `direct-send get <reference>` | read | A direct send Reply keeps, by its reference, asked for two things. Of `email-1`, one reference in reply-cli's own spelling for every channel, before a send that names a moment still ahead or a sending schedule and before a repeat after an attempt that may have sent: whether the account's Reply keeps direct sends at all. Its own answer about the send it names — the send, or that it holds no such send or none of this account's (`direct_send.not_found`, `direct_send.not_owned`) — says it does; a 404 with no code of Reply's own says it does not. That read exists to bridge the days between this release and Reply's deployment of deferred sends. The routes, the key and the schedule arrived in one Reply release, so the read guards all three: a Reply that answers a direct send holds its key and times a send by a schedule. And first on a repeat, inside the window and past it, of the send an earlier attempt that may have sent returned (`context.unsettled_reference`): Reply's record of that send, whose state answers the work item with nothing sent. A record of another send, none, or no answer leaves the repeat to the window; a read the CLI refuses for want of a working credential fails `unauthorized`. And of the send the runtime names under `send.reference`: what `message.status` answers from. |
+| `direct-send cancel <reference>` | write | Takes back a direct send Reply still holds for its moment, by its reference, and answers with Reply's record of it: what `message.cancel` answers from. One cancelled before answers as it stands, so a repeat after a lost answer changes nothing; one that went, that Reply is sending or that failed is refused (`direct_send.already_sent`, `direct_send.already_failed`), and nothing is changed. |
 | `contact delete <contact>` | write | Deletes the contact by its id, with its history at Reply: it leaves every sequence and list. Run again after a lost answer, it answers that Reply holds the contact no longer. |
 
 ### Endings every operation can meet
@@ -334,7 +432,8 @@ route's binding names them.
 | A **write**'s outcome is unknown: the CLI answered `outcome.unknown`, or the write timed out, exited without an error the CLI explained, printed something that is not a result, or had its answer cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | Where the operation's contract says a repeat is safe, the runtime repeats it; otherwise the item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned, the CLI's own identifiers included, travels with the failure, so there are identifiers to look by. |
 | The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
 | Reply asked to wait longer than the CLI waits on its own (`rate_limited`). | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt; the wait Reply asked for is in the trace. |
-| Reply refused the call (`reply.refused`), refused a field no row below names (`reply.invalid_request`), or the CLI answered a code this version does not know. | `provider_call_failed` | permanent | The CLI's code, Reply's own code and its sentence are in the trace. A refusal that recurs belongs in the table. |
+| Reply's API has no route for the call: `reply.refused` at status 404 and no code of Reply's own, which reply-cli passes through as it is only on the direct sends (`contact send-email`, `contact linkedin-message`, `contact linkedin-connect`), on reading and cancelling one (`direct-send get`, `direct-send cancel`), on `inbox categorize` and on the membership check of `sequence add-contact` and `sequence remove-contact`; the other commands read a 404 as the thing they asked for not being found. The account's Reply does not offer the operation yet, and nothing was done. | `capability_not_offered` | permanent | Nothing here repairs it, and asking again meets the same answer; the message names the operation. Do the work another way, or wait for a Reply that offers it. |
+| Reply refused the call otherwise (`reply.refused`), refused a field no row below names (`reply.invalid_request`), or the CLI answered a code this version does not know. | `provider_call_failed` | permanent | The CLI's code, Reply's own code and its sentence are in the trace. A refusal that recurs belongs in the table. |
 | Not reported yet for the account: Reply refused the call for the account's money or plan or a revoked key, and did nothing for it. | `provider_blocked` | blocked | Clear it at Reply where the block says. Pending: the CLI publishes no code for this today, so nothing reaches the row `account_or_sender_blocked` in the table; when the CLI publishes one, its mapping in `rowOf` is where the switch lands, and the failure then carries the block. Until then such a refusal arrives as one of the rows above or below, under the class that row gives it. A sending account Reply refused for its own state is the sender's block, in the two sends' tables. |
 
 A call that runs out of time is the package's to answer, so each call is given what is left of the invocation's
@@ -600,7 +699,7 @@ thread was. A repeat after a lost answer runs the command again. Neither records
 | A custom field the work item names is one the account has none of, whatever its case (`contact.field_not_found`). Nothing is changed. | `field_not_found` | validation | Name each custom field as the account names it. |
 | Reply did not accept a value the work item gives a field (`reply.invalid_request`; Reply's names for the fields are in the trace), or the work item names one custom field twice, whatever its case. Nothing is changed. | `invalid_field_value` | validation | Correct the value, or name the field once, and propose the update again. |
 | Reply answered that it holds no contact under an identifier it had just named — one the lookup found, or one the command's own import made or matched (`contact.not_found`). Nothing is changed, and nothing is pinned. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the update again. |
-| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.14.0 or newer. |
+| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.22.0 or newer. |
 | Reply says the account's plan or role may not change a contact (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes it. |
 
 The person is found before anything is written: by the pin, or by the exact lookup of the address. Then one command
@@ -671,7 +770,7 @@ may end at `24:00`, the end of the day, and never start there. The read pins not
 | More than one contact is held under the profile (`contact.not_unique`). | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the invitation again. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name the channel they have a profile on. |
 | Reply will not accept the LinkedIn URL the person would be created from (`contact.invalid_linkedin_url`). Nothing is sent. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
-| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.14.0 or newer. |
+| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.22.0 or newer. |
 | Reply holds nobody for the person and the account will hold no further contact (`account.contact_limit_reached`). Nothing is sent. | `limit_reached` | permanent | Free capacity at Reply, then propose the invitation again. |
 | The person has no pin, no first name and no last name, Reply holds nobody under the value, and it has no text before an `@`. Nothing is sent. | `provider_call_failed` | permanent | "A first name could not be derived." Give the person a first name in Jason and propose the invitation again: Reply creates nobody without one. |
 | The person has no pin and no first name, Reply holds nobody under the value, and the route's binding says `derive_first_name: false`. Nothing is sent. | `provider_call_failed` | permanent | "The route forbids deriving a first name." Give the person a first name in Jason, or allow the derivation in the route's binding, and propose the invitation again. |
@@ -680,32 +779,89 @@ may end at `24:00`, the end of the day, and never start there. The read pins not
 | Reply did not say whether the profile was written onto a contact that held none. Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which reads the contact again first. |
 | Reply answered that it holds no contact under an identifier it had just named — one the lookup found, one the command's own import made, or one it named as already held (`contact.not_found`). Nothing is sent, and nothing is pinned. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the invitation again. |
 | The command answered that Reply already held the person (`contact.already_held`) without saying which contact. Nothing is sent. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the invitation again. |
+| The arguments name a moment in `send_after` still ahead, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not keep a direct send for a later moment. Nothing is sent. | `capability_not_offered` | permanent | The message names the operation and `send_after`. The invitation goes at that moment or not at all: propose it without a moment, or wait for a Reply that keeps one. |
+| The arguments name a moment in `send_after` that this package cannot read. The claim refuses every form but the one the document names, so this is a moment given past the claim or one that form admits and the runtime does not read. It is never read as a moment already past. Nothing is read or sent. | `provider_call_failed` | permanent | The message names `send_after` and never quotes the moment. The invitation goes at the moment a person approved or not at all: write the moment again in the document's form. |
+| A repeat after an attempt that may have sent, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply keeps no key on a direct send, so the repeat could send the person a second invitation. Nothing is sent. | `send_not_settled` | permanent | Whether the first attempt's invitation went is a person's to find out at Reply; propose it again only if it did not. |
+| A repeat 23 hours or more after the earliest attempt that may have sent was claimed (`context.unsettled_since`): Reply keeps a direct send's key for a day, so the key may no longer settle the repeat. Where the runtime names the send such an attempt returned (`context.unsettled_reference`), Reply's record of it was read first and said nothing of it. Nothing is sent. | `send_not_settled` | permanent | Whether the first attempt's invitation went is a person's to find out at Reply; propose it again only if it did not. |
+| A repeat told the send an earlier attempt returned (`context.unsettled_reference`), and `reply direct-send get` of it answered `direct_send.not_owned`: Reply holds that send for an account this one is not, so the key settles nothing from here. Inside the window and past it; nothing is sent. | `send_not_settled` | permanent | Whether the first attempt's invitation went is a person's to find out at Reply; propose it again only if it did not. |
+| Reply is still finishing the send an earlier attempt of this work item made under the same key (`idempotency_key.in_use`). Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which Reply answers with the send the first one made, or lets through where that one failed. |
+| Reply answered the invitation with its own `directLinkedIn.unknown` at status 400, in any shape — naming the invitation by its reference or not, in the state `failed` or another — reply-cli from 0.17.1 answers it as `outcome.unknown`, 0.17.0 as `reply.refused`. Reply keeps no key for a send it answered with a failure, so a repeat would be a new send, and none is made. | `provider_call_failed` | permanent | Reply's own sentence is quoted in the message. Whether the invitation went is a person's to find out at Reply, and whether to propose it again a person's to decide. |
+| Reply answered the invitation with a failure at a status of 400 to 499, other than a 409 or a 429, that reply-cli passes on as a lost answer (`outcome.unknown`). Reply keeps no key for a send it answered so, so a repeat would be a new send, and none is made. | `provider_call_failed` | permanent | Reply's own sentence is quoted in the message. Whether the invitation went is a person's to find out at Reply, and whether to propose it again a person's to decide. |
+| Reply took the invitation and says it did not go: the send's answer, what Reply holds under the key for another request (`idempotency_key.reused`), or Reply's record of the send an earlier attempt returned (`context.unsettled_reference`) gives its state as `failed`. | `provider_call_failed` | permanent | Reply's reason, where it gave one, is quoted in the message. Whether to propose the invitation again is a person's to decide. |
+| The invitation was cancelled at Reply before it went: the send's answer, what Reply holds under the key for another request, or Reply's record of the send an earlier attempt returned gives its state as `cancelled`. | `provider_call_failed` | permanent | Whether to propose the invitation again is a person's to decide. |
 | The account's plan or role does not include LinkedIn sends outside a sequence (`linkedin.feature_disabled`), or its LinkedIn accounts (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes them. |
 
 Before the invitation, in this order and each refusing with nothing sent: the note is held to what Reply would send as
 written; the sender is read from `reply account list --channel linkedin` and held to the address the person approving
-read; the person is found by the pin or by `reply contact find`; and the contact Reply holds is read with `reply contact
+read; where the arguments name a moment in `send_after` still ahead, and on a repeat after an attempt that may have sent, `reply direct-send get` is
+read to see that the account's Reply keeps direct sends; the person is found by the pin or by `reply contact find`; and the contact Reply holds is read with `reply contact
 get` — opted out is a stop, another profile a refusal, no profile filled with the work item's. Then `reply contact
 linkedin-connect`, the note on stdin or no `--message` at all for an invitation without one. A person Reply holds nobody
 for is named to it by `--contact -` instead, imported by the profile, and the note beside them in one object on stdin;
 the command invites only a contact it made, and one Reply already held it names as `contact.already_held`, inviting
-nobody, which the package then reads as above and invites by its identifier. A person
-who is already a connection answers `already_connected`. An invitation whose answer was lost is never sent again:
-the item stops for a person, with the contact pinned.
+nobody, which the package then reads as above and invites by its identifier. The command that invites carries the
+work item's key as `--idempotency-key`, the import by `--contact -` included, since Reply keeps the key only where it
+took the send; and a moment still ahead as `--send-after`, as written. The key travels only on the send command, and at
+most one send command per attempt reaches Reply's send: a person Reply already held is named before it, and the send
+by their identifier that follows is the one. A moment already past goes as none, and nothing
+is read for it. A person who is already a connection answers `already_connected`, and nothing was taken. Otherwise the
+answer says what Reply said of the invitation. Its status is what happened, by Reply's state: `sent` for `sent`, and
+`accepted` for any other state Reply still holds it in — `queued`, `sending`, and a state Reply adds later alike. An
+answer with no state is `sent` where it names no send, as a Reply that sent the invitation inside the call answers, and
+`accepted` where it names one. Its fields are what reply-cli gave, under either status: `accepted_for` — the moment
+Reply holds it for, in UTC, never one Reply only estimates — its `reference`, and whether it is `cancelable`, which it
+is in every state but `sent` and `sending`, each only where reply-cli gave its source; an absent or null one reads as
+none. An answer that gives the invitation's state as `failed` or `cancelled` says what became of it, and is final:
+`provider_call_failed`, with Reply's reason where it gave one. An invitation whose answer was lost is repeated under the same key: Reply answers a send it already took with what it answered then, and a key it
+holds for another request (`idempotency_key.reused`) with what it holds under it — the work item's invitation, its
+status by the state Reply keeps for it, with the moment Reply says, and none where it says none.
+
+A repeat is one after an attempt that may have sent: the runtime gives the moment the earliest such attempt was
+claimed as `context.unsettled_since`, and no such key where every earlier attempt settled, which makes a later attempt
+a first send again that reads nothing before it. Reply keeps a direct send's key for a day, so this package repeats under
+it only within 23 hours of that moment; a repeat 23 hours or more after it is `send_not_settled`, with nothing sent.
+
+Where the runtime also names the send such an attempt returned, as `context.unsettled_reference`, that send is read
+first with `reply direct-send get` of its reference, before anything else and inside the window as past it, since a read
+never makes a send twice. Reply's record of it answers the work item as a key Reply holds for another request does: its
+status by the state, its fields only where Reply gave them, and a state that says it failed or was cancelled final.
+Nothing more is called and nothing is sent. A read Reply answers as another account's send (`direct_send.not_owned`)
+is not settled, `send_not_settled`, since the key settles nothing from this account, and nothing is sent. A read that
+finds nothing, gets no answer, or answers for another send or in a shape this package does not read says nothing of
+the send, and the window decides as it does without a reference.
+
+Wherever Reply names a send on an answer that is not a result — a refusal of a send it took, a lost answer — the
+reference it names is kept on the attempt as the work item's `send`, whatever the ending's class, so the send can be read
+back by it. A send Reply answered with a failure is never repeated: Reply releases the key of a send it answered with a
+failure and keeps it only for a send it completed, so a repeat under the key would be a new send. An answer of Reply's
+at a status of 400 to 499 about the send it took or refused is final, since Reply's guard released the key: its own
+`directLinkedIn.unknown` in every shape and a 400 with no code of its own among them, whichever way reply-cli passes it
+on. Two answers in that range are not about such a send, and both are repeated safely, whichever way reply-cli passes
+them on. `idempotency_key.in_use` (409) is the one where the key is still held: it is the first request's claim, and
+Reply answers so until that request completes or releases the key. A 429 (`rate_limited`) is refused before the guard
+runs, so nothing was taken and no key was touched. The LinkedIn account's own refusals in that range, its 409s
+(`linkedin.account_inactive`, `linkedin.invalid_cookie`) and its spent allowance at 429 (`linkedin.limit_reached`), are
+about the sender: the work is held on the sender's block and repeated once it clears. Only an ending with no answer of
+Reply's about the send — a timeout, a lost connection, a CLI that died, an answer cut off or unreadable, or one at 500
+or above — is the lost answer, repeated under the key. A direct send that failed with Reply's own 500 was not recorded,
+since Reply records the effect as the send's last step, so the repeat under the key it released is the send that did
+not happen; and a 500 or above from in front of Reply, a gateway's 502, 503 or 504, leaves the key as the request left
+it: still held, answered `in_use`; completed, answered again; or never claimed.
 
 ### `message.send`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| A final text (`compose` absent or `text`) whose subject or text carries `{{`, which Reply reads as the start of a placeholder of its own, closed or not, or `@prompt[[`, which Reply reads as a prompt to a model; or Reply could not fill a placeholder it found in a LinkedIn text (`linkedin.missing_variables`). Nothing is sent. | `message_invalid` | validation | Write it without either and propose the message again. |
+| A final text (`compose` absent or `text`) whose subject or text carries `{{`, which Reply reads as the start of a placeholder of its own, closed or not, or `@prompt[[`, which Reply reads as a prompt to a model; or Reply could not fill a placeholder it found, in a LinkedIn text (`linkedin.missing_variables`) or in an email (`contact.missing_variables`, `contact.rendering_failed`), the names Reply lists in the details as `missing_variables`. Nothing is sent. | `message_invalid` | validation | Write it without either and propose the message again. |
 | An email written as final text whose subject or body holds a `<` Reply reads as markup, one an HTML reader takes as the start of a tag: one followed by an ASCII letter, `/`, `!` or `?`, such as `<name@example.com>` or `</p>`. Reply decodes the body before it reads it, and drops a tag it does not know with everything after it, in the body and in the subject alike; the subject goes as written, and a character reference in it is not read. `a < b`, `<3` and a `<` at the end are not refused. The message names the character's position without quoting the text. Nothing is called. | `message_invalid` | validation | Write it without a `<` right before a letter, `/`, `!` or `?`, an address without its angle brackets, and propose the message again. |
 | A template (`compose: template`) whose subject or body writes a construct the template standard refuses: the package reads it by the standard, behind the document, and the message names the construct and the character it starts on. Nothing is called. | `template_unsupported` | validation | Write the template as the standard does and propose the message again. |
 | A template that names a custom field under a key Reply keeps for a value of its own — a field of the contact's such as `Company`, an engagement count such as `Opens`, a date it computes such as `today`, one of its helpers, or a word its template engine reads; the list is `KEPT` in `modules/template.js`. Reply would write its own value instead of the field. Nothing is called. | `template_unsupported` | validation | Keep the field at Reply under another key, name that key in the template, and propose the message again. |
 | A template whose text and fallbacks, put together along one way through its conditions, spell `@prompt[[` once Reply fills it in, which Reply reads as a prompt to a model. Nothing is called. | `template_unsupported` | validation | Write the template so that its text and its fallbacks spell no prompt, and propose the message again. |
 | A template whose comparison compares a text holding a character Reply's comparison does not read: Reply reads letters, the marks that combine with them, digits, `_` and the other joining punctuation, white space and the punctuation `` $@"`~!#%^&*()+,-./:;<= `` there, and leaves any other tag to its template engine, which reads it otherwise. The message names the character's position without quoting the template. Nothing is called. | `template_unsupported` | validation | Write the text the comparison compares without that character, or send the message as final text, and propose it again. |
-| A template (`compose: template`) whose subject or body holds a `<` Reply reads as markup, one an HTML reader takes as the start of a tag, in its text, a fallback's or a comparison's: one followed by an ASCII letter, `/`, `!` or `?`, or one right before a value Reply fills in, which may start with a letter. Reply drops a tag it does not know with everything after it, as in a final text. A template's text, a fallback's text and the text a comparison compares are held alike, the last because whether Reply sanitizes before or after it fills a template in has not been seen; `a < b`, `<3` and a `<` at the end are not refused. The message names the character's position without quoting the template. Nothing is called. | `template_unsupported` | validation | Write the template without a `<` right before a letter, `/`, `!`, `?` or a value, an address without its angle brackets, and propose the message again. |
-| A template in a LinkedIn format: only an email may be one. The document refuses it first; the package refuses it too. Nothing is called. | `template_unsupported` | validation | Write the LinkedIn message as final text and propose it again. |
-| Reply could not fill in the template for this person, a name with no value and no fallback among the causes: reply-cli's `reply.refused` with Reply's code `contact.unknown` and a sentence that starts `RenderingFail`. The message carries Reply's own sentence. Nothing is sent. | `template_unrendered` | validation | Give the person a value for each name the template uses, or a fallback beside it, and propose the message again. |
+| An email composed as a template (`compose: template`) whose subject or body holds a `<` Reply reads as markup, one an HTML reader takes as the start of a tag, in its text, a fallback's or a comparison's: one followed by an ASCII letter, `/`, `!` or `?`, or one right before a value Reply fills in, which may start with a letter. Reply drops a tag it does not know with everything after it, as in a final text. A template's text, a fallback's text and the text a comparison compares are held alike, the last because whether Reply sanitizes before or after it fills a template in has not been seen; `a < b`, `<3` and a `<` at the end are not refused. The message names the character's position without quoting the template. Nothing is called. | `template_unsupported` | validation | Write the template without a `<` right before a letter, `/`, `!`, `?` or a value, an address without its angle brackets, and propose the message again. |
+| A template on LinkedIn that names `sender.last_name`, or names `sender.address` with no fallback where the arguments hold no address: Reply has no variable for either on LinkedIn, and the package writes in its place only the address the arguments hold, so there is nothing to write. The message names the name and the character it starts on. Nothing is called. | `template_unsupported` | validation | Name the sender by `sender.first_name` or `sender.name`, give `sender.address` a fallback, or write the name out, and propose the message again. |
+| A template in a voice message: Reply speaks a voice message from a final script alone. The document refuses it first; the package refuses it too. Nothing is called. | `template_unsupported` | validation | Write the script as final text and propose it again. |
+| Reply could not fill in the template for this person, a name with no value and no fallback among the causes: reply-cli's `contact.missing_variables`, which lists the names Reply could not fill, or `contact.rendering_failed` on an email, `linkedin.missing_variables` on LinkedIn, or `reply.refused` with Reply's code `contact.unknown` and a sentence that starts `RenderingFail`. The message carries Reply's own sentence and the names it lists, and the details carry the names as `missing_variables`, the first twenty, each to 64 characters. Nothing is sent. | `template_unrendered` | validation | Give the person a value for each name the template uses, or a fallback beside it, and propose the message again. |
 | The message's format belongs to another channel than the one the call named: an email on LinkedIn, or a LinkedIn format on the email channel. The document refuses it first; the package refuses it too. Nothing is called. | `message_invalid` | validation | Name the format of the channel, or the channel of the format, and propose the message again. |
 | Reply found the text too long (`linkedin.message_too_long`), or a voice message too long to speak (`linkedin.voice_too_long`). Nothing is sent. | `message_too_long` | validation | Write a shorter text. A script within the document's 1000 characters can still be too long to speak. |
 | A LinkedIn message or voice message to a person the account is not connected with (`linkedin.not_connected`). Nothing is sent. | `not_connected` | permanent | Invite them with `social_invitation.send` and send once they accept, or send an InMail. |
@@ -719,7 +875,7 @@ the item stops for a person, with the contact pinned.
 | More than one contact is held under the address or the profile (`contact.not_unique`). | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the message again. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name the channel they have. |
 | Reply will not accept the address or the LinkedIn URL the person would be created from (`contact.invalid_email`, `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email). Nothing is sent. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
-| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.14.0 or newer. |
+| The work item arrived without the person's own fields at all — absent, not empty — which only a Jason older than 0.14.0 hands over. Nothing is called; the fields it lacks are named in the trace. | `invalid_channel_value` | validation | Update Jason to 0.22.0 or newer. |
 | Reply holds nobody for the person and the account will hold no further contact (`account.contact_limit_reached`). Nothing is sent. | `limit_reached` | permanent | Free capacity at Reply, then propose the message again. |
 | The person has no pin, no first name and no last name, Reply holds nobody under the value, and it has no text before an `@`. Nothing is sent. | `provider_call_failed` | permanent | "A first name could not be derived." Give the person a first name in Jason and propose the message again: Reply creates nobody without one. |
 | The person has no pin and no first name, Reply holds nobody under the value, and the route's binding says `derive_first_name: false`. Nothing is sent. | `provider_call_failed` | permanent | "The route forbids deriving a first name." Give the person a first name in Jason, or allow the derivation in the route's binding, and propose the message again. |
@@ -728,23 +884,100 @@ the item stops for a person, with the contact pinned.
 | Reply did not say whether the profile was written onto a contact that held none. Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which reads the contact again first. |
 | Reply answered that it holds no contact under an identifier it had just named — one the lookup found, one the command's own import made, or one it named as already held (`contact.not_found`). Nothing is sent, and nothing is pinned. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the message again. |
 | The command answered that Reply already held the person (`contact.already_held`) without saying which contact. Nothing is sent. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the message again. |
+| The arguments name a moment in `send_after` still ahead, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not keep a direct send for a later moment. Nothing is sent. | `capability_not_offered` | permanent | The message names the operation and `send_after`. The message goes at that moment or not at all: propose it without a moment, or wait for a Reply that keeps one. |
+| The provider's own object names a schedule in `provider.schedule_id`, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not time a direct send by a schedule. Nothing is sent. | `capability_not_offered` | permanent | The message names the operation and `provider.schedule_id`. The message goes by the schedule or not at all: propose it without one, or wait for a Reply that times one. |
+| The work item carries the provider's own object (`args.provider`) and it is not `{"schedule_id": "<id>"}`: it names another member beside it or instead, or none; or the schedule is not a string of a Reply id's digits, 1 to 2147483647, written without a sign, a space or a leading zero. Nothing is called. | `provider_input_invalid` | validation | The message is the shape the package reads, the same sentence whatever was given, and quotes none of it; the trace names where it went wrong. Write the object in that shape and propose the message again. |
+| A LinkedIn message whose provider object names a schedule. Reply refuses a schedule on every LinkedIn direct send in this version (scheduleId is not supported for LinkedIn sends in this version, a 400 on each LinkedIn route), so a schedule on a LinkedIn message is refused before any call. | `provider_input_invalid` | validation | Send it without the schedule, or by email. |
+| The schedule `provider.schedule_id` names is not one Reply holds for the account. The package does not read `reply schedule list` before the send, so Reply's own refusal of the send answers it, on the row its code names; one this version has no word for is the last row's. Nothing is sent. | `provider_call_failed` | permanent | Reply's code is in the trace. Name a schedule `schedule.list` returns and propose the message again. |
+| The arguments name a moment in `send_after` that this package cannot read. The claim refuses every form but the one the document names, so this is a moment given past the claim or one that form admits and the runtime does not read. It is never read as a moment already past. Nothing is read or sent. | `provider_call_failed` | permanent | The message names `send_after` and never quotes the moment. The message goes at the moment a person approved or not at all: write the moment again in the document's form. |
+| A repeat after an attempt that may have sent, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply keeps no key on a direct send, so the repeat could send the person a second message. Nothing is sent. | `send_not_settled` | permanent | Whether the first attempt's message went is a person's to find out at Reply; propose it again only if it did not. |
+| A repeat 23 hours or more after the earliest attempt that may have sent was claimed (`context.unsettled_since`): Reply keeps a direct send's key for a day, so the key may no longer settle the repeat. Where the runtime names the send such an attempt returned (`context.unsettled_reference`), Reply's record of it was read first and said nothing of it. Nothing is sent. | `send_not_settled` | permanent | Whether the first attempt's message went is a person's to find out at Reply; propose it again only if it did not. |
+| A repeat told the send an earlier attempt returned (`context.unsettled_reference`), and `reply direct-send get` of it answered `direct_send.not_owned`: Reply holds that send for an account this one is not, so the key settles nothing from here. Inside the window and past it; nothing is sent. | `send_not_settled` | permanent | Whether the first attempt's message went is a person's to find out at Reply; propose it again only if it did not. |
+| Reply is still finishing the send an earlier attempt of this work item made under the same key (`idempotency_key.in_use`). Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which Reply answers with the send the first one made, or lets through where that one failed. |
+| Reply answered the LinkedIn message with its own `directLinkedIn.unknown` at status 400, in any shape — naming the message by its reference or not, in the state `failed` or another — reply-cli from 0.17.1 answers it as `outcome.unknown`, 0.17.0 as `reply.refused`. Reply keeps no key for a send it answered with a failure, so a repeat would be a new send, and none is made. | `provider_call_failed` | permanent | Reply's own sentence is quoted in the message. Whether the message went is a person's to find out at Reply, and whether to propose it again a person's to decide. |
+| Reply answered the message with a failure at a status of 400 to 499, other than a 409 or a 429, that reply-cli passes on as a lost answer (`outcome.unknown`). Reply keeps no key for a send it answered so, so a repeat would be a new send, and none is made. | `provider_call_failed` | permanent | Reply's own sentence is quoted in the message. Whether the message went is a person's to find out at Reply, and whether to propose it again a person's to decide. |
+| Reply took the message and says it did not go: the send's answer, what Reply holds under the key for another request (`idempotency_key.reused`), or Reply's record of the send an earlier attempt returned (`context.unsettled_reference`) gives its state as `failed`. | `provider_call_failed` | permanent | Reply's reason, where it gave one, is quoted in the message. Whether to propose the message again is a person's to decide. |
+| The message was cancelled at Reply before it went: the send's answer, what Reply holds under the key for another request, or Reply's record of the send an earlier attempt returned gives its state as `cancelled`. | `provider_call_failed` | permanent | Whether to propose the message again is a person's to decide. |
 | The account's plan or role does not include LinkedIn sends outside a sequence (`linkedin.feature_disabled`), or the accounts of the channel (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes them. |
 | Reply refused a field (`reply.invalid_request`) or the text (`reply.refused`, `contact.unknown` among them) in a way this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | Reply's code, and the fields it names, are in the attempt's trace; correct what it names and propose the message again. |
 
 The same path as the invitation's, in this order and each refusing with nothing sent: the subject and the text are held
 to what Reply would send as written; the sender is read from `reply account list --channel email` or `--channel
-linkedin` and held to the address the person approving read; the person is found by the pin or by `reply contact
-find`; and the contact Reply holds is read with `reply contact get` — opted out is a stop, another address or profile a
+linkedin` and held to the address the person approving read; where the arguments name a moment in `send_after` still
+ahead, and on a repeat after an attempt that may have sent, `reply direct-send get` is read as for the invitation; the person is found by the pin or by
+`reply contact find`; and the contact Reply holds is read with `reply contact get` — opted out is a stop, another address or profile a
 refusal, no LinkedIn profile filled with the work item's. Then the one command made for the format, the text on stdin —
 for a person Reply holds nobody for, given `--contact -`, which imports them, the person and the text one object
 `{"contact": …, "message": …}`: `reply contact send-email` with `{subject, body}`, the body the text written as HTML, or
 the template in Reply's syntax; `reply contact
-linkedin-message` with `{body}`; `reply contact linkedin-inmail` with `{subject, body}`; `reply contact linkedin-voice`
-with the text as `{script}`. Given `--contact -`, the command sends only to a contact it made, and one Reply already
+linkedin-message` with `{body}` and `reply contact linkedin-inmail` with `{subject, body}`, the text as written or the template
+in Reply's syntax; `reply contact linkedin-voice` with the text as `{script}`. Given `--contact -`, the command sends only to a contact it made, and one Reply already
 held it names as `contact.already_held`, sending nothing; the package then reads that contact as above and sends to it
-by its identifier. `status: sent` says Reply took the message; on a failure, Reply's own word for an email's
-state stays in the evidence. A message whose answer was lost is never sent again: the item stops for a person, with the contact
-pinned.
+by its identifier. The command that sends carries the work item's key and the moment as the invitation's does. The
+answer is read as the invitation's is: its status by Reply's state, and `accepted_for`, its `reference` and whether it
+is `cancelable`, each only where reply-cli gave it; a message held for its moment names no message yet. On a failure, Reply's own
+word for an email's state stays in the evidence. A message whose answer was lost is repeated under the same key, and
+Reply answers it as it answers the invitation's.
+
+**The provider's own object.** A work item may carry the provider's own object, `args.provider`, beside the
+arguments; on `message.send` this package reads one member of it, the Reply sending schedule an email is timed by, one
+of the ids `reply schedule list` names, written as a string of its digits:
+
+```json
+{ "schedule_id": "4021" }
+```
+
+The schedule goes on the send as `--schedule-id`, once `reply direct-send get` is read as it is for a moment ahead,
+and Reply holds the email for the schedule's next opening: the answer is `accepted` with `cancelable` true, and names
+no moment. Beside a moment still ahead in `send_after`, the send goes at the schedule's first opening at or after
+`send_after`; the answer is `accepted` with `cancelable` true, and `accepted_for` is absent, since Reply only estimates
+the moment. An object that names another member or none, and a schedule in another form, are refused before anything
+is called with `provider_input_invalid`, class `validation`, the trace naming where it went wrong, and the message
+the same sentence whatever was given:
+
+> `args.provider` is read on message.send as `{"schedule_id": "<id>"}` and nothing else, the id of a Reply sending schedule written as a string of its digits; the object given is not that shape.
+
+Reply refuses a schedule on every LinkedIn direct send in this version (scheduleId is not supported for LinkedIn sends
+in this version, a 400 on each LinkedIn route), so a schedule on a LinkedIn message is refused before any call. The
+package does not read `reply schedule list` before the send, so a schedule Reply does not hold for the account is
+Reply's to refuse, on the row its code names.
+
+### `message.status`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| Reply holds no send under the reference (`direct_send.not_found`), holds it for an account this one is not (`direct_send.not_owned`), or the CLI refused the reference without a call (`usage.reference`). Nothing is read. | `send_not_found` | permanent | Read the send from the account that made it; no later attempt will find it here. |
+| The answer passed `Plugins:Exec:OutputBytes` and was cut off. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`. |
+| The answer names another send, gives no state or a message identifier in another shape. | `provider_unavailable` | transient | Nothing; the runtime asks again. |
+| `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not keep a direct send to be read. Nothing is read. | `capability_not_offered` | permanent | The message names the operation. Read the send at Reply, or wait for a Reply that offers the read. |
+
+One read, `reply direct-send get` of the reference the runtime composed under `send.reference`; nothing the caller wrote
+is read for one. Reply's state is told in the document's five words: `sent`, `cancelled` and `failed` as they are, but
+for a failed send whose code is Reply's `directSend.dispatchInterrupted` — it may have gone out — which is `unknown`, and
+any other — `queued`, `sending`, `waitingForSchedule`, or one Reply adds later — `queued`, `cancelable` unless Reply is
+sending it now. The channel is the reference's own: `email` for an `email-` reference, `linkedin` for a `linkedin-` one;
+Reply's own channel field, which writes LinkedIn as `linkedIn`, is not read for it. Each moment is written in UTC, to
+the second, or to the millisecond where Reply names a fraction, and one that cannot be read is given as none: the state
+answers all the same. A message identifier past 998 characters, and a rendered subject or body too long to carry whole,
+are given as none rather than cut; Reply's reason for a failed send is cut to 512, and its code is given as Reply gave
+it, or as none past 128 characters. Every other failed send is `failed`: nothing went out, a missed window
+(`directSend.dispatchWindowMissed`) among them. Nothing is pinned.
+
+### `message.cancel`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| Reply holds no send under the reference (`direct_send.not_found`), holds it for an account this one is not (`direct_send.not_owned`), or the CLI refused the reference without a call (`usage.reference`). Nothing is cancelled. | `send_not_found` | permanent | Cancel the send from the account that made it. |
+| The send already went, or Reply is sending it now (`direct_send.already_sent`), or the cancel answered with it `sent` or `sending`. Nothing is changed; the failure's `state` is `sent`. | `send_not_pending` | permanent | Read what it became with `message.status`. |
+| The send already failed (`direct_send.already_failed`), or the cancel answered with it `failed`, a send `message.status` tells as `unknown` among them. Nothing is changed; the failure's `state` is `failed`. | `send_not_pending` | permanent | Read Reply's reason with `message.status`. |
+| The cancel answered about another send, or in a state that still holds it. | `provider_answer_lost` | ambiguous | Nothing; the runtime repeats the cancel, which the document says is safe. |
+| `reply direct-send cancel` answered that Reply's API has no route for it: the account's Reply does not keep a direct send to be cancelled. Nothing is changed. | `capability_not_offered` | permanent | The message names the operation. Cancel the send at Reply, or wait for a Reply that offers the cancel. |
+
+One write, `reply direct-send cancel` of the reference the runtime composed under `send.reference`, with no key: a send
+cancelled before answers as one cancelled now, so a cancel whose answer was lost is repeated, and the repeat changes
+nothing at Reply. The answer is the send cancelled, with Reply's moment for it, or none where Reply
+gives none or one that cannot be read. A send that went or failed is never
+reported as cancelled, whatever the exit.
 
 ## What it cannot do
 
@@ -818,7 +1051,7 @@ pinned.
 - **`immediately` and `next_open_window` are the same request.** Reply always sends inside the sequence's
   own schedule and publishes no way to bypass a sending window, so both first touches ask the CLI to ignore the
   first step's own delay. `authored_delay` is the one that differs: it leaves the step's own delay alone.
-- **Reply has no idempotency key.** A repeat after a lost answer runs the command again, and the command's own
+- **Reply has no idempotency key outside the direct sends.** A repeat after a lost answer runs the command again, and the command's own
   reading — the person's part in the sequence before an enrolment, the sequence's state and count before a start — is
   the nearest answer the provider can give. It cannot tell this work item's own earlier write from somebody else's
   addition of the same person an hour ago.
@@ -886,9 +1119,10 @@ pinned.
   kind from Reply is `message_invalid` too. An invitation's note, and a message's subject and text on every format, are
   held the same way, `{{ name }}` and a `{{` that never closes alike, and so is `@prompt[[`, which Reply reads as a
   prompt to a model and replaces with the model's answer; other template syntax is not refused. On an email
-  Reply's own refusal of one comes under a code that says nothing of it, so one that got past this check would be
-  reported as `provider_call_failed`, Reply's code in the trace. A message composed as a template is Reply's to fill
-  in, and is not held to this.
+  reply-cli answers one as `contact.missing_variables` or `contact.rendering_failed`, which are `message_invalid` too;
+  an answer under `contact.unknown`, as a reply-cli older than 0.17.2 gave it, says nothing of it, so one that got past
+  this check there would be reported as `provider_call_failed`, Reply's code in the trace. A message composed as a
+  template is Reply's to fill in, and is not held to this.
 - **An email composed as a template goes in Reply's syntax.** Each construct and each name of the [template
   standard](../../docs/contracts/README.md#the-template-standard) is written as Reply writes it — `contact.first_name`
   as `FirstName`, a custom field by its key alone, `sender.*` as the sending mailbox's `SendingEmail.*` — and goes by
@@ -897,6 +1131,18 @@ pinned.
   `&lt;`, a `&` as `&amp;` and a `'` as `&#39;`, a line break as `<br>`. Reply decodes the whole message before it reads
   it, so a comparison compares the value with the text as the template wrote it, which the text sent as written would
   not be once an entity in it was decoded. The subject goes as written.
+- **A LinkedIn message or InMail composed as a template goes in Reply's syntax as written.** Each construct and each
+  name is written as on an email, but `sender.first_name` and `sender.name` as the LinkedIn account's
+  `SendingLinkedIn.SenderFirstName` and `SendingLinkedIn.SenderName`. Reply has no variable on LinkedIn for the sending
+  account's last name or address. The arguments hold the address, the account's profile, so where a template names
+  `sender.address` the package writes the profile they hold in its place, as the example a person approves shows it:
+  its fallback where they hold none, and a condition on it as the branch the profile takes, compared as the example
+  compares. With no profile and no fallback it is refused `template_unsupported` before anything is called, and so is a
+  template naming `sender.last_name`, which neither Reply nor the arguments hold. The package writes the template's text as written around the tags and
+  inside them, as a final LinkedIn text does, by the command a final message takes. After filling a LinkedIn text in,
+  Reply converts it from HTML to text, so markup written in it does not reach the person as written,
+  and what it makes of a `<` that starts a tag has not been seen; the package does not refuse one on LinkedIn. A voice
+  message is spoken from a final script, and is never a template.
 - **A `<` that starts a tag is refused in a direct email, `message.send`.** Reply decodes the body before it reads it,
   and drops an unknown tag with everything after it, in the body and in the subject alike, in a final text as in a
   template: a direct email whose body held `<name@example.com>` in the middle of a line arrived cut right before it, its
@@ -905,12 +1151,14 @@ pinned.
   letter, `/`, `!` or `?`, as `message_invalid` in a final text and as `template_unsupported` in a template, and names
   the character without quoting the text. The refusals come in one order: a final text is read for a placeholder or a
   prompt, then its subject for a tag's start, then its body; a template is read part by part, its subject first, each
-  for a construct the standard refuses, then a key Reply keeps, then a comparison Reply cannot read, then a prompt, then
-  a tag's start. The subject goes as written, and a character reference in it is not read. In a template its text, a
+  for a construct the standard refuses, then, on LinkedIn, the sending account's address named with neither a value
+  nor a fallback, then a name Reply holds no field for on the channel, then a key Reply keeps,
+  then a comparison Reply cannot read, then a prompt, then, on an email, a tag's start. The subject goes as written, and a character reference in it is not read. In a template its text, a
   fallback and the text a comparison compares are held alike, and so is a `<` right before a value, which the package
   does not see and which may start with a letter. A comparison's text is held because whether Reply sanitizes a template
-  before or after it fills it in has not been seen. Write an address without its angle brackets. A LinkedIn text is not
-  HTML and goes as written, and an invitation's note too. A reply on a thread, `conversation.reply`, is not held to this
+  before or after it fills it in has not been seen. Write an address without its angle brackets. On LinkedIn the package
+  writes a text as written, and Reply converts it from HTML to text after filling it in; an invitation's note goes as
+  written. A reply on a thread, `conversation.reply`, is not held to this
   yet, and its text goes as written.
 - **What counts as no value, and how two values compare, is Reply's.** As Reply's rendering reads a template, a fallback
   is written in place of a value that is null, empty, or exactly `false` or `0`; an `#if` takes its other branch on
@@ -924,16 +1172,26 @@ pinned.
   `@prompt[[` once Reply fills it in; a value is not in hand, so a template whose value completes one is not refused,
   and a value between the parts breaks the spelling the package reads.
 - **A template Reply could not fill in is never ambiguous.** This is the package's own reading of Reply's direct send,
-  which fills a template in before it sends anything: a refusal to fill it in says nothing went, so it is
-  `template_unrendered`, final. Reply answers it under `contact.unknown`, the code it gives a mailbox that failed too,
-  and the package tells the two apart by Reply's sentence, which the message carries. As Reply's rendering answers it,
-  that sentence starts `RenderingFail`; were Reply to word it otherwise, the refusal would be reported as
+  which fills in a template it sends within the call before it sends anything: a refusal to fill it in says nothing went, so it is
+  `template_unrendered`, final. reply-cli names it by a code of its own — `contact.missing_variables`, with the names
+  Reply could not fill, or `contact.rendering_failed` on an email, and `linkedin.missing_variables` on LinkedIn — and
+  the package reads those codes as a template's only when the message is one: for a final text they are
+  `message_invalid`. Where Reply answers it under `contact.unknown`, the code it gives a mailbox that failed too, the
+  package tells the two apart by Reply's sentence, which the message carries. As Reply's rendering answers it, that
+  sentence starts `RenderingFail`; were Reply to word it otherwise, the refusal would be reported as
   `provider_call_failed`, final, and the send would not be made twice.
-- **Reply does not refuse a send outside a sequence to a person it holds as opted out, nor consult its blacklist on a
-  LinkedIn send.** Jason's own register is checked at the claim for the address or the profile the send consumes, and
-  the package reads Reply's opt-out mark on the contact before every invitation and every message. Reply consults its
-  blacklist on an email alone, and its refusal there is `suppressed`. A blacklist rule at Reply that sets no
-  opt-out mark on the contact is not seen: record the stop with `jason suppression add` as well.
+- **A template Reply does not send within the call is filled in when it goes.** A send held for a later moment, or one
+  that goes now which Reply queues behind the account's other sends and answers as accepted, is taken as written and
+  filled in at the moment Reply sends it, so a name it cannot fill then is not refused when the send is made: the send fails at Reply, and
+  `message.status` reads it as `failed`.
+- **Reply does not refuse a send outside a sequence to a person it holds as opted out, nor consult its blacklist when
+  it takes a LinkedIn send.** Jason's own register is checked at the claim for the address or the profile the send
+  consumes, and the package reads Reply's opt-out mark on the contact before every invitation and every message.
+  Reply consults its blacklist on an email when it takes it, and its refusal there is `suppressed`. On LinkedIn it
+  consults it when it makes the send: a send to a person its blacklist holds is accepted, and fails when Reply makes
+  it, which `message.status` reads as `failed` with Reply's reason. A blacklist rule at Reply that sets no opt-out mark
+  on the contact is not seen before the send: record the stop with `jason suppression add` as well, so the send is
+  refused at the claim.
 - **Reply refuses notes over 200 characters.** The document holds a note to that, so a longer one is refused when the
   work item is written, before anybody is asked.
 - **No moment is recorded for an invitation or a message.** Reply answers a LinkedIn send with a moment of its own, and

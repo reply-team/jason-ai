@@ -5,20 +5,23 @@ namespace Jason.Contracts.Operations;
 
 /// <summary>
 /// The one example a person approving a template reads: the template rendered by the standard over the composed input.
-/// A name is read where the table of names says the input holds it; one it does not hold — a custom field, the sending
-/// account's names — is the provider's alone to fill, so it renders its fallback, or itself in brackets, and is listed.
+/// A name is read where the table of names says the input holds it on the message's channel; one it does not hold there
+/// — a custom field, the sending account's names, on LinkedIn the person's email address — is the provider's alone to
+/// fill, so it renders its fallback, or itself in brackets, and is listed.
 /// A name the input holds with no value and no fallback renders the same way and is listed, since the provider will
 /// not send the message. The rendering writes text and escapes nothing; a provider's own may differ.
 /// </summary>
 internal static class TemplateExample
 {
     private const string Compose = "/args/message/compose";
+    private const string Channel = "/args/channel";
     private const string Subject = "/args/message/subject";
     private const string Body = "/args/message/body";
 
-    private static readonly Dictionary<string, PreviewPointer> Pointers = TemplateGrammar.Names
-        .Where(row => row.Pointer is not null)
-        .ToDictionary(row => row.Name, row => PreviewPointer.Parse(row.Pointer!), StringComparer.Ordinal);
+    private static readonly Dictionary<(string Channel, string Name), PreviewPointer> Pointers = TemplateGrammar.Channels
+        .SelectMany(channel => TemplateGrammar.Names.Select(row => (Channel: channel, row.Name, Pointer: row.On(channel))))
+        .Where(held => held.Pointer is not null)
+        .ToDictionary(held => (held.Channel, held.Name), held => PreviewPointer.Parse(held.Pointer!));
 
     /// <summary>The example of the message <paramref name="input"/> writes as a template, or null when it writes none.</summary>
     internal static JsonObject? Of(JsonNode? input)
@@ -104,9 +107,9 @@ internal static class TemplateExample
         }
     }
 
-    /// <summary>Whether the input holds <paramref name="name"/>, and its value there as text when it is text.</summary>
+    /// <summary>Whether the input holds <paramref name="name"/> on the message's channel, and its value there as text when it is text.</summary>
     private static (bool Held, string? Value) Read(string name, JsonNode? input) =>
-        Pointers.TryGetValue(name, out var pointer)
+        Pointers.TryGetValue((Text(input, Channel) ?? string.Empty, name), out var pointer)
             ? (true, pointer.Resolve(input) is JsonValue value && value.TryGetValue<string>(out var text) ? text : null)
             : (false, null);
 
