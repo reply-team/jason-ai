@@ -56,6 +56,40 @@ public class CampaignEndpointTests
         Assert.Equal("required", detail.Code);
     }
 
+    /// <summary>
+    /// A name is printed to people wherever the campaign is listed, so a control character inside one (an escape sequence,
+    /// a backspace, a line break, a C1 control) is refused at the door, on create and on rename alike, and the refusal does
+    /// not echo it.
+    /// </summary>
+    [Theory]
+    [InlineData("Autumn\u001b[31m outreach")]
+    [InlineData("Autumn\boutreach")]
+    [InlineData("Autumn\noutreach")]
+    [InlineData("Autumn\u0085outreach")]
+    [InlineData("Autumn\u007foutreach")]
+    public async Task A_name_holding_a_control_character_is_refused_on_create_and_on_update(string name)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var created = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "LatAm" }, Ct);
+
+        var refusals = new[]
+        {
+            await api.PostErrorAsync(Operations.CampaignCreate, new { Name = name }, HttpStatusCode.BadRequest, Ct),
+            await api.PostErrorAsync(Operations.CampaignUpdate, new { CampaignId = created.Id, Name = name }, HttpStatusCode.BadRequest, Ct),
+        };
+
+        foreach (var error in refusals)
+        {
+            Assert.Equal("validation_failed", error.Code);
+            var detail = Assert.Single(error.Details!);
+            Assert.Equal("name", detail.Field);
+            Assert.Equal("invalid", detail.Code);
+            Assert.DoesNotContain(name, detail.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Equal("LatAm", (await api.PostOkAsync<CampaignDto>(Operations.CampaignGet, new { CampaignId = created.Id }, Ct)).Name);
+    }
+
     [Fact]
     public async Task A_caller_cannot_claim_to_be_the_runtime_itself()
     {

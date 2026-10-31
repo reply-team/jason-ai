@@ -9,7 +9,7 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// The troubleshooting skill's text changed to teach jason logs and jason doctor, so it is a draft until a host
     /// reads it, and the catalog claims no reading of it; it still says which work a paused campaign lets through:
-    /// the field a contract declares, and the two operations that declare it today.
+    /// the field a contract declares, and the operations that declare it today, every one the catalogue runs there.
     /// </summary>
     [Fact]
     public void The_troubleshooting_skill_is_a_draft_until_a_host_reads_it_and_names_what_runs_in_a_paused_campaign()
@@ -18,9 +18,12 @@ public partial class InteractiveSkillTests
         Assert.Equal("draft", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
         Assert.DoesNotContain("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
         Assert.Contains(
-            "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record` and `campaign.pause`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
+            "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`, `campaign.pause` and `message.cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
             Flattened("troubleshooting-jason"),
             StringComparison.Ordinal);
+        Assert.Equal(
+            ["campaign.pause", "message.cancel", "optout.record"],
+            Jason.Contracts.Operations.OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -408,7 +411,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("its `last_error` is `provider_blocked`", skill, StringComparison.Ordinal);
         Assert.Contains("`jason block list` shows every open block, how many items each holds and its link", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "they fix the cause at the provider, through the link, and the block's trial then lets one item through; once the provider takes it, the block clears and releases everything it held.",
+            "they fix the cause at the provider, through the link, and the block's trial then lets one item through: acts first; where none can run, one held control, whose answer decides nothing but `blocked`. Once the provider takes an act, the block clears and releases everything it held.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("jason workitem list --block blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human", skill, StringComparison.Ordinal);

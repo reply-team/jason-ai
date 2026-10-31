@@ -80,6 +80,87 @@ public class ReplyMessageStatusTests
     }
 
     /// <summary>
+    /// A deferred LinkedIn send, read by the <c>linkedin-scheduled-</c> reference it keeps for its whole life, as Reply reads
+    /// it once it has handed it to the account's queue, and once it failed: <c>sending</c> still holds the send and no cancel can stop it; a send whose window passed before it could go
+    /// (<c>directLinkedIn.missedWindow</c>), and one whose account's allowance stayed spent until its window passed — a
+    /// block code as the send's fate, not a refusal when Reply took it — is <c>failed</c>, nothing having gone, with Reply's
+    /// code carried as given and never <c>unknown</c>. So is every other <c>directLinkedIn.</c> code Reply gives a send's
+    /// fate once it times deferred LinkedIn sends itself, <c>directLinkedIn.unknown</c> among them, and one this version
+    /// has never seen, <c>directLinkedIn.contactNotFound</c>; and a failure after Reply handed the send on, which carries
+    /// no code at all and is never a malformed answer. The stand-in prints each record as reply-cli 0.18.0 does (reply-cli's
+    /// <c>src/operations/direct-sends.ts</c>:54): the state as Reply gives it, and <c>failure_code</c> beside it.
+    /// </summary>
+    [Theory]
+    [InlineData("sending", null, "queued")]
+    [InlineData("failed", "directLinkedIn.missedWindow", "failed")]
+    [InlineData("failed", "directLinkedIn.weeklyLimitReached", "failed")]
+    [InlineData("failed", "directLinkedIn.dailyLimitReached", "failed")]
+    [InlineData("failed", null, "failed")]
+    [InlineData("failed", "directLinkedIn.featureDisabled", "failed")]
+    [InlineData("failed", "directLinkedIn.unknown", "failed")]
+    [InlineData("failed", "directLinkedIn.noLinkedInProfile", "failed")]
+    [InlineData("failed", "directLinkedIn.linkedInAccountNotFound", "failed")]
+    [InlineData("failed", "directLinkedIn.linkedInAccountInactive", "failed")]
+    [InlineData("failed", "directLinkedIn.invalidCookie", "failed")]
+    [InlineData("failed", "directLinkedIn.notConnected", "failed")]
+    [InlineData("failed", "directLinkedIn.scheduleNotFound", "failed")]
+    [InlineData("failed", "directLinkedIn.contactTimeZoneMissing", "failed")]
+    [InlineData("failed", "directLinkedIn.contactNotFound", "failed")]
+    public async Task A_linkedin_send_reply_is_sending_or_that_failed_at_its_window_is_told_as_reply_holds_it(string held, string? code, string state)
+    {
+        using var account = new ReplyAccount().WithDirectSend("linkedin-scheduled-1001", held, sendAfter: "2099-11-03T14:00:00Z", failureCode: code);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input("linkedin-scheduled-1001"), Ct));
+
+        Assert.Equal(
+            (state, "linkedin", false, null, null, code),
+            ((string?)read["state"], (string?)read["channel"], (bool)read["cancelable"]!, (string?)read["sent_at"], (string?)read["message_id"], (string?)read["failure_code"]));
+    }
+
+    /// <summary>
+    /// A LinkedIn send Reply holds until its schedule's next opening, once Reply times deferred LinkedIn sends itself, is
+    /// <c>waitingForSchedule</c> with no moment of its own, under its <c>linkedin-scheduled-</c> reference: <c>queued</c>,
+    /// still cancelable, and naming no moment.
+    /// </summary>
+    [Fact]
+    public async Task A_linkedin_send_waiting_for_its_schedule_is_queued_and_still_cancelable()
+    {
+        using var account = new ReplyAccount().WithDirectSend("linkedin-scheduled-1001", "waitingForSchedule");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input("linkedin-scheduled-1001"), Ct));
+
+        Assert.Equal(
+            ("queued", "linkedin", true, null),
+            ((string?)read["state"], (string?)read["channel"], (bool)read["cancelable"]!, (string?)read["accepted_for"]));
+    }
+
+    /// <summary>
+    /// A send waiting for its schedule is read by reply-cli 0.18.0 with the moment Reply expects to send it,
+    /// <c>estimated_send_at</c>. An estimate is not a moment Reply holds the send for, so the send is <c>queued</c>, still
+    /// cancelable, and names no moment, an email and a LinkedIn send alike.
+    /// </summary>
+    [Theory]
+    [InlineData("email-1001", "email")]
+    [InlineData("linkedin-scheduled-1001", "linkedin")]
+    public async Task A_send_waiting_for_its_schedule_names_no_moment_from_reply_s_estimate(string reference, string channel)
+    {
+        using var account = new ReplyAccount().WithDirectSend(reference, "waitingForSchedule", estimatedSendAt: "2099-11-04T14:00:00Z");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(reference), Ct));
+
+        Assert.Equal(
+            ("queued", channel, true, null),
+            ((string?)read["state"], (string?)read["channel"], (bool)read["cancelable"]!, (string?)read["accepted_for"]));
+        Assert.DoesNotContain("2099-11-04", read.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The channel is the reference's own word: <c>email</c> for an <c>email-</c> reference, <c>linkedin</c> for a
     /// <c>linkedin-</c> one. Reply writes a LinkedIn send's channel in its own enum, <c>linkedIn</c>, and reply-cli passes it
     /// on as given.
@@ -163,6 +244,27 @@ public class ReplyMessageStatusTests
 
         Assert.Equal((code, FailureClass.Permanent), (error.Code, error.Class));
         Assert.Equal([$"direct-send get {reference}"], account.Calls.Select(call => call.Line));
+    }
+
+    /// <summary>
+    /// A LinkedIn send Reply holds for a moment ahead or for its schedule is called by its <c>linkedin-scheduled-</c>
+    /// reference for its whole life, which reply-cli takes from 0.18.0: the read reaches Reply and tells the send as Reply
+    /// holds it.
+    /// </summary>
+    [Fact]
+    public async Task A_deferred_linkedin_send_is_read_by_its_scheduled_reference()
+    {
+        const string scheduled = "linkedin-scheduled-4021";
+        using var account = new ReplyAccount().WithDirectSend(scheduled, "queued", sendAfter: "2099-11-03T14:00:00Z");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(scheduled), Ct));
+
+        Assert.Equal(
+            ("queued", "linkedin", true, "2099-11-03T14:00:00Z"),
+            ((string?)read["state"], (string?)read["channel"], (bool)read["cancelable"]!, (string?)read["accepted_for"]));
+        Assert.Equal([$"direct-send get {scheduled}"], account.Calls.Select(call => call.Line));
     }
 
     /// <summary>

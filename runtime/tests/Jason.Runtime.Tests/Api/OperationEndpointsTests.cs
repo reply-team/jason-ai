@@ -302,6 +302,63 @@ public class OperationEndpointsTests
         Assert.DoesNotContain(SentinelBody, error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Two keys of a free-form object that differ only in case are two keys. Matched loosely, the object refused the
+    /// second the first time it was read, inside the handler, and the exception that said so named the key in the log.
+    /// </summary>
+    [Fact]
+    public async Task Keys_that_differ_only_in_case_are_two_keys_and_nothing_reaches_the_log()
+    {
+        var logs = new RecordingLogs();
+        await using var api = await ProbeApi.StartAsync(request => new ProbeResponse("keys", request.Context!.AsObject().Count), Ct, logs);
+
+        var (status, body) = await api.PostAsync("{\"context\":{\"" + SentinelKey + "\":1,\"" + SentinelKey.ToLowerInvariant() + "\":2}}", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("{\"echo\":\"keys\",\"total_count\":2}", body);
+        Assert.Empty(logs.Lines);
+    }
+
+    /// <summary>
+    /// Exact matching is a request's alone. What the runtime reads that is not a request (an answer the CLI reads back,
+    /// an invocation the plugin host reads, a stored column) is read with the shared dialect, as it was; so a request has
+    /// an instance of its own, the dialect in every other respect.
+    /// </summary>
+    [Fact]
+    public void A_request_is_read_with_exact_members_and_everything_else_with_the_shared_dialect()
+    {
+        var request = OperationEndpoints.RequestDialect;
+
+        Assert.False(request.PropertyNameCaseInsensitive);
+        Assert.True(JasonJson.Options.PropertyNameCaseInsensitive);
+        Assert.NotSame(JasonJson.Options, request);
+        Assert.Same(JasonJson.Options.PropertyNamingPolicy, request.PropertyNamingPolicy);
+        Assert.Same(JasonJson.Options.DictionaryKeyPolicy, request.DictionaryKeyPolicy);
+        Assert.Equal(JasonJson.Options.DefaultIgnoreCondition, request.DefaultIgnoreCondition);
+        Assert.Equal(JasonJson.Options.Converters, request.Converters);
+    }
+
+    /// <summary>
+    /// The door reads every typed request with the request dialect. An operation that takes its body as a node reads
+    /// the node's members itself, so the code that does is held here too: report.submit is the one such operation, and
+    /// every value its submission turns into a type is read with the request dialect.
+    /// </summary>
+    [Fact]
+    public void A_body_an_operation_reads_itself_is_read_with_the_request_dialect()
+    {
+        var sources = Path.Combine(Documentation.Publication.RepositoryRoot(), "runtime", "src", "Jason.Runtime");
+        var nodeBound = Directory.EnumerateFiles(sources, "*.cs", SearchOption.AllDirectories)
+            .SelectMany(file => System.Text.RegularExpressions.Regex.Matches(
+                File.ReadAllText(file), @"MapOperation<\w+, (JsonObject|JsonNode|JsonElement|JsonDocument), \w+>\(\s*Operations\.(\w+)"))
+            .Select(match => match.Groups[2].Value);
+        Assert.Equal([nameof(Operations.ReportSubmit)], nodeBound);
+
+        var submission = File.ReadAllText(Path.Combine(sources, "Reports", "ReportSubmission.cs"));
+        var reads = System.Text.RegularExpressions.Regex.Matches(submission, @"\.Deserialize<[^>]+>\(([^)]*)\)").Select(match => match.Groups[1].Value).ToList();
+        Assert.NotEmpty(reads);
+        Assert.All(reads, options => Assert.Equal("OperationEndpoints.RequestDialect", options));
+    }
+
     [Fact]
     public async Task The_modules_are_wired_into_the_running_runtime()
     {

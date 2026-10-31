@@ -5,7 +5,8 @@ namespace Jason.Cli.Human;
 /// <summary>
 /// The fixed-width table behind every <c>--human</c> listing: columns left-aligned and two spaces apart, the
 /// header underlined, an absent cell shown as a dash. Machine-readable output is the JSON response, so this
-/// only has to be readable.
+/// only has to be readable. A cell is one line, and what a table lists is often somebody's text, so every cell is
+/// printed by <see cref="RenderText.Shown"/>.
 /// </summary>
 public sealed class HumanTable
 {
@@ -34,7 +35,7 @@ public sealed class HumanTable
             throw new ArgumentException($"The table has {_headers.Length} columns but this row has {cells.Length} cells.", nameof(cells));
         }
 
-        _rows.Add([.. cells.Select(cell => string.IsNullOrEmpty(cell) ? Absent : cell)]);
+        _rows.Add([.. cells.Select(cell => string.IsNullOrEmpty(cell) ? Absent : RenderText.Shown(cell)!)]);
         return this;
     }
 

@@ -118,6 +118,16 @@ public static class OperationEndpoints
     /// </summary>
     private static readonly JsonDocumentOptions Bodies = new() { AllowDuplicateProperties = false };
 
+    /// <summary>
+    /// The dialect, with a request's members matched by their exact spelling, at every depth. Matched loosely, a name
+    /// that differed from a member only in case was served as that member, and inside a free-form object it was the
+    /// same key as the one it resembled, so a context holding both failed wherever it was first read, in an exception
+    /// that named the key. A name spelled another way is a name the operation does not take, as any other is. The
+    /// shared dialect is left as it is: it also reads answers, plugin invocations and stored columns, which are not
+    /// requests.
+    /// </summary>
+    internal static JsonSerializerOptions RequestDialect { get; } = new(JasonJson.Options) { PropertyNameCaseInsensitive = false };
+
     internal static async Task<TRequest> ReadRequestAsync<TRequest>(HttpContext context)
         where TRequest : class
     {
@@ -129,7 +139,7 @@ public static class OperationEndpoints
         }
 
         using var document = JsonDocument.Parse(text, Bodies);
-        return document.Deserialize<TRequest>(JasonJson.Options) ?? throw new JsonException("The request body must be a JSON object.");
+        return document.Deserialize<TRequest>(RequestDialect) ?? throw new JsonException("The request body must be a JSON object.");
     }
 
     /// <summary>

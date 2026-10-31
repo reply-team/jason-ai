@@ -53,11 +53,11 @@ public static class PreferenceRenderers
 
         var paragraphs = page.Items.Select(preference => preference.Value is null
             ? preference.Key + ": not set"
-            : preference.Key + ": set " + RenderText.Moment(preference.UpdatedAt) + " by " + RenderText.Actor(preference.UpdatedBy)
+            : preference.Key + ": set " + RenderText.Moment(preference.UpdatedAt) + " by " + RenderText.Shown(RenderText.Actor(preference.UpdatedBy))
                 + Environment.NewLine + preference.Value.ToJsonString(Indented));
 
         return RenderText.WithCursor(string.Join(Environment.NewLine + Environment.NewLine, paragraphs), page.NextCursor);
     }
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

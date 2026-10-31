@@ -38,7 +38,7 @@ public static class SuppressionRenderers
             return null;
         }
 
-        return $"{removal.Channel} {removal.Value}: {(removal.Removed ? "removed" : "not suppressed")}";
+        return RenderText.Shown($"{removal.Channel} {removal.Value}: {(removal.Removed ? "removed" : "not suppressed")}");
     }
 
     /// <summary>A page of do-not-contact entries.</summary>
@@ -59,5 +59,5 @@ public static class SuppressionRenderers
         return RenderText.WithCursor(table.Render(), page.NextCursor);
     }
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

@@ -56,10 +56,15 @@ public static partial class DecisionRenderers
             return null;
         }
 
-        var lines = new List<string> { Line("Question:", decision.Question) };
+        // A question is often several lines: each stays a line of its own, its first beside the label and the rest under
+        // it, so a line of the question that reads like one of the view's own is never at a label's place.
+        var question = RenderText.ShownLines(decision.Question).ToList();
+        var lines = new List<string> { Line("Question:", question[0]) };
+        lines.AddRange(question.Skip(1).Select(line => line.Length == 0 ? line : new string(' ', Label) + line));
+        var asked = lines.Count;
         lines.AddRange(Options(decision.Options));
         lines.AddRange(References(decision.References));
-        if (lines.Count > 1)
+        if (lines.Count > asked)
         {
             lines.Add(string.Empty);
         }
@@ -160,7 +165,7 @@ public static partial class DecisionRenderers
         return text[..taken];
     }
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();

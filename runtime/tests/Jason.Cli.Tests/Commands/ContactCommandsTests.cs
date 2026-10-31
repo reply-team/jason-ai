@@ -240,6 +240,38 @@ public class ContactCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A person's name is refused a control character when it is written, but one written before that rule, or one that
+    /// reaches the runtime some other way, is still somebody's text: the view, its table of campaigns and the listing show
+    /// a character that changes how the line reads as U+FFFD, a mark that can be seen, and never write it.
+    /// </summary>
+    [Theory]
+    [InlineData("get")]
+    [InlineData("list")]
+    public async Task Human_mode_shows_a_character_that_changes_the_line_in_a_name_as_a_replacement_mark(string verb)
+    {
+        var contact = new ContactDto(
+            "cnt_A", "Ada\u001b]0;owned\u0007", "Love\blace‮", null, null, null, [], [], [], Moment, Moment, null,
+            [new ContactCampaignDto("cmp_A", "Lat\u001b[2JAm", MembershipState.Enrolled, Moment, Moment)]);
+        using var cli = new CliRun(verb == "get"
+            ? JsonSerializer.Serialize(contact, JasonJson.Options)
+            : JsonSerializer.Serialize(new Page<ContactDto>([contact], null), JasonJson.Options));
+
+        var exit = await cli.RunAsync(verb == "get" ? ["contact", "get", "cnt_A", "--human"] : ["contact", "list", "--human"]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        foreach (var character in new[] { '\u001b', '\u0007', '\b', '‮' })
+        {
+            Assert.DoesNotContain(character, cli.Text);
+        }
+
+        Assert.Contains("Ada�]0;owned� Love�lace�", cli.Text, StringComparison.Ordinal);
+        if (verb == "get")
+        {
+            Assert.Contains("Lat�[2JAm", cli.Text, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task Human_mode_renders_a_contact_listing()
     {

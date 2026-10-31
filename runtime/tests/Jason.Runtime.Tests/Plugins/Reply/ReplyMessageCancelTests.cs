@@ -71,6 +71,39 @@ public class ReplyMessageCancelTests
     }
 
     /// <summary>
+    /// A cancel of a send Reply is sending now is the refusal of a send that went: <c>send_not_pending</c>, permanent, the
+    /// state <c>sent</c>, and never a refusal this version has no word for. Once Reply times deferred LinkedIn sends itself
+    /// it refuses it at 409 with its own code <c>directSend.alreadySending</c>, which reply-cli names
+    /// <c>direct_send.already_sending</c> (reply-cli's <c>src/operations/direct-send.ts</c>:235, read for a cancel at
+    /// <c>src/operations/direct-sends.ts</c>:77), and it may do so while a read still tells the send <c>queued</c>: the
+    /// send left the queue between the two. A Reply before that answers the same send <c>direct_send.already_sent</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("sending", null)]
+    [InlineData("queued", "direct_send.already_sending")]
+    [InlineData("sending", "direct_send.already_sent")]
+    public async Task A_send_reply_is_sending_is_not_pending_whichever_code_reply_cli_names_it_by(string held, string? code)
+    {
+        using var account = new ReplyAccount().WithDirectSend(ReplyMessageStatusTests.Reference, held);
+        if (code is not null)
+        {
+            account.Refuses(
+                "direct-send cancel", code, status: 409,
+                replyCode: code == "direct_send.already_sent" ? "directSend.alreadySent" : "directSend.alreadySending");
+        }
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct));
+
+        Assert.Equal(("send_not_pending", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal("sent", (string?)error.Details!["state"]);
+        Assert.Contains("sending it now", error.Message, StringComparison.Ordinal);
+        Assert.Equal(held, (string?)account.DirectSends[0]!["state"]);
+    }
+
+    /// <summary>
     /// A cancel Reply answers with a state that says the send went or failed is that refusal too, whatever the exit: it is
     /// never reported as cancelled. One that answers about another send, or in a state that still holds it, is no answer,
     /// and the cancel is repeated, which the document says is safe.
@@ -132,6 +165,58 @@ public class ReplyMessageCancelTests
     }
 
     /// <summary>
+    /// Reply answers a cancel it could not confirm at 503 with its own code <c>directSend.cancelNotConfirmed</c>, with its
+    /// direct sends and before it times deferred LinkedIn sends itself: the send is still queued (or, once it does, waiting
+    /// for its schedule), and Reply asks for the cancel again. reply-cli names it
+    /// <c>direct_send.cancel_not_confirmed</c>, exit 1, with the wait Reply asked for as <c>retry_after</c> where it gave
+    /// one (reply-cli's <c>src/operations/direct-send.ts</c>:243 and its <c>known_refusal</c>, read for a cancel only at
+    /// <c>src/operations/direct-sends.ts</c>:77). The package reads it as <c>provider_unavailable</c>, transient, and the
+    /// repeat cancels the send.
+    /// </summary>
+    [Theory]
+    [InlineData("waitingForSchedule", 30)]
+    [InlineData("queued", null)]
+    public async Task A_cancel_reply_could_not_confirm_is_transient_and_the_repeat_cancels(string held, int? wait)
+    {
+        using var account = new ReplyAccount().WithDirectSend(ReplyMessageStatusTests.Reference, held);
+        account.Refuses(
+            "direct-send cancel", "direct_send.cancel_not_confirmed", status: 503, replyCode: "directSend.cancelNotConfirmed", retryAfter: wait);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct));
+        var repeat = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct, attempt: 2));
+
+        Assert.Equal(("provider_unavailable", FailureClass.Transient), (error.Code, error.Class));
+        Assert.True(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
+        Assert.Contains("still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule)", error.Message, StringComparison.Ordinal);
+        Assert.Equal(wait, (int?)error.Details!["retry_after"]);
+        Assert.Equal("cancelled", (string?)repeat["items"]![0]!["state"]);
+    }
+
+    /// <summary>
+    /// Any other answer at 500 or above to a cancel stays a lost answer: reply-cli passes it on as <c>outcome.unknown</c>,
+    /// exit 3 (reply-cli's <c>src/operations/direct-sends.ts</c>:77, then <c>refusal</c>), whatever Reply's code in it, and
+    /// the package ends it <c>provider_answer_lost</c>, ambiguous, repeated as the document says is safe.
+    /// </summary>
+    [Theory]
+    [InlineData(500, null)]
+    [InlineData(503, null)]
+    [InlineData(502, "directSend.dispatchInterrupted")]
+    public async Task Any_other_answer_at_500_or_above_to_a_cancel_is_a_lost_answer(int status, string? replyCode)
+    {
+        using var account = new ReplyAccount().WithDirectSend(ReplyMessageStatusTests.Reference, "queued");
+        account.Refuses("direct-send cancel", "outcome.unknown", exitCode: 3, status: status, replyCode: replyCode);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct));
+
+        Assert.Equal(("provider_answer_lost", FailureClass.Ambiguous), (error.Code, error.Class));
+        Assert.True(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
+    }
+
+    /// <summary>
     /// A send Reply does not hold for this account is <c>send_not_found</c>; a route Reply's API does not have is the
     /// capability not offered. Nothing is cancelled either way.
     /// </summary>
@@ -158,6 +243,25 @@ public class ReplyMessageCancelTests
 
         Assert.Equal((code, FailureClass.Permanent), (error.Code, error.Class));
         Assert.Equal([$"direct-send cancel {ReplyMessageStatusTests.Reference}"], account.Calls.Select(call => call.Line));
+    }
+
+    /// <summary>
+    /// A LinkedIn send Reply holds for a moment ahead or for its schedule is called by its <c>linkedin-scheduled-</c>
+    /// reference for its whole life, which reply-cli takes from 0.18.0: the cancel reaches Reply and the send is cancelled.
+    /// </summary>
+    [Fact]
+    public async Task A_deferred_linkedin_send_is_cancelled_by_its_scheduled_reference()
+    {
+        const string scheduled = "linkedin-scheduled-4021";
+        using var account = new ReplyAccount().WithDirectSend(scheduled, "queued", sendAfter: "2099-11-03T14:00:00Z");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var cancelled = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(scheduled), Ct));
+
+        Assert.Equal("cancelled", (string?)Assert.Single(cancelled["items"]!.AsArray())!["state"]);
+        Assert.Equal([$"direct-send cancel {scheduled}"], account.Calls.Select(call => call.Line));
+        Assert.Equal(["cancelled"], account.DirectSends.Select(send => (string?)send!["state"]));
     }
 
     /// <summary>

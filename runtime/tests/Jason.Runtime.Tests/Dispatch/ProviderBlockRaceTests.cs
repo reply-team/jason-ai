@@ -26,7 +26,7 @@ public class ProviderBlockRaceTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static OperationContract Pause => OperationCatalog.Find("campaign.pause")!;
+    private static OperationContract Activate => OperationCatalog.Find("campaign.activate")!;
 
     [Theory]
     [InlineData(true)]
@@ -64,7 +64,7 @@ public class ProviderBlockRaceTests
     }
 
     /// <summary>
-    /// Two held calls on one account that get past its block at the same moment. Each read the block open; the one that
+    /// Two held calls that reach people, on one account, that get past its block at the same moment. Each read the block open; the one that
     /// saves first clears it, and the other's clear finds it no longer open. One block, cleared by the first; each campaign
     /// that was told of it is told once that it cleared; both calls succeeded.
     /// </summary>
@@ -73,14 +73,14 @@ public class ProviderBlockRaceTests
     [InlineData(false)]
     public async Task Two_calls_that_get_past_one_block_together_clear_it_once_and_say_so_once(bool oneCampaign)
     {
-        var command = new FakeCommand(WorkItemKind.ProviderOp, _ => Task.FromResult<CommandOutcome>(new CommandOutcome.Provider(Paused(), null)));
+        var command = new FakeCommand(WorkItemKind.ProviderOp, _ => Task.FromResult<CommandOutcome>(new CommandOutcome.Provider(Live(), null)));
         using var harness = new DispatchHarness(Noon, commands: command);
         var (loser, winner) = await SeedTwoClaimedAsync(harness, oneCampaign);
         int block;
         await using (var db = harness.Open())
         {
             var campaign = await db.Campaigns.FirstAsync(Ct);
-            var opener = WorkItemFactory.NewProviderOp(campaign, Pause.Id, Noon);
+            var opener = WorkItemFactory.NewProviderOp(campaign, Activate.Id, Noon);
             opener.Status = WorkItemStatus.Failed;
             var row = BlockRows.Block(opener, Noon, Noon.AddHours(1));
             row.PluginId = TestPlugins.FakeProviderId;
@@ -127,7 +127,7 @@ public class ProviderBlockRaceTests
     {
         using var database = new TestDatabase();
         var campaign = WorkItemFactory.NewCampaign(now: Noon);
-        var opener = WorkItemFactory.NewProviderOp(campaign, Pause.Id, Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, Activate.Id, Noon);
         var first = BlockRows.Block(opener, Noon, Noon);
         await using (var db = database.Open())
         {
@@ -153,7 +153,7 @@ public class ProviderBlockRaceTests
     internal static Task RunAsync(DispatchHarness harness, ClaimedWork work) =>
         AttemptHandler.RunAsync(harness.Scopes, work, harness.Registry, NullLogger.Instance);
 
-    /// <summary>Two pauses on one account, each claimed, in one campaign or in two.</summary>
+    /// <summary>Two activations on one account, each claimed, in one campaign or in two.</summary>
     internal static async Task<(ClaimedWork First, ClaimedWork Second)> SeedTwoClaimedAsync(DispatchHarness harness, bool oneCampaign)
     {
         await using var db = harness.Open();
@@ -163,7 +163,7 @@ public class ProviderBlockRaceTests
         var claimed = new List<(WorkItem Item, Attempt Attempt)>();
         foreach (var campaign in new[] { first, second })
         {
-            var item = WorkItemFactory.NewProviderOp(campaign, Pause.Id, Noon);
+            var item = WorkItemFactory.NewProviderOp(campaign, Activate.Id, Noon);
             item.Status = WorkItemStatus.Scheduled;
             var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Scheduled, Noon);
             db.WorkItems.Add(item);
@@ -178,21 +178,21 @@ public class ProviderBlockRaceTests
         return (works[0], works[1]);
     }
 
-    /// <summary>A plan as a claim leaves it for a pause, through a route that binds nothing.</summary>
+    /// <summary>A plan as a claim leaves it for an activation, through a route that binds nothing.</summary>
     private static ProviderOpPlan Plan() => new(
-        TestPlugins.Loaded(TestPlugins.FakeProviderId, [Pause.Id]),
+        TestPlugins.Loaded(TestPlugins.FakeProviderId, [Activate.Id]),
         PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNA",
         RouteSnapshot.IdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNB",
         RouteScope.GlobalDefault,
         null,
         null,
-        Pause,
+        Activate,
         new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "seq_4410" } });
 
-    /// <summary>The campaign was paused already: the call got past whatever held the account.</summary>
-    private static PluginInvocationResult Paused() => new(
+    /// <summary>The campaign was live already: the call got past whatever held the account.</summary>
+    private static PluginInvocationResult Live() => new(
         new InvocationOutcome.Succeeded(
-            new JsonObject { ["items"] = new JsonArray(new JsonObject { ["campaign_external_id"] = "seq_4410", ["status"] = "already_paused" }) },
+            new JsonObject { ["items"] = new JsonArray(new JsonObject { ["campaign_external_id"] = "seq_4410", ["status"] = "already_live", ["was"] = null, ["enrolled"] = 3 }) },
             null,
             new OutcomeDiagnostics(12, 1, 0, 1)),
         Provenance(),

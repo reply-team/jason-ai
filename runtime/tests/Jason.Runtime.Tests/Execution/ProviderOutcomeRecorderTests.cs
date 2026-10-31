@@ -38,6 +38,8 @@ public class ProviderOutcomeRecorderTests
 
     private static OperationContract Send => OperationCatalog.Find("message.send")!;
 
+    private static OperationContract Cancel => OperationCatalog.Find("message.cancel")!;
+
     private static JsonNode Taken(string contact, string? reference) => new JsonObject
     {
         ["items"] = new JsonArray(new JsonObject
@@ -839,10 +841,44 @@ public class ProviderOutcomeRecorderTests
         Assert.DoesNotContain("billing.example.com", said.New!.ToJsonString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The take-back of a send is not held by a block: the claim lets it through an open one, and where the provider
+    /// refuses it for the account, that answer ends it final, as a failed protective action a person is told about. It is
+    /// not parked and not repeated behind the block it ignores, the open block is left exactly as it was, and no
+    /// campaign is told the block holds its work.
+    /// </summary>
+    [Fact]
+    public async Task A_cancel_runs_through_an_open_block_and_its_blocked_answer_ends_it_final()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Cancel.Id);
+        var opener = WorkItemFactory.NewProviderOp(scene.Campaign, Send.Id, Noon);
+        opener.Status = WorkItemStatus.Failed;
+        db.WorkItems.Add(opener);
+        var open = BlockRows.Block(opener, Noon, Noon.AddMinutes(10), binding: "sha256:1");
+        open.PluginId = TestPlugins.FakeProviderId;
+        db.ProviderBlocks.Add(open);
+        await db.SaveChangesAsync(Ct);
+        var block = new JsonObject { ["scope"] = "account", ["reason"] = "billing" };
+
+        await scene.RecordAsync(db, Cancel, Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "the plan has lapsed", null, null, block)));
+
+        Assert.Equal((WorkItemStatus.Failed, AttemptStatus.Failed), (scene.Item.Status, scene.Attempt.Status));
+        Assert.Equal(("provider_blocked", (FailureClass?)FailureClass.Blocked, false), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class, scene.Attempt.Error.Retriable));
+        Assert.False(await db.WorkItemWaits.AsNoTracking().AnyAsync(w => w.WorkItemId == scene.Item.Id, Ct));
+        var row = await db.ProviderBlocks.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(
+            (ProviderBlockStatus.Open, (int?)null, (int?)null, Noon, Noon.AddMinutes(10)),
+            (row.Status, row.ClearedByAttemptId, row.TrialWorkItemId, row.LastSeenAt, row.NextTrialAt));
+        Assert.False(await db.Journal.AsNoTracking().AnyAsync(e => e.Kind == JournalKinds.ProviderBlocked || e.Kind == JournalKinds.ProviderBlockCleared, Ct));
+    }
+
     public static TheoryData<string, bool> WhatAnAnswerSaysOfAnOpenBlock() => new()
     {
         { "succeeded", true },
-        { "campaign_not_found", true },
+        { "contact_not_found", true },
+        { "message_invalid", true },
         { HostOutcomeCodes.PluginException, false },
         { UnjudgedOutcomeCodes.ProviderInputInvalid, false },
         { UnjudgedOutcomeCodes.CapabilityNotOffered, false },
@@ -851,8 +887,8 @@ public class ProviderOutcomeRecorderTests
     };
 
     /// <summary>
-    /// A call to held work that the provider judged on the work — it succeeded, or failed permanent or validation — got
-    /// past the block, which clears; a transient or ambiguous failure, the host's own ending, the package's refusal of
+    /// A call to held work that reaches a person — here a send — that the provider judged on the work — it succeeded, or
+    /// failed permanent or validation — got past the block, which clears; a transient or ambiguous failure, the host's own ending, the package's refusal of
     /// the provider's object, answered before any call, or the provider's answer that it does not offer the operation yet,
     /// which judges nothing of the work, says nothing about it. Each failure is recorded as it was given:
     /// one refused as an answer outside the contract would leave the block open too, for another reason.
@@ -863,8 +899,8 @@ public class ProviderOutcomeRecorderTests
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
-        var scene = await SeedAsync(db, operation: Pause.Id);
-        var opener = WorkItemFactory.NewProviderOp(scene.Campaign, Pause.Id, Noon);
+        var scene = await SeedAsync(db, operation: Send.Id);
+        var opener = WorkItemFactory.NewProviderOp(scene.Campaign, Send.Id, Noon);
         opener.Status = WorkItemStatus.Failed;
         db.WorkItems.Add(opener);
         var block = BlockRows.Block(opener, Noon, Noon, binding: "sha256:1");
@@ -877,14 +913,14 @@ public class ProviderOutcomeRecorderTests
             "succeeded" => null,
             HostOutcomeCodes.PluginException => new OutcomeError(FailureClass.Permanent, answer, "the host stopped the plugin", null, null),
             UnjudgedOutcomeCodes.ProviderInputInvalid => new OutcomeError(FailureClass.Validation, answer, "args.provider is read as an object with a schedule; the object given is not that shape", null, null),
-            UnjudgedOutcomeCodes.CapabilityNotOffered => new OutcomeError(FailureClass.Permanent, answer, "campaign.pause: the provider does not offer this operation yet", null, null),
-            _ => new OutcomeError(OperationCatalog.Find(Pause.Id)!.FailureCodes.Single(c => c.Code == answer).Class, answer, "the provider said so", null, null),
+            UnjudgedOutcomeCodes.CapabilityNotOffered => new OutcomeError(FailureClass.Permanent, answer, "message.send: the provider does not offer this operation yet", null, null),
+            _ => new OutcomeError(Send.FailureCodes.Single(c => c.Code == answer).Class, answer, "the provider said so", null, null),
         };
         await scene.RecordAsync(
             db,
-            Pause,
+            Send,
             given is null
-                ? Succeeded(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["campaign_external_id"] = "sq-1129", ["status"] = "paused" }) }, null)
+                ? Succeeded(Taken(scene.Contact.PublicId, "email-1001"), new JsonObject { ["contact"] = "p_1001", ["send"] = "email-1001" })
                 : Failed(given));
 
         var row = await db.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == block.Id, Ct);
@@ -897,9 +933,94 @@ public class ProviderOutcomeRecorderTests
         {
             var error = scene.Attempt.Error!;
             Assert.Equal(
-                (given.Code, (FailureClass?)given.Class, OutcomeContract.Retriable(given.Class, Pause)),
+                (given.Code, (FailureClass?)given.Class, OutcomeContract.Retriable(given.Class, Send, packageSettlesByKey: false)),
                 (error.Code, error.Class, error.Retriable));
         }
+    }
+
+    /// <summary>
+    /// A held control is not the block's judge: the pause that succeeds while an account block of its binding is open
+    /// got past nothing that reaches a person. The block stays open, cleared by nobody, and no line says it cleared. Where
+    /// the pause was the block's trial, the next one is a cadence off rather than never; where it was not — claimed
+    /// before the block opened, or while another item is the trial — the block's trial is left as it was. The
+    /// provider's judgement of the pause itself decides no more than its success does.
+    /// </summary>
+    [Theory]
+    [InlineData("succeeded", "this")]
+    [InlineData("campaign_not_found", "this")]
+    [InlineData("succeeded", "none")]
+    [InlineData("succeeded", "another")]
+    public async Task A_held_control_that_succeeds_under_an_open_block_leaves_it_as_it_was(string answer, string trial)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Pause.Id);
+        var opener = WorkItemFactory.NewProviderOp(scene.Campaign, Send.Id, Noon);
+        opener.Status = WorkItemStatus.Failed;
+        db.WorkItems.Add(opener);
+        var block = BlockRows.Block(opener, Noon.AddHours(-1), Noon, binding: "sha256:1");
+        block.PluginId = TestPlugins.FakeProviderId;
+        db.ProviderBlocks.Add(block);
+        await db.SaveChangesAsync(Ct);
+        block.TrialWorkItemId = trial switch
+        {
+            "this" => scene.Item.Id,
+            "another" => opener.Id,
+            _ => null,
+        };
+        await db.SaveChangesAsync(Ct);
+
+        await scene.RecordAsync(
+            db,
+            Pause,
+            answer == "succeeded"
+                ? Succeeded(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["campaign_external_id"] = "sq-1129", ["status"] = "paused" }) }, null)
+                : Failed(new OutcomeError(Pause.FailureCodes.Single(c => c.Code == answer).Class, answer, "the provider said so", null, null)));
+
+        Assert.Equal(answer == "succeeded" ? WorkItemStatus.Succeeded : WorkItemStatus.Failed, scene.Item.Status);
+        var row = await db.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == block.Id, Ct);
+        Assert.Equal(
+            (ProviderBlockStatus.Open, (int?)null, (DateTime?)null, trial == "another" ? opener.Id : (int?)null),
+            (row.Status, row.ClearedByAttemptId, row.ClearedAt, row.TrialWorkItemId));
+        Assert.Equal(trial == "this" ? Noon.AddSeconds(TestOptions.Settings().Current.Blocks.TrialSeconds) : Noon, row.NextTrialAt);
+        Assert.False(await db.Journal.AsNoTracking().AnyAsync(e => e.Kind == JournalKinds.ProviderBlockCleared, Ct));
+    }
+
+    /// <summary>
+    /// A held control that is an account block's trial and meets a sender's block has not got past the account: what
+    /// it says is that a sender is blocked, which decides nothing about the account. The account's block stays open,
+    /// cleared by nobody, with its next trial a cadence off; the pause parks on the sender's block its answer opened.
+    /// </summary>
+    [Fact]
+    public async Task A_held_control_that_is_the_account_s_trial_and_meets_a_sender_s_block_leaves_the_account_open()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Pause.Id);
+        var opener = WorkItemFactory.NewProviderOp(scene.Campaign, Send.Id, Noon);
+        opener.Status = WorkItemStatus.Failed;
+        db.WorkItems.Add(opener);
+        var account = BlockRows.Block(opener, Noon.AddHours(-1), Noon, binding: "sha256:1");
+        account.PluginId = TestPlugins.FakeProviderId;
+        account.TrialWorkItemId = scene.Item.Id;
+        db.ProviderBlocks.Add(account);
+        await db.SaveChangesAsync(Ct);
+        var said = new JsonObject { ["scope"] = "sender", ["sender_external_id"] = "li_5531", ["reason"] = "limit" };
+
+        await scene.RecordAsync(db, Pause, Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "the sender is at its limit", null, null, said)));
+
+        var row = await db.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == account.Id, Ct);
+        Assert.Equal(
+            (ProviderBlockStatus.Open, (int?)null, (int?)null),
+            (row.Status, row.ClearedByAttemptId, row.TrialWorkItemId));
+        Assert.Equal(Noon.AddSeconds(TestOptions.Settings().Current.Blocks.TrialSeconds), row.NextTrialAt);
+        var sender = await db.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id != account.Id, Ct);
+        Assert.Equal(
+            (ProviderBlockStatus.Open, ProviderBlockScope.Sender, "li_5531", scene.Attempt.Id),
+            (sender.Status, sender.Scope, sender.SenderExternalId, sender.OpenedByAttemptId));
+        Assert.Equal((WorkItemStatus.Waiting, AttemptStatus.Blocked), (scene.Item.Status, scene.Attempt.Status));
+        Assert.Equal(sender.Id, (await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == scene.Item.Id, Ct)).ProviderBlockId);
+        Assert.False(await db.Journal.AsNoTracking().AnyAsync(e => e.Kind == JournalKinds.ProviderBlockCleared, Ct));
     }
 
     /// <summary>

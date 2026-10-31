@@ -46,8 +46,12 @@ public enum ProgramLookupOutcome
 /// for a shim.
 /// </param>
 /// <param name="Refusal">For a refused shim, the rule it broke, worded to follow "which": "is not the shim npm writes".</param>
+/// <param name="InterpreterPathRead">
+/// Whether the lookup went to the interpreter search path to find a shim's node.exe, because none stood beside the shim.
+/// It says nothing of the search path the name itself was looked up on.
+/// </param>
 public sealed record FoundProgram(
-    string Name, ProgramLookupOutcome Outcome, string? Path, IReadOnlyList<string> Launch, string? File, string? Refusal);
+    string Name, ProgramLookupOutcome Outcome, string? Path, IReadOnlyList<string> Launch, string? File, string? Refusal, bool InterpreterPathRead = false);
 
 /// <summary>
 /// Where a bare program name is on this machine, answered the one way Jason answers it for every program it starts by
@@ -151,10 +155,10 @@ public static partial class ProgramLookup
         {
             // The whole search path yielded neither an .exe nor a .com, so the first `.cmd` it did yield is
             // read — and only now.
-            var shim = ReadNpmShim(shims[0], name, interpreterSearchPath, out var rule);
+            var shim = ReadNpmShim(shims[0], name, interpreterSearchPath, out var rule, out var pathRead);
             return shim is not null
-                ? new FoundProgram(name, ProgramLookupOutcome.NpmShim, shim.Interpreter, [shim.Entry], shims[0], null)
-                : new FoundProgram(name, ProgramLookupOutcome.RefusedShim, null, [], shims[0], rule);
+                ? new FoundProgram(name, ProgramLookupOutcome.NpmShim, shim.Interpreter, [shim.Entry], shims[0], null, pathRead)
+                : new FoundProgram(name, ProgramLookupOutcome.RefusedShim, null, [], shims[0], rule, pathRead);
         }
 
         return script is not null
@@ -196,9 +200,10 @@ public static partial class ProgramLookup
     /// again at every lookup rather than trusted from last time. The answer is null and <paramref name="rule"/>
     /// names the rule that was broken, because a refusal an operator cannot act on is barely a refusal at all.
     /// </summary>
-    private static NpmShimTarget? ReadNpmShim(string shim, string name, ProgramSearchPath interpreterSearchPath, out string rule)
+    private static NpmShimTarget? ReadNpmShim(string shim, string name, ProgramSearchPath interpreterSearchPath, out string rule, out bool pathRead)
     {
         rule = "is not the shim npm writes";
+        pathRead = false;
         var directory = Path.GetDirectoryName(shim);
         if (directory is null)
         {
@@ -280,7 +285,7 @@ public static partial class ProgramLookup
             return null;
         }
 
-        var interpreter = FindInterpreter(directory, interpreterSearchPath);
+        var interpreter = FindInterpreter(directory, interpreterSearchPath, out pathRead);
         if (interpreter is null)
         {
             rule = "needs node.exe, which is neither beside it nor on the search path";
@@ -422,14 +427,16 @@ public static partial class ProgramLookup
     /// the first on the interpreter's search path the caller passed. Always an absolute path, so what is
     /// recorded is the file that runs rather than a name something else could answer for later.
     /// </summary>
-    private static string? FindInterpreter(string directory, ProgramSearchPath interpreterSearchPath)
+    private static string? FindInterpreter(string directory, ProgramSearchPath interpreterSearchPath, out bool pathRead)
     {
+        pathRead = false;
         var beside = Path.Combine(directory, "node.exe");
         if (File.Exists(beside))
         {
             return Path.GetFullPath(beside);
         }
 
+        pathRead = true;
         foreach (var candidate in Directories(interpreterSearchPath))
         {
             var file = Path.Combine(candidate, "node.exe");

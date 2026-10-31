@@ -94,6 +94,7 @@ every document spells them.
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
+| under a provider block | `waits` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | The campaign exists at the provider and is not archived, and the provider's enrolled count equals `args.expected.enrolled`. |
 | preview a person reads | `Start sending the provider's campaign for Jason's campaign {/campaign/name}. People enrolled there: {/args/expected/enrolled}. Step 1 goes to each of them on that campaign's own schedule, and the cost is metered per message released. If the provider's count is not {/args/expected/enrolled} at execution, nothing starts.`; highlighted: `/args/expected/enrolled`, `/campaign/name`, `/campaign/external_ids/campaign`, `/args/campaign` |

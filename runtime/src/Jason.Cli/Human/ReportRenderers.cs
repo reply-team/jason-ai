@@ -107,5 +107,5 @@ public static class ReportRenderers
             ? null
             : string.Join(", ", entries.Select(entry => (string?)entry));
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

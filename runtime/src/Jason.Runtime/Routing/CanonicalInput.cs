@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Json;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 
@@ -35,6 +36,18 @@ public static class CanonicalInput
     /// the work item under <c>args.send</c>, and the runtime composes the send under <c>send</c>.
     /// </summary>
     private const string SendKey = "send";
+
+    /// <summary>The root key of the campaign the work belongs to.</summary>
+    private const string CampaignKey = "campaign";
+
+    /// <summary>The root key of the people the work is about: the one person, where the operation reads one.</summary>
+    private const string ContactsKey = "contacts";
+
+    /// <summary>The key of an entity's pins, under the person and the campaign alike.</summary>
+    private const string ExternalIdsKey = "external_ids";
+
+    /// <summary>The campaign's status, the one member of the composed input its digest leaves out.</summary>
+    private const string CampaignStatusKey = "status";
 
     private static readonly IReadOnlyDictionary<string, Func<Contact, JsonNode?>> Fields =
         new Dictionary<string, Func<Contact, JsonNode?>>(StringComparer.Ordinal)
@@ -74,10 +87,10 @@ public static class CanonicalInput
         // otherwise — and an optional one travels exactly when the work item names somebody.
         if (contract.Preflight.Contact != ContactRequirement.NotUsed && facts.Contact is { } contact)
         {
-            input["contacts"] = new JsonArray(Person(contract, contact, facts.ContactPins, ConsumedChannel(contract, facts.Item)));
+            input[ContactsKey] = new JsonArray(Person(contract, contact, facts.ContactPins, ConsumedChannel(contract, facts.Item)));
         }
 
-        input["campaign"] = Campaign(facts.Campaign, facts.CampaignPins);
+        input[CampaignKey] = Campaign(facts.Campaign, facts.CampaignPins);
 
         if (string.Equals(contract.IdempotencyKey.Value, Required, StringComparison.Ordinal))
         {
@@ -85,6 +98,65 @@ public static class CanonicalInput
         }
 
         return input;
+    }
+
+    /// <summary>
+    /// What a composed input is called: the canonical <c>sha256:</c> of the document, keys sorted in ordinal order, so the
+    /// same members in another order are the same name. A claim records it on the attempt it lets run, and a repeat after
+    /// a lost answer is the same request only under the same name.
+    /// </summary>
+    /// <remarks>
+    /// The campaign's status is left out of the name, and nothing else is. A pause and a resume between the attempt that
+    /// lost its answer and its repeat ask nothing else of the provider; another address, another field of the person, a
+    /// pin added, a campaign renamed or an argument edited does, and a key that settles only the request it went with
+    /// would answer such a repeat with the send the first request made.
+    /// </remarks>
+    public static string Digest(JsonObject input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        var named = input.DeepClone().AsObject();
+        if (named[CampaignKey] is JsonObject campaign)
+        {
+            campaign.Remove(CampaignStatusKey);
+        }
+
+        return CanonicalJson.Hash(named);
+    }
+
+    /// <summary>
+    /// A composed input without the pins one attempt <paramref name="learned"/>: what the same facts composed before that
+    /// attempt recorded them, since a pin is written once, by the attempt that learned it, and every pin travels in the
+    /// input under the kind it is known by.
+    /// </summary>
+    public static JsonObject Without(JsonObject input, PinsLearned learned)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(learned);
+
+        var before = input.DeepClone().AsObject();
+        if (before[ContactsKey] is JsonArray { Count: > 0 } contacts && contacts[0] is JsonObject person)
+        {
+            Remove(person, learned.Contact);
+        }
+
+        if (before[CampaignKey] is JsonObject campaign)
+        {
+            Remove(campaign, learned.Campaign);
+        }
+
+        return before;
+
+        static void Remove(JsonObject entity, IReadOnlySet<string> kinds)
+        {
+            if (entity[ExternalIdsKey] is JsonObject pins)
+            {
+                foreach (var kind in kinds)
+                {
+                    pins.Remove(kind);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -101,7 +173,7 @@ public static class CanonicalInput
         var input = new JsonObject { ["args"] = args };
         if (contract.Preflight.Contact != ContactRequirement.NotUsed && contact is not null)
         {
-            input["contacts"] = new JsonArray(Person(contract, contact, contactPins, channel: null));
+            input[ContactsKey] = new JsonArray(Person(contract, contact, contactPins, channel: null));
         }
 
         return input;
@@ -218,7 +290,7 @@ public static class CanonicalInput
                 });
         }
 
-        person["external_ids"] = Pins(pins);
+        person[ExternalIdsKey] = Pins(pins);
         return person;
     }
 
@@ -226,8 +298,8 @@ public static class CanonicalInput
     {
         ["id"] = JsonValue.Create(campaign.PublicId),
         ["name"] = JsonValue.Create(campaign.Name),
-        ["status"] = JsonSerializer.SerializeToNode(campaign.Status, JasonJson.Options),
-        ["external_ids"] = Pins(pins),
+        [CampaignStatusKey] = JsonSerializer.SerializeToNode(campaign.Status, JasonJson.Options),
+        [ExternalIdsKey] = Pins(pins),
     };
 
     /// <summary>

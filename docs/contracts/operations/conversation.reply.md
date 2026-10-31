@@ -130,6 +130,7 @@ show each case.
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_only` |
 | in a paused campaign | `waits` |
+| under a provider block | `waits` |
 | contact projection | `id`; channels: `consumed` |
 | precondition | The thread's person is this person: the one pinned, where there is a pin, and in every case the one whose address on the channel named by `args.channel` is that channel's value as the runtime keys it for its suppression register; otherwise nothing is sent. |
 | preview a person reads | `Reply in the provider's thread {/args/thread/external_id} to {/contacts/0/channels/0/value} by {/args/channel}, from the account that owns the thread and to nobody else: {/args/body}`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/thread`, `/args/reply_to_message`, `/args/body` |

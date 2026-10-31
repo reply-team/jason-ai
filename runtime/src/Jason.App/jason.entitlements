@@ -2,9 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   The entitlements of the macOS executable, signed into it by the release's package action together with the hardened
-  runtime notarization requires. The hardened runtime refuses what .NET does by design unless the signature says it may;
-  these four keys are the set Microsoft documents for a .NET application under the hardened runtime, and nothing else
-  is asked for. Whether the set can be trimmed is shown by a run of its own, never guessed.
+  runtime notarization requires. The hardened runtime refuses what .NET does by design unless the signature says it may,
+  and each key below says which of those things it allows and why the runtime needs it; nothing else is asked for.
+  Library validation stays on: the package action signs the native libraries the bundle unpacks, SQLite's among them,
+  with the executable's own identity, so the system loads them as they are. The DYLD_ variables stay dropped, as the
+  hardened runtime drops them: the runtime loads what it unpacked by its full path, and it keeps those variables out of
+  every plugin's environment itself. A key leaves this file only once a release run has started, migrated and stopped
+  the signed executable without it.
 -->
 <plist version="1.0">
 <dict>
@@ -14,14 +18,6 @@
   <!-- Some of the runtime's code paths make memory executable without the JIT's own mapping; Microsoft's set allows
        them rather than leave a path that fails only when it is taken. -->
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-  <true/>
-  <!-- The hardened runtime would otherwise drop the DYLD_ variables the dynamic loader reads, which is how a native
-       library is pointed at when one has to be. -->
-  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-  <true/>
-  <!-- The native libraries the single-file bundle unpacks on its first run, SQLite's among them, are not signed by our
-       team, and library validation would refuse to load them. -->
-  <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
 </dict>
 </plist>

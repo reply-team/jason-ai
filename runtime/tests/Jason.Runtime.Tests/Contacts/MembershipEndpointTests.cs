@@ -62,6 +62,34 @@ public class MembershipEndpointTests
     }
 
     /// <summary>
+    /// An import creates contacts through the same door as <c>contact.create</c>: a row whose name holds a control
+    /// character is refused by its index, and the rest of the batch lands.
+    /// </summary>
+    [Fact]
+    public async Task An_imported_row_whose_name_holds_a_control_character_is_refused_by_its_index()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        var campaignId = SeedCampaign(fixture);
+
+        var result = await fixture.PostOkAsync<AddContactsResult>(
+            Operations.CampaignAddContacts,
+            new
+            {
+                campaign_id = campaignId,
+                contacts = new object[] { new { first_name = "Ada" }, new { first_name = "Grace", last_name = "Hop\u001b]0;per\u0007" } },
+            },
+            Ct);
+
+        Assert.Equal(AddContactsItemStatus.Added, result.Items[0].Status);
+        var refused = result.Items[1];
+        Assert.Equal(AddContactsItemStatus.Rejected, refused.Status);
+        Assert.Equal("validation_failed", refused.Error!.Code);
+        var detail = Assert.Single(refused.Error.Details!);
+        Assert.Equal("contacts[1].last_name", detail.Field);
+        Assert.Equal("invalid", detail.Code);
+    }
+
+    /// <summary>
     /// Matching a row reads at most two contacts, and a query that takes some rows of a set in no order is one EF Core
     /// warns about every time it runs. An import is ordinary work and puts no warning in the log, by either kind of match
     /// key. Read from the file the real sink wrote.

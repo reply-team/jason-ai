@@ -569,6 +569,53 @@ public class CampaignCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The runtime keeps two context keys that differ only in case as two keys, and the rendering reads its answer the
+    /// same way: a create the runtime performed is shown, both keys listed, rather than refused after the fact.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_lists_context_keys_that_differ_only_in_case_as_two_keys()
+    {
+        var campaign = JsonSerializer.Serialize(
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, "prj_A", "default", new JsonObject { ["region"] = "latam", ["Region"] = "emea" }, [], null, null, Moment, Moment, null),
+            JasonJson.Options);
+        using var cli = new CliRun(campaign);
+
+        var exit = await cli.RunAsync("campaign", "create", "--name", "LatAm", "--context", """{"region":"latam","Region":"emea"}""", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.CampaignCreate, """{"name":"LatAm","context":{"region":"latam","Region":"emea"}}""");
+        Assert.Matches("(?m)^Context keys: +region, Region\\r?$", cli.Text);
+    }
+
+    /// <summary>
+    /// A campaign's name is refused a control character when it is written, but a name written before that rule, or
+    /// one that reaches the runtime some other way, is still somebody's text: the view and the listing show a character
+    /// that changes how the line reads as U+FFFD, a mark that can be seen, and never write it.
+    /// </summary>
+    [Theory]
+    [InlineData("get")]
+    [InlineData("list")]
+    public async Task Human_mode_shows_a_character_that_changes_the_line_in_a_campaign_name_as_a_replacement_mark(string verb)
+    {
+        const string Hostile = "Lat\u001b[2J\bAm‮";
+        using var cli = new CliRun(verb == "get"
+            ? JsonSerializer.Serialize(new CampaignDto("cmp_A", Hostile, CampaignStatus.Active, "prj_A", "default", [], [], null, null, Moment, Moment, null), JasonJson.Options)
+            : JsonSerializer.Serialize(
+                new Page<CampaignSummaryDto>([new CampaignSummaryDto("cmp_A", Hostile, CampaignStatus.Draft, "prj_A", "default", Moment, Moment, null)], null),
+                JasonJson.Options));
+
+        var exit = await cli.RunAsync(verb == "get" ? ["campaign", "get", "cmp_A", "--human"] : ["campaign", "list", "--human"]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        foreach (var character in new[] { '\u001b', '\b', '‮' })
+        {
+            Assert.DoesNotContain(character, cli.Text);
+        }
+
+        Assert.Contains("Lat�[2J�Am�", cli.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_renders_a_campaign_listing_with_its_cursor()
     {

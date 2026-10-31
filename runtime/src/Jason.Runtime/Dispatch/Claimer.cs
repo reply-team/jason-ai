@@ -509,7 +509,9 @@ public sealed class Claimer(
     /// <summary>
     /// Whether this item is the trial of the block that holds it: the one the block already names, or — where the
     /// block's next trial is due and no trial of it is still under way, as the resume step reads it — this one, which the
-    /// block then names. One trial is in flight per block; every other item the block holds parks.
+    /// block then names. One trial is in flight per block; every other item the block holds parks. The resume step runs
+    /// before the claim and names an act wherever a parked one could run, so a block still due here holds no parked act
+    /// that could: the item named here may be a control, and its answer decides nothing but <c>blocked</c>.
     /// </summary>
     private static async Task<bool> TrialAsync(JasonDbContext db, ProviderBlock block, WorkItem item, DateTime now, CancellationToken ct)
     {
@@ -584,7 +586,7 @@ public sealed class Claimer(
         var send = await SendAsync(db, contract, item, ct).ConfigureAwait(false);
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send);
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled));
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -603,7 +605,34 @@ public sealed class Claimer(
             await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false),
             blocks,
             unsettled,
-            send);
+            send,
+            Learned(contact.ExternalIds, campaign.ExternalIds, pluginId, item, unsettled));
+    }
+
+    /// <summary>
+    /// The kinds of the routed plugin's pins that the attempt this claim would repeat, or any later attempt of the item,
+    /// recorded, taken from the pins already loaded, or null where no attempt is repeated: an ambiguous answer may name the
+    /// person it reached, and what the attempt learned so was not in the input its claim composed. Every later attempt ran
+    /// only because its claim found it the same request, so what it learned is the provider's answer to that request too.
+    /// </summary>
+    private static PinsLearned? Learned(IEnumerable<ExternalId> contactPins, IEnumerable<ExternalId> campaignPins, string pluginId, WorkItem item, Attempt? unsettled)
+    {
+        if (unsettled is null)
+        {
+            return null;
+        }
+
+        var since = item.Attempts
+            .Where(attempt => attempt.Number >= unsettled.Number)
+            .Select(attempt => attempt.PublicId)
+            .ToHashSet(StringComparer.Ordinal);
+        return new PinsLearned(By(contactPins), By(campaignPins));
+
+        IReadOnlySet<string> By(IEnumerable<ExternalId> pins) => pins
+            .Where(pin => string.Equals(pin.PluginId, pluginId, StringComparison.Ordinal)
+                && since.Contains(pin.RecordedByAttemptId))
+            .Select(pin => pin.Kind)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>

@@ -109,6 +109,7 @@ summary differently never turns a pending decision into another one. The fixture
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
+| under a provider block | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | none |
 | preview a person reads | `Enroll {/contacts/0/channels/0/value} in the provider's campaign for Jason's campaign {/campaign/name}: start at {/args/start/position}, first touch {/args/first_touch}, {/args/collision} if they already take part. If the provider's campaign is live, its messages start going to this person on that timing.`; highlighted: `/contacts/0/channels/0/value`, `/campaign/name`, `/args/start`, `/args/first_touch`, `/args/collision` |

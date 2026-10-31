@@ -82,5 +82,5 @@ public static class ProfileRenderers
     private static string? Tools(IReadOnlyList<AgentTool>? tools) =>
         tools is { Count: > 0 } ? string.Join(", ", tools.Select(RenderText.Snake)) : null;
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

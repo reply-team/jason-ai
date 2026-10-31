@@ -74,6 +74,9 @@ public class AttemptProvenanceTests
         Assert.Equal(attempt.Id, provenance.CorrelationId);
         Assert.Equal(Answered.InvocationId, provenance.InvocationId);
         Assert.NotNull(provenance.Diagnostics);
+
+        // The input the plugin was handed is named, and only named: the digest of the document, never the document.
+        Assert.Equal(CanonicalInput.Digest(executor.Handed!), provenance.InputDigest);
     }
 
     /// <summary>An attempt of the other kind carries none, and its JSON says so by leaving the field out.</summary>
@@ -288,6 +291,7 @@ public class AttemptProvenanceTests
         Assert.Null(provenance.BindingIdentity);
         Assert.Null(provenance.InvocationId);
         Assert.Null(provenance.Diagnostics);
+        Assert.Null(provenance.InputDigest);
     }
 
     /// <summary>
@@ -423,10 +427,14 @@ public class AttemptProvenanceTests
 
         public ICommand Command { get; }
 
+        /// <summary>The input the claim composed for the plugin, as the command was handed it.</summary>
+        public JsonObject? Handed { get; private set; }
+
         public void Answers(RuntimeApiFixture api) => _api = api;
 
         private async Task<CommandOutcome> RunAsync(CommandContext context)
         {
+            Handed = context.Plan?.Input.DeepClone().AsObject();
             await using (var scope = _api!.Resolve<IServiceScopeFactory>().CreateAsyncScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();

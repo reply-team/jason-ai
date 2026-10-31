@@ -682,7 +682,8 @@ public partial class ReleaseWorkflowTests
     /// The token that can publish is handed to the one job that publishes, and to nothing that builds or tests: a
     /// compromised test on a matrix runner must not be able to create a release or push to the public repository.
     /// That job writes nothing here either but a dry run's artifact — the draft, the branch and the pull request are all
-    /// in the public repository, reached with that token alone — so no permission anywhere grants a write.
+    /// in the public repository, reached with that token alone — so no permission anywhere grants a write to this
+    /// repository.
     /// </summary>
     [Fact]
     [Critical(Family.B4, "the publication token's scope")]
@@ -708,7 +709,8 @@ public partial class ReleaseWorkflowTests
 
         // Every mention of a secret stands in its place, which SecretsOutOfPlace says: the publication token inside
         // the expression that gives a dry run this run's own token instead, in one job; the six Apple secrets in the
-        // package call of the job that builds osx-arm64 and tests nothing, and nowhere else.
+        // package call of the job that builds osx-arm64 and tests nothing, the five Azure ones in the package call of the
+        // job that builds win-x64 and tests nothing, and nowhere else.
         Assert.Empty(SecretsOutOfPlace(text));
         Assert.Equal(
             Regex.Matches(text, Regex.Escape(DryRunToken)).Count,
@@ -720,7 +722,7 @@ public partial class ReleaseWorkflowTests
         var packaging = jobs.Children.Where(job => JobSteps((YamlMappingNode)job.Value).Any(step => Scalar(step, "uses") == "./.github/actions/package"))
             .Select(job => job.Key.ToString())
             .ToList();
-        Assert.Equal(2, packaging.Count);
+        Assert.Equal(3, packaging.Count);
         Assert.All(packaging, job => Assert.Contains(job, Assert.IsType<YamlSequenceNode>(Node((YamlMappingNode)holder.Value, "needs")).Children.Select(need => need.ToString())));
         Assert.Contains("gh release create", text, StringComparison.Ordinal);
     }
@@ -735,26 +737,39 @@ public partial class ReleaseWorkflowTests
         var release = Parse(text);
         var jobs = Mapping(release, "jobs");
 
-        // The package call that names osx-arm64 itself, in a job none of whose steps runs a test. A runner is handed
-        // every secret its job names, whatever the steps then do with them, so the six stand in a job that builds that
-        // platform alone and runs no test code and no test-only package beside them: never in a matrix shared with
-        // another platform, never where a test runs. There is exactly one, and each of the six stands there under the
-        // input of its own name, its only place.
-        var arm = jobs.Children.Values.Cast<YamlMappingNode>()
-            .Where(job => !JobSteps(job).Any(step => Scalar(step, "run") is { } run && RunsTests().IsMatch(run)))
-            .SelectMany(job => JobSteps(job)
-                .Where(step => Scalar(step, "uses") == "./.github/actions/package")
-                .Where(step => Node(step, "with") is YamlMappingNode with && Scalar(with, "rid") == "osx-arm64"))
-            .ToList();
-        var placed = new HashSet<YamlNode>(ReferenceEqualityComparer.Instance);
-        if (arm.Count != 1)
+        // A job that calls another workflow runs steps this workflow does not show, and `secrets: inherit` hands that
+        // workflow every secret without naming one in an expression, so neither is ever read past below.
+        foreach (var (name, job) in jobs.Children.Select(pair => (pair.Key.ToString(), (YamlMappingNode)pair.Value)))
         {
-            problems.Add($"{arm.Count} package calls name osx-arm64 in a job that runs no test, where exactly one holds the Apple secrets");
+            if (Node(job, "uses") is not null)
+            {
+                problems.Add($"the {name} job calls another workflow, whose steps this one does not show");
+            }
+
+            if (Node(job, "secrets") is not null)
+            {
+                problems.Add($"the {name} job hands secrets on to another workflow");
+            }
         }
-        else
+
+        // For each signed platform, the package call that names it itself, in a job none of whose steps runs a test. A
+        // runner is handed every secret its job names, whatever the steps then do with them, so a platform's secrets
+        // stand in a job that builds that platform alone and runs no test code and no test-only package beside them:
+        // never in a matrix shared with another platform, never where a test runs, never in the other platform's job.
+        // There is exactly one such call per platform, and each of its secrets stands there under the input of its own
+        // name, its only place.
+        var placed = new HashSet<YamlNode>(ReferenceEqualityComparer.Instance);
+        foreach (var (rid, secrets) in SigningSecrets)
         {
-            var with = Mapping(arm[0], "with");
-            foreach (var (input, secret) in AppleSecrets)
+            var calls = PackageCallsWithoutTests(jobs, rid).Select(call => call.Step).ToList();
+            if (calls.Count != 1)
+            {
+                problems.Add($"{calls.Count} package calls name {rid} in a job that runs no test, where exactly one holds its secrets");
+                continue;
+            }
+
+            var with = Mapping(calls[0], "with");
+            foreach (var (input, secret) in secrets)
             {
                 if (Node(with, input) is YamlScalarNode value && value.Value == $"${{{{ secrets.{secret} }}}}")
                 {
@@ -762,7 +777,7 @@ public partial class ReleaseWorkflowTests
                 }
                 else
                 {
-                    problems.Add($"the osx-arm64 package call's {input} is not secrets.{secret}");
+                    problems.Add($"the {rid} package call's {input} is not secrets.{secret}");
                 }
             }
         }
@@ -812,6 +827,18 @@ public partial class ReleaseWorkflowTests
         return problems;
     }
 
+    /// <summary>Each signed platform and the secrets its package call alone holds, each under the input of its own name.</summary>
+    private static (string Rid, (string Input, string Secret)[] Secrets)[] SigningSecrets => [("osx-arm64", AppleSecrets), ("win-x64", AzureSecrets)];
+
+    /// <summary>The package calls that name a platform literally, in a job none of whose steps runs a test, with the job's name.</summary>
+    private static IEnumerable<(string Job, YamlMappingNode Step)> PackageCallsWithoutTests(YamlMappingNode jobs, string rid) =>
+        jobs.Children
+            .Where(job => !JobSteps((YamlMappingNode)job.Value).Any(step => Scalar(step, "run") is { } run && RunsTests().IsMatch(run)))
+            .SelectMany(job => JobSteps((YamlMappingNode)job.Value)
+                .Where(step => Scalar(step, "uses") == "./.github/actions/package")
+                .Where(step => Node(step, "with") is YamlMappingNode with && Scalar(with, "rid") == rid)
+                .Select(step => (job.Key.ToString(), step)));
+
     /// <summary>Every scalar node under a node, keys and values alike.</summary>
     private static IEnumerable<YamlScalarNode> ScalarNodes(YamlNode node) => node switch
     {
@@ -860,7 +887,7 @@ public partial class ReleaseWorkflowTests
     {
         var text = Read(Release).ReplaceLineEndings("\n");
         const string TeamId = "          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}\n";
-        const string Archive = "          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
+        const string Archive = "      - name: Read the signature of the archived macOS executable\n        shell: bash\n        env:\n          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
         const string PluginSteps = "  plugin:\n    name: The Reply plugin's package\n    needs: version\n    runs-on: ubuntu-latest\n";
         var six = string.Concat(AppleSecrets.Select(secret => $"          {secret.Input}: ${{{{ secrets.{secret.Secret} }}}}\n"));
 
@@ -1251,16 +1278,20 @@ public partial class ReleaseWorkflowTests
             .Where(step => Scalar(step, "run") is { } run && (run.StartsWith("dotnet test", StringComparison.Ordinal) || run.StartsWith("dotnet build", StringComparison.Ordinal) || run.StartsWith("dotnet restore", StringComparison.Ordinal)))
             .ToList();
         Assert.Equal(3, ranOnLinuxAlone.Count);
-        var action = Read(Action);
-        var publish = Assert.Single(action.Split('\n'), line => line.TrimStart().StartsWith("dotnet publish ", StringComparison.Ordinal));
+        // The package action's publish builds on its own; only a signing release publishes a second time, and that one
+        // bundles the first one's build.
+        var publish = Assert.Single(
+            Scalar(ActionSteps().Single(step => Scalar(step, "id") == "publish"), "run")!.Split('\n'),
+            line => line.TrimStart().StartsWith("dotnet publish ", StringComparison.Ordinal));
         Assert.DoesNotContain("--no-build", publish, StringComparison.Ordinal);
         Assert.DoesNotContain("--no-restore", publish, StringComparison.Ordinal);
         Assert.All(ranOnLinuxAlone, step => Assert.True(Scalar(step, "if") == OnLinux, $"'{Scalar(step, "name")}' has the condition '{Scalar(step, "if")}', not '{OnLinux}'"));
 
-        // macOS packages in a job of its own, which builds and tests nothing else; both jobs package and smoke-test
-        // every platform they build, the two smoke tests one text.
+        // macOS and Windows each package in a job of their own, which builds and tests nothing else; every job packages
+        // and smoke-tests every platform it builds, the three smoke tests one text.
         var macos = JobSteps(MacosJob()).ToList();
-        foreach (var platform in new[] { steps, macos })
+        var windows = JobSteps(WindowsJob()).ToList();
+        foreach (var platform in new[] { steps, macos, windows })
         {
             var everywhere = platform.Where(step => Scalar(step, "uses") == "./.github/actions/package" || Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true).ToList();
             Assert.Equal(2, everywhere.Count);
@@ -1268,10 +1299,13 @@ public partial class ReleaseWorkflowTests
         }
 
         static YamlMappingNode Smoke(IEnumerable<YamlMappingNode> steps) => steps.Single(step => Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true);
-        Assert.Equal(Scalar(Smoke(steps), "run"), Scalar(Smoke(macos), "run"));
-        Assert.Equal(
-            Mapping(Smoke(steps), "env").Children.Select(pair => $"{pair.Key}={pair.Value}"),
-            Mapping(Smoke(macos), "env").Children.Select(pair => $"{pair.Key}={pair.Value}"));
+        foreach (var job in new[] { macos, windows })
+        {
+            Assert.Equal(Scalar(Smoke(steps), "run"), Scalar(Smoke(job), "run"));
+            Assert.Equal(
+                Mapping(Smoke(steps), "env").Children.Select(pair => $"{pair.Key}={pair.Value}"),
+                Mapping(Smoke(job), "env").Children.Select(pair => $"{pair.Key}={pair.Value}"));
+        }
     }
 
     [Fact]
@@ -1522,7 +1556,7 @@ public partial class ReleaseWorkflowTests
         }
 
         var release = PackagingCalls(Release);
-        Assert.Equal(2, release.Count);
+        Assert.Equal(3, release.Count);
         var signing = Assert.Single(release, call => Node(Mapping(call, "with"), "sign-macos") is not null);
         var with = Mapping(signing, "with");
         Assert.Equal("osx-arm64", Scalar(with, "rid"));
@@ -1635,13 +1669,13 @@ public partial class ReleaseWorkflowTests
         Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
 
         var own = File.ReadAllText(Path.Combine([RepositoryRoot(), .. Entitlements.Split('/')]));
-        const string Dyld = "  <key>com.apple.security.cs.allow-dyld-environment-variables</key>\n  <true/>\n";
-        Assert.Contains(Dyld, own, StringComparison.Ordinal);
+        const string Jit = "  <key>com.apple.security.cs.allow-jit</key>\n  <true/>\n";
+        Assert.Contains(Jit, own, StringComparison.Ordinal);
         var readBack = carried switch
         {
             "the file's own" => own,
             "one key more" => own.Replace("</dict>", "  <key>com.apple.security.get-task-allow</key>\n  <true/>\n</dict>", StringComparison.Ordinal),
-            "one key fewer" => own.Replace(Dyld, string.Empty, StringComparison.Ordinal),
+            "one key fewer" => own.Replace(Jit, string.Empty, StringComparison.Ordinal),
             _ => string.Empty,
         };
 
@@ -1690,14 +1724,15 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The entitlements are the set Microsoft documents for .NET under the hardened runtime, and nothing else: the JIT,
-    /// the executable memory it writes, the <c>DYLD_</c> variables the dynamic loader reads, which the hardened runtime
-    /// would otherwise drop, and the native libraries the bundle unpacks, which our team did not sign. Each key says why
-    /// it is there, in a comment just above it. The file sits beside the Windows manifest, and the stray-file check of
-    /// the publish keeps it out of the archive.
+    /// The entitlements are what .NET needs under the hardened runtime, and nothing else: the JIT and the executable
+    /// memory it writes. Library validation stays on, since the native libraries the bundle unpacks are signed by the
+    /// executable's own team, and the <c>DYLD_</c> variables stay dropped, since nothing the runtime loads is found
+    /// through one.
+    /// Each key says why it is there, in a comment just above it. The file sits beside the Windows manifest, and the
+    /// stray-file check of the publish keeps it out of the archive.
     /// </summary>
     [Fact]
-    public void The_entitlements_file_holds_exactly_the_four_keys_and_says_why_each_is_there()
+    public void The_entitlements_file_holds_exactly_its_keys_and_says_why_each_is_there()
     {
         var path = Path.Combine([RepositoryRoot(), .. Entitlements.Split('/')]);
         Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(path)!, "jason.manifest")), "The entitlements file is not beside jason.manifest.");
@@ -1710,10 +1745,8 @@ public partial class ReleaseWorkflowTests
         var keys = dict.Elements("key").ToList();
         Assert.Equal(
             [
-                "com.apple.security.cs.allow-dyld-environment-variables",
                 "com.apple.security.cs.allow-jit",
                 "com.apple.security.cs.allow-unsigned-executable-memory",
-                "com.apple.security.cs.disable-library-validation",
             ],
             keys.Select(key => key.Value).Order(StringComparer.Ordinal));
         Assert.Equal(keys.Count * 2, dict.Elements().Count());
@@ -2254,7 +2287,7 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The notary is asked with the executable zipped as Apple documents, and waited for, for thirty minutes at most:
     /// anything but <c>Accepted</c> prints the service's own log of the submission and fails the step. Nothing is stapled:
-    /// a bare executable has no place for the ticket, which Gatekeeper fetches online at the first run of a downloaded copy.
+    /// a bare executable has no place for the ticket, which Apple documents Gatekeeper finding online instead.
     /// </summary>
     [Fact]
     public void The_notarization_waits_for_the_notary_and_fails_on_anything_but_accepted()
@@ -2428,7 +2461,7 @@ public partial class ReleaseWorkflowTests
     /// The file the smoke test runs is the file the action signed, and the archive's copy is read for its signature on
     /// the leg: unpacked from the archive a person downloads, verified, and its Developer ID authority required, rather
     /// than trusted to be the same file. And after the smoke test, a step lists who signed each native library the bundle
-    /// unpacked: a reading that decides whether <c>disable-library-validation</c> can go, which never fails the job.
+    /// unpacked, which shows each one signed by our team: a reading, which never fails the job.
     /// </summary>
     [Fact]
     public void The_smoke_test_runs_the_signed_file_and_the_archived_copy_is_read_for_its_signature()
@@ -2461,36 +2494,116 @@ public partial class ReleaseWorkflowTests
     // --- the notes --------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Which half of a release is signed, said where a person downloading it reads: the macOS executable carries Reply's
-    /// Developer ID and is notarized, and Gatekeeper fetches the ticket online at the first run of a copy a browser
-    /// downloaded, which is all the notes claim of that run; what a reader checks to know the signature is Reply's is
-    /// named, the Authority line and the team id, since Gatekeeper accepts any notarized Developer ID. The Linux and
-    /// Windows executables are not signed, SmartScreen stops the Windows one as before, and on both the checksum is the
-    /// only provenance. The sentence that nothing is signed is gone from every page that said it.
+    /// Which executables a release signs, said where a person downloading it reads: the macOS executable carries Reply's
+    /// Developer ID and is notarized, the release's own assessment accepts its signature as Notarized Developer ID, and a
+    /// quarantined copy is started on the build machine; of a person's first run the notes say only what Apple documents.
+    /// What a reader checks to know the signature is Reply's is named, the Authority line and the team id, since spctl
+    /// accepts any notarized Developer ID's signature. The one native library is signed with the same identity, so the
+    /// executable keeps library validation and carries only the two
+    /// entitlements the JIT needs, and the notes say where a reader finds the library to check it. The Windows
+    /// executable is signed with Reply's certificate through Azure Artifact Signing and carries an RFC 3161 timestamp, and
+    /// what a reader checks is named there too: the subject the certificate is issued to, and signtool's verdict. SmartScreen
+    /// still looks at a downloaded copy, and its reputation for a new publisher builds over downloads, so the notes promise
+    /// no silent first run in the first weeks: its dialog is still possible, and they no longer say it is a certain stop.
+    /// The Linux executable is not signed, and the checksum is its only provenance. The sentences that nothing, or the
+    /// Windows executable, is unsigned or not yet signed are gone from every page that said them, and so are the claims
+    /// that Gatekeeper accepts the executable or lets a first start through, and that a first run needs the network, the
+    /// release's own notes included.
     /// </summary>
     [Fact]
-    public void The_notes_say_which_half_of_a_release_is_signed()
+    public void The_notes_say_which_executables_a_release_signs()
     {
         var notes = Regex.Replace(Read(Notes), @"\s+", " ");
         Assert.Contains("The macOS executable is signed with Reply's Developer ID and notarized by Apple.", notes, StringComparison.Ordinal);
-        Assert.Contains("checks the notarization with Apple, online, the first time", notes, StringComparison.Ordinal);
-        Assert.Contains("The Linux and Windows executables are not signed, and nothing else a release carries is either.", notes, StringComparison.Ordinal);
-        Assert.Contains("stopped by SmartScreen the first time it runs", notes, StringComparison.Ordinal);
-        Assert.Contains("On Linux and Windows that check is the only provenance there is", notes, StringComparison.Ordinal);
-        foreach (var checkable in (string[])["`codesign -dv --verbose=2`", "`Authority=Developer ID Application:`", "`TeamIdentifier=`"])
+        // Of a downloaded copy the notes claim only what a release shows on its build machine, and Apple's own word
+        // for the rest: the assessment of the signature that holds the release back, the quarantined copy the job
+        // starts, and that an unstapled ticket is found online as Apple documents it, not as any run saw it. spctl's
+        // execute assessment refuses a command-line tool as not an app, so nothing says the executable itself is
+        // accepted, and that refusal is not quoted.
+        Assert.Contains("Before anything is published, the release's macOS job has `spctl` assess the executable's signature and stops unless that signature is accepted from the source `Notarized Developer ID`; the same job starts a copy carrying the quarantine flag a browser puts on a download, and its log says whether that copy started and opened its database.", notes, StringComparison.Ordinal);
+        Assert.Contains("The ticket is not stapled to the file, which a bare executable has no place for; for a file without a stapled ticket, Apple's documentation says Gatekeeper finds the ticket online.", notes, StringComparison.Ordinal);
+        Assert.Contains("an archive fetched with a browser and unpacked by hand keeps the flag.", notes, StringComparison.Ordinal);
+        Assert.Contains("`spctl` accepts the signature of any notarized Developer ID from the source `Notarized Developer ID`, so it is that name and that team id, not the acceptance, that say the executable is Reply's.", notes, StringComparison.Ordinal);
+        foreach (var unshown in (string[])["checks the notarization with Apple, online, the first time", "that first run needs the network", "assess the executable and stops unless it is accepted", "Gatekeeper accepts any notarized Developer ID"])
+        {
+            Assert.DoesNotContain(unshown, notes, StringComparison.Ordinal);
+        }
+        Assert.Contains("The Windows executable is signed with Reply's certificate through Azure Artifact Signing, and timestamped under RFC 3161, so the signature stays valid after the certificate expires.", notes, StringComparison.Ordinal);
+        Assert.Contains("SmartScreen's reputation for a new publisher builds over downloads, so in the first weeks of signed releases a download may still show its dialog", notes, StringComparison.Ordinal);
+        Assert.Contains("The Linux executable is not signed, and nothing else a release carries is either.", notes, StringComparison.Ordinal);
+        Assert.Contains("On Linux that check is the only provenance there is; on macOS and Windows the signature says who built the executable as well.", notes, StringComparison.Ordinal);
+        foreach (var checkable in (string[])["`codesign -dv --verbose=2`", "`Authority=Developer ID Application:`", "`TeamIdentifier=`", "`Get-AuthenticodeSignature`", "`Valid`", "`CN=ReplyApp Inc.`", "`signtool verify /pa /v`"])
         {
             Assert.Contains(checkable, notes, StringComparison.Ordinal);
         }
 
-        // What no run has shown: a quarantined launch was never made, so the notes do not say how it ends.
+        // The signer is a line a reader can type and a value they can compare, the same under Windows PowerShell and
+        // PowerShell: the certificate's subject, whose first part is the common name.
+        Assert.Contains(@"`(Get-AuthenticodeSignature .\jason.exe).SignerCertificate.Subject` prints the subject the certificate is issued to, which begins `CN=ReplyApp Inc.`", notes, StringComparison.Ordinal);
+
+        // The one native library is signed as the executable is, which is what lets the executable keep library
+        // validation and drop the DYLD key; the notes name the library, where it is unpacked, and the two entitlements
+        // left, so a reader can check all three.
+        Assert.Contains("The one native library the executable carries, `libe_sqlite3.dylib`, is signed with the same Developer ID and timestamped before it is bundled; the executable unpacks it under `~/.net/jason/` the first time it runs, and `codesign -dv --verbose=2` on it prints the same `Authority=` and `TeamIdentifier=` lines.", notes, StringComparison.Ordinal);
+        Assert.Contains("So the executable keeps the hardened runtime's library validation, which loads only a library signed by Apple or by the executable's own team, and it ignores `DYLD_` environment variables: the only entitlements it carries, `com.apple.security.cs.allow-jit` and `com.apple.security.cs.allow-unsigned-executable-memory`, let the .NET runtime compile code as it runs.", notes, StringComparison.Ordinal);
+        foreach (var dropped in (string[])["disable-library-validation", "allow-dyld-environment-variables"])
+        {
+            Assert.DoesNotContain(dropped, notes, StringComparison.Ordinal);
+        }
+
+        // What no run has shown: a quarantined copy started on a release runner, but nothing there showed that
+        // Gatekeeper assessed it, so the notes do not say how a downloaded copy's first run ends; and a signed
+        // executable's first run is SmartScreen's to decide, so they no longer say it is stopped.
         Assert.DoesNotContain("lets it start", notes, StringComparison.Ordinal);
         Assert.DoesNotContain("On Windows that check is the only provenance", notes, StringComparison.Ordinal);
-        Assert.Contains("the Linux executable is not signed", Regex.Replace(Read(["docs", "architecture.md"]), @"\s+", " "), StringComparison.Ordinal);
+        Assert.DoesNotContain("On Linux and Windows that check", notes, StringComparison.Ordinal);
+        var architecture = Regex.Replace(Read(["docs", "architecture.md"]), @"\s+", " ");
+        Assert.Contains("the Linux executable is not signed", architecture, StringComparison.Ordinal);
+        Assert.Contains("the Windows executable is signed through Azure Artifact Signing with a certificate issued to Reply and timestamped", architecture, StringComparison.Ordinal);
+        Assert.Contains("The Windows signing identity is reached only from the release's Windows job, in the GitHub environment `signing`, through that job's own OIDC token; no client secret is stored.", architecture, StringComparison.Ordinal);
 
-        foreach (var page in (string[][])[Notes, ["README.md"], ["docs", "INSTALL.md"], ["docs", "release-and-update.md"], ["docs", "architecture.md"]])
+        // A release's own notes are the other half of its body, so they are held to the same words whenever the file is
+        // there; the next release rewrites it, and a sentence carried from the last one is caught before it ships again.
+        string[][] pages = [Notes, ["README.md"], ["docs", "INSTALL.md"], ["docs", "release-and-update.md"], ["docs", "architecture.md"]];
+        if (File.Exists(Path.Combine(RepositoryRoot(), "RELEASE-NOTES.md")))
         {
-            Assert.DoesNotMatch(@"(?i)nothing (in (this|a) release )?is signed", Regex.Replace(Read(page), @"\s+", " "));
+            pages = [.. pages, ["RELEASE-NOTES.md"]];
         }
+
+        foreach (var page in pages)
+        {
+            var text = Regex.Replace(Read(page), @"\s+", " ");
+            Assert.DoesNotMatch(@"(?i)without Gatekeeper refusing", text);
+            Assert.DoesNotMatch(@"(?i)first run needs the network", text);
+            Assert.DoesNotMatch(@"(?i)nothing (in (this|a) release )?is signed", text);
+            Assert.DoesNotMatch(@"(?i)\bWindows executables? (is|are) not signed", text);
+            Assert.DoesNotMatch(@"(?i)\bnot yet signed", text);
+            Assert.DoesNotMatch(UnsignedClaim, text);
+            Assert.DoesNotMatch(@"(?i)Microsoft's Artifact Signing", text);
+            Assert.DoesNotMatch(@"(?i)signing the Windows executable", text);
+            Assert.DoesNotMatch(@"(?i)stopped by SmartScreen", text);
+            Assert.DoesNotMatch(@"(?i)Gatekeeper accepts|accepts? the executable|executable (is|was) accepted|seem to be an app", text);
+        }
+    }
+
+    /// <summary>
+    /// Any page saying something is unsigned, except for the one entitlement whose name holds the word.
+    /// </summary>
+    private const string UnsignedClaim = @"(?i)(?<!cs\.allow-)\bunsigned\b(?!-executable-memory)";
+
+    /// <summary>
+    /// The ban on "unsigned" reads past the entitlement <c>com.apple.security.cs.allow-unsigned-executable-memory</c>,
+    /// which is a name rather than a claim, and past nothing else: the word is still caught on its own, and after a
+    /// prefix that only looks like the entitlement's.
+    /// </summary>
+    [Theory]
+    [InlineData("the Linux executable is unsigned", true)]
+    [InlineData("the executable is allow-unsigned", true)]
+    [InlineData("an allow-unsigned build", true)]
+    [InlineData("its entitlements are `com.apple.security.cs.allow-jit` and `com.apple.security.cs.allow-unsigned-executable-memory`", false)]
+    public void The_ban_on_unsigned_reads_past_only_the_entitlements_name(string text, bool caught)
+    {
+        Assert.Equal(caught, Regex.IsMatch(text, UnsignedClaim));
     }
 
     /// <summary>
@@ -3705,8 +3818,9 @@ public partial class ReleaseWorkflowTests
         var action = Read(Action);
         Assert.Contains("RUNTIME_VERSION: ${{ inputs.runtime-version }}", action, StringComparison.Ordinal);
         Assert.Contains("$runtime = @(if ($env:RUNTIME_VERSION) { \"-p:RuntimeFrameworkVersion=$env:RUNTIME_VERSION\" })", action, StringComparison.Ordinal);
-        var publish = Assert.Single(action.Split('\n'), line =>line.TrimStart().StartsWith("dotnet publish ", StringComparison.Ordinal));
-        Assert.Contains(" @runtime ", publish, StringComparison.Ordinal);
+        var publishes = action.Split('\n').Where(line => line.TrimStart().StartsWith("dotnet publish ", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(publishes);
+        Assert.All(publishes, publish => Assert.Contains(" @runtime ", publish, StringComparison.Ordinal));
     }
 
     /// <summary>

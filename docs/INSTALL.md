@@ -418,6 +418,14 @@ To check a provider's own CLI as well, name it — this build knows no vendor's 
 jason status --provider-cli my-provider-cli
 ```
 
+The check looks the name up on the PATH of the process that runs `jason status`, and its answer says so whenever it read
+a PATH: *It read the CLI's PATH; the runtime's PATH may differ, see the install page.* The runtime has a PATH of its own, fixed when it
+started, and a runtime started at logon or from another shell may not see a program your terminal does. That is the
+case `plugin_availability` above names for a plugin's program; this check does not ask the runtime to look. A name
+given as a path is looked up in its own directory and reads no PATH, so the answer says nothing of one, with one
+exception: an npm shim given as a path takes its `node.exe` from the PATH when none stands beside it, and then the answer
+says whose PATH that was.
+
 ---
 
 ## 6. Start it, and keep it started

@@ -43,7 +43,9 @@ with `.` is not a candidate at all, and a directory without a `plugin.yaml` is s
 `.mjs` file under the package root can be imported by a relative specifier.
 
 A package holds at most **1024 files** and **16 MiB** in total, hidden paths excluded; over either it
-is refused with `package_too_large`, so hashing one stays cheap.
+is refused with `package_too_large`, so hashing one stays cheap. A `plugin.yaml` that cannot be read at load,
+and a package whose files cannot be read while it is hashed (an I/O error, or no permission to read them), are
+refused with `package_unreadable`, located at `plugin.yaml` and at `(package)` respectively.
 
 **The digest** is `sha256:` and 64 hex characters over a canonical stream: every file whose relative
 path has no segment starting with `.`, sorted ordinally by its forward-slashed relative path, each
@@ -847,9 +849,11 @@ Because that reading rests on your sending under the key, the runtime repeats su
 lists it under `settles_by_key` (§3): under a package that does not, an ambiguous end of the send is final, and a
 repeat already claimed is refused at the claim, `provider_answer_lost`, before your code runs. The claim refuses it the
 same way where the routed package, by its id and digest, or its binding is not the one the unsettled attempt ran under,
-since the key settles a send only at the provider and the account that took it, and where the item's arguments are not
-the ones that attempt ran with, since the key settles only the request it went with: a provider holding it answers a
-repeat with the earlier send.
+since the key settles a send only at the provider and the account that took it, and where the input composed for the
+repeat is not the one that attempt was composed with — its arguments, the person's projected fields and the value of the
+channel it consumes, the person's and the campaign's pins, and the campaign but for its status, leaving out only the
+pins that attempt and every later attempt of the item learned from their answers — since the key settles only the
+request it went with: a provider holding it answers a repeat with the earlier send.
 
 ### What to return
 
@@ -1020,7 +1024,7 @@ it under one code, `provider_blocked`, and the failure carries a `block` the
 nothing, say `provider_blocked` with the block even where the operation also declares an older code for the condition
 (`sender_limit_reached`, `insufficient_credits`, `sender_unavailable`, `unauthorized`); those codes stand for an answer
 you cannot read as a block. The block is kept on the attempt and on the item's `last_error`, where a person reads what
-to clear. Where the operation is one a block holds — `reach: act` work and the protective operations — the attempt
+to clear. Where the operation is one a block holds — its contract says `dispatch.under_provider_block: waits` — the attempt
 ends `blocked`, never counted, and the item waits on the block until it clears or a trial gets past it; any other
 operation ends there, final. So report `blocked` only for a refusal that concerns the account or the sender rather
 than the call: work waits on it. A block outside that page is recorded `permanent`, with what is wrong with it named

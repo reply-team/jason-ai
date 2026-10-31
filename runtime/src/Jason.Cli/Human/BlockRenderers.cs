@@ -92,5 +92,5 @@ public static class BlockRenderers
 
     private static string Items(int count) => count == 1 ? "1 item" : $"{count.ToString(CultureInfo.InvariantCulture)} items";
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

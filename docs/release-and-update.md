@@ -9,10 +9,17 @@ yes.
 `jason runtime autostart enable` registers the runtime to start at logon (§8). An update keeps that
 registration working, and whatever you wrote yourself, for the reason §7 gives.
 
-**The macOS executable is signed with Reply's Developer ID and notarized by Apple; the Linux and Windows executables
-are not signed.** Integrity is a SHA-256 you can check yourself, published beside the files and inside the manifest.
-On Linux and Windows it is the only provenance there is; on macOS the signature says who built the executable as
-well. Signing the Windows executable is its own story, before 1.0.0.
+**The macOS executable is signed with Reply's Developer ID and notarized by Apple, and the Windows executable with a
+certificate issued to Reply through Azure Artifact Signing, timestamped; the Linux executable is not signed.**
+Integrity is a SHA-256 you can check yourself, published beside the files and inside the manifest. On Linux it is the
+only provenance there is; on macOS and Windows the signature says who built the executable as well. The Windows
+signature is made by the release's Windows job alone: it runs in the GitHub environment `signing`, which only release
+tags and release branches may run in, and signs in to Azure with that job's own OIDC token, which Azure accepts from
+that environment alone; there is no client secret. On macOS the one native library the executable unpacks,
+`libe_sqlite3.dylib`, is signed with the same Developer ID before it is bundled, so the executable keeps the hardened
+runtime's library validation and ignores `DYLD_` environment variables; its only entitlements,
+`com.apple.security.cs.allow-jit` and `com.apple.security.cs.allow-unsigned-executable-memory`, are the ones the .NET
+runtime's JIT compiler needs.
 
 ## 1. What a release is
 
@@ -322,8 +329,10 @@ in the order a stranger reads it.
 
 The workflow that builds a release has a button — a `workflow_dispatch` that produces a draft, the button's draft,
 before any tag exists. GitHub offers that button only for a workflow that is already on the **default branch**;
-once it is, a branch's own version can be run from it (`gh workflow run release.yml --ref <branch>`), which is how a
-change to the pipeline is rehearsed before it merges. The button builds the draft in `reply-team/jason-ai` and opens
+once it is, a branch's own version can be run from it (`gh workflow run release.yml --ref <branch>`). Its Windows job
+runs in the environment `signing`, which admits only release tags and release branches, so a change to the pipeline is
+rehearsed from a release branch before it merges: a run from any other branch, a dry run included, is refused at the
+Windows job, and nothing is assembled. The button builds the draft in `reply-team/jason-ai` and opens
 no pull request. With `dry_run` it makes no draft either: every job runs, and the assembled release — archives,
 packages, manifest, checksums and notes — and the pull request's body come back as one artifact of the run, while the
 publishing job holds this run's own read-only token in place of the publication token.

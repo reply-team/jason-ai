@@ -61,5 +61,5 @@ public static class JournalRenderers
         return RenderText.WithCursor(table.Render(), page.NextCursor);
     }
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

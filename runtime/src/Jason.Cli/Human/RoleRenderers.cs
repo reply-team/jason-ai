@@ -54,5 +54,5 @@ public static class RoleRenderers
     private static string? EntryCommand(IReadOnlyList<string>? entryCommand) =>
         entryCommand is { Count: > 0 } ? string.Join(' ', entryCommand) : null;
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

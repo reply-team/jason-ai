@@ -38,6 +38,20 @@ public class HumanTableTests
         Assert.Equal(string.Join(System.Environment.NewLine, "A", "------------------", "a much longer cell"), text);
     }
 
+    /// <summary>
+    /// A cell is one line, and what a table lists is often somebody's text: a character that changes how the line reads
+    /// is shown as U+FFFD by the rule every human view holds for such text, and the column is as wide as what is shown.
+    /// </summary>
+    [Fact]
+    public void A_cell_shows_a_character_that_changes_the_line_as_a_replacement_mark()
+    {
+        var text = new HumanTable("NAME", "ID").Row("Ada\u001b[2J\nGrace‮\tx", "cnt_1").Render();
+
+        Assert.Equal(
+            string.Join(System.Environment.NewLine, "NAME              ID", "----------------  -----", "Ada�[2J�Grace�\tx  cnt_1"),
+            text);
+    }
+
     [Fact]
     public void A_row_with_the_wrong_number_of_cells_is_rejected()
     {

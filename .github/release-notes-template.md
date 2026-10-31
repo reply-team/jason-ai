@@ -91,20 +91,38 @@ If you then put the executable in place by hand, keep `LICENSE` and `THIRD-PARTY
 
 ## What is signed
 
-The macOS executable is signed with Reply's Developer ID and notarized by Apple. The quarantine flag is put there
-by the browser that downloaded the file, not by `curl`, so the one-liner's download has none and `install.sh`
-clears nothing; an archive fetched with a browser and unpacked by hand keeps the flag, and Gatekeeper checks the
-notarization with Apple, online, the first time the executable runs. The ticket is not stapled to the file, which a
-bare executable has no place for, so that first run needs the network.
+The macOS executable is signed with Reply's Developer ID and notarized by Apple. Before anything is published, the
+release's macOS job has `spctl` assess the executable's signature and stops unless that signature is accepted from the
+source `Notarized Developer ID`; the same job starts a copy carrying the quarantine flag a browser puts on a download,
+and its log says whether that copy started and opened its database. The ticket is not stapled to the file, which a
+bare executable has no place for; for a file without a stapled ticket, Apple's documentation says Gatekeeper finds the
+ticket online. The quarantine flag is put there by the browser that downloaded the file, not by `curl`, so the
+one-liner's download has none and `install.sh` clears nothing; an archive fetched with a browser and unpacked by hand
+keeps the flag.
 
 Who signed it is yours to read: `codesign -dv --verbose=2` on the unpacked executable prints an
 `Authority=Developer ID Application:` line naming Reply and its team id in parentheses, the same id the
-`TeamIdentifier=` line gives. Gatekeeper accepts any notarized Developer ID, so it is that name and that team id, not
-the acceptance, that say the executable is Reply's.
+`TeamIdentifier=` line gives. `spctl` accepts the signature of any notarized Developer ID from the source
+`Notarized Developer ID`, so it is that name and that team id, not the acceptance, that say the executable is Reply's.
 
-The Linux and Windows executables are not signed, and nothing else a release carries is either. On Windows, an
-archive a browser downloaded carries the mark of the web, and the executable unpacked from it is stopped by
-SmartScreen the first time it runs: `install.ps1` clears that mark from what it unpacks.
+The one native library the executable carries, `libe_sqlite3.dylib`, is signed with the same Developer ID and
+timestamped before it is bundled; the executable unpacks it under `~/.net/jason/` the first time it runs, and
+`codesign -dv --verbose=2` on it prints the same `Authority=` and `TeamIdentifier=` lines. So the executable keeps the
+hardened runtime's library validation, which loads only a library signed by Apple or by the executable's own team, and
+it ignores `DYLD_` environment variables: the only entitlements it carries, `com.apple.security.cs.allow-jit` and
+`com.apple.security.cs.allow-unsigned-executable-memory`, let the .NET runtime compile code as it runs.
 
-Both scripts check the archive against `checksums.txt` before unpacking. On Linux and Windows that check is the only
-provenance there is; on macOS the signature says who built the executable as well.
+The Windows executable is signed with Reply's certificate through Azure Artifact Signing, and timestamped under
+RFC 3161, so the signature stays valid after the certificate expires. Who signed it is yours to read, in Windows
+PowerShell or PowerShell alike: `Get-AuthenticodeSignature` on the unpacked executable says `Valid`, and, run where it
+was unpacked, `(Get-AuthenticodeSignature .\jason.exe).SignerCertificate.Subject` prints the subject the certificate
+is issued to, which begins `CN=ReplyApp Inc.`; `signtool verify /pa /v`, where the Windows SDK is installed, accepts it
+and prints the timestamp. An archive a browser downloaded carries the mark of the web, and
+SmartScreen looks at the executable unpacked from it the first time it runs. SmartScreen's reputation for a new
+publisher builds over downloads, so in the first weeks of signed releases a download may still show its dialog;
+`install.ps1` clears that mark from what it unpacks.
+
+The Linux executable is not signed, and nothing else a release carries is either.
+
+Both scripts check the archive against `checksums.txt` before unpacking. On Linux that check is the only provenance
+there is; on macOS and Windows the signature says who built the executable as well.

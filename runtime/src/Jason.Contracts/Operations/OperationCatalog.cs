@@ -44,15 +44,25 @@ public static class OperationCatalog
         [.. All.Where(contract => contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs).Select(contract => contract.Id)];
 
     /// <summary>
-    /// The operations whose work a provider block holds: every one whose <c>reach</c> is <c>act</c>, and the protective
-    /// ones — those that run in a paused campaign (<see cref="RunsInPausedCampaign"/>) — from the documents, as both are
-    /// published. A block is about what the provider refuses to let reach a person or protect them; every other
-    /// operation, a read or a control, runs through it and fails on its own, because a read tells the truth and a
-    /// control may still succeed.
+    /// The operations whose work a provider block holds, from each document's <c>dispatch.under_provider_block</c>: every
+    /// one that declares <c>waits</c>. Every operation whose <c>reach</c> is <c>act</c> declares it, because a block is
+    /// the provider refusing to let work reach a person; a control declares it where its one run must not end on that
+    /// refusal. Every other operation, a read or a control, runs through a block and ends on its own answer, because a
+    /// read tells the truth and a control may still succeed. Read once, as the documents are.
     /// </summary>
     public static IReadOnlySet<string> HeldByProviderBlock { get; } =
         new HashSet<string>(
-            All.Where(contract => string.Equals(contract.Reach.Value, ActReach, StringComparison.Ordinal) || contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs).Select(contract => contract.Id),
+            All.Where(contract => contract.Dispatch.UnderProviderBlock == UnderProviderBlock.Waits).Select(contract => contract.Id),
+            StringComparer.Ordinal);
+
+    /// <summary>
+    /// The held operations whose answer decides a block: those whose <c>reach</c> is <c>act</c>. A block's trial is drawn
+    /// from their work first, and only their call getting past a block clears it; a held control's answer decides
+    /// nothing but that the provider still refuses it.
+    /// </summary>
+    public static IReadOnlySet<string> TriedByProviderBlock { get; } =
+        new HashSet<string>(
+            All.Where(contract => HeldByProviderBlock.Contains(contract.Id) && string.Equals(contract.Reach.Value, ActReach, StringComparison.Ordinal)).Select(contract => contract.Id),
             StringComparer.Ordinal);
 
     /// <summary>The contract for one operation, or null when nothing of that name is published.</summary>

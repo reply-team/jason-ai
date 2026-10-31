@@ -16,8 +16,9 @@ namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
 /// The resume step's two branches for work parked on a provider block: every item a block holds goes back to the queue
-/// once the block clears, and while it is open a block whose trial is due lets one item through — protective work first,
-/// then the highest priority, then the oldest — and no other until that trial has ended.
+/// once the block clears, and while it is open a block whose trial is due lets one item through — work that reaches a
+/// person first, a held control only where none can run, then the highest priority, then the oldest — and no other until
+/// that trial has ended.
 /// </summary>
 public class BlockResumeTests
 {
@@ -53,22 +54,23 @@ public class BlockResumeTests
     }
 
     /// <summary>
-    /// A due trial lets exactly one item through, and the block records it: protective work before any other, then the
-    /// highest priority, then the oldest. While that item is in the queue no other is let through; once it has ended and
-    /// the next trial is due, the next in that order is.
+    /// A due trial lets exactly one item through, and the block records it: work that reaches a person before any other,
+    /// then the highest priority, then the oldest; a held control only once the block holds no such work that could run,
+    /// whatever its priority. While that item is in the queue no other is let through; once it has ended and the next trial
+    /// is due, the next in that order is.
     /// </summary>
     [Fact]
-    public async Task A_due_trial_lets_one_item_through_protective_first_then_priority_then_oldest()
+    public async Task A_due_trial_lets_one_item_through_an_act_first_then_priority_then_oldest()
     {
         using var harness = new DispatchHarness(Noon);
         var (block, parked) = await SeedAsync(
             harness,
             nextTrialAt: Noon,
             ("message.send", 0),
+            ("campaign.pause", 9),
             ("message.send", 5),
-            ("message.send", 5),
-            ("campaign.pause", 0));
-        string[] order = [parked[3], parked[1], parked[2], parked[0]];
+            ("message.send", 5));
+        string[] order = [parked[2], parked[3], parked[0], parked[1]];
 
         foreach (var expected in order)
         {
@@ -144,7 +146,6 @@ public class BlockResumeTests
             db.Campaigns.AddRange(pausing, active);
             var row = NewBlock(db, pausing, Noon);
             first = BlockRows.Parked(db, pausing, row, Noon, operation, 5).PublicId;
-            other = BlockRows.Parked(db, active, row, Noon.AddMinutes(1)).PublicId;
             await db.SaveChangesAsync(Ct);
             block = row.Id;
         }
@@ -156,6 +157,10 @@ public class BlockResumeTests
             Assert.True(row.TrialWorkItem?.PublicId == first, $"The first trial is {row.TrialWorkItem?.PublicId}, not {first}.");
             row.TrialWorkItem!.Status = trial;
             row.TrialWorkItem.Campaign!.Status = CampaignStatus.Paused;
+
+            // The other campaign's message is parked only now, so the first trial was drawn from the paused one's item
+            // alone, whichever operation it names.
+            other = BlockRows.Parked(db, await db.Campaigns.SingleAsync(c => c.Id != row.TrialWorkItem.CampaignId, Ct), row, Noon.AddMinutes(1)).PublicId;
             await db.SaveChangesAsync(Ct);
         }
 
@@ -214,7 +219,8 @@ public class BlockResumeTests
 
     /// <summary>
     /// Nothing is let through before the trial is due, and when it is due only an item the claim could run now is: not one
-    /// of a paused campaign unless it is protective work, and not one already past its due date.
+    /// of a paused campaign unless it is protective work, and not one already past its due date. Work that reaches a person
+    /// is the trial where one could run; the protective item of a paused campaign is the next, once none can.
     /// </summary>
     [Fact]
     public async Task A_trial_waits_for_its_moment_and_lets_through_only_an_item_the_claim_could_run()
@@ -222,6 +228,7 @@ public class BlockResumeTests
         using var harness = new DispatchHarness(Noon);
         int block;
         string protective;
+        string sent;
         await using (var db = harness.Open())
         {
             var paused = WorkItemFactory.NewCampaign("Paused", CampaignStatus.Paused, now: Noon);
@@ -233,21 +240,29 @@ public class BlockResumeTests
             await db.SaveChangesAsync(Ct);
             block = row.Id;
             protective = BlockRows.Parked(db, paused, row, Noon.AddMinutes(1), "optout.record").PublicId;
-            BlockRows.Parked(db, active, row, Noon.AddMinutes(2)).DueAt = Noon.AddMinutes(20);
+            var message = BlockRows.Parked(db, active, row, Noon.AddMinutes(2));
+            message.DueAt = Noon.AddMinutes(20);
             await db.SaveChangesAsync(Ct);
+            sent = message.PublicId;
         }
 
         harness.Clock.Now = Noon.AddMinutes(15).AddSeconds(-1);
         Assert.Equal(0, await harness.ResumeAsync(Ct));
 
-        // Due now: of the four, the paused campaign's message and the message past its due date cannot run; the
-        // protective item of the paused campaign comes first among the two that can.
+        // Due now: of the four, the paused campaign's message and the message past its due date cannot run; of the two
+        // that can, the active campaign's message reaches a person and comes first, and the protective item of the paused
+        // campaign once it has ended.
         harness.Clock.Now = Noon.AddMinutes(15);
-        Assert.Equal(1, await harness.ResumeAsync(Ct));
-        await using (var db = harness.Open())
+        foreach (var expected in new[] { sent, protective })
         {
-            var row = await db.ProviderBlocks.AsNoTracking().Include(b => b.TrialWorkItem).SingleAsync(b => b.Id == block, Ct);
-            Assert.True(row.TrialWorkItem?.PublicId == protective, $"The trial is {row.TrialWorkItem?.PublicId}, not {protective}.");
+            Assert.Equal(1, await harness.ResumeAsync(Ct));
+            await using (var db = harness.Open())
+            {
+                var row = await db.ProviderBlocks.AsNoTracking().Include(b => b.TrialWorkItem).SingleAsync(b => b.Id == block, Ct);
+                Assert.True(row.TrialWorkItem?.PublicId == expected, $"The trial is {row.TrialWorkItem?.PublicId}, not {expected}.");
+            }
+
+            await EndTrialAsync(harness, block, WorkItemStatus.Failed);
         }
     }
 
@@ -510,11 +525,12 @@ public class BlockResumeTests
     }
 
     /// <summary>
-    /// The protective work the trial query puts first is the catalogue's own set, written into the text from the
-    /// catalogue: every protective operation is in the emitted query and no other operation the catalogue knows is.
+    /// The operations the trial query names are the catalogue's own sets, written into the text from the catalogue: the
+    /// held work that reaches a person, which it puts first, and the protective work, which it lets run in a paused
+    /// campaign. No other operation the catalogue knows is named, and its order names the first set alone.
     /// </summary>
     [Fact]
-    public async Task The_trial_query_holds_exactly_the_catalogues_protective_operations()
+    public async Task The_trial_query_names_exactly_the_catalogues_sets()
     {
         using var harness = new DispatchHarness(Noon);
         await SeedAsync(harness, nextTrialAt: Noon.AddHours(1), ("message.send", 0));
@@ -525,8 +541,12 @@ public class BlockResumeTests
         var text = TrialQuery(harness);
         var named = OperationCatalog.All.Select(contract => contract.Id).Where(id => text.Contains($"'{id}'", StringComparison.Ordinal))
             .Order(StringComparer.Ordinal).ToList();
-        var protective = OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal).ToList();
-        Assert.True(named.SequenceEqual(protective), $"The trial query names {string.Join(", ", named)}; the catalogue's protective work is {string.Join(", ", protective)}.");
+        var sets = OperationCatalog.RunsInPausedCampaign.Union(OperationCatalog.TriedByProviderBlock).Order(StringComparer.Ordinal).ToList();
+        Assert.True(named.SequenceEqual(sets), $"The trial query names {string.Join(", ", named)}; the catalogue's sets are {string.Join(", ", sets)}.");
+        var first = System.Text.RegularExpressions.Regex.Match(text, "ORDER BY CASE WHEN w[.]operation IN [(](?<ids>[^)]*)[)] THEN 0").Groups["ids"].Value;
+        Assert.Equal(
+            OperationCatalog.TriedByProviderBlock.Order(StringComparer.Ordinal).Select(id => $"'{id}'"),
+            first.Split(", ").Order(StringComparer.Ordinal));
     }
 
     /// <summary>

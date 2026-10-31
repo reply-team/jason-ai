@@ -22,31 +22,63 @@ public class OperationCatalogTests
     }
 
     /// <summary>
-    /// What a provider block holds is read from the documents and nowhere else: every operation of reach <c>act</c>, and
-    /// the protective ones, which run in a paused campaign — three by name, a pause, an opt-out and the take-back of a
-    /// send. Every read and every other control runs through a block, a read of one send among them.
+    /// What a provider block holds is read from the documents and nowhere else: every operation whose
+    /// <c>dispatch.under_provider_block</c> is <c>waits</c> — the acts, the pause and the opt-out — and nothing beside
+    /// them; the take-back of a send, every other control and every read run through a block. The block's trial is
+    /// drawn first from the held work that reaches a person, its reach read as the published value.
     /// </summary>
     [Fact]
-    public void A_provider_block_holds_every_act_and_the_protective_operations_and_nothing_else()
+    public void A_provider_block_holds_the_work_whose_document_waits_and_nothing_else()
     {
         foreach (var contract in OperationCatalog.All)
         {
-            var held = string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal) || OperationCatalog.RunsInPausedCampaign.Contains(contract.Id);
+            var held = contract.Dispatch.UnderProviderBlock == UnderProviderBlock.Waits;
             Assert.True(
                 held == OperationCatalog.HeldByProviderBlock.Contains(contract.Id),
-                $"'{contract.Id}' (reach {contract.Reach.Value}) is held by a block: {OperationCatalog.HeldByProviderBlock.Contains(contract.Id)}; expected {held}.");
+                $"'{contract.Id}' (under a provider block: {contract.Dispatch.UnderProviderBlock}) is held by a block: {OperationCatalog.HeldByProviderBlock.Contains(contract.Id)}; expected {held}.");
+
+            var tried = held && string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal);
+            Assert.True(
+                tried == OperationCatalog.TriedByProviderBlock.Contains(contract.Id),
+                $"'{contract.Id}' (reach {contract.Reach.Value}) is a block's trial first: {OperationCatalog.TriedByProviderBlock.Contains(contract.Id)}; expected {tried}.");
         }
 
         Assert.Contains("message.send", OperationCatalog.HeldByProviderBlock);
         Assert.Contains("campaign.pause", OperationCatalog.HeldByProviderBlock);
         Assert.Contains("optout.record", OperationCatalog.HeldByProviderBlock);
-        Assert.Contains("message.cancel", OperationCatalog.HeldByProviderBlock);
+        Assert.DoesNotContain("message.cancel", OperationCatalog.HeldByProviderBlock);
         Assert.DoesNotContain("message.status", OperationCatalog.HeldByProviderBlock);
-        Assert.Equal(
-            ["campaign.pause", "message.cancel", "optout.record"],
-            OperationCatalog.HeldByProviderBlock.Where(id => !string.Equals(OperationCatalog.Find(id)!.Reach.Value, "act", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
         Assert.DoesNotContain("conversation.list", OperationCatalog.HeldByProviderBlock);
+        Assert.Contains("message.cancel", OperationCatalog.RunsInPausedCampaign);
+        Assert.Equal(
+            ["campaign.activate", "campaign.enroll", "conversation.reply", "message.send", "social_invitation.send"],
+            OperationCatalog.TriedByProviderBlock.Order(StringComparer.Ordinal));
         Assert.Contains(OperationCatalog.All, contract => string.Equals(contract.Reach.Value, "control", StringComparison.Ordinal) && !OperationCatalog.HeldByProviderBlock.Contains(contract.Id));
+    }
+
+    /// <summary>
+    /// The rule the documents keep: every published operation that reaches a person — its <c>reach</c> read as the
+    /// dangerous value, never a list kept by hand — waits under a provider block, and beside them exactly two controls
+    /// wait, the pause and the record that somebody said stop, each of which must happen once and keeps its place
+    /// rather than end on the provider's refusal. The take-back of a send runs: its moment passes while it waits.
+    /// A third control that waits is a change made in this row or not at all.
+    /// </summary>
+    [Fact]
+    public void Every_operation_that_reaches_a_person_waits_under_a_provider_block_and_the_pause_and_the_stop_wait_beside_them()
+    {
+        foreach (var contract in OperationCatalog.All.Where(contract => string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal)))
+        {
+            Assert.True(
+                contract.Dispatch.UnderProviderBlock == UnderProviderBlock.Waits,
+                $"'{contract.Id}' reaches a person and declares `dispatch.under_provider_block: {contract.Dispatch.UnderProviderBlock}`.");
+        }
+
+        Assert.Equal(
+            ["campaign.pause", "optout.record"],
+            OperationCatalog.All
+                .Where(contract => !string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal) && contract.Dispatch.UnderProviderBlock == UnderProviderBlock.Waits)
+                .Select(contract => contract.Id));
+        Assert.Equal(UnderProviderBlock.Runs, OperationCatalog.Find("message.cancel")!.Dispatch.UnderProviderBlock);
     }
 
     [Fact]
@@ -180,8 +212,10 @@ public class OperationCatalogTests
     [InlineData("preview", "{\"summary\": \"Enroll somebody\", \"highlights\": [], \"title\": \"x\"}")]
     [InlineData("dispatch", "\"waits\"")]
     [InlineData("dispatch", "{}")]
-    [InlineData("dispatch", "{\"in_paused_campaign\": \"sometimes\"}")]
-    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"in_draft_campaign\": \"waits\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"sometimes\", \"under_provider_block\": \"runs\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"under_provider_block\": \"sometimes\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"under_provider_block\": \"runs\", \"in_draft_campaign\": \"waits\"}")]
     [InlineData("channel_arguments", "\"send_after\"")]
     [InlineData("channel_arguments", "[1]")]
     [InlineData("channel_arguments", "{}")]
@@ -497,7 +531,7 @@ public class OperationCatalogTests
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = "control";
-        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "under_provider_block": "waits" }""");
 
         var contract = OperationContract.Parse("campaign.pause.json", document);
 
@@ -519,11 +553,51 @@ public class OperationCatalogTests
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = JsonNode.Parse(reach);
         document["approval"] = JsonNode.Parse(approval);
-        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "under_provider_block": "waits" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.activate.json", document));
 
         Assert.Contains("dispatch.in_paused_campaign", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What an open provider block does to an operation's work is the document's own word, read as written: a read or a
+    /// control may run through a block or wait behind it, because a control whose one run must not be lost — a pause, an
+    /// opt-out — keeps its place while the provider refuses the account.
+    /// </summary>
+    [Theory]
+    [InlineData("\"read\"", "runs", UnderProviderBlock.Runs)]
+    [InlineData("\"control\"", "runs", UnderProviderBlock.Runs)]
+    [InlineData("\"control\"", "waits", UnderProviderBlock.Waits)]
+    [InlineData("\"act\"", "waits", UnderProviderBlock.Waits)]
+    public void A_document_says_whether_its_work_waits_under_a_provider_block(string reach, string value, UnderProviderBlock expected)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = JsonNode.Parse(reach);
+        document["dispatch"] = new JsonObject { ["in_paused_campaign"] = "waits", ["under_provider_block"] = value };
+
+        var contract = OperationContract.Parse("campaign.get.json", document);
+
+        Assert.Equal(expected, contract.Dispatch.UnderProviderBlock);
+    }
+
+    /// <summary>
+    /// A provider block is the provider refusing to let work reach a person, so an operation that reaches one — its
+    /// reach read as the dangerous value — waits behind it, and a document that says it runs through is refused.
+    /// </summary>
+    [Theory]
+    [InlineData("\"act\"")]
+    [InlineData("""{ "value": "act", "conditional": true, "detail": "`control` while the campaign holds nobody." }""")]
+    public void An_operation_that_reaches_a_person_is_refused_where_it_would_run_through_a_provider_block(string reach)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = JsonNode.Parse(reach);
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "waits", "under_provider_block": "runs" }""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.activate.json", document));
+
+        Assert.Contains("campaign.activate.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`dispatch.under_provider_block` is `runs`, but `reach` is `act`", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -551,7 +625,7 @@ public class OperationCatalogTests
     [InlineData("approval_reason", "null")]
     [InlineData("approval_reason", "\"   \"")]
     [InlineData("preflight", """{ "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" }""")]
-    [InlineData("dispatch", """{ "in_paused_campaign": "waits" }""")]
+    [InlineData("dispatch", """{ "in_paused_campaign": "waits", "under_provider_block": "waits" }""")]
     public void The_protective_floor_is_refused_where_anything_it_implies_does_not_hold(string field, string value)
     {
         var document = Floor();
@@ -865,7 +939,7 @@ public class OperationCatalogTests
         document["protective_floor"] = true;
         document["approval_reason"] = "the protective floor: waiting for permission to stop is the destructive choice.";
         document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_or_create" }""");
-        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "under_provider_block": "waits" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
         DeclaresAContactIdentifier(document);
         return document;
@@ -955,7 +1029,7 @@ public class OperationCatalogTests
           "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
           "channel_arguments": null,
           "channel_templates": null,
-          "dispatch": { "in_paused_campaign": "waits" },
+          "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "waits" },
           "contact_projection": null,
           "precondition": "none",
           "preview": null,

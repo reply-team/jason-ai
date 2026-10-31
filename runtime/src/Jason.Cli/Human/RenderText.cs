@@ -19,13 +19,20 @@ internal static class RenderText
     /// <summary>How much of a digest a person needs to tell two packages apart at a glance.</summary>
     private const int DigestShown = 12;
 
+    /// <summary>
+    /// The project's dialect with property names matched exactly. The runtime keeps two keys of a context, a contact's
+    /// custom fields or a channel's data that differ only in case as two, and a node read with the dialect's
+    /// case-insensitive names would throw on listing them, after the runtime had already done what it was asked.
+    /// </summary>
+    private static readonly JsonSerializerOptions Answers = new(JasonJson.Options) { PropertyNameCaseInsensitive = false };
+
     /// <summary>A response body of the expected shape, or null when it is something else — the runner then prints the raw JSON.</summary>
     public static T? Read<T>(string json)
         where T : class
     {
         try
         {
-            return JsonSerializer.Deserialize<T>(json, JasonJson.Options);
+            return JsonSerializer.Deserialize<T>(json, Answers);
         }
         catch (JsonException)
         {
@@ -120,13 +127,13 @@ internal static class RenderText
     /// <summary>
     /// Text somebody else wrote, as a human view prints it: a character that changes how the line around it reads (see
     /// <see cref="PreviewTemplate.ChangesTheLine"/>: an escape sequence, a backspace, a right-to-left override, a line
-    /// separator) is shown as U+FFFD, a mark that can be seen, rather than written; a tab, the joiners and the soft
-    /// hyphen stay (see <see cref="IsKept"/>). It is the one rule the human views hold for a person's text where that
-    /// text passes through it, so a name, a subject and a message are printed the same way wherever they do: the
-    /// approval's lines and its example, and the thread views. A view not named here still prints some of its text as it
-    /// came. A line break is such a character, so this is for a value that is one line; <see cref="ShownLines"/> is for
-    /// one that is not. The rule reads characters, not bytes: what the console's code page makes of a glyph that is not
-    /// marked is the writer's matter.
+    /// separator) is shown as U+FFFD, a mark that can be seen, rather than written; a tab, the joiners, the soft hyphen
+    /// and the direction marks stay (see <see cref="IsKept"/>). It is the one rule the human views hold for a person's
+    /// text, so a name, a reason, a subject and a message are printed the same way wherever they are: every table cell,
+    /// every labelled line of every view, and the lines a view writes of its own around such text. A value printed
+    /// whole as JSON needs no rule, because the serializer escapes such a character. A line break is such a character,
+    /// so this is for a value that is one line; <see cref="ShownLines"/> is for one that is not. The rule reads
+    /// characters, not bytes: what the console's code page makes of a glyph that is not marked is the writer's matter.
     /// </summary>
     public static string? Shown(string? text)
     {
@@ -145,13 +152,16 @@ internal static class RenderText
     }
 
     /// <summary>
-    /// What <see cref="Shown"/> prints as it came although <see cref="PreviewTemplate.ChangesTheLine"/> is true or, for the
-    /// tab, would be turned into a space by the summary's rule: a tab, which is whitespace a person reads as such, and
-    /// the zero-width joiner, the zero-width non-joiner and the soft hyphen, which emoji sequences, Persian and Indic
-    /// spelling and HTML-made text are written with and which move no character and break no line. The summary's own
-    /// rule is a contract and keeps them marked.
+    /// What <see cref="Shown"/> prints as it came although <see cref="PreviewTemplate.ChangesTheLine"/> is true or, for
+    /// the tab, would be turned into a space by the summary's rule: a tab, which is whitespace a person reads as such,
+    /// and the zero-width joiner, the zero-width non-joiner and the soft hyphen, which emoji sequences, Persian and
+    /// Indic spelling and HTML-made text are written with, and the left-to-right, right-to-left and Arabic letter
+    /// marks, which text mixing Arabic or Hebrew with Latin letters and digits is written with to read in the right
+    /// order. None of them moves a character of its own or breaks a line, unlike the overrides, embeddings and
+    /// isolates, which stay marked. The summary's own rule is a contract and keeps them marked.
     /// </summary>
-    private static bool IsKept(Rune character) => character.Value is 0x09 or 0x200C or 0x200D or 0x00AD;
+    private static bool IsKept(Rune character) =>
+        character.Value is 0x09 or 0x200C or 0x200D or 0x00AD or 0x200E or 0x200F or 0x061C;
 
     /// <summary>
     /// A message's text split at its own line breaks (CR LF, CR and LF alike, so that no carriage return reaches the

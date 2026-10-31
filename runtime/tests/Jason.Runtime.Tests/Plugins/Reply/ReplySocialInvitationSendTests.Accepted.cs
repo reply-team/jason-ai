@@ -25,13 +25,39 @@ public partial class ReplySocialInvitationSendTests
         var result = await InvokeAsync(api, WithMoment(Input(pinned: "1001"), "2099-11-03T16:30:00+02:00"));
 
         var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!;
-        Assert.Equal(("accepted", "2099-11-03T14:30:00Z", "linkedin-1001", true), ((string?)item["status"], (string?)item["accepted_for"], (string?)item["reference"], (bool)item["cancelable"]!));
+        Assert.Equal(("accepted", "2099-11-03T14:30:00Z", "linkedin-scheduled-1001", true), ((string?)item["status"], (string?)item["accepted_for"], (string?)item["reference"], (bool)item["cancelable"]!));
         Assert.Equal("""{"external_id":null,"sent_at":null}""", item["invitation"]!.ToJsonString());
-        Assert.Equal("""{"contact":"1001","send":"linkedin-1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
+        Assert.Equal("""{"contact":"1001","send":"linkedin-scheduled-1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
         Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", "contact linkedin-connect"], Lines(account));
         Assert.Equal(("2099-11-03T16:30:00+02:00", Key), (account.Calls[^1].Option("--send-after"), account.Calls[^1].Option("--idempotency-key")));
         Assert.All(account.Calls.SkipLast(1), call => Assert.Null(call.Option("--idempotency-key")));
         Assert.Equal("queued", (string?)Assert.Single(account.DirectSends)!["state"]);
+    }
+
+    /// <summary>
+    /// An invitation held for a moment ahead, which Reply answers with no activity and no moment and names by a
+    /// <c>linkedin-scheduled-</c> reference for its whole life, is accepted under that reference as given, with no
+    /// identifier yet. The stand-in prints the answer as reply-cli 0.17.2 does (reply-cli's
+    /// <c>src/operations/direct-send.ts</c>, <c>result_of</c>: a null <c>linkedInActivityId</c> is <c>activity_id</c> null).
+    /// </summary>
+    [Fact]
+    public async Task A_deferred_invitation_is_accepted_under_the_reference_reply_gives_it_with_no_identifier_yet()
+    {
+        using var account = Planted();
+        account.Returns("contact linkedin-connect", new JsonObject
+        {
+            ["status"] = "sent", ["contact_id"] = 1001, ["contact_created"] = false, ["activity_id"] = null, ["sent_at"] = null,
+            ["reference"] = "linkedin-scheduled-4021", ["send_after"] = "2099-11-03T14:30:00Z", ["state"] = "queued",
+        });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, WithMoment(Input(pinned: "1001"), "2099-11-03T16:30:00+02:00"));
+
+        var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!;
+        Assert.Equal(("accepted", "2099-11-03T14:30:00Z", "linkedin-scheduled-4021", true), ((string?)item["status"], (string?)item["accepted_for"], (string?)item["reference"], (bool)item["cancelable"]!));
+        Assert.Equal("""{"external_id":null,"sent_at":null}""", item["invitation"]!.ToJsonString());
+        Assert.Equal("""{"contact":"1001","send":"linkedin-scheduled-4021"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
     }
 
     /// <summary>

@@ -36,8 +36,8 @@ public static class ContactValidation
 
         var errors = new ValidationErrors();
         var draft = new ContactDraft(
-            Text(input.FirstName, fieldPrefix + "first_name", errors),
-            Text(input.LastName, fieldPrefix + "last_name", errors),
+            Name(input.FirstName, fieldPrefix + "first_name", errors),
+            Name(input.LastName, fieldPrefix + "last_name", errors),
             Text(input.Company, fieldPrefix + "company", errors),
             Text(input.Title, fieldPrefix + "title", errors),
             TimeZoneRules.Normalize(input.TimeZone, fieldPrefix + "time_zone", errors),
@@ -62,6 +62,23 @@ public static class ContactValidation
         if (text.Length > MaxTextLength)
         {
             errors.Add(field, "too_long", string.Create(CultureInfo.InvariantCulture, $"{field} must be at most {MaxTextLength} characters."));
+            return null;
+        }
+
+        return text;
+    }
+
+    /// <summary>
+    /// A part of a person's name, as <see cref="Text"/> reads it and holding no control character: a name is printed to
+    /// people wherever the contact is listed, and a control character inside one would act on their terminal rather than
+    /// be read.
+    /// </summary>
+    public static string? Name(string? raw, string field, ValidationErrors errors)
+    {
+        var text = Text(raw, field, errors);
+        if (text is not null && text.Any(char.IsControl))
+        {
+            errors.Add(field, "invalid", $"{field} must hold no control character.");
             return null;
         }
 

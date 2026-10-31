@@ -55,6 +55,50 @@ internal static partial class Account
     }
 
     /// <summary>
+    /// Reply's refusal of a send timed by a schedule it cannot time it by, or null: a schedule the account holds none
+    /// under, unknown and another account's alike; one that never opens, with no active day that has hours; and one read
+    /// in the contact's own time zone for a contact Reply holds none for. The email route and the LinkedIn routes each
+    /// name it in their own family, and reply-cli 0.18.0 gives both one code of its meaning
+    /// (src/operations/direct-send.ts:130-138, mapped at :192-197). An account planted with no schedules times a send by
+    /// any, as the rows that never read one need.
+    /// </summary>
+    private static Ending? Untimed(string root, DirectSend send, int schedule, int contactId, JsonObject ids)
+    {
+        var schedules = Records(root, SchedulesFile).ToList();
+        if (schedules.Count == 0)
+        {
+            return null;
+        }
+
+        var family = send.Channel == "email" ? "contact." : "directLinkedIn.";
+        if (schedules.FirstOrDefault(entry => entry["id"] is JsonValue id && id.TryGetValue<long>(out var held) && held == schedule) is not { } timing)
+        {
+            return Refused(
+                "schedule.not_found", "Reply has no sending schedule by that id that this account can use, so nothing was sent.",
+                status: 404, replyCode: family + "scheduleNotFound", ids: ids);
+        }
+
+        var opens = (timing["mainTimings"] as JsonArray ?? []).OfType<JsonObject>()
+            .Any(day => Flag(day, "isActive") && day["timeRanges"] is JsonArray { Count: > 0 });
+        if (!opens)
+        {
+            return Refused(
+                "schedule.no_slot", "The sending schedule has no active day with a time range, so it never opens; nothing was sent.",
+                status: 409, replyCode: family + "scheduleHasNoSlot", ids: ids);
+        }
+
+        var contact = Find(Read(root, ContactsFile), contactId);
+        if (Flag(timing, "useProspectTimezone") && Text(contact, "timeZoneId").Length == 0)
+        {
+            return Refused(
+                "contact.time_zone_missing", "Reply holds no time zone for the contact to read the schedule in, so nothing was sent.",
+                status: 409, replyCode: family + "contactTimeZoneMissing", ids: ids);
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The key a send carries, as reply-cli takes one: 1 to 255 printable ASCII characters, none of them a space at either
     /// end, or the CLI's usage error.
     /// </summary>
@@ -170,12 +214,19 @@ internal static partial class Account
             details["state"] = state;
         }
 
+        var status = planted["status"] is JsonValue answered ? answered.GetValue<int>() : (int?)null;
+        var replyCode = planted["reply_code"] is JsonValue code ? code.GetValue<string>() : null;
+        if (status == 429 && replyCode is not null && SpentAllowances.ContainsKey(replyCode))
+        {
+            return SpentAllowance(replyCode, ids, details);
+        }
+
         return Refused(
             Text(planted, "code"),
             "Reply took the send and it did not go.",
             exit: Number(planted, "exit"),
-            status: planted["status"] is JsonValue status ? status.GetValue<int>() : null,
-            replyCode: planted["reply_code"] is JsonValue replyCode ? replyCode.GetValue<string>() : null,
+            status: status,
+            replyCode: replyCode,
             detail: planted["detail"] is JsonValue detail ? detail.GetValue<string>() : null,
             ids: ids,
             details: details.Count == 0 ? null : details);
@@ -186,23 +237,37 @@ internal static partial class Account
         string root, DirectSend send, int contactId, DateTimeOffset? sendAfter, int? schedule, string? key, string request, JsonObject answer)
     {
         var sends = Read(root, DirectSendsFile);
-        var reference = (send.Channel == "email" ? "email-" : "linkedin-") + (1001 + sends.Count).ToString(CultureInfo.InvariantCulture);
 
         // A schedule holds the send for its next window, which this stand-in never reaches. While it waits Reply names no
-        // moment, given one or not: what it estimates goes under a member of its own, which the CLI does not pass.
+        // moment, given one or not. One that opens later than ten minutes from now leaves the send waitingForSchedule,
+        // with what Reply estimates under a member of its own, which reply-cli 0.18.0 passes on as estimated_send_at
+        // (src/operations/direct-send.ts:320-323).
         var queued = (sendAfter is { } at && at > DateTimeOffset.UtcNow) || schedule is not null;
+        var waiting = schedule is { } timedBy
+            ? Records(root, SchedulesFile).FirstOrDefault(entry => entry["id"] is JsonValue id && id.TryGetValue<long>(out var held) && held == timedBy && entry.ContainsKey("_estimate"))
+            : null;
+
+        // A LinkedIn send Reply holds for later is linkedin-scheduled-<n> for its whole life; one that goes at once is
+        // linkedin-<n>.
+        var prefix = send.Channel == "email" ? "email-" : queued ? "linkedin-scheduled-" : "linkedin-";
+        var reference = prefix + (1001 + sends.Count).ToString(CultureInfo.InvariantCulture);
         sendAfter = schedule is null ? sendAfter : null;
         var record = new JsonObject
         {
             ["reference"] = reference,
             ["channel"] = WireChannel(send.Channel),
             ["contactId"] = contactId,
-            ["state"] = queued ? "queued" : "sent",
+            ["state"] = waiting is not null ? "waitingForSchedule" : queued ? "queued" : "sent",
             ["sendAfter"] = sendAfter is { } moment ? Utc(moment) : null,
             ["scheduleId"] = schedule,
             ["sentAt"] = queued ? null : answer["sent_at"]?.DeepClone(),
             ["messageId"] = queued ? null : answer["message_id"]?.DeepClone(),
         };
+        if (waiting is not null)
+        {
+            record["estimatedSendAt"] = waiting["_estimate"]?.DeepClone();
+        }
+
         sends.Add(record);
         Write(root, DirectSendsFile, sends);
 
@@ -213,6 +278,10 @@ internal static partial class Account
         }
 
         answer["state"] = Text(record, "state");
+        if (waiting is not null)
+        {
+            answer["estimated_send_at"] = waiting["_estimate"]?.DeepClone();
+        }
         if (queued)
         {
             // Held for its moment: nothing has gone, so nothing is named that went.
@@ -245,7 +314,7 @@ internal static partial class Account
         var reference = line.Operands[0];
         if (!Regex.IsMatch(reference, Jason.ReplyCliStub.DirectSendReference.Pattern))
         {
-            return Refused("usage.reference", "A reference names one direct send as Reply spells it: email-<number> or linkedin-<number>.", exit: 2);
+            return Refused("usage.reference", "That is not a reference Reply gives: email-<n>, linkedin-<n> or linkedin-scheduled-<n>, n from 1.", exit: 2);
         }
 
         if (!Offered(root, "direct_send"))
@@ -271,6 +340,13 @@ internal static partial class Account
             ["cancelled_at"] = held["cancelledAt"]?.DeepClone(),
         };
 
+        // The moment Reply expects to send a send waiting for its schedule, only where it gave one, and null in every
+        // other state, as reply-cli 0.18.0 passes it on (src/operations/direct-sends.ts:54).
+        if (held.ContainsKey("estimatedSendAt"))
+        {
+            record["estimated_send_at"] = Text(held, "state") == "waitingForSchedule" ? held["estimatedSendAt"]?.DeepClone() : null;
+        }
+
         // Reply's own code for a failure, only where it gave one, as reply-cli passes it on.
         if (held["failureCode"] is { } code)
         {
@@ -290,16 +366,16 @@ internal static partial class Account
     /// <summary>
     /// <c>direct-send cancel &lt;reference&gt;</c>: cancels a send Reply still holds for its moment, and answers its record as
     /// <c>direct-send get</c> prints it. A send already cancelled answers the same, cancelled when it first was; one that
-    /// went, or that Reply is sending now, is <c>direct_send.already_sent</c>, and one that failed
-    /// <c>direct_send.already_failed</c>, with nothing changed. The reference and the route are read as
-    /// <c>direct-send get</c> reads them.
+    /// went is <c>direct_send.already_sent</c>, one Reply is sending now <c>direct_send.already_sending</c>, as a Reply that
+    /// times deferred LinkedIn sends itself answers it, and one that failed <c>direct_send.already_failed</c>, with nothing
+    /// changed. The reference and the route are read as <c>direct-send get</c> reads them.
     /// </summary>
     private static Ending DirectSendCancel(string root, Parsed line)
     {
         var reference = line.Operands[0];
         if (!Regex.IsMatch(reference, Jason.ReplyCliStub.DirectSendReference.Pattern))
         {
-            return Refused("usage.reference", "A reference names one direct send as Reply spells it: email-<number> or linkedin-<number>.", exit: 2);
+            return Refused("usage.reference", "That is not a reference Reply gives: email-<n>, linkedin-<n> or linkedin-scheduled-<n>, n from 1.", exit: 2);
         }
 
         if (!Offered(root, "direct_send"))
@@ -315,8 +391,11 @@ internal static partial class Account
 
         switch (Text(held, "state"))
         {
-            case "sent" or "sending":
+            case "sent":
                 return Refused("direct_send.already_sent", $"Reply has sent {reference}, so it cannot be cancelled.", status: 409, replyCode: "directSend.alreadySent");
+            case "sending":
+                // reply-cli 0.18.0's src/operations/direct-send.ts:235, read for a cancel at src/operations/direct-sends.ts:77.
+                return Refused("direct_send.already_sending", $"Reply is sending {reference}, so it cannot be cancelled.", status: 409, replyCode: "directSend.alreadySending");
             case "failed":
                 return Refused("direct_send.already_failed", $"Reply failed to send {reference}, so it cannot be cancelled.", status: 409, replyCode: "directSend.alreadyFailed");
             case "cancelled":

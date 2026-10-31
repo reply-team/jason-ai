@@ -1116,12 +1116,14 @@ public class RecordedExchangesTests
                 succeeded.FinishedAt = At(8, 41);
 
                 // What the plugin returned, and that the provider created the person for this call rather than finding them:
-                // said by a release of the package that says it.
+                // said by a release of the package that says it. And the name of the input its claim composed, which a repeat
+                // after a lost answer is compared with.
                 Ran(succeeded, 9, 1, AttemptStatus.Succeeded, At(8, 40), At(8, 41)).Provenance = provenance with
                 {
                     PluginVersion = "0.9.0",
                     ExternalIdsReturned = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "1001", ["campaign"] = "7" },
                     ExternalIdOrigins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "created" },
+                    InputDigest = "sha256:5e0a1d6c3b8f47e29a1c0d4b6e8f2a3c5d7e9f1a2b4c6d8e0f1a3b5c7d9e1f2a",
                 };
 
                 var refused = new AttemptErrorDto("reply.refused", "Invalid data: first name is required", false, Class: FailureClass.Permanent);

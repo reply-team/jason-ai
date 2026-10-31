@@ -27,7 +27,7 @@
   "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
   "channel_arguments": null,
   "channel_templates": null,
-  "dispatch": { "in_paused_campaign": "waits" },
+  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "waits" },
   "contact_projection": null,
   "precondition": "The campaign exists at the provider and is not archived, and the provider's enrolled count equals `args.expected.enrolled`.",
   "preview": {

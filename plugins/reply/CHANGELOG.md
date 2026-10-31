@@ -3,6 +3,75 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.14.3
+
+- A cancel of a send Reply is sending now, which Reply refuses at 409 with its code `directSend.alreadySending` once
+  Reply times deferred LinkedIn sends itself, and reply-cli names `direct_send.already_sending`, is the refusal of a
+  send that already went: `send_not_pending`, permanent, the failure's `state` `sent`, as a cancel that answers the
+  state `sending` already was, even where a read still told the send as queued. Before, it would have ended
+  `provider_call_failed`; until then Reply answers such a cancel `alreadySent`, which was already `send_not_pending`.
+- The README says what Reply answers, once it times deferred LinkedIn sends itself, for a LinkedIn send it holds for
+  a moment ahead: no activity and no moment until it goes, and a reference of its own, `linkedin-scheduled-<n>`, for
+  its whole life, which the package pins as given; a send that goes inside the call keeps `linkedin-<activity>` and
+  its activity as the identifier. It says that `sending` is a send handed to the account's queue, read as `queued` and
+  not cancelable; that a missed window on LinkedIn, `directLinkedIn.missedWindow`, is `failed`; and that a block code
+  such as `directLinkedIn.weeklyLimitReached` on a failed send is that send's fate, `failed`, never a block on the
+  sender, since once Reply times deferred LinkedIn sends itself it no longer refuses one for a spent allowance when it
+  takes it. Before then a deferred send may still be refused for the allowance when it is taken; the package reads
+  both. Rows hold each of these.
+- A deferred LinkedIn send is read and cancelled by its `linkedin-scheduled-<n>` reference, which reply-cli takes from
+  0.18.0; 0.17.2 refuses it before it calls Reply. Rows hold the read, the cancel and a repeat that reads the send
+  before anything else.
+- A LinkedIn message, InMail or voice message may name a Reply sending schedule in `provider.schedule_id`, as an email
+  may: it goes as `--schedule-id` on the format's own command, after the same `reply direct-send get` read that guards
+  a moment ahead, so a Reply without direct sends, whose LinkedIn routes would not read the schedule and would send at
+  once, is answered `capability_not_offered` and nothing is sent. Before, such a message was refused with
+  `provider_input_invalid` before anything was called. A Reply whose direct sends are deployed and whose LinkedIn
+  routes do not take a schedule yet refuses it at 400 naming `scheduleId`, which is `capability_not_offered` as well.
+- A send timed by a schedule Reply cannot time it by ends on one row for each of reply-cli 0.18.0's codes, an email
+  and a LinkedIn message alike: a schedule Reply does not hold for the account is `schedule.not_found` (Reply's
+  `contact.scheduleNotFound` on an email, `directLinkedIn.scheduleNotFound` on a LinkedIn message, at 404), one that
+  keeps the contact's time zone for a contact Reply holds none for is `contact.time_zone_missing`
+  (`contact.contactTimeZoneMissing` or `directLinkedIn.contactTimeZoneMissing`, at 409), and one with no day to send in
+  is `schedule.no_slot` (`contact.scheduleHasNoSlot` or `directLinkedIn.scheduleHasNoSlot`, at 409). Each is
+  `provider_call_failed`, permanent, with a message that says what to change; before, an email's had no row of its own
+  and ended as a refusal this version had no word for. Once Reply times deferred LinkedIn sends itself, a message it
+  holds is answered as an email is, `queued` or `waitingForSchedule`, accepted and cancelable with no `accepted_for`;
+  `message.status` reads `waitingForSchedule` as `queued`, and a failed send as `failed` with Reply's `directLinkedIn.`
+  code as given, one this version has never seen included, or with no code at all.
+- The moment Reply expects to send a message waiting for its schedule, which reply-cli 0.18.0 passes on as
+  `estimated_send_at` on the send and on its read, is never read as `accepted_for`: an estimate is no moment Reply holds
+  the message for, on an email or a LinkedIn message, on `message.send` or on `message.status`.
+- A cancel Reply could not confirm, which Reply answers at 503 with its code `directSend.cancelNotConfirmed` and
+  reply-cli names `direct_send.cancel_not_confirmed`, says the send is still queued (or, once Reply times deferred
+  LinkedIn sends itself, waiting for its schedule) and asks for the cancel again: it is `provider_unavailable`, transient, and the
+  runtime repeats it. Every other answer at 500 or above to a cancel stays a lost answer, `provider_answer_lost`.
+- The `route_not_offered` row, in the error table and in the README, says reply-cli passes Reply's bare 404 through
+  on every command but the ones that cannot meet it, and names those: `contact get`, `contact delete`, `inbox get`,
+  `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which
+  read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers
+  `reply.refused`. 0.14.2's list of the commands that pass it through left out `inbox list`, `inbox changes` and more.
+  A row holds the commands named against reply-cli 0.18.0's source.
+- The package needs Jason 0.22.0 and reply-cli 0.18.0 or newer, the release that gives the codes and the estimate
+  above. A reload refuses an older reply-cli, 0.17.2 among them: the plugin is `unavailable` with
+  `executable_incompatible` until reply-cli is updated and the plugins reloaded.
+
+## 0.14.2
+
+- The `route_not_offered` row, in the error table and in the README, adds four commands to those it names as passing
+  Reply's bare 404 through: `reply direct-send get` and `reply direct-send cancel`, which the error table left out, and
+  `reply contact linkedin-inmail` and `reply contact linkedin-voice`, which both left out. The list still left others
+  out, `inbox list` and `inbox changes` among them; 0.14.3 names the commands that cannot meet such a 404 instead.
+- A LinkedIn invitation or message Reply refuses over the account's allowance, a 429 under
+  `directLinkedIn.dailyLimitReached` or `directLinkedIn.weeklyLimitReached` that reply-cli answers
+  `linkedin.limit_reached`, is the sender's block, `provider_blocked` with the allowance under `limit`, whether or not
+  Reply names the send in the state `failed` beside it. The README and the error table say so, and that a 429 under no
+  such code is `rate_limited`.
+- The README says the two ways Reply answers an email timed by a schedule: `queued` with the moment where the schedule
+  is open now or opens within ten minutes, `waitingForSchedule` with only an estimate where it opens later. Both are
+  `accepted` and can still be cancelled, with no `accepted_for`.
+- No change in behaviour. The package still needs Jason 0.22.0 and reply-cli 0.17.2 or newer.
+
 ## 0.14.1
 
 - The README is corrected. `message.status` and `message.cancel` list `capability_not_offered` for a Reply whose API

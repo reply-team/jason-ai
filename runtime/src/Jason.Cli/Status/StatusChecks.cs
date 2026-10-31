@@ -999,6 +999,12 @@ internal static class StatusChecks
     }
 
     /// <summary>
+    /// What the provider check says when it looked a program up on a search path: the CLI process's own, which is not
+    /// necessarily the one the runtime started with.
+    /// </summary>
+    private const string SearchPathRead = "It read the CLI's PATH; the runtime's PATH may differ, see the install page.";
+
+    /// <summary>
     /// Whether the provider's own CLI is on this machine and answering. It names the command it runs and the file
     /// that command resolved to, it is bounded, and it prints no credential: not the key, not a prefix of it, not
     /// its length. A name that resolves to nothing a program may be started through is not run at all.
@@ -1027,10 +1033,17 @@ internal static class StatusChecks
         }
 
         var (found, directory) = FindProvider(providerCli, env.SearchPath);
+
+        // A name is looked up on this process's search path; a path names its directory and reads none, except that a shim
+        // given by path takes its interpreter from the search path when none stands beside it. A runtime that started at
+        // logon, or from another shell, may hold another search path.
+        var readPath = !IsPath(providerCli) || found.InterpreterPathRead;
+        string Said(string fact) => readPath ? $"{fact} {SearchPathRead}" : fact;
+
         if (found is not { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } program })
         {
             var script = found.Outcome == ProgramLookupOutcome.NotFound ? ScriptNamed(providerCli, env.SearchPath) : null;
-            return new StatusCheck("provider_cli", false, CheckState.Absent, NotRun(found, providerCli, directory, script, command), null);
+            return new StatusCheck("provider_cli", false, CheckState.Absent, Said(NotRun(found, providerCli, directory, script, command)), null);
         }
 
         // What the name came to is said first: a person reading "did not answer" has to know which file did not, and
@@ -1042,17 +1055,17 @@ internal static class StatusChecks
         var result = await runner.RunAsync(program, [.. found.Launch, .. ProviderArguments], null, ProviderTimeout, cancellationToken).ConfigureAwait(false);
         if (result.NotStarted)
         {
-            return new StatusCheck("provider_cli", false, CheckState.Absent, $"{resolved} '{command}' could not be started.", null);
+            return new StatusCheck("provider_cli", false, CheckState.Absent, Said($"{resolved} '{command}' could not be started."), null);
         }
 
         if (result.TimedOut)
         {
-            return new StatusCheck("provider_cli", false, CheckState.Absent, $"{resolved} '{command}' did not answer in {ProviderTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} seconds.", null);
+            return new StatusCheck("provider_cli", false, CheckState.Absent, Said($"{resolved} '{command}' did not answer in {ProviderTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} seconds."), null);
         }
 
         return result.ExitCode == 0
-            ? new StatusCheck("provider_cli", false, CheckState.Ok, $"{resolved} '{command}' answered.", null)
-            : new StatusCheck("provider_cli", false, CheckState.Absent, string.Create(CultureInfo.InvariantCulture, $"{resolved} '{command}' did not answer: exit code {result.ExitCode}."), null);
+            ? new StatusCheck("provider_cli", false, CheckState.Ok, Said($"{resolved} '{command}' answered."), null)
+            : new StatusCheck("provider_cli", false, CheckState.Absent, Said(string.Create(CultureInfo.InvariantCulture, $"{resolved} '{command}' did not answer: exit code {result.ExitCode}.")), null);
     }
 
     /// <summary>

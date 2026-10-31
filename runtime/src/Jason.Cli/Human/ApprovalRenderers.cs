@@ -73,8 +73,8 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Parked:", approval.Reason));
         text.AppendLine(Line("Requested:", RenderText.Moment(approval.RequestedAt)));
         text.AppendLine(Line("Decided:", RenderText.Moment(approval.DecidedAt)));
-        text.AppendLine(Line("Decided by:", RenderText.Shown(RenderText.Actor(approval.DecidedBy))));
-        text.AppendLine(Line("Note:", RenderText.Shown(approval.DecisionReason)));
+        text.AppendLine(Line("Decided by:", RenderText.Actor(approval.DecidedBy)));
+        text.AppendLine(Line("Note:", approval.DecisionReason));
         text.AppendLine(Line("Work item:", approval.WorkItemId));
         text.AppendLine(Line("Content hash:", approval.SubjectHash));
         text.Append(Line("Id:", approval.Id));
@@ -85,7 +85,7 @@ public static class ApprovalRenderers
     /// The one reading of a template that the approval holds, printed as the runtime rendered it. It is somebody's
     /// message, so a character that changes how the line around it reads (see
     /// <see cref="PreviewTemplate.ChangesTheLine"/>) is shown as U+FFFD, a mark that can be seen, rather than written;
-    /// a tab, the joiners and the soft hyphen stay (see <see cref="RenderText.Shown"/>, which also says what the rule
+    /// a tab, the joiners, the soft hyphen and the direction marks stay (see <see cref="RenderText.Shown"/>, which also says what the rule
     /// leaves to the writer). The subject is one line and its line breaks are such characters; the body keeps its own,
     /// each of its lines indented under the label so that none reads as a labelled line of the approval. An empty
     /// subject says so. A preview without an example adds nothing.
@@ -120,8 +120,9 @@ public static class ApprovalRenderers
             ? null
             : (string?)property["value"] + ((bool?)property["conditional"] == true ? " (conditional)" : string.Empty);
 
-    // A campaign's and a contact's names are not refused a control character when they are written, and either may
-    // arrive from a provider's sync, so every part of these two lines goes through the rule the example uses.
+    // A campaign's and a contact's names are refused a control character when they are written, but a name may still
+    // hold a format character such as a direction override, and one written before that rule may hold anything, so every
+    // part of these two lines goes through the rule the example uses.
     private static string? Named(JsonNode? entity) =>
         entity is null ? null : $"{RenderText.Shown((string?)entity["name"])} ({RenderText.Shown((string?)entity["id"])})";
 
@@ -142,7 +143,7 @@ public static class ApprovalRenderers
         return who + (where is null ? string.Empty : $" | {channel} {where}");
     }
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 
     private static string Indented(string label, string? value) => "  " + label.PadRight(Label - 2) + (string.IsNullOrEmpty(value) ? "-" : value);
 }

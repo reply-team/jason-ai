@@ -57,6 +57,7 @@ again. Nothing is pinned.
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |
 | preview a person reads | none |

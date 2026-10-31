@@ -1,3 +1,4 @@
+using System.Text;
 using Jason.Cli.Autostart;
 using Jason.Cli.Doctor;
 using Jason.Cli.Installation;
@@ -19,7 +20,7 @@ namespace Jason.Cli;
 /// rather than the real thing. The three above are safe to leave null in a test because a real handler, process
 /// table or install path acts on a temporary directory or an unreachable host; a real registrar acts on the
 /// machine whatever the data directory says, and two guards in this repository type documented command lines
-/// for real. So <see cref="Default"/> names this machine's registrar and nothing else does: null is
+/// for real. So <see cref="Default()"/> names this machine's registrar and nothing else does: null is
 /// <c>autostart_unsupported</c>, which is the wrong answer to get by accident and a harmless one to get.
 /// </param>
 /// <param name="Harnesses">
@@ -63,40 +64,45 @@ namespace Jason.Cli;
 /// <param name="BuildVersion">
 /// The version this build goes by, which decides the ref its skills are pinned to and which <c>jason status</c> compares
 /// with the version the running runtime reports. Null is this build's own stamp, the answer everywhere but a test, and
-/// <see cref="Default"/> never names one: a release compares its skills and its runtime with itself. A test names one
+/// <see cref="Default()"/> never names one: a release compares its skills and its runtime with itself. A test names one
 /// because the suite runs at whatever stamp CI gave it, a development one or a release, and a fact about what a release
 /// does with an older deployment, or about a runtime that is not this build, has to hold at both.
 /// </param>
 /// <param name="Opener">
 /// How a link reaches the person's browser — the fifth seam whose default is the refusal, for the reason
 /// <paramref name="Autostart"/> gives: a verb that opened a browser for itself would open one on whoever runs the
-/// suite. Null opens nothing and says the link is the person's to open; <see cref="Default"/> names this platform's.
+/// suite. Null opens nothing and says the link is the person's to open; <see cref="Default()"/> names this platform's.
 /// </param>
 /// <param name="Managers">
 /// What the package managers recorded about what they installed, which decides whether this installation is Jason's own
 /// or a manager's. Null is "no manager recorded anything", which leaves every installation Jason's own — and the
 /// default for the reason <paramref name="Removes"/> gives: winget's record is in this account's registry, and a test
-/// that read it would read the registry of whoever ran the suite. <see cref="Default"/> names this machine's.
+/// that read it would read the registry of whoever ran the suite. <see cref="Default()"/> names this machine's.
 /// </param>
 /// <param name="WorkingDirectory">
 /// The folder the command was typed in, from which a verb that takes a project and was given none finds it by the nearest
 /// marker of the harness (<see cref="Folders.WorkingFolder"/>). Null finds nothing, which is the answer everywhere but
-/// <see cref="Default"/>, and the default for the reason <paramref name="Harnesses"/> gives: a test that walked up from
+/// <see cref="Default()"/>, and the default for the reason <paramref name="Harnesses"/> gives: a test that walked up from
 /// its own folder would read whatever folders the person running the suite has above it.
 /// </param>
 /// <param name="AccountName">
 /// The name of the account the CLI runs as, which a write that names no actor is made as — <c>human:&lt;name&gt;</c>, the
 /// name the runtime's browser door issues its tokens to, so a person carries one name whichever of the two they wrote
-/// from. Null names nobody, as a write did before there was a default, and the answer everywhere but <see cref="Default"/>,
+/// from. Null names nobody, as a write did before there was a default, and the answer everywhere but <see cref="Default()"/>,
 /// for the reason <paramref name="Identity"/> gives: a test that read the real name would write the developer's own into
 /// the requests it checks.
 /// </param>
 public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null)
 {
-    public static CliEnvironment Default() =>
+    public static CliEnvironment Default() => Default(Console.Out, Console.Error, Console.OutputEncoding);
+
+    /// <summary>
+    /// The environment <see cref="Default()"/> names, over the console's writers and the encoding they write through.
+    /// </summary>
+    internal static CliEnvironment Default(TextWriter output, TextWriter error, Encoding encoding) =>
         new(
-            Console.Out,
-            Console.Error,
+            ConsoleText.Guarded(output, encoding),
+            ConsoleText.Guarded(error, encoding),
             JasonPaths.FromEnvironment(),
             null,
             Console.In,

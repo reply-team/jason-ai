@@ -301,12 +301,15 @@ public static class ProviderOpPreflight
         // Eighteenth: a repeat of a send whose lost answer only the work item's key settles is made only under a plugin
         // whose manifest says it settles the send so, and only under the package, by its id and digest, and the binding
         // the attempt that lost it ran under: the key settles a send only at the provider and account that took it, and
-        // another version of the package may keep its keys otherwise. And only with the arguments that attempt ran with: a
-        // provider holding the key answers a repeat with the send the first request made, so an item edited since would be
-        // answered for a message the person never got. That attempt may have reached the person, and a repeat anywhere
-        // else could reach them again; the work is as unsettled as that attempt left it, so the refusal keeps its class,
-        // and nothing has run, so it is asked before a person approves.
-        if (facts.Unsettled is { } earlier && OutcomeContract.SettlesByKey(contract) && Unsettled(earlier, plugin, route, operation, input["args"]) is { } unsettled)
+        // another version of the package may keep its keys otherwise. And only with the input that attempt was composed
+        // with: a provider holding the key answers a repeat with the send the first request made, so an item edited since,
+        // or a person whose address changed since, would be answered for a message the person never got. Its arguments are
+        // compared with the snapshot, and the whole document with the digest its claim recorded where it recorded one; the
+        // campaign's status is not in the digest, and a pin that attempt or a later attempt of the item learned from its
+        // answer is not a change of the request. That attempt may have reached the person, and a repeat anywhere else could reach them again; the work is
+        // as unsettled as that attempt left it, so the refusal keeps its class, and nothing has run, so it is asked before a
+        // person approves.
+        if (facts.Unsettled is { } earlier && OutcomeContract.SettlesByKey(contract) && Unsettled(earlier, facts.Learned, plugin, route, operation, input) is { } unsettled)
         {
             return Refused(resolution, AttemptErrors.ProviderAnswerLost, unsettled, failureClass: FailureClass.Ambiguous);
         }
@@ -321,8 +324,9 @@ public static class ProviderOpPreflight
             contract,
             input);
 
-        // The block that holds this work, if one does: only an act or a protective operation is held, only by a block
-        // of the plugin and binding it is routed to, and a sender's block only where the input names that sender.
+        // The block that holds this work, if one does: only an operation whose document says
+        // `dispatch.under_provider_block: waits` is held, only by a block of the plugin and binding it is routed to, and
+        // a sender's block only where the input names that sender.
         var identity = ProviderBlocks.Identity(route.BindingIdentity);
         var block = OperationCatalog.HeldByProviderBlock.Contains(contract.Id) && facts.Blocks is { Count: > 0 } open
             ? ProviderBlocks.Covering(
@@ -584,10 +588,13 @@ public static class ProviderOpPreflight
     /// <summary>
     /// Why a repeat after an attempt that lost its answer cannot be settled by the work item's key under this route, or
     /// null where it can: the routed plugin lists the operation under <c>settles_by_key</c>, and its id, its digest and the
-    /// binding are the ones the attempt's provenance names, and <paramref name="arguments"/> are the ones its snapshot kept,
-    /// in any order of their keys. An attempt whose provenance does not name the package leaves nothing to compare.
+    /// binding are the ones the attempt's provenance names, the arguments of <paramref name="input"/> are the ones its
+    /// snapshot kept, in any order of their keys, and the whole of <paramref name="input"/> has the name its claim recorded
+    /// once the pins that attempt <paramref name="learned"/> itself are left out. An attempt whose provenance does not name
+    /// the package leaves nothing to compare. One claimed before attempts named their input names none, and is held to its
+    /// arguments alone, as it was when it lost its answer.
     /// </summary>
-    private static string? Unsettled(Attempt earlier, LoadedPlugin plugin, Route route, string operation, JsonNode? arguments)
+    private static string? Unsettled(Attempt earlier, PinsLearned? learned, LoadedPlugin plugin, Route route, string operation, JsonObject input)
     {
         const string Ask = "so a repeat could make the effect twice; nothing was run. Find out from the provider whether the first attempt acted.";
         if (!plugin.Manifest.SettlesByKey(operation))
@@ -607,9 +614,14 @@ public static class ProviderOpPreflight
             return $"An earlier attempt of this '{operation}' lost its answer under another plugin, package version or account than '{route.PluginId}' is routed to now, and the work item's key settles a send only at the provider and the account that took it, {Ask}";
         }
 
-        return JsonNode.DeepEquals(earlier.ContextSnapshot[WorkItemService.InputKey], arguments)
+        if (!JsonNode.DeepEquals(earlier.ContextSnapshot[WorkItemService.InputKey], input["args"]))
+        {
+            return $"An earlier attempt of this '{operation}' lost its answer with other arguments than the work item carries now, and the work item's key settles only the request it went with, {Ask}";
+        }
+
+        return provenance.InputDigest is not { } composed || string.Equals(composed, CanonicalInput.Digest(learned is null ? input : CanonicalInput.Without(input, learned)), StringComparison.Ordinal)
             ? null
-            : $"An earlier attempt of this '{operation}' lost its answer with other arguments than the work item carries now, and the work item's key settles only the request it went with, {Ask}";
+            : $"An earlier attempt of this '{operation}' lost its answer with another input than the one composed for it now: what the composed input carries of the person or the campaign changed since, and the work item's key settles only the request it went with, {Ask}";
     }
 
     /// <summary>

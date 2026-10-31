@@ -104,19 +104,33 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// The two sentences this page exists to make checkable: what a check sends, and which half of a release is signed.
+    /// The two sentences this page exists to make checkable: what a check sends, and which executables a release signs.
     /// Both are promises to a person who is deciding whether to let a runtime talk to the internet at all, and whether to
-    /// run what it downloads.
+    /// run what it downloads. The environment that keeps the signature to release tags and release branches also
+    /// decides where the pipeline is rehearsed, and the page says so where it tells how.
     /// </summary>
     [Fact]
-    public void The_page_says_what_is_sent_and_which_half_is_signed()
+    public void The_page_says_what_is_sent_and_which_executables_are_signed()
     {
         var page = Regex.Replace(Read(), @"\s+", " ");
 
         Assert.Contains("User-Agent", page, StringComparison.Ordinal);
         Assert.Contains("jason/<version>", page, StringComparison.Ordinal);
-        Assert.Contains("**The macOS executable is signed with Reply's Developer ID and notarized by Apple; the Linux and Windows executables are not signed.**", page, StringComparison.Ordinal);
-        Assert.Contains("On Linux and Windows it is the only provenance there is", page, StringComparison.Ordinal);
+        Assert.Contains("**The macOS executable is signed with Reply's Developer ID and notarized by Apple, and the Windows executable with a certificate issued to Reply through Azure Artifact Signing, timestamped; the Linux executable is not signed.**", page, StringComparison.Ordinal);
+        Assert.Contains("On Linux it is the only provenance there is; on macOS and Windows the signature says who built the executable as well.", page, StringComparison.Ordinal);
+        Assert.Contains("The Windows signature is made by the release's Windows job alone: it runs in the GitHub environment `signing`, which only release tags and release branches may run in, and signs in to Azure with that job's own OIDC token, which Azure accepts from that environment alone; there is no client secret.", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("Signing the Windows executable is its own story", page, StringComparison.Ordinal);
+
+        // What the macOS signature covers beyond the executable: the one native library it unpacks, which is why the
+        // executable can keep library validation and needs only the JIT's two entitlements.
+        Assert.Contains("On macOS the one native library the executable unpacks, `libe_sqlite3.dylib`, is signed with the same Developer ID before it is bundled, so the executable keeps the hardened runtime's library validation and ignores `DYLD_` environment variables; its only entitlements, `com.apple.security.cs.allow-jit` and `com.apple.security.cs.allow-unsigned-executable-memory`, are the ones the .NET runtime's JIT compiler needs.", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("disable-library-validation", page, StringComparison.Ordinal);
+
+        // What that environment's rule makes of a rehearsal: the Windows job of a run from any other branch is
+        // refused, and the job that assembles the release needs it, so a change to the pipeline is rehearsed from a
+        // release branch.
+        Assert.Contains("a branch's own version can be run from it (`gh workflow run release.yml --ref <branch>`). Its Windows job runs in the environment `signing`, which admits only release tags and release branches, so a change to the pipeline is rehearsed from a release branch before it merges: a run from any other branch, a dry run included, is refused at the Windows job, and nothing is assembled.", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("which is how a change to the pipeline is rehearsed before it merges", page, StringComparison.Ordinal);
         Assert.DoesNotContain("Nothing in a release is signed", page, StringComparison.Ordinal);
     }
 

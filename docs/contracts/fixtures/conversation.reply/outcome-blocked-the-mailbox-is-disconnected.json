@@ -18,5 +18,5 @@
     },
     "diagnostics": { "duration_ms": 900, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
   },
-  "expect": { "status": "failed", "class": "blocked", "retriable": false, "block": "kept" }
+  "expect": { "status": "failed", "class": "blocked", "retriable": false, "block": "kept", "held": true }
 }

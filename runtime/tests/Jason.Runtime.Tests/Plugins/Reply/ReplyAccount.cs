@@ -514,7 +514,9 @@ public sealed class ReplyAccount : IDisposable
     /// A sending schedule as Reply holds one: its name, its time zone as Reply spells it — a Windows time zone identifier —
     /// whether it reads its windows in each person's own time zone, whether it skips holidays, whether it is the caller's
     /// default, Reply's word for its state, its windows (<see cref="Day"/>) and, where it keeps them, the windows of the
-    /// later steps with whether they are in use.
+    /// later steps with whether they are in use. Where it <paramref name="opensLater"/> than ten minutes from now, a send
+    /// timed by it waits for it, and Reply names <paramref name="estimate"/> as the moment it expects to send it, null
+    /// where the schedule does not open within 30 days.
     /// </summary>
     public ReplyAccount WithSchedule(
         long id,
@@ -526,10 +528,12 @@ public sealed class ReplyAccount : IDisposable
         bool recipientTimeZone = false,
         bool skipsHolidays = false,
         JsonArray? followUp = null,
-        bool useFollowUp = false)
+        bool useFollowUp = false,
+        bool opensLater = false,
+        string? estimate = null)
     {
         var schedules = ReadArray(SchedulesFile);
-        schedules.Add(new JsonObject
+        var schedule = new JsonObject
         {
             ["id"] = id,
             ["name"] = name,
@@ -541,7 +545,13 @@ public sealed class ReplyAccount : IDisposable
             ["followUpTimings"] = followUp,
             ["isDefault"] = isDefault,
             ["status"] = status,
-        });
+        };
+        if (opensLater)
+        {
+            schedule["_estimate"] = estimate;
+        }
+
+        schedules.Add(schedule);
         Write(SchedulesFile, schedules);
         return this;
     }
@@ -559,8 +569,24 @@ public sealed class ReplyAccount : IDisposable
     };
 
     /// <summary>
-    /// A contact on the account's blacklist, which Reply consults on a direct email and on no LinkedIn send. It is kept on
-    /// the planted record and never answered by <c>contact get</c>, as Reply's contact read does not show it.
+    /// The time zone Reply holds for a contact, which a schedule read in each person's own time zone needs to time a send
+    /// to them by. A contact planted without one has none.
+    /// </summary>
+    public ReplyAccount WithTimeZone(int contact, string timeZone)
+    {
+        var contacts = ReadArray(ContactsFile);
+        var planted = contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == contact)
+            ?? throw new InvalidOperationException($"no contact {contact} has been planted to give a time zone.");
+        planted["timeZoneId"] = timeZone;
+        Write(ContactsFile, contacts);
+        return this;
+    }
+
+    /// <summary>
+    /// A contact on the account's blacklist. Reply consults it on a direct email when it takes the send, and refuses it
+    /// there; on a LinkedIn send it consults it only when it makes the send, which fails then, so the send is taken as any
+    /// other. It is kept on the planted record and never answered by <c>contact get</c>, as Reply's contact read does not
+    /// show it.
     /// </summary>
     public ReplyAccount WithBlacklisted(int contact)
     {
@@ -659,12 +685,14 @@ public sealed class ReplyAccount : IDisposable
     /// <summary>
     /// A direct send Reply kept, under <paramref name="reference"/>, in <paramref name="state"/>: what <c>direct-send
     /// get</c> reads back and <c>direct-send cancel</c> takes back. The members left null are none given; a rendered
-    /// subject names the rendered body beside it, and a failure's code is printed only where one is given.
+    /// subject names the rendered body beside it, a failure's code is printed only where one is given, and so is the
+    /// moment Reply expects to send a send waiting for its schedule.
     /// </summary>
     public ReplyAccount WithDirectSend(
         string reference, string state, string? sendAfter = null, string? sentAt = null, string? messageId = null,
         string? failureReason = null, string? cancelledAt = null, string? renderedSubject = null, string? renderedBody = null,
-        string? failureCode = null)
+        string? failureCode = null,
+        string? estimatedSendAt = null)
     {
         ArgumentNullException.ThrowIfNull(reference);
         var sends = ReadArray(DirectSendsFile);
@@ -689,6 +717,11 @@ public sealed class ReplyAccount : IDisposable
         if (failureCode is not null)
         {
             record["failureCode"] = failureCode;
+        }
+
+        if (estimatedSendAt is not null)
+        {
+            record["estimatedSendAt"] = estimatedSendAt;
         }
 
         sends.Add(record);

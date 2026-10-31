@@ -102,5 +102,5 @@ public static class EventsRenderers
             $"  {backfill.Id}  {RenderText.Moment(backfill.From)} to {RenderText.Moment(backfill.To)}  {RenderText.Snake(backfill.Status)}, {backfill.Stored} new, {backfill.Duplicates} already held{how}");
     }
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

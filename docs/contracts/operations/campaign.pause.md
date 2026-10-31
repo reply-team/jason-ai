@@ -75,6 +75,7 @@ gave one. The shared failures are spelled as every document spells them.
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `runs` |
+| under a provider block | `waits` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |
 | preview a person reads | none |

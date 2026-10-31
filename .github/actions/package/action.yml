@@ -74,6 +74,39 @@ inputs:
     required: false
     default: ''
 
+  sign-windows:
+    description: >
+      'true' signs the win-x64 executable through Artifact Signing with the account and the certificate profile the
+      azure-* inputs name, timestamps it and verifies it, between the publish and the staging, so that the archive and
+      the caller's smoke test carry the signed file. Any other platform ignores it. The default, 'false', leaves the
+      executable unsigned, which is what a pull request's build wants: ci.yml never signs, and never signs in to Azure.
+    required: false
+    default: 'false'
+
+  # The five Azure secrets. None is a credential: the sign-in is the job's own OIDC token, exchanged through the federated
+  # credential of the application the client id names, so no client secret exists. They still reach only the two steps
+  # that take them, as their inputs, and none is ever printed.
+  azure-tenant-id:
+    description: The tenant the signing application belongs to. Read only when signing.
+    required: false
+    default: ''
+  azure-client-id:
+    description: The application whose federated credential accepts this job's OIDC token. Read only when signing.
+    required: false
+    default: ''
+  azure-signing-account:
+    description: The Artifact Signing account's name. Read only when signing.
+    required: false
+    default: ''
+  azure-signing-endpoint:
+    description: The account's regional endpoint, as a URL. Read only when signing.
+    required: false
+    default: ''
+  azure-signing-profile:
+    description: The certificate profile the executable is signed with. Read only when signing.
+    required: false
+    default: ''
+
 outputs:
   executable:
     description: The published executable, for the caller's smoke test.
@@ -117,11 +150,19 @@ runs:
         VERSION: ${{ inputs.version }}
         RUNTIME_VERSION: ${{ inputs.runtime-version }}
         EXECUTABLE: ${{ steps.name.outputs.executable }}
+        SIGN_MACOS: ${{ inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true' }}
       run: |
         $publish = "artifacts/publish/$env:RID"
         $runtime = @(if ($env:RUNTIME_VERSION) { "-p:RuntimeFrameworkVersion=$env:RUNTIME_VERSION" })
-        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime --output $publish
+
+        # A signed macOS executable loads only the native libraries its own team signed, so the ones the bundle
+        # carries are copied out for the signing steps below, which bundle them again once they are signed. The
+        # project reads the directory as an absolute path.
+        $natives = Join-Path $PWD "artifacts/natives/$env:RID"
+        $copied = @(if ($env:SIGN_MACOS -eq 'true') { "-p:CopyBundledNativeLibrariesTo=$natives" })
+        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime @copied --output $publish
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish exited with $LASTEXITCODE" }
+        if ($copied) { "natives=$natives" >> $env:GITHUB_OUTPUT }
 
         # One executable and its symbols, and nothing else. A native library left beside the executable —
         # SQLite's, should the project ever stop bundling it — is a file the archive would not carry and the
@@ -132,8 +173,105 @@ runs:
 
         "executable=$publish/$env:EXECUTABLE" >> $env:GITHUB_OUTPUT
 
+    # The Windows executable is signed between the publish and the staging, so that the staged copy, the archive and the
+    # caller's smoke test all carry the one signed file. Only a release asks for it. The sign-in is the job's own OIDC
+    # token, which the caller's job alone may ask for, traded through the application's federated credential; it is
+    # signed in right before the signature, since the Azure CLI cannot renew a token it was handed, and forgotten after
+    # it whatever happened in between. No step here traces its commands or prints an input.
+    - name: Name the Windows executable to sign, once every Azure input is given
+      id: signable
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
+      shell: pwsh
+      env:
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        # The names of the inputs that are empty, never their values: this step holds none of them.
+        MISSING: >-
+          ${{ format('{0} {1} {2} {3} {4}',
+            inputs.azure-tenant-id == '' && 'azure-tenant-id' || '',
+            inputs.azure-client-id == '' && 'azure-client-id' || '',
+            inputs.azure-signing-account == '' && 'azure-signing-account' || '',
+            inputs.azure-signing-endpoint == '' && 'azure-signing-endpoint' || '',
+            inputs.azure-signing-profile == '' && 'azure-signing-profile' || '') }}
+      run: |
+        $missing = @($env:MISSING -split '\s+' | Where-Object { $_ })
+        if ($missing.Count -gt 0) {
+          Write-Host "::error title=Signing::Signing was asked for without every Azure input; empty: $($missing -join ', ')."
+          exit 1
+        }
+
+        # The signing action takes absolute paths only.
+        "file=$((Resolve-Path -LiteralPath $env:EXECUTABLE).Path)" >> $env:GITHUB_OUTPUT
+
+    # No subscription: the signing service needs a token of the tenant alone, and the application's role is on the
+    # signing account, never on a subscription a sign-in would select. The two actions that hold the identity are pinned
+    # to the commit of a release, with its tag beside it, where every other action keeps its major tag: a tag can move.
+    - name: Sign in to Azure with this job's OIDC token
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
+      uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      with:
+        client-id: ${{ inputs.azure-client-id }}
+        tenant-id: ${{ inputs.azure-tenant-id }}
+        allow-no-subscriptions: true
+
+    # The sign-in traded a GitHub assertion that lives for minutes, and fetched a token for Azure Resource Manager alone.
+    # The signing service's token is fetched now, while that assertion is fresh, rather than after the signing action has
+    # spent those minutes installing what it needs; the Azure CLI then hands it out for its hour. The token proves no role:
+    # a role missing on the signing account fails the signing step, and with it the job. Nothing is printed, so the token
+    # never reaches the log.
+    - name: Fetch the signing service's token while the sign-in is fresh
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
+      shell: pwsh
+      run: az account get-access-token --resource https://codesigning.azure.net --output none
+
+    # The Azure CLI's sign-in, above, and no other: every other source the signing action would try is excluded by name,
+    # so a credential the runner happens to hold is never the one that signs. The timestamp makes the signature outlive
+    # the certificate, which Artifact Signing keeps short-lived. Nothing a previous run cached is restored into the job
+    # that holds the sign-in.
+    - name: Sign the Windows executable with Artifact Signing
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
+      uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+      with:
+        endpoint: ${{ inputs.azure-signing-endpoint }}
+        signing-account-name: ${{ inputs.azure-signing-account }}
+        certificate-profile-name: ${{ inputs.azure-signing-profile }}
+        files: ${{ steps.signable.outputs.file }}
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+        exclude-azure-cli-credential: false
+        exclude-environment-credential: true
+        exclude-workload-identity-credential: true
+        exclude-managed-identity-credential: true
+        exclude-shared-token-cache-credential: true
+        exclude-visual-studio-credential: true
+        exclude-visual-studio-code-credential: true
+        exclude-azure-powershell-credential: true
+        exclude-azure-developer-cli-credential: true
+        exclude-interactive-browser-credential: true
+        cache-dependencies: false
+        trace: false
+
+    # Exactly this, and nothing after it: the script refuses with exit 1, which fails a pwsh step only as its last command.
+    - name: Verify the signature of the Windows executable
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
+      shell: pwsh
+      env:
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+      run: ./.github/scripts/Assert-WindowsSignature.ps1 -Executable $env:EXECUTABLE -Publisher 'ReplyApp Inc.'
+
+    - name: Forget the Azure sign-in
+      if: always() && inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
+      shell: pwsh
+      run: |
+        # Whatever happened above. A command that fails is warned of rather than failing the step, so that nothing
+        # after it is skipped.
+        az account clear
+        if ($LASTEXITCODE -ne 0) { Write-Host "::warning title=Signing::The Azure CLI's sign-in could not be cleared." }
+        exit 0
+
     # The runtime a logon task starts has no console window only because the executable declares so. So the file
     # about to be archived is read for that declaration, rather than the project that asked for it.
+    # It is read after the signature, which rewrites the file.
     - name: Read the application manifest out of the packaged executable
       if: startsWith(inputs.rid, 'win-')
       shell: pwsh
@@ -142,9 +280,10 @@ runs:
       run: ./.github/scripts/Assert-ApplicationManifest.ps1 -Executable $env:EXECUTABLE
 
     # The macOS executable is signed between the publish and the staging, so that the staged copy, the archive and the
-    # caller's smoke test all carry the one signed file. Only a release asks for it. The identity lives in a keychain of
-    # this job's own, from the first of these steps to the last, which forgets it whatever happened in between. No step
-    # here traces its commands or prints a secret: each reaches its step through env, never written into the script.
+    # caller's smoke test all carry the one signed file, and the native libraries it bundles are signed and bundled again
+    # before it is. Only a release asks for it. The identity lives in a keychain of this job's own, from the first of
+    # these steps to the last, which forgets it whatever happened in between. No step here traces its commands or prints
+    # a secret: each reaches its step through env, never written into the script.
     - name: Import the Developer ID identity into a keychain of this job's own
       id: identity
       if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
@@ -265,6 +404,33 @@ runs:
         echo "identity=$sha" >> "$GITHUB_OUTPUT"
         echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
 
+    # The native libraries the publish copied out of the bundle, signed in place before the executable is: what the
+    # bundle unpacks is then what our team signed, and library validation loads it.
+    - name: Sign the native libraries the bundle carries
+      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      shell: pwsh
+      env:
+        NATIVES: ${{ steps.publish.outputs.natives }}
+        IDENTITY: ${{ steps.identity.outputs.identity }}
+        KEYCHAIN: ${{ steps.identity.outputs.keychain }}
+      run: ./.github/scripts/Sign-NativeLibraries.ps1 -Directory $env:NATIVES -Identity $env:IDENTITY -Keychain $env:KEYCHAIN
+
+    # The publish above, again, building and restoring nothing: it bundles the very build the first one made, with each
+    # native library taken from the signed copies instead of from where the first publish found it.
+    - name: Bundle the signed native libraries into the executable
+      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      shell: pwsh
+      env:
+        RID: ${{ inputs.rid }}
+        VERSION: ${{ inputs.version }}
+        RUNTIME_VERSION: ${{ inputs.runtime-version }}
+        NATIVES: ${{ steps.publish.outputs.natives }}
+      run: |
+        $publish = "artifacts/publish/$env:RID"
+        $runtime = @(if ($env:RUNTIME_VERSION) { "-p:RuntimeFrameworkVersion=$env:RUNTIME_VERSION" })
+        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime --no-restore --no-build "-p:BundleNativeLibrariesFrom=$env:NATIVES" --output $publish
+        if ($LASTEXITCODE -ne 0) { throw "dotnet publish exited with $LASTEXITCODE" }
+
     - name: Sign the macOS executable with the hardened runtime
       if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
       shell: bash
@@ -321,7 +487,7 @@ runs:
         # The notary takes a zip, not a bare executable, and ditto writes the one Apple documents. --wait holds the
         # step until the service answers, for thirty minutes at most; anything but Accepted fails it, with the
         # service's own log of the submission. Nothing is stapled: a bare executable has no place for the ticket,
-        # which Gatekeeper fetches online at the first run of a copy a browser downloaded.
+        # which Apple documents Gatekeeper finding online instead.
         printf '%s\n' "$NOTARY_KEY" > "$key"
         ditto -c -k --keepParent "$EXECUTABLE" "$zip"
         submitted=0

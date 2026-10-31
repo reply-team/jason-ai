@@ -81,7 +81,7 @@ public static class CampaignRenderers
     /// why it holds one project's campaigns.
     /// </summary>
     public static string ScopedByFolder(string project, string rows) =>
-        RenderText.Lines([$"Project: {project}, from the working directory (--all-projects lists every project's)", string.Empty, rows]);
+        RenderText.Lines([$"Project: {RenderText.Shown(project)}, from the working directory (--all-projects lists every project's)", string.Empty, rows]);
 
     /// <summary>
     /// A page of the campaigns' people: who they are, where they stand, how to recognize them, the campaigns that list them
@@ -245,7 +245,7 @@ public static class CampaignRenderers
     }
 
     private static string Rejected(int index, ErrorBody? error) =>
-        $"#{index}: {error?.Code ?? "rejected"}{(error?.Message is null ? string.Empty : " — " + error.Message)}";
+        $"#{index}: {error?.Code ?? "rejected"}{(error?.Message is null ? string.Empty : " — " + RenderText.Shown(error.Message))}";
 
-    private static string Line(string label, string value) => label.PadRight(Label) + value;
+    private static string Line(string label, string value) => label.PadRight(Label) + RenderText.Shown(value);
 }

@@ -150,7 +150,14 @@ public sealed record AttemptProvenanceDto(
     /// The agent half: which execution profile ran this attempt and how it was chosen. Present on agent
     /// attempts, absent on provider ones, so there is still exactly one provenance record per attempt.
     /// </summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentProvenanceDto? Agent = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentProvenanceDto? Agent = null,
+
+    /// <summary>
+    /// The canonical <c>sha256:</c> of the input the claim composed for the plugin, written by a claim that let the attempt
+    /// run and absent where the claim refused it, since nothing was handed to a plugin: what a repeat after a lost answer is
+    /// compared with. It names the document and carries none of it, no address included.
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? InputDigest = null);
 
 /// <summary>One run of one work item. The id is also the fencing token every executor operation must carry.</summary>
 public sealed record AttemptDto(

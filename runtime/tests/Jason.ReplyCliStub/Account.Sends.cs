@@ -17,7 +17,9 @@ using System.Text.Json.Nodes;
 /// now, as Reply rendered it for the person, and a send held for a later moment the moment it is held for. What a Reply
 /// that keeps direct sends adds — the moment, the key and the reference — is in Account.DirectSends.cs. Reply's own checks are kept in the order a live account was seen to make them: a note too long is
 /// refused before the ids are looked at. Reply does not refuse a contact it holds as opted out on these sends, and
-/// neither does this; it consults its blacklist on an email alone.
+/// neither does this. It consults its blacklist on an email when it takes the send, and on a LinkedIn send when it makes
+/// it, so a LinkedIn send to a contact the blacklist holds is taken here as any other: the failure Reply gives it when it
+/// makes the send is not one this stand-in plays.
 /// </summary>
 internal static partial class Account
 {
@@ -26,6 +28,16 @@ internal static partial class Account
 
     /// <summary>What a test plants on a LinkedIn account whose daily or weekly allowance of sends is spent.</summary>
     private const string Limit = "_limit";
+
+    /// <summary>
+    /// Reply's two codes for a LinkedIn account whose allowance is spent, each with the allowance reply-cli names for it.
+    /// Copied from reply-cli 0.17.2, src/operations/direct-send.ts, `LIMITS`.
+    /// </summary>
+    private static readonly Dictionary<string, string> SpentAllowances = new(StringComparer.Ordinal)
+    {
+        ["directLinkedIn.dailyLimitReached"] = "daily",
+        ["directLinkedIn.weeklyLimitReached"] = "weekly",
+    };
 
     /// <summary>What a test plants on a contact the account's blacklist holds.</summary>
     private const string Blacklisted = "_blacklisted";
@@ -206,6 +218,11 @@ internal static partial class Account
             return answered;
         }
 
+        if (timedBy is { } scheduleId && Untimed(root, send, scheduleId, contactId, ids) is { } untimed)
+        {
+            return untimed;
+        }
+
         JsonObject? rendered = null;
         var refused = send.Channel == "email"
             ? EmailRefusal(root, contactId, accountId, text!, ids, out rendered)
@@ -383,10 +400,7 @@ internal static partial class Account
 
         if (Text(account, Limit) is { Length: > 0 } spent)
         {
-            return Refused(
-                "linkedin.limit_reached", $"The LinkedIn account reached its {spent} limit, so nothing was sent.", status: 429,
-                replyCode: spent == "weekly" ? "directLinkedIn.weeklyLimitReached" : "directLinkedIn.dailyLimitReached", ids: ids,
-                details: new JsonObject { ["limit"] = spent });
+            return SpentAllowance(spent == "weekly" ? "directLinkedIn.weeklyLimitReached" : "directLinkedIn.dailyLimitReached", ids, []);
         }
 
         // An invitation's note and a voice script fill nothing in: a double opening brace there is a variable Reply refuses.
@@ -410,6 +424,27 @@ internal static partial class Account
         var (filled, refusal) = RenderedLinkedIn(text, contact, account, ids);
         rendered = filled;
         return refusal;
+    }
+
+    /// <summary>
+    /// A send Reply refused at 429 under one of its codes for a spent allowance, as reply-cli 0.17.2 answers it
+    /// (src/operations/direct-send.ts, `refusal_of_send` and `send_refusal`): <c>linkedin.limit_reached</c>, exit 1, the
+    /// allowance under <c>details.limit</c> and, beside it, the reference, the state and the moment where Reply named the
+    /// send it made a record of. It reads that before any other refusal of a send, so the status alone never makes it
+    /// <c>rate_limited</c>.
+    /// </summary>
+    private static Ending SpentAllowance(string replyCode, JsonObject ids, JsonObject held)
+    {
+        var allowance = SpentAllowances[replyCode];
+        var details = new JsonObject { ["limit"] = allowance };
+        foreach (var (name, value) in held)
+        {
+            details[name] = value?.DeepClone();
+        }
+
+        return Refused(
+            "linkedin.limit_reached", $"The LinkedIn account reached its {allowance} limit, so nothing was sent.", status: 429,
+            replyCode: replyCode, ids: ids, details: details);
     }
 
     /// <summary>Whether any field of the text holds a double opening brace, which Reply reads as the start of a template variable.</summary>

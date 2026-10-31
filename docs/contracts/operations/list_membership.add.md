@@ -106,6 +106,7 @@ contact creation it implies may be metered, and a second contact is a merge nobo
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | none |
 | preview a person reads | none |

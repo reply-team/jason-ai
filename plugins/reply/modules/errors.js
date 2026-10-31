@@ -166,9 +166,9 @@ export const COMMANDS = {
 // `usage.*`.
 //
 // `reply.refused:404` is a refusal at 404 with no code of Reply's own, which is how Reply's API answers a route it does
-// not have. The CLI passes such a 404 through as it is only on the direct sends, `inbox categorize` and the membership
-// check of `sequence add-contact` and `sequence remove-contact`; its other commands read a 404 as the thing they asked
-// for not being found. A 404 Reply explains with a code keeps the row that code has.
+// not have. The CLI passes such a 404 through as it is on every command but the nine that read every 404 as the thing
+// they asked for not being found and `auth whoami`, which never answers `reply.refused`, as the row says. A 404 Reply
+// explains with a code keeps the row that code has.
 //
 // `outcome.unknown` is never looked up here for a work command: the CLI answers it with exit 3, and `cli.js` reads an
 // exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
@@ -340,7 +340,9 @@ export const CODES = {
       "direct_send.not_owned": "send_not_found",
       "usage.reference": "send_not_found",
       "direct_send.already_sent": "send_already_sent",
-      "direct_send.already_failed": "send_already_failed"
+      "direct_send.already_failed": "send_already_failed",
+      "direct_send.already_sending": "send_already_sent",
+      "direct_send.cancel_not_confirmed": "cancel_not_confirmed"
     },
     "message.send": {
       "template:reply.refused:contact.unknown:RenderingFail": "template_not_filled",
@@ -355,6 +357,10 @@ export const CODES = {
       "contact.invalid_linkedin_url": "invalid_channel_value",
       "account.contact_limit_reached": "limit_reached",
       "reply.invalid_request:email": "invalid_channel_value",
+      "reply.invalid_request:scheduleId": "schedule_not_taken_on_the_route",
+      "schedule.not_found": "schedule_not_held",
+      "contact.time_zone_missing": "schedule_needs_the_contact_s_zone",
+      "schedule.no_slot": "schedule_has_no_hours",
       "contact.already_held": "held_unnamed",
       "contact.no_linkedin_profile": "no_profile_at_reply",
       "contact.blacklisted": "blacklisted_at_reply",
@@ -442,7 +448,7 @@ export const ROWS = {
       "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
     },
     "route_not_offered": {
-      "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's API has no route for the call, so the account's Reply does not offer it yet. The CLI passes such a 404 through as it is only on the direct sends, `inbox categorize` and the membership check of `sequence add-contact` and `sequence remove-contact`.",
+      "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's API has no route for the call, so the account's Reply does not offer it yet. The CLI passes such a 404 through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`.",
       "code": "capability_not_offered",
       "class": "permanent",
       "quotes": "operation",
@@ -1142,7 +1148,7 @@ export const ROWS = {
         "note": "The LinkedIn account cannot send now — it is turned off, or its session at LinkedIn has to be connected again at Reply — so nothing was sent. Put the account right at Reply; the invitation waits on the sender's block and goes once a trial gets past it."
       },
       "sender_blocked_limit": {
-        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace. Where the CLI said how long to wait (`retry_after`), the block clears that long after the answer.",
+        "when": "The CLI answered `linkedin.limit_reached`, its word for Reply's 429 under `directLinkedIn.dailyLimitReached` or `directLinkedIn.weeklyLimitReached`, naming the send in the state `failed` or not: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace. Where the CLI said how long to wait (`retry_after`), the block clears that long after the answer.",
         "code": "provider_blocked",
         "class": "blocked",
         "block": { "scope": "sender", "reason": "limit" },
@@ -1424,7 +1430,7 @@ export const ROWS = {
         "note": "The account cannot send now — it is turned off, or its connection at Reply has to be made again — so nothing was sent. Put the account right at Reply; the message waits on the sender's block and goes once a trial gets past it."
       },
       "sender_blocked_limit": {
-        "when": "The CLI answered `linkedin.limit_reached`: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace. Where the CLI said how long to wait (`retry_after`), the block clears that long after the answer.",
+        "when": "The CLI answered `linkedin.limit_reached`, its word for Reply's 429 under `directLinkedIn.dailyLimitReached` or `directLinkedIn.weeklyLimitReached`, naming the send in the state `failed` or not: the LinkedIn account's daily or weekly allowance is spent, which one under `limit` in the trace. Where the CLI said how long to wait (`retry_after`), the block clears that long after the answer.",
         "code": "provider_blocked",
         "class": "blocked",
         "block": { "scope": "sender", "reason": "limit" },
@@ -1562,6 +1568,31 @@ export const ROWS = {
         "quotes": "operation",
         "note": "The account's Reply does not time a direct send by a schedule, so the message that names one in `provider.schedule_id` was not sent: it goes by the schedule or not at all. Asking again meets the same answer; what to do instead is the agent's to choose."
       },
+      "schedule_not_taken_on_the_route": {
+        "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose direct sends are deployed and whose LinkedIn routes do not take a schedule yet answers one so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so the field refused is the route not taking one, never a request built wrong. Nothing is sent.",
+        "code": "capability_not_offered",
+        "class": "permanent",
+        "quotes": "operation",
+        "note": "The account's Reply does not time a send on this channel by a schedule yet, so the message that names one in `provider.schedule_id` was not sent: it goes by the schedule or not at all. Asking again meets the same answer until Reply times such sends; what to do instead is the agent's to choose."
+      },
+      "schedule_not_held": {
+        "when": "The send answered `schedule.not_found`, Reply's code `contact.scheduleNotFound` on an email or `directLinkedIn.scheduleNotFound` on a LinkedIn message, at 404, the second once Reply times deferred LinkedIn sends itself: the schedule `provider.schedule_id` names is not one the account can read, unknown and another account's alike. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The schedule `provider.schedule_id` names is not one Reply holds for this account, so the message was not sent. Name a schedule `schedule.list` returns and propose the message again."
+      },
+      "schedule_needs_the_contact_s_zone": {
+        "when": "The send answered `contact.time_zone_missing`, Reply's code `contact.contactTimeZoneMissing` on an email or `directLinkedIn.contactTimeZoneMissing` on a LinkedIn message, at 409, the second once Reply times deferred LinkedIn sends itself: the schedule `provider.schedule_id` names keeps the contact's own time zone, and Reply holds none for this person. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The schedule `provider.schedule_id` names keeps the contact's own time zone, and Reply holds none for this person, so the message was not sent. Give the contact a time zone at Reply, or name a schedule that keeps its own, and propose the message again."
+      },
+      "schedule_has_no_hours": {
+        "when": "The send answered `schedule.no_slot`, Reply's code `contact.scheduleHasNoSlot` on an email or `directLinkedIn.scheduleHasNoSlot` on a LinkedIn message, at 409, the second once Reply times deferred LinkedIn sends itself: the schedule `provider.schedule_id` names has no day with hours to send in. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The schedule `provider.schedule_id` names has no day with hours to send in, so the message was not sent. Give the schedule hours at Reply, or name another, and propose the message again."
+      },
       "provider_unreadable": {
         "when": "The work item carries the provider's own object beside the arguments (`args.provider`), and it is not an object whose one member is `schedule_id`: it names another member beside it or instead, or none. Decided before anything is read; nothing is sent.",
         "code": "provider_input_invalid",
@@ -1573,12 +1604,6 @@ export const ROWS = {
         "code": "provider_input_invalid",
         "class": "validation",
         "note": "`args.provider` is read on message.send as `{\"schedule_id\": \"<id>\"}` and nothing else, the id of a Reply sending schedule written as a string of its digits; the object given is not that shape."
-      },
-      "provider_schedule_off_email": {
-        "when": "The provider's own object names a schedule in `provider.schedule_id` for a message on LinkedIn. Reply refuses a schedule on every LinkedIn direct send in this version (scheduleId is not supported for LinkedIn sends in this version, a 400 on each LinkedIn route), so a schedule on a LinkedIn message is refused before any call. Decided before anything is read; nothing is sent.",
-        "code": "provider_input_invalid",
-        "class": "validation",
-        "note": "Reply refuses a schedule on every LinkedIn direct send in this version (scheduleId is not supported for LinkedIn sends in this version, a 400 on each LinkedIn route), so a schedule on a LinkedIn message is refused before any call. Send it without the schedule, or by email."
       },
       "send_after_unreadable": {
         "when": "The arguments name a moment in `send_after` that this package's `Date.parse` cannot read — the claim refuses any form but the one the document names, so this is a moment that form admits and the runtime does not read, or one given past the claim. It is never read as a moment already past. Decided before anything is read; nothing is sent.",
@@ -1626,6 +1651,12 @@ export const ROWS = {
       }
     },
     "message.cancel": {
+      "cancel_not_confirmed": {
+        "when": "The CLI answered `direct_send.cancel_not_confirmed`, Reply's code `directSend.cancelNotConfirmed` at 503: it could not confirm the cancel, the send is still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule), and Reply asks for the cancel again, after the wait it names as `retry_after` where it names one. Any other answer at 500 or above to a cancel stays the lost answer.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply could not confirm the cancel: the send is still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule), and Reply asks for the cancel again. The runtime cancels again later; a send already cancelled by then answers cancelled."
+      },
       "send_not_found": {
         "when": "The CLI answered `direct_send.not_found`, or `direct_send.not_owned` for a send Reply holds for an account this one is not, or refused the reference without a call (`usage.reference`).",
         "code": "send_not_found",
@@ -1633,7 +1664,7 @@ export const ROWS = {
         "note": "Reply holds no send under the reference the runtime keeps for this send, or none this account may see, so nothing was cancelled. No later attempt will find it."
       },
       "send_already_sent": {
-        "when": "The CLI answered `direct_send.already_sent`, for a send that went or that Reply is sending now, or the cancel answered with a send in the state `sent` or `sending`. Nothing was changed.",
+        "when": "The CLI answered `direct_send.already_sent`, for a send that went or that Reply is sending now; or, once Reply times deferred LinkedIn sends itself, `direct_send.already_sending`, Reply's code `directSend.alreadySending` at 409, for a send Reply is sending now, even one a read still told as queued; or the cancel answered with a send in the state `sent` or `sending`. Nothing was changed.",
         "code": "send_not_pending",
         "class": "permanent",
         "state": "sent",

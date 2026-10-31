@@ -18,7 +18,7 @@
     "operation_version": 1,
     "status": "rejected",
     "reason": "approval_required",
-    "subject_hash": "sha256:recorded-2",
+    "subject_hash": "sha256:recorded-3",
     "subject": {
       "operation": "campaign.enroll",
       "contact_id": "cnt_2",
@@ -53,7 +53,7 @@
       }
     },
     "plugin_id": "reply",
-    "binding_identity": "sha256:recorded-3",
+    "binding_identity": "sha256:recorded-4",
     "route_scope": "global_default",
     "plugin_snapshot_id": "snp_1",
     "routing_snapshot_id": "rts_1",

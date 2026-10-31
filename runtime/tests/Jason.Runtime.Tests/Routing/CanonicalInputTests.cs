@@ -232,6 +232,88 @@ public class CanonicalInputTests
         Assert.Empty(unknown);
     }
 
+    /// <summary>
+    /// A composed input is named by its canonical form: the same members in another order are the same request, and so is
+    /// one composed while the campaign stood in another status, since a pause and a resume ask nothing else of the
+    /// provider. Everything else in the composed input is part of the name.
+    /// </summary>
+    [Fact]
+    public void A_composed_input_is_named_whatever_the_order_of_its_members_and_the_campaign_s_status()
+    {
+        var input = CanonicalInput.Compose(Contract(ListMembershipAdd), Facts(ListMembershipAdd, Arguments("email"), ContactWith(("email", "ada@example.test", true))));
+        var reversed = (JsonObject)Reversed(input)!;
+        Assert.NotEqual(input.Select(member => member.Key), reversed.Select(member => member.Key));
+        var paused = input.DeepClone().AsObject();
+        paused["campaign"]!["status"] = "paused";
+
+        Assert.StartsWith("sha256:", CanonicalInput.Digest(input), StringComparison.Ordinal);
+        Assert.Equal(CanonicalInput.Digest(input), CanonicalInput.Digest(reversed));
+        Assert.Equal(CanonicalInput.Digest(input), CanonicalInput.Digest(paused));
+        Assert.Equal("active", (string?)input["campaign"]!["status"]);
+    }
+
+    /// <summary>
+    /// What the provider is asked to do is in the name, and a change of any of it is another request: the address on the
+    /// consumed channel, a field of the person, a pin of the person or of the campaign, the campaign's name, an argument.
+    /// </summary>
+    [Theory]
+    [InlineData("/contacts/0/channels/0/value", "ada@another.example.test")]
+    [InlineData("/contacts/0/first_name", "Adeline")]
+    [InlineData("/contacts/0/external_ids/contact", "p-88421")]
+    [InlineData("/campaign/external_ids/campaign", "c-7714")]
+    [InlineData("/campaign/name", "Another flow")]
+    [InlineData("/args/list/external_id", "L-1130")]
+    public void A_change_of_anything_in_the_composed_input_but_the_campaign_s_status_names_another_input(string pointer, string value)
+    {
+        var input = CanonicalInput.Compose(Contract(ListMembershipAdd), Facts(ListMembershipAdd, Arguments("email"), ContactWith(("email", "ada@example.test", true))));
+        var changed = input.DeepClone().AsObject();
+        var path = pointer.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        JsonNode parent = changed;
+        foreach (var step in path[..^1])
+        {
+            parent = int.TryParse(step, out var index) ? parent[index]! : parent[step]!;
+        }
+
+        parent[path[^1]] = value;
+
+        Assert.NotEqual(CanonicalInput.Digest(input), CanonicalInput.Digest(changed));
+    }
+
+    /// <summary>
+    /// A pin is written once, by the attempt that learned it, so the input composed before an attempt learned some pins is
+    /// the input composed now without them, and only without them: the pins learned elsewhere stay.
+    /// </summary>
+    [Fact]
+    public void An_input_without_the_pins_an_attempt_learned_is_the_one_composed_before_it_learned_them()
+    {
+        var facts = Facts(
+            ListMembershipAdd,
+            Arguments("email"),
+            ContactWith(("email", "ada@example.test", true)),
+            contactPins: new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "p-88421" },
+            campaignPins: new Dictionary<string, string>(StringComparer.Ordinal) { ["campaign"] = "c-7714", ["list"] = "L-1130" });
+        var before = facts with
+        {
+            ContactPins = PreflightFacts.NoPins,
+            CampaignPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["list"] = "L-1130" },
+        };
+        var learned = new PinsLearned(new HashSet<string>(StringComparer.Ordinal) { "contact" }, new HashSet<string>(StringComparer.Ordinal) { "campaign" });
+        var now = CanonicalInput.Compose(Contract(ListMembershipAdd), facts);
+
+        var without = CanonicalInput.Without(now, learned);
+
+        Assert.True(JsonNode.DeepEquals(CanonicalInput.Compose(Contract(ListMembershipAdd), before), without));
+        Assert.Equal("p-88421", (string?)now["contacts"]![0]!["external_ids"]!["contact"]);
+    }
+
+    /// <summary>The same document with the members of every object in the opposite order.</summary>
+    private static JsonNode? Reversed(JsonNode? node) => node switch
+    {
+        JsonObject members => new JsonObject(members.Reverse().Select(member => KeyValuePair.Create(member.Key, Reversed(member.Value)))),
+        JsonArray items => new JsonArray(items.Select(Reversed).ToArray()),
+        _ => node?.DeepClone(),
+    };
+
     private static OperationContract Contract(string id) => OperationCatalog.Find(id)!;
 
     private static JsonObject Listing() => new() { ["limit"] = 20, ["offset"] = 0, ["source"] = "all" };

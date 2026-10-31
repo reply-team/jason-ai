@@ -249,6 +249,9 @@ public class FixtureTests
         Assert.True(
             status == "failed" || !expected.ContainsKey("package_settles_by_key"),
             $"{relative} names package_settles_by_key on an outcome that did not fail, where no package is asked anything.");
+        Assert.True(
+            status == "failed" || !expected.ContainsKey("held"),
+            $"{relative} says whether a block holds the work of an outcome that did not fail, where no block is named.");
 
         switch (status)
         {
@@ -284,6 +287,7 @@ public class FixtureTests
                 var recorded = OutcomeContract.Recorded(outcome.Error, out var blockProblems);
                 Assert.Equal(Class(expected), recorded);
                 TheBlockTheFailureCarries(relative, expected, outcome.Error, blockProblems);
+                TheBlockHoldsTheWorkAsTheDocumentSays(relative, contract, expected, recorded);
 
                 // Where the operation settles a lost answer by the work item's key, a repeat rests on the package's word,
                 // so the fixture says which package answered; no other failure names one.
@@ -396,6 +400,26 @@ public class FixtureTests
     }
 
     /// <summary>
+    /// Whether the work waits on the block its failure names. A failure recorded <c>blocked</c> states <c>expect.held</c>:
+    /// true where the operation's document says <c>dispatch.under_provider_block: waits</c>, so the item parks on the
+    /// block and is released when it clears, and false where it says <c>runs</c>, so the failure ends the item. No other
+    /// failure states it.
+    /// </summary>
+    private static void TheBlockHoldsTheWorkAsTheDocumentSays(string relative, OperationContract contract, JsonObject expected, FailureClass recorded)
+    {
+        if (recorded != FailureClass.Blocked)
+        {
+            Assert.True(!expected.ContainsKey("held"), $"{relative} says whether a block holds the work of a failure recorded `{Name(recorded)}`, which names no block.");
+            return;
+        }
+
+        var waits = contract.Dispatch.UnderProviderBlock == UnderProviderBlock.Waits;
+        Assert.True(
+            expected["held"] is JsonValue held && held.TryGetValue<bool>(out var stated) && stated == waits,
+            $"{relative} is recorded `blocked` and states held {expected["held"]?.ToJsonString() ?? "nowhere"}; {contract.Id} {(waits ? "waits" : "runs")} under a provider block.");
+    }
+
+    /// <summary>
     /// A refusal of the provider's object points into it from the input's root, as every pointer the runtime writes about
     /// the slot does: <c>/args/provider/…</c> in the composed input the package was handed, never a path relative to the
     /// object itself, which would read as a key of the input.
@@ -414,8 +438,9 @@ public class FixtureTests
     }
 
     /// <summary>
-    /// The blocked answer is published for a send, an invitation, a reply and a read, and a block outside its contract
-    /// beside them, so a plugin author sees both what is kept and what is refused.
+    /// The blocked answer is published for a send, an invitation, a reply, a read, a take-back and an opt-out, and a block
+    /// outside its contract beside them, so a plugin author sees both what is kept and what is refused, and both work the
+    /// block holds and work it lets run.
     /// </summary>
     [Fact]
     public void A_blocked_answer_is_published_kept_and_refused()
@@ -424,12 +449,14 @@ public class FixtureTests
             .Where(fixture => (string?)fixture["outcome"]?["error"]?["class"] == "blocked")
             .ToList();
 
-        foreach (var operation in new[] { "message.send", "social_invitation.send", "conversation.reply", "sender.list" })
+        foreach (var operation in new[] { "message.send", "social_invitation.send", "conversation.reply", "sender.list", "message.cancel", "optout.record" })
         {
             Assert.Contains(blocked, fixture => (string?)fixture["operation"] == operation && fixture["expect"]!["block"] is JsonValue kept && (string?)kept == "kept");
         }
 
         Assert.Contains(blocked, fixture => fixture["expect"]!["block"] is JsonObject && (string?)fixture["expect"]!["class"] == "permanent");
+        Assert.Contains(blocked, fixture => fixture["expect"]!["held"] is JsonValue held && (bool)held);
+        Assert.Contains(blocked, fixture => fixture["expect"]!["held"] is JsonValue held && !(bool)held);
     }
 
     /// <summary>

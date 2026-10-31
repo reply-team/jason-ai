@@ -75,7 +75,10 @@ public class ProgramRunnerTests
     /// The grandchild is known only by the number the program wrote, and on a shared machine that number may belong to
     /// another process by the time it is read. So the grandchild is opened through the proof, a process of its name that
     /// had started by the moment the number was read, and ended only through it; a number the proof does not hold fails
-    /// the row, and its process is left alone.
+    /// the row, and its process is left alone. On Linux the number is the forked subshell's, which is still named
+    /// <c>sh</c> until it executes <c>sleep</c> a moment after the fork, so the name is read again within
+    /// <see cref="OwnedChild.StartAllowance"/> until it is the grandchild's before the number is refused; the "Left
+    /// alone" lines a green run on Linux carries are those retries.
     /// </remarks>
     [Fact]
     public async Task A_caller_that_cancels_stops_the_whole_tree_of_the_program()
@@ -97,10 +100,10 @@ public class ProgramRunnerTests
         try
         {
             var (number, read) = await ChildThatStartsAGrandchild.WaitForGrandchildAsync(pidFile, Ct);
-            grandchild = Proven(number, read);
+            grandchild = await ProvenWithinAsync(number, read, Ct);
             Assert.True(
                 grandchild is not null,
-                $"Process {number}, the number the program wrote, is not a {ChildThatStartsAGrandchild.GrandchildName} that had started by {read:O}, when it was read: it is gone or another process's, and is left alone.");
+                $"Process {number}, the number the program wrote, is not a {ChildThatStartsAGrandchild.GrandchildName} that had started by {read:O}, when it was read and again for {OwnedChild.StartAllowance.TotalSeconds:0} s after: it is gone or another process's, and is left alone.");
 
             await cancel.CancelAsync();
 
@@ -165,6 +168,27 @@ public class ProgramRunnerTests
     /// </summary>
     private static OwnedChild.Held? Proven(int number, DateTimeOffset read) =>
         OwnedChild.Open(number, read, ChildThatStartsAGrandchild.GrandchildName);
+
+    /// <summary>
+    /// <see cref="Proven"/> read again until it holds or <see cref="OwnedChild.StartAllowance"/> has passed. A forked
+    /// subshell is named for its parent until it executes its program, so the one reading that comes right after the
+    /// fork can see <c>sh</c> where the grandchild is about to be; a number that is never the grandchild's is still
+    /// refused, a little later.
+    /// </summary>
+    private static async Task<OwnedChild.Held?> ProvenWithinAsync(int number, DateTimeOffset read, CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + OwnedChild.StartAllowance;
+        while (true)
+        {
+            var held = Proven(number, read);
+            if (held is not null || DateTime.UtcNow >= deadline)
+            {
+                return held;
+            }
+
+            await Task.Delay(20, cancellationToken);
+        }
+    }
 
     /// <summary>
     /// A kill of the tree that fails part way — the operating system raises every descendant it could not end as one

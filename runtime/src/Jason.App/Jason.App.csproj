@@ -23,4 +23,42 @@
           Condition="$(RuntimeIdentifier.StartsWith('win')) and !$([MSBuild]::IsOSPlatform('Windows'))">
     <Error Text="A Windows executable of jason is built on Windows only: whether the SDK writes its application manifest (consoleAllocationPolicy) on another host has not been measured, and without it the runtime would open a console window at every logon." />
   </Target>
+
+  <!-- The native libraries the single-file bundle carries, SQLite's among them, are unpacked on the first run and loaded
+       from there, and macOS loads them into the signed executable only if the same team signed them. So a macOS release
+       signs them before they are bundled, across two publishes the package action makes: the first copies each one into
+       the directory CopyBundledNativeLibrariesTo names, under the path it has in the bundle, and the second, given
+       BundleNativeLibrariesFrom, bundles each one from that directory instead of from where the publish found it. A
+       library the bundle carries that the directory does not hold stops the second publish rather than going in as it
+       was. Both directories are absolute paths, since MSBuild would read a relative one against this project. -->
+  <Target Name="ExchangeBundledNativeLibraries"
+          AfterTargets="PrepareForBundle"
+          Condition="'$(PublishSingleFile)' == 'true' and ('$(CopyBundledNativeLibrariesTo)' != '' or '$(BundleNativeLibrariesFrom)' != '')">
+    <Error Condition="'$(CopyBundledNativeLibrariesTo)' != '' and !$([System.IO.Path]::IsPathRooted('$(CopyBundledNativeLibrariesTo)'))"
+           Text="CopyBundledNativeLibrariesTo is '$(CopyBundledNativeLibrariesTo)', which is not an absolute path." />
+    <Error Condition="'$(BundleNativeLibrariesFrom)' != '' and !$([System.IO.Path]::IsPathRooted('$(BundleNativeLibrariesFrom)'))"
+           Text="BundleNativeLibrariesFrom is '$(BundleNativeLibrariesFrom)', which is not an absolute path." />
+
+    <PropertyGroup>
+      <_CopyBundledNativeLibrariesTo Condition="'$(CopyBundledNativeLibrariesTo)' != ''">$([MSBuild]::EnsureTrailingSlash('$(CopyBundledNativeLibrariesTo)'))</_CopyBundledNativeLibrariesTo>
+      <_BundleNativeLibrariesFrom Condition="'$(BundleNativeLibrariesFrom)' != ''">$([MSBuild]::EnsureTrailingSlash('$(BundleNativeLibrariesFrom)'))</_BundleNativeLibrariesFrom>
+    </PropertyGroup>
+    <ItemGroup>
+      <_BundledNativeLibrary Include="@(FilesToBundle)" Condition="'%(FilesToBundle.AssetType)' == 'native'" />
+    </ItemGroup>
+
+    <Copy Condition="'$(CopyBundledNativeLibrariesTo)' != ''"
+          SourceFiles="@(_BundledNativeLibrary)"
+          DestinationFiles="@(_BundledNativeLibrary->'$(_CopyBundledNativeLibrariesTo)%(RelativePath)')" />
+
+    <ItemGroup Condition="'$(BundleNativeLibrariesFrom)' != ''">
+      <_ExchangedNativeLibrary Include="@(_BundledNativeLibrary->'$(_BundleNativeLibrariesFrom)%(RelativePath)')" />
+    </ItemGroup>
+    <Error Condition="'$(BundleNativeLibrariesFrom)' != '' and !Exists('%(_ExchangedNativeLibrary.Identity)')"
+           Text="The bundle carries %(_ExchangedNativeLibrary.RelativePath), and $(BundleNativeLibrariesFrom) does not hold it." />
+    <ItemGroup Condition="'$(BundleNativeLibrariesFrom)' != ''">
+      <FilesToBundle Remove="@(_BundledNativeLibrary)" />
+      <FilesToBundle Include="@(_ExchangedNativeLibrary)" />
+    </ItemGroup>
+  </Target>
 </Project>

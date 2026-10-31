@@ -120,6 +120,7 @@ be asked again.
 |---|---|
 | pre-flight | contact `optional`, channel `none`, suppression `checked`, provider contact `pinned_only` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | `id`; channels: `none` |
 | precondition | none |
 | preview a person reads | none |

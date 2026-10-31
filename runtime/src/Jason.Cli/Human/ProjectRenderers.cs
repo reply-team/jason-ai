@@ -93,5 +93,5 @@ public static class ProjectRenderers
         return RenderText.Lines(lines);
     }
 
-    private static string Line(string label, string value) => label.PadRight(Label) + value;
+    private static string Line(string label, string value) => label.PadRight(Label) + RenderText.Shown(value);
 }

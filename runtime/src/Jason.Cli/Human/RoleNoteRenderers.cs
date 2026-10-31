@@ -76,5 +76,5 @@ public static class RoleNoteRenderers
 
     private static System.Text.Json.JsonSerializerOptions Indented { get; } = new(Contracts.Json.JasonJson.Options) { WriteIndented = true };
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

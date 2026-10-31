@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
@@ -315,6 +316,11 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     /// it again, and parks the item on it: a trial of the account that met a sender's block has got past the account,
     /// so the account clears and the item parks on the sender. <see cref="BlockAnswer.Undecided"/> says nothing, and a
     /// trial it was puts the block's next trial a cadence off. Every block it cleared is said to have cleared.
+    /// <para>
+    /// Only work that reaches a person is the block's judge. A held control got past nothing that does: its success, or
+    /// the provider's judgement of it, is <see cref="BlockAnswer.Undecided"/>, and its <see cref="BlockAnswer.Blocked"/>
+    /// sees the block again and clears none, so no control ever clears a block.
+    /// </para>
     /// </summary>
     /// <param name="input">The input the claim composed: the one place a sender is read from.</param>
     /// <param name="error">The error a blocked attempt keeps; only <see cref="BlockAnswer.Blocked"/> reads it.</param>
@@ -337,6 +343,11 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
         var identity = ProviderBlocks.Identity(attempt.Provenance?.BindingIdentity);
         var open = await ProviderBlocks.OpenAsync(db, pluginId, identity, cancellationToken).ConfigureAwait(false);
         var cleared = new List<ProviderBlock>();
+        var decides = OperationCatalog.TriedByProviderBlock.Contains(item.Operation ?? string.Empty);
+        if (answer == BlockAnswer.GotPast && !decides)
+        {
+            answer = BlockAnswer.Undecided;
+        }
 
         switch (answer)
         {
@@ -358,10 +369,14 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
                 var met = ProviderBlocks.Meet(db, open, pluginId, identity, said, attempt, now, trialSeconds);
                 foreach (var trial in open.Where(block => block.TrialWorkItemId == item.Id && !ReferenceEquals(block, met)))
                 {
-                    if (trial.Scope == ProviderBlockScope.Account && met.Scope == ProviderBlockScope.Sender)
+                    if (trial.Scope == ProviderBlockScope.Account && met.Scope == ProviderBlockScope.Sender && decides)
                     {
                         ProviderBlocks.Clear(trial, attempt, now);
                         cleared.Add(trial);
+                    }
+                    else if (trial.Scope == ProviderBlockScope.Account && met.Scope == ProviderBlockScope.Sender)
+                    {
+                        ProviderBlocks.Undecided(trial, now, trialSeconds);
                     }
                     else
                     {

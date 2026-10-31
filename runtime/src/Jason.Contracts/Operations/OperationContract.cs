@@ -269,6 +269,7 @@ public sealed record OperationContract(
         RefuseKeyedReadWithoutRepeat(source, contract);
         RefuseUncheckedReach(source, contract);
         RefuseUnpausableWork(source, contract);
+        RefuseUnheldReach(source, contract);
         RefuseUnaddressablePreview(source, contract);
         RefuseUndeclaredContactMode(source, contract);
         return contract;
@@ -585,6 +586,20 @@ public sealed record OperationContract(
         }
     }
 
+    /// <summary>
+    /// A provider block is the provider refusing to let work reach a person, so an operation that reaches one —
+    /// <c>act</c>, read as its dangerous value — waits behind it. Nothing is refused the other way: a control may wait.
+    /// </summary>
+    private static void RefuseUnheldReach(string source, OperationContract contract)
+    {
+        if (contract.Dispatch.UnderProviderBlock == UnderProviderBlock.Runs
+            && string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `dispatch.under_provider_block` is `runs`, but `reach` is `act`; an operation that reaches a person waits while a provider block of its plugin and binding is open.");
+        }
+    }
+
     private static readonly IReadOnlyDictionary<string, RepeatAfterAmbiguous> RepeatAfterAmbiguousNames =
         new Dictionary<string, RepeatAfterAmbiguous>(StringComparer.Ordinal)
         {
@@ -625,6 +640,13 @@ public sealed record OperationContract(
         {
             ["waits"] = InPausedCampaign.Waits,
             ["runs"] = InPausedCampaign.Runs,
+        };
+
+    private static readonly IReadOnlyDictionary<string, UnderProviderBlock> UnderProviderBlockNames =
+        new Dictionary<string, UnderProviderBlock>(StringComparer.Ordinal)
+        {
+            ["waits"] = UnderProviderBlock.Waits,
+            ["runs"] = UnderProviderBlock.Runs,
         };
 
     private static readonly IReadOnlyDictionary<string, ChannelRequirement> ChannelRequirementNames =
@@ -675,7 +697,9 @@ public sealed record OperationContract(
     private static DispatchRule ReadDispatch(JsonObject dispatch, DocumentReader outer)
     {
         var reader = outer.Into("dispatch", dispatch);
-        var value = new DispatchRule(reader.Enumeration("in_paused_campaign", InPausedCampaignNames));
+        var value = new DispatchRule(
+            reader.Enumeration("in_paused_campaign", InPausedCampaignNames),
+            reader.Enumeration("under_provider_block", UnderProviderBlockNames));
         reader.RefuseAnythingElse();
         return value;
     }
@@ -1047,7 +1071,7 @@ public enum ProviderContact
 }
 
 /// <summary>How the dispatcher treats this operation's work beyond what every work item shares.</summary>
-public sealed record DispatchRule(InPausedCampaign InPausedCampaign);
+public sealed record DispatchRule(InPausedCampaign InPausedCampaign, UnderProviderBlock UnderProviderBlock);
 
 /// <summary>Whether a work item naming this operation is claimed while its campaign is paused.</summary>
 public enum InPausedCampaign
@@ -1059,6 +1083,20 @@ public enum InPausedCampaign
     /// It runs: an operation whose not running is the harm — recording that somebody said stop, or pausing the
     /// provider's own campaign — still reaches the provider after somebody paused Jason's campaign first.
     /// </summary>
+    Runs,
+}
+
+/// <summary>Whether a work item naming this operation is held while a provider block of its plugin and binding is open.</summary>
+public enum UnderProviderBlock
+{
+    /// <summary>
+    /// It waits: parked while the block is open and released when it clears. Every operation that reaches a person
+    /// waits, and the block's trial is drawn from that work; a control waits where its one run must not be lost to the
+    /// provider's refusal.
+    /// </summary>
+    Waits,
+
+    /// <summary>It runs through the block and ends on its own answer: a read tells the truth, and a control may still succeed.</summary>
     Runs,
 }
 

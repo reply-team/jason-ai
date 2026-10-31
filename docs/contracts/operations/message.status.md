@@ -111,6 +111,7 @@ An answer longer than this installation lets a plugin read from a program (`Plug
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |
 | preview a person reads | none |

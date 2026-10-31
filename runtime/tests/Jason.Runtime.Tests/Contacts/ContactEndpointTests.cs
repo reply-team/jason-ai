@@ -39,6 +39,41 @@ public class ContactEndpointTests
         Assert.Equal("invalid", detail.Code);
     }
 
+    /// <summary>
+    /// A person's name is printed to people wherever the contact is listed, so a control character inside either part of
+    /// it is refused at the door, on create and on update alike, and the refusal does not echo it.
+    /// </summary>
+    [Theory]
+    [InlineData("first_name", "Ada\u001b[2J")]
+    [InlineData("first_name", "Ada\rGrace")]
+    [InlineData("last_name", "Love\blace")]
+    [InlineData("last_name", "Love\u009blace")]
+    public async Task A_name_holding_a_control_character_is_refused_on_create_and_on_update(string field, string name)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var fixture = await RuntimeApiFixture.StartAsync(ct);
+        var created = await fixture.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ada", last_name = "Lovelace" }, ct);
+
+        var refusals = new[]
+        {
+            await fixture.PostErrorAsync(Operations.ContactCreate, new JsonObject { [field] = name }, HttpStatusCode.BadRequest, ct),
+            await fixture.PostErrorAsync(
+                Operations.ContactUpdate, new JsonObject { ["contact_id"] = created.Id, [field] = name }, HttpStatusCode.BadRequest, ct),
+        };
+
+        foreach (var error in refusals)
+        {
+            Assert.Equal("validation_failed", error.Code);
+            var detail = Assert.Single(error.Details!);
+            Assert.Equal(field, detail.Field);
+            Assert.Equal("invalid", detail.Code);
+            Assert.DoesNotContain(name, detail.Message, StringComparison.Ordinal);
+        }
+
+        var unchanged = await fixture.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = created.Id }, ct);
+        Assert.Equal(("Ada", "Lovelace"), (unchanged.FirstName, unchanged.LastName));
+    }
+
     [Fact]
     public async Task An_unknown_contact_is_a_not_found_envelope()
     {

@@ -94,6 +94,10 @@ public static class AttemptProvenance
             BindingIdentity = route?.BindingIdentity,
             CorrelationId = correlationId,
             ApprovalId = approvalId,
+
+            // The input this claim composed, named where the decision let the attempt run with it: the request a repeat
+            // after a lost answer has to be, and nothing that says what was in it.
+            InputDigest = verdict.Plan is { } plan ? CanonicalInput.Digest(plan.Input) : null,
         };
     }
 

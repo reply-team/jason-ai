@@ -596,8 +596,9 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// A block holds only work that reaches a person or protects one. A read runs through it and tells the truth, and
-    /// a control operation the protective set does not name runs too and succeeds or fails on its own.
+    /// A block holds only the work whose operation declares that it waits under one. A read runs through it and tells the
+    /// truth, a control operation that declares it runs succeeds or fails on its own, and the take-back of a send runs
+    /// too, because its moment passes while it waits.
     /// </summary>
     [Fact]
     public void A_read_and_a_control_operation_a_block_does_not_hold_run_through_it()
@@ -616,10 +617,14 @@ public partial class ProviderOpPreflightTests
             Arguments = Scenario.CompleteArguments,
             Blocks = [Scenario.Block()],
         }.Check();
+        var cancelling = Naming(Cancel, Made());
+        cancelling.Blocks = [Scenario.Block()];
+        var cancel = cancelling.Check();
 
         Assert.True(read.Passed, $"The read answered {read.Code}.");
         Assert.True(control.Passed, $"The control operation answered {control.Code}.");
-        Assert.Equal([null, null], [read.Block, control.Block]);
+        Assert.True(cancel.Passed, $"The take-back of a send answered {cancel.Code}.");
+        Assert.Equal([null, null, null], [read.Block, control.Block, cancel.Block]);
     }
 
     /// <summary>
@@ -1242,6 +1247,16 @@ public partial class ProviderOpPreflightTests
         /// <summary>The context that attempt's snapshot kept; null where it ran with the item's context as it is now.</summary>
         public JsonObject? UnsettledArguments { get; set; }
 
+        /// <summary>
+        /// The facts the claim of the earlier attempt decided on, as a change of this claim's: where set, that attempt's
+        /// provenance is the one its claim wrote, the digest of the input it composed included. Null where the attempt
+        /// is described by <see cref="UnsettledUnder"/> and <see cref="UnsettledArguments"/>, and kept no digest.
+        /// </summary>
+        public Func<PreflightFacts, PreflightFacts>? UnsettledClaim { get; set; }
+
+        /// <summary>The kinds of the pins the earlier attempt recorded itself, as the claim reads them; null for none.</summary>
+        public PinsLearned? UnsettledLearned { get; set; }
+
         /// <summary>An earlier attempt whose provenance says nothing of where it ran.</summary>
         public static (string? PluginId, string? PluginDigest, string? BindingIdentity) NoProvenance => (null, null, null);
 
@@ -1322,7 +1337,7 @@ public partial class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled ? Earlier(item.Context) : null, Named);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);
@@ -1339,6 +1354,19 @@ public partial class ProviderOpPreflightTests
                 PluginSnapshotId,
                 new RouteSet(Route, RouteSet.Empty.Operations),
                 campaigns);
+
+            if (Unsettled)
+            {
+                var earlier = Earlier(item.Context);
+                if (UnsettledClaim is { } claimed)
+                {
+                    // That attempt's claim decided on the facts as they stood then, and wrote what it decided.
+                    var then = ProviderOpPreflight.Check(claimed(facts), plugins, routes, Timing);
+                    earlier.Provenance = AttemptProvenance.AtClaim(Operation, then, plugins, routes, earlier.PublicId);
+                }
+
+                facts = facts with { Unsettled = earlier, Learned = UnsettledLearned };
+            }
 
             return ProviderOpPreflight.Check(facts, plugins, routes, Timing);
         }

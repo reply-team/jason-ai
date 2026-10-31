@@ -31,6 +31,11 @@ namespace Jason.Runtime.Routing;
 /// The send the work names under <c>args.send</c>, read only for an operation whose input carries one, and null where the
 /// campaign holds no work item under that id.
 /// </param>
+/// <param name="Learned">
+/// The kinds of the routed plugin's pins of the person and of the campaign that <paramref name="Unsettled"/> recorded
+/// itself, from the answer it ended with, or null where there is no such attempt: the input its claim composed did not
+/// carry them yet.
+/// </param>
 public sealed record PreflightFacts(
     WorkItem Item,
     Campaign Campaign,
@@ -40,8 +45,18 @@ public sealed record PreflightFacts(
     bool Suppressed,
     IReadOnlyList<ProviderBlock>? Blocks = null,
     Attempt? Unsettled = null,
-    NamedSend? Send = null)
+    NamedSend? Send = null,
+    PinsLearned? Learned = null)
 {
     /// <summary>What an entity no plugin has pinned yet has: nothing, stated once rather than allocated per claim.</summary>
     public static IReadOnlyDictionary<string, string> NoPins { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
 }
+
+/// <summary>
+/// The kinds of one plugin's pins of a person and of a campaign that the compared attempt and every later attempt of the
+/// item recorded: a pin is written once, by the attempt that learned it, so these are the ones the input composed for the
+/// compared attempt did not carry.
+/// </summary>
+/// <param name="Contact">The kinds of the person's pins those attempts recorded.</param>
+/// <param name="Campaign">The kinds of the campaign's pins those attempts recorded.</param>
+public sealed record PinsLearned(IReadOnlySet<string> Contact, IReadOnlySet<string> Campaign);

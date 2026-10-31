@@ -340,6 +340,25 @@ public class ReplyStubDirectSendTests
     }
 
     /// <summary>
+    /// Reply consults its blacklist on a LinkedIn send only when it makes the send, not when it takes it: an invitation
+    /// and a message to a contact the blacklist holds are taken as any other.
+    /// </summary>
+    [Theory]
+    [InlineData("connect")]
+    [InlineData("message")]
+    public async Task A_linkedin_send_to_a_contact_the_blacklist_holds_is_taken_as_any_other(string what)
+    {
+        using var account = (what == "connect" ? Planted() : Planted().WithConnection(1001, 34)).WithBlacklisted(1001);
+
+        var (exit, _, said) = what == "connect"
+            ? await account.RunAsync(Connect(), Ct)
+            : await account.RunAsync(LinkedIn("linkedin-message"), """{"body":"Hi"}""", Ct);
+
+        Assert.True(exit == 0, said);
+        Assert.Single(account.Sent);
+    }
+
+    /// <summary>
     /// Reply fills a direct email's tags in for the person before it sends: the contact's fields, a custom field by its
     /// key, and the mailbox's names and address, with a fallback, a condition and its other branch. What went out is
     /// recorded as written and as rendered.
@@ -981,6 +1000,95 @@ public class ReplyStubDirectSendTests
     }
 
     /// <summary>
+    /// A send timed by a schedule Reply cannot time it by is refused when it is taken, and nothing is held or sent: a
+    /// schedule the account holds none under is <c>schedule.not_found</c> at 404, one with no active day that has hours
+    /// <c>schedule.no_slot</c> at 409, and one read in each person's own time zone, for a contact Reply holds none for,
+    /// <c>contact.time_zone_missing</c> at 409. The email route names each under <c>contact.</c> and the LinkedIn routes
+    /// under <c>directLinkedIn.</c>, and reply-cli 0.18.0 gives both the one code (src/operations/direct-send.ts:130-138
+    /// and :192-197). A contact with a time zone is timed by the same schedule.
+    /// </summary>
+    [Theory]
+    [InlineData("email")]
+    [InlineData("linkedin")]
+    public async Task A_send_timed_by_a_schedule_reply_cannot_time_it_by_is_refused_by_one_code_on_either_route(string channel)
+    {
+        using var account = OnBothRoutes()
+            .WithSchedule(4021, "Never open", [ReplyAccount.Day("Monday", false, (9, 0, 17, 0)), ReplyAccount.Day("Tuesday", true)])
+            .WithSchedule(4022, "Their mornings", [ReplyAccount.Day("Monday", true, (9, 0, 12, 0))], recipientTimeZone: true);
+        var family = channel == "email" ? "contact." : "directLinkedIn.";
+
+        foreach (var (schedule, code, status, replyCode) in new[]
+        {
+            ("4099", "schedule.not_found", 404, "scheduleNotFound"),
+            ("4021", "schedule.no_slot", 409, "scheduleHasNoSlot"),
+            ("4022", "contact.time_zone_missing", 409, "contactTimeZoneMissing"),
+        })
+        {
+            var (refused, _, said) = await account.RunAsync(TimedBy(channel, schedule), TextOf(channel), Ct);
+            var error = Error(said);
+            Assert.Equal((1, code, status, family + replyCode), (refused, (string?)error["code"], (int?)error["status"], (string?)error["reply_code"]));
+        }
+
+        Assert.Empty(account.Sent);
+        Assert.Empty(account.DirectSends);
+
+        account.WithTimeZone(1001, "Eastern Standard Time");
+        var (taken, _, _) = await account.RunAsync(TimedBy(channel, "4022"), TextOf(channel), Ct);
+        Assert.Equal(0, taken);
+        Assert.Equal(4022, (int)Assert.Single(account.DirectSends)!["scheduleId"]!);
+    }
+
+    /// <summary>
+    /// A send timed by a schedule that opens later waits for it, on either route: Reply answers it
+    /// <c>waitingForSchedule</c>, leaves <c>send_after</c> out, and names under <c>estimated_send_at</c> when it expects to
+    /// send it, or null where the schedule does not open within 30 days. A read of the send answers the same estimate,
+    /// and once it is cancelled the estimate is null, as Reply gives it in every other state (reply-cli 0.18.0's
+    /// src/operations/direct-send.ts:320-323 for the send, src/operations/direct-sends.ts:54 for the read).
+    /// </summary>
+    [Theory]
+    [InlineData("email", "2099-11-04T14:00:00Z")]
+    [InlineData("linkedin", "2099-11-04T14:00:00Z")]
+    [InlineData("email", null)]
+    [InlineData("linkedin", null)]
+    public async Task A_send_waiting_for_a_schedule_that_opens_later_says_when_reply_expects_to_send_it(string channel, string? estimate)
+    {
+        using var account = OnBothRoutes()
+            .WithSchedule(4021, "Next week", [ReplyAccount.Day("Monday", true, (9, 0, 17, 0))], opensLater: true, estimate: estimate);
+
+        var (taken, said, _) = await account.RunAsync(TimedBy(channel, "4021"), TextOf(channel), Ct);
+        var answer = JsonNode.Parse(said)!.AsObject();
+        Assert.Equal((0, "waitingForSchedule"), (taken, (string?)answer["state"]));
+        Assert.False(answer.ContainsKey("send_after"), said);
+        Assert.True(answer.ContainsKey("estimated_send_at"), said);
+        Assert.Equal(estimate, (string?)answer["estimated_send_at"]);
+
+        var reference = (string)answer["reference"]!;
+        var (_, readOut, _) = await account.RunAsync(Line("direct-send", "get", reference), Ct);
+        var read = JsonNode.Parse(readOut)!.AsObject();
+        Assert.Equal(("waitingForSchedule", null, estimate), ((string?)read["state"], (string?)read["send_after"], (string?)read["estimated_send_at"]));
+        Assert.True(read.ContainsKey("estimated_send_at"), readOut);
+
+        var (_, cancelOut, _) = await account.RunAsync(Line("direct-send", "cancel", reference), Ct);
+        var cancelled = JsonNode.Parse(cancelOut)!.AsObject();
+        Assert.Equal("cancelled", (string?)cancelled["state"]);
+        Assert.True(cancelled.ContainsKey("estimated_send_at"), cancelOut);
+        Assert.Null(cancelled["estimated_send_at"]);
+    }
+
+    private static ReplyAccount OnBothRoutes() =>
+        new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", linkedIn: Profile)
+            .WithSender(Mailbox, "email", "Ann Owner", "ann@example.com")
+            .WithSender(34, "linkedin", "Ann Owner", "https://www.linkedin.com/in/ann-owner")
+            .WithConnection(1001, 34);
+
+    private static string[] TimedBy(string channel, string schedule) => channel == "email"
+        ? Email("--message", "-", "--schedule-id", schedule)
+        : Line("contact", "linkedin-message", "--contact-id", "1001", "--linkedin-account-id", "34", "--message", "-", "--schedule-id", schedule);
+
+    private static string TextOf(string channel) => channel == "email" ? """{"subject":"Tuesday","body":"Hi"}""" : """{"body":"Hi"}""";
+
+    /// <summary>
     /// A send made again under its key with the same request is answered with the first answer, and nothing goes twice;
     /// the same key on another request is <c>idempotency_key.reused</c>, with what Reply holds under it in the details.
     /// </summary>
@@ -1127,11 +1235,11 @@ public class ReplyStubDirectSendTests
         using var account = Planted();
         await account.RunAsync(Connect("--send-after", "2099-11-03T14:00:00Z"), Ct);
 
-        var (exit, stdout, _) = await account.RunAsync(Line("direct-send", "get", "linkedin-1001"), Ct);
+        var (exit, stdout, _) = await account.RunAsync(Line("direct-send", "get", "linkedin-scheduled-1001"), Ct);
 
         Assert.Equal(0, exit);
         Assert.Equal(
-            """{"reference":"linkedin-1001","channel":"linkedIn","contact_id":1001,"state":"queued","send_after":"2099-11-03T14:00:00Z","sent_at":null,"message_id":null,"failure_reason":null,"cancelled_at":null}""",
+            """{"reference":"linkedin-scheduled-1001","channel":"linkedIn","contact_id":1001,"state":"queued","send_after":"2099-11-03T14:00:00Z","sent_at":null,"message_id":null,"failure_reason":null,"cancelled_at":null}""",
             JsonNode.Parse(stdout)!.ToJsonString());
 
         var (missing, _, missingSaid) = await account.RunAsync(Line("direct-send", "get", "linkedin-9999"), Ct);
@@ -1162,12 +1270,17 @@ public class ReplyStubDirectSendTests
 
     /// <summary>
     /// reply-cli takes a reference only in Reply's own spelling — the channel, a dash and a number with no leading zero, of
-    /// up to ten digits — and refuses any other before it calls Reply; <c>email-1</c> is one, and Reply answers it.
+    /// up to ten digits, where a LinkedIn send Reply holds for later is <c>linkedin-scheduled-</c> — and refuses any other
+    /// before it calls Reply; <c>email-1</c> is one, and Reply answers it.
     /// </summary>
     [Theory]
     [InlineData("email-1", 1)]
     [InlineData("linkedin-9999999999", 1)]
+    [InlineData("linkedin-scheduled-1", 1)]
     [InlineData("email-0", 2)]
+    [InlineData("linkedin-scheduled-0", 2)]
+    [InlineData("linkedin-Scheduled-1", 2)]
+    [InlineData("email-scheduled-1", 2)]
     [InlineData("email-01", 2)]
     [InlineData("linkedin-12345678901", 2)]
     [InlineData("sms-1", 2)]
@@ -1185,8 +1298,9 @@ public class ReplyStubDirectSendTests
 
     /// <summary>
     /// <c>direct-send cancel</c> takes back a send Reply still holds and answers its record; a second cancel answers the
-    /// same, cancelled when it first was. A send that went or is going now is <c>direct_send.already_sent</c>, one that
-    /// failed <c>direct_send.already_failed</c>, and neither is changed; a reference Reply holds nothing under is
+    /// same, cancelled when it first was. A send that went is <c>direct_send.already_sent</c>, one going now
+    /// <c>direct_send.already_sending</c>, one that failed <c>direct_send.already_failed</c>, and none is changed; a
+    /// reference Reply holds nothing under is
     /// <c>direct_send.not_found</c>, and one that names no single send the CLI's usage error.
     /// </summary>
     [Fact]
@@ -1196,16 +1310,16 @@ public class ReplyStubDirectSendTests
         await account.RunAsync(Connect("--send-after", "2099-11-03T14:00:00Z"), Ct);
         account.WithDirectSend("linkedin-1002", "sending").WithDirectSend("linkedin-1003", "sent").WithDirectSend("linkedin-1004", "failed");
 
-        var (exit, stdout, _) = await account.RunAsync(Line("direct-send", "cancel", "linkedin-1001"), Ct);
-        var (again, repeated, _) = await account.RunAsync(Line("direct-send", "cancel", "linkedin-1001"), Ct);
+        var (exit, stdout, _) = await account.RunAsync(Line("direct-send", "cancel", "linkedin-scheduled-1001"), Ct);
+        var (again, repeated, _) = await account.RunAsync(Line("direct-send", "cancel", "linkedin-scheduled-1001"), Ct);
 
         Assert.Equal((0, 0), (exit, again));
         var record = JsonNode.Parse(stdout)!.AsObject();
-        Assert.Equal(("linkedin-1001", "cancelled"), ((string?)record["reference"], (string?)record["state"]));
+        Assert.Equal(("linkedin-scheduled-1001", "cancelled"), ((string?)record["reference"], (string?)record["state"]));
         Assert.NotNull((string?)record["cancelled_at"]);
         Assert.Equal(record.ToJsonString(), JsonNode.Parse(repeated)!.ToJsonString());
 
-        foreach (var (reference, code) in new[] { ("linkedin-1002", "direct_send.already_sent"), ("linkedin-1003", "direct_send.already_sent"), ("linkedin-1004", "direct_send.already_failed"), ("linkedin-9999", "direct_send.not_found") })
+        foreach (var (reference, code) in new[] { ("linkedin-1002", "direct_send.already_sending"), ("linkedin-1003", "direct_send.already_sent"), ("linkedin-1004", "direct_send.already_failed"), ("linkedin-9999", "direct_send.not_found") })
         {
             var (refused, _, said) = await account.RunAsync(Line("direct-send", "cancel", reference), Ct);
             Assert.Equal((1, code), (refused, (string?)Error(said)["code"]));

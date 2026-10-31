@@ -98,7 +98,9 @@ public static class StatusCommand
         with a ten-second bound and reports whether it answered. The name is found the way Jason finds every
         program it starts by name: on Windows an .exe or a .com first, else npm's .cmd shim, run as the
         interpreter and script it names, and never a script only a shell could run. The check says which file
-        it resolved to. Which provider you use is yours, so this build knows no vendor's command by heart.
+        it resolved to, and, when it looked the name up on a PATH, whose: the CLI's PATH; the runtime's PATH
+        may differ, see the install page. Which provider you use is yours, so this build knows no vendor's
+        command by heart.
 
         Exit codes: 0 when every required check passed, 1 when one did not. Never 3: "the runtime did not
         answer" is this command's answer rather than a reason it has none.

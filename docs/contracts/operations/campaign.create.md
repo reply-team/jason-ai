@@ -97,6 +97,7 @@ failure so a person can find it. The shared failures are spelled as every docume
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | Jason's campaign is not linked yet to a provider's campaign of this plugin's: `campaign.external_ids.campaign` is absent. A linked one is refused as `campaign_already_linked` before the provider is called, because a second create would make a second provider's campaign beside the first link. |
 | preview a person reads | none |

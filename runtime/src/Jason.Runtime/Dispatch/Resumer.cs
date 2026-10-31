@@ -130,9 +130,11 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
         db.Database.SqlQueryRaw<ReadyWait>(ReadySql, now).ToListAsync(ct);
 
     /// <summary>
-    /// The open blocks whose trial is due and that have none under way, each with the one wait its trial is: protective
-    /// work first, then the highest priority, then the oldest item, among the items the claim could run now — in a campaign
-    /// that is active, or paused for work that runs in a paused campaign, and not yet past its due date. A trial is under
+    /// The open blocks whose trial is due and that have none under way, each with the one wait its trial is: work that
+    /// reaches a person first, then the highest priority, then the oldest item, among the items the claim could run now — in
+    /// a campaign that is active, or paused for work that runs in a paused campaign, and not yet past its due date. Only
+    /// such work can tell whether the block is still there, so a held control is the trial only where the block holds none
+    /// of it that could run, and its answer decides nothing but <c>blocked</c>. A trial is under
     /// way as <see cref="TrialUnderWay"/> says. A sender's block holds no trial of its own while its account's block is
     /// open: the account's trial answers first, and it is drawn from the items the account's senders' blocks hold as well
     /// as its own, since the account covers them. Raw SQL because the pick is a correlated subquery with an order, joined
@@ -207,8 +209,10 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
     {
         static string Text<TEnum>(TEnum value) where TEnum : struct, Enum => $"'{SnakeCaseEnumConverter<TEnum>.Format(value)}'";
 
-        // Protective work is the work the catalogue runs in a paused campaign, as the claim and the notifications read it.
+        // Protective work is the work the catalogue runs in a paused campaign, as the claim and the notifications read it;
+        // the work a trial goes to first is the held work that reaches a person, as the catalogue says.
         var protective = Words(OperationCatalog.RunsInPausedCampaign);
+        var tried = Words(OperationCatalog.TriedByProviderBlock);
 
         return $$"""
             SELECT b.id AS "BlockId", (
@@ -223,7 +227,7 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
                        AND x.status = {{Text(WaitStatus.Open)}} AND w.status = {{Text(WorkItemStatus.Waiting)}}
                        AND (c.status = {{Text(CampaignStatus.Active)}} OR (c.status = {{Text(CampaignStatus.Paused)}} AND w.operation IN ({{protective}})))
                        AND (w.due_at IS NULL OR w.due_at > {0})
-                     ORDER BY CASE WHEN w.operation IN ({{protective}}) THEN 0 ELSE 1 END, w.priority DESC, w.id
+                     ORDER BY CASE WHEN w.operation IN ({{tried}}) THEN 0 ELSE 1 END, w.priority DESC, w.id
                      LIMIT 1) AS "WaitId"
             FROM provider_blocks b
             WHERE b.status = {{Text(ProviderBlockStatus.Open)}} AND b.next_trial_at <= {0}

@@ -77,4 +77,44 @@ public partial class ReplySocialInvitationSendTests
         Assert.Single(account.Sent);
         Assert.Equal(2, account.KeyedArrivals.Count);
     }
+
+    /// <summary>
+    /// Reply refuses an invitation over the LinkedIn account's allowance at 429 under a code of its own, the daily one or
+    /// the weekly one, and may name the send it made a record of, in the state <c>failed</c>. Whatever the shape, reply-cli
+    /// tells it from a busy Reply by the code, and the ending is the sender's block for its limit, the limit named: never a wait
+    /// on a busy Reply. A 429 under no such code is that wait.
+    /// </summary>
+    [Theory]
+    [InlineData("directLinkedIn.weeklyLimitReached", "weekly", false)]
+    [InlineData("directLinkedIn.dailyLimitReached", "daily", false)]
+    [InlineData("directLinkedIn.weeklyLimitReached", "weekly", true)]
+    [InlineData("directLinkedIn.dailyLimitReached", "daily", true)]
+    public async Task An_invitation_refused_at_429_over_the_sender_s_allowance_is_the_sender_s_block(string replyCode, string limit, bool named)
+    {
+        using var account = Planted().FailsTheNextSend("linkedin.limit_reached", 1, status: 429, replyCode: replyCode, named: named);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"limit"}""", ReplyOperations.Blocked(error));
+        Assert.Equal(limit, (string?)error.Details!["limit"]);
+        Assert.Equal(named ? """{"contact":"1001","send":"linkedin-1001"}""" : """{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Empty(account.Sent);
+    }
+
+    [Fact]
+    public async Task An_invitation_refused_at_429_under_no_code_of_reply_s_waits_as_reply_asked()
+    {
+        using var account = Planted().FailsTheNextSend("rate_limited", 1, status: 429);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
+
+        Assert.Equal(("rate_limited", FailureClass.Transient), (error.Code, error.Class));
+        Assert.Null(error.Block);
+        Assert.Empty(account.Sent);
+    }
 }

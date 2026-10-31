@@ -358,10 +358,10 @@ public class ApprovalCommandsTests
     }
 
     /// <summary>
-    /// A campaign's name and a contact's name are not refused a control character when they are written, and either may
-    /// come from a provider's sync, so the lines that print them follow the rule the example does: a character that
-    /// changes how the line reads (an escape sequence, a backspace, a right-to-left override) is shown as U+FFFD and
-    /// never runs, and a tab stays.
+    /// A campaign's name and a contact's name are refused a control character when they are written, but one written
+    /// before that rule, or one from a provider, may still hold one, so the lines that print them follow the rule the
+    /// example does: a character that changes how the line reads (an escape sequence, a backspace, a right-to-left
+    /// override) is shown as U+FFFD and never runs, and a tab stays.
     /// </summary>
     [Fact]
     public async Task Get_shows_a_character_that_changes_the_line_in_a_campaign_name_and_a_contact_name_as_a_replacement_mark()

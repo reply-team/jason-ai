@@ -27,7 +27,7 @@
   "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_only" },
   "channel_arguments": null,
   "channel_templates": null,
-  "dispatch": { "in_paused_campaign": "waits" },
+  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "waits" },
   "contact_projection": { "fields": ["id"], "channels": "consumed" },
   "precondition": "The thread's person is this person: the one pinned, where there is a pin, and in every case the one whose address on the channel named by `args.channel` is that channel's value as the runtime keys it for its suppression register; otherwise nothing is sent.",
   "preview": {

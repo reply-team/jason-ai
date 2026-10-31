@@ -17,7 +17,7 @@
         "operation": "campaign.enroll",
         "status": "pending",
         "reason": "approval_required",
-        "subject_hash": "sha256:recorded-1",
+        "subject_hash": "sha256:recorded-2",
         "plugin_id": "reply",
         "requested_at": "2026-10-15T12:00:00.000Z",
         "decided_at": null,

@@ -1664,6 +1664,253 @@ public class ClaimerTests
     }
 
     /// <summary>
+    /// The claim names the input it composed on the attempt it makes, and a repeat of that attempt after a lost answer is
+    /// claimed only with an input of the same name. The person's address changed in between is another request, refused at
+    /// the claim, ambiguous and final, with the attempt kept, and so is a pin of the person another attempt recorded since. A
+    /// keyed send is claimed only in an active campaign, so a campaign paused and resumed in between is active at both
+    /// claims, and the pause leaves nothing else in the input: the repeat runs under the decision the person already made.
+    /// (That the status itself is left out of the name is held where the check is.) A pin of the person or of the campaign
+    /// the lost attempt learned from its own answer is the same request too, though a pin is part of what the person
+    /// approves: they are asked again, and the repeat then runs, named with the pin it now carries. That repeat losing its
+    /// answer too is repeated in turn, since its claim named the input with the pin already in it.
+    /// </summary>
+    [Theory]
+    [InlineData("nothing", false)]
+    [InlineData("the campaign paused and resumed, active at both claims", false)]
+    [InlineData("a pin the lost attempt learned", false)]
+    [InlineData("a campaign pin the lost attempt learned", false)]
+    [InlineData("two answers lost in a row", false)]
+    [InlineData("another address", true)]
+    [InlineData("a pin another attempt recorded", true)]
+    public async Task A_send_that_lost_its_answer_is_claimed_again_only_with_the_input_its_claim_composed(string since, bool refused)
+    {
+        var plugin = TestPlugins.Loaded("stand-in-provider", ["message.send"]);
+        plugin = plugin with { Manifest = plugin.Manifest with { KeyedOperations = ["message.send"] } };
+        using var harness = new Harness(plugin: plugin, route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
+            },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        await Decide(db, ApprovalStatus.Approved);
+        var first = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var lost = await db.Attempts.SingleAsync(Ct);
+        Assert.Equal(CanonicalInput.Digest(first.Plan!.Input), lost.Provenance!.InputDigest);
+
+        // The attempt started and its answer never came back.
+        WorkItemTransitions.Apply(item, WorkItemStatus.Processing, Noon);
+        lost.StartedAt = Noon;
+        lost.Status = AttemptStatus.Failed;
+        lost.FinishedAt = Noon;
+        lost.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: FailureClass.Ambiguous);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Created, Noon);
+        await db.SaveChangesAsync(Ct);
+        switch (since)
+        {
+            case "the campaign paused and resumed, active at both claims":
+                campaign.Status = CampaignStatus.Paused;
+                await db.SaveChangesAsync(Ct);
+                campaign.Status = CampaignStatus.Active;
+                break;
+            case "another address":
+                contact.Channels.Single().Value = "ada@another.example.test";
+                break;
+            case "a pin the lost attempt learned" or "two answers lost in a row" or "a pin another attempt recorded":
+                contact.ExternalIds.Add(new ExternalId
+                {
+                    PluginId = "stand-in-provider",
+                    Kind = "contact",
+                    Value = "p-88421",
+                    RecordedAt = Noon,
+                    RecordedByAttemptId = since == "a pin another attempt recorded" ? PublicId.New("att") : lost.PublicId,
+                });
+                break;
+            case "a campaign pin the lost attempt learned":
+                campaign.ExternalIds.Add(new ExternalId
+                {
+                    PluginId = "stand-in-provider",
+                    Kind = "campaign",
+                    Value = "c-7714",
+                    RecordedAt = Noon,
+                    RecordedByAttemptId = lost.PublicId,
+                });
+                break;
+        }
+
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+        var learned = since is "a pin the lost attempt learned" or "a campaign pin the lost attempt learned" or "two answers lost in a row";
+        if (learned)
+        {
+            // The pin is in what the person is asked to approve, so the repeat the key settles asks them again first.
+            Assert.Empty(claimed);
+            Assert.Equal(WorkItemStatus.AwaitingApproval, item.Status);
+            await Decide(db, ApprovalStatus.Approved);
+            claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+        }
+
+        await using var fresh = database.Open();
+        var repeat = await fresh.Attempts.AsNoTracking().SingleAsync(a => a.Number == 2, Ct);
+        if (!refused)
+        {
+            Assert.Equal(item.PublicId, Assert.Single(claimed).WorkItemPublicId);
+            Assert.Equal(
+                learned ? CanonicalInput.Digest(Assert.Single(claimed).Plan!.Input) : lost.Provenance.InputDigest,
+                repeat.Provenance!.InputDigest);
+            if (since == "two answers lost in a row")
+            {
+                // The repeat lost its answer as well, and learned nothing new: the third claim is named as the second was.
+                var second = await db.Attempts.SingleAsync(a => a.Number == 2, Ct);
+                WorkItemTransitions.Apply(item, WorkItemStatus.Processing, Noon);
+                second.StartedAt = Noon;
+                second.Status = AttemptStatus.Failed;
+                second.FinishedAt = Noon;
+                second.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: FailureClass.Ambiguous);
+                WorkItemTransitions.Apply(item, WorkItemStatus.Created, Noon);
+                await db.SaveChangesAsync(Ct);
+
+                Assert.Equal(item.PublicId, Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct)).WorkItemPublicId);
+                await using var after = database.Open();
+                var third = await after.Attempts.AsNoTracking().SingleAsync(a => a.Number == 3, Ct);
+                Assert.Equal(repeat.Provenance.InputDigest, third.Provenance!.InputDigest);
+            }
+
+            return;
+        }
+
+        Assert.Empty(claimed);
+        Assert.Equal(WorkItemStatus.Failed, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Equal((AttemptErrors.ProviderAnswerLost, FailureClass.Ambiguous, false), (repeat.Error!.Code, repeat.Error.Class, repeat.Error.Retriable));
+        Assert.Contains("another input than the one composed for it now", repeat.Error.Message, StringComparison.Ordinal);
+        Assert.Null(repeat.Provenance!.InputDigest);
+    }
+
+    /// <summary>
+    /// A repeat is compared with the latest attempt that lost its answer, and the pins left out of the input composed now
+    /// are the ones that attempt and every later attempt of the item recorded: each later one ran only because the claim
+    /// found it the same request, so what it learned is the provider's answer to that request. A repeat that ended
+    /// transient after learning the person's pin is repeated in turn, once the person approves the pin. A pin an attempt
+    /// before the compared one recorded is not left out, and since the compared attempt was not composed with it, the
+    /// repeat is refused: compared with the first lost answer instead, it would have run.
+    /// </summary>
+    [Theory]
+    [InlineData("a later repeat that ended transient learned a pin", false)]
+    [InlineData("an attempt before the compared one recorded a pin", true)]
+    public async Task A_repeat_leaves_out_the_pins_the_compared_attempt_and_every_later_one_recorded_and_no_earlier_one(string history, bool refused)
+    {
+        var plugin = TestPlugins.Loaded("stand-in-provider", ["message.send"]);
+        plugin = plugin with { Manifest = plugin.Manifest with { KeyedOperations = ["message.send"] } };
+        using var harness = new Harness(plugin: plugin, route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
+            },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        await Decide(db, ApprovalStatus.Approved);
+
+        // The first attempt starts and its answer never comes back; the second is its repeat, and runs.
+        Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var first = await db.Attempts.SingleAsync(a => a.Number == 1, Ct);
+        await EndAsync(first, FailureClass.Ambiguous);
+        Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var second = await db.Attempts.SingleAsync(a => a.Number == 2, Ct);
+        Assert.Equal(first.Provenance!.InputDigest, second.Provenance!.InputDigest);
+        if (history == "a later repeat that ended transient learned a pin")
+        {
+            // The provider found the person and then answered that it was too busy: the first attempt is still the one compared.
+            contact.ExternalIds.Add(Pin(second));
+            await EndAsync(second, FailureClass.Transient);
+        }
+        else
+        {
+            // The second answer is lost too, so it is the one compared, and a pin carries the first attempt's name. The
+            // runtime never reaches this itself: a pin is written once, at the end of the attempt that learned it, a late
+            // answer is fenced off, and nothing removes a pin, so an earlier attempt's pin is always in the compared input.
+            // The row stands for a pin under an earlier attempt's name that the compared input lacks, as after a hand edit
+            // of the database, a restore or a pin unlinked some day, and it is the row that tells the compared attempt, the
+            // latest, from the first.
+            await EndAsync(second, FailureClass.Ambiguous);
+            contact.ExternalIds.Add(Pin(first));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+        await using var fresh = database.Open();
+        if (!refused)
+        {
+            // The pin is in what the person is asked to approve, so the repeat asks them again first.
+            Assert.Empty(claimed);
+            Assert.Equal(WorkItemStatus.AwaitingApproval, item.Status);
+            await Decide(db, ApprovalStatus.Approved);
+            var repeat = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+            var third = await fresh.Attempts.AsNoTracking().SingleAsync(a => a.Number == 3, Ct);
+            Assert.Equal(CanonicalInput.Digest(repeat.Plan!.Input), third.Provenance!.InputDigest);
+            return;
+        }
+
+        Assert.Empty(claimed);
+        Assert.Equal(WorkItemStatus.Failed, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        var refusal = await fresh.Attempts.AsNoTracking().SingleAsync(a => a.Number == 3, Ct);
+        Assert.Equal((AttemptErrors.ProviderAnswerLost, FailureClass.Ambiguous, false), (refusal.Error!.Code, refusal.Error.Class, refusal.Error.Retriable));
+        Assert.Contains("another input than the one composed for it now", refusal.Error.Message, StringComparison.Ordinal);
+
+        async Task EndAsync(Attempt attempt, FailureClass ending)
+        {
+            WorkItemTransitions.Apply(item, WorkItemStatus.Processing, Noon);
+            attempt.StartedAt = Noon;
+            attempt.Status = AttemptStatus.Failed;
+            attempt.FinishedAt = Noon;
+            attempt.Error = ending == FailureClass.Ambiguous
+                ? new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: ending)
+                : new AttemptErrorDto("provider_busy", "Too many requests.", Retriable: true, Class: ending);
+            WorkItemTransitions.Apply(item, WorkItemStatus.Created, Noon);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        static ExternalId Pin(Attempt by) => new()
+        {
+            PluginId = "stand-in-provider",
+            Kind = "contact",
+            Value = "p-88421",
+            RecordedAt = Noon,
+            RecordedByAttemptId = by.PublicId,
+        };
+    }
+
+    /// <summary>
     /// A send whose earlier attempt lost its answer, routed since to a plugin that does not perform it, is refused for
     /// that reason, and the refusal says the earlier attempt may have reached the person: ambiguous and final, so nobody
     /// reads "the plugin has no such operation" as leave to create the send again before finding out at the provider.

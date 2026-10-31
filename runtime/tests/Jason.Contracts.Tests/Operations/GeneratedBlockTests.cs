@@ -324,6 +324,7 @@ public class GeneratedBlockTests
         }
 
         Row(block, "in a paused campaign", $"`{Name(contract.Dispatch.InPausedCampaign)}`");
+        Row(block, "under a provider block", $"`{Name(contract.Dispatch.UnderProviderBlock)}`");
         Row(block, "contact projection", Projection(contract));
         Row(block, "precondition", contract.Precondition);
         Row(block, "preview a person reads", Preview(contract));

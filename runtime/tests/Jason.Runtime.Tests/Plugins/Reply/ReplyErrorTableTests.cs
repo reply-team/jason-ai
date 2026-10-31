@@ -506,12 +506,12 @@ public partial class ReplyErrorTableTests
 
     /// <summary>
     /// What says Reply does not offer what was asked is told where the table maps it: a route Reply's API does not have, in
-    /// the README's table of endings every operation can meet, under the code and the class the row gives it, and only on
-    /// the commands reply-cli passes that 404 through on, since the others read a 404 as a thing not found.
+    /// the README's table of endings every operation can meet, under the code and the class the row gives it, and on every
+    /// command but those that cannot pass that 404 through, since they read a 404 as a thing not found.
     /// </summary>
     [Theory]
     [InlineData("Endings every operation can meet", "status 404 and no code of Reply's own")]
-    [InlineData("Endings every operation can meet", "which reply-cli passes through as it is only on the direct sends")]
+    [InlineData("Endings every operation can meet", "which reply-cli passes through as it is on every command but")]
     public void The_readme_says_when_reply_does_not_offer_what_was_asked(string section, string when)
     {
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
@@ -526,6 +526,149 @@ public partial class ReplyErrorTableTests
 
         Assert.Equal(($"`{UnjudgedOutcomeCodes.CapabilityNotOffered}`", "permanent"), (columns[2].Trim(), columns[3].Trim()));
     }
+
+    /// <summary>
+    /// The commands a 404 with no code of Reply's own is told against are written twice: in the README's row of endings
+    /// every operation can meet, and in the "when" of the row it lands on. Both name the same commands, in the package's
+    /// own spelling. 0.14.1's row named three of the README's eight, and the row above, which reads the README alone,
+    /// could not see it.
+    /// </summary>
+    [Fact]
+    public void The_row_for_a_route_reply_does_not_offer_names_the_commands_the_readme_names()
+    {
+        var commands = ReplyErrorTable.Commands.Select(command => command.Key).ToHashSet(StringComparer.Ordinal);
+
+        var told = CommandsNamed(RouteNotOfferedInTheReadme(), commands);
+        Assert.NotEmpty(told);
+        Assert.Equal(told, CommandsNamed(Text(ReplyErrorTable.Shared["route_not_offered"]!.AsObject(), "when"), commands));
+    }
+
+    /// <summary>
+    /// Both texts say which commands a 404 with no code of Reply's own cannot come from, and that every other command
+    /// can meet one, rather than listing the commands it can: a list of those left out <c>inbox list</c> and
+    /// <c>inbox changes</c> in both, which the row above, comparing the texts only with each other, could not see. The
+    /// commands left out are held here from reply-cli 0.18.0's source: those whose every call reads a 404 as the thing
+    /// asked for not being found (<c>contact-record.ts</c> lines 44 and 221, <c>inbox.ts</c> 148 and 158,
+    /// <c>inbox-reply.ts</c> 76 and 141, <c>sequence-read.ts</c> 28, 44, 59, 89 and 133, <c>sequence-state.ts</c> 11), and
+    /// <c>auth whoami</c>, which answers through the CLI's own client and never as <c>reply.refused</c>.
+    /// </summary>
+    [Fact]
+    public void A_route_reply_does_not_offer_is_written_for_every_command_but_those_that_read_a_404_as_missing()
+    {
+        var commands = ReplyErrorTable.Commands.Select(command => command.Key).ToHashSet(StringComparer.Ordinal);
+        string[] never =
+        [
+            .. new[]
+            {
+                "auth whoami", "contact delete", "contact get", "inbox get", "inbox reply",
+                "sequence contacts", "sequence get", "sequence pause", "sequence start", "sequence stats",
+            }.Order(StringComparer.Ordinal),
+        ];
+        Assert.All(never, command => Assert.Contains(command, commands));
+
+        foreach (var text in new[] { RouteNotOfferedInTheReadme(), Text(ReplyErrorTable.Shared["route_not_offered"]!.AsObject(), "when") })
+        {
+            var start = text.IndexOf("on every command but ", StringComparison.Ordinal);
+            Assert.True(start >= 0, text);
+            Assert.DoesNotContain("only on", text, StringComparison.Ordinal);
+            Assert.Equal(never, CommandsNamed(text[start..], commands));
+        }
+    }
+
+    /// <summary>
+    /// A LinkedIn send over the account's allowance is told from a busy Reply by Reply's code, so both sends' tables name
+    /// both of Reply's codes beside reply-cli's word for them, and the shape that names the send in the state
+    /// <c>failed</c>: in the README, which also says a 429 under no such code is <c>rate_limited</c>, and in the "when" of
+    /// the row the code lands on.
+    /// </summary>
+    [Theory]
+    [InlineData("social_invitation.send")]
+    [InlineData("message.send")]
+    public void Both_sends_name_reply_s_codes_for_an_allowance_spent(string operation)
+    {
+        string[] named = ["`linkedin.limit_reached`", "`directLinkedIn.dailyLimitReached`", "`directLinkedIn.weeklyLimitReached`", "the state `failed`"];
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf($"### `{operation}`", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"The README has no section for {operation}.");
+        var section = readme[start..readme.IndexOf("\n### ", start + 1, StringComparison.Ordinal)];
+        var row = Assert.Single(section.Split('\n'), line => line.StartsWith("| The LinkedIn account's daily or weekly allowance is spent", StringComparison.Ordinal));
+        var when = Text(ReplyErrorTable.Own(operation)["sender_blocked_limit"]!.AsObject(), "when");
+
+        Assert.All(named, word => Assert.Contains(word, row, StringComparison.Ordinal));
+        Assert.Contains("a 429 under no such code is `rate_limited`", row, StringComparison.Ordinal);
+        Assert.All(named, word => Assert.Contains(word, when, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A code reply-cli gives for a refusal Reply makes once it times deferred LinkedIn sends itself is told with the status
+    /// and the code Reply gives it: in the README's table for the operation, in one row under the code and the class the
+    /// table's row gives it, and in the "when" of that row. A reader who meets either code in a trace finds it in both.
+    /// </summary>
+    [Theory]
+    [InlineData("message.cancel", "direct_send.already_sending", "directSend.alreadySending", "409")]
+    [InlineData("message.cancel", "direct_send.cancel_not_confirmed", "directSend.cancelNotConfirmed", "503")]
+    public void A_refusal_reply_cli_names_for_reply_s_scheduler_is_told_with_its_status_where_it_lands(
+        string operation, string cliCode, string replyCode, string status)
+    {
+        var key = Assert.Single(ReplyErrorTable.Codes["per_operation"]![operation]!.AsObject(), entry => entry.Key == cliCode);
+        var row = ReplyErrorTable.Own(operation)[key.Value!.GetValue<string>()]!.AsObject();
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf($"\n### `{operation}`\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"The README has no section for {operation}.");
+        var end = readme.IndexOf("\n#", start + 1, StringComparison.Ordinal);
+        var columns = Assert.Single(
+            readme[start..(end < 0 ? readme.Length : end)].Split('\n'),
+            line => line.StartsWith("| ", StringComparison.Ordinal) && line.Contains($"`{cliCode}`", StringComparison.Ordinal)).Split('|');
+
+        Assert.Equal(($"`{Text(row, "code")}`", Text(row, "class")), (columns[2].Trim(), columns[3].Trim()));
+        Assert.Contains($"`{cliCode}`, Reply's code `{replyCode}` at {status}", columns[1], StringComparison.Ordinal);
+        Assert.Contains($"`{cliCode}`, Reply's code `{replyCode}` at {status}", Text(row, "when"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A schedule Reply cannot time a send by is one code of reply-cli's whichever route Reply refused it on, so it is one
+    /// row of <c>message.send</c> for the email and the LinkedIn message alike: no key reads Reply's own code, and the
+    /// README's row and the row's "when" name the CLI's code with both of Reply's and the status.
+    /// </summary>
+    [Theory]
+    [InlineData("schedule.not_found", "scheduleNotFound", "404")]
+    [InlineData("schedule.no_slot", "scheduleHasNoSlot", "409")]
+    [InlineData("contact.time_zone_missing", "contactTimeZoneMissing", "409")]
+    public void A_schedule_reply_cannot_time_a_send_by_is_one_row_for_the_email_and_the_linkedin_message(string cliCode, string replyCode, string status)
+    {
+        var keys = ReplyErrorTable.Codes["per_operation"]!["message.send"]!.AsObject();
+        Assert.DoesNotContain(keys, entry => entry.Key.Contains(replyCode, StringComparison.Ordinal));
+        var key = Assert.Single(keys, entry => entry.Key == cliCode);
+        var row = ReplyErrorTable.Own("message.send")[key.Value!.GetValue<string>()]!.AsObject();
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf("\n### `message.send`\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The README has no section for message.send.");
+        var end = readme.IndexOf("\n#", start + 1, StringComparison.Ordinal);
+        var columns = Assert.Single(
+            readme[start..(end < 0 ? readme.Length : end)].Split('\n'),
+            line => line.StartsWith("| ", StringComparison.Ordinal) && line.Contains($"`{cliCode}`", StringComparison.Ordinal)).Split('|');
+        var named = $"`{cliCode}`, Reply's code `contact.{replyCode}` on an email or `directLinkedIn.{replyCode}` on a LinkedIn message, at {status}";
+
+        Assert.Equal(($"`{Text(row, "code")}`", Text(row, "class")), (columns[2].Trim(), columns[3].Trim()));
+        Assert.Contains(named, columns[1], StringComparison.Ordinal);
+        Assert.Contains(named, Text(row, "when"), StringComparison.Ordinal);
+    }
+
+    /// <summary>The first column of the README's row for a route Reply does not offer.</summary>
+    private static string RouteNotOfferedInTheReadme()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var row = Assert.Single(
+            readme.Split('\n'),
+            line => line.StartsWith("| ", StringComparison.Ordinal) && line.Contains("which reply-cli passes through as it is on every command but", StringComparison.Ordinal));
+        return row.Split('|')[1];
+    }
+
+    private static string[] CommandsNamed(string text, HashSet<string> commands) =>
+        [.. Quoted().Matches(text).Select(match => match.Groups["text"].Value).Where(commands.Contains).Distinct().Order(StringComparer.Ordinal)];
+
+    [GeneratedRegex("`(?<text>[^`]+)`")]
+    private static partial Regex Quoted();
 
     /// <summary>
     /// The rows are not the only place the package fails. A row a module names and the table does not hold falls back to

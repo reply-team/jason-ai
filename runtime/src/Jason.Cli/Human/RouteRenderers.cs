@@ -44,7 +44,7 @@ public static class RouteRenderers
         if (resolution.Problems is { Count: > 0 } problems)
         {
             lines.Add("problems:");
-            lines.AddRange(problems.Select(problem => $"{problem.Field}: {problem.Code} — {problem.Message}"));
+            lines.AddRange(problems.Select(problem => RenderText.Shown($"{problem.Field}: {problem.Code} — {problem.Message}")!));
         }
 
         return RenderText.Lines(lines);
@@ -107,5 +107,5 @@ public static class RouteRenderers
         return $"{resolution.PluginId} {resolution.PluginVersion ?? "-"} | {status}";
     }
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

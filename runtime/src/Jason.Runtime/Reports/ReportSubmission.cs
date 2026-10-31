@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
-using Jason.Contracts.Json;
+using Jason.Runtime.Api;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Json;
 
@@ -123,7 +123,8 @@ internal sealed record ReportSubmission(
         ActorRef? claimed;
         try
         {
-            claimed = node.Deserialize<ActorRef>(JasonJson.Options);
+            // Part of the request, so its members are matched by their exact spelling, as the door matches the rest.
+            claimed = node.Deserialize<ActorRef>(OperationEndpoints.RequestDialect);
         }
         catch (JsonException)
         {

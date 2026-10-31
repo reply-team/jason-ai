@@ -190,5 +190,5 @@ public static class ContactRenderers
     /// <summary>Text a provider wrote, printed by the rule the thread views hold for it (<see cref="RenderText.Shown"/>).</summary>
     private static string? Shown(JsonNode? node) => RenderText.Shown((string?)node);
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

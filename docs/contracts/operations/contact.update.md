@@ -104,6 +104,7 @@ contact: … } })` — so the next attempt has a pin to work by.
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | Every custom field the arguments name is one the provider's account defines. |
 | preview a person reads | none |

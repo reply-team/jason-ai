@@ -23,7 +23,8 @@ Five things, and only these:
   than for the work, and the runtime holds the work that block concerns until a trial gets past it
   ([work-execution.md](work-execution.md) §Provider blocks). It is said once, by block, from the first
   `provider_blocked` line it writes; a block cleared before the pointer is sent is not said. A protective action a block
-  holds is parked, not failed, so it is said here and never as a protective action that failed. A block is said while it
+  holds is parked, not failed, so it is said here and never as a protective action that failed. A take-back of a send
+  runs through a block rather than waiting on it, so its `blocked` end is a protective action that failed. A block is said while it
   is open, whatever it holds, because it is still the person's to fix and the next item parks on it. The work items it
   holds are the work items parked on it, as `block.get`'s `held_count` counts them, so a pointer's count,
   `jason block get` and `jason workitem list --block` agree. Whether a block is the account's or one sending account's,

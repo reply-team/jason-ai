@@ -107,6 +107,7 @@ such a delete before it is parked, so nobody is shown that preview to decide on.
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `pinned_only` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | `id`; channels: `consumed` |
 | precondition | The provider does not hold the person as opted out, because deleting them would erase its only record of that stop. |
 | preview a person reads | `Delete the provider's contact {/contacts/0/external_ids/contact} for {/contacts/0/channels/0/value}, with the history the provider keeps for them: they leave every campaign and list there. Jason's own record of the person and its do-not-contact register stay as they are.`; highlighted: `/contacts/0/channels/0/value`, `/contacts/0/external_ids/contact` |

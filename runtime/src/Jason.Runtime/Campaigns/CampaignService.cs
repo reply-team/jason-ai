@@ -556,6 +556,13 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         {
             errors.Add("name", "too_long", string.Create(CultureInfo.InvariantCulture, $"name must be at most {MaxNameLength} characters."));
         }
+
+        // A name is printed to people wherever the campaign is listed, and a control character inside one would act on
+        // their terminal rather than be read.
+        if (name.Trim().Any(char.IsControl))
+        {
+            errors.Add("name", "invalid", "name must hold no control character.");
+        }
     }
 
     private static void ValidateReason(string? reason, ValidationErrors errors)

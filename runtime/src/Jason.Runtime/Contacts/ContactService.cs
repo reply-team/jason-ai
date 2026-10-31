@@ -175,8 +175,8 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         // Everything is validated before anything is applied, so a payload with two problems reports both and
         // leaves the contact exactly as it was.
         var errors = new ValidationErrors();
-        var firstName = request.FirstName.IsSet ? ContactValidation.Text(request.FirstName.Value, "first_name", errors) : contact.FirstName;
-        var lastName = request.LastName.IsSet ? ContactValidation.Text(request.LastName.Value, "last_name", errors) : contact.LastName;
+        var firstName = request.FirstName.IsSet ? ContactValidation.Name(request.FirstName.Value, "first_name", errors) : contact.FirstName;
+        var lastName = request.LastName.IsSet ? ContactValidation.Name(request.LastName.Value, "last_name", errors) : contact.LastName;
         var company = request.Company.IsSet ? ContactValidation.Text(request.Company.Value, "company", errors) : contact.Company;
         var title = request.Title.IsSet ? ContactValidation.Text(request.Title.Value, "title", errors) : contact.Title;
         var timeZone = request.TimeZone.IsSet ? TimeZoneRules.Normalize(request.TimeZone.Value, "time_zone", errors) : contact.TimeZone;

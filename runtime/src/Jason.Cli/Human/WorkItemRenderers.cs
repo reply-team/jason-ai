@@ -368,5 +368,5 @@ public static class WorkItemRenderers
     private static string? Text(JsonObject block, string name) =>
         block[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
-    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);
+    private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }
