@@ -12,7 +12,7 @@ what it learns about your business - Jason in your home directory, unless Harnes
 another folder - and makes no folder for it.
 
     irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.22.0/install.ps1))) -Version 0.22.0 -NoModifyPath
+    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.23.0/install.ps1))) -Version 0.23.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just

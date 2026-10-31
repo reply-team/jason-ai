@@ -15,9 +15,10 @@
 // written.
 //
 // The message is made under the work item's key, and at the moment the arguments name where one is still ahead (send.js).
-// An email may also name, in the provider's own object, the Reply sending schedule it is timed by (provider.js): it goes
-// by that schedule, at the first opening at or after the moment where one is named too, and Reply only estimates when
-// that is, so the result names no moment for it. The result says Reply took it — `accepted`, the moment it holds it for, its reference and whether it can still be
+// A message on any channel may also name, in the provider's own object, the Reply sending schedule it is timed by
+// (provider.js): it goes by that schedule, at the first opening at or after the moment where one is named too. Reply answers it `queued` with
+// the moment where the schedule is open now or opens within ten minutes, and `waitingForSchedule` with only an estimate
+// where it opens later; either way it goes when the schedule lets it, so the result names no moment for it. The result says Reply took it — `accepted`, the moment it holds it for, its reference and whether it can still be
 // cancelled — and never that it went: whether and when it goes is learned later. A message that may have gone is
 // repeated under the same key, which Reply answers with the send it took: the document says `after_recovery_read`. Where
 // the runtime names the send such an attempt returned, Reply's record of it is read first, and what it says answers the
@@ -101,8 +102,9 @@ export function messageSend(input, context) {
   const learned = done.learned;
   const took = acceptance(done);
 
-  // A message timed by a schedule goes at the schedule's opening, which Reply only estimates: a moment it answers is not
-  // one it holds the message for, so none is passed on.
+  // A message timed by a schedule goes at the schedule's opening: `queued` with a moment where the schedule is open
+  // now or opens within ten minutes, `waitingForSchedule` with only an estimate where it opens later. Neither is a
+  // moment Reply holds the message for apart from the schedule, so none is passed on.
   if (schedule !== null && took !== undefined) {
     delete took.given.accepted_for;
   }

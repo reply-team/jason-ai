@@ -1,0 +1,22 @@
+{
+  "operation": "optout.record",
+  "version": 1,
+  "case": "the account's plan has lapsed, so the provider recorded nothing: an opt-out waits on the block it names and is released when the block clears",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "blocked",
+      "code": "provider_blocked",
+      "message": "The account's plan has lapsed, so nothing was recorded.",
+      "details": null,
+      "external_ids": null,
+      "block": { "scope": "account", "reason": "billing", "link": "https://app.example.com/billing" }
+    },
+    "diagnostics": { "duration_ms": 380, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "blocked", "retriable": false, "block": "kept", "held": true }
+}

@@ -65,7 +65,8 @@
           },
           "external_id_origins": {
             "contact": "created"
-          }
+          },
+          "input_digest": "sha256:recorded-1"
         }
       }
     ],
