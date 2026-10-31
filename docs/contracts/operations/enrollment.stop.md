@@ -91,6 +91,7 @@ of the provider's campaigns the person leaves, on a first link as well as after 
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `not_applicable`, provider contact `find_only` |
 | in a paused campaign | `waits` |
+| under a provider block | `runs` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | A person the provider does not hold takes part in nothing, which is a completed stop. |
 | preview a person reads | `Take {/contacts/0/channels/0/value} out of the provider's campaign for Jason's campaign {/campaign/name}, reason {/args/reason/code}. Their history stays; nothing further is sent to them from that campaign.`; highlighted: `/args/reason`, `/contacts/0/channels/0/value`, `/campaign/name`, `/campaign/external_ids/campaign`, `/args/campaign` |

@@ -81,9 +81,10 @@ breaks either half is not an outcome, and ends as `plugin_malformed_outcome`.
 
 A blocked failure spends no retry: the attempt ends `blocked`, never counted, and the block is kept beside the error
 the work item shows (`last_error.block`). The runtime keeps the block itself too, per plugin and binding identity —
-the account's, or one sender's under it — and holds the work it concerns: `reach: act` work and the protective
-operations wait on the block, as `waiting` with a `wait.blocked_by` naming it, until a call gets past it — one of
-them let through as the block's trial at the moment the provider said it clears by itself where that is ahead, a day
+the account's, or one sender's under it — and holds the work it concerns: the work of every operation whose
+contract says `dispatch.under_provider_block: waits` — every `reach: act` operation, `campaign.pause` and
+`optout.record` — waits on the block, as `waiting` with a `wait.blocked_by` naming it, until an act's call gets past
+it — one of them let through as the block's trial at the moment the provider said it clears by itself where that is ahead, a day
 at most; otherwise at the cadence. Every other operation's item ends final, and reads run through an open block. The
 `link` stays on the block, which `block.get` and `block.list` answer, and on the error, where a person reads it: never
 in a log, a journal line, a notification or a `wait` block. A person who has removed the cause clears the block with

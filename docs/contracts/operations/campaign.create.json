@@ -23,7 +23,7 @@
   "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
   "channel_arguments": null,
   "channel_templates": null,
-  "dispatch": { "in_paused_campaign": "waits" },
+  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "runs" },
   "contact_projection": null,
   "precondition": "Jason's campaign is not linked yet to a provider's campaign of this plugin's: `campaign.external_ids.campaign` is absent. A linked one is refused as `campaign_already_linked` before the provider is called, because a second create would make a second provider's campaign beside the first link.",
   "preview": null,

@@ -294,8 +294,9 @@ jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 `workitem list --block` names them; each item's `wait` names the block under `blocked_by`. `jason block list` shows
 every open block and how many items each holds. In your review, say what stopped and why, in the person's terms: which
 account or sender, and what the provider wants. Then decide with the person, by one question, whether to pause the
-campaign or wait for the block's trial, which lets one held item through and, once the provider takes it, releases the
-rest by itself. **You never clear a block yourself**: a clear is a person's word that the cause is gone, and it is
+campaign or wait for the block's trial, which lets one held item through: acts first; where none can run, one held
+control, whose answer decides nothing but `blocked`. Once the provider takes an act, the block releases the rest by
+itself. **You never clear a block yourself**: a clear is a person's word that the cause is gone, and it is
 theirs to give. Do not cancel or recreate the work it holds either; the block releases it. When the block clears, the
 campaign is told `provider_block_cleared`, and that line wakes nobody: the work runs again by itself.
 

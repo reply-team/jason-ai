@@ -23,7 +23,7 @@
   "preflight": { "contact": "not_used", "channel": "none", "suppression": "not_applicable", "provider_contact": "not_used" },
   "channel_arguments": null,
   "channel_templates": null,
-  "dispatch": { "in_paused_campaign": "runs" },
+  "dispatch": { "in_paused_campaign": "runs", "under_provider_block": "runs" },
   "contact_projection": null,
   "precondition": "none",
   "preview": null,

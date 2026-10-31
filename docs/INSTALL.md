@@ -143,14 +143,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.22.0/install.sh | sh -s -- --version 0.22.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.23.0/install.sh | sh -s -- --version 0.23.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.22.0/install.ps1))) -Version 0.22.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.23.0/install.ps1))) -Version 0.23.0
 ```
 
-These install 0.22.0 with 0.22.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.23.0 with 0.23.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -417,6 +417,14 @@ To check a provider's own CLI as well, name it — this build knows no vendor's 
 ```sh
 jason status --provider-cli my-provider-cli
 ```
+
+The check looks the name up on the PATH of the process that runs `jason status`, and its answer says so whenever it read
+a PATH: *It read the CLI's PATH; the runtime's PATH may differ, see the install page.* The runtime has a PATH of its own, fixed when it
+started, and a runtime started at logon or from another shell may not see a program your terminal does. That is the
+case `plugin_availability` above names for a plugin's program; this check does not ask the runtime to look. A name
+given as a path is looked up in its own directory and reads no PATH, so the answer says nothing of one, with one
+exception: an npm shim given as a path takes its `node.exe` from the PATH when none stands beside it, and then the answer
+says whose PATH that was.
 
 ---
 

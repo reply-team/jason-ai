@@ -17,7 +17,8 @@ yesterday is stopped today, when the person has answered meanwhile, asked to sto
 It reaches nobody, so it needs nobody's approval, and it is not refused for a person on the do-not-contact register: a
 send to somebody who has just asked to stop is the one most worth cancelling. For the same reason it runs while its
 campaign is paused, as the provider's own pause and the record of a stop do. Under an open block of the account, the
-cancel waits on it as the other protective work does, and is claimed again once the block clears.
+cancel does not wait on it, as a stop and a pause do: the moment of the send it takes back passes while it would wait,
+so it runs, and a `blocked` answer ends it, final, a protective action that failed.
 
 A send that went cannot be cancelled. Sending again is the compensation of a cancel, which is why the catalogue calls
 it compensatable rather than reversible.
@@ -75,6 +76,7 @@ Cancelling a cancelled send changes nothing, and a send that went meanwhile answ
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `not_applicable`, provider contact `not_used` |
 | in a paused campaign | `runs` |
+| under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |
 | preview a person reads | none |

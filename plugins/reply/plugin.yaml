@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.14.1
+version: 0.14.3
 kind: provider
 name: Reply
 description: >-
@@ -30,12 +30,14 @@ capabilities:
         # the Reply user whose each account is, and the contact options on the direct sends and on `reply contact
         # update`, which import a person Reply holds nobody for, `reply schedule list`, the account's sending schedules
         # with their windows, and `reply inbox changes`, Reply's change feed — and, on the direct sends, the moment a send
-        # goes out after (`--send-after`), the key it is made under (`--idempotency-key`), the sending schedule an email is
+        # goes out after (`--send-after`), the key it is made under (`--idempotency-key`), the sending schedule a send is
         # timed by (`--schedule-id`) and the reference, the moment and the state Reply answers, with `reply direct-send
         # get`, which also reads a send by its reference, and `reply direct-send cancel`, which takes one back — and the
-        # client a call came through, which the CLI reads from `REPLY_CLIENT` from 0.17.2. This package makes no raw
-        # call. A reload runs the version command and refuses an older one.
-        min_version: 0.17.2
+        # client a call came through, which the CLI reads from `REPLY_CLIENT` from 0.17.2, and the reference a LinkedIn
+        # send Reply holds for later is read and cancelled by, `linkedin-scheduled-<n>`, a code of its own for a cancel
+        # of a send Reply is sending, a cancel Reply could not confirm and a sending schedule that cannot time a send,
+        # and the moment Reply expects to send one waiting for its schedule, which it gives from 0.18.0. This package makes no raw call. A reload runs the version command and refuses an older one.
+        min_version: 0.18.0
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak

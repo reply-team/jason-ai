@@ -20,7 +20,7 @@ The descriptor is `run/runtime.json` under the data directory: `~/.jason/run/run
 directory `JASON_DATA_DIR` names when that variable is set. It is one JSON object:
 
 ```json
-{"api_version":"v1","runtime_version":"0.22.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z"}
+{"api_version":"v1","runtime_version":"0.23.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z"}
 ```
 
 | Field | What it is |
@@ -86,6 +86,11 @@ A request that carries an `Origin` header naming anything but the runtime's own 
   takes `{}`. A name the runtime does not know is answered `404` with the code `not_found`.
 - **JSON is snake_case**, in both directions: members, enum values and the keys of a map. A property written twice in
   one body is refused.
+- **A member is matched by its exact spelling**, compared ordinally, at every depth of a request: `Name` is not `name`.
+  At the top of a body, a name that differs from a member only in case is skipped like any member the operation does
+  not take; inside a free-form object, such as a context or a patch's `set`, it is a key of its own beside the one it
+  resembles; and among the arguments a work item carries for its operation, it is a name the operation's schema does
+  not declare.
 - **Timestamps are ISO-8601 in UTC**, as `2026-10-26T09:00:00.000Z`.
 - **Ids are prefixed ULIDs**, and the prefix says what an id names. Among them: `cmp_` a campaign, `cnt_` a contact,
   `wi_` a work item, `att_` an attempt, `apr_` an approval, `dec_` a question, `blk_` a block, `jrn_` a journal entry,
@@ -157,7 +162,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 ### `campaign`
 
 - `campaign.create`: Jason's campaign; the provider's campaign is a `provider_op` work item. Takes a caller's
-  `idempotency_key`.
+  `idempotency_key`. A name is printed to people, so one holding a control character is refused, `validation_failed`
+  with the detail `invalid` on `name`, here and by `campaign.update`.
 - `campaign.get`: Jason's campaign, read without calling a provider.
 - `campaign.list`: takes `project_id` and keeps that project's campaigns.
 - `campaign.update`: takes `project_id`, which moves the campaign.
@@ -191,7 +197,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 
 ### `contact`
 
-- `contact.create`
+- `contact.create`: a `first_name` or `last_name` holding a control character is refused as a campaign's name is, here,
+  by `contact.update` and in a row of `campaign.add_contacts`.
 - `contact.get`
 - `contact.list`: `query` finds any part of a name, a company, a title or any channel value.
 - `contact.update`: Jason's own record of the person; the provider's contact is a `provider_op` work item.
