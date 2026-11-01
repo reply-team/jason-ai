@@ -7,9 +7,10 @@ namespace Jason.Contracts.Tests;
 /// </summary>
 public class PlatformTests
 {
+    // The zones are chosen for standard offsets that no daylight rule or pending law moves: a legislature moved one row once.
     [Theory]
     [InlineData("Europe/Kyiv", 2)]
-    [InlineData("America/Vancouver", -8)]
+    [InlineData("Pacific/Honolulu", -10)]
     public void Iana_time_zone_ids_resolve_on_every_platform(string ianaId, int baseUtcOffsetHours)
     {
         var zone = TimeZoneInfo.FindSystemTimeZoneById(ianaId);
