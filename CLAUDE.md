@@ -8,16 +8,15 @@ covered here.
 
 ## Layout
 
-- `runtime/` — all C#: `Jason.slnx`, `src/Jason.App` (the single executable; picks the mode from
+- `dotnet/` — all C#: `Jason.slnx`, `src/Jason.App` (the single executable; picks the mode from
   argv), `src/Jason.Cli`, `src/Jason.Runtime`, `src/Jason.PluginHost`, `src/Jason.Contracts`,
   `tests/` (one xUnit project per source project).
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
 - `ui/` — the browser UI: a Preact client of the Runtime API, built into the release asset `jason-ui.zip`;
   `ui/README.md` says how it is built and tested.
-- `.github/publish/` — what a release publishes: `open-set.txt` and the public repository's own files.
-- `LICENSE` — MIT, for everything outside `runtime/`. `LICENSE-RUNTIME.md` — the runtime's own licence; every archive
-  carries it as `LICENSE`, beside the executable and `THIRD-PARTY-NOTICES`.
+- `LICENSE` — MIT, for everything in the repository, the runtime included; every archive carries it as `LICENSE`, beside
+  the executable and `THIRD-PARTY-NOTICES`.
 - `global.json` at the root pins the SDK; run every command from the repository root.
 
 ## Commands
@@ -42,16 +41,14 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   `ProcessStartInfo` made anywhere else, a `Process.Start` anywhere else, a write to `CreateNoWindow` or
   `UseShellExecute`, `Process.Start` from a file name, and a read of a process's `StartInfo`. Reflection,
   expression trees and `new T()` are beyond what it reads.
-- Publication: the open set — exactly the paths `.github/publish/open-set.txt` lists — and the public repository's own
-  files under `.github/publish/public/` are published to `reply-team/jason-ai` at each release, through a pull request
-  a person reviews. The release workflow's publish job makes the public tree a pure function of the tag: the open set,
-  `LICENSE` as its MIT block alone, `VERSION`, and the public-own files; it creates the draft release there first and
-  then opens the pull request, and merging it tags and publishes there. Paths are identical on both sides. Everything
-  in the open set, and every diff of it, is read publicly, so the public-repository hygiene holds here as well: no
-  tracker key, no attribution trailer, no internal pointer, no link or path that leaves the published set
-  (`PublicationTests` holds the links). This repository keeps every file and the runtime's tags; its README is the
-  public one.
-- Package versions live in `runtime/Directory.Packages.props` only. `THIRD-PARTY-NOTICES` covers every package of
+- Publication: this repository is public. Every file in it, every commit message and every pull request's title and
+  body is read publicly, so none of them carries a tracker key outside a branch name, an attribution trailer, a
+  pointer to an internal note, plan or system, a link to a private repository, a real person's name or account in the
+  text (git's author fields and CODEOWNERS aside), or a secret. `RepositoryHygieneTests` holds every file of the tree
+  to the patterns a machine can check, and every link to a path of this repository to a file the tree holds; the
+  `hygiene.yml` workflow holds each pull request's added lines, title and body to the same patterns. The rest is the
+  author's to keep.
+- Package versions live in `dotnet/Directory.Packages.props` only. `THIRD-PARTY-NOTICES` covers every package of
   `Jason.App`'s closure and the runtime packs the executable carries; after a package or SDK change
   `ThirdPartyNoticesTests` is red until `pwsh .github/scripts/Write-ThirdPartyNotices.ps1` writes it again.
 - Warnings are errors. Every test runs offline and uses an isolated temporary data directory.
@@ -193,9 +190,14 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   themselves, the names actors gave, and the reasons they typed — and it prints a warning; the runtime's
   own report (`system_info`) travels projected, withholding channel detail, presence detail outside the
   runtime's own words, skill problem text and the release-notes URL, and the bundle says so; and before
-  anything is written the home directory becomes `~`, a data directory outside it `<data>`, a different
-  one the runtime keeps its data in a mark of its own, and the account's user, machine and domain names
-  and SIDs marks of their own. `CliApp` states all eight where the rule is written, each verb's `--help`
+  anything is written the home directory becomes `~`, a data directory other than `~/.jason` `<data>`
+  wherever it stands, a different one the runtime keeps its data in a mark of its own, the harness root
+  `<harness_root>` wherever it stands, the executable's folder outside home `<install_dir>` unless a package
+  manager's prefix holds it, the account's user, machine and domain names and SIDs marks of their own, every
+  plugin id, role name and skill pack name Jason did not ship an alias per distinct name (`<plugin-N>`,
+  `<role-N>`, `<skill-pack-N>`), and a skill source other than the public repository, with its ref unless
+  that is a release tag, `<skill-source>`.
+  `CliApp` states all eight where the rule is written, each verb's `--help`
   publishes its own contract — which checks are required, what is removed, what is never touched and
   what a bundle never carries — and guards hold the list to these eight.
 - Persistence: EF Core over SQLite in WAL mode, snake_case tables and columns, integer primary keys

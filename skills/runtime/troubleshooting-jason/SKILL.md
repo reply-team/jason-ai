@@ -376,9 +376,10 @@ failures by their codes; recent errors and a bounded slice of the logs; and the 
 many entries of each kind and when, never what they say.
 
 What it leaves out is just as deliberate. What the runtime says about itself travels with a few free-text
-fields withheld, and the bundle names each one. The home directory, a data directory outside it — this one,
-or another the runtime reports — and the names of the account and the machine are rewritten before anything
-is written. It never carries the capability token, a request body or a prompt, and it reaches nothing beyond
+fields withheld, and the bundle names each one. A plugin, a role or a skill pack Jason does not ship travels as an
+alias — `<plugin-1>`, `<role-1>`, `<skill-pack-1>`, one per name — never by its own name.
+A skill source given with `--source` other than the public repository, and the ref it was taken at unless that is a release tag, travel as `<skill-source>`.
+The home directory, a data directory other than `~/.jason` — this one, or another the runtime reports — the harness root, the folder the executable is in outside home, and the names of the account and the machine are rewritten before anything is written. It never carries the capability token, a request body or a prompt, and it reaches nothing beyond
 this machine. It writes one file and prints where; **sending it anywhere is the person's act, never yours.**
 `--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
 project link recorded, campaign and
@@ -388,6 +389,12 @@ errors attempts ended with, provider identifiers, the effect, tool and operation
 text and receipts notification channels reported, entries people and agents wrote themselves, the names actors
 gave, and the reasons they typed — so use it only when the person asks for it, and pass on the warning it
 prints.
+
+After the file is written, `jason doctor` prints the address of the repository's problem form in its result and
+on stderr, as `problem_report_url` in the result, with the version and the platform filled in. **Offer the person that link: opening the issue, with the file
+attached, is their act, never yours.** A file made with `--include-journal` goes only to the support address
+the README gives under Getting help, never to an issue: an issue is public the moment it is submitted.
+With `--include-journal`, `problem_report_url` is null and the result's warnings say the file goes to the support address only; never offer an issue for it.
 
 The bundle is not the report. It carries what the installation knows; the report needs four things it
 cannot know:

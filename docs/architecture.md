@@ -6,9 +6,7 @@
 > contains it. The project is delivered incrementally; this document deliberately contains no
 > roadmap, milestones, or delivery order.
 >
-> This is a *derived document*: a maintained internal architecture record is the decision source,
-> and this adaptation is kept aligned with it. It lives with the runtime's source in
-> `reply-team/jason-internal` and is not published.
+> It lives in this repository beside the runtime's source, and changes with it.
 
 ## 1. About this document
 
@@ -51,9 +49,10 @@ decision and may change; nothing in the architecture depends on the name.
 
 ## 2. Executive architecture statement
 
-Jason AI is a **local-first, vendor-neutral SDR domain runtime**, distributed as closed-source
-binaries with open skills, contracts and plugins, that turns a user's existing AI agents, installed
-SDR skills, and external execution providers into a durable operational system.
+Jason AI is a **local-first, vendor-neutral SDR domain runtime**, open source under the MIT licence
+and distributed as self-contained binaries with its skills, contracts and plugins, that turns a
+user's existing AI agents, installed SDR skills, and external execution providers into a durable
+operational system.
 
 It is not an LLM, an AI client, a prompt library, a thin scheduler, or a self-hosted clone
 of Reply.io. It is the missing system around user-owned AI intelligence:
@@ -109,10 +108,10 @@ operations.
 
 The public ecosystem consists of these components, which users should meet as one product:
 
-- `reply-team/jason-ai` — the product entry point, holding the plugin marketplace, the runtime
-  and business skills (`skills/runtime`, `skills/business`), the contracts, the documentation,
-  the install path and the runtime's releases; the runtime's source lives in
-  `reply-team/jason-internal` (private), the source of truth for all of it;
+- `reply-team/jason-ai` — the product entry point and everything Jason is made of: the runtime's
+  source, the plugin marketplace, the runtime and business skills (`skills/runtime`,
+  `skills/business`), the contracts, the documentation, the install path and the runtime's
+  releases;
 - [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) — Reply authentication,
   profiles, team context, skill installation for its own Reply-specific skills, and broad
   API v3 access;
@@ -1340,6 +1339,10 @@ simplicity) but does not outweigh the development leverage and richer domain-app
 here. TypeScript/Node remains suitable for surrounding components but not the selected
 deterministic core.
 
+The runtime is being ported to Rust in this repository, which supersedes the rejection of Rust as
+the core platform (REJ-PLAT-001). Until the port is complete, the C# runtime under `dotnet/` is
+the one released, and the baseline above is the one it is built on.
+
 ### 15.3 EF Core, Dapper, and Native AOT
 
 EF Core is the accepted persistence and migration technology. Dapper is explicitly excluded
@@ -1391,13 +1394,12 @@ certificate issued to Reply and timestamped, and the Linux executable is not sig
 (DEF-DIST-001). The Windows signing identity is reached only from the release's Windows job,
 in the GitHub environment `signing`, through that job's own OIDC token; no client secret is
 stored. GitHub Releases can serve as the binary store. The product's own address,
-`jasonharness.ai`, stands in front of it: the feed, the install lines and the release page
+`get.jasonharness.ai`, stands in front of it: the feed, the install lines and the release page
 name the address, which redirects every request under `/releases/` to the same path in the
 public repository, so the store behind it can change while those paths stay the same. This
 mechanism describes artifact integrity and update compatibility; it does not impose a
-roadmap, and source increments are not atomic product releases. The private repository's
-pipeline publishes each release in the public repository, together with the open set at that
-version, through a pull request a person reviews.
+roadmap, and source increments are not atomic product releases. Each release is built from a
+tagged tree of this repository and published in it.
 
 ### 15.8 Update responsibility
 
@@ -1421,11 +1423,12 @@ future server or managed variants under different requirements.
 ### 15.10 Repository layout
 
 The repository is organised by deliverable, not by one language's convention, because it
-carries the runtime, the plugin marketplace and the skills together:
+carries the runtime, the plugin marketplace and the skills together. The C# runtime sits under
+`dotnet/`, which keeps the root free for the Cargo workspace of the Rust port (15.2):
 
 ```text
-jason-internal/
-├── runtime/               all C#: Jason.slnx, Directory.Build.props
+jason-ai/
+├── dotnet/                all C#: Jason.slnx, Directory.Build.props
 │   ├── src/Jason.App      the single published executable; routes its arguments into the
 │   │                      cli, runtime-service and plugin-host modes
 │   ├── src/Jason.Cli      pure HTTP client of the Runtime API; references Jason.Contracts only
@@ -1442,12 +1445,8 @@ jason-internal/
 ├── docs/                  maintained documentation
 ├── install/               the install scripts and the update feed's schema
 ├── global.json            pins the .NET SDK; commands run from the repository root
-└── README.md  CLAUDE.md  LICENSE  LICENSE-RUNTIME.md  THIRD-PARTY-NOTICES  TRADEMARKS.md
+└── README.md  CLAUDE.md  LICENSE  THIRD-PARTY-NOTICES  TRADEMARKS.md
 ```
-
-The public repository, `reply-team/jason-ai`, holds `plugins/`, `skills/`, `.claude-plugin/`,
-`install/`, three pages and the contracts directory under `docs/`, and the root files a release
-publishes (`.github/publish/open-set.txt` lists them all); this repository holds all of it.
 
 Project references enforce two invariants at compile time: the CLI can only reach the runtime
 through the Runtime API (INV-API-001, INV-AUTH-002), and the runtime library references neither
@@ -1685,11 +1684,11 @@ original chat session.
 
 | ID | Accepted decision |
 |---|---|
-| DEC-PROD-001 | The product is Jason AI, an AI SDR harness: a local-first, vendor-neutral SDR domain runtime distributed as closed-source binaries, together with open skills, contracts, plugins, documentation and install path, presented as one coherent product. |
+| DEC-PROD-001 | The product is Jason AI, an AI SDR harness: a local-first, vendor-neutral SDR domain runtime, open source and distributed as self-contained binaries, together with its skills, contracts, plugins, documentation and install path, presented as one coherent product. |
 | DEC-PROD-002 | The product combines deterministic Runtime, skill-guided AI reasoning, and provider execution plugins. |
-| DEC-OSS-002 | Contracts, skills, the public plugin mechanism, documentation and the install path are open (MIT) and published in `reply-team/jason-ai`; the runtime's source is not published and its binaries are released there under the Jason Runtime Licence (`LICENSE-RUNTIME.md`), with the trademark note `TRADEMARKS.md` beside it; hosted provider capabilities remain external services. |
+| DEC-OSS-003 | The runtime, its source and everything else in `reply-team/jason-ai` are open source under the MIT licence (`LICENSE`) and developed in that repository, with the trademark note `TRADEMARKS.md` beside it: the licence grants no right to the marks. Hosted provider capabilities remain external services. Supersedes SUP-OSS-001 and DEC-OSS-002. |
 | DEC-ENTRY-001 | `reply-team/jason-ai` is the intended primary public product entry point. |
-| DEC-REPO-001 | Two repositories, resolving DEF-REPO-001. `reply-team/jason-internal` (private) is the source of truth for the whole product including the open set; `reply-team/jason-ai` (public) is the product entry point, a release-aligned published copy of the open set, and the binary store. Publication is release-triggered, deterministic, and lands through a reviewed pull request; the public repository never describes a runtime that has not been released. |
+| DEC-REPO-001 | One repository, resolving DEF-REPO-001. `reply-team/jason-ai` (public) holds the whole product, the runtime's source included, with its history; it is the product entry point and the binary store. Until 0.24.0 the product was developed in a private repository, and each release published a copy of its open part here. |
 | DEC-REPLY-001 | Reply is the configured ready-to-use default provider and commercial execution path, not a hard-coded dependency. |
 | DEC-TOPO-001 | One user-scoped Runtime installation manages multiple logically isolated business campaigns for one OS user. |
 | DEC-PROJ-001 | Every campaign is in exactly one project — one business goal of the client, a runtime entity of Jason's own that never reaches a plugin; the client is the installation and has no entity. Every installation has one default project, made by the migration that brought projects in under an id of its own; a campaign that names no project lands there, and a campaign can be moved. A project's slug is made once, is unique and never changes, which is also why `project.create` needs no idempotency key: a repeat is refused as `project_exists`, naming the project. `docs/projects.md` is the contract. |
@@ -1744,7 +1743,7 @@ original chat session.
 | DEC-INSTALL-001 | Standalone and Reply-assisted installation are both legitimate paths to the same user Runtime. |
 | DEC-INSTALL-002 | The Reply plugin ships as a release asset: every release publishes `jason-plugin-reply.zip`, the files of `plugins/reply` at the tag at the archive's root, built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, never among the manifest's artifacts, which are platforms. Installing it is `jason plugin install reply`: download, verify against `checksums.txt` and the manifest's content digest, unpack into the plugins directory; the package's content digest is its identity, and both installation paths of §15.5 rest on that asset. |
 | DEC-UPDATE-001 | Runtime may advertise updates; a short-lived CLI/installer performs controlled replacement. |
-| DEC-UPDATE-002 | The feed, the install lines and the release page name the product's own address, `jasonharness.ai`, which redirects `/releases/*` to the same path in the public repository's releases with a temporary redirect; the licence page, links into the tree and the skills source stay on GitHub, and the runtime's licence never names the address. |
+| DEC-UPDATE-002 | The feed, the install lines and the release page name the product's own address, `get.jasonharness.ai`, which redirects `/releases/*` to the same path in the public repository's releases with a temporary redirect; the licence page, links into the tree and the skills source stay on GitHub, and the page `docs/responsible-use.md` never names the address. |
 | DEC-UPDATE-003 | An installation is Jason's own unless a package manager's own record says otherwise; a managed installation is updated and taken off by its manager, and Jason's verbs act only on what is Jason's (autostart, skills by receipt, data); and a status check says when the running runtime is not the build installed. |
 | DEC-UI-001 | The Jason UI is served by the runtime itself under `/ui/`, from `<data>/ui/custom/` when that holds a build and else `<data>/ui/default/`, as static files under `Content-Security-Policy: default-src 'self'`; it is a client of the Runtime API and nothing else. |
 | DEC-UI-002 | A browser is paired once: `ui.open` mints a single-use ticket good for one minute, the page trades it at `POST /ui/session` — the one door outside the operation catalog, and the only POST without a bearer — for a UI token the runtime stores as a hash and accepts as a bearer until `ui.revoke`; UI tokens never expire on their own. A request carrying an `Origin` that is not the runtime's own is refused. |
@@ -1812,7 +1811,9 @@ architecture is explicitly revised with new evidence.
 | SUP-STATE-001 | Goals, plans, work items, schedules, and execution history as authoritative Markdown/YAML files. | SQLite-backed Runtime state accessed through Runtime API. |
 | SUP-STATE-002 | Skills or agents operating a parallel file-based durable runtime. | No parallel skills-only Markdown runtime mode. |
 | SUP-ORCH-001 | A daemon that scans workspaces and infers readiness/status from files. | A deterministic domain Runtime owns readiness and state transactionally. |
-| SUP-OSS-001 | Runtime, contracts, skills, and the public plugin mechanism remain open source; hosted provider capabilities remain external services. | DEC-OSS-002: the contracts, skills, plugin mechanism, documentation and install path are open; the runtime's source is not published. |
+| SUP-OSS-001 | Runtime, contracts, skills, and the public plugin mechanism remain open source; hosted provider capabilities remain external services. | DEC-OSS-003: the runtime, its source and everything else are open source under MIT. |
+| DEC-OSS-002 | Contracts, skills, the public plugin mechanism, documentation and the install path open (MIT) and published in `reply-team/jason-ai`, with the runtime released there as binaries without its source. | DEC-OSS-003: the runtime's source is open too, and developed in the same repository. |
+| REJ-PLAT-001 | Rejected: Go, TypeScript/Node, Rust, Java, or Python as the selected core Runtime platform, since none outweighed .NET's product fit and existing team leverage. | The runtime is being ported to Rust in this repository; until the port is complete, the C# runtime under `dotnet/` is the one released (DEC-PLAT-001, 15.2). |
 
 ### 20.2 Rejected under the accepted architecture
 
@@ -1840,7 +1841,6 @@ architecture is explicitly revised with new evidence.
 | REJ-ADP-008 | Direct plugin access to CLR internals or Runtime SQLite. | Breaks isolation and state authority. |
 | REJ-ADP-009 | Automatic filesystem watchers as the required discovery mechanism. | Cross-platform lifecycle complexity without need; explicit reload is sufficient. |
 | REJ-DB-001 | Dapper as the selected persistence alternative. | Gives up EF integration and migrations for insufficient benefits. |
-| REJ-PLAT-001 | Go, TypeScript/Node, Rust, Java, or Python as the selected core Runtime platform. | None outweigh .NET's product fit and existing team leverage. |
 
 ### 20.3 Deferred rather than rejected
 
@@ -1930,7 +1930,7 @@ are visible — none of them should be read as settled or implemented.
 
 | Term | Meaning in this document | Must not be confused with |
 |---|---|---|
-| Jason AI | The complete local-first product direction described here: a runtime distributed as binaries, and the open skills, contracts, plugins and install path around it. | Reply's hosted Jason AI SDR product or a self-hosted Reply clone. |
+| Jason AI | The complete local-first product direction described here: open source under the MIT licence and distributed as self-contained binaries with its skills, contracts, plugins and install path. | Reply's hosted Jason AI SDR product or a self-hosted Reply clone. |
 | Jason Runtime | The one long-running user-scoped deterministic domain process. | Dispatcher alone, Plugin Host, agent host, or a Reply service. |
 | Runtime API | The supported authoritative boundary around Jason state and behavior. | SQLite, CLI command syntax, or a provider API. |
 | Jason CLI | Short-lived administrative and business client of Runtime API. | Reply CLI. |

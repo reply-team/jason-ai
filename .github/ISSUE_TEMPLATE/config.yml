@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A question or an idea
+    url: https://github.com/reply-team/jason-ai/discussions
+    about: Ask, or suggest something, in Discussions.
+  - name: A vulnerability
+    url: https://github.com/reply-team/jason-ai/blob/main/SECURITY.md
+    about: Never in a public issue. SECURITY.md says where it goes.

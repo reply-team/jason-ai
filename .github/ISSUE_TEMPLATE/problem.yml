@@ -1,0 +1,67 @@
+name: A problem
+description: Something in Jason does not work, or works otherwise than a page says.
+title: "[Problem]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Everything in this form, and the file you attach, is public the moment you submit it. A question or an idea
+        goes to Discussions; help with your own data goes to support@reply.io; a vulnerability goes the way
+        SECURITY.md says, never here.
+  - type: textarea
+    id: ran
+    attributes:
+      label: What you ran
+      description: The command, or what you asked your agent to do, exactly as typed.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: answered
+    attributes:
+      label: What it answered
+      description: The output or the error, exactly as printed. Leave out anything you would not show the world.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `jason --version` prints. `jason doctor` fills this in when you open the form from it.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: The operating system and its architecture. `jason doctor` fills this in when you open the form from it.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened instead, and where a page says so, if one does.
+    validations:
+      required: true
+  - type: checkboxes
+    id: without_journal
+    attributes:
+      label: The file
+      description: >-
+        By default `jason doctor` writes a file made to be shared: versions, settings by their shape, counts, codes and
+        recent log events, with your names and paths rewritten. A file made with `--include-journal` also carries what
+        the journal entries say (campaign names, contexts, addresses, the reasons people typed), so it goes to
+        support@reply.io only, never here.
+      options:
+        - label: This file was made by `jason doctor` without `--include-journal`.
+          required: true
+  - type: upload
+    id: doctor_file
+    attributes:
+      label: The file `jason doctor` wrote
+      description: >-
+        Read it first. A .json file attaches as it is; if GitHub refuses it, attach it as a .zip. Never a file made with
+        `--include-journal`. If `jason doctor` itself failed, say so under what it answered.
+    validations:
+      accept: ".json,.zip"

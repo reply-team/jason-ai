@@ -378,11 +378,11 @@ ask them before every act it marks "Ask first". The two lines are the person's: 
 you, hand them the lines to type.
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
+curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
+irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
 Each script works out the platform, verifies the download's SHA-256 before unpacking it, installs the executable

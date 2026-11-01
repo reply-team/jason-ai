@@ -29,10 +29,12 @@ its card says so.
 
 ## Sending a case
 
-While Jason is in alpha this repository takes no pull requests or issues. To share a case, copy
-[`_template/`](_template/README.md), fill it in, and send it to the address in the README's
+To share a case, copy [`_template/`](_template/README.md), fill it in, and send it to the address in the README's
 [Getting help](../README.md#getting-help) section. A case that is accepted is published with a later release, credited
-as you wish or not at all.
+as you wish or not at all. For anything else, [CONTRIBUTING.md](../CONTRIBUTING.md) says where to write: an
+[issue](https://github.com/reply-team/jason-ai/issues) for something that does not work, a
+[discussion](https://github.com/reply-team/jason-ai/discussions) for a question or an idea, the same address for help
+with your own installation, and a vulnerability the way [SECURITY.md](../SECURITY.md) says.
 
 The rules for a case:
 

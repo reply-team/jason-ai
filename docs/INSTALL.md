@@ -71,15 +71,15 @@ ask.
 ## 2. Install from a release
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
+curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
+irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](../LICENSE-RUNTIME.md). If you do
-not accept it, do not install Jason.
+Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your
+responsibility when it reaches people, is in [responsible-use.md](responsible-use.md).
 
 Both lines install the **latest release**. If either answers 404, the release could not be reached — through the
 address or on GitHub — and that is not a failure of your machine: report it as it stands rather than run the line
@@ -143,11 +143,11 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.24.0/install.sh | sh -s -- --version 0.24.0
+curl -fsSL https://get.jasonharness.ai/releases/download/v0.24.0/install.sh | sh -s -- --version 0.24.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.24.0/install.ps1))) -Version 0.24.0
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.24.0/install.ps1))) -Version 0.24.0
 ```
 
 These install 0.24.0 with 0.24.0's own script: a pinned install fetches the script from the release it installs.
@@ -186,9 +186,9 @@ A started runtime asks the release feed whether a newer version exists five minu
 day after that, at the default settings: one `GET`, carrying nothing about you or your work — it identifies only
 the runtime's version, including its build. `Update:CheckEnabled` set to `false` in
 `~/.jason/config/settings.json` turns that off. That request, and the downloads the install scripts,
-`jason update apply` and `jason ui install` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this
-repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the
-[licence](../LICENSE-RUNTIME.md).
+`jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this
+repository's releases on GitHub. What that address keeps, and for how long, is in
+[responsible-use.md](responsible-use.md#update-check-and-downloads).
 
 ### With a package manager
 
@@ -199,9 +199,9 @@ build for an Intel Mac is published, so on an Intel Mac Homebrew answers "formul
 `install.sh` names the platforms it has, and the way to Jason today is another machine: Linux x64, Windows x64 or an
 Apple silicon Mac.
 
-Installing this way accepts the same licence. The package manager owns that installation: it updates it and takes it
-off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and names the
-manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
+Installed this way, Jason is under the same MIT licence. The package manager owns that installation: it updates it
+and takes it off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and
+names the manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
 upgrade removes the previous version's keg by default, the path a running runtime starts its plugin hosts from.
 
 ### By hand
@@ -209,8 +209,8 @@ upgrade removes the previous version's keg by default, the path a running runtim
 To install without running a downloaded script, take the steps the script takes, yourself:
 
 1. Download the archive for this machine and `checksums.txt` beside it: for the latest release,
-   `https://jasonharness.ai/releases/latest/download/jason-win-x64.zip`, `…/jason-linux-x64.tar.gz` or
-   `…/jason-osx-arm64.tar.gz`, and `https://jasonharness.ai/releases/latest/download/checksums.txt`. For a
+   `https://get.jasonharness.ai/releases/latest/download/jason-win-x64.zip`, `…/jason-linux-x64.tar.gz` or
+   `…/jason-osx-arm64.tar.gz`, and `https://get.jasonharness.ai/releases/latest/download/checksums.txt`. For a
    particular release, use the address the pinned lines above use, with the file's name in place of the script's.
 2. Check the archive's SHA-256 against its line in `checksums.txt` (`Get-FileHash -Algorithm SHA256` on Windows,
    `sha256sum` or `shasum -a 256` elsewhere), and stop if they differ.
@@ -425,6 +425,12 @@ case `plugin_availability` above names for a plugin's program; this check does n
 given as a path is looked up in its own directory and reads no PATH, so the answer says nothing of one, with one
 exception: an npm shim given as a path takes its `node.exe` from the PATH when none stands beside it, and then the answer
 says whose PATH that was.
+
+**When something does not work**, run `jason doctor --dry-run`, then `jason doctor`, and open an
+[issue](https://github.com/reply-team/jason-ai/issues/new?template=problem.yml) with the file it wrote attached: the
+address it prints fills in the version and the platform. Help with your own data, or a file made with
+`--include-journal`, goes to the support address the README gives under Getting help, never to an issue; a
+vulnerability goes the way [SECURITY.md](../SECURITY.md) says.
 
 ---
 

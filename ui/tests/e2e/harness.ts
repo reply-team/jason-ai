@@ -16,7 +16,7 @@ export const jasonExe =
     process.env.JASON_EXE ??
     resolve(
         repo,
-        'runtime',
+        'dotnet',
         'src',
         'Jason.App',
         'bin',

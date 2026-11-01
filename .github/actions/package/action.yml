@@ -160,7 +160,7 @@ runs:
         # project reads the directory as an absolute path.
         $natives = Join-Path $PWD "artifacts/natives/$env:RID"
         $copied = @(if ($env:SIGN_MACOS -eq 'true') { "-p:CopyBundledNativeLibrariesTo=$natives" })
-        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime @copied --output $publish
+        dotnet publish dotnet/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime @copied --output $publish
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish exited with $LASTEXITCODE" }
         if ($copied) { "natives=$natives" >> $env:GITHUB_OUTPUT }
 
@@ -316,19 +316,19 @@ runs:
         # security import says only that a passphrase was not correct. macOS's own openssl, LibreSSL, reads the legacy
         # encodings a keychain imports, which OpenSSL 3 refuses without -legacy. The password goes by its environment
         # variable, never on a command line. LibreSSL's -info goes to stderr, kept in a file: the MAC's iteration count,
-        # whether the MAC verified, and each bag's PBE with its iteration count, of which only those lines are printed;
+        # whether the MAC verified, and each bag's PBE with its iteration count, of which only those lines are kept;
         # stdout, where the bags' attributes would go, is dropped. LibreSSL does not name the MAC's algorithm, so it is
         # read from the file's structure: the last object a PKCS#12 file holds is its MAC's digest.
-        echo "The decoded .p12 is $(wc -c < "$p12" | tr -d ' ') bytes."
+        size="$(wc -c < "$p12" | tr -d ' ')"
         opened="$RUNNER_TEMP/jason-signing.opened"
         info=0
         /usr/bin/openssl pkcs12 -in "$p12" -info -noout -passin env:P12_PASSWORD > /dev/null 2> "$opened" || info=$?
-        grep -E '^(MAC |MAC:|PKCS7 Encrypted data:|Shrouded Keybag:)' "$opened" || true
+        reported="$(grep -E '^(MAC |MAC:|PKCS7 Encrypted data:|Shrouded Keybag:)' "$opened" || true)"
         mac="$({ /usr/bin/openssl asn1parse -inform DER -in "$p12" 2> /dev/null || true; } | sed -n 's/.*prim: *OBJECT *://p' | tail -n 1)"
-        echo "The MAC's digest, by the file's structure: ${mac:-(none)}."
 
         advice="rebuild it with -legacy -macalg sha1 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES"
         refused=""
+        described=""
         if grep -q 'Mac verify error' "$opened"; then
           case "$P12_PASSWORD" in
             *[[:space:]]) echo "::notice title=Signing::The password secret ends with whitespace, which a value pasted or piped into a secret often carries." ;;
@@ -360,11 +360,21 @@ runs:
           if [ "$info" -ne 0 ]; then described="$described LibreSSL could not read every bag."; fi
           if [ -n "$rc2" ]; then described="$described A certificate bag under pbeWithSHA1And40BitRC2-CBC is one macOS reads."; fi
           if [ "$legacy" != yes ]; then described="$described If the keychain refuses it, $advice."; fi
-          echo "::notice title=Signing::$described"
         fi
         rm -f "$opened"
+
+        # What the .p12 is - its size, the lines of openssl's report, the MAC's digest and, for one that opens, a notice
+        # naming its encoding - said only when it is refused, here or by the keychain, just before the refusal: a
+        # release's log is public, and a run that signs has nothing to rebuild.
+        describe() {
+          echo "The decoded .p12 is $size bytes."
+          if [ -n "$reported" ]; then printf '%s\n' "$reported"; fi
+          echo "The MAC's digest, by the file's structure: ${mac:-(none)}."
+          if [ -n "$described" ]; then echo "::notice title=Signing::$described"; fi
+        }
         if [ -n "$refused" ]; then
           rm -f "$p12"
+          describe
           echo "::error title=Signing::$refused"
           exit 1
         fi
@@ -375,6 +385,7 @@ runs:
         security unlock-keychain -p "$password" "$keychain"
         if ! security import "$p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"; then
           rm -f "$p12"
+          describe
           echo "::error title=Signing::The keychain refused to import the .p12, which the password secret opens: what security said is above. If the notice above names an encoding other than sha1 and 3DES, $advice."
           exit 1
         fi
@@ -428,7 +439,7 @@ runs:
       run: |
         $publish = "artifacts/publish/$env:RID"
         $runtime = @(if ($env:RUNTIME_VERSION) { "-p:RuntimeFrameworkVersion=$env:RUNTIME_VERSION" })
-        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime --no-restore --no-build "-p:BundleNativeLibrariesFrom=$env:NATIVES" --output $publish
+        dotnet publish dotnet/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" @runtime --no-restore --no-build "-p:BundleNativeLibrariesFrom=$env:NATIVES" --output $publish
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish exited with $LASTEXITCODE" }
 
     - name: Sign the macOS executable with the hardened runtime
@@ -443,7 +454,7 @@ runs:
         # bundle's payload with it. The hardened runtime is what notarization requires, and the entitlements say what
         # it must still let .NET do; the timestamp, from Apple's service, keeps the signature valid after the
         # certificate expires.
-        entitlements=runtime/src/Jason.App/jason.entitlements
+        entitlements=dotnet/src/Jason.App/jason.entitlements
         plutil -lint "$entitlements"
         codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" --options runtime --timestamp --entitlements "$entitlements" "$EXECUTABLE"
 
@@ -492,12 +503,16 @@ runs:
         ditto -c -k --keepParent "$EXECUTABLE" "$zip"
         submitted=0
         xcrun notarytool submit "$zip" --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait --timeout 30m --output-format json > "$answer" || submitted=$?
-        cat "$answer"
 
+        # A release's log is public: an accepted submission is said without its id. Anything else prints the notary's
+        # answer and the submission's id, which reading Apple's log of it needs, and the log itself.
         id="$(sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' "$answer")"
         status="$(sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p' "$answer")"
-        echo "notarytool exited $submitted: submission ${id:-(none)}, status ${status:-(none)}"
-        if [ "$status" != "Accepted" ]; then
+        if [ "$status" = "Accepted" ]; then
+          echo "The notary accepted the executable."
+        else
+          cat "$answer"
+          echo "notarytool exited $submitted: submission ${id:-(none)}, status ${status:-(none)}"
           if [ -n "$id" ]; then
             xcrun notarytool log "$id" --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" || true
           fi
@@ -568,15 +583,14 @@ runs:
         RID: ${{ inputs.rid }}
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
       run: |
-        # The archive carries the runtime's own licence, LICENSE-RUNTIME.md, under the name LICENSE. The
-        # repository's MIT licence covers the skills, contracts, plugins, documentation and install scripts, not
-        # the runtime, so the repository's LICENSE is not the one that travels beside the executable.
-        # THIRD-PARTY-NOTICES travels with it: the runtimes and packages the executable carries, and their licences.
+        # The archive carries the repository's LICENSE, the MIT licence, which covers the whole repository and so the
+        # runtime the executable is built from. THIRD-PARTY-NOTICES travels with it: the runtimes and packages the
+        # executable carries, and their licences.
         $staging = "artifacts/package/$env:RID"
         New-Item -ItemType Directory -Force $staging | Out-Null
         New-Item -ItemType Directory -Force artifacts/release | Out-Null
         Copy-Item $env:EXECUTABLE $staging
-        Copy-Item LICENSE-RUNTIME.md (Join-Path $staging LICENSE)
+        Copy-Item LICENSE (Join-Path $staging LICENSE)
         Copy-Item THIRD-PARTY-NOTICES (Join-Path $staging THIRD-PARTY-NOTICES)
 
     - name: Archive as zip

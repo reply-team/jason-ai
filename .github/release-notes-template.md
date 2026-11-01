@@ -29,8 +29,8 @@ at this version and released only after its tests passed.
 | `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
 
-Each archive holds the executable, `LICENSE` (the runtime's licence; the repository's MIT does not cover the
-runtime) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by
+Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
+included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by
 `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in
 `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it. The UI's package is
 placed by `jason ui install`, which the install guide runs and `jason update apply` runs at its end.
@@ -43,18 +43,16 @@ not start.
 One line, on macOS and Linux:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
+curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 and on Windows, in PowerShell:
 
 ```powershell
-irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
+irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-By installing Jason you accept the Jason Runtime Licence:
-<https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE-RUNTIME.md>. If you do not accept it, do not
-install Jason.
+Jason is released under the MIT licence: <https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE>.
 
 Both find this machine's archive, check it against `checksums.txt` before unpacking, and put `jason` on the
 PATH — in `~/.local/bin`, or `%LOCALAPPDATA%\Programs\jason` — with its licence and the third-party notices
@@ -63,11 +61,11 @@ the same version changes nothing and says so, unless a licence file is missing b
 then writes. Two options, for a script that must be told:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}} --no-modify-path
+curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}} --no-modify-path
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}} -NoModifyPath
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}} -NoModifyPath
 ```
 
 ## Upgrading from 0.1.0

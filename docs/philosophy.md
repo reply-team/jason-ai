@@ -145,15 +145,15 @@ Jason is built to do as much as it can on its own and nothing that should be you
   team works as several.
 - **A machine the builds do not cover.** Jason ships for Windows x64, Linux x64 and Apple-silicon macOS; there is no
   build for an Intel Mac ([docs/INSTALL.md](INSTALL.md)).
-- **Someone who wants to run it as a service for other companies.** The runtime is a free executable whose source is not
-  published, under its own licence, [LICENSE-RUNTIME.md](../LICENSE-RUNTIME.md): for your own business use, on as many
-  of your own machines as you like, including rented cloud machines; running it for other companies, as a hosted or
-  outsourced service, needs a written agreement, and redistributing or modifying it is not allowed. The skills,
-  contracts, plugins, documentation and install scripts are MIT. Your agent host and your provider account stay yours to
-  pay for, as you do already.
 - **Someone who needs a promise of results.** Jason improves continuity, control and the use of professional knowledge.
   It does not guarantee replies, meetings or revenue when the offer, the data, the market or the sender's reputation are
   weak, and it does not turn an agent's judgment into truth.
+
+None of that is the licence's doing. Jason is free and released under the MIT licence, the runtime included
+([LICENSE](../LICENSE)): you may run it on as many machines as you like, for your own business or as a service for other
+companies, change it and redistribute it, keeping the licence's notice with every copy and within the note on the
+names ([TRADEMARKS.md](../TRADEMARKS.md)). Your agent host and your provider account stay yours to pay for, as you do
+already.
 
 ## How it grows
 

@@ -1,6 +1,6 @@
 # Developing Jason
 
-For people working on Jason itself. This file is never published: the runtime's source it describes stays here.
+For people working on Jason itself: building and running this checkout, the commands, and how a change lands.
 
 You need the .NET SDK named in `global.json`, Node 24 for the UI, and git.
 
@@ -14,7 +14,7 @@ names the folder everything goes into; change it there and nowhere else, for exa
 
 ```sh
 export JASON_DEV=~/jason-dev && export JASON_DATA_DIR="$JASON_DEV/data" && \
-dotnet publish runtime/src/Jason.App -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o "$JASON_DEV/bin" && \
+dotnet publish dotnet/src/Jason.App -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o "$JASON_DEV/bin" && \
 "$JASON_DEV/bin/jason" skills install --roles-only --source . && \
 (cd ui && npm ci && npm run build) && \
 mkdir -p "$JASON_DATA_DIR/ui" && ln -sfn "$PWD/ui/dist" "$JASON_DATA_DIR/ui/custom" && \
@@ -25,7 +25,7 @@ mkdir -p "$JASON_DATA_DIR/ui" && ln -sfn "$PWD/ui/dist" "$JASON_DATA_DIR/ui/cust
 
 ```sh
 export JASON_DEV=~/jason-dev && export JASON_DATA_DIR="$JASON_DEV/data" && \
-dotnet publish runtime/src/Jason.App -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o "$JASON_DEV/bin" && \
+dotnet publish dotnet/src/Jason.App -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o "$JASON_DEV/bin" && \
 "$JASON_DEV/bin/jason" skills install --roles-only --source . && \
 (cd ui && npm ci && npm run build) && \
 mkdir -p "$JASON_DATA_DIR/ui" && ln -sfn "$PWD/ui/dist" "$JASON_DATA_DIR/ui/custom" && \
@@ -37,7 +37,7 @@ mkdir -p "$JASON_DATA_DIR/ui" && ln -sfn "$PWD/ui/dist" "$JASON_DATA_DIR/ui/cust
 ```bat
 set JASON_DEV=%USERPROFILE%\jason-dev
 set JASON_DATA_DIR=%JASON_DEV%\data
-dotnet publish runtime/src/Jason.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "%JASON_DEV%\bin" && ^
+dotnet publish dotnet/src/Jason.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "%JASON_DEV%\bin" && ^
 "%JASON_DEV%\bin\jason.exe" skills install --roles-only --source . && ^
 npm --prefix ui ci && npm --prefix ui run build && ^
 (rmdir "%JASON_DATA_DIR%\ui\custom" 2>nul & mkdir "%JASON_DATA_DIR%\ui" 2>nul & mklink /J "%JASON_DATA_DIR%\ui\custom" "%CD%\ui\dist") && ^
@@ -71,22 +71,22 @@ To stop and remove it all: `jason runtime stop`, run as above, then delete the f
 
 ## Commands
 
-- Build: `dotnet build runtime/Jason.slnx`
-- Test everything: `dotnet test --solution runtime/Jason.slnx`
-- Test one project: `dotnet test --project runtime/tests/Jason.Runtime.Tests`
+- Build: `dotnet build dotnet/Jason.slnx`
+- Test everything: `dotnet test --solution dotnet/Jason.slnx`
+- Test one project: `dotnet test --project dotnet/tests/Jason.Runtime.Tests`
 - Test one method or class: append `-- --filter-method "*MethodName"` or `-- --filter-class "Namespace.ClassName"`
 - Start a long pass (the whole suite, the install-script classes) from a terminal you keep open, or as a background task
   of that terminal, never through a hidden window or a detached launcher: started that way, whole passes have failed the
   install-script tests whose PowerShell 7 children hang for their full two-minute bound and print nothing, and the same
   tests pass attached. A one-test run under a hidden launcher passes, so the cause is not pinned down; the product starts
   its own children with no window and no shell, and a child so made ran under hidden and detached drivers without a hang.
-- Run without publishing (with `JASON_DATA_DIR` set as above): `dotnet run --project runtime/src/Jason.App -- --version`
+- Run without publishing (with `JASON_DATA_DIR` set as above): `dotnet run --project dotnet/src/Jason.App -- --version`
   · `-- runtime run` · `-- runtime status` · `-- runtime start` (background; nothing is registered until you ask)
   · `-- runtime stop` · `-- runtime autostart enable | disable | status` · `-- campaign list` · `-- workitem list`
   · `-- role list` · `-- plugin list` · `-- plugin reload` · `-- ui open`
 - Add a migration: `dotnet tool restore` once, then
-  `dotnet ef migrations add <Name> --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --output-dir Persistence/Migrations`
-- Publish: `dotnet publish runtime/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`
+  `dotnet ef migrations add <Name> --project dotnet/src/Jason.Runtime --startup-project dotnet/src/Jason.Runtime --output-dir Persistence/Migrations`
+- Publish: `dotnet publish dotnet/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`
 - UI: from `ui/`, `npm ci`, `npm run check`, `npm test`, `npm run build`, `npm run package`, `npm run e2e` (the last
   needs a Release build of `Jason.App`).
 
@@ -94,164 +94,47 @@ To stop and remove it all: `jason runtime stop`, run as above, then delete the f
 
 The conventions the code follows — the layout, the boundaries the build enforces, the terminology, the rules of the
 API, of persistence and of the logs — are in `CLAUDE.md`, which every AI session reads and which holds for people just
-the same. This section is the part of the process that no test runs for you. It describes the flow from the release
-after 0.14.0 on; where the pipeline still runs by the earlier rule, the paragraph says so.
+the same. This section is how a change travels from a branch to a release.
 
-**Two kinds of branch.** `main` is what has been released: it changes when a release branch merges, and the tag follows
-that merge (`docs/release-and-update.md` is the contract). A release branch, `release/<name>`, carries one release's
-scope: a business increment heavy enough to be tried as a whole and to have release notes of its own, cut by urgency or
-by kind, never a polish. Several release branches run at once. Each is led by one session and owned by one person, who
-scopes it with the architecture session; the branches share nothing until a release, but for the next release's branch,
-cut as below. There is no cadence: the goal reached closes the release. A feature branch is cut from its release branch
-and its pull request targets that release branch. When a release merges, every other release branch but the next one
-(below) takes `main` then, and conflicts are resolved there and nowhere else. The next release's branch is cut from the
-previous release branch's head the moment that release's pull request has both readings, not from `main` after the bump,
-so the next release does not wait for the previous one's platform runs, tag and publication. When the bump lands on
-`main`, the next branch takes `main` by a rebase onto it from the cut, and the previous release's commits, `main`'s by
-then, drop out of the replay. A fix that landed in the previous branch after the cut arrives that way; it is
-cherry-picked earlier only when the next branch's own checks need it. A release branch takes `main` by a fast-forward,
-or by a rebase pushed straight to the branch by its owner, never through a pull request into the branch, because the
-release's rebase into `main` must find `main`'s own commits in the branch. The ruleset on the release branches lets a
-repository admin push to them for this act alone, and the push's run is the Linux set and gates nothing.
+**Two kinds of branch.** `main` is what has been released: it changes when a release merges, and the release's tag
+follows that merge. A release branch, `release/<name>`, carries one release's scope, and several can run at once. A
+change is made on a feature branch cut from its release branch, and its pull request targets that release branch.
+When no release branch is open, a change starts as an issue or a discussion; `CONTRIBUTING.md` says where.
 
 **One pull request per increment.** A branch carries one change: a feature, a fix, a document, a skill's text. Two
-independent things are two pull requests, even when they were written in one sitting. When the second builds on the
-first, its branch is cut from the first's and rebased onto the release branch once the first has merged; it is
-reviewed as the difference from the first and merges after it. The reason is the review: a reader who finds a problem
-in one half must not hold up the other, and the commit on the release branch should say one thing. A pull request that
-has grown two things is split before it is read, not after a review has found it.
+independent things are two pull requests, so that a problem found in one half does not hold up the other, and the
+commit the change leaves says one thing.
 
-**The branch is named after the story it implements**, `REPLY-<key>-<slug>`, the key first. That name is the one
-place a tracker key is allowed: it is how the tracker links the pull request, and it never reaches a release branch or
-`main`. A pull request with no story of its own — the version after a release, a change to the pipeline, a
-document — is named after the standing story kept for such changes.
+**Squash merges.** A pull request into a release branch is squash-merged: the release branch takes one commit per pull
+request, and that commit's message is the pull request's title and body, written for a reader who was not there —
+what changed, why, how it was verified. The release's own pull request into `main` is squash-merged too, so `main` takes
+one commit per release, and after it the one that moves `main` to the next version.
 
-**Tests by stage.** A commit runs the critical tier locally before it is pushed — the tests that carry the `Critical`
-trait, about two minutes on a workstation — and never the whole suite, which takes seventeen minutes there and hours
-over a pull request's life. A branch that touches `runtime/` runs the whole suite locally once, in Release, with the log
-written to a file, while it is read (the paragraph below); one that changes Markdown only skips that, unless it changes
-`docs/` or `skills/` (below). A page a test merely reads is documentation, and the version check treats a change to it
-so; only `docs/golden-path.md`, whose step 3 a test runs as a script in three shells, and `LICENSE-RUNTIME.md`, which
-every archive carries, are code to it. The page-reading tests are mostly outside the critical tier, which is all a
-documentation change on a pull request into a release branch, draft or ready, runs (a ready pull request into `main`
-that is not the release's, an unrecorded push to a release branch and a pull request into another branch run the whole
-suite on linux-x64), so a branch that changes `docs/` or `skills/` runs the whole suite locally before its pull request
-opens, and the release's pull request, where the whole suite runs, is the first place CI reads them. A red full run on
-the release's pull request puts it back to draft: the fix lands in the release branch, the whole suite runs locally on
-the fixed head until it is green, a red job the Linux set runs (the install script on Ubuntu, the update and the package
-on linux-x64) is proven fixed on a draft push's Linux set first, a red Windows or macOS install, update or package job
-is read from its log and its fix is read, and only then is the pull request marked ready again; the next ready run of
-every check proves it. On CI, a draft's push runs the Linux set: the version check, the linux-x64 build and the critical
-tier, an update on linux-x64, the install script on Ubuntu and the UI's checks; it keeps no record of the tree it
-tested, and the release's pull request is the one draft this flow opens. Marking a pull request into a release branch
-ready runs the Linux set with the critical tier on linux-x64; the whole suite runs once per release, on the release's
-pull request, and locally, once per branch, while the branch is read, for a change under `runtime/`. The tag is the tree
-that pull request tested on all three operating systems, so the release workflow does not run the whole suite again: at
-the tag it runs the critical tier under the tag's version on Linux alone, since what differs from that pull request's
-run is the version and, when the 10.0 channel has released an SDK in between, the SDK the tag resolves again, both of
-which that run carries; each platform then packages and smoke-tests the published executable. The pull request
-from a release branch into `main` runs every check on all three operating systems, macOS included, and that run is the
-release's gate; a pull request into `main` from any other branch — a document, a change to the pipeline — runs the Linux
-set and reports the rest as skipped by rule. The version pull request into `main` runs the critical tier alone, on
-linux-x64 and under the `linux-x64` name a ruleset requires, since for it the tier is the ready run. A push to `main` or
-to a release branch whose tree a passing run recorded runs the version check alone, and so does a push to `main` whose
-change against its parent is documentation alone. Nothing runs nightly. The critical tier is the `Critical` trait, run
-with `--filter-trait "Category=Critical"`, and one table pins it: how many critical cases each family has in each test
-assembly (`CriticalTier.cs`). Each test assembly discovers itself and holds its column to the table, so a row that
-leaves the tier, which a run of the tier cannot notice, turns that guard red; every family keeps a critical case; the
-tier stays at or under 15 % of the suite's methods and of its discovered cases, with no floor; and every mark gives its
-reason, the attribute's own or a `// Critical:` comment above a marked row or above the member that marks rows. The
-guard also holds each assembly to at least the test methods the table measured, and to nine tenths of its cases, since
-the ceiling is measured on them; so a commit that marks or unmarks a test, adds or removes a row of a critical theory,
-or removes test methods rewrites the table in the same commit, from the numbers the guard prints. A draft's leg that
-tests the tier alone is named `linux-x64 (critical tier)`, so only a ready run reports the `linux-x64` that a ruleset
-requires. `CiRunsTests` holds the rule the workflow carries.
+**What CI runs, by stage.** Before a push, the critical tier is run locally: the tests that carry the `Critical` trait,
+run with `--filter-trait "Category=Critical"`, about two minutes on a workstation. A pull request into
+a release branch runs the Linux set — the version check, the linux-x64 build with the critical tier, the install script
+on Ubuntu, an update on linux-x64 and the UI's checks — and merges on green; a change under `dotnet/` has run the whole
+suite locally before that. The release's pull request into `main` runs every check, the whole suite included, on Linux,
+Windows and macOS, and the release merges only when that run is green. At the tag, the release workflow runs the
+critical tier again and packages and smoke-tests the executable for each platform; it does not run the whole suite
+again, since the tag is the tree that run tested. `.github/workflows/ci.yml` says which run each event gets,
+`CiRunsTests` holds the workflow to that rule, and `docs/release-and-update.md` is the release's contract.
 
-**Build on a branch, open the pull request after the readings.** A branch is pushed as the work goes, and no pull
-request is opened while it is built or read: the critical tier runs locally for each commit before it is pushed, and a
-pushed branch without a pull request runs nothing on CI, where an open pull request would run the Linux set on every
-push. When the work is done, the two readings below read the pushed branch and its comparison against the release
-branch, and the fixes they asked for land as commits on it, each with the tier. A change under `runtime/` runs the whole
-suite locally once, in Release, with the log written to a file, while the readers read, and that run is green before the
-pull request opens. Then the pull request opens, ready, and its one run is the Linux set with the critical tier on
-linux-x64; it merges on green. The reason is that a pull request open before that is read by nobody and waited for by
-nobody, and every push to it would run CI for no one. The whole suite runs once per release, on the release's pull
-request into `main`. On the release's pull request, a push after ready that changes nothing but documentation since the
-tree the last full run tested — Markdown outside `runtime/`, `.github/` and `plugins/` that no build compiles and no
-test runs as code — runs the Linux set and reports the rest as skipped; any other push after ready runs the full run
-again. The ruleset on a release branch lets a pull request merge only when the Linux set reports green at the head that
-merges; the ruleset on `main` waits for every check.
-
-**Two readers before the pull request.** Before a pull request into a release branch opens, its branch is read twice: by
-the session that leads the release, which knows the scope and what the release's other pull requests do, and by a
-reviewer with no part in the change, started fresh for this reading, whose model and effort follow the size of the
-change — a document reads cheaply, a migration, a contract or a change to a guard reads at the highest effort. Each says
-what it found and that it approves, and the pull request carries both when it opens; what was found is fixed before it
-opens. The pull request merges into its release branch on both approvals and a green run, and the session that leads the
-release merges it. Nothing is reviewed on commits; a complex commit may be read by a peer when the lead asks.
-
-**The release review.** The pull request from a release branch into `main` is read by the architecture session alone,
-its sub-agents reading the diff by blocks: the release against its scope and the direction, the seams, the hygiene of
-what the release publishes, the skills' statuses. It does not repeat the two readings each pull request had. The owner
-then walks the release on a real machine with the session that led it; what the walk finds lands as pull requests into
-the release branch under the rules above, and the three-platform run follows the patches. What that run finds is fixed
-in the release branch too: `main` takes only a green head, and the owner merges it.
-
-**Seams are read early.** Some paths are shared by every release branch and by every reader of the product: the
-operation documents and the catalog under `docs/contracts/`, a migration under
-`runtime/src/Jason.Runtime/Persistence/Migrations/`, the open set in `.github/publish/`, a skill's craft block or
-readings row under `skills/runtime/`, the release workflow and the public files, the version in
-`runtime/Directory.Build.props`. A pull request that touches one says so to the architecture session in one line when
-it opens, and the session reads that part then rather than twenty pull requests later; a release's scope names the
-seams it will touch at the start. One release branch owns the schema at a time, and a migration is regenerated on the
-release branch after it takes `main`, never merged by hand.
-
-**The version.** A release branch sets its version when its release pull request opens — the number after the last
-tag — and the branch that merges second sets its own again then. The pull request into `main` is marked ready with the
-bare version, so the suite that gates the release runs under the version the tag will carry. The platform legs
-build the `-dev` version, and the suite runs once more under the bare version on one Linux runner; the tag's own
-critical tier then runs under that version on Linux. After a release, the pull
-request that moves `main` to the next version carries the version prefix and every pin the version guards hold to it,
-and nothing else, and is squash-merged. The release's own flow opens it right after the tag, as the release's last
-act on `main`, so that `main` holds the next version between releases and every release branch inherits it when it
-takes `main`. It has one reading and no second reader, since it changes no behaviour.
-
-**The squash commit is the pull request.** A release branch takes one squash commit per pull request, and that
-commit's message is the pull request's title and body; the messages of the branch's own commits never reach it. Commit
-on the branch as often as you like, and write the title as the one line `git log` will show and the body for a reader
-who was not there: what changed, why, how it was verified. The release's pull request into `main` merges by rebase,
-so `main` keeps one commit per pull request of the release, in order, and its tree is the one the three-platform run
-tested.
-
-**Nothing internal in what reaches a release branch or `main`.** Commit messages and pull request bodies carry no
-tracker key, no link to a private system, no pointer to a plan or a note outside the repository, and no tooling
-attribution trailer: an AI assistant adds `Co-Authored-By` and session trailers by default, and they are stripped
-before the push. The reasoning a key would have pointed at is written into the body instead. The internal part — the
-discussion, the alternatives, who decided what — goes to the story's comments in the tracker. The trace runs one way,
-from the tracker to GitHub. Everything `.github/publish/open-set.txt` lists is read publicly at each release, and
-`PublicationTests` holds its links.
-
-**A red run is read before it is re-run.** A job that fails on a tree a green run already covered is a candidate
-defect — a timing assumption, a file still held, an order a test relied on — until its log says otherwise. It is
-diagnosed from the log first and re-run after, never re-run to see whether it goes away. The release's record counts
-the full runs each pull request needed until it was green; the target is one, and a pull request that needed more is
-an incident with a cause named, not a number.
+**Nothing internal in what reaches this repository.** Every branch here is public. Commit messages and pull request
+bodies carry no tracker key, no link to a private system, no pointer to a plan or a note outside the repository, and no
+tooling attribution trailer: an AI assistant adds `Co-Authored-By` and other attribution trailers by default, and they
+are stripped before the push. The reasoning a key would have pointed at is written into the body instead. A branch may
+be named after the tracker story it implements; that name is the one place a key appears, and it never reaches a commit
+of a release branch or of `main`. `RepositoryHygieneTests` reads every file of the tree for these, and the
+`hygiene.yml` workflow reads every pull request's added lines, title and body.
 
 **Tests and fixtures use made-up data.** Never a real person's name, a real login, a real profile link, a real mailbox
 or a live provider identifier: not in a test, a fixture, a document, a pull request body or a commit message. A key or
 a token of any kind reaches no file of this repository, and no log, state or setting Jason writes.
 
-**A release walks a real machine once.** Install, uninstall, update, autostart, `jason status`, the deployment of
-skills and the UI's installation are each right alone and wrong together more easily than a test shows. The owner runs
-the release's scenario by hand, on a machine or under an account the build did not run under, on the release branch
-after the architecture session's review, with the session that led the release; what it finds is fixed as pull
-requests into the release branch before the three-platform run. A single pull request is walked only when a fact has
-to be found to build it at all, on the lead's request.
-
-**A skill's `verified` row is earned, never written.** A skill marked `verified` was read, as that exact text, by a
-named agent host driving this runtime, and the digest of what it read is recorded. A change to its text, however
-small, makes it a draft again until a host reads the new text; nobody writes the row by hand, and the reading is its
-own act after the merge, not part of the pull request. `skills/runtime/README.md` says which skills stand where.
+**A red run is read before it is re-run.** A job that fails on a tree a green run already covered is a candidate
+defect — a timing assumption, a file still held, an order a test relied on — until its log says otherwise. It is
+diagnosed from the log first and re-run after, never re-run to see whether it goes away.
 
 **Plans, designs and scratch files stay out of the repository.** A note written while working is kept beside the
 checkout, not in it. What has lasting value is written where a reader will look for it: `docs/` for a contract, the
@@ -261,9 +144,10 @@ README of the area for how it is used.
 check a ruleset still waits for, or never asked for; the ruleset on `main` and the one on `release/*` are changed in
 the same breath, or every merge blocks.
 
-**Merging and releasing.** A pull request into a release branch merges when its Linux run is green, both readers have
-approved and no review asks for changes; squash is the only merge method there, and the branch is deleted at the
-merge. The release's pull request into `main` merges when the three-platform run is green at its head and the
-architecture session's review is done, by rebase, by the owner; the tag follows, and the release workflow does the
-rest: it runs the critical tier on Linux, packages each platform and publishes, and does not run the whole suite again,
-since the tag is the tree that run tested. `docs/release-and-update.md` is the contract.
+**The numbers in old commit subjects.** Until 0.24.0, Jason was developed in a private repository, and its whole
+history came here with it. A commit made before 0.24.0 whose subject ends in "(#N)" names a pull request of that
+repository. GitHub links "(#N)" in a subject to the issue or pull request of this repository that has the number, so in
+those commits the link leads to something unrelated. From 0.24.0 on, the numbers are this repository's own.
+
+**The tags before 0.24.0.** The tags `v0.1.0` to `v0.23.0` point at snapshots of the open part published here at
+those versions; the releases, from `v0.7.0`, and their assets are unchanged.

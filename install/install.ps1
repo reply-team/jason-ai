@@ -11,8 +11,8 @@ says so, unless a licence file is missing beside it, which it then writes. Eithe
 what it learns about your business - Jason in your home directory, unless Harness:Root in the settings names
 another folder - and makes no folder for it.
 
-    irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.24.0/install.ps1))) -Version 0.24.0 -NoModifyPath
+    irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
+    & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.24.0/install.ps1))) -Version 0.24.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just
@@ -61,7 +61,7 @@ function Install-Jason {
 
     # The product's own address, in front of the releases: it redirects every path under /releases/ to the same path
     # in the public repository's releases on GitHub.
-    $releasesUrl = 'https://jasonharness.ai/releases'
+    $releasesUrl = 'https://get.jasonharness.ai/releases'
     # The licence is a page of the repository, at the release's tag; the downloads are a release's assets. Each has a
     # base of its own, so that the downloads can move without the licence page moving with them.
     $licenceBase = 'https://github.com/reply-team/jason-ai/blob'
@@ -145,12 +145,19 @@ function Install-Jason {
 
     $held = 'is held open by another program; it was tried for 10 seconds.'
 
-    # True for 0.6.0 and later, the pre-release part ignored: LICENSE-RUNTIME.md first exists at v0.6.0, and an earlier
-    # release carried a notice of its own, which is not the Jason Runtime Licence.
-    function Test-Licensed([string] $version) {
+    # True when $version is $floor or later, the pre-release part ignored, compared field by field.
+    function Test-From([string] $version, [string] $floor) {
         $core = $null
-        [version]::TryParse(($version -split '[-+]')[0], [ref] $core) -and $core -ge [version] '0.6.0'
+        [version]::TryParse(($version -split '[-+]')[0], [ref] $core) -and $core -ge [version] $floor
     }
+
+    # True for 0.6.0 and later: its archive carries the licence and the notices, and its tag a licence file. An earlier
+    # release carried a notice of its own, which is neither.
+    function Test-Licensed([string] $version) { Test-From $version '0.6.0' }
+
+    # True for 0.24.0 and later, published under the MIT licence. From 0.6.0 to 0.23.x a release was published under the
+    # Jason Runtime Licence, LICENSE-RUNTIME.md, which those tags keep.
+    function Test-Mit([string] $version) { Test-From $version '0.24.0' }
 
     # The archive, downloaded with checksums.txt and checked against it before Expand-Archive opens anything. An
     # archive that does not match goes with the temporary directory, and nothing is installed or written.
@@ -376,8 +383,10 @@ function Install-Jason {
     # The last two lines of a successful run, and never a question: what is installed and the terms it is installed
     # under, then the one command that says what this installation still needs. The text is in single quotes, so its
     # backticks are text and not an escape.
-    if (Test-Licensed $latest) {
-        Write-Host "Jason $latest is licensed under the Jason Runtime Licence: $licenceBase/v$latest/LICENSE-RUNTIME.md"
+    if (Test-Mit $latest) {
+        Write-Host "Jason $latest is licensed under the MIT licence: $licenceBase/v$latest/LICENSE"
+    } elseif (Test-Licensed $latest) {
+        Write-Host "Jason $latest was published under the Jason Runtime Licence: $licenceBase/v$latest/LICENSE-RUNTIME.md"
     }
     Write-Host 'Next, run `jason status`: it says what this installation still needs, and the command for each.'
 }

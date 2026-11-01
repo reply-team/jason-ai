@@ -3,7 +3,7 @@
   "description": "The skills that ship with the Jason runtime: how to operate the runtime itself, and vendor-neutral knowledge of the SDR profession.",
   "owner": {
     "name": "Jason",
-    "url": "https://jasonharness.ai"
+    "url": "https://get.jasonharness.ai"
   },
   "plugins": [
     {

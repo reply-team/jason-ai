@@ -26,11 +26,16 @@ runtime's JIT compiler needs.
 A release is the git tag `vX.Y.Z` and the files that tag's build publishes. A merge to `main` is not a release:
 `main` is where the code is, and a tag is the statement that one commit of it is worth installing.
 
-Two repositories carry a release. The runtime's source and its tags live in `reply-team/jason-internal`, and a tag
-there builds the release. The release itself — the assets below, the notes, `latest` — is published in
-`reply-team/jason-ai`, together with the open set at that version, through a pull request a person reviews and merges;
-that merge is what tags `v<version>` in the public repository, so the public tag names the published tree and the
-runtime's tag of the same name names the source it was built from.
+Everything about a release happens in one repository, `reply-team/jason-ai`: the source, its tags and its releases.
+A release starts as the release pull request into `main`, whose run builds and tests the tree on Linux, macOS and
+Windows; merging it is the last review a release has. The tag `v<version>` pushed on that merge builds the release
+from it: the critical tests again under the tag's version, the three executables, the macOS and Windows ones signed
+and their archived signatures verified, and the plugin's and the UI's packages. The release job then writes the
+manifest and the checksums and publishes the release at once, with the assets below and its notes, as the latest
+release unless a newer one already is or the version is a release candidate; a last job asks the Homebrew tap to bump
+its formula (§6). The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
+it can and publishes nothing: a copy without the signing secrets stops at the macOS and Windows jobs, and one that
+holds them assembles the release and says in one line that it publishes nothing.
 
 Versions are [SemVer](https://semver.org). `0.x` releases are ordinary releases and are never flagged as
 pre-releases — the pre-release flag is reserved for release candidates (`v1.0.0-rc.1`), because a repository
@@ -40,9 +45,9 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 
 | Asset | What it is |
 |---|---|
-| `jason-win-x64.zip` | the Windows executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
-| `jason-linux-x64.tar.gz` | the Linux executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
-| `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
+| `jason-win-x64.zip` | the Windows executable, `LICENSE` (the MIT licence) and `THIRD-PARTY-NOTICES` |
+| `jason-linux-x64.tar.gz` | the Linux executable, `LICENSE` (the MIT licence) and `THIRD-PARTY-NOTICES` |
+| `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable, `LICENSE` (the MIT licence) and `THIRD-PARTY-NOTICES` |
 | `checksums.txt` | one `sha256sum` line per archive, and one for each package |
 | `manifest.json` | what the updater reads |
 | `install.sh` | the macOS and Linux install script, as this release was published with it |
@@ -57,7 +62,7 @@ release it installs was published with.
 **The names carry no version, on purpose.** That is what makes
 
 ```text
-https://jasonharness.ai/releases/latest/download/jason-linux-x64.tar.gz
+https://get.jasonharness.ai/releases/latest/download/jason-linux-x64.tar.gz
 ```
 
 resolve for every release there will ever be, so a README, an install script and a runtime's feed URL are
@@ -65,8 +70,7 @@ written once and never edited again. The address is Reply.io's own and keeps Git
 behind it can change without any of them changing.
 
 **An archive holds the executable, `LICENSE` and `THIRD-PARTY-NOTICES`, and nothing else.** That `LICENSE` is
-the runtime's own; the repository's MIT licence covers the skills, contracts, plugins, documentation and install
-scripts, not the runtime. `THIRD-PARTY-NOTICES` names the .NET runtime and the packages the executable carries,
+the repository's, the MIT licence, which covers the whole repository, the runtime included. `THIRD-PARTY-NOTICES` names the .NET runtime and the packages the executable carries,
 each with its licence. A plugin is installed into the data directory and nothing reads the install directory, so
 a plugin bundled with the executable would be a file nothing loads. The Reply plugin is
 published beside the archives instead, from 0.11.0 on, as a package of its own: `jason-plugin-reply.zip`, the
@@ -94,7 +98,7 @@ nothing to break when an API version retires.
   "schema": 1,
   "version": "0.2.0",
   "published_at": "2026-09-19T08:00:00Z",
-  "release_notes_url": "https://jasonharness.ai/releases/tag/v0.2.0",
+  "release_notes_url": "https://get.jasonharness.ai/releases/tag/v0.2.0",
   "min_upgrade_from": null,
   "artifacts": {
     "win-x64":   { "asset": "jason-win-x64.zip",      "sha256": "e3b0…b855", "size": 114254557 },
@@ -154,10 +158,15 @@ the one who never thinks to ask.
 nothing else.** No body, no query, no identifier, no machine facts, nothing about your campaigns, your plugins
 or your data directory. The answer is kept in memory and shown by `system.info`; it is never written to disk.
 
-**Where it goes.** The default feed is on `jasonharness.ai`, an address Reply.io operates, which redirects every
+**Where it goes.** The default feed is on `get.jasonharness.ai`, an address Reply.io operates, which redirects every
 request under `/releases/` to the same path in the public repository's releases on GitHub. A download is composed
-from the feed's own directory (§3), so it goes the same way. An installation built before that address existed
-asks GitHub directly; both answer with the same file.
+from the feed's own directory (§3), so it goes the same way. An installation built before 0.7.0 asks GitHub
+directly; both answer with the same file. An installation from 0.7.0 to 0.23.x asks the earlier address,
+`jasonharness.ai`, which keeps redirecting the same paths; if it ever stops,
+`jason update apply --feed https://get.jasonharness.ai/releases/latest/download/manifest.json`, or a reinstall with
+the current one-liner, moves it, and the executable that arrives asks `get.jasonharness.ai` from then on.
+`Update:FeedUrl` set to that address moves only that runtime's own check: `jason update`, `jason ui install` and
+`jason plugin install` read no settings and ask the address they were built with unless `--feed` names another.
 
 A check that fails — offline, a page that answers 500, something that is not a manifest — is a log line at
 warning and never an error to any caller. An offline machine is a normal machine. A feed that has not answered
@@ -169,7 +178,7 @@ an offline machine slower to admit it. `jason update check` waits exactly as lon
 | Setting | Default | Range | What it does |
 |---|---|---|---|
 | `Update:CheckEnabled` | `true` | — | whether this runtime asks at all |
-| `Update:FeedUrl` | `https://jasonharness.ai/releases/latest/download/manifest.json` | an `https` address, or `http` on loopback | where it asks |
+| `Update:FeedUrl` | `https://get.jasonharness.ai/releases/latest/download/manifest.json` | an `https` address, or `http` on loopback | where it asks |
 | `Update:InitialDelayMinutes` | `5` | 1..1440 | how long after starting it first asks |
 | `Update:IntervalHours` | `24` | 1..168 | how often it asks after that |
 
@@ -307,11 +316,11 @@ runs no apply, so after one `jason plugin install <id> --replace` places each.
 ## 6. Installing
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
+curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
+irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
 Each script works out your platform, downloads the archive for it, **verifies the SHA-256 before unpacking**,
@@ -329,13 +338,14 @@ in the order a stranger reads it.
 
 The workflow that builds a release has a button — a `workflow_dispatch` that produces a draft, the button's draft,
 before any tag exists. GitHub offers that button only for a workflow that is already on the **default branch**;
-once it is, a branch's own version can be run from it (`gh workflow run release.yml --ref <branch>`). Its Windows job
-runs in the environment `signing`, which admits only release tags and release branches, so a change to the pipeline is
-rehearsed from a release branch before it merges: a run from any other branch, a dry run included, is refused at the
-Windows job, and nothing is assembled. The button builds the draft in `reply-team/jason-ai` and opens
-no pull request. With `dry_run` it makes no draft either: every job runs, and the assembled release — archives,
-packages, manifest, checksums and notes — and the pull request's body come back as one artifact of the run, while the
-publishing job holds this run's own read-only token in place of the publication token.
+once it is, a branch's own version can be run from it (`gh workflow run release.yml --ref <branch>`). Its jobs that
+sign, publish or hold a token run in the environment `signing`, which admits only release tags and release branches, so
+a change to the pipeline is rehearsed from a release branch before it merges: a run from any other branch, a dry run
+included, is refused at the macOS and Windows jobs, and nothing is assembled. The button's draft is made in
+`reply-team/jason-ai` alone, names the commit the run built, is never the latest release, and asks nothing of the tap.
+The draft is for reading and is deleted afterwards: a release is published only by its tag, never by publishing the
+button's draft. With `dry_run` it makes no draft either: every job runs, and the assembled release — archives, packages, manifest,
+checksums and notes — comes back as one artifact of the run.
 
 A release's notes are the template `.github/release-notes-template.md` and what that release says of itself,
 `RELEASE-NOTES.md` at the root: its first line is `# Jason <version>`, and the rest goes into the body after the

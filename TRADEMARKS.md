@@ -1,8 +1,8 @@
 # Trademarks
 
 "Jason", "Jason AI", "Reply" and "Reply.io", and the related logos (the "Marks"), are trademarks of
-**ReplyApp Inc.** Neither the MIT licence of the open components nor the Jason Runtime Licence grants
-any right to use them, except as this note describes.
+**ReplyApp Inc.** The MIT licence Jason is released under grants no right to use them, except as this
+note describes.
 
 ## You may, without asking
 

@@ -1,16 +1,29 @@
-# A tag named v<version> builds the release: three native runners, each packaging one platform through the same action
-# ci.yml runs on every pull request, and smoke-testing what it published, the Linux one first running the critical tier
-# at the tag, the macOS one, in a job of its own that runs no test, signing and notarizing its executable, and the
-# Windows one, in a job of its own that runs no test either, signing its executable through Artifact Signing, and one
-# job that archives the Reply plugin's package from the tag's tree; then one job — the only one that holds the
-# publication token — assembles the manifest and the checksums, creates the release as a draft in
-# reply-team/jason-ai, and opens the pull request that brings that repository to this version. Merging that pull request
-# is what tags the release there and publishes it.
+# A tag named v<version> builds the release and, in reply-team/jason-ai, publishes it there: three native runners,
+# each packaging one platform through the same action ci.yml runs on every pull request, and smoke-testing what it
+# published, the Linux one first running the critical tier at the tag, the macOS one, in a job of its own that runs no
+# test, signing and notarizing its executable, and the Windows one, in a job of its own that runs no test either,
+# signing its executable through Artifact Signing, and one job that archives the Reply plugin's package from the tag's
+# tree; then the release job — the only one that may write to this repository — assembles the manifest and the
+# checksums and publishes the release at once, with its notes and its assets, and a last job asks the Homebrew tap to
+# bump its formula. The release pull request into main, and its run on every platform, come before the tag: the tag
+# is that merge.
 #
-# The button (workflow_dispatch) builds the same draft, the button's draft, and stops there: nothing is tagged and no
-# pull request is opened, so it leaves nothing behind once its draft is deleted. With dry_run it does not make the draft
-# either: every job runs, the release is assembled and the pull request's body written, and both are handed back as an
-# artifact of the run, while the publishing job holds this run's own read-only token in place of the publication token.
+# A release is published from reply-team/jason-ai alone. The same tag pushed anywhere else that holds this workflow —
+# a fork, a copy — builds what it can and publishes nothing: without the signing secrets its macOS and Windows jobs
+# stop and nothing is assembled, and a copy that holds them assembles the release and says in one line that it
+# publishes nothing there. Either way the tap is asked nothing.
+#
+# Every job that holds a secret or may write runs in the environment `signing`, which admits only release tags and
+# release branches: the macOS and Windows jobs, which sign, the release job, which publishes, and the tap's job, which
+# holds the tap's token. Every job declares the least permissions it needs, and the workflow's default stays read:
+# contents: read for every job that checks the tree out, an OIDC token for the Windows job alone, contents: write for
+# the release job alone, and nothing at all for the tap's job.
+#
+# The button (workflow_dispatch) makes a draft of the release in reply-team/jason-ai and stops there: nothing is
+# tagged, nothing is published and the tap is not asked. The draft is for reading and is deleted afterwards, so the
+# button leaves nothing behind: a release is published only by its tag, never by publishing a draft. With
+# dry_run it does not make the draft either: every job runs, and the assembled release is handed back as an artifact of
+# the run.
 #
 # A release's own notes are RELEASE-NOTES.md at the root, written for the release they name. The version job reads
 # the file before anything is built: a tag whose file is missing, untitled or names another version stops there, and
@@ -23,11 +36,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'The version to build, without the v (0.2.0, 1.0.0-rc.1). Nothing is tagged and no pull request is opened; the result is a draft in reply-team/jason-ai unless dry_run is set.'
+        description: 'The version to build, without the v (0.2.0, 1.0.0-rc.1). Nothing is tagged and nothing is published: the result is a draft release in reply-team/jason-ai, and nothing anywhere else, unless dry_run is set.'
         required: true
         type: string
       dry_run:
-        description: 'Build and assemble everything, make no draft, and hand the assembled release and the pull request''s body back as an artifact of this run.'
+        description: 'Build and assemble everything and publish nothing: no draft, no release, no request to the tap. The assembled release comes back as an artifact of this run.'
         required: false
         default: false
         type: boolean
@@ -39,6 +52,8 @@ jobs:
   version:
     name: The version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       notes: ${{ steps.notes.outputs.notes }}
@@ -116,6 +131,8 @@ jobs:
     name: ${{ matrix.rid }}
     needs: version
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -135,12 +152,12 @@ jobs:
       # publishes on every platform by itself.
       - name: Restore
         if: matrix.rid == 'linux-x64'
-        run: dotnet restore runtime/Jason.slnx
+        run: dotnet restore dotnet/Jason.slnx
 
       # One version through build, test and publish, so that the Linux tier runs under the version every archive carries.
       - name: Build (warnings are errors)
         if: matrix.rid == 'linux-x64'
-        run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
+        run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
       # The whole suite ran on this tree, on every platform, on the release's pull request into main, and again under the
       # bare version on Linux; the tag is that merge, so its tree is the one those runs passed, and the version the tag
@@ -153,7 +170,7 @@ jobs:
       # Windows and macOS jobs go straight to packaging.
       - name: Test the critical tier (offline)
         if: matrix.rid == 'linux-x64'
-        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
+        run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
 
       - name: Package
         id: package
@@ -209,9 +226,14 @@ jobs:
     name: osx-arm64
     needs: version
     runs-on: macos-latest
+    permissions:
+      contents: read
     # The one job that holds the Apple identity. It builds this platform alone, and the package action signs and
     # notarizes its executable; it runs no test, so no test code and no test-only package shares a runner with the
-    # identity. The tier at the tag is the Linux leg's, above; this job publishes on its own, as the Windows job does.
+    # identity. The tier at the tag is the Linux leg's, above; this job publishes on its own, as the Windows job does. It
+    # runs in the signing environment, which only release tags and release branches may run in, as every job that holds
+    # a secret does.
+    environment: signing
     steps:
       - uses: actions/checkout@v7
 
@@ -566,6 +588,8 @@ jobs:
     name: The Reply plugin's package
     needs: version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # Once per release, not once per platform: the package is JavaScript, the same on every machine. Archived from the
     # tag's own checkout, whose line endings .gitattributes fixes, so the archive unpacks to the content digest of the
     # package at the tag; the release's pull request ran the test that holds the script to that digest on this tree, on every
@@ -589,6 +613,8 @@ jobs:
     name: The UI's package
     needs: version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # Once per release, like the plugin's package, and built here rather than taken from CI: CI's zip carries the -dev
     # version and is kept fourteen days, and `jason status` compares the default UI's version with the runtime's. The
     # page's checks and tests run on the tag's tree before it is packaged, as the runtime's do before it is archived.
@@ -629,23 +655,35 @@ jobs:
           path: ui/artifacts/jason-ui.zip
           if-no-files-found: error
 
+
   release:
     name: Assemble and publish
     needs: [version, build, macos, windows, plugin, ui]
     runs-on: ubuntu-latest
-    # The only job that holds the publication token, which reaches the public repository and nothing else. It builds
-    # and runs nothing that was built, so a test on a matrix runner cannot publish anything, and nothing is published
-    # when a platform's job or the plugin's job failed. It writes nothing here but a dry run's artifact: the draft release,
-    # the branch and the pull request are all in reply-team/jason-ai. Under a dry run it holds this run's own read-only
-    # token in place of the publication token: the job's token and the public checkout's are this run's own, which
-    # reads reply-team/jason-ai because that repository is public and can write nothing there, so a step that forgot
-    # its condition still could not publish.
+    # The only job that may write to this repository, and what it writes is the release. It builds and runs nothing
+    # that was built, so a test on a matrix runner cannot publish anything, and nothing is published when a platform's
+    # job or a package's job failed: the macOS and Windows jobs verified their archived signatures before this job
+    # starts. It writes with this run's own token, handed to the one step that publishes, and only outside a dry run in
+    # reply-team/jason-ai; anywhere else it assembles the release and says that it publishes nothing there. No action
+    # runs here but the checkout and the artifacts' download and upload: an action is handed the token whatever it is
+    # for, so any other would publish as surely as that step does, and would hold to the same two conditions. It runs in
+    # the signing environment, which only release tags and release branches may run in.
+    environment: signing
     permissions:
-      contents: read
-    env:
-      GH_TOKEN: ${{ inputs.dry_run && github.token || secrets.PUBLISH_TOKEN }}
+      contents: write
+    # One release job publishes at a time, across every run of this workflow: it reads which release is the latest and
+    # then publishes, and two doing that at once would read the same latest and both claim it. A run waiting here never
+    # cancels the one publishing. GitHub keeps one run waiting in a group, so a third that arrives meanwhile cancels the
+    # waiting one, and that run is re-run once the others have published.
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
     steps:
+      # The checkout leaves no token in git's config: a step after it could push with this job's write. Nothing here
+      # needs git's credentials; gh takes its token from GH_TOKEN, on the one step that is handed it.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v7
         with:
@@ -661,13 +699,13 @@ jobs:
           # The three fragments become manifest.json — what a running Jason reads to learn this release exists —
           # and checksums.txt, which lists the plugin's and the UI's packages after the archives; the manifest names the
           # plugin's under its plugins. A platform or a package missing from the download, or an archive that no
-          # longer hashes to what its fragment says, stops the release here. The notes are read where the release is
-          # published, which is the public repository whichever repository built it. Every release from 0.20.0 names
+          # longer hashes to what its fragment says, stops the release here. The notes are read at the product's
+          # address, which leads to the release's page in reply-team/jason-ai. Every release from 0.20.0 names
           # 0.19.0 as the oldest version that updates to it in one apply: 0.19.0 is the first applier that loads what it
           # needs and hands over to the new executable, so an older build goes through it first. The floor moves only
           # when an applier change raises it. The plugin's entry is the tag's digest list, whose last line is the package
           # this release publishes, so nothing is built or hashed here to say which package that is.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-ui.zip -ReleaseNotesUrl "https://jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-ui.zip -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -695,81 +733,80 @@ jobs:
           $notes = if ($own) { $notes.Replace('{{notes}}', $own) } else { [regex]::Replace($notes, '\{\{notes\}\}\n+', '') }
           Set-Content artifacts/release/notes.md -Value $notes -NoNewline
 
-      - name: Check out the public repository
-        uses: actions/checkout@v7
-        with:
-          repository: reply-team/jason-ai
-          path: public
-          token: ${{ inputs.dry_run && github.token || secrets.PUBLISH_TOKEN }}
-
-      - name: Make it what this release publishes
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          # The public tree becomes the open set at this tag, LICENSE's MIT block, VERSION and the public repository's
-          # own files - a function of the tag, whatever its main held before. Staged and not committed: the button
-          # stops at the draft, and only a tag commits it, in the pull request's step.
-          ./.github/scripts/Publish-OpenSet.ps1 -Source . -Target public -Version $env:VERSION
-          git -C public add -A
-          if ($LASTEXITCODE -ne 0) { throw "git add exited with $LASTEXITCODE" }
-
-      - name: Write the pull request's body
-        id: body
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          # Printed on every run, the button's included, so that a dry run shows the pull request a tag would open.
-          ./.github/scripts/Write-PublishBody.ps1 -Target public -Version $env:VERSION -Body artifacts/publish/body.md
-          Get-Content artifacts/publish/body.md
-
       # What a dry run hands back to read: the archives, the packages, the manifest, the checksums and the notes as the
-      # draft would have carried them, and the pull request's body a tag would have opened. Kept for a week: the
-      # archives and packages are this run's other artifacts as well.
+      # release would have carried them. Kept for a week: the archives and packages are this run's other artifacts as
+      # well.
       - name: Keep what a dry run assembled
         if: ${{ inputs.dry_run }}
         uses: actions/upload-artifact@v7
         with:
           name: dry-run-v${{ needs.version.outputs.version }}
-          path: |
-            artifacts/release
-            artifacts/publish/body.md
+          path: artifacts/release
           if-no-files-found: error
           retention-days: 7
 
-      - name: Create the draft release
-        if: ${{ !inputs.dry_run }}
+      - name: Say that nothing is published here
+        if: ${{ github.repository != 'reply-team/jason-ai' }}
+        shell: pwsh
+        run: |
+          # A run in any other repository that holds this workflow and the signing secrets gets this far and assembles
+          # the release; the step that publishes and the tap's job hold to reply-team/jason-ai, so this line is all such a
+          # run says of it.
+          Write-Host "::notice title=Not published::This run is in $env:GITHUB_REPOSITORY, and a release is published from reply-team/jason-ai alone: nothing is published here and the tap is not asked."
+
+      - name: Publish the release
+        if: ${{ !inputs.dry_run && github.repository == 'reply-team/jason-ai' }}
         shell: pwsh
         env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          # The release is created in the public repository, as a draft, before the pull request that announces it:
-          # merging that pull request is what tags the release there and publishes it. A tag and the button make the
-          # same draft. Never --latest here: which release is latest is decided when one is published, by the public
-          # repository's own workflow.
+          # A tag publishes its release at once, on the tag that was pushed: --verify-tag stops the step rather than let
+          # gh make a tag of its own. gh uploads the assets to a draft and publishes it once every asset is there, so a
+          # failed upload leaves no published release behind. The button makes a draft and nothing else: no tag exists,
+          # so the draft names the commit this run built. The draft is for reading and is deleted afterwards; a release
+          # is published only by its tag, the merge of the release pull request, never by publishing a draft.
           #
           # [string[]] and not a bare assignment: PowerShell unrolls a one-element array assigned from an `if`
           # into a scalar string, and `+=` on a string concatenates rather than appends.
-          $repository = 'reply-team/jason-ai'
-          [string[]] $how = '--draft', '--target', 'main'
+          $repository = $env:GITHUB_REPOSITORY
+          [string[]] $how = if ($env:EVENT -eq 'push') { '--verify-tag' } else { '--draft', '--target', $env:GITHUB_SHA }
 
-          # A version carrying a pre-release part is published as one, so that it never becomes the latest release:
-          # `latest` is what the default update feed advertises and what both install one-liners download. The rule
-          # is the version's, not the event's: a candidate is a candidate however it arrived.
-          if ($env:VERSION -clike '*-*') { $how += '--prerelease' }
+          # What gh answers about one release, or $null when there is no such release. gh says "release not found" for
+          # that, and only that is taken as none: any other failure - a refused token, a server that did not answer -
+          # stops the step before anything is deleted or created, so that the run is re-run. Taken as none, a failed
+          # read of the latest would let a fix to an older line take latest from a newer release.
+          function Read-Release([string[]] $asked) {
+            $said = @(gh release view @asked 2>&1)
+            $code = $LASTEXITCODE
+            $errors = (@($said | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }) -join ' ').Trim()
+            $answer = (@($said | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }) -join "`n").Trim()
+            if ($code -eq 0) { return $answer }
+            if ($errors -ceq 'release not found') { return $null }
+            throw "gh release view $($asked -join ' ') exited with ${code}: $errors"
+          }
+
+          # A version carrying a pre-release part is a pre-release, so that it never becomes the latest release: `latest`
+          # is what the default update feed advertises and what both install one-liners download. The rule is the
+          # version's, not the event's: a candidate is a candidate however it arrived. A tag's release otherwise becomes
+          # the latest unless a newer one already is - a fix to an older line published after a newer release must not
+          # take latest from it. A draft is never made the latest; that is decided when a release is published.
+          if ($env:VERSION -clike '*-*') { $how += '--prerelease' } elseif ($env:EVENT -eq 'push') {
+            $latest = Read-Release '-R', $repository, '--json', 'tagName', '--jq', '.tagName'
+            if ($latest -and [semver]$latest.Substring(1) -gt [semver]$env:VERSION) {
+              Write-Host "$latest is newer and stays the latest release; v$env:VERSION is published beside it."
+              $how += '--latest=false'
+            } else {
+              $how += '--latest'
+            }
+          }
 
           # A draft this version left behind - an earlier button's draft of the same number, inspected and pressed
-          # again - holds the name that is about to be created, so it is deleted first, and only if it really is
-          # a draft. A published release of this version is somebody's installed software: the job stops before it
-          # creates anything. No --cleanup-tag; a draft has no tag to clean up.
-          $existing = $null
-          try {
-            $existing = gh release view "v$env:VERSION" -R $repository --json isDraft --jq '.isDraft' 2>$null
-            if ($LASTEXITCODE -ne 0) { $existing = $null }
-          } catch {
-            $existing = $null
-          }
+          # again, or kept until the tag - holds the name that is about to be created, so it is deleted first, and only
+          # if it really is a draft. A published release of this version is somebody's installed software: the job stops
+          # before it creates anything. No --cleanup-tag; a draft has no tag to clean up.
+          $existing = Read-Release "v$env:VERSION", '-R', $repository, '--json', 'isDraft', '--jq', '.isDraft'
           if ($null -ne $existing -and $existing -ne 'true') {
             throw "v$env:VERSION is already published in $repository. A published release is somebody's installed software, and this job replaces only a draft."
           }
@@ -785,47 +822,93 @@ jobs:
           $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-ui.zip')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
+          if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }
 
-      - name: Open the pull request
-        if: github.event_name == 'push'
+  # Asks the tap to bump its formula once a tag's release is published: after the release job succeeded, never after it
+  # failed or was skipped. A 2xx proves only that a bump run was queued; the bump checks, tests and pushes in the tap, and
+  # changes nothing when the address still answers the previous release or when this one is a candidate or an older
+  # line's fix, since it reads the latest release. The tap's six-hour schedule catches whatever this misses. A job of its
+  # own, so that "Re-run failed jobs" after a refusal runs this job alone, with the secret as it is then, and never the
+  # publication again, which refuses a release that is already published. Once a run can no longer be re-run, the tap's
+  # own six-hour schedule and its bump button are what move it. Its token is a fine-grained one with Actions read and
+  # write on reply-team/homebrew-tap alone, kept in the signing environment, which only release tags and release
+  # branches may run in.
+  tap:
+    name: Tell the tap
+    needs: release
+    if: ${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: signing
+    # Nothing of this repository's: the job checks nothing out, and its one token is the tap's.
+    permissions: {}
+    steps:
+      - name: Dispatch the tap's bump
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
-          LABEL: ${{ steps.body.outputs.label }}
+          TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
         run: |
-          # Only a tag opens the pull request; the button makes its draft at most and leaves the public repository's
-          # branches alone. The commit holds what the projection staged, and the branch is this version's alone,
-          # replaced whole when the job runs again.
-          $repository = 'reply-team/jason-ai'
-          $branch = "release/v$env:VERSION"
+          if (-not $env:TOKEN) {
+            Write-Host '::error::HOMEBREW_TAP_DISPATCH_TOKEN is not set: the tap moves at its six-hour schedule instead. Store a fine-grained token with Actions read and write on reply-team/homebrew-tap in the signing environment, then re-run this job.'
+            exit 1
+          }
+          $tail = 'The release is published; the tap moves at its six-hour schedule until this job runs green.'
 
-          git -C public diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "The public repository already holds v$env:VERSION's tree: there is nothing to commit, and no pull request is opened."
+          # The bump takes no input: it reads the latest release's manifest itself, so the ref is all there is to send.
+          # -SkipHttpErrorCheck hands a refusal back as a response, so its status is read below rather than thrown; a
+          # request that gets no answer at all still throws.
+          try {
+            $response = Invoke-WebRequest -Method Post -Uri https://api.github.com/repos/reply-team/homebrew-tap/actions/workflows/bump.yml/dispatches -Headers @{ Authorization = "Bearer $env:TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -ContentType application/json -Body '{"ref":"main"}' -SkipHttpErrorCheck
+          } catch {
+            Write-Host "::error::GitHub could not be reached: $("$($_.Exception.Message)".TrimEnd('.')). $tail"
+            exit 1
+          }
+          $status = [int] $response.StatusCode
+
+          # A token that expires says when in a header of the response, as GitHub sent it when this was written, for
+          # example "2026-11-25 13:50:00 UTC"; one without an expiry sends no such header. A warning never turns the job
+          # red.
+          $expiration = @($response.Headers['github-authentication-token-expiration'])[0]
+          if ($expiration) {
+            $at = [DateTimeOffset]::MinValue
+            $text = $expiration.Trim() -replace ' UTC$', ' +00:00'
+            if ([DateTimeOffset]::TryParseExact($text, 'yyyy-MM-dd HH:mm:ss zzz', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref] $at)) {
+              $left = $at - [DateTimeOffset]::UtcNow
+              $date = "$($at.UtcDateTime.ToString('yyyy-MM-dd HH:mm')) UTC"
+              if ($left -le [TimeSpan]::Zero) {
+                Write-Host "::warning title=Tap token::HOMEBREW_TAP_DISPATCH_TOKEN expired ${date}: make a new one and store it in the signing environment."
+              } elseif ($left -lt [TimeSpan]::FromDays(14)) {
+                $days = [int] [math]::Ceiling($left.TotalDays)
+                $unit = if ($days -eq 1) { 'day' } else { 'days' }
+                Write-Host "::warning title=Tap token::HOMEBREW_TAP_DISPATCH_TOKEN expires $date, in $days ${unit}: make a new one and store it in the signing environment before then."
+              }
+            } else {
+              Write-Host "::warning title=Tap token::GitHub says HOMEBREW_TAP_DISPATCH_TOKEN expires '$expiration', which is not a date this job reads: look at the token's expiry yourself."
+            }
+          }
+
+          # GitHub documents the answer as 200 with the run it queued, whose address is printed; an answer without one is
+          # a bump queued all the same.
+          if ($status -ge 200 -and $status -lt 300) {
+            $queued = $null
+            try { $queued = "$(($response.Content | ConvertFrom-Json).html_url)" } catch { $queued = $null }
+            if ($queued) {
+              Write-Host "The tap's bump is queued at $queued; it reads the latest release itself."
+            } else {
+              Write-Host "The tap's bump is queued; it reads the latest release itself."
+            }
             exit 0
           }
 
-          git -C public -c user.name='Artem Kosolap' -c user.email='art@reply.io' commit --quiet -m "Jason $env:VERSION"
-          if ($LASTEXITCODE -ne 0) { throw "git commit exited with $LASTEXITCODE" }
-          git -C public push --force origin "HEAD:refs/heads/$branch"
-          if ($LASTEXITCODE -ne 0) { throw "git push exited with $LASTEXITCODE" }
-
-          # One release's pull request at a time. Merging one tags its version, so two open at once would be tagged
-          # in whatever order a person merged them. Asked after the draft and the push, so running the job again once
-          # the other is merged or closed has only this step left to do.
-          $open = @(gh pr list -R $repository --state open --json number,headRefName | ConvertFrom-Json)
-          if ($LASTEXITCODE -ne 0) { throw "gh pr list exited with $LASTEXITCODE" }
-          $other = @($open | Where-Object { $_.headRefName -clike 'release/v*' -and $_.headRefName -cne $branch })
-          if ($other.Count -gt 0) { throw "$($other[0].headRefName)'s pull request is open; merge or close it, then re-run this job." }
-
-          $mine = @($open | Where-Object { $_.headRefName -ceq $branch })
-          if ($mine.Count -gt 0) {
-            gh pr edit $mine[0].number -R $repository --body-file artifacts/publish/body.md
-            if ($LASTEXITCODE -ne 0) { throw "gh pr edit exited with $LASTEXITCODE" }
-            exit 0
+          switch ($status) {
+            401 { $why = 'HOMEBREW_TAP_DISPATCH_TOKEN was refused (expired or revoked): make a new one, store it in the signing environment, re-run this job.' }
+            403 { $why = 'HOMEBREW_TAP_DISPATCH_TOKEN may not dispatch there: it needs Actions read and write on reply-team/homebrew-tap, and the organisation may still have to approve it.' }
+            404 { $why = "HOMEBREW_TAP_DISPATCH_TOKEN does not reach reply-team/homebrew-tap's bump.yml: the repository is not selected for it, or the workflow moved." }
+            default {
+              $message = $null
+              try { $message = "$(($response.Content | ConvertFrom-Json).message)".TrimEnd('.') } catch { $message = $null }
+              $why = if ($message) { "GitHub answered ${status}: $message." } else { "GitHub answered $status." }
+            }
           }
-
-          [string[]] $label = @()
-          if ($env:LABEL -eq 'contracts') { $label = '--label', 'contracts' }
-          gh pr create -R $repository --base main --head $branch --title "Jason $env:VERSION" --body-file artifacts/publish/body.md @label
-          if ($LASTEXITCODE -ne 0) { throw "gh pr create exited with $LASTEXITCODE" }
+          Write-Host "::error::$why $tail"
+          exit 1

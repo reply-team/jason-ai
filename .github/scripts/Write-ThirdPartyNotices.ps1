@@ -12,7 +12,7 @@ closure. The file this writes holds, in order:
 3. the text of each licence a package is used under, once, with the packages that use it.
 
 Where it reads:
-- the closure from runtime/src/Jason.App/obj/project.assets.json, so the solution is restored first;
+- the closure from dotnet/src/Jason.App/obj/project.assets.json, so the solution is restored first;
 - each package's licence, copyright and source from its .nuspec in the NuGet cache that restore used;
 - the runtime packs at the version the SDK that global.json selects publishes with, for every platform a release ships.
   A pack not yet in the cache is restored into it by a project made for that in a temporary folder;
@@ -57,9 +57,9 @@ function Get-LicenceIds([string] $Expression) {
 }
 
 # The closure, from the restore's own record.
-$assetsPath = Join-Path $Repository 'runtime/src/Jason.App/obj/project.assets.json'
+$assetsPath = Join-Path $Repository 'dotnet/src/Jason.App/obj/project.assets.json'
 if (-not (Test-Path -LiteralPath $assetsPath)) {
-    throw "$assetsPath does not exist: restore the solution first (dotnet restore runtime/Jason.slnx)."
+    throw "$assetsPath does not exist: restore the solution first (dotnet restore dotnet/Jason.slnx)."
 }
 $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json -AsHashtable
 $targetNames = @($assets.targets.Keys | Where-Object { $_ -notmatch '/' })

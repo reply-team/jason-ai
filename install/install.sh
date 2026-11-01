@@ -7,8 +7,8 @@
 # Either way it says where Jason will keep what it learns about your business — Jason in your home directory, unless
 # Harness:Root in the settings names another folder — and makes no folder for it.
 #
-#   curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
-#   curl -fsSL https://jasonharness.ai/releases/download/v0.24.0/install.sh | sh -s -- --version 0.24.0 --no-modify-path
+#   curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
+#   curl -fsSL https://get.jasonharness.ai/releases/download/v0.24.0/install.sh | sh -s -- --version 0.24.0 --no-modify-path
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, manifest.json and checksums.txt — which is how CI runs it against the archives it has just
@@ -18,7 +18,7 @@ set -eu
 
 # The product's own address, in front of the releases: it redirects every path under /releases/ to the same path in
 # the public repository's releases on GitHub.
-RELEASES_URL="https://jasonharness.ai/releases"
+RELEASES_URL="https://get.jasonharness.ai/releases"
 # The licence is a page of the repository, at the release's tag; the downloads are a release's assets. Each has a base
 # of its own, so that the downloads can move without the licence page moving with them.
 LICENCE_BASE="https://github.com/reply-team/jason-ai/blob"
@@ -177,11 +177,10 @@ missing_notice() {
     return 1
 }
 
-# True when a version is 0.6.0 or later, its pre-release part ignored: LICENSE-RUNTIME.md first exists at v0.6.0, and an
-# earlier release carried a notice of its own, which is not the Jason Runtime Licence. Field by field, since sort -V is
-# not on macOS; a field that is not a number is no such version.
-licensed() {
-    CORE="${1%%[-+]*}"
+# True when the version in $2 is 0.$1.0 or later, its pre-release part ignored. Field by field, since sort -V is not on
+# macOS; a field that is not a number is no such version.
+from_minor() {
+    CORE="${2%%[-+]*}"
     MAJOR="$(echo "$CORE" | cut -d. -f1)"
     MINOR="$(echo "$CORE" | cut -d. -f2)"
     for FIELD in "$MAJOR" "$MINOR"; do
@@ -189,7 +188,19 @@ licensed() {
             ''|*[!0-9]*) return 1 ;;
         esac
     done
-    [ "$MAJOR" -gt 0 ] || [ "$MINOR" -ge 6 ]
+    [ "$MAJOR" -gt 0 ] || [ "$MINOR" -ge "$1" ]
+}
+
+# True when a version is 0.6.0 or later: its archive carries the licence and the notices, and its tag a licence file.
+# An earlier release carried a notice of its own, which is neither.
+licensed() {
+    from_minor 6 "$1"
+}
+
+# True when a version is 0.24.0 or later, published under the MIT licence. From 0.6.0 to 0.23.x a release was
+# published under the Jason Runtime Licence, LICENSE-RUNTIME.md, which those tags keep.
+mit() {
+    from_minor 24 "$1"
 }
 
 # --- the version, and whether it is already here ------------------------------------------------------------
@@ -341,7 +352,9 @@ fi
 # The last two lines of a successful run, and never a question: what is installed and the terms it is installed
 # under, then the one command that says what this installation still needs. Each text is in single quotes where it
 # carries backticks, so they are text and not a command to substitute.
-if licensed "$LATEST"; then
-    echo "Jason $LATEST is licensed under the Jason Runtime Licence: $LICENCE_BASE/v$LATEST/LICENSE-RUNTIME.md"
+if mit "$LATEST"; then
+    echo "Jason $LATEST is licensed under the MIT licence: $LICENCE_BASE/v$LATEST/LICENSE"
+elif licensed "$LATEST"; then
+    echo "Jason $LATEST was published under the Jason Runtime Licence: $LICENCE_BASE/v$LATEST/LICENSE-RUNTIME.md"
 fi
 echo 'Next, run `jason status`: it says what this installation still needs, and the command for each.'

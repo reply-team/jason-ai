@@ -20,7 +20,7 @@
 # update job proves on every run that builds a platform, the version pull request aside; an update performed by an
 # older build can stop at started, and applying it again finishes it. The channel's newest SDK is at or past the one
 # global.json names, which its latestFeature roll forward accepts. A newer SDK of the channel can turn a run red with no
-# change in the tree, since runtime/Directory.Build.props treats warnings as errors under AnalysisLevel latest; the step
+# change in the tree, since dotnet/Directory.Build.props treats warnings as errors under AnalysisLevel latest; the step
 # "Show the SDK the tree resolves" is where to read which SDK it was.
 name: Set up .NET
 description: Install one exact .NET SDK from Microsoft's CDN, say which SDK it installed and which SDK the tree resolves.

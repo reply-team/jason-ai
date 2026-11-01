@@ -36,23 +36,23 @@ The reasoning behind this, and who Jason is for and who it is not for, is in [do
 > and then once a day, at the default settings, a single `GET` that identifies only the runtime's version, including
 > its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
 > scripts, `jason update` and `jason ui install`, and `jason skills install` and `update`. The check, the install
-> scripts, `jason update` and `jason ui install` go to `jasonharness.ai`, an address Reply.io operates, which
-> redirects them to this repository's releases; the skills come from this repository directly. What that address keeps, and for how long, is
-> section 7.2 of the [runtime's licence](LICENSE-RUNTIME.md). Nothing else, and no telemetry: the file
-> `jason doctor` writes stays on your machine unless you send it.
+> scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which
+> redirects them to this repository's releases; the skills come from this repository directly. What that address keeps,
+> and for how long, is in [docs/responsible-use.md](docs/responsible-use.md#update-check-and-downloads). Nothing else,
+> and no telemetry: the file `jason doctor` writes stays on your machine unless you send it.
 
 ## Installing
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
+curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
+irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](LICENSE-RUNTIME.md). If you do not
-accept it, do not install Jason.
+Jason is released under the MIT licence: [LICENSE](LICENSE). What it sends off your machine, and what stays your
+responsibility when it reaches people, is in [docs/responsible-use.md](docs/responsible-use.md).
 
 A one-liner installs the executable. [docs/INSTALL.md](docs/INSTALL.md) is the rest, in order — teaching it its
 skills, without which every role it launches runs untaught, asking whether it can work, and starting it — for a
@@ -84,13 +84,12 @@ directory, the role skills), and each act the instructions mark "Ask first", off
 one as a choice. Offer me the other way too: switching this session to a mode that asks me before
 every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.
 
-Jason is downloaded from its releases at <https://jasonharness.ai/releases/>, which redirect to
+Jason is downloaded from its releases at <https://get.jasonharness.ai/releases/>, which redirect to
 <https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package
 section 2 names for this platform.
 
-By installing Jason you accept the Jason Runtime Licence:
-<https://github.com/reply-team/jason-ai/blob/main/LICENSE-RUNTIME.md>. If you do not accept it, do
-not install Jason.
+Jason is released under the MIT licence:
+<https://github.com/reply-team/jason-ai/blob/main/LICENSE>.
 
 At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran
 and what it changed. If it can, ask me once whether I want a synthetic walk to meet Jason first or
@@ -185,8 +184,9 @@ plugin author needs is here:
 | `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
 | `VERSION` | The runtime version this tree describes |
 
-Each release attaches the runtime for every platform, built at the release's version, and this tree is published from
-the same release.
+The runtime's source is here too, under `dotnet/`: the runtime, its CLI and its plugin host in C#, with their tests.
+[DEVELOPMENT.md](DEVELOPMENT.md) says how to build and run it from a checkout. Each release attaches the runtime for
+every platform, built from this tree at the release's version.
 
 ## The installation
 
@@ -307,13 +307,19 @@ failure text and receipts notification channels reported, entries people and age
 names actors gave, and the reasons they typed; it prints a warning to read the file before you share it. The
 runtime's own report (`system_info`) is carried in part: channel detail, presence detail outside the
 runtime's own words, skill problem text and the release-notes URL are withheld, and the bundle says so.
-Before anything is written, your home directory becomes `~`, a data directory outside it `<data>`, a
-different directory the runtime keeps its data in a mark of its own, and this account's user, machine and
-domain names and its Windows account identifiers marks of their own.
+Before anything is written, your home directory becomes `~`, a data directory other than `~/.jason` `<data>`
+wherever it stands, a different directory the runtime keeps its data in a mark of its own, the harness root
+`<harness_root>` wherever it stands, the folder the executable is in outside your home directory `<install_dir>`
+(a package manager's prefix, such as `/opt/homebrew`, travels), and this account's user, machine and domain names and
+its Windows account identifiers marks of their own; a plugin, a role or a skill pack Jason does not ship is named by an
+alias, `<plugin-1>`, `<role-1>` or `<skill-pack-1>`, one per name, never by its own; and a skill source given with
+`--source` other than this repository, with the ref it was taken at unless that is a release tag, is `<skill-source>`.
 
 The file is written under the data directory, in `logs/doctor`, and the verb prints its path and the SHA-256
 of its bytes. **It is yours to share, and nothing sends it anywhere**: it never reaches the network, and the
-only requests it makes are to this installation's own runtime, on this machine. Bundles are not rolled — they
+only requests it makes are to this installation's own runtime, on this machine. After a plain run it prints where a
+problem goes — the issue form's address, filled in — and opening that issue is yours to do; a file made with
+`--include-journal` goes to the support address under [Getting help](#getting-help), never to an issue. Bundles are not rolled — they
 stay until you delete them or `jason uninstall --purge-data` removes what Jason keeps in the data directory.
 Like `status`, both verbs exit 0 or 1 and never 3: `logs` never asks the runtime, and a runtime that does not
 answer `doctor` is written into the bundle rather than given as a reason there is none.
@@ -508,17 +514,23 @@ jason report list --campaign <campaign-id> --human
 
 ## Getting help
 
-Jason is in alpha, and this repository takes no issues yet. If something does not work, write to
-**support@reply.io**: what you ran, what it answered, and — if you choose to — the file `jason doctor` wrote. Read
-that file before you send it; [When something is wrong](#when-something-is-wrong) says what it holds and what only
-`--include-journal` adds. A vulnerability goes the way [SECURITY.md](SECURITY.md) says.
+Jason is in alpha. Where to write ([CONTRIBUTING.md](CONTRIBUTING.md) says the same):
+
+- **A problem** — something that does not work: an
+  [issue](https://github.com/reply-team/jason-ai/issues/new?template=problem.yml) with the file `jason doctor` wrote
+  attached. That file is made to be shared, and `jason doctor` prints the form's address with the version and the
+  platform filled in. Read the file first; [When something is wrong](#when-something-is-wrong) says what it holds.
+- **Help with your own data**, or a file made with `jason doctor --include-journal`: **support@reply.io**, never an
+  issue — such a file carries what the journal entries say, and an issue is public.
+- **A question or an idea**: a [discussion](https://github.com/reply-team/jason-ai/discussions).
+- **A vulnerability**: the way [SECURITY.md](SECURITY.md) says, never anywhere public.
 
 ## License
 
-Everything in this repository is MIT ([LICENSE](LICENSE)). The runtime binaries attached to each release are
-licensed separately, under the Jason Runtime Licence ([LICENSE-RUNTIME.md](LICENSE-RUNTIME.md)): every archive
-carries the licence and the third-party notices, and an install keeps both beside the executable as
-`jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.
+Everything in this repository is MIT ([LICENSE](LICENSE)), the runtime included, and so is the executable each
+release builds from it: every archive carries the licence and the third-party notices, and an install keeps both
+beside the executable as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`. ReplyApp Inc. releases this repository,
+its history included, under the MIT licence from 0.24.0, and the licence files in older trees are superseded.
 
-The names "Jason", "Jason AI", "Reply" and "Reply.io", and their logos, are trademarks of ReplyApp Inc. Neither
-licence grants a right to use them; [TRADEMARKS.md](TRADEMARKS.md) says what you may do with them without asking.
+The names "Jason", "Jason AI", "Reply" and "Reply.io", and their logos, are trademarks of ReplyApp Inc. The licence
+grants no right to use them; [TRADEMARKS.md](TRADEMARKS.md) says what you may do with them without asking.

@@ -1,0 +1,88 @@
+# Every pull request is read for what a public repository never carries: a tracker key, an Atlassian address, an
+# attribution trailer, a session link, or the name of another repository of ours. The lines the change adds are read,
+# and so are the pull request's title and body, again whenever they are edited. The patterns are the ones the tests
+# hold every file of the tree to, so a change that passes here leaves a tree that passes there.
+#
+# A pull request from a fork runs this too, with the fork's own copy of this file: what it reads is untrusted, so the
+# job holds a token that can only read, is handed no secret, and keeps no credential in the checkout; the title and the
+# body reach the script through its environment, as text, and are never written into it.
+name: Hygiene
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+# A newer edit or push makes an older reading of the same pull request moot.
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    name: Nothing internal in the change
+    runs-on: ubuntu-latest
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
+    steps:
+      # The pull request's merge with its base branch, two commits deep: the merge and its first parent, the base
+      # branch's head, so the merge's change against that parent is exactly what the pull request brings.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Nothing internal in the change
+        shell: pwsh
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Each pattern is written so that it does not match itself, so a change to this file is read like any other.
+          # A key of the tracker stands anywhere, after a word, a hyphen or an underscore too; an architecture register's
+          # id, three capitals and a hyphen before the key, is not one.
+          $patterns = [ordered]@{
+            'a tracker key'                  = '(?<![A-Z]{3}-)REPL[Y]-[0-9]+'
+            'an Atlassian address'           = '(?i)atlassia[n]\.net'
+            'an attribution trailer'         = '(?i)Co-Authored-B[y]:|Claude-Sessio[n]:|Generated wit[h] \[Claude'
+            'a session link'                 = '(?i)claude\.a[i]/code'
+            'another repository of ours'     = 'reply-team/jaso[n]-(?!ai(?![\w-]))[\w-]+'
+            'the private repository by name' = '(?<![\w/-])jason-interna[l](?![\w-])'
+          }
+          $found = [Collections.Generic.List[string]]::new()
+          function Read-Text([string] $where, [string] $text) {
+            foreach ($name in $patterns.Keys) {
+              if ([regex]::IsMatch($text, $patterns[$name])) { $found.Add("${where}: $name") }
+            }
+          }
+
+          Read-Text 'the title' $env:TITLE
+          Read-Text 'the body' $env:BODY
+
+          # The added lines, each with its file and its line in the new text. --unified=0 leaves no context lines, so
+          # every line of a hunk is an addition or a removal, and a file's header ends at its first hunk. The attributes
+          # are the base's: a .gitattributes the change itself adds could otherwise call every file binary, and git would
+          # then show no added line of any of them.
+          $file = $null
+          $line = 0
+          $header = $false
+          foreach ($row in (git --attr-source='HEAD^1' diff --unified=0 --no-color --no-ext-diff 'HEAD^1' HEAD)) {
+            if ($row.StartsWith('diff --git ')) { $header = $true; $file = $null; continue }
+            if ($header -and $row.StartsWith('+++ ')) { $file = if ($row -eq '+++ /dev/null') { $null } else { $row.Substring(6) }; continue }
+            if ($row -cmatch '^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@') { $header = $false; $line = [int]$Matches[1]; continue }
+            if ($header) { continue }
+            if ($row.StartsWith('+')) {
+              Read-Text "${file}:$line" $row.Substring(1)
+              $line++
+            }
+          }
+          if ($LASTEXITCODE -ne 0) { throw "git diff exited with $LASTEXITCODE" }
+
+          if ($found.Count -gt 0) {
+            $found | ForEach-Object { Write-Host "::error::$_" }
+            throw "The change carries $($found.Count) thing(s) that point into the work that produced it."
+          }
+          Write-Host 'Nothing internal in the change.'

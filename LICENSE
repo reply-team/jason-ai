@@ -1,8 +1,3 @@
-Scope. This licence covers this repository except the runtime/ directory,
-whose source is proprietary to ReplyApp Inc. and is licensed to no one by this
-file. The runtime binaries attached to each release are licensed under the
-Jason Runtime Licence (see LICENSE-RUNTIME.md), which every archive carries.
-
 MIT License
 
 Copyright (c) 2026 ReplyApp Inc.

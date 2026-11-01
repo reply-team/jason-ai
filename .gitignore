@@ -3,8 +3,6 @@ bin/
 obj/
 artifacts/
 publish/
-# ...but not what a release publishes to the public repository.
-!.github/publish/
 *.binlog
 
 # Test and coverage results
@@ -27,6 +25,7 @@ Thumbs.db
 # Local environment
 *.local.json
 .env
+node_modules/
 
 # SQLite files produced by local runs and design-time tooling
 *.db
@@ -34,7 +33,6 @@ Thumbs.db
 *.db-shm
 
 # The UI's build and its tooling's output
-ui/node_modules/
 ui/dist/
 ui/artifacts/
 ui/test-results/

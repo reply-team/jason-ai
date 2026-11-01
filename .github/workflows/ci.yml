@@ -8,7 +8,7 @@ name: CI
 # - a pull request into a release branch runs the Linux set when it is ready as well, which is all a release branch's
 #   ruleset requires, and reports nothing as skipped; its linux-x64 tests the critical tier there too, under its own
 #   name once the pull request is ready. The whole suite runs once per release, on the release's pull request into main,
-#   and a change under runtime/ ran it locally before it was marked ready. A pull request into any other branch but main
+#   and a change under dotnet/ ran it locally before it was marked ready. A pull request into any other branch but main
 #   runs the Linux set as well, and tests the whole suite;
 # - the release's pull request, from a release branch into main, runs every check, macOS included, when it is marked
 #   ready for review and on every push after that; a push after that which changes nothing but documentation since the
@@ -22,7 +22,8 @@ name: CI
 # - every ready run of a pull request into main or into a release branch keeps a record of the tree it tested and of
 #   the set it ran, whichever set that is, but for a push to the release's pull request that changes documentation
 #   only, and so does a push to main that runs every check; a draft's run keeps none. A record is named by the tree it
-#   tested, so a later run finds it by that tree's id, whatever ref the run that kept it ran on;
+#   tested, so a later run finds it by that tree's id, whatever ref the run that kept it ran on; only a run whose head
+#   is this repository's is believed, never a run of a fork's pull request;
 # - a push to main or to a release branch whose tree a run that passed recorded runs the version alone, and on main the
 #   rest report as skipped. Main passes over the record of a pull request into a release branch, whose test was the
 #   critical tier, and a run still in progress, cancelled or failed has recorded nothing;
@@ -102,14 +103,14 @@ jobs:
           # MSBuild's own answer — VersionPrefix and VersionSuffix from Directory.Build.props, a -dev version —
           # so a pull request is stamped with the number the tree already carries rather than with a second copy
           # kept here. Every job below but one is told this value; release.yml decides the same input from the tag.
-          $version = (dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -getProperty:Version).Trim()
+          $version = (dotnet msbuild dotnet/src/Jason.App/Jason.App.csproj -getProperty:Version).Trim()
           if ($LASTEXITCODE -ne 0 -or -not $version) { throw "MSBuild did not answer with a version." }
           Write-Host "version -> $version"
           "version=$version" >> $env:GITHUB_OUTPUT
 
           # And the version a release of this tree would carry: VersionPrefix alone, the number its tag would name.
           # The one job that is told it runs the whole suite under it.
-          $release = (dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -getProperty:VersionPrefix).Trim()
+          $release = (dotnet msbuild dotnet/src/Jason.App/Jason.App.csproj -getProperty:VersionPrefix).Trim()
           if ($LASTEXITCODE -ne 0 -or -not $release) { throw "MSBuild did not answer with a VersionPrefix." }
           Write-Host "release -> $release"
           "release=$release" >> $env:GITHUB_OUTPUT
@@ -158,7 +159,8 @@ jobs:
 
       # What an earlier run tested, asked only where the answer can let this run skip a leg: for a push to main or to a
       # release branch, the record of this very tree that the newest run to pass kept, on whatever ref it ran; for a push
-      # to the release's pull request once it is ready, the record its own last passing run of every check kept. Whatever
+      # to the release's pull request once it is ready, the record its own last passing run of every check kept. Either
+      # comes only from a run of this repository: a run from a fork is passed over, and said. Whatever
       # goes wrong here - an API error, no such run, a record that cannot be had - is an answer of nothing found, and on
       # nothing found the step after this skips nothing the branch requires.
       - id: earlier
@@ -197,16 +199,28 @@ jobs:
           # that runs every check, naming the set it ran.
           $named = 'tested-tree-*'
 
+          # A run whose head came from another repository ran that repository's own workflow, which could keep a record
+          # claiming any tree under any name: a fork's pull request runs here, and its branch may carry any name. Only a run
+          # of this repository is believed; any other is passed over, and said.
+          function Elsewhere([string] $id, $run) {
+            $from = "$($run.head_repository.full_name)"
+            if ($from -ne $env:REPOSITORY) { "run $id ran from $(if ($from) { $from } else { 'a repository that is gone' }), not from this repository" }
+          }
+
           # The newest of these runs that kept a record of the tree it tested for this pull request, downloaded. Only
           # runs that passed are asked about, so a record names a tree that set passed on.
           function Recorded($candidates, [string] $number) {
+            $passed = @()
             foreach ($run in @($candidates | Where-Object { $_ })) {
+              $other = Elsewhere "$($run.id)" $run
+              if ($other) { $passed += $other; continue }
               $kept = @((Api "repos/$env:REPOSITORY/actions/runs/$($run.id)/artifacts?per_page=100").artifacts | Where-Object { $_ -and -not $_.expired -and "$($_.name)" -clike $named })
               if ($kept.Count -eq 0) { continue }
               $read = Download "$($run.id)" "$($kept[0].name)"
               if ("$($read.record.pull_request)" -ne $number) { continue }
               return @{ file = $read.file; said = "run $($run.id) of pull request #$number tested tree $($read.record.tree)" }
             }
+            @{ file = ''; said = "no passing run of pull request #$number kept a record of its tree$(if ($passed.Count -gt 0) { " ($($passed -join '; '))" })" }
           }
 
           # The record of this run's tree that the newest run to pass kept, on any ref, downloaded: the artifacts named by
@@ -221,6 +235,8 @@ jobs:
             foreach ($artifact in $artifacts) {
               $id = "$($artifact.workflow_run.id)"
               $run = Api "repos/$env:REPOSITORY/actions/runs/$id"
+              $other = Elsewhere $id $run
+              if ($other) { $passed += $other; continue }
               if ($run.status -cne 'completed') { $passed += "run $id is $($run.status)"; continue }
               if ($run.conclusion -cne 'success') { $passed += "run $id concluded $($run.conclusion)"; continue }
               $read = Download $id "$($artifact.name)"
@@ -240,8 +256,7 @@ jobs:
                 $env:TARGET -ceq 'main' -and $env:BRANCH -clike 'release/*') {
               $branch = [uri]::EscapeDataString($env:BRANCH)
               $found = Recorded (Api "$($runs)?event=pull_request&branch=$branch&status=success&per_page=20").workflow_runs $env:PULL_REQUEST
-              if ($found) { $record = $found.file; $said = $found.said }
-              else { $said = "no passing run of pull request #$($env:PULL_REQUEST) kept a record of its tree" }
+              $record = $found.file; $said = $found.said
             } else {
               $said = 'nothing an earlier run tested changes what this run needs'
             }
@@ -263,7 +278,7 @@ jobs:
       # that builds anything needs, `build`, and a job its condition skips reports success to the checks the ruleset
       # requires. A leg is skipped only on what was found: nothing found, or a record that cannot be read, skips nothing
       # the branch requires. A pull request into a release branch tests the critical tier, ready or draft: the whole
-      # suite's run per release is the release's pull request's, and a change under runtime/ ran it locally before it
+      # suite's run per release is the release's pull request's, and a change under dotnet/ ran it locally before it
       # was marked ready.
       - id: legs
         name: Decide which checks this run needs
@@ -285,20 +300,20 @@ jobs:
           PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest","name":"linux-x64"},{"rid":"win-x64","os":"windows-latest","name":"win-x64"},{"rid":"osx-arm64","os":"macos-latest","name":"osx-arm64"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
         run: |
-          # Documentation is Markdown a build compiles nothing of: outside the runtime, the workflows and the plugins, a
+          # Documentation is Markdown a build compiles nothing of: outside the C# tree, the workflows and the plugins, a
           # plain file before and after. Read is documentation, run is code: a page a test merely reads (the publication,
           # page-claims and documented-commands tests read every published page) is documentation. Those tests are mostly
           # outside the critical tier, which is all a documentation change on a pull request into a release branch, draft
           # or ready, runs (a ready pull request into main that is not the release's, an unrecorded push to a release
           # branch and a pull request into another branch run the whole suite on linux-x64). So a branch that changes
           # docs/ or skills/ runs the whole suite locally before its pull request opens, and the release's pull request,
-          # where the whole suite runs, is the first place CI reads those pages. Two files differ in kind and stay code: the wiring check's page,
-          # docs/golden-path.md, whose step 3 line, `jason plugin install reply`, a test runs through the program, and whose
-          # other commands the wiring check's tests read their arguments from, so a change to it runs the three legs; and the
-          # runtime's licence, LICENSE-RUNTIME.md, which every archive the legs package carries.
-          $runAsCode = @('docs/golden-path.md', 'LICENSE-RUNTIME.md')
+          # where the whole suite runs, is the first place CI reads those pages. One page differs in kind and stays code: the
+          # wiring check's page, docs/golden-path.md, whose step 3 line, `jason plugin install reply`, a test runs through the
+          # program, and whose other commands the wiring check's tests read their arguments from, so a change to it runs the
+          # three legs. LICENSE, which every archive the legs package carries, is not Markdown, so it is code already.
+          $runAsCode = @('docs/golden-path.md')
           function Documentation([string] $path, $kinds) {
-            ($path -cmatch '\.md$') -and ($path -cnotmatch '^(runtime|\.github|plugins)/') -and ($runAsCode -cnotcontains $path) -and
+            ($path -cmatch '\.md$') -and ($path -cnotmatch '^(dotnet|\.github|plugins)/') -and ($runAsCode -cnotcontains $path) -and
               (@($kinds | Where-Object { $_ -and $_ -cnotlike '100644 blob *' }).Count -eq 0)
           }
 
@@ -349,7 +364,7 @@ jobs:
           # other, and whose change to the props file is its VersionPrefix line alone, is the pull request that moves main
           # to the next version after a release. All five move together, since the guards hold each pin to the prefix; one
           # left behind is not taken for the version pull request, so the whole suite those guards are in finds it.
-          $versionPaths = @('runtime/Directory.Build.props', 'skills/runtime/README.md', 'docs/INSTALL.md', 'install/install.sh', 'install/install.ps1')
+          $versionPaths = @('dotnet/Directory.Build.props', 'skills/runtime/README.md', 'docs/INSTALL.md', 'install/install.sh', 'install/install.ps1')
           $props = $versionPaths[0]
           $prefixLine = '^\s*<VersionPrefix>[^<]*</VersionPrefix>\s*$'
 
@@ -491,7 +506,7 @@ jobs:
           # A draft's push tests the critical tier alone, the tests that go red first when a rule the product rests on
           # breaks, and so do a pull request into a release branch and the version pull request when they are ready: for
           # them the tier is the ready run, by rule. The whole suite's run per release is the release's pull request's,
-          # and a change under runtime/ ran the whole suite locally before it was marked ready. Every other run tests the
+          # and a change under dotnet/ ran the whole suite locally before it was marked ready. Every other run tests the
           # whole suite.
           $draft = $env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true'
           $tier = $draft -or $set -eq 'version-only' -or ($env:EVENT -eq 'pull_request' -and $toRelease)
@@ -566,6 +581,9 @@ jobs:
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: ubuntu-latest
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -574,10 +592,10 @@ jobs:
           sdk-version: ${{ needs.version.outputs.sdk }}
 
       - name: Restore
-        run: dotnet restore runtime/Jason.slnx
+        run: dotnet restore dotnet/Jason.slnx
 
       - name: Build (warnings are errors)
-        run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.release }}
+        run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.release }}
 
       # The tests below prove nothing about a release's version unless the build carries it, so it is read back out
       # of what was built: the assembly the build reports its version from.
@@ -586,18 +604,21 @@ jobs:
         env:
           RELEASE: ${{ needs.version.outputs.release }}
         run: |
-          $stamped = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path runtime/src/Jason.Contracts/bin/Release/net10.0/Jason.Contracts.dll)).ProductVersion
+          $stamped = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path dotnet/src/Jason.Contracts/bin/Release/net10.0/Jason.Contracts.dll)).ProductVersion
           if (($stamped -split '\+')[0] -ne $env:RELEASE) { throw "the build is stamped '$stamped', and a release of this tree would carry $env:RELEASE" }
           Write-Host "stamped $stamped"
 
       - name: Test (offline)
-        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.release }}
+        run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.release }}
 
   build-test-publish:
     name: ${{ matrix.name }}
     needs: version
     if: needs.version.outputs.build == 'true'
     runs-on: ${{ matrix.os }}
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       # linux-x64, win-x64 and osx-arm64 when every check runs; linux-x64 alone on the Linux set and on the version pull
@@ -611,10 +632,10 @@ jobs:
           sdk-version: ${{ needs.version.outputs.sdk }}
 
       - name: Restore
-        run: dotnet restore runtime/Jason.slnx
+        run: dotnet restore dotnet/Jason.slnx
 
       - name: Build (warnings are errors)
-        run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
+        run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
       # Whether the SDK writes the application manifest into a Windows executable built on another host has not
       # been measured, so the project refuses to build one anywhere but Windows. The target is asked for by name
@@ -623,7 +644,7 @@ jobs:
       - name: A Windows executable is built on Windows or not at all
         shell: pwsh
         run: |
-          $said = dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -t:RefuseWindowsExecutableElsewhere -p:RuntimeIdentifier=win-x64 -nologo -nodeReuse:false 2>&1 | Out-String
+          $said = dotnet msbuild dotnet/src/Jason.App/Jason.App.csproj -t:RefuseWindowsExecutableElsewhere -p:RuntimeIdentifier=win-x64 -nologo -nodeReuse:false 2>&1 | Out-String
           $refused = $LASTEXITCODE -ne 0
           if ($refused -eq $IsWindows) { throw "on this host a win-x64 build should have been $(if ($IsWindows) { 'let through' } else { 'refused' }): $said" }
           if ($refused -and $said -notmatch 'consoleAllocationPolicy') { throw "it was refused for another reason: $said" }
@@ -636,11 +657,11 @@ jobs:
       # same version.
       - name: Test (offline)
         if: needs.version.outputs.tier != 'true'
-        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
+        run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
 
       - name: Test the critical tier (offline)
         if: needs.version.outputs.tier == 'true'
-        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
+        run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
 
       # The publish, the archive, the checksum and the manifest fragment: the same action release.yml runs on
       # a tag, so the packaging is exercised on every pull request long before a tag exists.
@@ -715,7 +736,7 @@ jobs:
           Copy-Item $env:EXECUTABLE $exe
           # And the two notice files an install keeps beside it, which the uninstall takes with it, by name.
           $notices = @('jason-LICENSE', 'jason-THIRD-PARTY-NOTICES') | ForEach-Object { Join-Path $install $_ }
-          Copy-Item LICENSE-RUNTIME.md $notices[0]
+          Copy-Item LICENSE $notices[0]
           Copy-Item THIRD-PARTY-NOTICES $notices[1]
           # Two things Jason keeps in a data directory, and one somebody else put there.
           New-Item -ItemType Directory -Force (Join-Path $env:JASON_DATA_DIR 'config'), (Join-Path $env:JASON_DATA_DIR 'logs') | Out-Null
@@ -789,6 +810,8 @@ jobs:
     needs: [version, build-test-publish]
     if: needs.version.outputs.full == 'true'
     runs-on: windows-2022
+    # It checks nothing out, and an artifact of its own run needs no token: its token can do nothing.
+    permissions: {}
     steps:
       - uses: actions/download-artifact@v7
         with:
@@ -840,6 +863,9 @@ jobs:
     needs: [version, build-test-publish, ui]
     if: needs.version.outputs.linux == 'true'
     runs-on: ${{ matrix.os }}
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       # linux-x64 and win-x64 when every check runs; linux-x64 alone on the Linux set.
@@ -1018,7 +1044,7 @@ jobs:
           dotnet tool restore
           if ($LASTEXITCODE -ne 0) { throw "dotnet tool restore exited with $LASTEXITCODE" }
 
-          $migrations = dotnet ef migrations list --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --no-connect `
+          $migrations = dotnet ef migrations list --project dotnet/src/Jason.Runtime --startup-project dotnet/src/Jason.Runtime --no-connect `
             | Where-Object { $_ -match '^\d{14}_' }
           $previous = ($migrations | Select-Object -Last 2 | Select-Object -First 1).Trim()
           if (-not $previous) { throw "no migration to stop at; got: $migrations" }
@@ -1026,7 +1052,7 @@ jobs:
           $data = Join-Path $env:RUNNER_TEMP 'update-data'
           New-Item -ItemType Directory -Force (Join-Path $data 'state') | Out-Null
           $database = Join-Path $data 'state/jason.db'
-          dotnet ef database update $previous --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --connection "Data Source=$database"
+          dotnet ef database update $previous --project dotnet/src/Jason.Runtime --startup-project dotnet/src/Jason.Runtime --connection "Data Source=$database"
           if ($LASTEXITCODE -ne 0) { throw "preparing the older database exited with $LASTEXITCODE" }
 
           "JASON_DATA_DIR=$data" >> $env:GITHUB_ENV
@@ -1072,9 +1098,9 @@ jobs:
           }
 
           # The notices travel with the executable: the installed ones were kept with it, and the release's are beside
-          # the new one, from its archive, whose LICENSE is this tree's LICENSE-RUNTIME.md.
+          # the new one, from its archive, whose LICENSE is this tree's LICENSE.
           $directory = Split-Path $env:install -Parent
-          $notices = @{ 'jason-LICENSE' = 'LICENSE-RUNTIME.md'; 'jason-THIRD-PARTY-NOTICES' = 'THIRD-PARTY-NOTICES' }
+          $notices = @{ 'jason-LICENSE' = 'LICENSE'; 'jason-THIRD-PARTY-NOTICES' = 'THIRD-PARTY-NOTICES' }
           foreach ($name in $notices.Keys) {
             if (-not (Test-Path -LiteralPath (Join-Path $update "previous/$name"))) { throw "$name was not kept with the executable it belonged to" }
             if ((Get-FileHash (Join-Path $directory $name)).Hash -ne (Get-FileHash $notices[$name]).Hash) { throw "$name beside the new executable is not its archive's" }
@@ -1184,6 +1210,9 @@ jobs:
     needs: [version, build-test-publish]
     if: needs.version.outputs.linux == 'true'
     runs-on: ubuntu-latest
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -1215,10 +1244,10 @@ jobs:
           [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed', expected $VERSION"; exit 1; }
 
           # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
-          # LICENSE is this tree's LICENSE-RUNTIME.md. And the run ends saying which licence that is, then what to run next.
-          cmp LICENSE-RUNTIME.md "$HOME/.local/bin/jason-LICENSE"
+          # LICENSE is this tree's LICENSE. And the run ends saying which licence that is, then what to run next.
+          cmp LICENSE "$HOME/.local/bin/jason-LICENSE"
           cmp THIRD-PARTY-NOTICES "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES"
-          [ "$(tail -n 2 first.txt | head -n 1)" = "Jason $VERSION is licensed under the Jason Runtime Licence: https://github.com/reply-team/jason-ai/blob/v$VERSION/LICENSE-RUNTIME.md" ] || { tail -n 2 first.txt; exit 1; }
+          [ "$(tail -n 2 first.txt | head -n 1)" = "Jason $VERSION is licensed under the MIT licence: https://github.com/reply-team/jason-ai/blob/v$VERSION/LICENSE" ] || { tail -n 2 first.txt; exit 1; }
           [ "$(tail -n 1 first.txt)" = 'Next, run `jason status`: it says what this installation still needs, and the command for each.' ] || { tail -n 1 first.txt; exit 1; }
 
           # What was installed opens its database, which is the half of "it runs" that --version cannot see.
@@ -1344,6 +1373,9 @@ jobs:
     needs: [version, build-test-publish]
     if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -1375,8 +1407,8 @@ jobs:
           if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed', expected $env:VERSION" }
 
           # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
-          # LICENSE is this tree's LICENSE-RUNTIME.md.
-          $notices = @{ 'jason-LICENSE' = 'LICENSE-RUNTIME.md'; 'jason-THIRD-PARTY-NOTICES' = 'THIRD-PARTY-NOTICES' }
+          # LICENSE is this tree's LICENSE.
+          $notices = @{ 'jason-LICENSE' = 'LICENSE'; 'jason-THIRD-PARTY-NOTICES' = 'THIRD-PARTY-NOTICES' }
           foreach ($name in $notices.Keys) {
             if ((Get-FileHash (Join-Path $dir $name)).Hash -ne (Get-FileHash $notices[$name]).Hash) { throw "$name beside the executable is not the archive's" }
           }
@@ -1420,7 +1452,7 @@ jobs:
           if (-not (Said 'its licence files were missing and are written beside it now')) { throw "the second run did not write the missing notice" }
           if ((Get-FileHash (Join-Path $dir 'jason-THIRD-PARTY-NOTICES')).Hash -ne (Get-FileHash THIRD-PARTY-NOTICES).Hash) { throw "the notice written again is not the archive's" }
           if ((Get-FileHash $exe).Hash -ne $executable) { throw "writing the missing notice changed the executable" }
-          if (-not (Said "is licensed under the Jason Runtime Licence: https://github.com/reply-team/jason-ai/blob/v$env:VERSION/LICENSE-RUNTIME.md")) { throw "the second run did not say the licence" }
+          if (-not (Said "is licensed under the MIT licence: https://github.com/reply-team/jason-ai/blob/v$env:VERSION/LICENSE")) { throw "the second run did not say the licence" }
           if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
 
           # And it kept the value's kind and every entry as it was written, variables unexpanded.
@@ -1477,12 +1509,14 @@ jobs:
   # against the exchanges the runtime's tests recorded, the build, the asset zip uploaded for a person to try, and the
   # browser smoke against a runtime built here. Linux only, and on every run of the Linux set, a draft's pushes
   # included: the browser engine is the same everywhere, and what differs by OS is runtime code the platform jobs run.
-  # Its npm steps' twin is "The published UI" in .github/publish/public/.github/workflows/check.yml; change both.
   ui:
     name: The UI on ubuntu
     needs: version
     if: needs.version.outputs.linux == 'true'
     runs-on: ubuntu-latest
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
     env:
       JASON_Update__CheckEnabled: 'false'
     defaults:
@@ -1497,7 +1531,7 @@ jobs:
 
       - name: Build the runtime the smoke drives
         working-directory: .
-        run: dotnet build runtime/src/Jason.App --configuration Release -p:Version=${{ needs.version.outputs.version }}
+        run: dotnet build dotnet/src/Jason.App --configuration Release -p:Version=${{ needs.version.outputs.version }}
 
       - uses: actions/setup-node@v5
         with:
@@ -1548,7 +1582,7 @@ jobs:
 
       - name: Browser smoke
         env:
-          JASON_EXE: ${{ github.workspace }}/runtime/src/Jason.App/bin/Release/net10.0/jason
+          JASON_EXE: ${{ github.workspace }}/dotnet/src/Jason.App/bin/Release/net10.0/jason
         run: npm run e2e
 
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
@@ -1564,6 +1598,8 @@ jobs:
     needs: version
     if: needs.version.outputs.skipping == 'true'
     runs-on: ubuntu-latest
+    # It checks nothing out and reads nothing: its token can do nothing.
+    permissions: {}
     strategy:
       matrix: ${{ fromJSON(needs.version.outputs.skipped) }}
     steps:
