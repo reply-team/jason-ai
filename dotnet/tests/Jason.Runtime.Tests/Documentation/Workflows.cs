@@ -60,7 +60,9 @@ internal static class Workflows
     /// are kept out — no system configuration, and the line endings, the signing and the identity set here — so a test
     /// repository holds exactly the bytes a test wrote, whatever this machine's git would have done to them. Automatic
     /// maintenance is off as well: a newer git starts it in the background after a commit, and it writes into
-    /// <c>.git</c> while a test is reading what is there.
+    /// <c>.git</c> while a test is reading what is there. Long paths are on, which git on Windows otherwise takes from the
+    /// system configuration kept out here: under a deep temporary folder a repository's object files lie past the old
+    /// 260-character limit, and git would refuse to write them. Elsewhere the setting does nothing.
     /// </summary>
     internal static string Git(string directory, params string[] args)
     {
@@ -75,7 +77,7 @@ internal static class Workflows
             WorkingDirectory = directory,
         };
         start.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
-        foreach (var setting in (string[])["core.autocrlf=false", "commit.gpgsign=false", "tag.gpgsign=false", "init.defaultBranch=main", "user.name=Jason Tests", "user.email=tests@example.invalid", "maintenance.auto=false", "gc.auto=0"])
+        foreach (var setting in (string[])["core.autocrlf=false", "commit.gpgsign=false", "tag.gpgsign=false", "init.defaultBranch=main", "user.name=Jason Tests", "user.email=tests@example.invalid", "maintenance.auto=false", "gc.auto=0", "core.longpaths=true"])
         {
             start.ArgumentList.Add("-c");
             start.ArgumentList.Add(setting);

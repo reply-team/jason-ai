@@ -29,6 +29,14 @@ public interface IHarnessLocator
 /// <summary>The locators this build knows how to make.</summary>
 public static class HarnessLocators
 {
+    /// <summary>
+    /// When two roots are one folder: case is ignored on Windows, and elsewhere the comparison is ordinal. That is a rule
+    /// of this build, not a reading of the file system — a volume elsewhere that ignores case, as macOS's does by default,
+    /// still has two spellings read as two roots. Detection, the status check and uninstall read roots by this one
+    /// comparer, so none folds two roots another keeps apart.
+    /// </summary>
+    public static StringComparer SamePath { get; } = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
     /// <summary>This machine's, read from the user profile.</summary>
     public static IHarnessLocator ForThisMachine() =>
         ForHome(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
@@ -60,8 +68,6 @@ public static class HarnessLocators
 
     private sealed class HomeLocator(string home, IReadOnlyList<AgentHostFacts> hosts) : IHarnessLocator
     {
-        private static readonly StringComparer SamePath = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
         public IReadOnlyList<HarnessRoot> Detect()
         {
             // The host's marker, not the skills directory: a person who has a host and has never installed a skill
@@ -71,7 +77,7 @@ public static class HarnessLocators
             foreach (var facts in hosts)
             {
                 var marker = AgentHosts.Under(home, facts.HomeMarker);
-                if (!Directory.Exists(marker) && !File.Exists(marker))
+                if (!(facts.MarkerKind == HomeMarkerKind.File ? File.Exists(marker) : Directory.Exists(marker)))
                 {
                     continue;
                 }

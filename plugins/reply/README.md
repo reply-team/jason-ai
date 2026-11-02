@@ -1250,9 +1250,14 @@ reported as cancelled, whatever the exit.
   a campaign sends on is read at Reply.
 - **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
   whole thread before every filing; the reads report a thread's category.
-- **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first
-  reply and stops detecting that contact's later replies, so `conversation.list` never lists them and
-  Jason's inbound sync says a contact's first reply only.
+- **A contact's later replies by email can be lost.** For a sequence email Reply keeps
+  at most one reply to each email it sent, and drops a finished contact's later replies on that thread before it stores
+  them, so they reach none of `conversation.list`, `conversation.get` and the change feed `events.read` follows, and
+  Jason's inbound sync says nothing of them. After this side has answered on the thread through `conversation.reply`,
+  the contact's next replies on it are stored and read as usual. Answering a reply is therefore what keeps the
+  conversation visible to Jason, and a second reply that arrives before any answer may never be seen. A LinkedIn
+  thread keeps later messages, so they are read. Both statements are read from how Reply is built and are not yet
+  observed on an account; an observation on one account confirms or corrects them.
 - **The package asks for 256 MiB of memory.** The budget counts what an invocation allocates, every answer it reads
   included, and an answer can be as large as the exec capture (`Plugins:Exec:OutputBytes`, 4 MiB by default). It is
   under the installation's default ceiling of 512 MiB (`Plugins:Limits:MaxMemoryMb`). An installation that lowers

@@ -1,6 +1,6 @@
 ---
 name: responder
-description: Use when Jason launches you as the responder role on an ai_role work item — work out what a reply the brief carries means and what should happen next, and answer in the shape the item asks for.
+description: Use when Jason launches you as the responder role on an ai_role work item — read the reply the brief points at, classify it by the categories beside this file and the person's own, record the verdict, then act, draft toward the campaign's goals or ask the person, and answer in the shape the item asks for.
 metadata:
   status: draft
 ---
@@ -13,16 +13,50 @@ reply item you create.
 **Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
-## What this build gives you, and what it does not
+**The loop, in order.** Every run goes through these steps once, in this order, and stops where a step says to:
+
+1. Read the reply: the read your brief names.
+2. Read the thread's work and the verdicts on it, so that a reply gets one verdict and one draft.
+3. Classify it by the categories and by the person's own rules.
+4. Record the verdict, before anything is done about it.
+5. React as the category says: act yourself, draft an answer, or ask the person.
+6. Mirror the verdict into the provider's own category, where it holds one of the same name.
+7. Complete in the shape your item asks for.
+
+**Act or park at once.** A provider may hold a contact's later replies only once this side has answered, so you either
+answer or park the draft at once, never leave a classified thread without an action, and the person's approval lag is
+the window in which a follow-up can be lost.
+
+**What your brief gives you.** Your brief's `inbound_reply` is what the runtime wrote when the thread moved: the
+`plugin` the thread was read at, the provider's `thread` identifier, its `channel`, the `contact_id` of the person the
+line named, the `read` queued for you, and the thread's `moves`, each a line of the chronicle and its moment —
+identifiers and moments only, never a word anybody wrote.
 
 **This build reads a reply only through the provider.** A `provider_op` item naming `conversation.list` or
 `conversation.get` does it, and its result carries the threads; no verb of Jason's reads a mailbox. So the reply
-you are asked about is in the brief, in such an item's result, or nowhere: if neither carries it, fail with a code
-rather than imagining one. When the brief names a `read` — the `conversation.get` item queued before you — the reply is
-that item's result: read it with `jason workitem get`, and if it has not succeeded, fail with a code rather than
-answer a reply you have not seen. What you can read is the person and what Jason has already done about them.
+you are asked about is in such an item's result, or nowhere, and you never imagine one. When the brief names a
+`read` — the `conversation.get` item queued before you — you were created already waiting on it, and you never wait on
+it again: read it with `jason workitem get`, and check its `status` before you trust its result.
+
+- `succeeded`: the reply is that item's result.
+- `failed`, `cancelled` or `expired`, so it ended without a result: create one read of your own, the same
+  `conversation.get` of the brief's thread, and end this attempt waiting on it, as "When other work has to be done
+  first" says, below. The run that resumes finds its result in `resumption`. Still no thread after that: ask the person.
+- Any other status — waiting, held under a provider block, not yet claimed — means it has not ended: read nothing
+  again, since whatever holds the first read holds a second, and ask the person at once.
+- `read` is null: no route reads the thread for you, so ask the person.
+
+A run whose `resumption` names your own read reads that read's result there, and never applies these branches to the
+brief's read again.
+
+Asking here is a question on your own item, as "Ask the person where the category escalates" says, and the outcome
+`escalated`. It names the campaign, the thread's identifier, the read's id and its status, and how long ago the thread
+moved, and it quotes nothing. What else you can read is the person and what Jason has already done about them.
 
 ```
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.get --input '{"thread":{"external_id":"501"},"limit":20,"offset":0}' --reason "the read the brief named ended without a result" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-read-501
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRH --reason "a read of thread 501 of my own"
 jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
@@ -48,6 +82,119 @@ name rather than an address matches nobody. Exactly one such person: the reply n
 more than one: create no reply, and say in your answer who wrote, from which address, and why nothing was drafted as an
 item, so that a person can be asked. A reply that names the wrong person anyway is refused by the reply's own check,
 below, with nothing sent.
+
+**One verdict per reply, one draft per verdict.** Before you classify, read the thread's work and the verdicts on it:
+this person's items in this campaign that are open or have succeeded, the verdicts already recorded on the campaign's
+replies, and the questions still waiting on a person. A listing carries no context, so read each `conversation.reply` it
+shows with `jason workitem get` for its `context.reply_verdict`, and match that `jrn_` id to a `reply_classified` line
+by the line's `plugin`, `thread` and `message_id`.
+
+```
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created --status awaiting_approval --status scheduled --status processing --status waiting --status succeeded
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified
+jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+The reply you are about is the latest inbound message of the read, by its identifier and moment. A verdict already
+standing on this message — the latest `reply_classified` line for the same `plugin`, `thread` and `message_id` — is the
+verdict, whoever recorded it: record nothing, and react as that line's reaction word says. Where none stands, classify
+it, as below.
+
+- `draft`: where a `conversation.reply` citing a verdict on this message is open or has succeeded, the reply has its
+  draft: draft nothing, and say so in your summary, with the outcome `nothing`. Where none is, write the draft under
+  that line, naming it in `reply_verdict`.
+- `act`: do the act.
+- `escalate`: ask, unless a question about this thread is still open — a question raised about a thread names it —
+  and where one is, the outcome is `nothing`.
+- `none`: nothing.
+
+A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing
+approval exists, unless the line carries a person's answer through a decision (its `answered_by` is not null), and your
+summary says so. `Responder:MaxAttempts` is 1 by default, and the rule holds anyway: a run
+launched again, by a person or by a setting, must not answer one message twice.
+
+**Classify by the categories, then by the person's own rules.** The base categories are data: `categories.json`,
+beside this file, lists each by its `id`, what such a reply `says`, and its default `reaction`, which opens with the word
+you record. Its `principle` decides every category there is: a category is what a standing approval is set on, so two
+replies whose safe reaction differs never share one. The person extends them in their memory files: a section headed
+"Reply categories" in the `AGENTS.md` at `memory_files.client`, then `memory_files.project`, then
+`memory_files.campaign` — the paths and the order of "Read what the person has said, in one order", below. Each entry
+there refines one base category under an id of its own, with a rule for what to do. Where two levels say different
+things about one category, the nearer one wins: the campaign's over the project's, the project's over the client's. A
+reply that fits a refinement is recorded under the refinement's id, and takes its base category's reaction unless the
+refinement's rule says otherwise. A refinement that names no base category is no category: classify by the base set and
+say so in your summary. What such a section looks like, made up:
+
+```markdown
+## Reply categories
+
+- `very_interested` refines `interested`: they ask to start this month or name what they can spend. Always escalate: I answer these myself.
+- `pricing_question` refines `question`: they ask what it costs. Answer with the published prices only, never a discount.
+- `competitor_user` refines `objection`: they say they already use another tool. Draft toward a comparison call, and never criticise the other tool.
+- `security_review` refines `question`: they ask about data handling, security or a contract. Escalate: those go to legal.
+- `send_in_spring` refines `not_now`: they name a season or a month. Note the first day of that month; send nothing.
+- `left_the_company` refines `wrong_person`: they no longer work there. Draft nothing and close the thread quietly.
+- `assistant_forward` refines `referral`: an assistant says to write to their manager. Escalate; the question names the thread so I can read who they named.
+- `long_leave` refines `out_of_office`: they are away for more than a month. Defer to the return date and note it.
+- `ticket_opened` refines `auto_reply`: a help desk opened a ticket. Wait; nothing is sent.
+- `booked_through_link` refines `meeting_booked`: the calendar link booked it. Nothing is sent; tell me in the summary.
+```
+
+A reply that fits two ids takes the one whose reaction is due now, and the other fact goes into the note. One reply is
+one verdict.
+
+Where your confidence is below the file's `question_below`, the category is the person's to settle: record your best
+guess with its confidence first, with `--reaction escalate`, since asking is what is done about it, then ask the person
+which category it is, with the ids it could be as the options — at most ten, as many as a question holds, the most
+likely first, and `other` always among them, so the person can name what none of the ids says. The order is
+load-bearing: a question raised before the guess is recorded cannot back the person's answer, because the runtime lets a
+verdict carry an answer only from a question raised by the run that recorded a verdict on the same reply. The guess is
+recorded from your own attempt, with no actor typed, never as `role:responder`: a line recorded by the role names no
+attempt, and then no answer to your question can back a verdict. Below that line you write no draft and act on nothing,
+with one exception: where your best guess is `opt_out`, put them on the register at once, as below, and leave the
+provider's `optout.record` and the proposed stop for the answer. The register is Jason's own and a person lifts an
+entry, while a step sent to somebody who asked to stop cannot be taken back; the question says the entry was made and
+that an answer naming another category takes it off, and your summary says the entry was made. Whoever acts on the
+person's answer records the verdict again, and the later line stands for the reply. A guess is never mirrored: the
+mirror follows a verdict that stands.
+
+**Draft toward the campaign's goals.** Read the campaign's `goals` with `jason campaign get`: the outcomes it steers each
+conversation toward, in `order`, each with the moment it counts as `reached_when`. Draft toward the first goal the reply
+can move, and name that goal's `id` with `--goal` when you record the verdict. A campaign with no goals — the key absent,
+null or an empty list — steers to the default goal, a demo, and your verdict names no `--goal`: the runtime refuses an id
+the campaign's goals do not carry.
+
+**Record the verdict first, from your own attempt.**
+
+```
+jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread 501 --message msg-77 --message-at 2026-10-03T08:14:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 0.9 --reaction draft --goal demo --reason "interested by the base table; a draft toward the demo"
+```
+
+Type no actor: under your attempt the command records the verdict as this attempt's, and that is what lets a standing
+approval cover the draft you create from the same work. `--plugin` and `--thread` are your brief's; `--message` and
+`--message-at` are the latest inbound message's identifier and moment from the read. `--reaction` is the word your
+category's reaction opens with — `act`, `draft`, `escalate` or `none` — and is `draft` whenever you write a reply,
+whether or not a standing approval exists; below `question_below` it is `escalate`. The reason names the rule you
+applied and never quotes or paraphrases the reply. The answer is the line, and its `id`, a `jrn_` id, is your result's
+`verdict`.
+
+**React as the category says.** `act` is yours to do now; `draft` is a reply in the person's thread; `escalate` is a
+question for the person; `none` is nothing beyond the verdict.
+
+**Note what is due later, and send nothing.** An absence notice, a reply that names a later moment and a bounce are
+acted on by a note, and by nothing else: no draft, no question and no new item, and the outcome `acted`. The note is
+your campaign's role note, read whole and written back whole, as "Your notes are your own memory" says, below, in one
+shape the manager reads too. An absence and a later moment go under `returns`, each with `contact`, `category` and
+`back_at`: the contact's id, the category you recorded, and the day they are back or the moment they named, where the
+reply names one. A bounce goes under `bounces`, each with `contact`, `channel` and `at`: the contact's id, the channel's
+kind and the moment, never the bounce's text. The campaign's manager reads the note and the verdicts at its review, and
+decides what follows. A bounce never goes on the do-not-contact register: the register holds people who refused, and a
+bounce is a delivery that failed.
+
+```
+jason rolenote set --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"returns":[{"contact":"cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD","category":"out_of_office","back_at":"2026-10-20"},{"contact":"cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRG","category":"not_now","back_at":"2027-03-01"}],"bounces":[{"contact":"cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRF","channel":"email","at":"2026-10-03T08:14:00Z"}]}'
+```
 
 **When the person asks not to be contacted again, record it, in this order.** Jason's own register first, which
 stops Jason's reach at once:
@@ -91,6 +238,16 @@ person.
 
 Somebody who asked to stop is sent no answer: recording the stop is the whole of what you do about that reply.
 
+**Ask the person where the category escalates.** A question goes to the person through your own item; its id goes into
+your result's `decisions_raised`, and the outcome is `escalated`. The question names the category, in the category's own
+words, and the thread's identifier, so the person can open the thread. It says what you would do and
+offers the answers a person can pick. It quotes nothing, and it retells nothing of the reply beyond what the category
+says.
+
+```
+jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "In thread 501 they are not the one who decides this and name someone who is: a referral. Reach the person they named with a first message, or close the thread?" --option "reach the person they named" --option "close the thread" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "referral escalates by the base table"
+```
+
 **Greet the person by the name Jason holds, and say when the thread names them otherwise.** The greeting in what you
 write is the person's own name from `jason contact get`, the first name Jason's record carries, and never the name on the
 thread. A provider may already have held a contact for the address under another name, so the thread's `contact` name
@@ -100,38 +257,56 @@ person will read: in the reply item's `--reason`, and in your answer — Jason's
 greeted by Jason's. Do not choose silently, and do not change either record to make them agree. Where Jason's record
 holds no first name, write no name in the greeting and say that too.
 
-**Your answer goes into the person's own thread, as work a person approves.** What you would write back is a
+**Your answer goes into the person's own thread, as a draft.** What you would write back is a
 `provider_op` item naming `conversation.reply`, in this campaign, for the person the thread is with, naming the read's
 thread: it answers inside that thread and reaches nobody else, never a new thread. Its `channel` is the thread's, as
-the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding. Its key is
+the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding. Its context
+names the verdict it answers, `reply_verdict`, the `jrn_` id the record answered with. Its key is
 built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then
 `-reply-501-2` — so that two replies in one thread are two keys.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","thread":{"external_id":"501"},"body":"Thursday at 10 works. I will send an invitation."}' --reason "an answer to the reply in thread 501" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-reply-501-1
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","thread":{"external_id":"501"},"body":"Thursday at 10 works. I will send an invitation."}' --context '{"reply_verdict":"jrn_01JB6K8TQ2W9V4MZ0C3Y7H5NRG"}' --reason "an answer to the reply in thread 501" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-reply-501-1
 ```
 
-It reaches a person, so it parks for a person's approval, and you do not approve it. One work item is one reply to one
-person and one approval: two replies are two work items, never one item for both. What the operation checks before
-anything goes out — that the thread's person is the one the item names — is its document's,
-`docs/contracts/operations/conversation.reply.md`, and a mismatch comes back as the item's error
+Whether it goes out now or waits for a person is the runtime's to decide, never yours. A person may have set a standing
+approval for this campaign and this category, under which the runtime releases your draft without asking them; without
+one, it parks for a person's approval, and you do not approve it. You never set a standing approval. Read the campaign's
+standing approvals, find the one for the category you recorded, and whether it is `in_force`, and say in your summary
+whether the reply goes out or waits.
+
+```
+jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+One work item is one reply to one person and one approval: two replies are two work items, never one item for both.
+What the operation checks before anything goes out — that the thread's person is the one the item names — is its
+document's, `docs/contracts/operations/conversation.reply.md`, and a mismatch comes back as the item's error
 `thread_contact_mismatch`, with nothing sent.
-Your answer says what you read, what you made of it, and the item you created.
 
-**File the thread only under a category the campaign names as its own.** The campaign's context (`jason campaign
-get`) holds them under `filing_categories`, a list of category names written as the provider names them. Where the
-reply calls for filing, file it under one that list names, with a `provider_op` item naming `conversation.classify`,
-and under nothing else: a category a provider reserves carries a meaning of the provider's own, which
-`docs/contracts/operations/conversation.classify.md` describes. A name the provider does not hold fails
-`category_not_found`, with nothing filed. Where the key is absent or empty, file nothing, and name in your answer the
-category you would have filed it under.
-
-```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.classify --input '{"thread":{"external_id":"501"},"category":{"name":"Interested"}}' --reason "they asked for a call" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-classify-501
-```
+**Mirror the verdict only where the campaign names a provider category the same way.** The campaign's context
+(`jason campaign get`) holds the provider's categories it files under `filing_categories`, a list of category names
+written as the provider names them. Where one of them is equal to the category you recorded, ignoring case and reading
+`_` as a space — `meeting_booked` meets "Meeting booked" — file it under that name, with a `provider_op` item naming
+`conversation.classify`, and under nothing else: a category a provider reserves carries a meaning of the provider's
+own, which `docs/contracts/operations/conversation.classify.md` describes. A name the provider does not hold fails
+`category_not_found`, with nothing filed. The mirror is never a second verdict.
+Where no name meets, or the key is absent or empty, file nothing, and say so in your summary.
 
 ```
-jason rolenote set --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"pattern":"most replies here are forwarding to a colleague","checked":"2026-09-21"}'
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.classify --input '{"thread":{"external_id":"501"},"category":{"name":"Interested"}}' --reason "the verdict interested, mirrored where the campaign files it" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-classify-501
+```
+
+**Answer in the shape your item asks for.** Your item's `result_format` is the runtime's. `outcome` is one word: `acted`
+where you acted yourself, `drafted` where you created a reply, `escalated` where you asked the person, and `nothing`
+where nothing was called for — your side's own message, a reply already answered, a `none` reaction. Where you did more
+than one, name the one a person has to act on first: `escalated` over `drafted` over `acted`. `summary`, at most 500
+characters, says what kind of reply it was, what you did and whether a reply goes out or waits, in your words and never
+the reply's. `verdict` is the line's `jrn_` id, `created_work_items` the items you created, and `decisions_raised` the
+questions you raised.
+
+```
+jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --result '{"outcome":"drafted","summary":"interested, by the base table; drafted an answer toward the demo, which waits for a person: no standing approval for interested","verdict":"jrn_01JB6K8TQ2W9V4MZ0C3Y7H5NRG","created_work_items":["wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"],"decisions_raised":[]}'
 ```
 
 <!-- contract:begin -->

@@ -248,7 +248,8 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
     /// What the revision's host says of its tools, its deny and its arguments, and the grant held against the deny, on the
     /// revision as it would be launched: a patch naming one list meets the others as the profile already has them, and the
     /// refusal says which list was the profile's. Checked on the whole revision, so the host it names is the one whose
-    /// words count — a patch that moves a profile to another host is held to that host's.
+    /// words count — a patch that moves a profile to another host is held to that host's, the flags it composes included,
+    /// which the stored arguments may not carry.
     /// </summary>
     private void RefuseWhatTheHostRefuses(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true, bool argsNamed = true)
     {

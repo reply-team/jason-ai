@@ -21,7 +21,7 @@ public sealed partial class CampaignPlanningSkillTests
         var description = SkillFrontMatter.Read(SkillPack.Business().Single(skill => skill.Name == "campaign-planning").File).Top.GetValueOrDefault("description") ?? string.Empty;
 
         Assert.Equal(
-            "Turn a vague outbound goal into an executable plan: clarify the objective until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action. With Jason installed, `planner-in-session` leads the planning and uses this skill as its method, so load that one first.",
+            "Turn a vague outbound goal into an executable plan: clarify the goal until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action. With Jason installed, `planner-in-session` leads the planning and uses this skill as its method, so load that one first.",
             description);
     }
 
@@ -132,6 +132,38 @@ public sealed partial class CampaignPlanningSkillTests
         Assert.DoesNotContain("schedule", bullet, StringComparison.OrdinalIgnoreCase);
 
         Assert.Contains("- 2.5.0 (2026-10-29): a provider may offer a slot of its own beside an operation's arguments, and the provider's own skill is the authority on what goes in it.", Flat(text), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// With Jason, what a campaign is for is its <c>goals</c>, the one word the runtime uses, and the skill says goal where
+    /// it said objective: in its description, its purpose and the aside on the provider's own target. The one place the
+    /// word stays is a work item's own objective, which is prose about a step and not the campaign's field. A campaign
+    /// with no goals works towards a demo, as the contract says, and the skill says which thing <c>goal.get</c> is.
+    /// </summary>
+    [Fact]
+    public void With_Jason_what_the_campaign_is_for_is_its_goals_and_a_campaign_with_none_works_towards_a_demo()
+    {
+        var text = Text();
+        var skill = Flat(text);
+
+        Assert.Contains(
+            "With Jason, what the campaign is for is its `goals`, a reserved key of that context, settled with the person when the campaign is created",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("A campaign with none works towards a demo.", skill, StringComparison.Ordinal);
+        Assert.Contains("and not `goal.get`, which is a person's or team's target for a period", skill, StringComparison.Ordinal);
+        Assert.Contains("`docs/contracts/context/goals.md`", skill, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(SkillPack.RepositoryRoot(), "docs", "contracts", "context", "goals.md")));
+
+        // The campaign's word is goal; the only objective left is a work item's own, in a sentence about a step.
+        var objectives = Regex.Matches(skill, @"[^.]*\bobjective\b[^.]*\.").Select(match => match.Value.Trim()).ToList();
+        Assert.Contains(objectives, sentence => sentence.Contains("Each one states its objective, how you will know it is done", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            objectives,
+            sentence => !sentence.Contains("Each one states its objective", StringComparison.Ordinal) && !sentence.Contains("where it said objective", StringComparison.Ordinal));
+
+        // The changelog says what changed, so a reader of an older copy knows.
+        Assert.Contains("- 2.6.0 (2026-11-02): with Jason, what the campaign is for is its `goals`", skill, StringComparison.Ordinal);
     }
 
     private static string Text() =>

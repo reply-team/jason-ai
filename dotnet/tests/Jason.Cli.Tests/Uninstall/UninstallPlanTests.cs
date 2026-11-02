@@ -70,6 +70,28 @@ public class UninstallPlanTests
     }
 
     /// <summary>
+    /// Two roots are one only where detection and the status check would call them one: where a path's case is a different
+    /// folder, two roots that differ only in case are two, and each is planned by its own record. Only such a machine can
+    /// tell the comparers apart.
+    /// </summary>
+    [Fact]
+    public void Two_roots_that_differ_only_in_case_are_two_where_case_makes_two_folders()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "only where the file system keeps two folders whose names differ in case apart");
+        using var dir = new TempPaths();
+        var lower = Path.Combine(dir.Paths.Root, "harness");
+        var upper = Path.Combine(dir.Paths.Root, "HARNESS");
+        Record(lower, ("runtime", [Relative(lower, Deploy(lower, "operating-the-installation"))]));
+        Record(upper, ("runtime", [Relative(upper, Deploy(upper, "operating-the-installation"))]));
+
+        var plan = UninstallReader.Read(Machine(dir, lower) with { Harnesses = new Roots([new([], lower), new([], upper)]) }, purgeData: false);
+
+        Assert.Equal(
+            new[] { lower, upper }.Order(StringComparer.Ordinal),
+            plan.Roots.Select(root => root.Root).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// The runtime's own role root is read as well as the harnesses. It is a root a deployment wrote into and
     /// carries a record of its own, and it is the half the documents call not optional.
     /// </summary>
@@ -196,6 +218,11 @@ public class UninstallPlanTests
                 [.. pack.Files.Select(file => new DeployedFile(
                     file,
                     SkillsRecord.Digest(Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar)))))]))]));
+
+    private sealed class Roots(IReadOnlyList<HarnessRoot> roots) : IHarnessLocator
+    {
+        public IReadOnlyList<HarnessRoot> Detect() => roots;
+    }
 
     private static CliEnvironment Machine(TempPaths dir, string harnessRoot, TextWriter? output = null, IInstallationRemover? remover = null) =>
         new(

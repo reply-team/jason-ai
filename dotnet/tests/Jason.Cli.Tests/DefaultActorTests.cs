@@ -160,13 +160,13 @@ public class DefaultActorTests
 
     /// <summary>
     /// Every verb that reaches the runtime, run with the account's name set against a runtime that answers <c>{}</c>: each
-    /// request whose type takes an actor carries the account's person, and the eight that are a person's own word send
+    /// request whose type takes an actor carries the account's person, and the ten that are a person's own word send
     /// nothing at all. Which types take one is read from the runtime's own registration of its operations and from the
     /// contracts, so a write that left the default out is a difference here however its body was built; and every
     /// operation that takes an actor is reached by some verb, so none is left out of the reading.
     /// </summary>
     [Fact]
-    public async Task Every_write_a_verb_makes_carries_the_account_s_person_but_the_eight()
+    public async Task Every_write_a_verb_makes_carries_the_account_s_person_but_the_ten()
     {
         var takesAnActor = OperationsTakingAnActor();
         var reached = new HashSet<string>(StringComparer.Ordinal);
@@ -184,7 +184,7 @@ public class DefaultActorTests
             }
         }
 
-        foreach (var args in TheEight)
+        foreach (var args in TheTen)
         {
             var refused = await RunEachAsync(args);
             Assert.True(refused.Exit == ExitCodes.Usage && refused.Requests.Count == 0, $"'jason {VerbOf(args)}' was not refused: exit {refused.Exit}, {refused.Requests.Count} request(s)");
@@ -221,7 +221,7 @@ public class DefaultActorTests
     }
 
     /// <summary>
-    /// The verbs above are every verb: each is run there, is one of the eight, or says here why it is not run, so a verb
+    /// The verbs above are every verb: each is run there, is one of the ten, or says here why it is not run, so a verb
     /// added later is a difference in this row before it is a write nobody ran.
     /// </summary>
     [Fact]
@@ -233,7 +233,7 @@ public class DefaultActorTests
 
         Assert.Equal(
             leaves.Order(StringComparer.Ordinal),
-            Runs.Concat(TheEight).Select(VerbOf).Concat(NotRun.Keys).Order(StringComparer.Ordinal));
+            Runs.Concat(TheTen).Select(VerbOf).Concat(NotRun.Keys).Order(StringComparer.Ordinal));
 
         void Walk(Command command, string path)
         {
@@ -249,13 +249,15 @@ public class DefaultActorTests
         }
     }
 
-    public static TheoryData<string[]> PersonsWord() => [.. TheEight];
+    public static TheoryData<string[]> PersonsWord() => [.. TheTen];
 
     /// <summary>The verbs that are a person's own word: no default actor applies to any of them.</summary>
-    private static readonly string[][] TheEight =
+    private static readonly string[][] TheTen =
     [
         ["approval", "approve", "apr_A"],
         ["approval", "reject", "apr_A"],
+        ["approval", "set-standing", "cmp_A", "--category", "interested"],
+        ["approval", "unset-standing", "cmp_A", "--category", "interested"],
         ["decision", "answer", "dec_A", "--answer", "Yes, go ahead."],
         ["preference", "set", "outreach.tone", "--value", "{\"tone\":\"plain\"}"],
         ["preference", "unset", "outreach.tone"],
@@ -319,11 +321,13 @@ public class DefaultActorTests
         ["profile", "enable", "local-codex"],
         ["approval", "list"],
         ["approval", "get", "apr_A"],
+        ["approval", "list-standing", "cmp_A"],
         ["block", "list"],
         ["block", "get", "blk_A"],
         ["decision", "list"],
         ["decision", "get", "dec_A"],
         ["decision", "raise", "wi_A", "--attempt", "att_A", "--question", "Which tone?"],
+        ["reply", "record", "cmp_A", "--plugin", "mailbox", "--thread", "thr_A", "--message", "msg_A", "--message-at", "2026-10-12T00:00:00Z", "--category", "interested", "--confidence", "0.9", "--reaction", "draft"],
         ["report", "get", "rpt_A"],
         ["report", "list"],
         ["journal", "append", "cmp_A", "--kind", "observation"],

@@ -360,3 +360,16 @@ public enum EventBackfillStatus
     Done,
     Failed,
 }
+
+/// <summary>
+/// What a role decided to do about one reply it read: act on it within what it may already do, draft an answer for a
+/// person to approve, hand the conversation to a person, or nothing at all. It is the decision, recorded; doing it is
+/// other work.
+/// </summary>
+public enum ReplyReaction
+{
+    Act,
+    Draft,
+    Escalate,
+    None,
+}

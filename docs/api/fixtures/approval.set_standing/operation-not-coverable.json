@@ -1,0 +1,33 @@
+{
+  "operation": "approval.set_standing",
+  "case": "operation-not-coverable",
+  "request": {
+    "campaign_id": "cmp_1",
+    "category": "interested",
+    "operations": [
+      "campaign.enroll"
+    ],
+    "expires_at": "2026-12-01T00:00:00Z",
+    "max_releases": 20,
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "the interested may hear back at once"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: operations: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "operations",
+          "code": "invalid",
+          "message": "operations must name one or both of conversation.reply and message.send."
+        }
+      ]
+    }
+  }
+}

@@ -330,6 +330,48 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// A host that is not on the machine ends the attempt as <c>host_not_available</c>, whichever host it is; one that
+    /// stops because it is not signed in does so only where that host reads a signal for it, which its row names. A host
+    /// that reads none, a host whose not-signed-in exit looks like any other, ends as any exit does, so the page may not
+    /// promise every host the code.
+    /// </summary>
+    [Fact]
+    public void The_host_matrix_says_a_signed_out_host_ends_as_host_not_available_only_where_its_row_names_the_signal()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains("A host whose program is not on this machine ends the attempt with `host_not_available`", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            "so does a host that stops because it is not signed in, where that host's row names the signal Jason reads for it; a host whose row names none ends such an attempt as any exit of it ends",
+            contract,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("or that stops because it is not signed in, ends the attempt", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every refusal of AI work is decided before a child exists but one: a host that ran and answered that it is not
+    /// signed in ends its attempt as <c>host_not_available</c> after the child ran. Both pages that list the codes say so,
+    /// and that such an end carries the fixed sentence and no byte of what the host wrote; neither says every code is
+    /// decided before a child exists.
+    /// </summary>
+    [Fact]
+    public void Both_pages_say_host_not_available_also_ends_an_attempt_after_the_child_ran()
+    {
+        foreach (var page in new[] { "execution-profiles.md", "work-execution.md" })
+        {
+            var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), page)));
+
+            Assert.Contains(
+                "except `host_not_available` where a host that ran answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no byte of what the host wrote",
+                contract,
+                StringComparison.Ordinal);
+            Assert.DoesNotMatch(
+                "Every one of these is decided before a child process exists(?!, except `host_not_available`)",
+                contract.Replace("**", "", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
     /// The host matrix has one home, §12, and it is held to the table the CLI and the runtime both read: every host this
     /// build knows has a row that says yes, with the skills root, the work directory's folder and the import file the
     /// table names; and a row for a host this build does not know yet says so, in the words a profile naming it meets.
@@ -403,6 +445,40 @@ public partial class ExecutionProfileDocTests
         Assert.All(
             rows.Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is null),
             row => Assert.Equal("—", row[7]));
+    }
+
+    /// <summary>
+    /// What holds for every host is said once, in the work-execution contract, and each host's own form of it in its
+    /// row of the matrix: how a launched role is let read a memory file, and how the brief on standard input reaches the
+    /// host. A row of a host this build registers names both; a row of a host it does not know yet names neither; and
+    /// the contract states each rule for every host, with Claude Code's form as its example.
+    /// </summary>
+    [Fact]
+    public void Each_host_s_row_says_how_it_reads_a_memory_file_and_takes_the_brief_and_the_contract_states_the_rule_for_every_host()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var header = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .First(line => line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Split('|', StringSplitOptions.TrimEntries)[1..^1];
+        Assert.Equal(["Reads a memory file by", "Takes the brief"], header[8..]);
+
+        var rows = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .ToList();
+        Assert.All(rows, row =>
+        {
+            var known = Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is not null;
+            Assert.All(row[8..], cell => Assert.Equal(!known, cell == "—"));
+        });
+
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
+        Assert.Contains("each host holds this rule in its own form", contract, StringComparison.Ordinal);
+        Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
     }
 
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>

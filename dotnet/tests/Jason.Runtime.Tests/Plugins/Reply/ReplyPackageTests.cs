@@ -39,7 +39,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.14.3", plugin.Version);
+        Assert.Equal("0.14.4", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.cancel", "message.send", "message.status", "optout.record", "schedule.list", "sender.list", "social_invitation.send"],
@@ -282,7 +282,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.14.3", result.Provenance.Version);
+        Assert.Equal("0.14.4", result.Provenance.Version);
     }
 
     /// <summary>
@@ -581,7 +581,7 @@ public class ReplyPackageTests
         var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
         Assert.True(start >= 0, "The README has no section on what the package cannot do.");
         var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
-        var entry = Flat(ChangelogSection(16));
+        var entry = Flat(ChangelogSection(17));
 
         Assert.All(
             new[]
@@ -654,7 +654,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_opens_with_0_14_3_a_cancel_of_a_send_reply_is_sending_and_reply_s_deferred_linkedin_sends()
     {
-        var section = Flat(ChangelogSection(0));
+        var section = Flat(ChangelogSection(1));
 
         Assert.StartsWith(" ## 0.14.3 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -682,7 +682,7 @@ public class ReplyPackageTests
         const string Coming = "once Reply times deferred LinkedIn sends itself";
         var readme = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "README.md")).Where(line => line.Contains(Code, StringComparison.Ordinal)).ToList();
         var table = ReplyErrorTable.AllRows().Select(entry => (string?)entry.Row["when"] ?? "").Where(when => when.Contains(Code, StringComparison.Ordinal)).ToList();
-        var changelog = Items(ChangelogSection(0)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
+        var changelog = Items(ChangelogSection(1)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
 
         Assert.Equal((2, 1, 1), (readme.Count, table.Count, changelog.Count));
         Assert.All(readme.Concat(table).Concat(changelog), text => Assert.Contains(Coming, Flat(text), StringComparison.Ordinal));
@@ -701,7 +701,7 @@ public class ReplyPackageTests
         const string Queued = "still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule)";
         var readme = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "README.md")).Where(line => line.Contains(Code, StringComparison.Ordinal)).ToList();
         var table = ReplyErrorTable.AllRows().Where(entry => entry.Key == "cancel_not_confirmed").SelectMany(entry => new[] { (string?)entry.Row["when"] ?? "", (string?)entry.Row["note"] ?? "" }).ToList();
-        var changelog = Items(ChangelogSection(0)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
+        var changelog = Items(ChangelogSection(1)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
 
         Assert.Equal((2, 2, 1), (readme.Count, table.Count, changelog.Count));
         Assert.All(
@@ -719,14 +719,13 @@ public class ReplyPackageTests
     /// <summary>
     /// A LinkedIn message may name a Reply sending schedule from 0.14.3, so the texts say what it meets: the changelog's
     /// entry names the flag, Reply's refusals of a schedule and the cancel Reply could not confirm; the README's paragraph
-    /// says Reply answers such a message as it answers an email under the scheduled reference; and no release notes keep
-    /// the known issue that a schedule times an email only. The package's item in the notes of its own release, 0.23.0,
-    /// stays at that release's tag; a later release's notes are not held to it.
+    /// says Reply answers such a message as it answers an email under the scheduled reference. What the release's notes
+    /// no longer say is held with the notes, by <see cref="ReleaseNotesTests"/>.
     /// </summary>
     [Fact]
     public void The_texts_say_a_linkedin_message_may_name_a_sending_schedule()
     {
-        var changelog = Flat(ChangelogSection(0));
+        var changelog = Flat(ChangelogSection(1));
         Assert.All(
             new[]
             {
@@ -741,9 +740,6 @@ public class ReplyPackageTests
         var paragraph = Flat(Assert.Single(readme, item => item.StartsWith("A LinkedIn message, InMail or voice message names a schedule", StringComparison.Ordinal)));
         Assert.Contains("answers it as it answers such an email", paragraph, StringComparison.Ordinal);
         Assert.Contains("`linkedin-scheduled-<n>`", paragraph, StringComparison.Ordinal);
-
-        var notes = Items(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "RELEASE-NOTES.md")));
-        Assert.DoesNotContain(notes, item => Flat(item).Contains("a sending schedule times an email only", StringComparison.Ordinal));
     }
 
     /// <summary>A page's items: each list item and each paragraph, whole, however it is wrapped.</summary>
@@ -759,7 +755,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_14_2_what_the_package_does_named_and_nothing_it_does_changed()
     {
-        var section = Flat(ChangelogSection(1));
+        var section = Flat(ChangelogSection(2));
 
         Assert.StartsWith(" ## 0.14.2 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -781,7 +777,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_14_1_the_readme_corrected_and_nothing_the_package_does_changed()
     {
-        var section = Flat(ChangelogSection(2));
+        var section = Flat(ChangelogSection(3));
 
         Assert.StartsWith(" ## 0.14.1 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -803,7 +799,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_14_0_templates_on_linkedin_and_the_codes_for_one_reply_could_not_fill_in()
     {
-        var section = Flat(ChangelogSection(3));
+        var section = Flat(ChangelogSection(4));
 
         Assert.StartsWith(" ## 0.14.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -831,7 +827,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_13_0_the_send_read_and_taken_back_the_schedule_and_the_calls_marked_as_the_harness_s()
     {
-        var section = Flat(ChangelogSection(4));
+        var section = Flat(ChangelogSection(5));
 
         Assert.StartsWith(" ## 0.13.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -881,7 +877,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_12_0_the_event_feed_it_reads_and_the_send_reply_takes()
     {
-        var section = Flat(ChangelogSection(5));
+        var section = Flat(ChangelogSection(6));
 
         Assert.StartsWith(" ## 0.12.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -914,7 +910,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_11_0_and_the_route_reply_does_not_have()
     {
-        var section = Flat(ChangelogSection(6));
+        var section = Flat(ChangelogSection(7));
 
         Assert.StartsWith(" ## 0.11.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -937,7 +933,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_10_0_and_the_template_it_sends()
     {
-        var section = Flat(ChangelogSection(7));
+        var section = Flat(ChangelogSection(8));
 
         Assert.StartsWith(" ## 0.10.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -960,7 +956,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_9_1_and_the_install_verb_its_readme_names()
     {
-        var section = Flat(ChangelogSection(8));
+        var section = Flat(ChangelogSection(9));
 
         Assert.StartsWith(" ## 0.9.1 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -976,7 +972,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_9_0_and_whether_the_contact_was_found_or_created()
     {
-        var section = Flat(ChangelogSection(9));
+        var section = Flat(ChangelogSection(10));
 
         Assert.StartsWith(" ## 0.9.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -1018,7 +1014,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_8_1_and_where_the_projected_fields_come_from()
     {
-        var section = Flat(ChangelogSection(10));
+        var section = Flat(ChangelogSection(11));
 
         Assert.StartsWith(" ## 0.8.1 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -1034,7 +1030,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_8_0_and_the_schedules_it_lists()
     {
-        var section = Flat(ChangelogSection(11));
+        var section = Flat(ChangelogSection(12));
 
         Assert.StartsWith(" ## 0.8.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -1054,7 +1050,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_7_0_and_the_sender_s_block()
     {
-        var section = Flat(ChangelogSection(12));
+        var section = Flat(ChangelogSection(13));
 
         Assert.StartsWith(" ## 0.7.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -1074,7 +1070,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_6_1_and_says_no_reply_answer_reaches_the_block_row()
     {
-        var section = Flat(ChangelogSection(13));
+        var section = Flat(ChangelogSection(14));
 
         Assert.StartsWith(" ## 0.6.1 ", section, StringComparison.Ordinal);
         Assert.Contains(
@@ -1092,7 +1088,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_6_0_and_the_three_operations_that_now_create_the_person()
     {
-        var section = Flat(ChangelogSection(14));
+        var section = Flat(ChangelogSection(15));
 
         Assert.StartsWith(" ## 0.6.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -1137,7 +1133,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_5_0_and_the_three_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(15));
+        var section = Flat(ChangelogSection(16));
 
         Assert.StartsWith(" ## 0.5.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -1153,7 +1149,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_4_0_and_the_four_inbox_operations_it_adds()
     {
-        var section = Flat(ChangelogSection(16));
+        var section = Flat(ChangelogSection(17));
 
         Assert.StartsWith(" ## 0.4.0 ", section, StringComparison.Ordinal);
         Assert.All(
@@ -1170,7 +1166,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_2_and_the_operation_it_added()
     {
-        var section = ChangelogSection(17);
+        var section = ChangelogSection(18);
 
         Assert.StartsWith("\n## 0.3.2\n", section, StringComparison.Ordinal);
         Assert.Contains("`campaign.create`", section, StringComparison.Ordinal);
@@ -1181,7 +1177,7 @@ public class ReplyPackageTests
     [Fact]
     public void The_changelog_keeps_0_3_1_and_the_rule()
     {
-        var section = ChangelogSection(18);
+        var section = ChangelogSection(19);
 
         Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
         Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);
@@ -1335,6 +1331,29 @@ public class ReplyPackageTests
 
         Assert.Contains("Reply reads " + classes + " `` $@\"`~!#%^&*()+,-./:;<= `` there", readme, StringComparison.Ordinal);
         Assert.Contains("Reply reads " + classes + " $@\"`~!#%^&*()+,-./:;<= there", (string?)row["when"], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What Reply does with a contact's later replies is stated as the fact it is: at most one reply to each sequence
+    /// email, a finished contact's later replies on that thread dropped before they are stored, the thread read as usual
+    /// once this side has answered through <c>conversation.reply</c>, LinkedIn keeping later messages, and the whole of
+    /// it said to come from how Reply is built rather than from an account. The earlier sentence, that only a contact's
+    /// first reply is read, is gone, and the changelog opens with the version that changed it.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_when_a_contacts_later_email_reply_is_lost_and_what_keeps_the_conversation_visible()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+        var section = Flat(ChangelogSection(0));
+
+        Assert.DoesNotContain("Only a contact's first reply is read.", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("stops detecting that contact's later replies", readme, StringComparison.Ordinal);
+        Assert.Contains("Reply keeps at most one reply to each email it sent, and drops a finished contact's later replies on that thread before it stores them", readme, StringComparison.Ordinal);
+        Assert.Contains("After this side has answered on the thread through `conversation.reply`, the contact's next replies on it are stored and read as usual.", readme, StringComparison.Ordinal);
+        Assert.Contains("A LinkedIn thread keeps later messages, so they are read.", readme, StringComparison.Ordinal);
+        Assert.Contains("are read from how Reply is built and are not yet observed on an account; an observation on one account confirms or corrects them.", readme, StringComparison.Ordinal);
+        Assert.StartsWith(" ## 0.14.4 ", section, StringComparison.Ordinal);
+        Assert.Contains("later replies", section, StringComparison.Ordinal);
     }
 
     /// <summary>The changelog's section at this position, newest first, from its heading up to the next one.</summary>

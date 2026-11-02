@@ -91,6 +91,26 @@ public sealed class RepositoryHygieneTests : IDisposable
         Assert.Equal(["scripts/planted.ps1 [a tracker key] REPLY" + "-999"], Hygiene());
     }
 
+    /// <summary>
+    /// A file's name is read publicly like its text, so a pointer in a path is named by its kind, at line 0, whatever the
+    /// file holds: these files hold bytes that are not text, and their names are read all the same. Each folder and the
+    /// file's own name are read on their own as well, so a name that is a pointer on its own is one in any folder.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/fix-" + "REPLY" + "-12345.md", "a tracker key", "REPLY" + "-12345")]
+    [InlineData("jason-" + "internal/readme.md", "the private repository by name", "jason-" + "internal")]
+    [InlineData("docs/jason-" + "internal/readme.md", "the private repository by name", "jason-" + "internal")]
+    [InlineData("docs/notes/jason-" + "internal.md", "the private repository by name", "jason-" + "internal")]
+    [InlineData("example." + "atlassian" + ".net.txt", "an Atlassian address", "atlassian" + ".net")]
+    public void A_pointer_in_a_file_name_is_named(string path, string kind, string matched)
+    {
+        var full = Path.Combine(_root, path.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllBytes(full, [0x89, 0x50, 0x00, 0x01]);
+
+        Assert.Equal([$"{path}:0 [{kind}] {matched}"], RepositoryHygiene.Findings(_root).Select(finding => finding.ToString()));
+    }
+
     /// <summary>A binary file holds no words, so a key in its bytes is not read.</summary>
     [Fact]
     public void A_binary_file_is_not_read()
@@ -114,6 +134,23 @@ public sealed class RepositoryHygieneTests : IDisposable
         GitTrees.Write(root, "new.txt", "REPLY" + "-2\n");
 
         Assert.Equal(["new.txt [a tracker key] REPLY" + "-2"], RepositoryHygiene.Findings(root).Select(finding => finding.Key));
+    }
+
+    /// <summary>
+    /// A repository whose own folder is short of the old 260-character limit on Windows, and whose object files are past
+    /// it, is built and read like any other: a temporary folder deep under a long one is where the tests of what the guard
+    /// reads in a repository run on a machine whose temporary folder is itself deep.
+    /// </summary>
+    [Fact]
+    public void A_repository_whose_files_lie_past_260_characters_is_built_and_read()
+    {
+        using var trees = new GitTrees();
+        var depth = Math.Max(8, 230 - (trees.Root.Length + 34));
+        var name = string.Join(Path.DirectorySeparatorChar, new string('d', depth).Chunk(100).Select(chunk => new string(chunk)));
+        var root = trees.NewRepository(name, ("README.md", "# Readme\n"), ("docs/page.md", "REPLY" + "-3\n"));
+        Assert.True(root.Length + "/.git/objects/00/".Length + 38 > 260, $"{root} is too short to hold an object file past 260 characters");
+
+        Assert.Equal(["docs/page.md [a tracker key] REPLY" + "-3"], RepositoryHygiene.Findings(root).Select(finding => finding.Key));
     }
 
     [Theory]

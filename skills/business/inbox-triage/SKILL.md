@@ -62,6 +62,32 @@ reading the text, so the approval **is** the rendered text, once per message. Tw
 are twelve approvals, and collapsing them into one yes is the exact inversion
 `approval-boundaries` exists to prevent.
 
+## With Jason, the replies have usually been worked before you open the inbox
+
+Unless the installation switched it off, Jason raises a responder for each thread that moved, without anybody asking.
+It reads the thread, records one verdict
+on the reply — a category, how sure it is, and what it decided to do — and then acts, drafts an answer or asks a
+person. So triage starts from what the responder left, not from a raw queue, and a person triaging works with that:
+
+- **A verdict that says draft** has its draft already, parked for the person's approval. Read it with them as it
+  stands, at the rendered text. **Never write a second draft beside it**: one reply has one verdict and one draft,
+  for a person as for a role, and a person who wants different words says so on the decision, which is then theirs to
+  settle.
+- **A verdict that says escalate** is a question waiting for the person, in their own words.
+- **A verdict that says act** has been acted on: a request to stop is already on the register, an out-of-office is
+  already waiting for its return date. Check that it was done; do not do it again.
+- **A verdict is a role's reading**, not the person's decision. Where it looks wrong, say so to the person, with the
+  verdict's line id, and leave the correction to them.
+- **A draft may have gone out without a question** where the person set a standing approval for that category in
+  that campaign. Which one let it go is in the record, and `approval-boundaries` says what a standing approval is.
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified
+jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
 ## Planning guidance
 
 Agree the scope before opening anything: everything, or a slice — one campaign, one meaning,
@@ -163,7 +189,10 @@ interested people with no meeting yet, and the follow-up that should exist for t
 ## Failure modes
 
 - **Batch-sending drafts.** Every message to a real person is its own `confirm_each`. There is
-  no bulk mode for this, by design, and no standing approval covers "the replies" as a class.
+  no bulk mode for this, by design, and no standing approval covers "the replies" as a class: where one exists it is
+  a person's own decision for one category of reply in one campaign, and it is never one you set.
+- **Drafting again for a reply that already has a draft.** Where a responder's verdict named a draft, one is parked
+  or has gone out; a second beside it sends two answers to one person.
 - **Switching channel silently** when the original channel is unavailable. `message.send`
   carries one channel per call, so the switch is a visible argument change and a new decision;
   tell the user instead of falling back.
@@ -216,6 +245,9 @@ Conversations contain personal data; keep quotes to what the decision requires. 
 
 ## Changelog
 
+- 3.1.0 (2026-11-02): with Jason, a reply has usually been worked before the inbox is opened: a responder records
+  a verdict and acts, drafts or asks. Triage reads what it left and never writes a second draft beside one; a standing
+  approval is a person's own decision for one category in one campaign.
 - 3.0.0 (2026-08-10): migrated onto contract 2.0.0. `conversation.read` → `conversation.get`;
   `conversation.reply` → `message.send`, which is a different family and the point of the move
   — a reply is a message, and switching channel is an argument change rather than a silent

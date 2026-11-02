@@ -63,7 +63,9 @@ public interface IAgentHost
     /// <summary>
     /// Whether this host is told which session an attempt keeps. Then <see cref="Compose"/> mints a fresh, non-empty id
     /// for every attempt and the provenance records it; a host that mints its own is told none, and the provenance names
-    /// no session rather than one the runtime did not give.
+    /// no session rather than one the runtime did not give. No launch reads this: the planner records what
+    /// <see cref="Compose"/> returned, and the seam's test holds every registered host's <see cref="Compose"/> to this
+    /// answer, which is enough for a host that is registered.
     /// </summary>
     bool TakesSessionId => true;
 

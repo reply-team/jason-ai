@@ -160,9 +160,9 @@ or your data directory. The answer is kept in memory and shown by `system.info`;
 
 **Where it goes.** The default feed is on `get.jasonharness.ai`, an address Reply.io operates, which redirects every
 request under `/releases/` to the same path in the public repository's releases on GitHub. A download is composed
-from the feed's own directory (§3), so it goes the same way. An installation built before 0.7.0 asks GitHub
-directly; both answer with the same file. An installation from 0.7.0 to 0.23.x asks the earlier address,
-`jasonharness.ai`, which keeps redirecting the same paths; if it ever stops,
+from the feed's own directory (§3), so it goes the same way, with the same `User-Agent`. An installation built
+before 0.7.0 asks GitHub directly; both answer with the same file. An installation from 0.7.0 to 0.23.x asks the
+earlier address, `jasonharness.ai`, which keeps redirecting the same paths; if it ever stops,
 `jason update apply --feed https://get.jasonharness.ai/releases/latest/download/manifest.json`, or a reinstall with
 the current one-liner, moves it, and the executable that arrives asks `get.jasonharness.ai` from then on.
 `Update:FeedUrl` set to that address moves only that runtime's own check: `jason update`, `jason ui install` and

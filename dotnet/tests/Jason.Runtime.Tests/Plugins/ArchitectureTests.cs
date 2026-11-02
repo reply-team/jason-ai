@@ -63,7 +63,8 @@ public class ArchitectureTests
     /// ordinary SDR vocabulary in this product — a prospect replies, a reply is classified — and they will keep
     /// appearing in operations, roles and seeded practice; a test that failed for one of those would be a test
     /// that fails for being right. What is refused is a vendor's product name, and the bare word used as an
-    /// identifier: a plugin id, a route default.
+    /// identifier: a plugin id, a route default. A command-line noun that is the word is read from the operation it
+    /// stands for (the verb map is one-to-one), so the noun is the operation's own and needs no exception here.
     /// </para>
     /// </summary>
     [Fact]

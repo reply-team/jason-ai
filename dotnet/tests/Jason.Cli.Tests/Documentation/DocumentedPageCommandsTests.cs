@@ -26,7 +26,7 @@ public class DocumentedPageCommandsTests
     /// </summary>
     private static readonly string[] Nouns =
     [
-        "jason profile ", "jason rolenote ", "jason campaign ", "jason project ", "jason preference ", "jason workitem ", "jason decision ", "jason update ",
+        "jason profile ", "jason rolenote ", "jason campaign ", "jason project ", "jason preference ", "jason workitem ", "jason decision ", "jason reply ", "jason update ",
         // Two lists called Nouns, two different questions. VerbMapTests.Nouns is "top-level names that are
         // nouns", and `uninstall` is not one -- it is declared there beside `status`, as a name no operation
         // stands behind. This list is "command prefixes whose printed lines this guard types", where the
@@ -69,6 +69,7 @@ public class DocumentedPageCommandsTests
         Path.Combine("docs", "projects.md"),
         Path.Combine("docs", "contracts", "preferences", "sender.identity.md"),
         Path.Combine("docs", "contracts", "preferences", "tone_of_voice.md"),
+        Path.Combine("docs", "contracts", "context", "goals.md"),
         Path.Combine("plugins", "ntfy", "README.md"),
     ];
 
