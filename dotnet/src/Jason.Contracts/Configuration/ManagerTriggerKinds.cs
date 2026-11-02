@@ -24,6 +24,7 @@ public static class ManagerTriggerKinds
         "workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired", "workitem_released",
         "workitem_awaiting_approval", "workitem_reopened", "workitem_waiting", "workitem_resumed",
         "approval_requested", "approval_approved", "approval_rejected", "approval_superseded", "approval_cancelled",
+        "standing_approval_set", "standing_approval_unset", "approval_standing_applied",
         "role_added", "role_updated", "role_note_set",
         "profile_created", "profile_revised", "profile_disabled", "profile_enabled",
         "plugins_reloaded", "routes_updated",

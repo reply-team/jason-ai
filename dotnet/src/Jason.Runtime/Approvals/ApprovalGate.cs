@@ -32,6 +32,12 @@ public static class ApprovalGate
     public const string InputChanged = "input_changed";
 
     /// <summary>
+    /// Why work was let go without being parked: a standing approval a person set covers it. The row records that
+    /// person's decision, made in advance, and is never a question anybody is asked.
+    /// </summary>
+    public const string StandingApproval = "standing_approval";
+
+    /// <summary>
     /// The decision that is still about this item: the one pending, or the one approved and not yet outgrown.
     /// At most one exists — a park supersedes whatever it replaces, and the database holds the pending half of
     /// that to one row per item.
@@ -105,6 +111,70 @@ public static class ApprovalGate
             key: "approval",
             updated: Names(approval),
             reason: approval.Reason,
+            workItem: item);
+
+        return approval;
+    }
+
+    /// <summary>
+    /// Writes the decision a standing approval made for this work: a row born approved, decided by the person who set the
+    /// standing approval, about the subject the claim would otherwise have parked, with the preview a person reading it
+    /// later sees. One line says the release and names the standing approval and the verdict; no question is asked, so no
+    /// line says one was and the item never waits.
+    /// </summary>
+    internal static Approval ReleaseUnderStanding(
+        JasonDbContext db,
+        JournalWriter journal,
+        WorkItem item,
+        ProviderOpPlan plan,
+        ApprovalSubject subject,
+        JsonObject preview,
+        StandingApprovals.Cover cover,
+        DateTime now)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(journal);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentNullException.ThrowIfNull(cover);
+
+        var approval = new Approval
+        {
+            PublicId = PublicId.New(IdPrefix),
+            WorkItem = item,
+            CampaignId = item.CampaignId,
+            Operation = plan.Contract.Id,
+            OperationVersion = plan.Contract.Version,
+            Subject = subject.Document.DeepClone().AsObject(),
+            SubjectHash = subject.Hash,
+            Preview = preview,
+            PluginId = plan.Plugin.Manifest.Id,
+            BindingIdentity = plan.BindingIdentity,
+            RouteScope = plan.Scope,
+            PluginSnapshotId = plan.PluginSnapshotId,
+            RoutingSnapshotId = plan.RoutingSnapshotId,
+            Status = ApprovalStatus.Approved,
+            Reason = StandingApproval,
+            RequestedAt = now,
+            DecidedAt = now,
+            DecidedByType = cover.SetBy.Type,
+            DecidedById = cover.SetBy.Id,
+        };
+
+        db.Approvals.Add(approval);
+        var names = Names(approval);
+        names["standing"] = cover.Standing.PublicId;
+        names["verdict"] = cover.Verdict.PublicId;
+        names["category"] = cover.Category;
+        journal.Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.ApprovalStandingApplied,
+            campaign: null,
+            key: cover.Standing.PublicId,
+            updated: names,
             workItem: item);
 
         return approval;

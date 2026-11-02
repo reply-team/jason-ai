@@ -15,7 +15,10 @@ public sealed record ApprovalDto(
     int OperationVersion,
     ApprovalStatus Status,
 
-    /// <summary>Why the work was parked: <c>approval_required</c>, or <c>input_changed</c> after a decision.</summary>
+    /// <summary>
+    /// Why the work was parked: <c>approval_required</c>, or <c>input_changed</c> after a decision; or
+    /// <c>standing_approval</c> where it was never parked, because a standing approval a person set released it.
+    /// </summary>
     string Reason,
     string SubjectHash,
     JsonObject Subject,
@@ -67,3 +70,42 @@ public sealed record ApprovalGetRequest(string? ApprovalId);
 /// anonymous human, which is right for creating work and wrong for deciding it.
 /// </summary>
 public sealed record ApprovalDecisionRequest(string? ApprovalId, ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// A person's word, given in advance, that the campaign's drafted replies of one category may go without a decision each
+/// time. <c>operations</c> is a non-empty set of <c>conversation.reply</c> and <c>message.send</c>, and
+/// <c>conversation.reply</c> alone when absent; <c>expires_at</c> and <c>max_releases</c> are optional limits. Only a person
+/// sets one, and the request names them.
+/// </summary>
+public sealed record ApprovalSetStandingRequest(
+    string? CampaignId,
+    string? Category,
+    IReadOnlyList<string>? Operations = null,
+    DateTimeOffset? ExpiresAt = null,
+    int? MaxReleases = null,
+    ActorRef? Actor = null,
+    string? Reason = null);
+
+/// <summary>Takes a campaign's standing approval for one category back. A person's act, as setting it is.</summary>
+public sealed record ApprovalUnsetStandingRequest(string? CampaignId, string? Category, ActorRef? Actor = null, string? Reason = null);
+
+/// <summary>The campaign's standing approvals that are set, in category order, those past a limit included.</summary>
+public sealed record ApprovalListStandingRequest(string? CampaignId, int? Limit = null, string? Cursor = null);
+
+/// <summary>
+/// One campaign's standing approval for one category, as it stands. <c>released</c> counts the work it has let go since
+/// it was set; <c>in_force</c> is false once it has expired or reached <c>max_releases</c>, and for a category that is not
+/// set, which answers with every other member null. <c>line_id</c> is the chronicle line that set it, which each line of a
+/// release under it names.
+/// </summary>
+public sealed record StandingApprovalDto(
+    string CampaignId,
+    string Category,
+    IReadOnlyList<string>? Operations,
+    DateTimeOffset? ExpiresAt,
+    int? MaxReleases,
+    int Released,
+    bool InForce,
+    ActorRef? SetBy,
+    DateTimeOffset? SetAt,
+    string? LineId);

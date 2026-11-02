@@ -38,19 +38,7 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
-        var category = request.Category?.Trim();
-        if (string.IsNullOrEmpty(category))
-        {
-            errors.Add("category", "required", "category is required: a word that names what kind of reply this is.");
-        }
-        else if (category.Length > MaxCategoryLength)
-        {
-            errors.Add("category", "too_long", string.Create(CultureInfo.InvariantCulture, $"category must be at most {MaxCategoryLength} characters."));
-        }
-        else if (category.EnumerateRunes().Any(PreviewTemplate.ChangesTheLine))
-        {
-            errors.Add("category", "invalid", "category is one line of text, without control, format or line-break characters.");
-        }
+        var category = Category(request.Category, errors);
 
         if (request.Confidence is not { } confidence)
         {
@@ -138,6 +126,30 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             contact: contact);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return JournalWriter.ToDto(entry, campaign.PublicId) with { ContactId = contact?.PublicId };
+    }
+
+    /// <summary>
+    /// A category as every verb that takes one reads it: trimmed, one line, at most <see cref="MaxCategoryLength"/>
+    /// characters, and otherwise compared exactly as written. A standing approval names its category by this same rule, so
+    /// the word it was set for and the word a verdict carries are compared as the same kind of string.
+    /// </summary>
+    internal static string? Category(string? value, ValidationErrors errors)
+    {
+        var category = value?.Trim();
+        if (string.IsNullOrEmpty(category))
+        {
+            errors.Add("category", "required", "category is required: a word that names what kind of reply this is.");
+        }
+        else if (category.Length > MaxCategoryLength)
+        {
+            errors.Add("category", "too_long", string.Create(CultureInfo.InvariantCulture, $"category must be at most {MaxCategoryLength} characters."));
+        }
+        else if (category.EnumerateRunes().Any(PreviewTemplate.ChangesTheLine))
+        {
+            errors.Add("category", "invalid", "category is one line of text, without control, format or line-break characters.");
+        }
+
+        return category;
     }
 
     private static void Identifier(ValidationErrors errors, string field, string? value)
