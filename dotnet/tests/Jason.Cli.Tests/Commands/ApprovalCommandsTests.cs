@@ -448,4 +448,94 @@ public class ApprovalCommandsTests
         Assert.Contains("campaign.enroll", cli.Text, StringComparison.Ordinal);
         Assert.Contains("pending", cli.Text, StringComparison.Ordinal);
     }
+
+    private const string OneStanding = """
+        {
+          "campaign_id": "cmp_01K52JR0000000000000000003",
+          "category": "interested",
+          "operations": ["conversation.reply", "message.send"],
+          "expires_at": "2026-12-01T00:00:00+00:00",
+          "max_releases": 20,
+          "released": 3,
+          "in_force": true,
+          "set_by": {"type": "human", "id": "ada"},
+          "set_at": "2026-09-14T10:00:00+00:00",
+          "line_id": "jrn_01K52JR0000000000000000009"
+        }
+        """;
+
+    /// <summary>A standing approval is set with what it covers and its limits, under the person who gives it.</summary>
+    [Fact]
+    public async Task Set_standing_sends_the_category_its_cover_and_limits_with_the_person()
+    {
+        using var cli = new CliRun(OneStanding);
+
+        var exit = await cli.RunAsync(
+            "--actor", "human:ada", "approval", "set-standing", "cmp_7", "--category", "interested",
+            "--operation", "conversation.reply", "--operation", "message.send",
+            "--expires-at", "2026-12-01T00:00:00Z", "--max-releases", "20", "--reason", "the interested may hear back at once");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ApprovalSetStanding,
+            "{\"campaign_id\":\"cmp_7\",\"category\":\"interested\",\"operations\":[\"conversation.reply\",\"message.send\"],"
+            + "\"expires_at\":\"2026-12-01T00:00:00Z\",\"max_releases\":20,\"reason\":\"the interested may hear back at once\","
+            + "\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    /// <summary>What is left out is not sent: the runtime's own defaults apply, a reply alone and no limit.</summary>
+    [Fact]
+    public async Task Set_standing_leaves_out_what_was_not_named()
+    {
+        using var cli = new CliRun(OneStanding);
+
+        var exit = await cli.RunAsync("--actor", "human:ada", "approval", "set-standing", "cmp_7", "--category", "interested");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ApprovalSetStanding,
+            "{\"campaign_id\":\"cmp_7\",\"category\":\"interested\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    [Fact]
+    public async Task Unset_standing_sends_the_category_with_the_person()
+    {
+        using var cli = new CliRun(OneStanding);
+
+        var exit = await cli.RunAsync("--actor", "human:ada", "approval", "unset-standing", "cmp_7", "--category", "interested");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ApprovalUnsetStanding,
+            "{\"campaign_id\":\"cmp_7\",\"category\":\"interested\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    /// <summary>The listing, for a person: each category, what it covers, whether it is in force and how much it let go.</summary>
+    [Fact]
+    public async Task List_standing_renders_one_category_to_a_row()
+    {
+        using var cli = new CliRun("{\"items\":[" + OneStanding + "],\"next_cursor\":null}");
+
+        var exit = await cli.RunAsync("approval", "list-standing", "cmp_7", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.ApprovalListStanding, "{\"campaign_id\":\"cmp_7\"}");
+        var row = Assert.Single(cli.Text.Split('\n'), line => line.StartsWith("interested", StringComparison.Ordinal));
+        Assert.Contains("conversation.reply, message.send", row, StringComparison.Ordinal);
+        Assert.Contains("3 of 20", row, StringComparison.Ordinal);
+        Assert.Contains("human:ada", row, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Set_standing_renders_the_record_for_a_person()
+    {
+        using var cli = new CliRun(OneStanding);
+
+        var exit = await cli.RunAsync("--actor", "human:ada", "approval", "set-standing", "cmp_7", "--category", "interested", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Category:      interested", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("In force:      yes", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Let go:        3 of 20", cli.Text, StringComparison.Ordinal);
+    }
 }

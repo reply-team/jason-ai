@@ -56,6 +56,24 @@ public static partial class JournalKinds
     /// <summary>The work the decision was about is gone, so the decision is not one anybody needs to make.</summary>
     public const string ApprovalCancelled = "approval_cancelled";
 
+    /// <summary>
+    /// A person set a campaign's standing approval for one category of reply: keyed by the category, with the record it
+    /// replaced (null where none stood) and the record set — the category, the operations it covers, its expiry and its
+    /// ceiling. Written by <c>approval.set_standing</c> only, and not a default manager trigger.
+    /// </summary>
+    public const string StandingApprovalSet = "standing_approval_set";
+
+    /// <summary>A person took a campaign's standing approval for one category back: keyed by the category, with the record it had.</summary>
+    public const string StandingApprovalUnset = "standing_approval_unset";
+
+    /// <summary>
+    /// The dispatcher released work under a standing approval instead of parking it: keyed by the line that set the
+    /// standing approval, with the approval it wrote, the operation, the subject's hash, the verdict that named the
+    /// category and the category. Never a draft, a subject or a name: the preview stays on the approval. Not a default
+    /// manager trigger: the manager reads what went out at its check-in.
+    /// </summary>
+    public const string ApprovalStandingApplied = "approval_standing_applied";
+
     /// <summary>An expired item was given a future due date and is work again.</summary>
     public const string WorkItemReopened = "workitem_reopened";
 
@@ -261,6 +279,9 @@ public static partial class JournalKinds
         ApprovalRejected,
         ApprovalSuperseded,
         ApprovalCancelled,
+        StandingApprovalSet,
+        StandingApprovalUnset,
+        ApprovalStandingApplied,
         WorkItemReopened,
         WorkItemWaiting,
         WorkItemResumed,
