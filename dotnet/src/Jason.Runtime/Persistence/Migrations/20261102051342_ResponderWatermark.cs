@@ -27,9 +27,9 @@ namespace Jason.Runtime.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "responder_watermark",
-                table: "campaigns");
+            // Dropped in place rather than by rebuilding the table, which would lose the triggers an earlier migration
+            // wrote on campaigns and, with foreign keys on, the rows that are deleted with a campaign.
+            migrationBuilder.Sql("ALTER TABLE campaigns DROP COLUMN responder_watermark;");
         }
     }
 }
