@@ -330,6 +330,45 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
+    /// <summary>
+    /// The host matrix has one home, §12, and it is held to the table the CLI and the runtime both read: every host this
+    /// build knows has a row that says yes, with the skills root, the work directory's folder and the import file the
+    /// table names; and a row for a host this build does not know yet says so, in the words a profile naming it meets.
+    /// </summary>
+    [Fact]
+    public void The_host_matrix_has_a_row_for_every_host_this_build_knows_with_the_tables_folders()
+    {
+        const string NotYet = "not in this build yet: a profile naming it is refused";
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var at = page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal);
+        Assert.True(at > 0, "execution-profiles.md has no section '12. The hosts'.");
+
+        var rows = page[at..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .ToList();
+        var words = rows.Select(row => row[1].Trim('`')).ToList();
+
+        Assert.Equal(words.Distinct(StringComparer.Ordinal).Count(), words.Count);
+        Assert.All(words, word => Assert.Matches("^[a-z][a-z0-9_]*$", word));
+        foreach (var facts in Jason.Contracts.Hosts.AgentHosts.All)
+        {
+            var word = Jason.Contracts.Hosts.AgentHosts.Word(facts.Kind);
+            var row = Assert.Single(rows, row => row[1] == $"`{word}`");
+            Assert.Equal($"`~/{facts.HomeSkills}`", row[2]);
+            Assert.Equal($"`{facts.WorkSkills}/<role>/`", row[3]);
+            Assert.Equal(facts.Instructions is { } file ? $"`{file.FileName}` (`{file.ImportLine}`)" : "—", row[4]);
+            Assert.Equal("yes", row[5]);
+        }
+
+        Assert.All(
+            rows.Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is null),
+            row => Assert.Equal(NotYet, row[5]));
+    }
+
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 
     [GeneratedRegex(@"\s+")]

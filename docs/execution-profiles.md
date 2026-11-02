@@ -30,7 +30,7 @@ A revision holds:
 
 | Field | Meaning |
 |---|---|
-| `host` | which host this describes. A closed vocabulary — `claude_code` in this version. An unknown value is refused when the profile is written, never discovered at launch |
+| `host` | which host this describes. A closed vocabulary — the `host` column of [§12](#12-the-hosts). An unknown value is refused when the profile is written, never discovered at launch |
 | `program` | what to start: an absolute path, or a name resolved on `PATH`. A `.cmd`, `.bat` or `.ps1`, in any case, is a script a shell would have to interpret and is refused when the profile is written with `shell_script`: Jason starts programs, never shells. The path is read as the operating system reads it, so a name Windows trims back to a script, such as `claude.cmd.`, is refused too. A profile stored before the rule keeps its program, and the claim refuses such a program with `host_not_available` before a child exists. A bare name without the extension is looked up on the search path (on Windows as an `.exe`, a `.com` or npm's own shim) |
 | `args` | what this profile adds after the arguments the runtime composes |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
@@ -149,8 +149,8 @@ can be read rather than guessed.
 
 ## 6. What the agent finds where it runs
 
-The per-attempt work directory is the per-item half of the launch. The runtime writes, before the
-child starts:
+The per-attempt work directory is the per-item half of the launch. Each host's folders are in [§12](#12-the-hosts).
+For Claude Code, the runtime writes, before the child starts:
 
 - `.claude/settings.json` holding the revision's **deny** rules, a deny of each web tool the revision does not
   grant (§7), each rule once, and three exclusions,
@@ -468,12 +468,33 @@ looking for.
 **Session resume.** A session id is minted per attempt and recorded, which is what a later nudge
 needs, but nothing resumes one: a host that is interrupted is retried from the start.
 
-**A second host.** The vocabulary has one value and one implementation. Adding another is one more
-implementation of the same seam plus one more value; nothing about the contract changes.
-
 **A general lineage resolver.** One hop, materialized at creation. Branch selection and ambiguity
 across a graph are not attempted.
 
 **Rate or spend limits.** Nothing bounds how many hosts a runtime launches per hour except
 `Dispatcher:MaxParallel`. A launched agent session is not free, and at background volumes that is a
 number worth watching rather than discovering.
+
+## 12. The hosts
+
+The interactive session runs from any agent with a shell: `jason` is a plain command, the skills are Markdown files,
+and the harness root carries `AGENTS.md`. `jason skills install --root <dir>` deploys into a host this table does not
+name. A launched role runs on a host a profile names, and a profile can name only a host this build knows: the
+`host` column below is the vocabulary, and a profile naming any other word is refused when it is written. `jason
+status` says which of these hosts it detected on this machine and whether every enabled profile names one of them
+(`agent_hosts`).
+
+| Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against |
+|---|---|---|---|---|---|---|
+| Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) |
+| Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — |
+| Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
+| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
+| GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
+| Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
+
+A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there — and
+`jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
+`AGENTS.md`, a one-line import file for every host that reads a file of another name. Jason holds no key for any host:
+each runs under the person's own plan, signed in by them, and a host that does not start, or that stops because it is
+not signed in, ends the attempt with `host_not_available` and one sentence of Jason's own, never the host's words.

@@ -397,9 +397,9 @@ attempt at a time, and whatever performs it reports what happened through the sa
 <id> --human` shows its attempts and how each ended.
 
 Which agent host runs a piece of AI work is named by an **execution profile**, and each attempt keeps the
-revision of the profile it ran under. In this release the host a profile can name is Claude Code; a profile naming
-another is refused when it is written. When no profile can run a piece of AI work it waits, blocked, and
-everything else keeps running:
+revision of the profile it ran under. The hosts a profile can name are those of the
+[host matrix](docs/execution-profiles.md#12-the-hosts); a profile naming another is refused when it is written.
+When no profile can run a piece of AI work it waits, blocked, and everything else keeps running:
 
 ```sh
 jason profile create local-claude --host claude_code --program claude   --deny Write --host-version-verified 2.1.275
