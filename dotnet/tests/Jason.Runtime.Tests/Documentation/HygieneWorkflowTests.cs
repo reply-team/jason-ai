@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
 using static Jason.Runtime.Tests.Documentation.Workflows;
@@ -5,8 +6,9 @@ using static Jason.Runtime.Tests.Documentation.Workflows;
 namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
-/// The workflows a public repository runs on other people's pull requests. None runs on <c>pull_request_target</c>,
-/// which runs this repository's workflow with its secrets and a token that can write, over whatever a fork brings.
+/// The workflows a public repository runs on other people's pull requests. None runs on <c>pull_request_target</c> or
+/// <c>workflow_run</c>, which run this repository's workflow with its secrets and a token that can write, over whatever a
+/// fork brings.
 /// <c>hygiene.yml</c> reads every pull request's added lines, title and body for what the tree's own files never carry,
 /// with the patterns the tree is held to; it holds a token that can only read and is handed no secret, and the title and
 /// the body reach its script as text. Its step is run here over git repositories these tests build.
@@ -30,27 +32,46 @@ public sealed class HygieneWorkflowTests
     public static TheoryData<string, string> Resemblances() =>
         [.. Rows(nameof(RepositoryHygieneTests.What_only_resembles_a_pointer_is_not_named)).Select(row => ((string)row[0]!, "What it does."))];
 
+    /// <summary>The names of a file the tree's own guard plants, each with the kind it is named by.</summary>
+    public static TheoryData<string, string> Names() =>
+        [.. Rows(nameof(RepositoryHygieneTests.A_pointer_in_a_file_name_is_named)).Select(row => ((string)row[0]!, (string)row[1]!))];
+
     /// <summary>
-    /// No workflow runs on <c>pull_request_target</c>, in any of the three shapes <c>on</c> takes: a pull request from a
-    /// fork would run this repository's workflow, with its secrets and a token that can write, over the fork's code.
+    /// The triggers that run this repository's workflow, with its secrets and a token that can write, over what a fork
+    /// brings: <c>pull_request_target</c> over a fork's pull request, and <c>workflow_run</c> after a fork's run, the usual
+    /// way a fork's artifact is taken up with privilege.
+    /// </summary>
+    private static readonly string[] Privileged = ["pull_request_target", "workflow_run"];
+
+    /// <summary>
+    /// No workflow runs on a trigger that runs this repository's workflow with its privileges over what a fork brings, in
+    /// any of the three shapes <c>on</c> takes.
     /// </summary>
     [Fact]
-    public void No_workflow_runs_on_pull_request_target()
+    public void No_workflow_runs_on_a_trigger_that_hands_a_fork_this_repository_s_privileges()
     {
-        var files = Directory.EnumerateFiles(Path.Combine([RepositoryRoot(), .. WorkflowDirectory]))
-            .Where(file => file.EndsWith(".yml", StringComparison.Ordinal) || file.EndsWith(".yaml", StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)
-            .ToList();
-        Assert.Contains(files, file => Path.GetFileName(file) == "hygiene.yml");
+        var directory = Path.Combine([RepositoryRoot(), .. WorkflowDirectory]);
+        Assert.True(File.Exists(Path.Combine(directory, "hygiene.yml")), "the workflows this test reads are not where it reads them");
 
-        foreach (var file in files)
-        {
-            var triggers = Triggers(Parse(File.ReadAllText(file)));
-            Assert.True(triggers.Count > 0, $"{Path.GetFileName(file)} names no trigger that this test can read");
-            Assert.True(
-                !triggers.Contains("pull_request_target"),
-                $"{Path.GetFileName(file)} runs on pull_request_target: {string.Join(", ", triggers)}");
-        }
+        Assert.Empty(PrivilegedRuns(directory));
+    }
+
+    /// <summary>A workflow planted with such a trigger, in each of the three shapes <c>on</c> takes, is named with it.</summary>
+    [Theory]
+    [InlineData("on: [push, pull_request_target]\n", "pull_request_target")]
+    [InlineData("'on': pull_request_target\n", "pull_request_target")]
+    [InlineData("\"on\":\n  pull_request_target:\n    types: [opened]\n", "pull_request_target")]
+    [InlineData("on: [push, workflow_run]\n", "workflow_run")]
+    [InlineData("'on': workflow_run\n", "workflow_run")]
+    [InlineData("\"on\":\n  workflow_run:\n    workflows: [CI]\n    types: [completed]\n", "workflow_run")]
+    public void A_workflow_planted_with_a_privileged_trigger_is_named(string on, string trigger)
+    {
+        using var tree = new TempTree();
+        var directory = tree.NewDirectory("workflows");
+        File.WriteAllText(Path.Combine(directory, "ci.yml"), "on: [push, pull_request]\njobs: {}\n");
+        File.WriteAllText(Path.Combine(directory, "planted.yaml"), on + "jobs: {}\n");
+
+        Assert.Equal([$"planted.yaml runs on {trigger}"], PrivilegedRuns(directory));
     }
 
     /// <summary>
@@ -171,6 +192,92 @@ public sealed class HygieneWorkflowTests
     }
 
     /// <summary>
+    /// A text saved as UTF-16 is read as the tree's own guard reads it: git calls it binary for its NUL bytes and shows
+    /// none of its lines, so the check reads the file the change leaves, through its byte order mark, line by line.
+    /// </summary>
+    [Theory]
+    [InlineData("utf-16le")]
+    [InlineData("utf-16be")]
+    public void A_text_file_in_utf_16_is_read_as_the_tree_s_guard_reads_it(string encoding)
+    {
+        using var repository = new Repository();
+        repository.Commit("README.md", "# Jason\n");
+        repository.Write(
+            "scripts/planted.ps1",
+            "# A script\n# Fixes " + "REPLY" + "-999\n",
+            encoding == "utf-16le" ? Encoding.Unicode : Encoding.BigEndianUnicode);
+        repository.Commit("README.md", "# Jason, again\n");
+
+        var run = repository.Check("A change", "What it does.");
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("::error::scripts/planted.ps1:2: a tracker key", run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>A binary file holds no words, for the check as for the tree's guard, so a key in its bytes is not read.</summary>
+    [Fact]
+    public void A_binary_file_is_not_read()
+    {
+        using var repository = new Repository();
+        repository.Commit("README.md", "# Jason\n");
+        repository.Write("image.png", [0x89, 0x50, 0x00, .. Encoding.ASCII.GetBytes("REPLY" + "-12345")]);
+        repository.Commit("README.md", "# Jason, again\n");
+
+        var run = repository.Check("A change", "What it does.");
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+    }
+
+    /// <summary>
+    /// A name the change gives a file, added or by a rename, is read with the patterns the tree's own guard reads every
+    /// path with: a name is read publicly like a line.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Names))]
+    public void A_pointer_in_a_name_the_change_gives_a_file_is_refused(string path, string kind)
+    {
+        foreach (var renamed in (bool[])[false, true])
+        {
+            using var repository = new Repository();
+            repository.Commit("README.md", "# Jason\n");
+            if (renamed)
+            {
+                repository.Commit("docs/page.md", "# A page\n");
+                repository.Move("docs/page.md", path);
+            }
+            else
+            {
+                repository.Commit(path, "# A page\n");
+            }
+
+            var run = repository.Check("A change", "What it does.");
+
+            Assert.True(run.Exit != 0, $"renamed: {renamed}: {run.Stdout}{run.Stderr}");
+            Assert.Contains($"::error::the file name {path}: {kind}", run.Stdout, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The error line names the file as it is called: a name with a space keeps no tab git writes after it, and a name
+    /// beyond ASCII is written in its own letters, not quoted and escaped.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/a page.md")]
+    [InlineData("docs/caf\u00e9.md")]
+    [InlineData("docs/caf\u00e9 au lait.md")]
+    public void A_file_is_named_in_the_error_line_as_it_is_called(string path)
+    {
+        using var repository = new Repository();
+        repository.Commit(path, "# A page\n");
+        repository.Commit(path, "# A page\n\nFixes " + "REPLY" + "-1.\n");
+
+        var run = repository.Check("A change", "What it does.");
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains($"::error::{path}:3: a tracker key\n", run.Stdout.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// What the check passes: whatever the tree's own guard passes, and a body that is empty.
     /// </summary>
     [Theory]
@@ -235,6 +342,22 @@ public sealed class HygieneWorkflowTests
             .Cast<InlineDataAttribute>()
             .Select(row => row.Data)];
 
+    /// <summary>Each workflow under <paramref name="directory"/> that runs on a privileged trigger, by file and trigger.</summary>
+    private static List<string> PrivilegedRuns(string directory)
+    {
+        var found = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(directory)
+            .Where(file => file.EndsWith(".yml", StringComparison.Ordinal) || file.EndsWith(".yaml", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal))
+        {
+            var triggers = Triggers(Parse(File.ReadAllText(file)));
+            Assert.True(triggers.Count > 0, $"{Path.GetFileName(file)} names no trigger that this test can read");
+            found.AddRange(triggers.Intersect(Privileged, StringComparer.Ordinal).Select(trigger => $"{Path.GetFileName(file)} runs on {trigger}"));
+        }
+
+        return found;
+    }
+
     /// <summary>The triggers a workflow names, whichever of the three shapes its <c>on</c> takes.</summary>
     private static List<string> Triggers(YamlMappingNode workflow) =>
         Node(workflow, "on") switch
@@ -283,6 +406,23 @@ public sealed class HygieneWorkflowTests
         public string Root { get; }
 
         public void Write(string path, string text) => GitTrees.Write(Root, path, text);
+
+        public void Write(string path, string text, Encoding encoding) => Write(path, [.. encoding.GetPreamble(), .. encoding.GetBytes(text)]);
+
+        public void Write(string path, byte[] bytes)
+        {
+            var full = Path.Combine(Root, path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, bytes);
+        }
+
+        /// <summary>A rename of a committed file, committed.</summary>
+        public void Move(string from, string to)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(Root, to.Replace('/', Path.DirectorySeparatorChar)))!);
+            Git(Root, "mv", from, to);
+            Git(Root, "commit", "--quiet", "-m", "A change");
+        }
 
         public void Commit(string path, string text)
         {

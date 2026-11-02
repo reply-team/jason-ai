@@ -91,6 +91,23 @@ public sealed class RepositoryHygieneTests : IDisposable
         Assert.Equal(["scripts/planted.ps1 [a tracker key] REPLY" + "-999"], Hygiene());
     }
 
+    /// <summary>
+    /// A file's name is read publicly like its text, so a pointer in a path is named by its kind, at line 0, whatever the
+    /// file holds: these files hold bytes that are not text, and their names are read all the same.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/fix-" + "REPLY" + "-12345.md", "a tracker key", "REPLY" + "-12345")]
+    [InlineData("jason-" + "internal/readme.md", "the private repository by name", "jason-" + "internal")]
+    [InlineData("example." + "atlassian" + ".net.txt", "an Atlassian address", "atlassian" + ".net")]
+    public void A_pointer_in_a_file_name_is_named(string path, string kind, string matched)
+    {
+        var full = Path.Combine(_root, path.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllBytes(full, [0x89, 0x50, 0x00, 0x01]);
+
+        Assert.Equal([$"{path}:0 [{kind}] {matched}"], RepositoryHygiene.Findings(_root).Select(finding => finding.ToString()));
+    }
+
     /// <summary>A binary file holds no words, so a key in its bytes is not read.</summary>
     [Fact]
     public void A_binary_file_is_not_read()

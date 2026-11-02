@@ -18,8 +18,9 @@ internal sealed record HygieneFinding(string File, int Line, string Kind, string
 /// <summary>
 /// What no file of this repository carries, since every file of it is read publicly: a tracker key, an Atlassian
 /// address, an attribution trailer, a session link, or another repository of ours. Every text file the tree holds is
-/// read, code and comments included; a binary file holds no words. Each pattern is written so that it does not match
-/// itself, so the file that holds them is read like any other.
+/// read, code and comments included; a binary file holds no words. Every file's path is read too, whatever the file
+/// holds, since a name is read publicly like a line. Each pattern is written so that it does not match itself, so the
+/// file that holds them is read like any other.
 /// </summary>
 internal static partial class RepositoryHygiene
 {
@@ -34,13 +35,17 @@ internal static partial class RepositoryHygiene
         ("the private repository by name", PrivateRepository()),
     ];
 
-    /// <summary>Every finding in the text files of the tree under <paramref name="root"/>, file by file.</summary>
+    /// <summary>Every finding in the paths and the text files of the tree under <paramref name="root"/>, file by file.</summary>
     public static IReadOnlyList<HygieneFinding> Findings(string root) =>
     [
-        .. RepositoryTree.Files(root)
-            .Where(file => RepositoryTree.IsText(root, file))
-            .SelectMany(file => Read(file, File.ReadAllText(Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar))).ReplaceLineEndings("\n"))),
+        .. RepositoryTree.Files(root).SelectMany(file => Name(file).Concat(
+            RepositoryTree.IsText(root, file)
+                ? Read(file, File.ReadAllText(Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar))).ReplaceLineEndings("\n"))
+                : [])),
     ];
+
+    /// <summary>Every pattern's matches in a file's path, each at line 0, a finding about the file as a whole.</summary>
+    public static IEnumerable<HygieneFinding> Name(string file) => Read(file, file).Select(finding => finding with { Line = 0 });
 
     /// <summary>Every pattern's matches in one text, in the order of the text.</summary>
     public static List<HygieneFinding> Read(string file, string text)
