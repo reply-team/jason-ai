@@ -431,7 +431,10 @@ public sealed class HygieneWorkflowTests
             Git(Root, "commit", "--quiet", "-m", "A change");
         }
 
-        /// <summary>The step over the last commit's change against its parent, with this title and body.</summary>
+        /// <summary>
+        /// The step over the last commit's change against its parent, with this title and body. The machine's system
+        /// configuration is kept out, as it is from every git a test runs, and long paths are on, as they are there.
+        /// </summary>
         public (int Exit, string Stdout, string Stderr) Check(string title, string body)
         {
             var step = Path.Combine(tree.Root, Guid.NewGuid().ToString("N") + ".ps1");
@@ -439,7 +442,14 @@ public sealed class HygieneWorkflowTests
             var harness = Path.Combine(tree.Root, Guid.NewGuid().ToString("N") + ".ps1");
             File.WriteAllText(harness, $"$ErrorActionPreference = 'Stop'\nSet-Location -LiteralPath '{Root}'\ntry {{ & '{step}'; if ((Test-Path -LiteralPath variable:\\LASTEXITCODE)) {{ exit $LASTEXITCODE }} }} catch {{ [Console]::Error.WriteLine($_.Exception.Message); exit 1 }}\n");
             return Pwsh(
-                new Dictionary<string, string>(StringComparer.Ordinal) { ["TITLE"] = title, ["BODY"] = body, ["GIT_CONFIG_NOSYSTEM"] = "1" },
+                new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["TITLE"] = title,
+                    ["BODY"] = body,
+                    ["GIT_CONFIG_NOSYSTEM"] = "1",
+                    ["GIT_CONFIG_COUNT"] = "1",
+                    ["GIT_CONFIG_KEY_0"] = "core.longpaths",
+                    ["GIT_CONFIG_VALUE_0"] = "true",
+                },
                 "-File",
                 harness);
         }

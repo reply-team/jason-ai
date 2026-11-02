@@ -133,6 +133,23 @@ public sealed class RepositoryHygieneTests : IDisposable
         Assert.Equal(["new.txt [a tracker key] REPLY" + "-2"], RepositoryHygiene.Findings(root).Select(finding => finding.Key));
     }
 
+    /// <summary>
+    /// A repository whose own folder is short of the old 260-character limit on Windows, and whose object files are past
+    /// it, is built and read like any other: a temporary folder deep under a long one is where the tests of what the guard
+    /// reads in a repository run on a machine whose temporary folder is itself deep.
+    /// </summary>
+    [Fact]
+    public void A_repository_whose_files_lie_past_260_characters_is_built_and_read()
+    {
+        using var trees = new GitTrees();
+        var depth = Math.Max(8, 230 - (trees.Root.Length + 34));
+        var name = string.Join(Path.DirectorySeparatorChar, new string('d', depth).Chunk(100).Select(chunk => new string(chunk)));
+        var root = trees.NewRepository(name, ("README.md", "# Readme\n"), ("docs/page.md", "REPLY" + "-3\n"));
+        Assert.True(root.Length + "/.git/objects/00/".Length + 38 > 260, $"{root} is too short to hold an object file past 260 characters");
+
+        Assert.Equal(["docs/page.md [a tracker key] REPLY" + "-3"], RepositoryHygiene.Findings(root).Select(finding => finding.Key));
+    }
+
     [Theory]
     [InlineData("[p](docs/nothing.md)", "README.md [a] docs/nothing.md")]
     [InlineData("[p][r]\n\n[r]: docs/nothing.md", "README.md [a] docs/nothing.md")]
