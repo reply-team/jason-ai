@@ -6,7 +6,7 @@
     "plugin_id": "mailbox",
     "thread_id": "thr-1042",
     "message_id": "msg-77",
-    "message_at": "2026-09-14T11:30:00Z",
+    "message_at": "2026-09-14T11:30:00.250Z",
     "contact_id": "cnt_1",
     "category": "interested",
     "confidence": 0.9,
@@ -16,7 +16,7 @@
       "type": "role",
       "id": "responder"
     },
-    "reason": "asked for a call next week"
+    "reason": "interested by the table; draft toward the demo"
   },
   "status": 200,
   "response": {
@@ -30,13 +30,13 @@
     "campaign_id": "cmp_1",
     "work_item_id": null,
     "attempt_id": null,
-    "key": "msg-77",
+    "key": "sha256:recorded-1",
     "old": null,
     "new": {
-      "plugin_id": "mailbox",
-      "thread_id": "thr-1042",
+      "plugin": "mailbox",
+      "thread": "thr-1042",
       "message_id": "msg-77",
-      "message_at": "2026-09-14T11:30:00Z",
+      "message_at": "2026-09-14T11:30:00.250Z",
       "contact_id": "cnt_1",
       "category": "interested",
       "confidence": 0.9,
@@ -44,7 +44,7 @@
       "goal_id": "demo",
       "goal_kind": "demo"
     },
-    "reason": "asked for a call next week",
+    "reason": "interested by the table; draft toward the demo",
     "contact_id": "cnt_1",
     "campaign_name": null,
     "contact_name": null,

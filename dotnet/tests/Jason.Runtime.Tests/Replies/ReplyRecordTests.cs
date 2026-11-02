@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -26,7 +27,7 @@ public class ReplyRecordTests
 
     /// <summary>What the line carries, and all of it: identifiers, a moment, numbers and words from closed lists, and the category.</summary>
     private static readonly string[] LineFields =
-        ["plugin_id", "thread_id", "message_id", "message_at", "contact_id", "category", "confidence", "reaction", "goal_id", "goal_kind"];
+        ["plugin", "thread", "message_id", "message_at", "contact_id", "category", "confidence", "reaction", "goal_id", "goal_kind"];
 
     /// <summary>Each check the request is held to, the field it is refused at and the code it is refused with.</summary>
     public static TheoryData<string, string, string> Refusals() => new()
@@ -34,6 +35,8 @@ public class ReplyRecordTests
         { "category blank", "category", "required" },
         { "category too long", "category", "too_long" },
         { "category with a line break", "category", "invalid" },
+        { "category with a line separator", "category", "invalid" },
+        { "category with a paragraph separator", "category", "invalid" },
         { "confidence missing", "confidence", "required" },
         { "confidence below 0", "confidence", "invalid" },
         { "confidence above 1", "confidence", "invalid" },
@@ -46,6 +49,7 @@ public class ReplyRecordTests
         { "message too long", "message_id", "too_long" },
         { "moment missing", "message_at", "required" },
         { "goal blank", "goal_id", "invalid" },
+        { "goal longer than any id", "goal_id", "unknown" },
         { "goal the campaign does not have", "goal_id", "unknown" },
         { "reason too long", "reason", "too_long" },
     };
@@ -57,21 +61,21 @@ public class ReplyRecordTests
         await using var db = database.Open();
         var seed = await SeedAsync(db);
 
-        var entry = await Service(db).RecordAsync(Request(seed) with { Reason = "asked for a call next week" }, Ct);
+        var entry = await Service(db).RecordAsync(Request(seed) with { Reason = "interested by the table; draft toward the demo" }, Ct);
 
         Assert.Equal(JournalKinds.ReplyClassified, entry.Kind);
         Assert.Equal(seed.Campaign.PublicId, entry.CampaignId);
         Assert.Equal(seed.Contact.PublicId, entry.ContactId);
         Assert.Equal(Ada, entry.Actor);
-        Assert.Equal("msg-77", entry.Key);
-        Assert.Equal("asked for a call next week", entry.Reason);
+        Assert.Equal(InboundSync.VerdictKey("mailbox", "thr-1042", "msg-77"), entry.Key);
+        Assert.Equal("interested by the table; draft toward the demo", entry.Reason);
         Assert.StartsWith("jrn_", entry.Id, StringComparison.Ordinal);
 
         var line = (JsonObject)entry.New!;
-        Assert.Equal("mailbox", (string?)line["plugin_id"]);
-        Assert.Equal("thr-1042", (string?)line["thread_id"]);
+        Assert.Equal("mailbox", (string?)line["plugin"]);
+        Assert.Equal("thr-1042", (string?)line["thread"]);
         Assert.Equal("msg-77", (string?)line["message_id"]);
-        Assert.Equal("2026-09-14T11:30:00Z", (string?)line["message_at"]);
+        Assert.Equal("2026-09-14T11:30:00.250Z", (string?)line["message_at"]);
         Assert.Equal(seed.Contact.PublicId, (string?)line["contact_id"]);
         Assert.Equal("interested", (string?)line["category"]);
         Assert.Equal(0.9, (double)line["confidence"]!);
@@ -83,6 +87,48 @@ public class ReplyRecordTests
         Assert.Equal(entry.Id, stored.PublicId);
         Assert.Equal(seed.Campaign.Id, stored.CampaignId);
         Assert.Equal(seed.Contact.Id, stored.ContactId);
+    }
+
+    /// <summary>
+    /// A second verdict on the same reply is a second line, never a change to the first: both are read back, the later
+    /// one last, and a reader takes the latest for a reply as the verdict that stands.
+    /// </summary>
+    [Fact]
+    public async Task A_second_verdict_on_the_same_reply_is_a_second_line_and_the_later_one_comes_last()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+
+        var first = await Service(db).RecordAsync(Request(seed), Ct);
+        var second = await Service(db).RecordAsync(Request(seed) with { Category = "not_now", Reaction = ReplyReaction.None }, Ct);
+
+        var lines = await db.Journal.Where(row => row.Kind == JournalKinds.ReplyClassified).OrderBy(row => row.Id).ToListAsync(Ct);
+        Assert.Equal([first.Id, second.Id], lines.Select(row => row.PublicId));
+        Assert.Equal(first.Key, second.Key);
+        Assert.Equal(
+            ["interested", "not_now"],
+            lines.Select(row => (string?)JournalWriter.ToDto(row, seed.Campaign.PublicId).New!["category"]));
+    }
+
+    /// <summary>
+    /// The line is said under the reply's identity within the campaign — plugin, thread and message, hashed — never the
+    /// bare message id, which is the provider's: two plugins of one campaign may each have a message 77.
+    /// </summary>
+    [Fact]
+    public async Task The_key_is_the_reply_s_identity_and_never_a_bare_provider_id()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+
+        var mailbox = await Service(db).RecordAsync(Request(seed), Ct);
+        var other = await Service(db).RecordAsync(Request(seed) with { PluginId = "another_mailbox" }, Ct);
+        var thread = await Service(db).RecordAsync(Request(seed) with { ThreadId = "thr-2001" }, Ct);
+
+        Assert.NotEqual("msg-77", mailbox.Key);
+        Assert.Equal(InboundSync.VerdictKey("mailbox", "thr-1042", "msg-77"), mailbox.Key);
+        Assert.Equal(3, new[] { mailbox.Key, other.Key, thread.Key }.Distinct(StringComparer.Ordinal).Count());
     }
 
     /// <summary>
@@ -376,14 +422,14 @@ public class ReplyRecordTests
             plugin_id = "mailbox",
             thread_id = "thr-1042",
             message_id = "msg-77",
-            message_at = "2026-09-14T11:30:00Z",
+            message_at = "2026-09-14T11:30:00.250Z",
             contact_id = contact.Id,
             category = "interested",
             confidence = 0.9,
             reaction = "draft",
             goal_id = "demo",
             actor = new { type = "role", id = "responder" },
-            reason = "asked for a call next week",
+            reason = "interested by the table; draft toward the demo",
         };
 
         var recorded = await api.RecordAsync<JournalEntryDto>(Operations.ReplyRecord, "recorded", verdict, Ct);
@@ -400,6 +446,8 @@ public class ReplyRecordTests
         "category blank" => request with { Category = "   " },
         "category too long" => request with { Category = new string('c', ReplyService.MaxCategoryLength + 1) },
         "category with a line break" => request with { Category = "interested\nnow" },
+        "category with a line separator" => request with { Category = "interested\u2028now" },
+        "category with a paragraph separator" => request with { Category = "interested\u2029now" },
         "confidence missing" => request with { Confidence = null },
         "confidence below 0" => request with { Confidence = -0.01 },
         "confidence above 1" => request with { Confidence = 1.01 },
@@ -412,6 +460,7 @@ public class ReplyRecordTests
         "message too long" => request with { MessageId = new string('m', ReplyService.MaxIdentifierLength + 1) },
         "moment missing" => request with { MessageAt = null },
         "goal blank" => request with { GoalId = " " },
+        "goal longer than any id" => request with { GoalId = new string('g', 65) },
         "goal the campaign does not have" => request with { GoalId = "purchase" },
         "reason too long" => request with { Reason = new string('r', 2001) },
         _ => throw new ArgumentOutOfRangeException(nameof(change), change, "no such change"),
@@ -422,7 +471,7 @@ public class ReplyRecordTests
         "mailbox",
         "thr-1042",
         "msg-77",
-        new DateTimeOffset(2026, 9, 14, 11, 30, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 9, 14, 11, 30, 0, 250, TimeSpan.Zero),
         "interested",
         0.9,
         ReplyReaction.Draft,

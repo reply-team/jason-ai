@@ -6,7 +6,7 @@
     "plugin_id": "mailbox",
     "thread_id": "thr-1042",
     "message_id": "msg-77",
-    "message_at": "2026-09-14T11:30:00Z",
+    "message_at": "2026-09-14T11:30:00.250Z",
     "contact_id": "cnt_1",
     "category": "interested",
     "confidence": 0.9,
@@ -16,7 +16,7 @@
       "type": "role",
       "id": "responder"
     },
-    "reason": "asked for a call next week"
+    "reason": "interested by the table; draft toward the demo"
   },
   "status": 400,
   "response": {

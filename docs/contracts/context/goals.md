@@ -33,7 +33,8 @@ has been settled, and the roles take the default goal, a demo.
   keeps naming the same goal for the campaign's life: a goal whose title or wording is edited keeps its id, and a goal
   that means something else is a new goal with a new id. A list that leaves out an id a verdict once named is
   accepted as written: the verdict's line copied the goal's id and kind when it was recorded, so it still reads
-  without the list, and only a later verdict is held to the goals as they then stand.
+  without the list, and only a later verdict is held to the goals as they then stand. A reader of an old line relies
+  on the line's `goal_kind`, never on a join to the current goals by id.
 - `kind` is one of `meeting`, `demo`, `trial`, `interested_reply`, `purchase` and `custom`; `custom` is the kind for
   a goal the list does not name, which its title and `reached_when` then say.
 - `title` names the goal for a person reading a list of them.
@@ -53,11 +54,12 @@ not name the key never checks it again, so goals written before this document ch
 ```sh
 jason campaign create --name "Spring outreach" --context '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}'
 jason campaign update-context cmp_01HZY3M4N5P6Q7R8S9T0V1W2X3 --set '{"goals":[]}'
-jason reply record cmp_01HZY3M4N5P6Q7R8S9T0V1W2X3 --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --category interested --confidence 0.9 --reaction draft --goal demo
+jason reply record cmp_01HZY3M4N5P6Q7R8S9T0V1W2X3 --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --category interested --confidence 0.9 --reaction draft --goal demo --reason "interested by the table; draft toward the demo"
 ```
 
 The last line is a verdict on one reply that names the goal by its id; the runtime refuses an id the campaign's goals
-do not carry ([`../../runtime-api.md`](../../runtime-api.md), `reply.record`).
+do not carry ([`../../runtime-api.md`](../../runtime-api.md), `reply.record`). Its reason is the actor's reason for the
+verdict, never the reply's words.
 
 ## The fields
 

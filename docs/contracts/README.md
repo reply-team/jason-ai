@@ -201,8 +201,8 @@ confidence, the reaction it chose and the goal it steers to — through the Runt
 the runtime's: `journal.append` refuses it to every other writer. It carries the campaign, the contact, the plugin and
 thread, the message's provider identifier and moment, the category as a string, the confidence from 0 to 1, the
 reaction (`act`, `draft`, `escalate` or `none`), the goal's id and kind, and the actor, and never a word a person
-wrote: no subject, no body, no preview, no name. The runtime checks that the category is a non-empty string and
-nothing more; what a category means is the skills' business, never the runtime's.
+wrote: no subject, no body, no preview, no name. The runtime checks that the category is one non-empty line of text
+and nothing more; what a category means is the skills' business, never the runtime's.
 
 ## What a document states
 

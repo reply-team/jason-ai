@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -30,9 +32,6 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
     /// <summary>A provider's identifier for a plugin, a thread or a message; generous for any of them, short of a payload.</summary>
     public const int MaxIdentifierLength = 256;
 
-    /// <summary>A goal's id, as the campaign's goals publish it.</summary>
-    public const int MaxGoalIdLength = 64;
-
     public async Task<JournalEntryDto> RecordAsync(ReplyRecordRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -48,9 +47,9 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
         {
             errors.Add("category", "too_long", string.Create(CultureInfo.InvariantCulture, $"category must be at most {MaxCategoryLength} characters."));
         }
-        else if (category.Any(char.IsControl))
+        else if (category.EnumerateRunes().Any(PreviewTemplate.ChangesTheLine))
         {
-            errors.Add("category", "invalid", "category is one line of text, without control characters or line breaks.");
+            errors.Add("category", "invalid", "category is one line of text, without control, format or line-break characters.");
         }
 
         if (request.Confidence is not { } confidence)
@@ -76,17 +75,9 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             errors.Add("message_at", "required", "message_at is required: the moment the reply arrived, in ISO-8601.");
         }
 
-        if (request.GoalId is not null)
+        if (request.GoalId is not null && request.GoalId.Trim().Length == 0)
         {
-            var goal = request.GoalId.Trim();
-            if (goal.Length == 0)
-            {
-                errors.Add("goal_id", "invalid", "goal_id names one of the campaign's goals by its id, or is left out.");
-            }
-            else if (goal.Length > MaxGoalIdLength)
-            {
-                errors.Add("goal_id", "too_long", string.Create(CultureInfo.InvariantCulture, $"goal_id must be at most {MaxGoalIdLength} characters."));
-            }
+            errors.Add("goal_id", "invalid", "goal_id names one of the campaign's goals by its id, or is left out.");
         }
 
         if (request.Reason is not null && request.Reason.Trim().Length > CampaignService.MaxReasonLength)
@@ -117,12 +108,15 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 
         var (workItem, attempt) = await AttemptOfAsync(actor, campaign, cancellationToken).ConfigureAwait(false);
 
+        var plugin = request.PluginId!.Trim();
+        var thread = request.ThreadId!.Trim();
+        var message = request.MessageId!.Trim();
         var line = new JsonObject
         {
-            ["plugin_id"] = request.PluginId!.Trim(),
-            ["thread_id"] = request.ThreadId!.Trim(),
-            ["message_id"] = request.MessageId!.Trim(),
-            ["message_at"] = request.MessageAt!.Value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture),
+            ["plugin"] = plugin,
+            ["thread"] = thread,
+            ["message_id"] = message,
+            ["message_at"] = InboundSync.Instant(request.MessageAt!.Value),
             ["contact_id"] = contact?.PublicId,
             ["category"] = category,
             ["confidence"] = request.Confidence!.Value,
@@ -136,7 +130,7 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             actor,
             JournalKinds.ReplyClassified,
             campaign,
-            key: request.MessageId!.Trim(),
+            key: InboundSync.VerdictKey(plugin, thread, message),
             updated: line,
             reason: string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
             workItem: workItem,

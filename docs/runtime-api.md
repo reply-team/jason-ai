@@ -253,9 +253,11 @@ that is not that attempt does not call them.
   characters, a `confidence` from 0 to 1, a `reaction` of `act`, `draft`, `escalate` or `none`, and an optional
   `goal_id`, which must name one of the campaign's goals ([the `goals` key](contracts/context/goals.md)) and whose kind
   the line copies. The line carries no word of the reply. An archived campaign still takes one; an `actor` of type
-  `attempt` must be an attempt of the same campaign's work, and the line then names its work item and attempt. Each
-  call writes a line of its own, keyed by the `message_id`, and the latest for a reply stands. `jason reply record`
-  sends it.
+  `attempt` must be an attempt of the same campaign's work, and the line then names its work item and attempt. The
+  line names the reply as `plugin`, `thread`, `message_id` and `message_at`, the chronicle's names, the moment to the
+  millisecond. A `reason` is the actor's reason for the verdict, never the reply's words. Each call writes a line of
+  its own, under a key that hashes the plugin, thread and message rather than the provider's bare message id; readers
+  find a verdict by its payload, and the latest for a reply stands. `jason reply record` sends it.
 
 ### `report`
 
