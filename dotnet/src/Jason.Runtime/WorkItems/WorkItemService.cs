@@ -528,7 +528,7 @@ public sealed class WorkItemService(
             item,
             actor,
             NormalizeReason(request.Reason),
-            await ApprovalGate.LiveAsync(db, item.Id, cancellationToken).ConfigureAwait(false),
+            await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, cancellationToken).ConfigureAwait(false),
             await OpenWaits.OfAsync(db, item.Id, cancellationToken).ConfigureAwait(false));
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         canceller.StopCancelled();
