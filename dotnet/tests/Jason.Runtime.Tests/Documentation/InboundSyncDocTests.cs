@@ -181,7 +181,7 @@ public partial class InboundSyncDocTests
 
     /// <summary>
     /// A read lists what the provider stores, so the page says, as a principle, that a provider may hold a contact's
-    /// later replies until this side has answered and that the responder therefore acts or parks at once, and sends a
+    /// later replies until this side has answered and that a reply is therefore acted on or parked when it is read, and sends a
     /// reader to the plugin's own statement of the fact. It names no provider and describes none. The link names a
     /// heading the plugin's README holds.
     /// </summary>
@@ -191,7 +191,7 @@ public partial class InboundSyncDocTests
         var page = Flattened(Read("inbound-sync.md"));
         var readme = File.ReadAllText(Path.Combine(RepositoryRoot(), "plugins", "reply", "README.md"));
 
-        Assert.Contains("A read lists only what the provider stores. A provider may hold a contact's later replies until this side has answered, so a reply that arrives before any answer may leave no line; that is why the responder acts or parks at once.", page, StringComparison.Ordinal);
+        Assert.Contains("A read lists only what the provider stores. A provider may hold a contact's later replies until this side has answered the thread, so a reply that arrives before any answer may leave no line; a reply is therefore acted on or parked when it is read, not left for a second one.", page, StringComparison.Ordinal);
         Assert.DoesNotContain("Reply", page.Replace("Responder:OnReply", ""), StringComparison.Ordinal);
         Assert.Contains("](../plugins/reply/README.md#what-it-cannot-do)", page, StringComparison.Ordinal);
         Assert.Contains("\n## What it cannot do\n", readme.ReplaceLineEndings("\n"), StringComparison.Ordinal);
