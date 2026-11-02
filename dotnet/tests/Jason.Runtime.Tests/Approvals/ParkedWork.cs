@@ -29,11 +29,14 @@ internal static class ParkedWork
         item.Priority = priority;
         db.WorkItems.Add(item);
 
+        // Saved first, as the claim finds them: the decision carries the campaign the item was given.
+        await db.SaveChangesAsync(ct);
+
         var approval = new Approval
         {
             PublicId = PublicId.New(ApprovalGate.IdPrefix),
             WorkItem = item,
-            CampaignId = campaign.Id,
+            CampaignId = item.CampaignId,
             Operation = "campaign.enroll",
             OperationVersion = 1,
             Subject = new JsonObject { ["operation"] = "campaign.enroll", ["work_item"] = item.PublicId },

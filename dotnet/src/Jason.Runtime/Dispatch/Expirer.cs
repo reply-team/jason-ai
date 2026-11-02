@@ -49,7 +49,7 @@ public sealed class Expirer(JournalWriter journal, TimeProvider clock)
                 continue;
             }
 
-            if (await ApprovalGate.LiveAsync(db, item.Id, ct).ConfigureAwait(false) is { } live)
+            if (await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, ct).ConfigureAwait(false) is { } live)
             {
                 ApprovalGate.Resolve(db, journal, item, live, ApprovalStatus.Cancelled, Actors.Dispatcher, reason: null, now);
             }
