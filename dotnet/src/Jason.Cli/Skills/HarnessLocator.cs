@@ -30,9 +30,10 @@ public interface IHarnessLocator
 public static class HarnessLocators
 {
     /// <summary>
-    /// When two roots are one folder, as the file system reads a path: in any case on Windows, by every character
-    /// elsewhere. Detection and the status check read roots by this one comparer, so neither folds two folders the other
-    /// keeps apart.
+    /// When two roots are one folder: case is ignored on Windows, and elsewhere the comparison is ordinal. That is a rule
+    /// of this build, not a reading of the file system — a volume elsewhere that ignores case, as macOS's does by default,
+    /// still has two spellings read as two roots. Detection, the status check and uninstall read roots by this one
+    /// comparer, so none folds two roots another keeps apart.
     /// </summary>
     public static StringComparer SamePath { get; } = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 

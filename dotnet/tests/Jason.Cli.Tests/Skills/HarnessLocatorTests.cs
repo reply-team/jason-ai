@@ -131,11 +131,11 @@ public class HarnessLocatorTests
     }
 
     /// <summary>
-    /// One comparer for two folders being one, read by detection and by the status check alike, and it is the file
-    /// system's: Windows names a folder in any case, and elsewhere two spellings are two folders.
+    /// One comparer for two roots being one, read by detection, the status check and uninstall alike, and its rule is
+    /// plain: case is ignored on Windows, and elsewhere the comparison is ordinal.
     /// </summary>
     [Fact]
-    public void Two_roots_are_one_folder_by_the_file_systems_own_reading_of_a_path()
+    public void Two_roots_are_one_by_case_ignored_on_windows_and_ordinal_elsewhere()
     {
         Assert.Same(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal, HarnessLocators.SamePath);
     }
