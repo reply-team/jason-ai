@@ -193,6 +193,14 @@ does not name the key never checks it again. A key's schema changes only by gain
 the document's version; anything else is a new key. Its fixtures live under
 [`fixtures/context/`](fixtures/context) and are run by the same tests.
 
+**A second reserved key of a work item's context, beside `context.input`.** A drafted reply may name the verdict it
+answers under `context.reply_verdict`: the `jrn_` id of a `reply_classified` line. It is checked at `workitem.create`,
+and at `workitem.update` whenever a patch names it or `input`: the work is a `conversation.reply` or a `message.send`,
+and the line is a verdict of the same campaign about the thread the reply answers in, or, for a message, about the
+same person. Anything else is refused as `validation_failed` at the field `context.reply_verdict`. The key is what a
+standing approval reads at the claim, and nothing else reads it
+([`docs/work-execution.md`](../work-execution.md), "Standing approvals").
+
 **A reserved journal line beside the goals.** A role records its verdict on a reply — the category it read, its
 confidence, the reaction it chose and the goal it steers to — through the Runtime API's `reply.record`
 ([`docs/runtime-api.md`](../runtime-api.md)), which writes one reserved journal line, `reply_classified`. The line is
@@ -201,6 +209,12 @@ thread, the message's provider identifier and moment, the category as a string, 
 reaction (`act`, `draft`, `escalate` or `none`), the goal's id and kind, and the actor, and never a word a person
 wrote: no subject, no body, no preview, no name. The runtime checks that the category is one non-empty line of text
 and nothing more; what a category means is the skills' business, never the runtime's.
+
+**Three reserved lines beside it.** A person's word in advance about one category of verdict in one campaign is a
+standing approval: `approval.set_standing` writes `standing_approval_set` and `approval.unset_standing` writes
+`standing_approval_unset`, each keyed by the category, and the dispatcher writes `approval_standing_applied`, keyed by
+the line that set it, each time it lets a draft go under one. All three are the runtime's, refused by
+`journal.append` to every other writer, and none carries a word a person wrote.
 
 ## What a document states
 
@@ -340,6 +354,12 @@ approved:** the subject carries the composed input — beside the operation and 
 the work item — and not the summary or the example, so its hash does not change when a summary is worded differently or
 a template rendered otherwise. An operation nobody is asked to decide on
 declares `preview: null`, and every `auto` operation does.
+
+Where the parked work names a verdict under `context.reply_verdict` and no standing approval covered it, the preview
+also carries `standing_approval`: `{verdict, category, why}` — the verdict's `jrn_` id, its category, and the first
+condition that did not hold, one of the codes [`docs/work-execution.md`](../work-execution.md) lists under "Standing
+approvals". It tells the person deciding why they were asked; like the rest of the preview, it is not part of what
+is approved.
 
 ## Pages
 

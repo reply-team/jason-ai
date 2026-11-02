@@ -23,7 +23,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
-public class ClaimerTests
+public partial class ClaimerTests
 {
     private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
 
