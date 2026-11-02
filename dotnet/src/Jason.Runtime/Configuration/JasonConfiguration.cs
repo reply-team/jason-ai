@@ -482,6 +482,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<NotificationsOptions>, BindingFailureValidator<NotificationsOptions>>();
         services.AddSingleton<IValidateOptions<RoutesOptions>, BindingFailureValidator<RoutesOptions>>();
         services.AddSingleton<IValidateOptions<InboundOptions>, BindingFailureValidator<InboundOptions>>();
+        services.AddSingleton<IValidateOptions<ResponderOptions>, BindingFailureValidator<ResponderOptions>>();
         services.AddSingleton<IValidateOptions<HarnessOptions>, BindingFailureValidator<HarnessOptions>>();
 
         services.AddSingleton<IValidateOptions<RuntimeOptions>, RuntimeOptionsValidator>();
@@ -502,6 +503,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<RoutesOptions>>(new RoutesOptionsValidator(Installed));
         services.AddSingleton<IValidateOptions<UpdateOptions>, UpdateOptionsValidator>();
         services.AddSingleton<IValidateOptions<InboundOptions>, InboundOptionsValidator>();
+        services.AddSingleton<IValidateOptions<ResponderOptions>, ResponderOptionsValidator>();
         services.AddSingleton<IValidateOptions<NotificationsOptions>>(new NotificationsOptionsValidator(Installed));
         services.AddSingleton<IValidateOptions<HarnessOptions>>(new HarnessOptionsValidator(paths, home));
 
@@ -511,6 +513,7 @@ public static class JasonConfiguration
         Bound<RolesOptions>(services, configuration.GetSection(RolesOptions.Section), Installed).ValidateOnStart();
         Bound<UpdateOptions>(services, configuration.GetSection(UpdateOptions.Section), Installed).ValidateOnStart();
         Bound<InboundOptions>(services, configuration.GetSection(InboundOptions.Section), Installed).ValidateOnStart();
+        Bound<ResponderOptions>(services, configuration.GetSection(ResponderOptions.Section), Installed).ValidateOnStart();
         Bound<HarnessOptions>(services, configuration.GetSection(HarnessOptions.Section), Installed).ValidateOnStart();
 
         // The scalars and each named plugin's Enabled are bound; each binding is JSON, which the binder cannot make,

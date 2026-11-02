@@ -27,7 +27,7 @@ public class JasonDbContextTests
             ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile",
              "manager_event_watermark", "manager_review_anchor", "manager_review_seconds", "idempotency_digest", "idempotency_key",
              "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from",
-             "project_id", "folder_path"],
+             "project_id", "folder_path", "responder_watermark"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
     }
 
