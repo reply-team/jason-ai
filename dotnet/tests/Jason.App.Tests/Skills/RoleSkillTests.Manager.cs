@@ -448,10 +448,21 @@ public partial class RoleSkillTests
         Assert.Contains("`plugin`, `thread`, `message_id` and `message_at`, and its `contact_id` and `goal_id`, from the first verdict line, never from the question, so that the line which now stands loses none of them", skill, StringComparison.Ordinal);
 
         var printed = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason reply record ", StringComparison.Ordinal));
-        foreach (var option in new[] { "--plugin", "--thread", "--message", "--message-at", "--contact", "--category", "--confidence", "--reaction", "--goal" })
+        foreach (var option in new[] { "--plugin", "--thread", "--message", "--message-at", "--contact", "--category", "--confidence", "--reaction", "--goal", "--decision" })
         {
             Assert.Contains(option + " ", printed, StringComparison.Ordinal);
         }
+
+        // The answer is carried by naming the question it answers, which the runtime checks against the category recorded.
+        Assert.Contains("Name the answered question with `--decision`, so that the line carries the person's answer", skill, StringComparison.Ordinal);
+        Assert.Contains("the option they chose is the category you record, word for word, and the question was raised by the run that recorded the verdict on this reply", skill, StringComparison.Ordinal);
+
+        // `other` is a category like any other; an answer in words alone is no category, and backs no line.
+        Assert.Contains("A person who picks `other` chose one of the ids: record `--category other` with `--decision`, and it passes.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the question shows no chosen option, because the person answered in words, the answer is not a category and cannot back a line.", skill, StringComparison.Ordinal);
+        Assert.Contains("Record the category you read in the person's words, never in the reply, `other` where none fits, without `--decision`, with your own confidence and a reason that names the decision.", skill, StringComparison.Ordinal);
+        Assert.Contains("The draft under that line waits for a person, as under any line that is nobody's answer, and your summary says why. Do not ask the person again.", skill, StringComparison.Ordinal);
+        Assert.Matches(@"--decision dec_[0-9A-Z]{26} ", printed);
     }
 
     /// <summary>
@@ -469,7 +480,8 @@ public partial class RoleSkillTests
         Assert.Contains("Where the answered category's reaction is not `none`, queue the thread's read and a responder for it, exactly as for a line no responder names, below.", skill, StringComparison.Ordinal);
         Assert.Contains("where the answer confirmed `opt_out`, it finds the register entry already there and goes on to the provider's half", skill, StringComparison.Ordinal);
         Assert.Contains("Every other answer stays as written: you draft nothing and act on nothing on the reply yourself.", skill, StringComparison.Ordinal);
-        Assert.Contains("A draft written after your verdict always waits for a person, whatever standing approval exists, because its attempt is neither the run the runtime gave that reply nor a named person.", skill, StringComparison.Ordinal);
+        Assert.Contains("A draft written after your verdict waits for a person whatever standing approval exists, unless the line carries a person's answer through a decision: without one, its attempt is neither the run the runtime gave that reply nor a named person.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("always waits", skill, StringComparison.Ordinal);
 
         var removal = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason suppression remove ", StringComparison.Ordinal));
         Assert.Contains("--channel email ", removal, StringComparison.Ordinal);

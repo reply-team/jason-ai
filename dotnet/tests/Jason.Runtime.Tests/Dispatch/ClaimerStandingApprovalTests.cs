@@ -316,6 +316,73 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// A person's answer, carried by a verdict a role recorded. Where the responder asked which category a reply is and a
+    /// person answered, the manager's run records the answer as the verdict that stands; carrying the decision, the line is
+    /// that person's word, so the draft a later responder writes under it goes under a standing approval, whoever wrote
+    /// it. The same line without the decision is the manager's own, which no standing approval trusts; and a line carrying
+    /// the answer that a later plain verdict on the same reply replaced no longer stands, so the draft under it waits.
+    /// </summary>
+    [Theory]
+    [InlineData("carrying the answer", null)]
+    [InlineData("without the decision", StandingApprovals.Why.VerdictNotAuthentic)]
+    [InlineData("carrying the answer, then replaced", StandingApprovals.Why.VerdictSuperseded)]
+    [Critical(Family.S2, "a standing approval: a verdict carrying a person's answer is that person's word")]
+    public async Task Standing_VerdictCarryingAPersonsAnswer_ReleasesTheRespondersDraft(string line, string? parks)
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var guess = await VerdictAsync(db, reading, RunOf(reading), category: "not_now", reaction: ReplyReaction.Escalate);
+        var question = new Decision
+        {
+            PublicId = PublicId.New("dec"),
+            CampaignId = reading.Campaign.Id,
+            WorkItemId = reading.Responder.Id,
+            AttemptId = reading.Run.Id,
+            Question = "Which kind of reply is this?",
+            Options = new JsonArray(
+                new JsonObject { ["label"] = "interested", ["detail"] = null },
+                new JsonObject { ["label"] = "not_now", ["detail"] = null }),
+            Status = DecisionStatus.Answered,
+            RaisedAt = Noon,
+            Answer = "They asked for times.",
+            ChosenOption = "interested",
+            AnsweredAt = Noon,
+            AnsweredByType = Operator.Type,
+            AnsweredById = Operator.Id,
+        };
+        var manager = WorkItemFactory.NewAiRole(reading.Campaign, role: "manager", now: Noon);
+        manager.Status = WorkItemStatus.Processing;
+        manager.AttemptCount = 1;
+        var review = WorkItemFactory.NewAttempt(manager, 1, AttemptStatus.Running, Noon);
+        var responder = WorkItemFactory.NewAiRole(reading.Campaign, role: "responder", now: Noon);
+        responder.Status = WorkItemStatus.Processing;
+        responder.AttemptCount = 1;
+        responder.Context = new JsonObject { ["inbound_reply"] = Inbound(Provider, InThread) };
+        var again = WorkItemFactory.NewAttempt(responder, 1, AttemptStatus.Running, Noon);
+        db.Decisions.Add(question);
+        db.WorkItems.AddRange(manager, responder);
+        await db.SaveChangesAsync(Ct);
+
+        var answer = await VerdictAsync(
+            db, reading, new ActorRef(ActorType.Attempt, review.PublicId), decision: line == "without the decision" ? null : question.PublicId);
+        if (line == "carrying the answer, then replaced")
+        {
+            await VerdictAsync(db, reading, new ActorRef(ActorType.Attempt, review.PublicId));
+        }
+
+        await StandAsync(db, reading.Campaign);
+        Drafted(db, reading, answer, by: new ActorRef(ActorType.Attempt, again.PublicId));
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        Assert.NotEqual(guess, answer);
+        await AssertReleasedOrParkedAsync(database, claimed, parks);
+    }
+
+    /// <summary>
     /// A standing approval decides once. Released work that fails and is tried again meets its own approved row and runs,
     /// although the standing approval was taken back since — as a person's own approval would; a draft whose text changed
     /// since is another draft, parked for a person, and the standing approval is not asked again.
@@ -596,7 +663,8 @@ public partial class ClaimerTests
         ReplyReaction reaction = ReplyReaction.Draft,
         string plugin = Provider,
         string thread = InThread,
-        string message = "msg-1")
+        string message = "msg-1",
+        string? decision = null)
     {
         var line = await new ReplyService(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon)))).RecordAsync(
             new ReplyRecordRequest(
@@ -609,7 +677,8 @@ public partial class ClaimerTests
                 0.9,
                 reaction,
                 ContactId: reading.Contact.PublicId,
-                Actor: by),
+                Actor: by,
+                DecisionId: decision),
             Ct);
         return line.Id;
     }

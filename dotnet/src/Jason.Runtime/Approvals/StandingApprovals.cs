@@ -147,7 +147,8 @@ public static class StandingApprovals
     /// The conditions are asked in this order and the first that fails names the answer. What runs under a standing
     /// approval is the draft its verdict's author made for that very reply, exactly as it was made: a verdict a role wrote
     /// outside the run that read the reply, or one a later verdict replaced, or a draft somebody else wrote or edited, is
-    /// left for a person.
+    /// left for a person. A verdict that carries a person's answer to a question about the reply is that person's, whoever
+    /// recorded it.
     /// </remarks>
     internal static async Task<Answer?> CoverAsync(JasonDbContext db, WorkItem item, ProviderOpPlan plan, DateTime now, CancellationToken ct)
     {
@@ -242,11 +243,21 @@ public static class StandingApprovals
 
     /// <summary>
     /// Who wrote the verdict, where that is somebody whose verdict can cover: a run of the campaign's work whose context
-    /// names the reply's plugin and thread as the runtime wrote them, or a person who gave their name. Null otherwise — a
-    /// role by name outside a run, or nobody at all.
+    /// names the reply's plugin and thread as the runtime wrote them, or a person who gave their name — either by recording
+    /// it, or by answering the question whose answer the line carries. Null otherwise — a role by name outside a run, or
+    /// nobody at all.
     /// </summary>
+    /// <remarks>
+    /// The line names who answered only when <c>reply.record</c> checked the decision as it wrote the line: answered, by a
+    /// named person, with the category recorded. The claim trusts the line for that and reads no decision.
+    /// </remarks>
     private static async Task<Author?> AuthorAsync(JasonDbContext db, WorkItem item, JournalEntry verdict, JsonObject said, CancellationToken ct)
     {
+        if (said["answered_by"] is JsonObject)
+        {
+            return new Author(null);
+        }
+
         if (verdict.ActorType == ActorType.Human)
         {
             return string.IsNullOrWhiteSpace(verdict.ActorId) ? null : new Author(null);

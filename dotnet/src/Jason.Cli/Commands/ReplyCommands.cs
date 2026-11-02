@@ -49,6 +49,10 @@ public static class ReplyCommands
         });
         var contact = new Option<string?>("--contact") { Description = "The person who replied, as cnt_...." };
         var goal = new Option<string?>("--goal") { Description = "The id of the campaign's goal the reaction steers to." };
+        var decision = new Option<string?>("--decision")
+        {
+            Description = "The question about this reply a person answered, as dec_...: the verdict then carries their answer, and its category must be the option they chose, and the question must have been raised by the run that recorded a verdict on this reply.",
+        };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -61,6 +65,7 @@ public static class ReplyCommands
         command.Options.Add(reaction);
         command.Options.Add(contact);
         command.Options.Add(goal);
+        command.Options.Add(decision);
         command.Options.Add(reason);
         command.Options.Add(human);
 
@@ -77,6 +82,7 @@ public static class ReplyCommands
                 .Set("reaction", parseResult.GetValue(reaction))
                 .Set("contact_id", parseResult.GetValue(contact))
                 .Set("goal_id", parseResult.GetValue(goal))
+                .Set("decision_id", parseResult.GetValue(decision))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
 

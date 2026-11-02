@@ -110,7 +110,8 @@ it, as below.
 - `none`: nothing.
 
 A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing
-approval exists, and your summary says so. `Responder:MaxAttempts` is 1 by default, and the rule holds anyway: a run
+approval exists, unless the line carries a person's answer through a decision (its `answered_by` is not null), and your
+summary says so. `Responder:MaxAttempts` is 1 by default, and the rule holds anyway: a run
 launched again, by a person or by a setting, must not answer one message twice.
 
 **Classify by the categories, then by the person's own rules.** The base categories are data: `categories.json`,
@@ -146,13 +147,17 @@ one verdict.
 Where your confidence is below the file's `question_below`, the category is the person's to settle: record your best
 guess with its confidence first, with `--reaction escalate`, since asking is what is done about it, then ask the person
 which category it is, with the ids it could be as the options — at most ten, as many as a question holds, the most
-likely first, and `other` always among them, so the person can name what none of the ids says. Below that line you write
-no draft and act on nothing, with one exception: where your best guess is `opt_out`, put them on the register at once,
-as below, and leave the provider's `optout.record` and the proposed stop for the answer. The register is Jason's own and
-a person lifts an entry, while a step sent to somebody who asked to stop cannot be taken back; the question says the
-entry was made and that an answer naming another category takes it off, and your summary says the entry was made.
-Whoever acts on the person's answer records the verdict again, and the later line stands for the reply. A guess is never
-mirrored: the mirror follows a verdict that stands.
+likely first, and `other` always among them, so the person can name what none of the ids says. The order is
+load-bearing: a question raised before the guess is recorded cannot back the person's answer, because the runtime lets a
+verdict carry an answer only from a question raised by the run that recorded a verdict on the same reply. The guess is
+recorded from your own attempt, with no actor typed, never as `role:responder`: a line recorded by the role names no
+attempt, and then no answer to your question can back a verdict. Below that line you write no draft and act on nothing,
+with one exception: where your best guess is `opt_out`, put them on the register at once, as below, and leave the
+provider's `optout.record` and the proposed stop for the answer. The register is Jason's own and a person lifts an
+entry, while a step sent to somebody who asked to stop cannot be taken back; the question says the entry was made and
+that an answer naming another category takes it off, and your summary says the entry was made. Whoever acts on the
+person's answer records the verdict again, and the later line stands for the reply. A guess is never mirrored: the
+mirror follows a verdict that stands.
 
 **Draft toward the campaign's goals.** Read the campaign's `goals` with `jason campaign get`: the outcomes it steers each
 conversation toward, in `order`, each with the moment it counts as `reached_when`. Draft toward the first goal the reply
