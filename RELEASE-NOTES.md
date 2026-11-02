@@ -59,9 +59,10 @@ replaces the title and the body together.
   where the reaction is a reply to the same person, and never for `referral`, `opt_out` or `bounce`.
   - **What it releases.** A draft nobody has been asked about, and only where every condition the claim checks holds: the
     verdict it answers is the newest on its reply and says `draft`, and was recorded by the run the runtime woke for
-    that reply or by a person who gave their name; the draft is unchanged since it was created; and a standing approval
-    for exactly that category is in force, names the operation, has not expired and is under its ceiling. Otherwise the
-    draft parks as before, and its preview says which condition failed.
+    that reply, by a person who gave their name, or with a person's answer to a question about that reply; the draft is
+    unchanged since it was created; and a standing approval for exactly that category is in force, names the operation,
+    has not expired and is under its ceiling. Otherwise the draft parks as before, and its preview says which condition
+    failed.
   - **What it never releases.** A draft parked before the standing approval was set still waits for you, however long
     ago, and so does one whose question expired and which was reopened.
   - **Where to see what went out.** Each draft let go is an approved approval whose reason is `standing_approval`, under
@@ -92,6 +93,18 @@ replaces the title and the body together.
   and records a person's answer to a doubtful category as a second verdict, which wakes the reaction it names. The
   analyst counts replies by category over a window and reports bounces as a deliverability figure, and inbox triage
   starts from what the responder left and never drafts a second answer to a reply that has one.
+- **A person's answer to a question about a reply can back the verdict recorded from it.** `jason reply record
+  --decision dec_...` (`decision_id` in the API) names the question that was raised about the reply, and the
+  `reply_classified` line then carries the decision and the person who answered it. The runtime checks the answer when
+  the verdict is recorded: the decision belongs to the campaign, it is answered, a person who gave their name answered
+  it, the option they chose is the category being recorded, and the question was raised by a run that had recorded a
+  verdict on this same reply. A refusal says why in one of five codes, `decision_not_found`, `decision_not_answered`,
+  `decision_not_human`, `decision_option_differs` or `decision_not_about_reply`, and writes nothing. A standing approval
+  counts such a verdict as that person's word, so a draft under it can go without a second approval of the choice they
+  just made. An answer in words, with no chosen option, backs no verdict: the manager records the category it reads
+  there without `--decision`, and the draft waits for you. The responder records its guess from its own run before it
+  asks, which is what lets the answer count. [The API
+  reference](https://github.com/reply-team/jason-ai/blob/v0.25.0/docs/runtime-api.md) has the contract.
 - **The Reply package states what Reply does with a contact's later replies.** Its README no longer says that only a
   contact's first reply is read. For a sequence email, Reply keeps at most one reply to each email it sent and drops a
   finished contact's later replies on that thread before it stores them; after this side has answered on the thread
