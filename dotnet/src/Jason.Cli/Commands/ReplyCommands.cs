@@ -51,7 +51,7 @@ public static class ReplyCommands
         var goal = new Option<string?>("--goal") { Description = "The id of the campaign's goal the reaction steers to." };
         var decision = new Option<string?>("--decision")
         {
-            Description = "The question about this reply a person answered, as dec_...: the verdict then carries their answer, and its category must be the option they chose.",
+            Description = "The question about this reply a person answered, as dec_...: the verdict then carries their answer, and its category must be the option they chose, and the question must have been raised by the run that recorded a verdict on this reply.",
         };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();

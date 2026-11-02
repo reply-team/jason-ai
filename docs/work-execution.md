@@ -323,8 +323,9 @@ verdict's plugin is the one the route resolved, and its thread the one the reply
 the work's person); the newest standing-approval line for the campaign and the verdict's category is a set; it names
 the operation; it has not expired; and fewer drafts were let go under it since it was set than its ceiling. A category
 is the verdict's word exactly: `interested` covers neither `very_interested` nor `Interested`. The decision behind
-`answered_by` was checked when the line was written — answered, by a named person, choosing the verdict's category —
-and the claim trusts the line for that; it reads no decision again.
+`answered_by` was checked when the line was written — answered, by a named person, choosing the verdict's category,
+raised by the attempt that recorded a verdict on the same reply — and the claim trusts the line for that; it reads no
+decision again.
 
 Covered, the work runs in the same claim. Its `apr_` row is written `approved`, with the reason `standing_approval`,
 decided by the person who set the standing approval; an `approval_standing_applied` line by the dispatcher, keyed by the

@@ -283,6 +283,14 @@ public static class DomainErrors
         new("decision_option_differs", $"The option chosen in decision '{id}' is not the category this verdict records; record the category the person chose.");
 
     /// <summary>
+    /// A person's answer is about the reply its question was asked about: the run that raised the decision recorded a
+    /// verdict on that reply first. A decision raised about another reply, or by a run that recorded no verdict before it
+    /// asked, is no answer about this one. No identifier of the reply is repeated: the caller sent them.
+    /// </summary>
+    public static InvalidRequestException VerdictDecisionNotAboutReply(string id) =>
+        new("decision_not_about_reply", $"Decision '{id}' was not raised by a run that recorded a verdict on this reply; a verdict carries the answer to the question asked about its own reply.");
+
+    /// <summary>
     /// A standing approval is a decision made in advance, so it is refused to whoever may not decide: the code a decision's
     /// refusal carries, in the words of what was being done. No role and no run grants one.
     /// </summary>

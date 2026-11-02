@@ -186,8 +186,9 @@ public class ReplyRecordTests
 
     /// <summary>
     /// A verdict may carry a person's answer to the question that asked which category a reply is. The runtime checks the
-    /// decision at the call — answered, by a named person, with the option the verdict's category is — and the line then
-    /// names the decision and the person who answered it, which is what a standing approval reads as that person's word.
+    /// decision at the call — answered, by a named person, with the option the verdict's category is, raised by the run
+    /// that recorded a verdict on this reply — and the line then names the decision and the person who answered it, which
+    /// is what a standing approval reads as that person's word.
     /// </summary>
     [Fact]
     public async Task A_verdict_carries_a_persons_answer_through_the_decision_it_names()
@@ -195,16 +196,70 @@ public class ReplyRecordTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var seed = await SeedAsync(db);
+        await GuessAsync(db, seed, "msg-77");
         var decision = await DecisionAsync(db, seed, "answered");
 
-        var entry = await Service(db).RecordAsync(
-            Request(seed) with { DecisionId = decision.PublicId, Actor = new ActorRef(ActorType.Attempt, seed.Attempt.PublicId) },
-            Ct);
+        var entry = await Service(db).RecordAsync(Request(seed) with { DecisionId = decision.PublicId, Actor = Manager }, Ct);
 
         var line = (JsonObject)entry.New!;
         Assert.Equal(decision.PublicId, (string?)line["decision_id"]);
         Assert.Equal("""{"type":"human","id":"operator"}""", line["answered_by"]!.ToJsonString());
-        Assert.Equal(new ActorRef(ActorType.Attempt, seed.Attempt.PublicId), entry.Actor);
+        Assert.Equal(Manager, entry.Actor);
+    }
+
+    /// <summary>
+    /// A decision is about the reply its asker recorded a verdict on, and only that one. Cited for another reply, or raised
+    /// by a run that recorded no verdict before it asked, the person's answer is not about the reply this verdict is on, and
+    /// the record is refused with a code of its own; nothing is written. The asker's line is found by the journal's own
+    /// columns — the campaign, the kind, the reply's key and the attempt — and nothing reads what a line says.
+    /// </summary>
+    [Theory]
+    [InlineData("a decision about another reply")]
+    [InlineData("a decision raised before any verdict")]
+    public async Task A_decision_not_raised_by_the_run_that_recorded_a_verdict_on_this_reply_is_refused(string asked)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        if (asked == "a decision about another reply")
+        {
+            await GuessAsync(db, seed, "msg-76");
+        }
+
+        var decision = await DecisionAsync(db, seed, "answered");
+        var written = await db.Journal.CountAsync(Ct);
+
+        var refused = await Assert.ThrowsAsync<InvalidRequestException>(
+            () => Service(db).RecordAsync(Request(seed) with { DecisionId = decision.PublicId, Actor = Manager }, Ct));
+
+        Assert.Equal("decision_not_about_reply", refused.Code);
+        Assert.Equal(400, refused.StatusCode);
+        Assert.Contains(decision.PublicId, refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("interested", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(written, await db.Journal.CountAsync(Ct));
+    }
+
+    /// <summary>
+    /// A decision is not spent by the verdict that carries it. The manager may record the person's answer on the same reply
+    /// again, and each record passes: any verdict the asker recorded on the reply counts, not only the latest line, which
+    /// is by then the manager's own. The lines supersede each other with the same word.
+    /// </summary>
+    [Fact]
+    public async Task The_managers_second_record_of_the_same_answer_on_the_same_reply_passes()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await GuessAsync(db, seed, "msg-77");
+        var decision = await DecisionAsync(db, seed, "answered");
+
+        var first = await Service(db).RecordAsync(Request(seed) with { DecisionId = decision.PublicId, Actor = Manager }, Ct);
+        var second = await Service(db).RecordAsync(Request(seed) with { DecisionId = decision.PublicId, Actor = Manager }, Ct);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(
+            [(decision.PublicId, "interested"), (decision.PublicId, "interested")],
+            new[] { first, second }.Select(entry => ((string?)entry.New!["decision_id"], (string?)entry.New!["category"])));
     }
 
     /// <summary>
@@ -509,6 +564,10 @@ public class ReplyRecordTests
         var unknown = await api.RecordErrorAsync(Operations.ReplyRecord, "unknown-goal", verdict with { goal_id = "purchase" }, HttpStatusCode.BadRequest, Ct);
         var range = await api.RecordErrorAsync(Operations.ReplyRecord, "confidence-out-of-range", verdict with { confidence = 1.5 }, HttpStatusCode.BadRequest, Ct);
         var question = await AnsweredQuestionAsync(api, campaign.Id);
+        await api.PostOkAsync<JournalEntryDto>(
+            Operations.ReplyRecord,
+            verdict with { category = "not_now", reaction = "escalate", actor = new { type = "attempt", id = question.Asker }, reason = "not sure; asking" },
+            Ct);
         var answered = await api.RecordAsync<JournalEntryDto>(
             Operations.ReplyRecord,
             "recorded-with-decision",
@@ -524,7 +583,7 @@ public class ReplyRecordTests
                 confidence = 1.0,
                 verdict.reaction,
                 verdict.goal_id,
-                decision_id = question,
+                decision_id = question.Id,
                 actor = new { type = "role", id = "manager" },
                 reason = "the person chose interested",
             },
@@ -533,11 +592,14 @@ public class ReplyRecordTests
         Assert.Equal(("reply_classified", "demo"), (recorded.Kind, (string?)recorded.New!["goal_kind"]));
         Assert.Equal(["goal_id/unknown"], unknown.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
         Assert.Equal(["confidence/invalid"], range.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
-        Assert.Equal((question, "human", "ada"), ((string?)answered.New!["decision_id"], (string?)answered.New!["answered_by"]!["type"], (string?)answered.New!["answered_by"]!["id"]));
+        Assert.Equal((question.Id, "human", "ada"), ((string?)answered.New!["decision_id"], (string?)answered.New!["answered_by"]!["type"], (string?)answered.New!["answered_by"]!["id"]));
     }
 
-    /// <summary>The responder's question about the reply, whose options are the category ids, answered by a person: its id.</summary>
-    private static async Task<string> AnsweredQuestionAsync(RuntimeApiFixture api, string campaignId)
+    /// <summary>
+    /// The responder's question about the reply, whose options are the category ids, answered by a person: its id and the
+    /// attempt that asked, which records its own verdict on the reply before the answer is carried.
+    /// </summary>
+    private static async Task<(string Id, string Asker)> AnsweredQuestionAsync(RuntimeApiFixture api, string campaignId)
     {
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
@@ -567,7 +629,7 @@ public class ReplyRecordTests
         db.Attempts.Add(attempt);
         db.Decisions.Add(decision);
         await db.SaveChangesAsync(Ct);
-        return decision.PublicId;
+        return (decision.PublicId, attempt.PublicId);
     }
 
     private static ReplyRecordRequest Changed(ReplyRecordRequest request, string change) => change switch
@@ -640,6 +702,21 @@ public class ReplyRecordTests
     }
 
     private static string PublicIdFor(string attemptId) => "cnt_" + attemptId;
+
+    /// <summary>The manager's run, which records the person's answer as the verdict that stands.</summary>
+    private static readonly ActorRef Manager = new(ActorType.Role, "manager");
+
+    /// <summary>The responder's own verdict on a reply of the seed's thread, recorded by its attempt before it asks.</summary>
+    private static async Task GuessAsync(JasonDbContext db, Seed seed, string message) =>
+        await Service(db).RecordAsync(
+            Request(seed) with
+            {
+                MessageId = message,
+                Category = "not_now",
+                Reaction = ReplyReaction.Escalate,
+                Actor = new ActorRef(ActorType.Attempt, seed.Attempt.PublicId),
+            },
+            Ct);
 
     /// <summary>
     /// The question the responder raised about the reply, whose options are the category ids, as it stands: answered by

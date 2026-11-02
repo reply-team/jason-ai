@@ -266,8 +266,13 @@ that is not that attempt does not call them.
   about the reply, an optional `decision_id` names that question, the `dec_` decision, and the runtime checks it at the
   call: a decision of the same campaign (`decision_not_found`, as for an id that names none), answered
   (`decision_not_answered`), by a person who gave their name (`decision_not_human`), whose chosen option is the
-  `category` recorded (`decision_option_differs`). Each refusal is a 400 and writes nothing. The line then names the
-  decision as `decision_id` and the person as `answered_by`, their actor; both are null where no decision is named.
+  `category` recorded (`decision_option_differs`), and raised by an attempt that has recorded a verdict on this reply —
+  a `reply_classified` line of the campaign under this reply's key whose attempt is the decision's, any such line, not
+  only the latest (`decision_not_about_reply`); a role raises a question and then ends its attempt, so a question raised
+  before its asker recorded a verdict on the reply, or one about another reply, backs no verdict. Each refusal is a 400
+  and writes nothing. One decision may back repeated records on the same reply, which supersede each other as any
+  verdicts do. The line then names the decision as `decision_id` and the person as `answered_by`, their actor; both are
+  null where no decision is named.
   `jason reply record` sends it, and `--decision` names the question.
 
 ### `report`

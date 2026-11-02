@@ -22,7 +22,7 @@ namespace Jason.Runtime.Replies;
 /// What is checked against the database: the campaign (archived ones included, as the chronicle takes lines on an
 /// archived campaign), the contact when one is named, the goal against the campaign's goals as they stand, an attempt
 /// actor, which must be a known attempt of work in the same campaign, and a decision when one is named, whose answer the
-/// verdict then carries. Everything else is checked by its shape. The call is not fenced by the attempt's lease: a
+/// verdict then carries and whose asker must have recorded a verdict on this reply. Everything else is checked by its shape. The call is not fenced by the attempt's lease: a
 /// verdict is a fact about a reply, and one recorded late is still true.
 /// </remarks>
 public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
@@ -100,15 +100,17 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
                 ?? throw new ValidationException([new ErrorDetail("goal_id", "unknown", "goal_id must name a goal the campaign's goals carry.")]);
         }
 
-        var answered = request.DecisionId is null
-            ? null
-            : await AnswerOfAsync(request.DecisionId.Trim(), campaign, category!, cancellationToken).ConfigureAwait(false);
-
-        var (workItem, attempt) = await AttemptOfAsync(actor, campaign, cancellationToken).ConfigureAwait(false);
-
         var plugin = request.PluginId!.Trim();
         var thread = request.ThreadId!.Trim();
         var message = request.MessageId!.Trim();
+        var key = InboundSync.VerdictKey(plugin, thread, message);
+
+        var answered = request.DecisionId is null
+            ? null
+            : await AnswerOfAsync(request.DecisionId.Trim(), campaign, category!, key, cancellationToken).ConfigureAwait(false);
+
+        var (workItem, attempt) = await AttemptOfAsync(actor, campaign, cancellationToken).ConfigureAwait(false);
+
         var line = new JsonObject
         {
             ["plugin"] = plugin,
@@ -132,7 +134,7 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             actor,
             JournalKinds.ReplyClassified,
             campaign,
-            key: InboundSync.VerdictKey(plugin, thread, message),
+            key: key,
             updated: line,
             reason: string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
             workItem: workItem,
@@ -201,12 +203,20 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 
     /// <summary>
     /// The decision whose answer the verdict carries, checked here and only here: a question of the same campaign, answered,
-    /// by a person who gave their name, who chose the very category recorded. The line names the decision and the person,
-    /// and what reads it later trusts it for that — nothing reads the decision again.
+    /// by a person who gave their name, who chose the very category recorded, raised by a run that recorded a verdict on
+    /// this reply. The line names the decision and the person, and what reads it later trusts it for that — nothing reads
+    /// the decision again.
     /// </summary>
-    private async Task<Decision> AnswerOfAsync(string id, Campaign campaign, string category, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The asker's verdict is any <c>reply_classified</c> line of the campaign under the reply's key that its attempt wrote,
+    /// not only the latest, so the manager may record the same answer on the same reply again; one decision may back many
+    /// such records, which supersede each other with the same word. The lookup reads the journal's own columns — campaign,
+    /// kind, key and attempt — and never what a line says.
+    /// </remarks>
+    private async Task<Decision> AnswerOfAsync(string id, Campaign campaign, string category, string key, CancellationToken cancellationToken)
     {
         var decision = await db.Decisions.AsNoTracking()
+            .Include(row => row.Attempt)
             .SingleOrDefaultAsync(row => row.PublicId == id, cancellationToken).ConfigureAwait(false);
         if (decision is null || decision.CampaignId != campaign.Id)
         {
@@ -226,6 +236,18 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
         if (!string.Equals(decision.ChosenOption, category, StringComparison.Ordinal))
         {
             throw DomainErrors.VerdictDecisionOptionDiffers(decision.PublicId);
+        }
+
+        var asker = decision.Attempt!.PublicId;
+        var aboutThisReply = await db.Journal.AsNoTracking().AnyAsync(
+            entry => entry.CampaignId == campaign.Id
+                && entry.Kind == JournalKinds.ReplyClassified
+                && entry.Key == key
+                && entry.AttemptId == asker,
+            cancellationToken).ConfigureAwait(false);
+        if (!aboutThisReply)
+        {
+            throw DomainErrors.VerdictDecisionNotAboutReply(decision.PublicId);
         }
 
         return decision;
