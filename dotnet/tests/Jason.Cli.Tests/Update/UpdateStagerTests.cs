@@ -172,6 +172,31 @@ public class UpdateStagerTests
         Assert.Equal($"jason/{JasonVersion.Current}", release.UserAgents["/releases/latest/download/" + release.Asset]);
     }
 
+    /// <summary>
+    /// The files beside the archives, a release's checksums, its UI build and its plugin packages, are asked for through
+    /// one routine, and it says which version asks as the feed and the archive do.
+    /// </summary>
+    [Fact]
+    public async Task A_file_beside_the_archives_says_which_version_is_asking_as_the_archive_does()
+    {
+        using var release = new FakeRelease(Next);
+        using var client = new HttpClient(release, disposeHandler: false);
+        var path = $"/releases/download/v{Next}/{ReleaseAssets.Checksums}";
+
+        await ReleaseFiles.FetchAsync(
+            client,
+            new Uri("https://127.0.0.1" + path),
+            ReleaseFiles.MaxChecksumsBytes,
+            $"a release's {ReleaseAssets.Checksums}",
+            TimeSpan.FromSeconds(30),
+            message => new InvalidOperationException(message),
+            message => new InvalidOperationException(message),
+            Ct,
+            Ct);
+
+        Assert.Equal($"jason/{JasonVersion.Current}", release.UserAgents[path]);
+    }
+
     [Fact]
     [Critical(Family.I1, "update verifies the checksum")]
     public async Task A_download_whose_digest_does_not_match_is_refused_and_its_bytes_are_gone()
