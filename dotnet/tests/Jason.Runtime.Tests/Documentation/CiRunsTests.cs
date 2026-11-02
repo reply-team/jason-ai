@@ -1311,6 +1311,30 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// Every plugin package's JavaScript is parsed by node, on the one runner that has it, before anything of the UI is
+    /// installed: the files are found under <c>plugins/*/</c>, so a package joins by being there, and the step names
+    /// none. Pinned by its text: node may be absent where these tests run.
+    /// </summary>
+    [Fact]
+    public void Every_plugin_package_s_javascript_is_parsed_by_node_whichever_packages_there_are()
+    {
+        var steps = Steps(Mapping(Jobs(), "ui"));
+        var parsing = Assert.Single(steps, step => Scalar(step, "name") == "Every plugin's JavaScript parses");
+        var run = Scalar(parsing, "run")!.Trim();
+        Assert.Equal("find plugins/*/ -name '*.js' -print0 | xargs -0 -r -n1 node --check", run);
+        Assert.Equal("bash", Scalar(parsing, "shell"));
+        Assert.Equal(".", Scalar(parsing, "working-directory"));
+
+        var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
+        var install = steps.FindIndex(step => Scalar(step, "run") == "npm ci");
+        Assert.InRange(steps.IndexOf(parsing), node + 1, install - 1);
+
+        var packages = Directory.GetDirectories(Path.Combine(RepositoryRoot(), "plugins")).Select(Path.GetFileName).OfType<string>().ToList();
+        Assert.NotEmpty(packages);
+        Assert.All(packages, package => Assert.DoesNotContain(package, run, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// install.sh's job and install.ps1's assemble their feed from the archives their run packaged, which is all three only on
     /// a run that builds macOS. The feed in the layout 0.1.0 published names all three archives, so that step runs there
     /// only, in both jobs.
