@@ -223,6 +223,47 @@ public class ResponderTests
         Assert.Equal(2, await db.WorkItems.CountAsync(item => item.Operation == Responder.ReadOperation, Ct));
     }
 
+    /// <summary>
+    /// The step gives a responder no due date, so one expires only where a person set one.
+    /// </summary>
+    [Fact]
+    public async Task Responder_MoveAfterResponderExpired_CreatesNewPair_ExpiredUntouched()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness);
+        RoutedTo(harness, Reader);
+        await LineAsync(harness, campaign, "th-1", Noon.AddMinutes(-20));
+        Assert.Equal(1, await harness.RespondAsync(Ct));
+
+        string expired;
+        string before;
+        await using (var db = harness.Open())
+        {
+            var responder = await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct);
+            foreach (var wait in await db.WorkItemWaits.Where(w => w.WorkItemId == responder.Id && w.Status == WaitStatus.Open).ToListAsync(Ct))
+            {
+                wait.Status = WaitStatus.Expired;
+            }
+
+            responder.DueAt = Noon.AddMinutes(-10);
+            responder.Status = WorkItemStatus.Expired;
+            responder.FinishedAt = Noon.AddMinutes(-10);
+            await db.SaveChangesAsync(Ct);
+            (expired, before) = (responder.PublicId, responder.Context.ToJsonString());
+        }
+
+        await LineAsync(harness, campaign, "th-1", Noon.AddMinutes(-2));
+        Assert.Equal(1, await harness.RespondAsync(Ct));
+
+        await using var read = harness.Open();
+        Assert.Equal(2, await read.WorkItems.CountAsync(item => item.Role == Responder.Role, Ct));
+        Assert.Equal(2, await read.WorkItems.CountAsync(item => item.Operation == Responder.ReadOperation, Ct));
+        var old = await read.WorkItems.SingleAsync(item => item.PublicId == expired, Ct);
+        Assert.Equal(WorkItemStatus.Expired, old.Status);
+        Assert.Equal(before, old.Context.ToJsonString());
+        Assert.False(await read.Journal.AnyAsync(e => e.WorkItemId == expired && e.Kind == JournalKinds.WorkItemContextUpdated, Ct));
+    }
+
     /// <summary>A responder somebody else created is theirs: the rule does not count it as the thread's.</summary>
     [Fact]
     public async Task Responder_ARolesOwnResponder_IsNotTheThreads()

@@ -412,7 +412,7 @@ public sealed class Responder(
     }
 
     /// <summary>
-    /// The thread's open responder: one the runtime itself created, in this campaign, not yet final, whose reply names the
+    /// The thread's open responder: one the runtime itself created, in this campaign, not finished, whose reply names the
     /// same plugin and thread. A responder a role or a person created is theirs, and not looked at.
     /// </summary>
     private static async Task<OpenResponder?> OpenResponderAsync(JasonDbContext db, int campaignId, Reply reply, CancellationToken ct)
