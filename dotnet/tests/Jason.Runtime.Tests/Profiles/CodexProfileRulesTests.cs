@@ -86,6 +86,32 @@ public class CodexProfileRulesTests
         Assert.Contains("codex", detail.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A flag one host leaves to the person may be one another host composes. A patch that moves a profile to Codex and
+    /// leaves its arguments alone would launch the stored ones after the flags Codex composes, where the last value wins,
+    /// so the stored arguments are held to Codex's flags and the profile keeps the revision it had.
+    /// </summary>
+    [Fact]
+    public async Task A_move_to_codex_whose_stored_arguments_carry_a_flag_codex_composes_is_refused_and_writes_nothing()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "moving", host = "claude_code", program = "claude", args = new[] { "--sandbox=danger-full-access" } },
+            Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "moving", host = "codex" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args[0]", "reserved"), (detail.Field, detail.Code));
+        Assert.Contains("--sandbox", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("codex", detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "moving" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+        Assert.Equal(AgentHostKind.ClaudeCode, read.Revision.Host);
+    }
+
     [Fact]
     public async Task A_search_granted_and_denied_at_once_is_refused()
     {
