@@ -62,6 +62,7 @@ public enum DecisionReferenceKind
 public enum AgentHostKind
 {
     ClaudeCode,
+    CursorCli,
 }
 
 /// <summary>

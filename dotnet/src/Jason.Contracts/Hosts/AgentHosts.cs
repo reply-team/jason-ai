@@ -43,6 +43,7 @@ public static class AgentHosts
     public static IReadOnlyList<AgentHostFacts> All { get; } =
     [
         new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile)),
+        new(AgentHostKind.CursorCli, "agent", ".cursor/cli-config.json", ".agents/skills", ".agents/skills", null),
     ];
 
     /// <summary>The instruction files a harness folder holds beside the memory file, each name once.</summary>

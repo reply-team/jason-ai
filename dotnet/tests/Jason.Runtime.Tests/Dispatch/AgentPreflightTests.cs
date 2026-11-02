@@ -327,6 +327,74 @@ public class AgentPreflightTests
     }
 
     /// <summary>
+    /// A host installed as a launcher script starts what that script starts. The claim asks the profile's own host
+    /// about the script rather than refusing it, so a profile naming Cursor's launcher by its full path starts the
+    /// interpreter and entry script the launcher would, with nothing started through a shell.
+    /// </summary>
+    [Fact]
+    public async Task A_profile_naming_its_hosts_launcher_script_starts_what_the_script_starts()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var root = harness.CursorInstall("2026.10.22-27dcf5f");
+        await SeedProfileAsync(db, "cursor", System.IO.Path.Combine(root, "agent.cmd"), host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        var agent = await AgentOf(database, item);
+        var version = System.IO.Path.Combine(root, "versions", "2026.10.22-27dcf5f");
+        Assert.Equal(System.IO.Path.Combine(version, "node.exe"), agent.Program);
+        Assert.Equal(
+            [System.IO.Path.Combine(version, "node.exe"), System.IO.Path.Combine(version, "index.js"), "-p"],
+            agent.Args!.Take(3));
+    }
+
+    /// <summary>
+    /// A launcher with nothing installed beside it is no program, and the refusal says what was expected and how to point
+    /// at the launcher by its full path, rather than calling the program missing or naming a script a shell would run.
+    /// </summary>
+    [Fact]
+    public async Task A_launcher_script_with_no_version_beside_it_is_refused_naming_the_launcher_by_its_full_path()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var root = harness.CursorInstall();
+        await SeedProfileAsync(db, "cursor", System.IO.Path.Combine(root, "agent.cmd"), host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains(System.IO.Path.Combine(root, "agent.cmd"), stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("--program", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("agent.cmd", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The host is named before the program is looked for, so a host this build lacks is said so and not blamed on its program.</summary>
+    [Fact]
+    public async Task A_host_this_build_cannot_start_is_refused_before_its_program_is_looked_for()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost()]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "cursor", "a-host-nobody-installed", host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains("cannot start", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A profile stored before its program was held to the rule keeps that program, so the claim holds it there too: a
     /// path to a script would be started through cmd.exe, and the claim refuses it before a child exists, naming the
     /// script rather than calling it missing.
@@ -513,7 +581,7 @@ public class AgentPreflightTests
         await db.SaveChangesAsync(Ct);
     }
 
-    private static async Task SeedProfileAsync(JasonDbContext db, string name, string program, bool disabled = false)
+    private static async Task SeedProfileAsync(JasonDbContext db, string name, string program, bool disabled = false, AgentHostKind host = AgentHostKind.ClaudeCode)
     {
         var profile = new ExecutionProfile
         {
@@ -528,7 +596,7 @@ public class AgentPreflightTests
         profile.Revisions.Add(new ExecutionProfileRevision
         {
             Number = 1,
-            Host = AgentHostKind.ClaudeCode,
+            Host = host,
             Program = program,
             Deny = ["Write"],
             CreatedByType = ActorType.Human,
@@ -574,7 +642,7 @@ public class AgentPreflightTests
         private readonly TempDataDir _dir = new();
         private readonly ILoggerFactory _logging;
 
-        public Harness(string? globalDefault = null)
+        public Harness(string? globalDefault = null, IReadOnlyList<IAgentHost>? hosts = null)
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
             Folders = global::Jason.Runtime.Tests.Harness.TestHarness.Folders(_dir.Home);
@@ -592,7 +660,7 @@ public class AgentPreflightTests
                 new AgentLaunchPlanner(
                     new AgentPreflight(),
                     new ProgramResolver(new OneProgramOnly(_dir.Paths.Root)),
-                    [new ClaudeCodeHost()],
+                    hosts ?? [new ClaudeCodeHost()],
                     Folders),
                 roles,
                 plugins,
@@ -622,6 +690,27 @@ public class AgentPreflightTests
             }
 
             return file;
+        }
+
+        /// <summary>A Cursor install root as the Windows installer makes one, with the versions named, outside the search path.</summary>
+        public string CursorInstall(params string[] versions)
+        {
+            var root = System.IO.Path.Combine(_dir.Paths.Root, "cursor-agent");
+            Directory.CreateDirectory(System.IO.Path.Combine(root, "versions"));
+            foreach (var file in new[] { "agent.cmd", "cursor-agent.cmd", "cursor-agent.ps1" })
+            {
+                File.WriteAllText(System.IO.Path.Combine(root, file), string.Empty);
+            }
+
+            foreach (var version in versions)
+            {
+                var directory = System.IO.Path.Combine(root, "versions", version);
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(System.IO.Path.Combine(directory, "node.exe"), string.Empty);
+                File.WriteAllText(System.IO.Path.Combine(directory, "index.js"), string.Empty);
+            }
+
+            return root;
         }
 
         /// <summary>The folders the claim finds the memory files by: a root of this test's own, made only where a test makes it.</summary>

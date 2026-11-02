@@ -182,5 +182,86 @@ public class ProgramResolverTests : IDisposable
         Assert.Equal([node, entry], launch);
     }
 
+    /// <summary>
+    /// A host installed as a launcher script that starts an interpreter, as Cursor's is on Windows: the script itself is
+    /// never started, since that would hand a command line to a shell, but its host knows what the script starts, so the
+    /// answer for the script is the interpreter and the entry script. A path to the script names the file the way a
+    /// person names it.
+    /// </summary>
+    [Fact]
+    public void A_path_to_the_hosts_own_launcher_script_resolves_to_what_that_script_starts()
+    {
+        var root = CursorInstall();
+
+        var launch = new ProgramResolver(Search(string.Empty)).Resolve(Path.Combine(root, "agent.cmd"), new CursorCliHost(windows: true));
+
+        Assert.Equal(
+            [Path.Combine(root, "versions", "2026.10.22-27dcf5f", "node.exe"), Path.Combine(root, "versions", "2026.10.22-27dcf5f", "index.js")],
+            launch);
+    }
+
+    [Fact]
+    public void A_launcher_script_is_still_no_program_when_no_host_is_asked_about_it()
+    {
+        var script = Path.Combine(CursorInstall(), "agent.cmd");
+
+        Assert.Null(new ProgramResolver(Search(string.Empty)).Resolve(script));
+        Assert.Null(new ProgramResolver(Search(string.Empty)).Resolve(script, null));
+    }
+
+    [Fact]
+    public void A_script_that_is_not_the_asked_hosts_launcher_is_still_no_program()
+    {
+        var root = CursorInstall();
+        File.WriteAllText(Path.Combine(root, "claude.cmd"), string.Empty);
+
+        Assert.Null(new ProgramResolver(Search(string.Empty)).Resolve(Path.Combine(root, "claude.cmd"), new CursorCliHost(windows: true)));
+    }
+
+    [Fact]
+    public void A_launcher_script_with_nothing_installed_beside_it_is_no_program()
+    {
+        var root = CursorInstall();
+        Directory.Delete(Path.Combine(root, "versions"), recursive: true);
+
+        Assert.Null(new ProgramResolver(Search(string.Empty)).Resolve(Path.Combine(root, "agent.cmd"), new CursorCliHost(windows: true)));
+    }
+
+    [Fact]
+    public void A_path_to_a_program_is_answered_the_same_whichever_host_is_asked()
+    {
+        var program = Executable("host");
+
+        Assert.Equal([program], new ProgramResolver(Search(string.Empty)).Resolve(program, new CursorCliHost(windows: true)));
+    }
+
+    [Fact]
+    public void On_Windows_a_bare_name_that_only_a_launcher_script_answers_for_resolves_to_what_it_starts()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows is the platform whose bare names carry an extension.");
+        var root = CursorInstall();
+        var search = new TestSearchPath { Path = root, PathExt = ".COM;.EXE;.BAT;.CMD" };
+
+        var launch = new ProgramResolver(search).Resolve("agent", new CursorCliHost(windows: true));
+
+        Assert.Equal(Path.Combine(root, "versions", "2026.10.22-27dcf5f", "node.exe"), launch![0]);
+        Assert.Null(new ProgramResolver(search).Resolve("agent"));
+    }
+
+    private string CursorInstall()
+    {
+        var root = Path.Combine(_directory, "cursor-agent");
+        var version = Path.Combine(root, "versions", "2026.10.22-27dcf5f");
+        Directory.CreateDirectory(version);
+        foreach (var file in new[] { "agent.cmd", "cursor-agent.cmd", "cursor-agent.ps1" })
+        {
+            File.WriteAllText(Path.Combine(root, file), string.Empty);
+        }
+
+        File.WriteAllText(Path.Combine(version, "node.exe"), string.Empty);
+        File.WriteAllText(Path.Combine(version, "index.js"), string.Empty);
+        return root;
+    }
+
     private static TestSearchPath Search(string path) => new() { Path = path };
 }

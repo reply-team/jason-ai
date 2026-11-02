@@ -47,23 +47,48 @@ public sealed class ProgramResolver(ISearchPath searchPath)
     /// <c>cmd.exe</c>. A profile stored before its program was held to that rule keeps its program, so the rule is
     /// held here as well, and <see cref="NamesShellScript"/> says why there was no answer.
     /// </para>
+    /// <para>
+    /// A script is the one exception, and only where <paramref name="host"/> says it is its own launcher: a host that is
+    /// installed as a script which starts an interpreter knows which script that is and what it starts, so the answer
+    /// for the script is that interpreter and entry script — never the script. Without a host, or for a script that is
+    /// not the host's, the answer is as it always was.
+    /// </para>
     /// </summary>
-    public IReadOnlyList<string>? Resolve(string program)
+    public IReadOnlyList<string>? Resolve(string program, IAgentHost? host = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(program);
 
         if (program.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
             || program.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
         {
-            return Full(program) is { } path && !ProgramLookup.IsShellScript(path) && Runnable(program) ? [path] : null;
+            if (Full(program) is not { } path)
+            {
+                return null;
+            }
+
+            if (ProgramLookup.IsShellScript(path))
+            {
+                return LayoutOf(host, path);
+            }
+
+            return Runnable(program) ? [path] : null;
         }
 
         // The same walk, the same order and the same reading of a shim that a plugin's declared program gets.
         // Two answers to "where is this program" would be one answer too many.
         var onPath = new ProgramSearchPath(searchPath.Path, searchPath.PathExt);
         var found = ProgramLookup.Find(program, onPath, onPath);
-        return found is { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } started } ? [started, .. found.Launch] : null;
+        return found switch
+        {
+            { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } started } => [started, .. found.Launch],
+            { Outcome: ProgramLookupOutcome.RefusedShim, File: { } shim } => LayoutOf(host, shim),
+            _ => null,
+        };
     }
+
+    /// <summary>What a host's own launcher script starts, or null where the file is not one the host owns.</summary>
+    private static IReadOnlyList<string>? LayoutOf(IAgentHost? host, string script) =>
+        host is not null && host.NamesItsLauncher(Path.GetFileName(script)) && host.ProgramLayout(script) is { Count: > 0 } layout ? layout : null;
 
     /// <summary>
     /// Whether a program names a file only a shell could start, read both as written and as this operating system
