@@ -72,17 +72,21 @@ jobs:
           $git = @('-c', 'core.quotePath=false', '--attr-source=HEAD^1')
 
           # A path from a header line: git ends one that holds a space with a tab, and still quotes, C-style, one that
-          # holds a quote, a backslash or a control character.
+          # holds a quote, a backslash or a control character. An octal escape is one byte of the name's UTF-8, so the
+          # quoted name is read back as bytes and decoded whole: a run of escapes is one letter, not one per byte.
           function Get-PathOf([string] $written) {
             $path = $written.TrimEnd("`t")
             if ($path.Length -ge 2 -and $path.StartsWith('"') -and $path.EndsWith('"')) {
-              $escapes = @{ 'a' = "`a"; 'b' = "`b"; 't' = "`t"; 'n' = "`n"; 'v' = "`v"; 'f' = "`f"; 'r' = "`r" }
-              $path = $path.Substring(1, $path.Length - 2) -replace '\\([0-7]{3}|.)', {
-                $escape = $_.Groups[1].Value
-                if ($escape.Length -eq 3) { [string][char][Convert]::ToInt32($escape, 8) }
-                elseif ($escapes.ContainsKey($escape)) { $escapes[$escape] }
-                else { $escape }
+              $escapes = @{ 'a' = 7; 'b' = 8; 't' = 9; 'n' = 10; 'v' = 11; 'f' = 12; 'r' = 13 }
+              $bytes = [Collections.Generic.List[byte]]::new()
+              foreach ($part in [regex]::Matches($path.Substring(1, $path.Length - 2), '\\([0-7]{3}|.)|[^\\]+')) {
+                $escape = $part.Groups[1]
+                if (-not $escape.Success) { $bytes.AddRange([Text.Encoding]::UTF8.GetBytes($part.Value)) }
+                elseif ($escape.Value.Length -eq 3) { $bytes.Add([Convert]::ToByte($escape.Value, 8)) }
+                elseif ($escapes.ContainsKey($escape.Value)) { $bytes.Add($escapes[$escape.Value]) }
+                else { $bytes.AddRange([Text.Encoding]::UTF8.GetBytes($escape.Value)) }
               }
+              $path = [Text.Encoding]::UTF8.GetString($bytes.ToArray())
             }
             return $path.Substring(2)
           }

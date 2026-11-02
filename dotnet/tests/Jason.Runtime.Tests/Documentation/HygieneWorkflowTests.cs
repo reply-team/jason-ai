@@ -278,6 +278,28 @@ public sealed class HygieneWorkflowTests
     }
 
     /// <summary>
+    /// A name git still quotes, C-style, with <c>core.quotePath</c> off — one holding a quote, a backslash or a control
+    /// character — is named in the error line as it is called, unquoted and unescaped, letters beyond ASCII included.
+    /// Such a name cannot stand on a Windows disk, so the change is made in git's index alone, on every system alike.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/say \"café\".md")]
+    [InlineData("docs/back\\slash.md")]
+    [InlineData("docs/a\ttab.md")]
+    [InlineData("docs/an \u001b escape.md")]
+    public void A_name_git_quotes_is_named_in_the_error_line_as_it_is_called(string path)
+    {
+        using var repository = new Repository();
+        repository.Commit("README.md", "# Jason\n");
+        repository.CommitInTheIndex(path, "# A page\n\nFixes " + "REPLY" + "-1.\n");
+
+        var run = repository.Check("A change", "What it does.");
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains($"::error::{path}:3: a tracker key\n", run.Stdout.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// What the check passes: whatever the tree's own guard passes, and a body that is empty.
     /// </summary>
     [Theory]
@@ -422,6 +444,19 @@ public sealed class HygieneWorkflowTests
             Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(Root, to.Replace('/', Path.DirectorySeparatorChar)))!);
             Git(Root, "mv", from, to);
             Git(Root, "commit", "--quiet", "-m", "A change");
+        }
+
+        /// <summary>
+        /// A file committed through git's index alone, never written to the disk, so its name may hold what a Windows
+        /// disk refuses: git on Windows refuses such a name only while it guards the disk, which is turned off here.
+        /// </summary>
+        public void CommitInTheIndex(string path, string text)
+        {
+            var source = Path.Combine(tree.Root, Guid.NewGuid().ToString("N") + ".txt");
+            File.WriteAllText(source, text);
+            var blob = Git(Root, "hash-object", "-w", "--", source).Trim();
+            Git(Root, "-c", "core.protectNTFS=false", "update-index", "--add", "--cacheinfo", $"100644,{blob},{path}");
+            Git(Root, "-c", "core.protectNTFS=false", "commit", "--quiet", "-m", "A change");
         }
 
         public void Commit(string path, string text)
