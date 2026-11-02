@@ -488,7 +488,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against | Tools |
 |---|---|---|---|---|---|---|---|
 | Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) |
-| Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
+| Codex CLI | `codex` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation and source for 0.166.0, npm's current release; measured on Windows with the CLI the Codex app bundles, 0.166.0-alpha.5.1; not yet run on an account ([Codex CLI](#codex-cli)) | `web_search` as `WebSearch`: granted as a live search, denied by that word; `web_fetch`: not on this host, so a grant is refused and a deny holds anyway |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
 | Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
 | GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
@@ -511,3 +511,53 @@ A host that reads its allow rules from the work directory rather than its comman
 deny rules — the command word that calls the runtime back and the memory files' paths, never the capability token or
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
+
+### Codex CLI
+
+Install the CLI (`npm install -g @openai/codex`), sign in to it yourself with `codex login`, then name it in a profile:
+`jason profile create local-codex --host codex --program codex`. Jason never signs in for you, and never looks for the
+copy of the CLI the Codex app carries.
+
+A launched role runs `codex exec` and reads its brief on stdin. None of the person's own configuration reaches it
+(`--ignore-user-config`), nor their command rules (`--ignore-rules`), hooks, plugins, apps, memories or MCP servers, and
+a setting the host does not know fails the start (`--strict-config`). Codex confines a role by a sandbox rather than by
+a list of commands: the runtime names a permissions profile of its own on the command line, and every command the role
+runs is held by it, whatever its name.
+
+**On Windows, first:** Codex's elevated sandbox must be set up once by an administrator
+([Codex's Windows sandbox setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a
+role runs is refused and the attempt fails by the role's report. Every Windows run names that sandbox
+(`windows.sandbox="elevated"`) rather than leaving it to the person's configuration: `--ignore-user-config` drops the
+person's own choice, and with none named Codex runs a command with no sandbox at all. Measured with 0.166.0-alpha.5.1,
+the sandbox that needs no administrator refused every command of this profile, since it reads the whole disk or nothing
+and cannot hold the network to loopback.
+
+**What a role may read.** The platform's libraries, the work directory, the folder of the `jason` executable, the folder
+that executable unpacks its libraries into, `<data>/run`, where the CLI finds the runtime, and each memory file the
+launch names. A memory file whose path holds a character the sandbox reads as a pattern (`* ? [ ] { }`) is left
+unreadable. A path the profile denies reading is denied, and a deny wins over a read. On Windows, whether the elevated
+sandbox reads only this list is not yet checked; Codex documents the paths it denies there rather than a list of the
+paths it reads, so a role may read more than this list. What no flag reaches: Codex reads its own global `AGENTS.md`
+(in `~/.codex`, or `$CODEX_HOME`) for every run, so that file reaches every Codex role and should carry nothing a role
+must not read.
+
+**Calling home.** The role runs `jason` in its shell, and the CLI reaches the runtime on loopback. The sandbox's network
+is on with loopback allowed, and every other address is kept out by Codex's network proxy, an experimental feature in
+0.166.0. On Linux, whether `jason` reaches the runtime from inside the sandbox is not yet checked; the sandbox may route
+loopback through its proxy, which the CLI does not use. On Windows, whether `jason` reaches the runtime from inside the
+elevated sandbox is not yet checked.
+
+**What a deny means.** Nothing is writable, so `Write`, `Edit`, `MultiEdit` and `NotebookEdit` hold already. `WebSearch`
+turns the search off, even where `tools` grants it. `WebFetch` holds already: Codex has no tool that fetches a page, and
+the network reaches loopback alone. `Read(//…)`, `Read(//d/…)` on Windows and `Read(~/…)` deny that path in the sandbox.
+Commands are not confined by name — any program the role can read runs, inside the same sandbox — so a deny naming a
+command or another tool (`Bash(…)`, `Glob`, an MCP tool) is refused when the profile is written, naming the host, rather
+than dropped at a launch. A grant of `web_fetch` is refused for the same reason.
+
+**Arguments.** A profile's `args` are flags, each value joined to its flag by `=` (`--model=<name>`): Codex reads a bare
+word as the prompt, which would replace the brief, or as a subcommand. `-c` is the runtime's alone, since one setting
+after the runtime's could replace any of them; the model is the person's.
+
+**What an attempt records.** Codex mints the id of its own run and takes none, so the attempt records none; the id Codex
+printed is in the attempt's `stdout.log`. An end without a report is read as any other end: Codex says nothing stable
+about a missing sign-in.

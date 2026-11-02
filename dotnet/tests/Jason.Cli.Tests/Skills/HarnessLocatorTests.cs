@@ -24,6 +24,20 @@ public class HarnessLocatorTests
         Assert.Equal(Path.Combine(home, ".claude", "skills"), root.Directory);
     }
 
+    /// <summary>Codex CLI keeps its own folder and reads skills from the shared one beside it, which is where they go.</summary>
+    [Fact]
+    public void The_codex_root_is_the_shared_skills_directory_found_by_the_hosts_own_folder()
+    {
+        using var tree = new TempPaths();
+        var home = Directory.CreateDirectory(Path.Combine(tree.Paths.Root, "home")).FullName;
+        Directory.CreateDirectory(Path.Combine(home, ".codex"));
+
+        var root = Assert.Single(HarnessLocators.ForHome(home).Detect());
+
+        Assert.Equal([AgentHostKind.Codex], root.Hosts);
+        Assert.Equal(Path.Combine(home, ".agents", "skills"), root.Directory);
+    }
+
     /// <summary>Every host of the table is detected by its own marker, and its root is where the table says.</summary>
     [Theory]
     [MemberData(nameof(Kinds))]
