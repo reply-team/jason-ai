@@ -137,7 +137,8 @@ against an attempt the runtime knows.
 Written at the claim, completed at the end, never rewritten: the profile's id, name and **revision**,
 which level chose it, the revision it inherited where lineage chose, the host, the program as this
 machine resolved it, **the whole argument list as launched**, the version the profile was verified
-against, the session id minted for that attempt alone, and **the tools the revision granted** — in the
+against, the session id minted for that attempt alone where the host takes one from the runtime (a host that mints
+its own is told none, and none is recorded; §12), and **the tools the revision granted** — in the
 API's words, `web_search` and `web_fetch`, and empty where it granted none; where a launch was made, the
 host's names for them are in the argument list. A record whose claim never read a revision — a role's own
 entry command, a refusal made before the revision was read, an attempt from before grants — has no `tools`.
@@ -465,7 +466,7 @@ looking for.
 
 ## 11. What this version does not do
 
-**Session resume.** A session id is minted per attempt and recorded, which is what a later nudge
+**Session resume.** A session id is minted per attempt and recorded where the host takes one, which is what a later nudge
 needs, but nothing resumes one: a host that is interrupted is retried from the start.
 
 **A general lineage resolver.** One hop, materialized at creation. Branch selection and ambiguity
@@ -484,17 +485,29 @@ name. A launched role runs on a host a profile names, and a profile can name onl
 status` says which of these hosts it detected on this machine and whether every enabled profile names one of them
 (`agent_hosts`).
 
-| Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against |
-|---|---|---|---|---|---|---|
-| Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) |
-| Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — |
-| Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
-| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
-| GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
-| Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — |
+| Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against | Tools |
+|---|---|---|---|---|---|---|---|
+| Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) |
+| Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
+| Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
+| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
+| GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
+| Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
 
 A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there — and
 `jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
 `AGENTS.md`, a one-line import file for every host that reads a file of another name. Jason holds no key for any host:
 each runs under the person's own plan, signed in by them, and a host that does not start, or that stops because it is
 not signed in, ends the attempt with `host_not_available` and one sentence of Jason's own, never the host's words.
+
+One rule holds every host's tools, where a profile is written: a grant of a tool the host does not have is refused,
+naming the host and the tool; a deny of a tool the host does not have is kept as the person's word, since it holds
+anyway; a deny of a tool the host has and cannot take away is refused, naming the host; and a grant of a tool the host
+has but Jason cannot make true on it is refused, naming the host. The `Tools` column is each host's table of the
+`tools` vocabulary, so the reason for a refusal can be read there. A host may also refuse arguments its own parser reads
+otherwise than the runtime composed them, naming the host, beside the flags it reserves.
+
+A host that reads its allow rules from the work directory rather than its command line is given them there, beside its
+deny rules — the command word that calls the runtime back and the memory files' paths, never the capability token or
+the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
+none, and the attempt records none.

@@ -329,7 +329,6 @@ public partial class ExecutionProfileDocTests
         Assert.DoesNotContain("not a promise", contract, StringComparison.Ordinal);
     }
 
-    /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     /// <summary>
     /// The host matrix has one home, §12, and it is held to the table the CLI and the runtime both read: every host this
     /// build knows has a row that says yes, with the skills root, the work directory's folder and the import file the
@@ -369,6 +368,44 @@ public partial class ExecutionProfileDocTests
             row => Assert.Equal(NotYet, row[5]));
     }
 
+    /// <summary>
+    /// The matrix carries each host's tool table, so a person can read why a grant or a deny was refused: for every host
+    /// this build registers, each tool the host has a rule for is named with that rule, in the host's own word; a row for
+    /// a host this build does not know yet has none.
+    /// </summary>
+    [Fact]
+    public void The_host_matrix_names_each_registered_hosts_rule_for_every_tool_it_has()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var rows = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .ToList();
+
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        foreach (var host in Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<Jason.Runtime.Execution.Hosts.IAgentHost>(provider))
+        {
+            var row = Assert.Single(rows, row => row[1] == $"`{Jason.Contracts.Hosts.AgentHosts.Word(host.Kind)}`");
+            foreach (var tool in Enum.GetValues<Jason.Contracts.Api.AgentTool>())
+            {
+                if (host.ToolRule(tool) is { } rule)
+                {
+                    Assert.Contains($"`{Jason.Runtime.Persistence.SnakeCaseEnumConverter<Jason.Contracts.Api.AgentTool>.Format(tool)}` as `{rule}`", row[7], StringComparison.Ordinal);
+                }
+            }
+        }
+
+        Assert.All(
+            rows.Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is null),
+            row => Assert.Equal("—", row[7]));
+    }
+
+    /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 
     [GeneratedRegex(@"\s+")]
