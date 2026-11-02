@@ -83,6 +83,23 @@ public class AgentHostsTests
         Assert.Equal(new HostInstructionFile("CLAUDE.md", "@AGENTS.md"), facts.Instructions);
     }
 
+    /// <summary>
+    /// Codex keeps its sign-in and settings in its own home folder and reads skills from the folder several hosts share,
+    /// both in the home and in the folder it runs in; it reads <c>AGENTS.md</c> itself, so no import file is written.
+    /// </summary>
+    [Fact]
+    public void Codex_reads_the_shared_skills_folder_and_the_memory_file_itself()
+    {
+        var facts = AgentHosts.Of(AgentHostKind.Codex);
+
+        Assert.Equal("codex", AgentHosts.Word(AgentHostKind.Codex));
+        Assert.Equal("codex", facts.CommandWord);
+        Assert.Equal(".codex", facts.HomeMarker);
+        Assert.Equal(".agents/skills", facts.HomeSkills);
+        Assert.Equal(".agents/skills", facts.WorkSkills);
+        Assert.Null(facts.Instructions);
+    }
+
     [Fact]
     public void The_import_files_are_each_file_once_and_never_the_memory_file_itself()
     {

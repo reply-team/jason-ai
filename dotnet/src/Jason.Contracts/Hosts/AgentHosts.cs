@@ -43,6 +43,10 @@ public static class AgentHosts
     public static IReadOnlyList<AgentHostFacts> All { get; } =
     [
         new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile)),
+
+        // Codex keeps its sign-in and settings in ~/.codex and reads skills from ~/.agents/skills and from the
+        // .agents/skills folder of the directory it runs in; it reads AGENTS.md itself, so it needs no import file.
+        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null),
     ];
 
     /// <summary>The instruction files a harness folder holds beside the memory file, each name once.</summary>
