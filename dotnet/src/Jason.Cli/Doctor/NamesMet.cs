@@ -193,7 +193,7 @@ internal sealed partial class NamesMet
         {
             case JsonObject members:
                 if (Text(members[LogTemplateKey]) is { } template && LoggedNames.PluginTemplates.TryGetValue(template, out var property)
-                    && Text(members[property]) is { } named && !LoggedNames.NotAPlugin.Contains(named))
+                    && Text(members[property]) is { } named && LoggedNames.NamesAPlugin(template, named))
                 {
                     Add(AliasKind.Plugin, named);
                 }

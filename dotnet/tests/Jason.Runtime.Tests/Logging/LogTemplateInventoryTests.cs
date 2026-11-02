@@ -191,7 +191,8 @@ public sealed class LogTemplateInventoryTests
     /// <see cref="LoggedNames.PluginIdProperty"/> on any line, and under another property on the lines the client lists
     /// by their templates, since it cannot read the runtime's code. That list is held to the runtime's templates here:
     /// each is a template the runtime writes, with its property as a hole; every template the runtime writes with a hole
-    /// of one of those names is on it; and no template names a role or a skill pack, which the client would not read.
+    /// of one of those names is on it; a value that names no plugin is kept to a template on it, never to every line; and
+    /// no template names a role or a skill pack, which the client would not read.
     /// </summary>
     [Fact]
     public void The_clients_list_of_the_lines_that_name_a_plugin_is_the_runtimes_own()
@@ -218,6 +219,7 @@ public sealed class LogTemplateInventoryTests
         Assert.Equal(
             templates.Where(template => Holes(template).Any(naming.Contains)).Order(StringComparer.Ordinal),
             listed.Keys.Order(StringComparer.Ordinal));
+        Assert.All(LoggedNames.NotAPlugin.Keys, template => Assert.Contains(template, listed.Keys));
         Assert.Contains(LoggedNames.PluginIdProperty, ReviewedLogProperties.Names);
         Assert.Contains(templates, template => Holes(template).Contains(LoggedNames.PluginIdProperty));
         Assert.DoesNotContain(

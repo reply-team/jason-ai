@@ -2620,6 +2620,29 @@ public sealed class DoctorComposerTests
         Assert.Equal("toast", Text(slice[templates.Count]!["Channel"]));
     }
 
+    /// <summary>The lines that name a plugin under a property of their own, but for the line about a notification channel.</summary>
+    public static TheoryData<string> LinesOtherThanAChannels() =>
+        [.. LoggedNames.PluginTemplates.Keys.Where(template => template != "Notification channel {Channel} failed ({Code}, {Class})").Order(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// <c>toast</c> names no plugin only on the line about a notification channel, the one line whose property can be the
+    /// runtime's own channel: on any other line that names a plugin the same word is a plugin's id, and travels as its
+    /// alias.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LinesOtherThanAChannels))]
+    public async Task The_runtime_s_own_channel_is_left_as_it_is_only_on_the_line_about_a_channel(string template)
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.LogsDirectory);
+        var property = LoggedNames.PluginTemplates[template];
+        Write(dir.Paths.LogsDirectory, "runtime-20261004.jsonl", Event(At(0), template, "Warning", (property, "toast")));
+
+        var bundle = await ComposeAsync(dir, Running(dir));
+
+        Assert.Matches("^<plugin-[0-9]+>$", Text(Section(bundle, "logs")["slice"]![0]![property]));
+    }
+
     /// <summary>
     /// A bundle is most wanted when the runtime does not answer, and then the plugins directory is the only place that
     /// says which packages are there: a package named only in the settings — a notification plugin's key, and the
