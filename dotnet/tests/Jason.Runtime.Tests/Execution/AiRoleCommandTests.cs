@@ -10,6 +10,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -67,6 +68,35 @@ public class AiRoleCommandTests
         Assert.Equal(3, exited.ExitCode);
         Assert.Equal(3, exited.Launch.ExitCode);
         Assert.Contains("behaviour=crash", exited.StderrTail!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The host the claim named is asked what its end means, and what it says is its own sentence; the tail it wrote
+    /// stays where the launcher keeps the child's output.
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_says_it_cannot_run_here_hands_back_its_sentence()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), host: new SentenceHost());
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(3, exited.ExitCode);
+        Assert.Equal(SentenceHost.Sentence, exited.Unavailable);
+        Assert.Contains("behaviour=crash", exited.StderrTail!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_host_that_says_nothing_of_its_end_leaves_the_end_as_it_was()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), host: new ClaudeCodeHost());
+
+        Assert.Null(Assert.IsType<CommandOutcome.Exited>(outcome).Unavailable);
     }
 
     [Fact]
@@ -363,12 +393,14 @@ public class AiRoleCommandTests
         JsonObject? brief = null,
         string? projectId = null,
         MemoryFileLocations? memoryFiles = null,
-        Resumption? resumption = null)
+        Resumption? resumption = null,
+        IAgentHost? host = null)
     {
         var command = new AiRoleCommand(
             paths,
             new TokenRedactor(new RuntimeSecrets(Token)),
             TestOptions.RoleSettings(roles),
+            host is null ? [] : [host],
             NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
             WorkItemId,
@@ -389,7 +421,8 @@ public class AiRoleCommandTests
             Deny: deny,
             ProjectId: projectId,
             MemoryFiles: memoryFiles,
-            Resumption: resumption);
+            Resumption: resumption,
+            Host: host?.Kind);
 
         return command.RunAsync(context, Ct);
     }
@@ -448,4 +481,25 @@ public class AiRoleCommandTests
 
         Assert.Fail(string.Create(CultureInfo.InvariantCulture, $"process {pid} was still running five seconds after the kill"));
     }
+}
+
+/// <summary>A host that reads every end with exit code 3 as "cannot run here", and is otherwise the one that ships.</summary>
+file sealed class SentenceHost : IAgentHost
+{
+    public const string Sentence = "The agent host cannot run on this machine.";
+
+    private readonly ClaudeCodeHost _inner = new();
+
+    public AgentHostKind Kind => _inner.Kind;
+
+    public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+    public string ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+    public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+        _inner.Compose(revision, launch, memoryFiles);
+
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> deny) => _inner.WriteWorkDirectory(workDir, deny);
+
+    public string? Unavailable(int exitCode, string? stderrTail) => exitCode == 3 ? Sentence : null;
 }

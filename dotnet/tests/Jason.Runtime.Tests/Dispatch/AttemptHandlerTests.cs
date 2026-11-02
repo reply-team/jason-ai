@@ -125,6 +125,31 @@ public class AttemptHandlerTests
         Assert.Equal(2718, attempt.Launch!.Pid);
     }
 
+    /// <summary>
+    /// A host that says it cannot run here — not signed in, say — ends the attempt as a fact about the machine, which a
+    /// repeat would only meet again. The sentence is the host's class's own, and none of what the host wrote travels.
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_says_it_cannot_run_here_ends_the_item_with_its_sentence_and_none_of_its_words()
+    {
+        const string Sentence = "The agent host is not signed in on this machine.";
+        var command = FakeCommand.Returning(new CommandOutcome.Exited(1, "Error: not signed in as person@example.test", Launch(2718), Sentence));
+        using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0, commands: command);
+        var seeded = await harness.SeedClaimableAsync(Ct);
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+        await RunAsync(harness, work);
+
+        var item = await harness.ReadItemAsync(seeded.PublicId, Ct);
+        Assert.Equal(WorkItemStatus.Failed, item.Status);
+        var attempt = Assert.Single(item.Attempts);
+        Assert.Equal(AttemptErrors.HostNotAvailable, attempt.Error!.Code);
+        Assert.False(attempt.Error.Retriable);
+        Assert.Equal(Sentence, attempt.Error.Message);
+        Assert.Null(attempt.Error.Trace);
+        Assert.Equal(2718, attempt.Launch!.Pid);
+    }
+
     [Fact]
     public async Task An_attempt_the_executor_already_finished_is_left_alone()
     {

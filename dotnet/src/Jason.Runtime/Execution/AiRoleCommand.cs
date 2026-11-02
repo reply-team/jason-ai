@@ -29,6 +29,7 @@ public sealed class AiRoleCommand(
     JasonPaths paths,
     TokenRedactor redactor,
     LiveSettings<RolesOptions> roles,
+    IEnumerable<IAgentHost> hosts,
     ILogger<AiRoleCommand> logger) : ICommand
 {
     /// <summary>What the envelope names where the claim handed over no memory files: every level unknown.</summary>
@@ -58,14 +59,29 @@ public sealed class AiRoleCommand(
             return new CommandOutcome.LaunchFailed("The role has no entry command.", launch);
         }
 
+        // The host the claim's profile names, by the one implementation registered for it; none where no profile ran
+        // the work, and a host the claim named that this build no longer registers is refused rather than guessed at.
+        IAgentHost? host = null;
+        if (context.Host is { } kind)
+        {
+            host = hosts.LastOrDefault(candidate => candidate.Kind == kind);
+            if (host is null)
+            {
+                return new CommandOutcome.LaunchFailed(
+                    "The execution profile names a host this build cannot start.", launch, AttemptErrors.HostNotAvailable);
+            }
+        }
+
         // What the agent will find where it runs: what it may not do, and how to do the job. Both are written
-        // before the child exists, and a role whose skill a host would silently ignore ends the attempt here.
+        // before the child exists, laid out where the host reads them, and a role whose skill a host would silently
+        // ignore ends the attempt here.
         var prepared = WorkDirectory.Prepare(
             context.WorkDir,
             context.Deny ?? [],
             context.Role,
             paths.RoleSkillsDirectory,
-            roles.Current.MaxSkillBytes);
+            roles.Current.MaxSkillBytes,
+            host);
         if (prepared.RefusalCode is { } refusal)
         {
             return new CommandOutcome.LaunchFailed(prepared.Message!, launch, refusal);
@@ -173,9 +189,15 @@ public sealed class AiRoleCommand(
                 context.WorkItemId,
                 process.ExitCode);
 
-            return context.Kill.IsCancellationRequested
-                ? new CommandOutcome.Killed(launch)
-                : new CommandOutcome.Exited(process.ExitCode, tail.ToString(), launch);
+            if (context.Kill.IsCancellationRequested)
+            {
+                return new CommandOutcome.Killed(launch);
+            }
+
+            // The host reads its own end: an exit that says it cannot run here becomes its sentence, and the tail it
+            // wrote stays the trace of an ordinary exit only.
+            var stderrTail = tail.ToString();
+            return new CommandOutcome.Exited(process.ExitCode, stderrTail, launch, host?.Unavailable(process.ExitCode, stderrTail));
         }
     }
 

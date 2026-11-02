@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Runtime.Routing;
 
@@ -55,4 +56,5 @@ public sealed record ClaimedWork(
     Resumption? Resumption = null);
 
 /// <summary>The per-item half of an agent launch, as the claim resolved it.</summary>
-public sealed record AgentLaunch(IReadOnlyList<string> Deny, string CliCommand);
+/// <param name="Host">The host the profile names, so the work directory is laid out where that host reads it.</param>
+public sealed record AgentLaunch(IReadOnlyList<string> Deny, string CliCommand, AgentHostKind Host);

@@ -15,6 +15,7 @@ namespace Jason.Runtime.Dispatch;
 /// <param name="MemoryFiles">The person's memory files as the claim found them, which the envelope names as they are.</param>
 /// <param name="Unreadable">The levels whose file the claim named and the host could not write as a read rule.</param>
 /// <param name="ProjectPublicId">The public id of the project whose folder the memory files were placed under; null for provider work, which has no launch decision.</param>
+/// <param name="Host">The host the revision names, whose layout the attempt's work directory is given.</param>
 public sealed record AgentPlan(
     IReadOnlyList<string> Command,
     IReadOnlyList<string> Deny,
@@ -22,7 +23,8 @@ public sealed record AgentPlan(
     AgentProvenanceDto Provenance,
     MemoryFileLocations MemoryFiles,
     IReadOnlyList<string> Unreadable,
-    string? ProjectPublicId);
+    string? ProjectPublicId,
+    AgentHostKind Host);
 
 /// <summary>What the claim decided about launching one agent work item.</summary>
 public abstract record AgentLaunchDecision
@@ -172,7 +174,8 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             provenance,
             memoryFiles,
             composed.Unreadable,
-            projectPublicId));
+            projectPublicId,
+            revision.Host));
     }
 
     /// <summary>What the pre-flight had decided when it refused: the level and the profile, and no more.</summary>

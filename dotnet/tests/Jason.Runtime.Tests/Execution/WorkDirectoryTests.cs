@@ -1,7 +1,11 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
+using Jason.Runtime.Hosting.Modules;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Execution;
 
@@ -272,6 +276,53 @@ public class WorkDirectoryTests : IDisposable
 
         var changed = Assert.Throws<RoleSkillTreeChanged>(() => RoleSkillRules.Measure(files));
         Assert.Contains("reference.md", changed.Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<AgentHostKind> Kinds() => [.. Enum.GetValues<AgentHostKind>()];
+
+    /// <summary>Each host reads skills from its own folder of the work directory, and the role's skill is placed there.</summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void A_role_is_taught_where_the_host_that_runs_it_reads_skills(AgentHostKind kind)
+    {
+        Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk the runtime for the brief.\n");
+        var host = Hosts().Single(candidate => candidate.Kind == kind);
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, host);
+
+        Assert.Null(report.RefusalCode);
+        Assert.True(report.Skill!.Copied);
+        var copied = Path.Combine(AgentHosts.Under(WorkDir, host.Facts.WorkSkills), Role, "SKILL.md");
+        Assert.Contains("Ask the runtime for the brief.", File.ReadAllText(copied), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A launch with no profile names no host, and its directory is laid out as it always was: the layout of the host
+    /// every installation before the table had, so a role's own entry command finds what it found before.
+    /// </summary>
+    [Fact]
+    public void A_launch_naming_no_host_keeps_the_layout_it_always_had()
+    {
+        Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk the runtime for the brief.\n");
+        var named = Path.Combine(_root, "named");
+
+        WorkDirectory.Prepare(WorkDir, ["WebFetch"], Role, SkillsRoot, 1024 * 1024);
+        WorkDirectory.Prepare(named, ["WebFetch"], Role, SkillsRoot, 1024 * 1024, new ClaudeCodeHost());
+
+        Assert.Equal(
+            Directory.GetFiles(named, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(named, file)).Order(),
+            Directory.GetFiles(WorkDir, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(WorkDir, file)).Order());
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(named, ".claude", "settings.json")),
+            File.ReadAllText(Path.Combine(WorkDir, ".claude", "settings.json")));
+    }
+
+    private static IReadOnlyList<IAgentHost> Hosts()
+    {
+        var services = new ServiceCollection();
+        services.AddDispatcherModule();
+        using var provider = services.BuildServiceProvider();
+        return [.. provider.GetServices<IAgentHost>()];
     }
 
     private void Skill(string text) =>
