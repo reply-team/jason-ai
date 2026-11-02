@@ -494,8 +494,8 @@ status` says which of these hosts it detected on this machine and whether every 
 | GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 
-A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there — and
-`jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
+A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there, and only
+a path of that kind detects it — and `jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
 `AGENTS.md`, a one-line import file for every host that reads a file of another name. Jason holds no key for any host:
 each runs under the person's own plan, signed in by them. A host whose program is not on this machine ends the attempt
 with `host_not_available`; so does a host that stops because it is not signed in, where that host's row names the

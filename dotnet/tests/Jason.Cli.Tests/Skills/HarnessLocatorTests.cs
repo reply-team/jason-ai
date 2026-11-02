@@ -32,7 +32,16 @@ public class HarnessLocatorTests
         using var tree = new TempPaths();
         var home = Directory.CreateDirectory(Path.Combine(tree.Paths.Root, "home")).FullName;
         var facts = AgentHosts.Of(kind);
-        Directory.CreateDirectory(AgentHosts.Under(home, facts.HomeMarker));
+        var marker = AgentHosts.Under(home, facts.HomeMarker);
+        if (facts.MarkerKind == HomeMarkerKind.File)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
+            File.WriteAllText(marker, "{}");
+        }
+        else
+        {
+            Directory.CreateDirectory(marker);
+        }
 
         var root = Assert.Single(HarnessLocators.ForHome(home).Detect(), root => root.Hosts.Contains(kind));
 
@@ -53,7 +62,8 @@ public class HarnessLocatorTests
 
     /// <summary>
     /// A marker is a path under home, nested or not, and a file says a host is installed as well as a directory does:
-    /// two hosts may keep one folder, and only a file of one of them inside it tells them apart.
+    /// two hosts may keep one folder, and only a file of one of them inside it tells them apart. Each marker detects by its
+    /// own kind only: a directory where a host keeps a file says nothing of that host.
     /// </summary>
     [Fact]
     public void A_marker_may_be_a_nested_directory_or_a_file_and_a_host_without_its_marker_is_not_detected()
@@ -62,12 +72,27 @@ public class HarnessLocatorTests
         var home = Directory.CreateDirectory(Path.Combine(tree.Paths.Root, "home")).FullName;
         Directory.CreateDirectory(Path.Combine(home, ".shared", "first"));
         File.WriteAllText(Path.Combine(home, ".shared", "second.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(home, ".shared", "third.json"));
 
-        var roots = HarnessLocators.ForHome(home, StandInTable(".shared/first", ".shared/second.json", ".shared/third")).Detect();
+        var roots = HarnessLocators.ForHome(home, StandInTable(".shared/first", ".shared/second.json", ".shared/third.json")).Detect();
 
         Assert.Equal(
             [(AgentHostKind.ClaudeCode, Path.Combine(home, ".shared", "one-skills")), ((AgentHostKind)1, Path.Combine(home, ".shared", "two-skills"))],
             roots.Select(root => (Assert.Single(root.Hosts), root.Directory)));
+    }
+
+    /// <summary>
+    /// A host that keeps a directory at home is detected by a directory there and by nothing else: a stray file of the same
+    /// name says nothing of the host, and a skills root under it could not be written.
+    /// </summary>
+    [Fact]
+    public void A_stray_file_where_claude_code_keeps_its_directory_detects_nothing()
+    {
+        using var tree = new TempPaths();
+        var home = Directory.CreateDirectory(Path.Combine(tree.Paths.Root, "home")).FullName;
+        File.WriteAllText(AgentHosts.Under(home, AgentHosts.Of(AgentHostKind.ClaudeCode).HomeMarker), "not a folder");
+
+        Assert.DoesNotContain(HarnessLocators.ForHome(home).Detect(), root => root.Hosts.Contains(AgentHostKind.ClaudeCode));
     }
 
     /// <summary>
@@ -144,7 +169,7 @@ public class HarnessLocatorTests
 
     /// <summary>
     /// A table of stand-in hosts, so the rules are proved for more hosts than this build ships. The kinds past the
-    /// first are values no member names, which the locator carries as given.
+    /// first are values no member names, which the locator carries as given; a marker ending in <c>.json</c> is a file.
     /// </summary>
     private static AgentHostFacts[] StandInTable(params string[] markers) =>
     [
@@ -154,6 +179,7 @@ public class HarnessLocatorTests
             marker,
             ".shared/" + new[] { "one", "two", "three" }[index] + "-skills",
             ".agents/skills",
-            null)),
+            null,
+            marker.EndsWith(".json", StringComparison.Ordinal) ? HomeMarkerKind.File : HomeMarkerKind.Directory)),
     ];
 }

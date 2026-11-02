@@ -77,7 +77,7 @@ public static class HarnessLocators
             foreach (var facts in hosts)
             {
                 var marker = AgentHosts.Under(home, facts.HomeMarker);
-                if (!Directory.Exists(marker) && !File.Exists(marker))
+                if (!(facts.MarkerKind == HomeMarkerKind.File ? File.Exists(marker) : Directory.Exists(marker)))
                 {
                     continue;
                 }
