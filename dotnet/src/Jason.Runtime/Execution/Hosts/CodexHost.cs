@@ -23,7 +23,12 @@ namespace Jason.Runtime.Execution.Hosts;
 /// </para>
 /// <para>
 /// What no flag reaches: Codex reads the person's global <c>AGENTS.md</c> in its own home for every run, so a role reads
-/// it whatever the runtime composes; and its Windows sandbox reads wider than the list it is given.
+/// it whatever the runtime composes.
+/// </para>
+/// <para>
+/// Measured with the CLI bundled in the Codex app, 0.166.0-alpha.5.1, on Windows: the sandbox that needs no administrator
+/// refused every command of this profile, since it reads the whole disk or nothing and cannot hold the network to
+/// loopback. So a Windows run names the elevated sandbox, which an administrator sets up once.
 /// </para>
 /// </summary>
 /// <param name="dataDirectory">
@@ -98,6 +103,14 @@ public sealed class CodexHost(
         "--cyber-access-program",
     };
 
+    /// <summary>
+    /// The Windows sandbox every run names on Windows, and nothing elsewhere. Without <c>windows.sandbox</c> this host's
+    /// Windows sandbox is disabled and a command runs unconfined; the non-elevated one reads the whole disk and cannot
+    /// hold the network to loopback, so only the elevated one keeps the profile above. It is set up once by an
+    /// administrator, as Codex's Windows sandbox page says; before that, every command a role runs is refused.
+    /// </summary>
+    private string[] WindowsSandbox => windows ? ["-c", "windows.sandbox=\"elevated\""] : [];
+
     public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles)
     {
         ArgumentNullException.ThrowIfNull(revision);
@@ -134,6 +147,11 @@ public sealed class CodexHost(
                 "-c", $"permissions.{Profile}.filesystem={{{string.Join(", ", entries.Select(entry => $"{Toml(entry.Path)}={Toml(entry.Access)}"))}}}",
                 "-c", $"permissions.{Profile}.network={{enabled=true, allow_local_binding=true}}",
                 "-c", "features.network_proxy=true",
+
+                // On Windows, the elevated sandbox, always. The person's own choice of it is in the configuration this
+                // run does not read, and with none named the host runs a command with no sandbox at all. Until an
+                // administrator has set that sandbox up, every command is refused, so the run fails closed.
+                .. WindowsSandbox,
                 "-c", $"web_search={Toml(search)}",
 
                 // No instruction file of a folder above the work directory, and nothing the person installed into the

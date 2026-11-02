@@ -76,6 +76,24 @@ public class CodexHostTests
         Assert.DoesNotContain("-", command);
     }
 
+    /// <summary>
+    /// On Windows the sandbox is the elevated one, named on every run: the person's own choice of Windows sandbox is in
+    /// the configuration the run does not read, and with none named this host runs a command with no sandbox at all.
+    /// Until an administrator has set that sandbox up, every command a role runs is refused, and the run fails closed.
+    /// </summary>
+    [Fact]
+    public void On_windows_every_run_names_the_elevated_sandbox_and_elsewhere_none()
+    {
+        var windows = new CodexHost(@"C:\j", @"C:\x", @"C:\t", windows: true).Compose(Revision(args: ["--model=made-up-model"]), ["codex"], NoFiles).Command;
+        var elsewhere = Host().Compose(Revision(), ["codex"], NoFiles).Command;
+
+        var at = windows.ToList().IndexOf("windows.sandbox=\"elevated\"");
+        Assert.True(at > 0, "The elevated sandbox is not named.");
+        Assert.Equal("-c", windows[at - 1]);
+        Assert.Equal("--model=made-up-model", windows[^1]);
+        Assert.DoesNotContain(elsewhere, word => word.StartsWith("windows.", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void A_web_search_the_person_granted_is_live_and_otherwise_off()
     {
