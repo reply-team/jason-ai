@@ -428,7 +428,7 @@ public sealed class InboundOptionsValidator : IValidateOptions<InboundOptions>
 }
 
 /// <summary>
-/// The respond step's numbers, each within its bounds: the queue's range, the budget a check-in is held to, and an age
+/// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to, and an age
 /// between an hour and thirty days.
 /// </summary>
 public sealed class ResponderOptionsValidator : IValidateOptions<ResponderOptions>

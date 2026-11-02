@@ -33,6 +33,7 @@ public static class DispatcherModule
             .AddScoped<EventScan>()
             .AddScoped<EventStore>()
             .AddScoped<InboundSync>()
+            .AddScoped<Responder>()
             .AddScoped<Summoner>()
             .AddScoped<Resumer>()
             .AddScoped<Claimer>()
@@ -93,6 +94,7 @@ public static class DispatcherModule
 
         // Which skipped campaigns have been said, once per campaign and reason in the life of the process.
         services.AddSingleton<InboundSkips>();
+        services.AddSingleton<ResponderSkips>();
         services.AddSingleton<ScanRunner>();
         return services.AddHostedService<DispatcherService>();
     }

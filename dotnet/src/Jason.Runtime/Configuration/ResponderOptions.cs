@@ -31,7 +31,7 @@ public sealed class ResponderOptions
     /// </summary>
     public int Priority { get; set; } = 50;
 
-    /// <summary>The budget of one responder run: the figure a check-in has, for a bounded semantic run.</summary>
+    /// <summary>How long one responder run may take: the figure a check-in has, for a bounded semantic run.</summary>
     public int TimeoutSeconds { get; set; } = 900;
 
     /// <summary>

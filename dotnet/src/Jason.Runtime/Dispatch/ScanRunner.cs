@@ -13,9 +13,10 @@ namespace Jason.Runtime.Dispatch;
 /// What one scan did. Zeros are the normal answer: most ticks find nothing to do. <paramref name="Synced"/> counts the
 /// conversation reads the scan started, <paramref name="Observed"/> the threads it said had moved, and
 /// <paramref name="EventReads"/> the read of an account's events it handed to the reader, one at most, and
-/// <paramref name="Resumed"/> the waiting items it released into the queue.
+/// <paramref name="Resumed"/> the waiting items it released into the queue, and <paramref name="Responded"/> the responders
+/// a reply woke.
 /// </summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0);
 
 /// <summary>
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, hand the reader the next read of an
@@ -110,6 +111,7 @@ public sealed class ScanRunner(
         var lost = await InScopeAsync<LeaseEnforcer, int>((step, db) => step.EnforceAsync(db, ct)).ConfigureAwait(false);
         var events = await InScopeAsync<EventScan, int>((step, db) => step.ScanAsync(db, ct)).ConfigureAwait(false);
         var inbound = await InScopeAsync<InboundSync, InboundReport>((step, db) => step.SyncAsync(db, ct)).ConfigureAwait(false);
+        var responded = await InScopeAsync<Responder, int>((step, db) => step.RespondAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
         var resumed = await InScopeAsync<Resumer, int>((step, db) => step.ResumeAsync(db, ct)).ConfigureAwait(false);
         var claimed = status.State == DispatcherState.Running
@@ -162,7 +164,7 @@ public sealed class ScanRunner(
         }
 
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)
