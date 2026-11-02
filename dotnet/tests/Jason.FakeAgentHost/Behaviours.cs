@@ -608,10 +608,6 @@ internal static class Behaviours
     }
 
     /// <summary>
-    /// The checkpoint halfway, and saying so when it was not kept: a test that reads the checkpoint back otherwise finds
-    /// nothing there and no reason why, whether the runtime refused it or never answered in time.
-    /// </summary>
-    /// <summary>
     /// A responder that drafts. It reads the inbound reply that woke it from its context, records its verdict on it as its
     /// own attempt — the category <c>--category</c> names, the reaction <c>draft</c> — then queues the answer as a
     /// <c>conversation.reply</c> on the same thread that names that verdict under <c>reply_verdict</c>, again as its own
@@ -703,6 +699,10 @@ internal static class Behaviours
         return Success;
     }
 
+    /// <summary>
+    /// The checkpoint halfway, and saying so when it was not kept: a test that reads the checkpoint back otherwise finds
+    /// nothing there and no reason why, whether the runtime refused it or never answered in time.
+    /// </summary>
     private static async Task<(int Status, string Body)> SetHalfDoneAsync(LaunchEnvelope envelope, RuntimeApi api)
     {
         var answer = await api.CallAsync(
