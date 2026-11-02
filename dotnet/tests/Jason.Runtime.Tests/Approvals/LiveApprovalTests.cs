@@ -25,7 +25,8 @@ public class LiveApprovalTests
         using var database = new TestDatabase();
         await using var db = database.Open();
 
-        var plan = await QueryPlans.PlanAsync(db, ApprovalGate.Live(db, 3, 7).ToQueryString(), Ct);
+        // Take(1) is what FirstOrDefaultAsync composes over the read: the inner query becomes a subquery, then LIMIT.
+        var plan = await QueryPlans.PlanAsync(db, ApprovalGate.Live(db, 3, 7).Take(1).ToQueryString(), Ct);
 
         Assert.True(
             plan.Any(detail => detail.Contains("SEARCH approvals USING INDEX ix_approvals_campaign_id (campaign_id=?)", StringComparison.Ordinal)),

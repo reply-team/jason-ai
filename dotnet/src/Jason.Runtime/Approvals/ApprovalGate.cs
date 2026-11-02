@@ -56,7 +56,8 @@ public static class ApprovalGate
     internal static IQueryable<Approval> Live(JasonDbContext db, int campaignId, int workItemId) =>
         db.Approvals.FromSqlInterpolated($"""
             SELECT * FROM approvals INDEXED BY ix_approvals_campaign_id
-            WHERE campaign_id = {campaignId} AND work_item_id = {workItemId} AND status IN ('pending', 'approved')
+            WHERE campaign_id = {campaignId} AND work_item_id = {workItemId}
+              AND status IN ({SnakeCaseEnumConverter<ApprovalStatus>.Format(ApprovalStatus.Pending)}, {SnakeCaseEnumConverter<ApprovalStatus>.Format(ApprovalStatus.Approved)})
             ORDER BY id DESC LIMIT 1
             """);
 
