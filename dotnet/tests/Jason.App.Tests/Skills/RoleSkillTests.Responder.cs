@@ -98,6 +98,7 @@ public partial class RoleSkillTests
 
         // The answer backs a verdict only through a question the run that recorded a verdict on the reply raised.
         Assert.Contains("The order is load-bearing: a question raised before the guess is recorded cannot back the person's answer", skill, StringComparison.Ordinal);
+        Assert.Contains("The guess is recorded from your own attempt, with no actor typed, never as `role:responder`: a line recorded by the role names no attempt, and then no answer to your question can back a verdict.", skill, StringComparison.Ordinal);
         Assert.Contains("write no draft and act on nothing, with one exception", skill, StringComparison.Ordinal);
 
         // A probable stop is the one act that does not wait: the register entry is Jason's own and a person lifts it.

@@ -173,6 +173,12 @@ nothing; acting on the answer is yours, at the answered question's line, and is 
 jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 1 --reaction draft --goal demo --decision dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the person chose interested"
 ```
 
+   A person who picks `other` chose one of the ids: record `--category other` with `--decision`, and it passes. Where
+   the question shows no chosen option, because the person answered in words, the answer is not a category and cannot
+   back a line. Record the category you read in the person's words, never in the reply, `other` where none fits, without
+   `--decision`, with your own confidence and a reason that names the decision. The draft under that line waits for a
+   person, as under any line that is nobody's answer, and your summary says why. Do not ask the person again.
+
 2. Where the responder's guess was `opt_out` and the answer names another category, the register entry the responder made
    for that person was made on a guess: remove it, with a reason that names the decision.
 
@@ -186,8 +192,8 @@ jason suppression remove --channel email --value marta@example.com --reason "the
    in which you queue a responder for a line whose responder has ended.
 
 Every other answer stays as written: you draft nothing and act on nothing on the reply yourself. A draft written after
-your verdict always waits for a person, whatever standing approval exists, because its attempt is neither the run the
-runtime gave that reply nor a named person, unless the line carries a person's answer through a decision.
+your verdict waits for a person whatever standing approval exists, unless the line carries a person's answer through a
+decision: without one, its attempt is neither the run the runtime gave that reply nor a named person.
 
 **The chronicle since the last review.** Your note carries the time of your last run; read everything after
 it, and everything there is when there is no note. Reports are what happened to the campaign where the runtime

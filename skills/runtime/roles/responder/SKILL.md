@@ -149,13 +149,15 @@ guess with its confidence first, with `--reaction escalate`, since asking is wha
 which category it is, with the ids it could be as the options — at most ten, as many as a question holds, the most
 likely first, and `other` always among them, so the person can name what none of the ids says. The order is
 load-bearing: a question raised before the guess is recorded cannot back the person's answer, because the runtime lets a
-verdict carry an answer only from a question raised by the run that recorded a verdict on the same reply. Below that
-line you write no draft and act on nothing, with one exception: where your best guess is `opt_out`, put them on the
-register at once, as below, and leave the provider's `optout.record` and the proposed stop for the answer. The register
-is Jason's own and a person lifts an entry, while a step sent to somebody who asked to stop cannot be taken back; the
-question says the entry was made and that an answer naming another category takes it off, and your summary says the
-entry was made. Whoever acts on the person's answer records the verdict again, and the later line stands for the reply.
-A guess is never mirrored: the mirror follows a verdict that stands.
+verdict carry an answer only from a question raised by the run that recorded a verdict on the same reply. The guess is
+recorded from your own attempt, with no actor typed, never as `role:responder`: a line recorded by the role names no
+attempt, and then no answer to your question can back a verdict. Below that line you write no draft and act on nothing,
+with one exception: where your best guess is `opt_out`, put them on the register at once, as below, and leave the
+provider's `optout.record` and the proposed stop for the answer. The register is Jason's own and a person lifts an
+entry, while a step sent to somebody who asked to stop cannot be taken back; the question says the entry was made and
+that an answer naming another category takes it off, and your summary says the entry was made. Whoever acts on the
+person's answer records the verdict again, and the later line stands for the reply. A guess is never mirrored: the
+mirror follows a verdict that stands.
 
 **Draft toward the campaign's goals.** Read the campaign's `goals` with `jason campaign get`: the outcomes it steers each
 conversation toward, in `order`, each with the moment it counts as `reached_when`. Draft toward the first goal the reply
