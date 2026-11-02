@@ -124,7 +124,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   flags, never a subject, a preview or a name — said once per campaign by a key. It interprets nothing; the line is a
   default manager trigger. A respond step between it and the summon reads those lines above a per-campaign watermark,
   whichever writer said them, and for a thread the campaign holds by its own pin queues a `conversation.get` and a
-  `responder` created waiting on it — one open responder per thread, a further move patched onto its `reply` — with
+  `responder` created waiting on it — one open responder per thread, a further move patched onto its `inbound_reply` — with
   identifiers and moments only, and never an idempotency key; its `conversation.list` items sit ten above
   `Responder:Priority`, so the sends wait and detection does not. `docs/inbound-sync.md` is the contract.
 - Events: a third contract family, `events.read` under `docs/contracts/events/`, embedded like the delivery contract

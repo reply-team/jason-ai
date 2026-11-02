@@ -1646,7 +1646,7 @@ cadence and writes one `inbound_reply_observed` line for each thread that moved.
 line and, for a thread the campaign holds by its own pin, queues a read of the thread (`conversation.get`) and the
 responder's work created waiting on it — one open responder a thread, a further move recorded on it — so the reply is
 answered without waiting for a review. The kind is also a default manager trigger, so the same line releases a manager
-check-in, claimed after the responder, which decides at its review what the campaign as a whole calls for
+check-in, queued after the responder, which decides at its review what the campaign as a whole calls for
 (`docs/inbound-sync.md`). A plugin that reads its accounts' events says the same line from the provider's own record,
 and a bounce, a reply the provider detected or an accepted invitation as `provider_event_observed`, which releases a
 check-in the same way and wakes no responder (`docs/events.md`).

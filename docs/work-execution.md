@@ -604,7 +604,10 @@ no rule, and every file of a role run by its own entry command, which is compose
 the same, with no rule to read it by — under a profile its read is refused — and the envelope never knows better
 than what the provenance recorded.
 
-`resumption` is null on every run that does not follow a wait. A run that does — the item's last run
+`resumption` is null on every run that does not follow a wait, and on the first run of an item created already
+waiting — a responder the respond step wrote waiting on the read of its thread ([inbound sync](inbound-sync.md) §1) —
+since no attempt waited: that run reads what it waited on by the identifiers its context carries, with
+`jason workitem get`. A run that does follow a wait — the item's last run
 ended with `workitem.wait`, and the item's latest wait was released rather than closed some other way — is told about that wait here, composed **at the
 claim** from the rows the wait left: `previous_attempt_id` is the attempt that waited, `resumption_number`
 counts the item's released waits up to this one, `waited_since` is when the wait opened, and

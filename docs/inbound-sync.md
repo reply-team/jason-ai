@@ -29,20 +29,26 @@ line this read says, and an events line whose `attributed_by` is `campaign_pin` 
 
 ```json
 {"trigger": "inbound_reply_observed",
- "reply": {"plugin": "…", "thread": "…", "channel": "email", "contact_id": "cnt_…", "read": "wi_…",
-           "last_activity_at": "…", "moves": [{"line": "jrn_…", "at": "…"}], "move_count": 1}}
+ "inbound_reply": {"plugin": "…", "thread": "…", "channel": "email", "contact_id": "cnt_…", "read": "wi_…",
+                   "last_activity_at": "…", "moves": [{"line": "jrn_…", "at": "…"}], "move_count": 1}}
 ```
 
-The responder is created already waiting on the read, through the same record a `workitem.wait` writes: it is never
-claimed before the read has ended — under a provider block or not — and spends no launch waiting; the wait's deadline is
-`Dispatcher:AiRole:MaxWaitSeconds`. With no read (no route for it, another plugin's route, or an identifier its input
-refuses), `read` is null and the responder is created ready, to find the thread itself. `contact_id` is the person the
+The responder is created already waiting on the read, through the same record a `workitem.wait` writes: it is not
+claimed until the read has ended or the wait's deadline, `Dispatcher:AiRole:MaxWaitSeconds`, has come — under a
+provider block or not — and spends no launch waiting. While a provider block holds the read the campaign has nothing
+scheduled, so the manager's check-in the same line wakes may be claimed before the responder. At the deadline it is released with `read` naming an item that
+has not ended, and finds the thread itself. The wait was written before any run, so no attempt waited and the first run
+is told of no resumption: its envelope's `resumption` is null, and it reads the item `inbound_reply.read` names with
+`jason workitem get`, which says whether the read succeeded and what it read. With no read (no route for it, another
+plugin's route, or an identifier its input refuses), `read` is null and the responder is created ready, to find the
+thread itself. `contact_id` is the person the
 line names; the items' own contact column is set only when that person is a member of the campaign who is not excluded
 and not archived.
 
 One thread has at most one open responder: while a responder the runtime created for the same plugin and thread has not
-ended, a further move is recorded on it — the move appended to `reply.moves` (the newest 20 kept), `move_count` one
-higher, `last_activity_at` the new moment — through the same patch any update makes, never a second item. A move after it
+ended, a further move is recorded on it — the move appended to `inbound_reply.moves` (the newest 20 kept),
+`move_count` one higher, `last_activity_at` the new moment — through the same patch any update makes, never a second
+item. A move after it
 ended makes a new pair. A responder is never given an `idempotency_key`.
 
 The step creates nothing, and still moves past the line, when `Responder:OnReply` is false; for a line older than
@@ -50,9 +56,11 @@ The step creates nothing, and still moves past the line, when `Responder:OnReply
 its own pin, which the manager reads across campaigns before anyone answers (`thread_not_campaign_own`); and when no
 responder could be launched — no execution profile anywhere and no entry command for the role or by default, the case
 the claim would end `role_not_launchable` (`responder_not_configured`). Each code is logged once per campaign, by id and
-code. A line whose write the database or a domain rule refuses is rolled back, logged once by its code, and passed over
-alone; any other failure stops that campaign for this scan, and the next scan tries again. A paused campaign is not read,
-so its lines wait for it; a campaign with no new line has its watermark moved to the chronicle's last line.
+code. A line whose write the database refuses by a constraint, or a domain rule refuses, is rolled back, logged once by its
+code, and passed over alone; any other failure — a write that failed for another reason included — stops that campaign
+for this scan, and the next scan tries again. A paused campaign is not read, so its lines wait for it; a campaign with
+no new line has its watermark moved to its own last line, and a line said in another campaign or by the installation
+writes nothing for it.
 
 It runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.
@@ -230,7 +238,9 @@ move into a thread whose responder is still open costs one patch and no launch. 
 campaign at a time — so a burst of fifty threads in one campaign is answered one after another over a few hours, and
 other campaigns are not held up. Meanwhile the campaign's own sends, at priority 0, wait behind its responders. The
 sends wait, detection does not: this read's `conversation.list` items sit ten above `Responder:Priority`, so the
-campaign's next read is claimed ahead of the responders still queued.
+campaign's next read is claimed ahead of the responders still queued — those queued before an edit that lowered
+`Responder:Priority` by more than ten keep the priority they were created with, and sit above the new reads until they
+are claimed.
 
 ## 9. Upgrading
 
@@ -238,7 +248,8 @@ campaign's next read is claimed ahead of the responders still queued.
 kind existed keeps its own list, and is not woken by replies until it adds the kind.
 
 The respond step's watermark is set, at the upgrade that adds it, to the chronicle's last line for every campaign, so no
-reply said before the upgrade wakes a responder; a campaign created later starts at the beginning, and has no older
+reply said before the upgrade wakes a responder, and the first scan after it writes nothing for a campaign with no new
+line; a campaign created later starts at the beginning, and has no older
 line.
 
 ## 10. Not here yet
