@@ -26,12 +26,12 @@ beside a runtime that owns campaign state, and that is what a reading would esta
 | Skill | Status | What it is for |
 |---|---|---|
 | [`sdr-operations`](sdr-operations/SKILL.md) | draft | The contract the rest of the pack argues from: 325 named operations in 21 families, each fixed by what it reaches, whether it can be undone, what approval it needs, what to read before repeating it, and what it costs. |
-| [`campaign-planning`](campaign-planning/SKILL.md) | draft | Turning a vague outbound goal into an executable plan: clarifying the objective until success is observable, surfacing the constraints, and deciding the checkpoints. |
+| [`campaign-planning`](campaign-planning/SKILL.md) | draft | Turning a vague outbound goal into an executable plan: clarifying the goal until success is observable, and with Jason what the campaign's `goals` are, surfacing the constraints, and deciding the checkpoints. |
 | [`audience-building`](audience-building/SKILL.md) | draft | Turning raw prospect data into a deliberately shaped audience: who belongs, how two records become one person, what is actually reachable. |
 | [`campaign-launch`](campaign-launch/SKILL.md) | draft | Preparing and launching a campaign with every precondition checked and the user's explicit approval of what will be sent. |
-| [`inbox-triage`](inbox-triage/SKILL.md) | draft | Working the replies: what matters first, compact thread context, drafting together, sending only what was approved. |
+| [`inbox-triage`](inbox-triage/SKILL.md) | draft | Working the replies: what matters first, compact thread context, drafting together, sending only what was approved, and with Jason starting from what the responder left and never drafting a second answer beside one. |
 | [`performance-analysis`](performance-analysis/SKILL.md) | draft | An honest read on performance: the figures over a stated window, and a diagnosis that separates deliverability from copy from targeting. |
-| [`approval-boundaries`](approval-boundaries/SKILL.md) | draft | Where an agent must stop and ask: how an operation's approval class follows from its reversibility and its reach, and what a valid confirmation is. |
+| [`approval-boundaries`](approval-boundaries/SKILL.md) | draft | Where an agent must stop and ask: how an operation's approval class follows from its reversibility and its reach, and what a valid confirmation is; with Jason, a standing approval is a person's, per campaign and category of reply. |
 | [`sending-guardrails`](sending-guardrails/SKILL.md) | draft | Protecting sender reputation and inbox placement: authentication, warm-up, pacing, bounce interpretation and recovery. |
 | [`linkedin-guardrails`](linkedin-guardrails/SKILL.md) | draft | Keeping social accounts safe under automation: invitation pacing, messaging windows, daily limits, and recovery when a platform restricts an account. |
 

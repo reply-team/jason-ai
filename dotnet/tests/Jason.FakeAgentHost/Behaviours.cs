@@ -63,7 +63,7 @@ internal static class Behaviours
     /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
     public static bool Known(string behaviour) =>
         behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope"
-            or "abandon" or "flood" or "researcher" or "manager" or "say" or ChainPlanner.Name;
+            or "abandon" or "flood" or "researcher" or "manager" or "responder" or "say" or ChainPlanner.Name;
 
     /// <summary>
     /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
@@ -109,6 +109,8 @@ internal static class Behaviours
                 return await ManagerAsync(options, envelope, api).ConfigureAwait(false);
             case "researcher":
                 return await ResearcherAsync(options, envelope, api).ConfigureAwait(false);
+            case "responder":
+                return await ResponderAsync(options, envelope, api).ConfigureAwait(false);
             case "echo-envelope":
                 return await EchoEnvelopeAsync(rawEnvelope).ConfigureAwait(false);
             case "say":
@@ -625,6 +627,98 @@ internal static class Behaviours
         {
             await Diagnostics.WriteAsync($"the note could not be written: {status.ToString(CultureInfo.InvariantCulture)} {body}").ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// A responder that drafts. It reads the inbound reply that woke it from its context, records its verdict on it as its
+    /// own attempt — the category <c>--category</c> names, the reaction <c>draft</c> — then queues the answer as a
+    /// <c>conversation.reply</c> on the same thread that names that verdict under <c>reply_verdict</c>, again as its own
+    /// attempt, and reports <c>drafted</c>. Its words are fixed: what a person's standing approval decides is whether a
+    /// draft of this kind goes, never what it says.
+    /// </summary>
+    private static async Task<int> ResponderAsync(IReadOnlyList<string> options, LaunchEnvelope envelope, RuntimeApi api)
+    {
+        if (envelope.Context["inbound_reply"] is not JsonObject inbound
+            || inbound["plugin"]?.GetValue<string>() is not { } plugin
+            || inbound["thread"]?.GetValue<string>() is not { } thread
+            || inbound["last_activity_at"]?.GetValue<string>() is not { } moved)
+        {
+            await Diagnostics.WriteAsync("woken without an inbound reply in the context").ConfigureAwait(false);
+            return UnexpectedAnswer;
+        }
+
+        var category = Option(options, "--category") ?? "interested";
+        var channel = inbound["channel"]?.GetValue<string>() ?? "email";
+        var self = new ActorRef(ActorType.Attempt, envelope.AttemptId);
+
+        var (recorded, verdictBody) = await api.CallAsync(
+            Operations.ReplyRecord,
+            new ReplyRecordRequest(
+                envelope.CampaignId,
+                plugin,
+                thread,
+                thread + "-latest",
+                DateTimeOffset.Parse(moved, CultureInfo.InvariantCulture),
+                category,
+                0.9,
+                ReplyReaction.Draft,
+                envelope.ContactId,
+                Actor: self,
+                Reason: "the person asked for a time"))
+            .ConfigureAwait(false);
+        if (recorded != 200 || JsonNode.Parse(verdictBody)?["id"]?.GetValue<string>() is not { } verdict)
+        {
+            await Diagnostics.WriteAsync($"{Operations.ReplyRecord} was refused: {recorded.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
+            return UnexpectedAnswer;
+        }
+
+        var (drafted, draftBody) = await api.CallAsync(
+            Operations.WorkItemCreate,
+            new WorkItemCreateRequest(
+                envelope.CampaignId,
+                WorkItemKind.ProviderOp,
+                null,
+                "conversation.reply",
+                envelope.ContactId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new JsonObject
+                {
+                    ["input"] = new JsonObject
+                    {
+                        ["channel"] = channel,
+                        ["thread"] = new JsonObject { ["external_id"] = thread },
+                        ["body"] = "Thursday at 10 works. I will send an invitation.",
+                    },
+                    ["reply_verdict"] = verdict,
+                },
+                null,
+                self,
+                "the answer the verdict drafts"))
+            .ConfigureAwait(false);
+        if (drafted != 200 || JsonNode.Parse(draftBody)?["id"]?.GetValue<string>() is not { } draft)
+        {
+            await Diagnostics.WriteAsync($"the draft was refused: {drafted.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
+            return UnexpectedAnswer;
+        }
+
+        await CompleteAsync(
+            envelope,
+            api,
+            new JsonObject
+            {
+                ["outcome"] = "drafted",
+                ["summary"] = "drafted an answer that offers a time",
+                ["verdict"] = verdict,
+                ["created_work_items"] = new JsonArray(JsonValue.Create(draft)),
+            })
+            .ConfigureAwait(false);
+        return Success;
     }
 
     /// <summary>

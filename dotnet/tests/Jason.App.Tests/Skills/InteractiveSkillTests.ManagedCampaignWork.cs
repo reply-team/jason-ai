@@ -132,12 +132,12 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// What the person told about their campaign becomes its context when Jason's campaign is created, before any contact
     /// exists and before anything is sent, so every role works from the brief rather than from whatever reached it later.
-    /// The context is shared knowledge a role that reads the campaign reads whole, so no key is reserved and none is anybody's
-    /// to rely on; and not every role reads it, so a session is not told that a standing instruction there reaches one
+    /// The context is shared knowledge a role that reads the campaign reads whole, so its keys are the person's to name, but for
+    /// `goals`, the one key the runtime reserves and checks; and not every role reads it, so a session is not told that a standing instruction there reaches one
     /// that works from its own work item's context alone.
     /// And the verb is Jason's own: the provider operation of the same name makes a campaign somewhere else. A session that
     /// added the people first, or kept the brief in the conversation, would start the work from less than it was given.
-    /// The paragraph is held whole: a sentence added to it that named a key every role is told to rely on would turn "no
+    /// The paragraph is held whole: a sentence added to it that named a second key every role is told to rely on would turn "one
     /// key is reserved" into its opposite while every sentence pinned here still stood.
     /// </summary>
     [Fact]
@@ -153,7 +153,7 @@ public partial class InteractiveSkillTests
 
         Assert.Equal(
             Opening + " What the person told you about the campaign — the product, the audience, how it sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any contact is added and before anything is sent. "
-            + "It is the campaign's shared knowledge: a role that reads the campaign (`jason campaign get`) reads it whole, and a role that does not works from its own work item's context alone. So its keys are yours to name for what they hold, and none is reserved. "
+            + "It is the campaign's shared knowledge: a role that reads the campaign (`jason campaign get`) reads it whole, and a role that does not works from its own work item's context alone. So its keys are yours to name for what they hold, apart from `goals`, the one key Jason reserves and checks (below). "
             + "Keep the person's own words beside what you made of them, and put a link or a file in as what it says, briefly, with where it is, rather than pasted whole. "
             + "This `jason campaign create` makes Jason's own campaign; it is not the provider operation `campaign.create`, which makes a campaign at a provider.",
             paragraph);
@@ -730,5 +730,70 @@ public partial class InteractiveSkillTests
             "your arguments, a provider that was unreachable, a provider that does not offer what you asked for yet, or a person who has not answered yet",
             skill,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the campaign is for is its goals, the one reserved key. The paragraph sits with the context's other
+    /// paragraphs, between the change of direction and the keys, names the key the runtime reserves and says what a
+    /// campaign with none does, so a session that wrote the person's aim under a key of its own, or told them a campaign
+    /// without goals is refused, is corrected here.
+    /// </summary>
+    [Fact]
+    public void What_the_campaign_is_for_is_its_goals_the_one_reserved_key()
+    {
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var goals = text.IndexOf("**What the campaign is for is its `goals`.**", StringComparison.Ordinal);
+        var change = text.IndexOf("**A change of direction goes into the context as well.**", StringComparison.Ordinal);
+        var keys = text.IndexOf("**Give every create a key you could send again.**", StringComparison.Ordinal);
+        Assert.True(
+            change >= 0 && goals > change && keys > goals,
+            $"The paragraph on goals is at offset {goals}; it belongs after the change of direction ({change}) and before the keys ({keys}).");
+
+        var end = text.IndexOf("\n\n", goals, StringComparison.Ordinal);
+        var paragraph = Whitespace().Replace(text[goals..end], " ");
+        Assert.Contains("are the one reserved key of the context", paragraph, StringComparison.Ordinal);
+        Assert.Contains("a patch replaces the list whole, so send every goal the campaign keeps", paragraph, StringComparison.Ordinal);
+        Assert.Contains("A campaign with no goals is valid, and its roles take the default goal, a demo.", paragraph, StringComparison.Ordinal);
+        Assert.Contains("`docs/contracts/context/goals.md`", paragraph, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(SkillPack.RepositoryRoot(), "docs", "contracts", "context", "goals.md")));
+    }
+
+    /// <summary>
+    /// A reply the runtime noticed wakes the responder before anybody reads it, so the session that is asked to answer
+    /// one looks at what the responder left first and drafts no second answer. The line it looks for is the kind the
+    /// runtime writes, and the filter the printed list takes is the role's own name.
+    /// </summary>
+    [Fact]
+    public void A_session_asked_to_answer_a_reply_looks_at_what_the_responder_left_first()
+    {
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var skill = Flattened("managed-campaign-work");
+
+        var responder = text.IndexOf("**A reply usually wakes the responder first.**", StringComparison.Ordinal);
+        var read = text.IndexOf("**Read the thread before you act on it.**", StringComparison.Ordinal);
+        Assert.True(responder >= 0 && read > responder, $"The responder paragraph is at {responder} and the one on reading the thread at {read}.");
+
+        Assert.Contains("records one verdict as a `reply_classified` line, and acts, drafts an answer or asks a person", skill, StringComparison.Ordinal);
+        Assert.Contains("never write a second draft for a reply it has already answered", skill, StringComparison.Ordinal);
+        Assert.Contains("jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder", SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File));
+        Assert.Equal("reply_classified", Jason.Runtime.Journal.JournalKinds.ReplyClassified);
+    }
+
+    /// <summary>
+    /// "Each send is approved on its own" keeps its words, and the exception is stated beside it: a person's standing
+    /// approval, never a session's, and the two lines that show what it let go. The kinds and the verbs are the runtime's.
+    /// </summary>
+    [Fact]
+    public void A_standing_approval_is_a_person_s_and_the_chronicle_shows_what_it_let_go()
+    {
+        var skill = Flattened("managed-campaign-work");
+
+        Assert.Contains("**A person may have decided it in advance, for one kind of reply.**", skill, StringComparison.Ordinal);
+        Assert.Contains("You do not set one: it is theirs, in `approvals-and-questions`, and an agent sets one only on a person's explicit word, naming them.", skill, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File);
+        Assert.Contains("jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", printed);
+        Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied", printed);
+        Assert.Equal("approval_standing_applied", Jason.Runtime.Journal.JournalKinds.ApprovalStandingApplied);
     }
 }

@@ -444,7 +444,7 @@ public class SkillsInstallTests
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Contains(
-            "'claude_code' was not detected on this machine: ~/.claude is not there. Install it, or name a directory with --root.",
+            "'claude_code' was not detected on this machine: there is no directory at ~/.claude. Install it, or name a directory with --root.",
             error.ToString(),
             StringComparison.Ordinal);
         Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));

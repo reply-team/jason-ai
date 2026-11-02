@@ -56,6 +56,24 @@ public static partial class JournalKinds
     /// <summary>The work the decision was about is gone, so the decision is not one anybody needs to make.</summary>
     public const string ApprovalCancelled = "approval_cancelled";
 
+    /// <summary>
+    /// A person set a campaign's standing approval for one category of reply: keyed by the category, with the record it
+    /// replaced (null where none stood) and the record set — the category, the operations it covers, its expiry and its
+    /// ceiling. Written by <c>approval.set_standing</c> only, and not a default manager trigger.
+    /// </summary>
+    public const string StandingApprovalSet = "standing_approval_set";
+
+    /// <summary>A person took a campaign's standing approval for one category back: keyed by the category, with the record it had.</summary>
+    public const string StandingApprovalUnset = "standing_approval_unset";
+
+    /// <summary>
+    /// The dispatcher released work under a standing approval instead of parking it: keyed by the line that set the
+    /// standing approval, with the approval it wrote, the operation, the subject's hash, the verdict that named the
+    /// category and the category. Never a draft, a subject or a name: the preview stays on the approval. Not a default
+    /// manager trigger: the manager reads what went out at its check-in.
+    /// </summary>
+    public const string ApprovalStandingApplied = "approval_standing_applied";
+
     /// <summary>An expired item was given a future due date and is work again.</summary>
     public const string WorkItemReopened = "workitem_reopened";
 
@@ -151,6 +169,14 @@ public static partial class JournalKinds
     /// anybody wrote. A trigger kind, and only the runtime's own store may say one.
     /// </summary>
     public const string ProviderEventObserved = "provider_event_observed";
+
+    /// <summary>
+    /// A role's verdict on one reply, recorded by <c>reply.record</c>: the plugin, thread and message that name the reply,
+    /// its moment, the person where one is named, the category as a word the skills own, the confidence, the reaction
+    /// decided and the goal it steers to by id and kind. Never a word of the reply, a subject or a name. Written by that
+    /// operation only, and not a default manager trigger: the verdict is itself what a reader of a reply produces.
+    /// </summary>
+    public const string ReplyClassified = "reply_classified";
 
     /// <summary>
     /// Any send a read finds gone, once, whether it went inside the send's own call or later: keyed by the work item that
@@ -253,6 +279,9 @@ public static partial class JournalKinds
         ApprovalRejected,
         ApprovalSuperseded,
         ApprovalCancelled,
+        StandingApprovalSet,
+        StandingApprovalUnset,
+        ApprovalStandingApplied,
         WorkItemReopened,
         WorkItemWaiting,
         WorkItemResumed,
@@ -275,6 +304,7 @@ public static partial class JournalKinds
         NotificationSent,
         InboundReplyObserved,
         ProviderEventObserved,
+        ReplyClassified,
         MessageSentObserved,
         EventsRead,
         EventsGapObserved,

@@ -85,6 +85,7 @@ public sealed class SettingsAllowlist
         new("Notifications:Toast", Kind.Switch),
         new($"Notifications:Plugins:{AnyPlugin}:Enabled", Kind.Switch),
         new("Inbound:Enabled", Kind.Switch),
+        new("Responder:OnReply", Kind.Switch),
 
         // And a word from a closed set, or a list of them.
         new("Logging:MinimumLevel", Kind.LogLevel),
@@ -140,6 +141,10 @@ public sealed class SettingsAllowlist
         new("Plugins:Invoker:LogLineBytes", Kind.Integer32),
         new("Inbound:SyncSeconds", Kind.Integer32),
         new("Inbound:LookbackSeconds", Kind.Integer32),
+        new("Responder:Priority", Kind.Integer32),
+        new("Responder:TimeoutSeconds", Kind.Integer32),
+        new("Responder:MaxAttempts", Kind.Integer32),
+        new("Responder:MaxAgeSeconds", Kind.Integer32),
     ]);
 
     /// <summary>

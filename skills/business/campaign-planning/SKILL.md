@@ -1,6 +1,6 @@
 ---
 name: campaign-planning
-description: Turn a vague outbound goal into an executable plan: clarify the objective until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action. With Jason installed, `planner-in-session` leads the planning and uses this skill as its method, so load that one first.
+description: Turn a vague outbound goal into an executable plan: clarify the goal until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action. With Jason installed, `planner-in-session` leads the planning and uses this skill as its method, so load that one first.
 metadata:
   status: draft
 ---
@@ -19,7 +19,7 @@ metadata:
 ## Purpose
 
 Outbound is a loop, not a single prompt: goal → plan → work → measure → reassess → repeat.
-This skill turns a business objective into the first two of those, in terms concrete enough
+This skill turns a business goal into the first two of those, in terms concrete enough
 that someone else — another agent, another session, a colleague — could execute the result
 without asking what was meant.
 
@@ -41,6 +41,11 @@ without asking what was meant.
   campaign is created (`jason campaign create`, not the provider operation `campaign.create`),
   under a project named from what is sold, before any contact is added and before anything is
   sent, so the plan and the roles that read the campaign start from the same brief.
+- With Jason, what the campaign is for is its `goals`, a reserved key of that context, settled with the person
+  when the campaign is created: a demo, a meeting, a trial, a purchase or an aim of their own, each with the
+  moment it counts as reached. A campaign with none works towards a demo. It is the campaign's own field, and
+  not `goal.get`, which is a person's or team's target for a period; `docs/contracts/context/goals.md` is the
+  contract.
 - The operation contract (`sdr-operations`), because a plan is expressed in operations.
 - A credential, if the plan is to be checked against a real installation. The constraint reads
   in step 2 need one; the plan can still be written without one, provided it states which
@@ -65,7 +70,7 @@ an invention from a name they simply have not met.
      item is "find the people", with no named source, is not executable — it stalls on its
      own first step. Ask whether the user has a list, has a sourcing tool of their own, or
      needs the options laid out: `audience-building` → *Where an audience comes from*.
-   - Where the objective is somebody's number for the period, it already has a home:
+   - Where the goal is somebody's number for the period, it already has a home:
      `goal.get` states the target and the unit the account actually pays on. Plan against that
      number rather than inventing a parallel one nobody is measured against.
 2. **Surface the constraints that shape the plan** before designing it. They come from three
@@ -232,6 +237,9 @@ in `approval-boundaries`.
 
 ## Changelog
 
+- 2.6.0 (2026-11-02): with Jason, what the campaign is for is its `goals`, settled with the person when the
+  campaign is created, and a campaign with none works towards a demo; the skill says goal where it said
+  objective.
 - 2.5.0 (2026-10-29): a provider may offer a slot of its own beside an operation's arguments, and
   the provider's own skill is the authority on what goes in it.
 - 2.4.0 (2026-10-23): with Jason, the campaign the brief becomes goes under a project named from

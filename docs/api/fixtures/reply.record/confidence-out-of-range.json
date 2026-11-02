@@ -1,0 +1,36 @@
+{
+  "operation": "reply.record",
+  "case": "confidence-out-of-range",
+  "request": {
+    "campaign_id": "cmp_1",
+    "plugin_id": "mailbox",
+    "thread_id": "thr-1042",
+    "message_id": "msg-77",
+    "message_at": "2026-09-14T11:30:00.250Z",
+    "contact_id": "cnt_1",
+    "category": "interested",
+    "confidence": 1.5,
+    "reaction": "draft",
+    "goal_id": "demo",
+    "actor": {
+      "type": "role",
+      "id": "responder"
+    },
+    "reason": "interested by the table; draft toward the demo"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: confidence: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "confidence",
+          "code": "invalid",
+          "message": "confidence must be a number from 0 to 1."
+        }
+      ]
+    }
+  }
+}

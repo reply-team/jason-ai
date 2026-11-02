@@ -432,7 +432,7 @@ public static class SkillsCommands
         IReadOnlyList<HarnessRoot> chosen = [.. detected.Where(root => root.Hosts.Contains(kind))];
         return chosen.Count > 0
             ? chosen
-            : throw new SkillsRefused($"'{AgentHosts.Word(kind)}' was not detected on this machine: ~/{AgentHosts.Of(kind).HomeMarker} is not there. Install it, or name a directory with --root.");
+            : throw new SkillsRefused($"'{AgentHosts.Word(kind)}' was not detected on this machine: there is no {(AgentHosts.Of(kind).MarkerKind == HomeMarkerKind.File ? "file" : "directory")} at ~/{AgentHosts.Of(kind).HomeMarker}. Install it, or name a directory with --root.");
     }
 
     /// <summary>

@@ -125,8 +125,8 @@ bodies carry no tracker key, no link to a private system, no pointer to a plan o
 tooling attribution trailer: an AI assistant adds `Co-Authored-By` and other attribution trailers by default, and they
 are stripped before the push. The reasoning a key would have pointed at is written into the body instead. A branch may
 be named after the tracker story it implements; that name is the one place a key appears, and it never reaches a commit
-of a release branch or of `main`. `RepositoryHygieneTests` reads every file of the tree for these, and the
-`hygiene.yml` workflow reads every pull request's added lines, title and body.
+of a release branch or of `main`. `RepositoryHygieneTests` reads every file of the tree and its name for these, and
+the `hygiene.yml` workflow reads every pull request's added lines, the names it gives files, its title and its body.
 
 **Tests and fixtures use made-up data.** Never a real person's name, a real login, a real profile link, a real mailbox
 or a live provider identifier: not in a test, a fixture, a document, a pull request body or a commit message. A key or

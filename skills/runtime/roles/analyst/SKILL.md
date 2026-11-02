@@ -38,6 +38,24 @@ counts over time is a day or a week at a time:
 jason campaign activity-by-period cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --count replied --period day --since 2026-10-09T00:00:00Z --until now
 ```
 
+**Replies by category are the responder's reading, and you count them from the chronicle.** The responder records one
+verdict on each reply it handles, a `reply_classified` line whose `new` names the reply (`plugin`, `thread`,
+`message_id`) and its `category`. To count replies by category over a window, list the lines since the window's
+start, drop any whose `ts` falls after its end, because the list takes a start and no end, and keep the latest line of
+each reply, because a reply can be recorded again and the latest stands; then count by `category`. The list answers
+the newest line first and pages by cursor, so read every page back to the window's start. The base categories are the
+responder's `categories.json`, which is not copied here; a category you do not find in it is a person's own, counted as
+it stands. A `bounce` is a deliverability fact and no refusal, so its count is reported as that, beside the others and never among the people who said no.
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified --since 2026-10-09T00:00:00Z
+```
+
+Say what that count is: the replies the responder gave a verdict, by the category it gave, and never the provider's own
+count of replies. A reply nobody has classified yet, and a thread the responder was never raised for, are not in it.
+The people `campaign activity` counts as having replied for the first time are people and not messages, so the two
+figures differ by design: name each one's source.
+
 Say what you could not establish. An honest "nothing here shows whether anyone replied" is worth more than a
 number nobody can trace.
 

@@ -3,6 +3,16 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.14.4
+
+- The README states what Reply does with a contact's later replies, as far as how Reply is built tells it. For a
+  sequence email Reply keeps at most one reply to each email it sent, and drops a finished contact's later replies on
+  that thread before it stores them, so `conversation.list`, `conversation.get` and the change feed carry none of them;
+  after this side has answered on the thread through `conversation.reply`, the contact's next replies on it are stored
+  and read as usual. A LinkedIn thread keeps later messages. Neither has yet been observed on an account. This replaces
+  the earlier statement that only a contact's first reply is read.
+- Nothing else changes: the same calls, codes, classes and messages.
+
 ## 0.14.3
 
 - A cancel of a send Reply is sending now, which Reply refuses at 409 with its code `directSend.alreadySending` once

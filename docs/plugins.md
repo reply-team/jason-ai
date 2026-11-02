@@ -1487,7 +1487,9 @@ back unchanged and never reads. Say who moved a thread with `moved_by` — `othe
 `null` only where the provider cannot say — because only a move by the other side reads as a reply, and Jason's own
 replies, categories and read flags move threads too. Name a thread that moved as `conversation.list` names it — its
 `thread` the thread's `external_id` there, its `occurred_at` the moment the thread last moved, which `conversation.list`
-reports as `last_activity_at`, to the millisecond — so that a move both reads find is said once. Name under `campaign`
+reports as `last_activity_at`, to the millisecond — so that a move both reads find is said once. Keeping the two moments
+the same is your plugin's to do, since the runtime cannot tell a second moment from a second move: one move given two
+says the reply twice, and once its responder has ended wakes another. Name under `campaign`
 the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier `campaign.get` pins,
 and `null` only for a thread outside every provider campaign: the runtime leaves a campaign's inbound read to your
 plugin on the strength of that. A move that names no campaign reaches, by the person, every campaign that is not archived

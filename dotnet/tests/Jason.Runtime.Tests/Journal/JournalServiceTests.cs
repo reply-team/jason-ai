@@ -69,6 +69,9 @@ public class JournalServiceTests
     [InlineData("notification_sent")]
     [InlineData("inbound_reply_observed")]
     [InlineData("message_sent_observed")]
+    [InlineData("standing_approval_set")]
+    [InlineData("standing_approval_unset")]
+    [InlineData("approval_standing_applied")]
     public async Task A_kind_the_runtime_writes_itself_cannot_be_appended_by_a_caller(string kind)
     {
         using var database = new TestDatabase();

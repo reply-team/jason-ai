@@ -1,7 +1,8 @@
 # Every pull request is read for what a public repository never carries: a tracker key, an Atlassian address, an
 # attribution trailer, a session link, or the name of another repository of ours. The lines the change adds are read,
-# and so are the pull request's title and body, again whenever they are edited. The patterns are the ones the tests
-# hold every file of the tree to, so a change that passes here leaves a tree that passes there.
+# a text saved as UTF-16 whole, the names it gives files, and the pull request's title and body, again whenever they are
+# edited. The patterns are the ones the tests hold every file of the tree and its name to, and a file is text where the
+# tests read it as text, so a change that passes here leaves a tree that passes there.
 #
 # A pull request from a fork runs this too, with the fork's own copy of this file: what it reads is untrusted, so the
 # job holds a token that can only read, is handed no secret, and keeps no credential in the checkout; the title and the
@@ -55,23 +56,56 @@ jobs:
           $found = [Collections.Generic.List[string]]::new()
           function Read-Text([string] $where, [string] $text) {
             foreach ($name in $patterns.Keys) {
-              if ([regex]::IsMatch($text, $patterns[$name])) { $found.Add("${where}: $name") }
+              $finding = "${where}: $name"
+              if ([regex]::IsMatch($text, $patterns[$name]) -and -not $found.Contains($finding)) { $found.Add($finding) }
             }
           }
 
           Read-Text 'the title' $env:TITLE
           Read-Text 'the body' $env:BODY
 
+          # git writes a path in UTF-8, and with core.quotePath off it writes one beyond ASCII in its own letters rather
+          # than quoted and escaped, so the error line names a file as it is called. The attributes are the base's: a
+          # .gitattributes the change itself adds could otherwise call every file binary, and git would then show no
+          # added line of any of them.
+          [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+          $git = @('-c', 'core.quotePath=false', '--attr-source=HEAD^1')
+
+          # A path from a header line: git ends one that holds a space with a tab, and still quotes, C-style, one that
+          # holds a quote, a backslash or a control character. An octal escape is one byte of the name's UTF-8, so the
+          # quoted name is read back as bytes and decoded whole: a run of escapes is one letter, not one per byte.
+          function Get-PathOf([string] $written) {
+            $path = $written.TrimEnd("`t")
+            if ($path.Length -ge 2 -and $path.StartsWith('"') -and $path.EndsWith('"')) {
+              $escapes = @{ 'a' = 7; 'b' = 8; 't' = 9; 'n' = 10; 'v' = 11; 'f' = 12; 'r' = 13 }
+              $bytes = [Collections.Generic.List[byte]]::new()
+              foreach ($part in [regex]::Matches($path.Substring(1, $path.Length - 2), '\\([0-7]{3}|.)|[^\\]+')) {
+                $escape = $part.Groups[1]
+                if (-not $escape.Success) { $bytes.AddRange([Text.Encoding]::UTF8.GetBytes($part.Value)) }
+                elseif ($escape.Value.Length -eq 3) { $bytes.Add([Convert]::ToByte($escape.Value, 8)) }
+                elseif ($escapes.ContainsKey($escape.Value)) { $bytes.Add($escapes[$escape.Value]) }
+                else { $bytes.AddRange([Text.Encoding]::UTF8.GetBytes($escape.Value)) }
+              }
+              $path = [Text.Encoding]::UTF8.GetString($bytes.ToArray())
+            }
+            return $path.Substring(2)
+          }
+
+          # The paths the change leaves of one kind of change, whole: -z writes each as it is, ended by a NUL.
+          function Get-Changed([string] $filter) {
+            $listed = (git @git diff --name-only -z "--diff-filter=$filter" 'HEAD^1' HEAD) -join "`n"
+            if ($LASTEXITCODE -ne 0) { throw "git diff exited with $LASTEXITCODE" }
+            return @($listed -split "`0" | Where-Object { $_ })
+          }
+
           # The added lines, each with its file and its line in the new text. --unified=0 leaves no context lines, so
-          # every line of a hunk is an addition or a removal, and a file's header ends at its first hunk. The attributes
-          # are the base's: a .gitattributes the change itself adds could otherwise call every file binary, and git would
-          # then show no added line of any of them.
+          # every line of a hunk is an addition or a removal, and a file's header ends at its first hunk.
           $file = $null
           $line = 0
           $header = $false
-          foreach ($row in (git --attr-source='HEAD^1' diff --unified=0 --no-color --no-ext-diff 'HEAD^1' HEAD)) {
+          foreach ($row in (git @git diff --unified=0 --no-color --no-ext-diff 'HEAD^1' HEAD)) {
             if ($row.StartsWith('diff --git ')) { $header = $true; $file = $null; continue }
-            if ($header -and $row.StartsWith('+++ ')) { $file = if ($row -eq '+++ /dev/null') { $null } else { $row.Substring(6) }; continue }
+            if ($header -and $row.StartsWith('+++ ')) { $file = if ($row -eq '+++ /dev/null') { $null } else { Get-PathOf $row.Substring(4) }; continue }
             if ($row -cmatch '^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@') { $header = $false; $line = [int]$Matches[1]; continue }
             if ($header) { continue }
             if ($row.StartsWith('+')) {
@@ -80,6 +114,31 @@ jobs:
             }
           }
           if ($LASTEXITCODE -ne 0) { throw "git diff exited with $LASTEXITCODE" }
+
+          # A text saved as UTF-16 holds NUL bytes, so git calls it binary and shows none of its lines; the tree's guard
+          # reads it as text through its byte order mark, and so does this, the whole file the change leaves, line by line.
+          foreach ($name in (Get-Changed 'd')) {
+            $path = [IO.Path]::Combine((Get-Location).Path, $name)
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+            $head = [byte[]]::new(2)
+            $stream = [IO.File]::OpenRead($path)
+            try { $read = $stream.Read($head, 0, 2) } finally { $stream.Dispose() }
+            if ($read -eq 2 -and (($head[0] -eq 0xFF -and $head[1] -eq 0xFE) -or ($head[0] -eq 0xFE -and $head[1] -eq 0xFF))) {
+              $number = 0
+              foreach ($text in [IO.File]::ReadAllText($path).ReplaceLineEndings("`n").Split("`n")) {
+                $number++
+                Read-Text "${name}:$number" $text
+              }
+            }
+          }
+
+          # A name is read publicly like a line: each name the change gives a file, added or by a rename, whole and
+          # then each folder and the file's own name on their own, as the tree's guard reads a path: a pattern that
+          # never matches after a slash in a line, as the private repository's name does not, still names a folder or
+          # a file called by it. Each finding is named once.
+          foreach ($name in (Get-Changed 'AR')) {
+            foreach ($text in @($name) + $name.Split('/')) { Read-Text "the file name $name" $text }
+          }
 
           if ($found.Count -gt 0) {
             $found | ForEach-Object { Write-Host "::error::$_" }

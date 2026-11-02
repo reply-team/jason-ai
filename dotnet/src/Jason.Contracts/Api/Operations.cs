@@ -72,6 +72,9 @@ public static class Operations
     public const string ApprovalGet = "approval.get";
     public const string ApprovalApprove = "approval.approve";
     public const string ApprovalReject = "approval.reject";
+    public const string ApprovalSetStanding = "approval.set_standing";
+    public const string ApprovalUnsetStanding = "approval.unset_standing";
+    public const string ApprovalListStanding = "approval.list_standing";
 
     public const string BlockList = "block.list";
     public const string BlockGet = "block.get";
@@ -85,6 +88,8 @@ public static class Operations
     public const string ReportSubmit = "report.submit";
     public const string ReportGet = "report.get";
     public const string ReportList = "report.list";
+
+    public const string ReplyRecord = "reply.record";
 
     public const string RoleList = "role.list";
     public const string RoleAdd = "role.add";

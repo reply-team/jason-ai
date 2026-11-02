@@ -1,0 +1,27 @@
+{
+  "operation": "approval.set_standing",
+  "case": "role-refused",
+  "request": {
+    "campaign_id": "cmp_1",
+    "category": "interested",
+    "operations": [
+      "conversation.reply",
+      "message.send"
+    ],
+    "expires_at": "2026-12-01T00:00:00Z",
+    "max_releases": 20,
+    "actor": {
+      "type": "role",
+      "id": "responder"
+    },
+    "reason": "the interested may hear back at once"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "approval_not_human",
+      "message": "An actor of type 'role' cannot set or unset a standing approval; it is a person's decision, made in advance.",
+      "retryable": false
+    }
+  }
+}

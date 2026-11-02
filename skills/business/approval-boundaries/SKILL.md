@@ -346,6 +346,31 @@ record which standing approval authorised each act — an act whose authority ca
 afterwards was unauthorised. Where responding fast requires acting with no human present, that
 is an explicit, recorded autonomy grant and not an inference from urgency (K9).
 
+**In Jason, a standing approval is set per campaign and per category of reply.** What it names is a category in one
+campaign, compared exactly with the category of the verdict a role recorded on the reply. It names the operations it
+releases (a drafted answer, `conversation.reply`, when none is named; `message.send` only when named), carries an
+`expires_at` where the person set one and a `max_releases` ceiling where they set one, and releases a drafted answer
+nobody has yet been asked about, nothing else. It is read with `jason approval list-standing`, which says what stands,
+how many drafts each one let go and whether it is in force. Each act it authorised is an approved row whose reason is
+`standing_approval`, decided under the name of the person who set it, with an `approval_standing_applied` line in the
+campaign's chronicle: that pair is how the authority is named afterwards.
+
+```
+jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+**Only a person sets one.** A role never does: the runtime refuses a role, and an attempt, with `approval_not_human`.
+An agent sets one only on a person's explicit word, naming them, and writes that name; it never infers one from "handle
+these" or from a person's patience. A question already put to a person stays theirs, and a draft parked before the
+standing approval was set still waits for them.
+
+**Which categories to set it on.** A category is the unit a standing approval is set on, so two replies whose safe
+reaction differs in what it reaches, or in its approval class, never share one. A standing approval is advisable where
+the reaction is a reply to the same person; never for `referral`, `opt_out` or `bounce`. A referral reaches somebody
+new and is a person's decision every time; an opt-out is a protective act with no reply to release; a bounce is a
+delivery failure, handled on the channel and never answered in the thread. The categories are the responder's
+`categories.json`, not copied here.
+
 ### The disclosure link
 
 An agent will not infer this connection, so it is stated here once. **A recorded human editorial
@@ -434,12 +459,15 @@ was left unprocessed. A report that shows approvals is what makes an autonomous 
 - **Blind retry** — re-issuing a call after a timeout instead of recovering its outcome by key.
 - **Standing approval as a licence** — treating a bounded, expiring decision about one named
   artefact as a general lowering of the class.
+- **A standing approval nobody gave, or one on the wrong category** — one an agent set on its own reading of a person's
+  patience, or one set for `referral`, `opt_out` or `bounce`, whose reaction is never a reply to the same person.
 
 ## Safety
 
 This skill *is* the safety layer for the operation contract, and it ships in the same pack as the
 contract for exactly that reason: guardrails must not be an optional extra that a selective install
-can leave out. It states no threshold and no product mechanism of its own — the classes it applies
+can leave out. It states no threshold and no product mechanism of its own — where it names what Jason does, the
+runtime's documents decide — and the classes it applies
 are derived in the contract, and where this skill and `sdr-operations` disagree the contract
 wins and the disagreement is a defect to fix here. Weakening a rule here weakens every workflow
 that relies on it, so such changes need review by the owning group, not a quick edit.
@@ -453,6 +481,10 @@ that relies on it, so such changes need review by the owning group, not a quick 
 
 ## Changelog
 
+- 2.1.0 (2026-11-02): with Jason, a standing approval is set per campaign and per category of reply, with an
+  `expires_at` and a `max_releases` where the person sets them; each act it authorised is an approved row with the
+  reason `standing_approval` and an `approval_standing_applied` line. Only a person sets one. It is advisable where the
+  reaction is a reply to the same person and never for `referral`, `opt_out` or `bounce`.
 - 2.0.0 (2026-08-10): breaking, against the 325-operation contract. The three hand-assigned
   approval levels are replaced by the derivation from reversibility by reach, with its widened
   cells, its protective floor and the rule that a departure names its reason at the operation.
