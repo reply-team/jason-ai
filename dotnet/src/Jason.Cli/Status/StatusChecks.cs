@@ -250,7 +250,8 @@ internal static class StatusChecks
             checks.Add(Binding(routes));
             checks.Add(await ProviderCliAsync(env, providerCli, cancellationToken).ConfigureAwait(false));
             checks.Add(Harnesses(env));
-            checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), client is null ? null : await ProfilesAsync(client, cancellationToken).ConfigureAwait(false), profileNames));
+            var profiles = client is null ? default : await ProfilesAsync(client, cancellationToken).ConfigureAwait(false);
+            checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), profiles.Profiles, profileNames, profiles.Unread));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
@@ -1286,10 +1287,11 @@ internal static class StatusChecks
     /// profile names one of them. Never required: a profile naming a host that is not here fails the work it launches with
     /// <c>host_not_available</c>, not the installation. A host the runtime wrote that this build of the CLI does not know —
     /// a newer runtime's — is named as given. Null <paramref name="roots"/> is an environment that detects nothing; null
-    /// <paramref name="profiles"/> a runtime that did not answer for them. Without <paramref name="names"/> the profiles are
+    /// <paramref name="profiles"/> profiles that could not be read, for the reason <paramref name="unread"/> says, or because
+    /// the runtime did not answer where it says none. Without <paramref name="names"/> the profiles are
     /// counted by host, in the table's order and then the words this CLI does not know, and the repair names none.
     /// </summary>
-    internal static StatusCheck AgentHostsCheck(IReadOnlyList<HarnessRoot>? roots, IReadOnlyList<ProfileHost>? profiles, bool names)
+    internal static StatusCheck AgentHostsCheck(IReadOnlyList<HarnessRoot>? roots, IReadOnlyList<ProfileHost>? profiles, bool names, string? unread = null)
     {
         const string Name = "agent_hosts";
         const string Unknown = "a host this build of the CLI does not know";
@@ -1311,7 +1313,7 @@ internal static class StatusChecks
 
         if (profiles is null)
         {
-            return new StatusCheck(Name, false, CheckState.Unknown, hosts + " The profiles could not be read: the runtime did not answer.", null);
+            return new StatusCheck(Name, false, CheckState.Unknown, hosts + " The profiles could not be read: " + (unread ?? "the runtime did not answer") + ".", null);
         }
 
         if (profiles.Count == 0)
@@ -1365,11 +1367,13 @@ internal static class StatusChecks
 
     /// <summary>
     /// Every page of the enabled profiles, each by its name and its host as the runtime wrote it — a string, so a host this
-    /// build does not know is read rather than thrown on. Null where the runtime did not answer or answered with something
-    /// this cannot read, a host that is not a snake_case word among it: what is no word is not repeated.
+    /// build does not know is read rather than thrown on. Where they cannot be read, none, and why in the check's own
+    /// words: the runtime did not answer, refused, answered with something this cannot read — a host that is not a
+    /// snake_case word among it, which is not repeated — or with more pages than the check reads.
     /// </summary>
-    private static async Task<IReadOnlyList<ProfileHost>?> ProfilesAsync(RuntimeClient client, CancellationToken cancellationToken)
+    private static async Task<(IReadOnlyList<ProfileHost>? Profiles, string? Unread)> ProfilesAsync(RuntimeClient client, CancellationToken cancellationToken)
     {
+        const string Unreadable = "the runtime answered with something this build of the CLI cannot read";
         var profiles = new List<ProfileHost>();
         string? cursor = null;
         for (var page = 0; page < MaxProfilePages; page++)
@@ -1378,16 +1382,26 @@ internal static class StatusChecks
             try
             {
                 var response = await client.PostAsync(Operations.ProfileList, body, cancellationToken).ConfigureAwait(false);
-                if (!response.IsSuccess || JsonNode.Parse(response.Body) is not JsonObject answer || answer["items"] is not JsonArray items)
+                if (!response.IsSuccess)
                 {
-                    return null;
+                    return (null, "the runtime refused to list them");
+                }
+
+                if (JsonNode.Parse(response.Body) is not JsonObject answer || answer["items"] is not JsonArray items)
+                {
+                    return (null, Unreadable);
                 }
 
                 foreach (var item in items)
                 {
-                    if (Text(item?["name"]) is not { } name || Text(item?["revision"]?["host"]) is not { } host || !IsHostWord(host))
+                    if (Text(item?["name"]) is not { } name || Text(item?["revision"]?["host"]) is not { } host)
                     {
-                        return null;
+                        return (null, Unreadable);
+                    }
+
+                    if (!IsHostWord(host))
+                    {
+                        return (null, "a profile names its host by something that is not a host word");
                     }
 
                     profiles.Add(new ProfileHost(name, host));
@@ -1396,16 +1410,20 @@ internal static class StatusChecks
                 cursor = Text(answer["next_cursor"]);
                 if (cursor is null)
                 {
-                    return profiles;
+                    return (profiles, null);
                 }
             }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
-                return null;
+                return (null, null);
+            }
+            catch (Exception exception) when (exception is JsonException or InvalidOperationException)
+            {
+                return (null, Unreadable);
             }
         }
 
-        return null;
+        return (null, string.Create(CultureInfo.InvariantCulture, $"the runtime answered with more than {MaxProfilePages} pages of them, more than this check reads"));
 
         static string? Text(JsonNode? node) =>
             node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;

@@ -176,6 +176,37 @@ public sealed class AgentHostsCheckTests
         var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "agent_hosts");
         Assert.Equal(CheckState.Unknown, check.State);
         Assert.DoesNotContain("example.com", check.Fact, StringComparison.Ordinal);
+        Assert.EndsWith("The profiles could not be read: a profile names its host by something that is not a host word.", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A runtime that answered with more pages than the check reads did answer: the fact says what happened, never that it
+    /// was silent.
+    /// </summary>
+    [Fact]
+    public async Task More_pages_than_the_check_reads_are_said_as_such_and_not_as_silence()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir);
+        StatusCommandTests.Profiles(dir, [.. Enumerable.Range(0, 101).Select(index => ($"p{index}", Claude))]);
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output), Ct);
+
+        var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "agent_hosts");
+        Assert.Equal(CheckState.Unknown, check.State);
+        Assert.EndsWith("The profiles could not be read: the runtime answered with more than 100 pages of them, more than this check reads.", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("did not answer", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>Why the profiles were not read is the check's to say in its own words, whatever it was.</summary>
+    [Fact]
+    public void Profiles_that_could_not_be_read_say_why_where_the_runtime_answered()
+    {
+        var check = StatusChecks.AgentHostsCheck(Detected, profiles: null, names: true, unread: "the runtime refused to list them");
+
+        Assert.Equal(CheckState.Unknown, check.State);
+        Assert.Equal($"Detected: claude_code ({ClaudeSkills}). The profiles could not be read: the runtime refused to list them.", check.Fact);
     }
 
     /// <summary>The same rule over the CLI's own table: a profile naming any host this build knows reads as that host.</summary>
