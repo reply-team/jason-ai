@@ -4,9 +4,10 @@ namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
 /// What a release's own notes, <c>RELEASE-NOTES.md</c>, are held to beyond their shape, which
-/// <see cref="ReleaseWorkflowTests"/> reads. A change to the notes runs the documentation classes, so every test that
-/// reads them is one of those: a test elsewhere that reads them would be left unrun by a change to them, and found red
-/// only later, by whoever runs the whole suite.
+/// <see cref="ReleaseWorkflowTests"/> reads. A pull request that changes only the notes runs the critical tier in CI,
+/// and the whole suite runs at the release's pull request into <c>main</c>; between the two, whoever changes the notes
+/// runs the documentation classes by hand. So every test that reads them is one of those: one elsewhere would be left
+/// unrun by that change and found red only at the release.
 /// </summary>
 public partial class ReleaseNotesTests
 {
