@@ -236,14 +236,7 @@ internal static partial class ProfileValidation
                 continue;
             }
 
-            var flag = value.Trim();
-            var separator = flag.IndexOf('=', StringComparison.Ordinal);
-            if (separator > 0)
-            {
-                flag = flag[..separator];
-            }
-
-            if (reserved.Contains(flag))
+            if (ReservedFlag(value, reserved) is { } flag)
             {
                 errors.Add(
                     string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
@@ -253,13 +246,27 @@ internal static partial class ProfileValidation
         }
     }
 
+    /// <summary>The flag an argument names, the text before any <c>=</c>, when the host composes it; otherwise null.</summary>
+    private static string? ReservedFlag(string value, IReadOnlySet<string> reserved)
+    {
+        var flag = value.Trim();
+        var separator = flag.IndexOf('=', StringComparison.Ordinal);
+        if (separator > 0)
+        {
+            flag = flag[..separator];
+        }
+
+        return reserved.Contains(flag) ? flag : null;
+    }
+
     /// <summary>
     /// What the revision's host says of its words, once the host is parsed, held to the revision as it would be launched.
     /// One rule for every host: a grant of a tool the host does not have is refused, naming the host and the tool; a deny
     /// of such a tool is kept as the person's word, since it holds anyway; a deny of a tool the host has and cannot take
     /// away, or of a word it does not read as a rule, is refused naming the host; and so is a grant of a tool the host
-    /// has but Jason cannot make true, and arguments the host's own reading refuses. Each is <c>invalid</c>, and the
-    /// message names the host and the word; then the grant is held beside the deny. Where a patch did not name a list,
+    /// has but Jason cannot make true, and arguments the host's own reading refuses. Each is <c>invalid</c>; stored
+    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>. Every message
+    /// names the host and the word; then the grant is held beside the deny. Where a patch did not name a list,
     /// the message says it is the profile's.
     /// </summary>
     public static void ValidateForHost(
@@ -275,6 +282,24 @@ internal static partial class ProfileValidation
         ArgumentNullException.ThrowIfNull(errors);
 
         var word = AgentHosts.Word(host.Kind);
+
+        // Arguments a request names were held to this host's flags where they were read. Arguments it leaves alone are
+        // the stored ones, and a patch that moves the profile to another host would otherwise launch them after the
+        // flags that host composes, where the last value wins.
+        if (!argsNamed)
+        {
+            for (var index = 0; index < revision.Args.Count; index++)
+            {
+                if (ReservedFlag(revision.Args[index], host.ReservedFlags) is { } flag)
+                {
+                    errors.Add(
+                        string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
+                        "reserved",
+                        $"the profile's args[{index}] '{flag}' is composed by the runtime on {word} for every attempt and cannot be set by a profile.");
+                }
+            }
+        }
+
         if (host.ArgsProblem(revision.Args) is { } refused)
         {
             errors.Add("args", "invalid", $"{(argsNamed ? "" : "the profile's ")}args are refused on {word}: {refused}");
