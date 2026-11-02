@@ -1,6 +1,8 @@
 using Jason.Cli;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
+using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
@@ -404,6 +406,122 @@ public class SkillsInstallTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
     }
 
+    /// <summary>
+    /// A word that names no host is refused on both verbs, naming every word there is, before anything is staged. There
+    /// is one spelling: the member's own name and the word without its underscore are not it.
+    /// </summary>
+    [Theory]
+    [InlineData("install", "nope")]
+    [InlineData("install", "ClaudeCode")]
+    [InlineData("install", "claudecode")]
+    [InlineData("update", "nope")]
+    public async Task A_host_this_build_does_not_know_is_refused_naming_every_host_it_does(string verb, string word)
+    {
+        using var dir = new TempPaths();
+        var home = Home(dir, ".claude");
+        var (env, _, error) = Machine(dir, HarnessLocators.ForHome(home));
+        string[] args = verb == "install" ? ["skills", "install", "--source", Source(dir), "--host", word] : ["skills", "update", "--host", word];
+
+        var exit = await CliApp.RunAsync(args, env, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains($"'{word}' is not a host this build knows. They are: {AgentHosts.Vocabulary}.", error.ToString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));
+        Assert.False(Directory.Exists(Path.Combine(home, ".claude", "skills")));
+    }
+
+    /// <summary>
+    /// A host this build knows that is not on this machine is refused, saying what was looked for and the way past it,
+    /// rather than deploying into no harness and exiting 0.
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_was_not_detected_is_refused_saying_what_was_looked_for()
+    {
+        using var dir = new TempPaths();
+        var (env, _, error) = Machine(dir, HarnessLocators.ForHome(Home(dir)));
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", Source(dir), "--host", "claude_code"], env, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(
+            "'claude_code' was not detected on this machine: ~/.claude is not there. Install it, or name a directory with --root.",
+            error.ToString(),
+            StringComparison.Ordinal);
+        Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));
+    }
+
+    /// <summary>The plan names each root with the hosts that read it, before anything is written.</summary>
+    [Fact]
+    public async Task The_plan_names_each_detected_root_with_the_hosts_that_read_it()
+    {
+        using var dir = new TempPaths();
+        var home = Home(dir, ".claude");
+        var (env, output, _) = Machine(dir, HarnessLocators.ForHome(home));
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", Source(dir), "--host", "claude_code", "--dry-run"], env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var targets = output.ToString().Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.StartsWith("Target:", StringComparison.Ordinal)).ToList();
+        Assert.Contains(targets, line => line.EndsWith($"into {Path.Combine(home, ".claude", "skills")} (claude_code)", StringComparison.Ordinal));
+        Assert.Contains(targets, line => line.EndsWith($"into {dir.Paths.RoleSkillsDirectory}", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <c>--root</c> with <c>--host</c> labels the named directory with that host, and deploys into it whether the host
+    /// is detected or not; the word is still checked.
+    /// </summary>
+    [Fact]
+    public async Task A_named_root_labelled_with_a_host_is_deployed_into_and_an_unknown_label_is_refused()
+    {
+        using var dir = new TempPaths();
+        var (env, output, _) = Machine(dir, HarnessLocators.ForHome(Home(dir)));
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", Source(dir), "--root", Harness(dir), "--host", "claude_code"], env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(File.Exists(Path.Combine(Harness(dir), "operating", "SKILL.md")));
+        Assert.Contains($"into {Harness(dir)} (claude_code)", output.ToString(), StringComparison.Ordinal);
+
+        var (refusedEnv, _, error) = Machine(dir);
+        var refused = await CliApp.RunAsync(["skills", "install", "--source", Source(dir), "--root", Harness(dir), "--host", "nope"], refusedEnv, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, refused);
+        Assert.Contains("'nope' is not a host this build knows.", error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>Two roots are two deployments, each with its own record, in the format a record has always had.</summary>
+    [Fact]
+    public async Task Two_roots_are_deployed_into_each_with_its_own_record()
+    {
+        using var dir = new TempPaths();
+        var first = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "first")).FullName;
+        var second = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "second")).FullName;
+        var (env, _, error) = Machine(dir, new TwoRoots(first, second));
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", Source(dir)], env, Ct);
+
+        Assert.True(exit == ExitCodes.Success, error.ToString());
+        foreach (var root in new[] { first, second })
+        {
+            Assert.True(File.Exists(Path.Combine(root, "operating", "SKILL.md")));
+            var record = SkillsRecord.Read(root);
+            Assert.NotNull(record);
+            Assert.Equal(SkillsRecord.CurrentVersion, record.Version);
+        }
+    }
+
+    /// <summary>A home of its own under the test's tree, holding the folders named.</summary>
+    private static string Home(TempPaths dir, params string[] folders)
+    {
+        var home = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "home")).FullName;
+        foreach (var folder in folders)
+        {
+            Directory.CreateDirectory(Path.Combine(home, folder));
+        }
+
+        return home;
+    }
+
     private static string Harness(TempPaths dir) =>
         Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
 
@@ -448,6 +566,12 @@ public class SkillsInstallTests
         File.WriteAllText(
             Path.Combine(source, "skills", "runtime", "roles", role, "SKILL.md"),
             $"---\nname: {declared}\ndescription: one line\n---\n\nbody\n");
+
+    private sealed class TwoRoots(string first, string second) : IHarnessLocator
+    {
+        public IReadOnlyList<HarnessRoot> Detect() =>
+            [new HarnessRoot([AgentHostKind.ClaudeCode], first), new HarnessRoot([(AgentHostKind)1], second)];
+    }
 
     private sealed class CountingLocator(string directory) : IHarnessLocator
     {

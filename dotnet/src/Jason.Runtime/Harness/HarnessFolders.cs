@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Harness;
+using Jason.Contracts.Hosts;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Projects;
@@ -38,11 +39,8 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
 
     public const string CampaignsDirectory = "campaigns";
 
-    /// <summary>What a level's <c>CLAUDE.md</c> holds when the runtime writes one: the import of the level's <c>AGENTS.md</c>, and nothing else.</summary>
-    public const string ClaudeImport = "@AGENTS.md";
-
     /// <summary>A level's memory file, the person's own words: made empty where absent, and never opened.</summary>
-    public const string MemoryFile = "AGENTS.md";
+    public const string MemoryFile = AgentHosts.MemoryFile;
 
     /// <summary>How many numbered leaves are tried for one campaign before the disk is said to have none free.</summary>
     private const int MaxNumbered = 999;
@@ -561,12 +559,16 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     }
 
     /// <summary>
-    /// <c>CLAUDE.md</c> holding exactly <see cref="ClaudeImport"/> and an empty <c>AGENTS.md</c>, each only where nothing of
-    /// that name is there: an existing one is never opened, read or written.
+    /// Each file a host reads in place of the memory file, holding exactly its line of the table of hosts, and an empty
+    /// <c>AGENTS.md</c>, each only where nothing of that name is there: an existing one is never opened, read or written.
     /// </summary>
     private static void WriteFilesIfAbsent(string folder)
     {
-        TryCreate(Path.Combine(folder, "CLAUDE.md"), System.Text.Encoding.UTF8.GetBytes(ClaudeImport));
+        foreach (var file in AgentHosts.ImportFiles)
+        {
+            TryCreate(Path.Combine(folder, file.FileName), System.Text.Encoding.UTF8.GetBytes(file.ImportLine));
+        }
+
         TryCreate(Path.Combine(folder, MemoryFile), []);
     }
 

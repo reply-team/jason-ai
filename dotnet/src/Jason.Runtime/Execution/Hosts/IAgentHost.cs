@@ -32,11 +32,40 @@ public interface IAgentHost
     IReadOnlySet<string> ReservedFlags { get; }
 
     /// <summary>
-    /// The host's own name for a tool: the allow rule a launch adds for a tool the person granted, and the deny it
-    /// writes for one the revision does not grant. A profile that grants a tool and denies it by this name is refused
-    /// where it is written.
+    /// Why this host refuses a profile's arguments as a whole — a shape its own parser reads otherwise than the runtime
+    /// composed it, say — or null where it takes them. Read where a profile is written, once its host is parsed, beside
+    /// <see cref="ReservedFlags"/>; the refusal names the host, and this sentence says why.
     /// </summary>
-    string ToolRule(AgentTool tool);
+    string? ArgsProblem(IReadOnlyList<string> args) => null;
+
+    /// <summary>
+    /// The host's own name for a tool: the allow rule a launch adds for a tool the person granted, and the deny it
+    /// writes for one the revision does not grant. Null where the host does not have the tool: a grant of it is refused
+    /// where a profile is written, naming the host and the tool, and a deny of it is kept as the person's word, since it
+    /// holds anyway. A profile that grants a tool and denies it by this name is refused where it is written.
+    /// </summary>
+    string? ToolRule(AgentTool tool);
+
+    /// <summary>
+    /// Why a grant of a tool this host has is one Jason cannot make true on it — the host decides it from a setting of
+    /// the person's own, say — or null where a grant is what it says. A grant this answers for is refused where a profile
+    /// is written, naming the host and the tool.
+    /// </summary>
+    string? GrantProblem(AgentTool tool) => null;
+
+    /// <summary>
+    /// Why this host cannot deny what one entry of a profile's deny list names — a tool it has and has no way to take
+    /// away, or a word it does not read as a rule — or null where it writes the entry as the person wrote it. A deny this
+    /// answers for is refused where a profile is written, naming the host and the entry, never dropped at a launch.
+    /// </summary>
+    string? DenyProblem(string word) => null;
+
+    /// <summary>
+    /// Whether this host is told which session an attempt keeps. Then <see cref="Compose"/> mints a fresh, non-empty id
+    /// for every attempt and the provenance records it; a host that mints its own is told none, and the provenance names
+    /// no session rather than one the runtime did not give.
+    /// </summary>
+    bool TakesSessionId => true;
 
     /// <summary>
     /// The command one attempt of <paramref name="revision"/> is started with. Called once per attempt: the
@@ -58,12 +87,18 @@ public interface IAgentHost
 
     /// <summary>
     /// Writes into an attempt's work directory what this host reads there before the child starts: the configuration
-    /// that carries <paramref name="deny"/> in the host's own form, and whatever else confines a session of it. The role's
-    /// skill is placed afterwards, under <see cref="AgentHostFacts.WorkSkills"/>, by the work directory and not here.
+    /// that carries <paramref name="allow"/> and <paramref name="deny"/> in the host's own form, and whatever else confines
+    /// a session of it. The role's skill is placed afterwards, under <see cref="AgentHostFacts.WorkSkills"/>, by the work
+    /// directory and not here.
     /// </summary>
     /// <param name="workDir">The attempt's own directory, which exists; nothing is written outside it.</param>
+    /// <param name="allow">
+    /// What the launched agent may do, for a host that reads its allow rules from the work directory rather than its
+    /// command line: the command word that calls the runtime back and the memory files' paths, never the capability token
+    /// or the envelope. Empty for a host whose allow rules travel on the command line.
+    /// </param>
     /// <param name="deny">What the launched agent may not do, in this host's own vocabulary.</param>
-    void WriteWorkDirectory(string workDir, IReadOnlyList<string> deny);
+    void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny);
 
     /// <summary>
     /// Whether an end of this host without a report says the host cannot run on this machine — not signed in, say —

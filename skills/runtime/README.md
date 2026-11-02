@@ -74,8 +74,9 @@ jason skills install --roles-only
 A person without this build installs an interactive skill by copying its directory into wherever their own
 agent host looks for skills — for Claude Code that is `~/.claude/skills/<name>/` for themselves or
 `.claude/skills/<name>/` inside a project, as its own documentation describes. Other hosts have their own
-location. The directory name is the skill's name, and the two must match: a skill whose front matter names
-anything else is loaded by nobody and reported by nobody.
+location; the [host matrix](../../docs/execution-profiles.md#12-the-hosts) lists the others. The directory name is
+the skill's name, and the two must match: a skill whose front matter names anything else is loaded by nobody and
+reported by nobody.
 
 ## The skills a launched role reads
 

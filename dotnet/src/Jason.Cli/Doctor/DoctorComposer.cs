@@ -351,6 +351,7 @@ public static partial class DoctorComposer
         "work/",
         "plugin packages",
         "a route's account and its identity",
+        "the names of execution profiles",
         "anything read from the harness root: no folder or file under it is listed or opened, so no memory file's name or word, and the folders a project link recorded travel only with --include-journal",
         "the id of a plugin this repository does not ship, the name of a role a person added or of a skill pack Jason does not ship: each is written as its alias, " + string.Join(", ", NameAliases.Marks.Values) + ", one per distinct name, numbered " + NameAliases.Numbering + ", and the mapping is never written",
         "the harness root, wherever it stands: it is written as " + IdentityRewriter.MarkWords["harness_root_written_as"],
@@ -428,8 +429,9 @@ public static partial class DoctorComposer
         var projected = new ProjectedSystemInfo(latch);
         try
         {
-            // As the status verb composes it: its own reads, through the same descriptor, and no provider CLI, so no program.
-            var status = Projected(await StatusChecks.ComposeAsync(env with { HttpHandler = projected }, providerCli: null, cancellationToken).ConfigureAwait(false), projected.Skills);
+            // As the status verb composes it: its own reads, through the same descriptor, and no provider CLI, so no program;
+            // and the profiles counted by host, since a profile's name is the person's.
+            var status = Projected(await StatusChecks.ComposeAsync(env with { HttpHandler = projected }, providerCli: null, profileNames: false, cancellationToken).ConfigureAwait(false), projected.Skills);
 
             var descriptor = new DescriptorReader(env.Paths).Read();
             using var client = descriptor is not null && IsLoopback(descriptor.BaseUrl) ? new RuntimeClient(descriptor, latch) : null;

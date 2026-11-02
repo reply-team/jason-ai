@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Cli.Autostart;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
@@ -9,6 +10,7 @@ using Jason.Cli.Uninstall;
 using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Plugins;
@@ -139,6 +141,12 @@ internal static class StatusChecks
         public const string UpdateSkills = "jason skills update";
 
         /// <summary>
+        /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has. A
+        /// bundle's report names no profile, so there it is <c>&lt;name&gt;</c>.
+        /// </summary>
+        public static string MoveProfile(string profile, string host) => $"jason profile update {profile} --host {host}";
+
+        /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
         /// default: the line that moves a harness deployment its record pins to this build's tag.
         /// </summary>
@@ -202,7 +210,15 @@ internal static class StatusChecks
     /// </summary>
     public static TimeSpan ProviderTimeout => TimeSpan.FromSeconds(10);
 
-    public static async Task<StatusReport> ComposeAsync(CliEnvironment env, string? providerCli, CancellationToken cancellationToken)
+    public static Task<StatusReport> ComposeAsync(CliEnvironment env, string? providerCli, CancellationToken cancellationToken) =>
+        ComposeAsync(env, providerCli, profileNames: true, cancellationToken);
+
+    /// <summary>
+    /// The report, with the profiles the <c>agent_hosts</c> check reads named by their names, or, without
+    /// <paramref name="profileNames"/>, counted by host: a profile's name is the person's, and the doctor's bundle never
+    /// carries one.
+    /// </summary>
+    public static async Task<StatusReport> ComposeAsync(CliEnvironment env, string? providerCli, bool profileNames, CancellationToken cancellationToken)
     {
         var checks = new List<StatusCheck>();
 
@@ -234,6 +250,7 @@ internal static class StatusChecks
             checks.Add(Binding(routes));
             checks.Add(await ProviderCliAsync(env, providerCli, cancellationToken).ConfigureAwait(false));
             checks.Add(Harnesses(env));
+            checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), client is null ? null : await ProfilesAsync(client, cancellationToken).ConfigureAwait(false), profileNames));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
@@ -1226,7 +1243,7 @@ internal static class StatusChecks
                         }
                     }
 
-                    deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}"));
+                    deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}{ReadBy(root)}"));
                     var away = record.Packs
                         .Where(pack => own is not null && pack.Commit is not null && !string.Equals(pack.Ref, own, StringComparison.Ordinal))
                         .ToList();
@@ -1256,7 +1273,147 @@ internal static class StatusChecks
         return gone.Count > 0 || behind.Count > 0
             ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned)), Repair.UpdateSkills)
             : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Select(note => " " + note)), null);
+
+        // The hosts that read a folder, by their words, after it; a folder named with --root and no host says none.
+        string ReadBy(string root) =>
+            roots.Where(found => string.Equals(found.Directory, root, StringComparison.OrdinalIgnoreCase)).SelectMany(found => found.Hosts).Distinct().ToList() is { Count: > 0 } hosts
+                ? " (" + string.Join(", ", hosts.Select(AgentHosts.Word)) + ")"
+                : string.Empty;
     }
+
+    /// <summary>
+    /// Which agent hosts this machine has, by the marker each keeps under the home directory, and whether every enabled
+    /// profile names one of them. Never required: a profile naming a host that is not here fails the work it launches with
+    /// <c>host_not_available</c>, not the installation. A host the runtime wrote that this build of the CLI does not know —
+    /// a newer runtime's — is named as given. Null <paramref name="roots"/> is an environment that detects nothing; null
+    /// <paramref name="profiles"/> a runtime that did not answer for them. Without <paramref name="names"/> the profiles are
+    /// counted by host, in the table's order and then the words this CLI does not know, and the repair names none.
+    /// </summary>
+    internal static StatusCheck AgentHostsCheck(IReadOnlyList<HarnessRoot>? roots, IReadOnlyList<ProfileHost>? profiles, bool names)
+    {
+        const string Name = "agent_hosts";
+        const string Unknown = "a host this build of the CLI does not know";
+        const string NotHere = "not detected";
+
+        if (roots is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "This environment does not detect agent hosts.", null);
+        }
+
+        var detected = AgentHosts.All
+            .Select(host => (host.Kind, Root: roots.FirstOrDefault(root => root.Hosts.Contains(host.Kind))))
+            .Where(found => found.Root is not null)
+            .Select(found => (Word: AgentHosts.Word(found.Kind), found.Root!.Directory))
+            .ToList();
+        var hosts = detected.Count == 0
+            ? "No agent host was detected on this machine."
+            : "Detected: " + string.Join("; ", detected.Select(host => $"{host.Word} ({host.Directory})")) + ".";
+
+        if (profiles is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, hosts + " The profiles could not be read: the runtime did not answer.", null);
+        }
+
+        if (profiles.Count == 0)
+        {
+            return new StatusCheck(Name, false, detected.Count == 0 ? CheckState.Absent : CheckState.Ok, hosts + " No enabled profile names a host.", null);
+        }
+
+        bool Here(string host) => detected.Any(found => string.Equals(found.Word, host, StringComparison.Ordinal));
+        string? Why(string host) => Here(host) ? null : AgentHosts.Parse(host) is not null ? NotHere : Unknown;
+
+        string said;
+        if (names)
+        {
+            said = "Profiles: " + string.Join("; ", profiles.Select(profile => Why(profile.Host) switch
+            {
+                null => $"{profile.Name} names {profile.Host}",
+                NotHere => $"{profile.Name} names {profile.Host}, which was not detected on this machine",
+                var why => $"{profile.Name} names {profile.Host}, {why}",
+            })) + ".";
+        }
+        else
+        {
+            var order = AgentHosts.All.Select(host => AgentHosts.Word(host.Kind)).ToList();
+            said = "Profiles by host: " + string.Join("; ", profiles
+                .GroupBy(profile => profile.Host, StringComparer.Ordinal)
+                .OrderBy(group => order.IndexOf(group.Key) is var at and >= 0 ? at : order.Count)
+                .ThenBy(group => group.Key, StringComparer.Ordinal)
+                .Select(group => string.Create(CultureInfo.InvariantCulture, $"{group.Key} {group.Count()}") + (Why(group.Key) is { } why ? ", " + why : string.Empty))) + ".";
+        }
+
+        var astray = profiles.FirstOrDefault(profile => !Here(profile.Host));
+        if (astray is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, hosts + " " + said, null);
+        }
+
+        // The repair moves the profile to a host that is here; with none here there is no command to give, since installing
+        // a host is the person's.
+        if (detected.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, null);
+        }
+
+        var profile = names ? astray.Name : "<name>";
+        var host = detected[0].Word;
+        return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, Repair.MoveProfile(profile, host));
+    }
+
+    /// <summary>The most pages of profiles the check reads; past them the answer is not one it can read whole.</summary>
+    private const int MaxProfilePages = 100;
+
+    /// <summary>
+    /// Every page of the enabled profiles, each by its name and its host as the runtime wrote it — a string, so a host this
+    /// build does not know is read rather than thrown on. Null where the runtime did not answer or answered with something
+    /// this cannot read, a host that is not a snake_case word among it: what is no word is not repeated.
+    /// </summary>
+    private static async Task<IReadOnlyList<ProfileHost>?> ProfilesAsync(RuntimeClient client, CancellationToken cancellationToken)
+    {
+        var profiles = new List<ProfileHost>();
+        string? cursor = null;
+        for (var page = 0; page < MaxProfilePages; page++)
+        {
+            var body = cursor is null ? "{}" : new JsonObject { ["cursor"] = cursor }.ToJsonString();
+            try
+            {
+                var response = await client.PostAsync(Operations.ProfileList, body, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccess || JsonNode.Parse(response.Body) is not JsonObject answer || answer["items"] is not JsonArray items)
+                {
+                    return null;
+                }
+
+                foreach (var item in items)
+                {
+                    if (Text(item?["name"]) is not { } name || Text(item?["revision"]?["host"]) is not { } host || !IsHostWord(host))
+                    {
+                        return null;
+                    }
+
+                    profiles.Add(new ProfileHost(name, host));
+                }
+
+                cursor = Text(answer["next_cursor"]);
+                if (cursor is null)
+                {
+                    return profiles;
+                }
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        return null;
+
+        static string? Text(JsonNode? node) =>
+            node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+    }
+
+    /// <summary>A host word as Jason writes one: lowercase letters, digits and underscores, starting with a letter.</summary>
+    private static bool IsHostWord(string host) =>
+        host.Length is > 0 and <= 64 && char.IsAsciiLetterLower(host[0]) && host.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_');
 
     private static StatusCheck Autostart(CliEnvironment env)
     {
@@ -1424,3 +1581,6 @@ internal static class StatusChecks
         }
     }
 }
+
+/// <summary>One enabled profile as the <c>agent_hosts</c> check reads it: its name, and its host as the runtime wrote it.</summary>
+internal sealed record ProfileHost(string Name, string Host);

@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json.Nodes;
 using Jason.Cli.Human;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 
 namespace Jason.Cli.Commands;
 
@@ -181,7 +182,7 @@ public static class ProfileCommands
     private sealed class Fields
     {
         private readonly Option<string?> _description = new("--description") { Description = "What this profile is for, in a sentence." };
-        private readonly Option<string?> _host = new("--host") { Description = "Which agent host this describes — for example claude_code." };
+        private readonly Option<string?> _host = new("--host") { Description = "Which agent host this describes. One of: " + AgentHosts.Vocabulary + "." };
         private readonly Option<string?> _program = new("--program") { Description = "The program to start: an absolute path, or a name resolved on PATH. Never a script a shell would interpret: a .cmd, .bat or .ps1 is refused." };
         private readonly Option<string[]> _arg = VerbOptions.Repeatable("--arg", "One argument added after the ones the runtime composes. Repeat the option once per argument, in order.");
         private readonly Option<string[]> _deny = VerbOptions.Repeatable("--deny", "One thing the launched agent may not do, in the host's own vocabulary. Repeat for more.");

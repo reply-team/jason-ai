@@ -46,7 +46,7 @@ public class ClaudeCodeHostTests
                 "--permission-mode",
                 "dontAsk",
                 "--session-id",
-                launch.SessionId,
+                launch.SessionId!,
                 "--setting-sources",
                 "project",
                 "--strict-mcp-config",

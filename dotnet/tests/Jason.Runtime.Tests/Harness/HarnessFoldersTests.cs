@@ -3,6 +3,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using Jason.Contracts.Harness;
+using Jason.Contracts.Hosts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Harness;
 using Jason.Runtime.Projects;
@@ -52,6 +53,37 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal($$"""{"marker_version":1,"kind":"project","id":"{{Project}}"}""", Text(folder, ".jason", "marker.json"));
         Assert.Equal("@AGENTS.md", Text(folder, "CLAUDE.md"));
         Assert.Equal(string.Empty, Text(folder, "AGENTS.md"));
+    }
+
+    /// <summary>
+    /// Every file a host reads in place of the memory file is written at each level where absent, holding exactly the line
+    /// of the table of hosts that imports the memory file, and one the person wrote is never opened.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ImportFiles))]
+    public async Task Every_host_s_import_file_is_written_at_each_level_where_absent_and_never_over_one(string file, string line)
+    {
+        Directory.CreateDirectory(Root);
+        File.WriteAllText(Path.Combine(Root, file), "Read the notes first.\n");
+        var folders = TestHarness.Folders(Home);
+
+        var project = folders.MakeProjectFolder(Project, "acme");
+        var campaign = await MakeAsync(folders, project, Campaign, "Q3 Marketing Leads");
+
+        Assert.Equal("Read the notes first.\n", Text(Root, file));
+        Assert.Equal(line, Text(project, file));
+        Assert.Equal(line, Text(campaign, file));
+    }
+
+    public static TheoryData<string, string> ImportFiles()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var file in AgentHosts.ImportFiles)
+        {
+            data.Add(file.FileName, file.ImportLine);
+        }
+
+        return data;
     }
 
     /// <summary>
