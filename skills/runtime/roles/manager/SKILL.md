@@ -144,8 +144,27 @@ jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-You record no verdict yourself: it is the responder's reading of a reply, and one that looks wrong to you is a question for
-the person, with the line's id.
+Some verdicts leave something to read, not something to do. A `bounce` is a deliverability fact and no refusal: the
+responder files no register entry for it and raises no question per bounce, and leaves a note of its own naming the
+contact by id, the channel's kind and the moment, never the bounce text. The count of them is yours at this review, and
+the business pack's `sending-guardrails` skill says when it is a problem. A `not_now` and an `out_of_office` leave a
+note with the moment the person named and no draft, so read the notes of both at this review:
+
+```
+jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+You record no verdict of your own reading: a verdict is the responder's reading of a reply, and one that looks wrong to
+you is a question for the person, with the line's id. The one you do record is a person's answer. Below its confidence
+threshold the responder records its best guess and raises a question whose options are the category ids, and drafts
+nothing; acting on the answer is yours, at the answered question's line. Take the reply's `plugin`, `thread`,
+`message_id` and `message_at` from the first verdict line, never from the question, and record the person's category as a
+second verdict for the same reply, which supersedes the first, with the reaction that category's row in `categories.json`
+gives. A person's word is no guess, so its confidence is 1:
+
+```
+jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --category interested --confidence 1 --reaction draft --reason "the person chose interested"
+```
 
 **The chronicle since the last review.** Your note carries the time of your last run; read everything after
 it, and everything there is when there is no note. Reports are what happened to the campaign where the runtime

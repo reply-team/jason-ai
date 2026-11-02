@@ -33,6 +33,7 @@ public partial class RoleSkillTests
         Assert.Contains("keep the latest line of each reply, because a reply can be recorded again and the latest stands", skill, StringComparison.Ordinal);
         Assert.Contains("the replies the responder gave a verdict, by the category it gave, and never the provider's own count of replies", skill, StringComparison.Ordinal);
         Assert.Contains("The base categories are the responder's `categories.json`, which is not copied here", skill, StringComparison.Ordinal);
+        Assert.Contains("A `bounce` is a deliverability fact and no refusal, so its count is reported as that", skill, StringComparison.Ordinal);
         Assert.Contains(
             "jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified --since 2026-10-09T00:00:00Z",
             SkillPack.PrintedCommands(SkillPack.Find("analyst").File));

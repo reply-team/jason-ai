@@ -403,7 +403,7 @@ public partial class RoleSkillTests
         Assert.Contains("count them by category; where one reply has several lines, the latest stands.", skill, StringComparison.Ordinal);
         Assert.Contains("The base categories are the responder's `categories.json`, which is not copied here", skill, StringComparison.Ordinal);
         Assert.Contains("A reaction of `draft` or `escalate` is something waiting for a person", skill, StringComparison.Ordinal);
-        Assert.Contains("You record no verdict yourself", skill, StringComparison.Ordinal);
+        Assert.Contains("You record no verdict of your own reading", skill, StringComparison.Ordinal);
     }
 
     /// <summary>The line the skill reads is the one the runtime writes: its kind and the fields the skill names are the journal's.</summary>
@@ -411,5 +411,44 @@ public partial class RoleSkillTests
     public void The_verdict_line_the_manager_reads_is_the_kind_the_runtime_writes()
     {
         Assert.Equal("reply_classified", Jason.Runtime.Journal.JournalKinds.ReplyClassified);
+    }
+
+    /// <summary>
+    /// A bounce is read at the review as a count and never filed as a refusal, the two notes the responder leaves for a
+    /// later moment are read at the review, and the guardrails say when the count is a problem. The ids are the ones the
+    /// runtime's categories use.
+    /// </summary>
+    [Fact]
+    public void The_manager_reads_bounces_as_a_count_and_the_notes_of_the_replies_that_wait_for_a_moment()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("A `bounce` is a deliverability fact and no refusal: the responder files no register entry for it and raises no question per bounce", skill, StringComparison.Ordinal);
+        Assert.Contains("The count of them is yours at this review, and the business pack's `sending-guardrails` skill says when it is a problem.", skill, StringComparison.Ordinal);
+        Assert.Contains("A `not_now` and an `out_of_office` leave a note with the moment the person named and no draft, so read the notes of both at this review", skill, StringComparison.Ordinal);
+        Assert.Contains("jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", SkillPack.PrintedCommands(SkillPack.Find("manager").File));
+        Assert.True(File.Exists(Path.Combine(SkillPack.BusinessRoot(), "sending-guardrails", SkillPack.SkillFile)));
+    }
+
+    /// <summary>
+    /// Below its threshold the responder records a guess and asks; the person's answer is recorded by the manager as a
+    /// second verdict for the same reply, whose identifiers come from the first verdict line and not from the question.
+    /// The printed command names every field the verb requires, so the second one meets the first.
+    /// </summary>
+    [Fact]
+    public void The_manager_records_a_persons_answer_to_a_question_of_the_responder_as_a_second_verdict()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("The one you do record is a person's answer.", skill, StringComparison.Ordinal);
+        Assert.Contains("raises a question whose options are the category ids, and drafts nothing; acting on the answer is yours, at the answered question's line.", skill, StringComparison.Ordinal);
+        Assert.Contains("from the first verdict line, never from the question", skill, StringComparison.Ordinal);
+        Assert.Contains("as a second verdict for the same reply, which supersedes the first", skill, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason reply record ", StringComparison.Ordinal));
+        foreach (var option in new[] { "--plugin", "--thread", "--message", "--message-at", "--category", "--confidence", "--reaction" })
+        {
+            Assert.Contains(option + " ", printed, StringComparison.Ordinal);
+        }
     }
 }

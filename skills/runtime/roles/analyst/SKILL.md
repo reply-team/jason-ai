@@ -45,7 +45,7 @@ start, drop any whose `ts` falls after its end, because the list takes a start a
 each reply, because a reply can be recorded again and the latest stands; then count by `category`. The list answers
 the newest line first and pages by cursor, so read every page back to the window's start. The base categories are the
 responder's `categories.json`, which is not copied here; a category you do not find in it is a person's own, counted as
-it stands.
+it stands. A `bounce` is a deliverability fact and no refusal, so its count is reported as that, beside the others and never among the people who said no.
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified --since 2026-10-09T00:00:00Z
