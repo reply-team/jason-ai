@@ -78,6 +78,7 @@ public class AgentHostsTests
 
         Assert.Equal("claude", facts.CommandWord);
         Assert.Equal(".claude", facts.HomeMarker);
+        Assert.Equal(HomeMarkerKind.Directory, facts.MarkerKind);
         Assert.Equal(".claude/skills", facts.HomeSkills);
         Assert.Equal(".claude/skills", facts.WorkSkills);
         Assert.Equal(new HostInstructionFile("CLAUDE.md", "@AGENTS.md"), facts.Instructions);

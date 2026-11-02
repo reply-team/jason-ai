@@ -67,7 +67,7 @@ public static class RequestBody
 
     /// <summary>
     /// Writes the claimed actor or, when none was claimed and the body names none of its own, the CLI's default: the
-    /// person this account is (<see cref="ActorOption.Default"/>). Every write takes this one but the eight that are
+    /// person this account is (<see cref="ActorOption.Default"/>). Every write takes this one but the ten that are
     /// somebody's own word, a report among them, which name who acts or are refused (<see cref="ActorOption.Named"/>).
     /// </summary>
     public static JsonObject SetActor(this JsonObject body, JsonObject? actor, CliEnvironment env)

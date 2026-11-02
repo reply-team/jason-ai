@@ -18,7 +18,8 @@ public sealed class WorkItemWait
 
     /// <summary>
     /// The attempt that ended waiting: <c>yielded</c> for a role's wait, <c>blocked</c> for an attempt a provider block
-    /// stopped. Null only for a wait no attempt asked for, which is an item the claim parked on a block.
+    /// stopped. Null only for a wait no attempt asked for: an item the claim parked on a block, or a responder the respond
+    /// step created already waiting on the read of its thread, whose first run is therefore told of no resumption.
     /// </summary>
     public int? AttemptId { get; set; }
 

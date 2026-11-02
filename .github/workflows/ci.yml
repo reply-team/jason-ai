@@ -1507,8 +1507,9 @@ jobs:
 
   # The UI's checks, tests, build and smoke, on the one runner with Node: typecheck, lint, the unit and screen tests
   # against the exchanges the runtime's tests recorded, the build, the asset zip uploaded for a person to try, and the
-  # browser smoke against a runtime built here. Linux only, and on every run of the Linux set, a draft's pushes
-  # included: the browser engine is the same everywhere, and what differs by OS is runtime code the platform jobs run.
+  # browser smoke against a runtime built here; and, with the same Node, every plugin package's JavaScript parsed. Linux
+  # only, and on every run of the Linux set, a draft's pushes included: the browser engine is the same everywhere, and
+  # what differs by OS is runtime code the platform jobs run.
   ui:
     name: The UI on ubuntu
     needs: version
@@ -1525,6 +1526,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      # Every file of every package under plugins/, found rather than listed, so a new package is parsed without an
+      # edit here. node --check reads one file at a time. Before the runtime's build, so a syntax error is reported in
+      # seconds rather than after it.
+      - name: Every plugin's JavaScript parses
+        working-directory: .
+        shell: bash
+        run: find plugins/*/ -name '*.js' -print0 | xargs -0 -r -n1 node --check
+
       - uses: ./.github/actions/setup-dotnet
         with:
           sdk-version: ${{ needs.version.outputs.sdk }}
@@ -1532,12 +1547,6 @@ jobs:
       - name: Build the runtime the smoke drives
         working-directory: .
         run: dotnet build dotnet/src/Jason.App --configuration Release -p:Version=${{ needs.version.outputs.version }}
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
 
       - name: Install
         run: npm ci

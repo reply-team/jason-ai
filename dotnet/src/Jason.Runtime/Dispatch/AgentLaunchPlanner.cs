@@ -164,6 +164,9 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             startedAs[0],
             composed.Command,
             revision.HostVersionVerified,
+
+            // As the host composed it, never checked here against TakesSessionId: only the seam's test reads that
+            // member, holding every registered host's Compose to it, which is enough for a host that is registered.
             composed.SessionId,
             revision.Tools);
 

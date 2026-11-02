@@ -258,6 +258,60 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     }
 
     /// <summary>
+    /// Writes a new item already waiting on the items it needs: the wait a role's run would write with
+    /// <c>workitem.wait</c>, all of <paramref name="children"/> and bounded by the same ceiling, but written before any
+    /// attempt exists, so the item is never claimed until they have ended and spends no launch waiting for them. The
+    /// resume step releases it as it releases any wait — the items ended, or the ceiling came — and it is then ordinary
+    /// queued work. The respond step is its one caller: a responder waits on the read of its thread.
+    /// </summary>
+    public WorkItemWait WaitFromCreation(JasonDbContext db, WorkItem item, IReadOnlyList<WorkItem> children, ActorRef actor)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(children);
+        if (item.Status != WorkItemStatus.Created || item.Attempts.Count > 0)
+        {
+            throw new ArgumentException($"Work item {item.PublicId} has already been queued or tried; only a new item waits from its creation.", nameof(item));
+        }
+
+        if (children.Count == 0 || children.Count > WorkItemWaitRequest.MaxWaitItems || children.Select(child => child.Id).Distinct().Count() != children.Count)
+        {
+            throw new ArgumentException($"A wait from creation names between one and {WorkItemWaitRequest.MaxWaitItems} work items, each once.", nameof(children));
+        }
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        var deadline = now.AddSeconds(settings.Current.AiRole.MaxWaitSeconds);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Waiting, now);
+
+        var wait = new WorkItemWait
+        {
+            WorkItem = item,
+            Mode = WaitMode.All,
+            Deadline = deadline,
+            Status = WaitStatus.Open,
+            OpenedAt = now,
+            Items = [.. children.Select((child, position) => new WorkItemWaitItem { ChildWorkItem = child, Position = position })],
+        };
+        db.WorkItemWaits.Add(wait);
+
+        journal.Append(
+            db,
+            actor,
+            JournalKinds.WorkItemWaiting,
+            campaign: null,
+            key: null,
+            updated: new JsonObject
+            {
+                ["on"] = new JsonArray([.. children.Select(child => JsonValue.Create(child.PublicId))]),
+                ["mode"] = SnakeCaseEnumConverter<WaitMode>.Format(WaitMode.All),
+                ["until"] = null,
+                ["deadline"] = JsonSerializer.SerializeToNode(WorkItemMapper.Utc(deadline), JasonJson.Options),
+            },
+            workItem: item);
+        return wait;
+    }
+
+    /// <summary>
     /// Parks <paramref name="item"/> on a provider block: it waits on <paramref name="block"/> until the block clears, a
     /// trial of it gets past, or its due date passes. Its two entries are the claim, which parks work a block already
     /// holds before any attempt exists, and an attempt that answered <c>blocked</c>, which ends <c>blocked</c> keeping the

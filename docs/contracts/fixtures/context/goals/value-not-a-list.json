@@ -1,0 +1,7 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "one goal written as an object instead of a list of one",
+  "value": { "id": "demo", "kind": "demo", "title": "A demo with the operations lead", "reached_when": "a demo is on their calendar", "order": 1 },
+  "expect": { "invalid": [{ "pointer": "", "reason": "type" }] }
+}

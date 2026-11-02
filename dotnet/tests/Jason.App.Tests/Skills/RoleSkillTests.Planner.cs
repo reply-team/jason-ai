@@ -227,4 +227,49 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// What a campaign is for is its goals, settled with the person when the campaign is made, with the default stated
+    /// aloud. The paragraph is in the craft block, so both seats carry it, and neither seat calls the campaign's aim by
+    /// the word the runtime does not use. A seat that said nothing of the default would leave a person to learn from a
+    /// campaign that behaved like a demo what it had been given.
+    /// </summary>
+    [Fact]
+    public void The_planner_settles_the_goals_with_the_person_and_states_the_default_in_both_seats()
+    {
+        foreach (var name in new[] { "planner", "planner-in-session" })
+        {
+            var file = SkillPack.Find(name).File;
+            var craft = Whitespace().Replace(CraftBlock.Extract(file) ?? string.Empty, " ");
+
+            Assert.Contains("**A campaign is made with its goals.**", craft, StringComparison.Ordinal);
+            Assert.Contains("They are written as the `goals` key of the campaign's context, the runtime's one word for it", craft, StringComparison.Ordinal);
+            Assert.Contains(
+                "Where nobody has said what the campaign is for, its goal is a demo, and you say so aloud rather than leave it unsaid.",
+                craft,
+                StringComparison.Ordinal);
+            Assert.Contains("A goal is the person's word: you write the ones they gave and invent none for them.", craft, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("objective", File.ReadAllText(file), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// The launched planner reads the goals from the campaign before it plans, plans towards them in their order, and
+    /// writes them only as the person gave them. The patch replaces the list, so it is told to send every goal back.
+    /// </summary>
+    [Fact]
+    public void The_launched_planner_reads_the_goals_from_the_campaign_and_keeps_them_there()
+    {
+        var skill = Flattened("planner");
+
+        Assert.Contains("**The goals are read from the campaign, and kept in it.**", skill, StringComparison.Ordinal);
+        Assert.Contains("`jason campaign get` shows whether the context carries `goals`.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where it does not, the roles take the default, a demo, and your plan says so.", skill, StringComparison.Ordinal);
+        Assert.Contains("write none the person has not given", skill, StringComparison.Ordinal);
+        Assert.Contains("`campaign update-context` replaces the whole list, so read the goals that are there and send all of them back", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            SkillPack.PrintedCommands(SkillPack.Find("planner").File),
+            line => line.StartsWith("jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{\"goals\":[", StringComparison.Ordinal));
+    }
 }

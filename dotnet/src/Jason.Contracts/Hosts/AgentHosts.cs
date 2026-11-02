@@ -11,6 +11,16 @@ namespace Jason.Contracts.Hosts;
 /// <param name="ImportLine">Its whole content, a line that imports <see cref="AgentHosts.MemoryFile"/>.</param>
 public sealed record HostInstructionFile(string FileName, string ImportLine);
 
+/// <summary>Whether a host's home marker is a directory or a file; only that kind at its path says the host is there.</summary>
+public enum HomeMarkerKind
+{
+    /// <summary>A directory, such as a host's own folder under home.</summary>
+    Directory,
+
+    /// <summary>A file, such as one host's settings inside a folder two hosts keep.</summary>
+    File,
+}
+
 /// <summary>
 /// What Jason knows about one agent host, read by both halves: the CLI that deploys skills into a home and the runtime
 /// that launches the host in a work directory. Every path is relative, written with forward slashes, and resolved with
@@ -22,13 +32,15 @@ public sealed record HostInstructionFile(string FileName, string ImportLine);
 /// <param name="HomeSkills">Where under the home folder the host reads skills.</param>
 /// <param name="WorkSkills">Where under a work directory the host reads skills, so a role's skill is placed there.</param>
 /// <param name="Instructions">The file the host reads instead of the memory file, or null when it reads the memory file itself.</param>
+/// <param name="MarkerKind">Whether <paramref name="HomeMarker"/> is a directory or a file: a path of the other kind detects nothing.</param>
 public sealed record AgentHostFacts(
     AgentHostKind Kind,
     string CommandWord,
     string HomeMarker,
     string HomeSkills,
     string WorkSkills,
-    HostInstructionFile? Instructions);
+    HostInstructionFile? Instructions,
+    HomeMarkerKind MarkerKind = HomeMarkerKind.Directory);
 
 /// <summary>
 /// The one table of agent hosts: one row per <see cref="AgentHostKind"/>, held to the enum by tests and to the runtime's
@@ -42,11 +54,11 @@ public static class AgentHosts
     /// <summary>Every host, in the order of the enum.</summary>
     public static IReadOnlyList<AgentHostFacts> All { get; } =
     [
-        new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile)),
+        new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile), HomeMarkerKind.Directory),
 
         // Codex keeps its sign-in and settings in ~/.codex and reads skills from ~/.agents/skills and from the
         // .agents/skills folder of the directory it runs in; it reads AGENTS.md itself, so it needs no import file.
-        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null),
+        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory),
     ];
 
     /// <summary>The instruction files a harness folder holds beside the memory file, each name once.</summary>

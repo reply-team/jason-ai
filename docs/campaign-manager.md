@@ -45,7 +45,7 @@ line. These kinds summon a review:
 | `approval_rejected` | A person said no to a proposed effect. The decision is made; what is missing is the strategy that follows it. |
 | `external_effect_reported` | Something happened to this campaign that the runtime did not do. |
 | `decision_answered` | A person answered a question a role could not answer for itself. The role that asked has already ended, so this is what releases the work that follows. |
-| `inbound_reply_observed` | A thread in one of the campaign's conversations moved since the last read: somebody may have replied. The runtime's own read says so and interprets nothing; what the reply means, and what to do about it, is the manager's ([inbound sync](inbound-sync.md)). |
+| `inbound_reply_observed` | A thread in one of the campaign's conversations moved since the last read: somebody may have replied. The runtime's own read says so and interprets nothing. For the campaign's own thread the same line has already woken the responder, queued ahead of this review, which reads the reply and answers it; what the campaign as a whole calls for is the manager's ([inbound sync](inbound-sync.md)). |
 | `provider_event_observed` | A provider said something happened that concerns the campaign — a reply it detected, an invitation accepted, a message that bounced — and the runtime found it by an identifier the campaign's own operations pinned, or by the person a member is. What it calls for is the manager's ([events](events.md)). |
 | `provider_blocked` | A provider block holds the campaign's work: the account, or one sending account under it, is refused for its money, plan, allowance, credential or channel, and what reaches people has stopped until it clears. Said once per campaign and block. Whether to tell somebody, or change course, is the manager's; the block's clearing is not a trigger, because the work runs again by itself ([work execution](work-execution.md) §Provider blocks). |
 
@@ -332,7 +332,9 @@ at all, and a runtime with no dispatcher summons nothing.
 
 How soon a reply wakes a manager is the inbound read's to say, not a manager setting: it reads each campaign's
 conversations every `Inbound:SyncSeconds` (900 by default), and looks `Inbound:LookbackSeconds` (14400 by default)
-behind its last read for a reply the provider took in late ([inbound sync](inbound-sync.md)).
+behind its last read for a reply the provider took in late ([inbound sync](inbound-sync.md)). Whether the same reply
+wakes the campaign's responder first is `Responder:OnReply`, which neither reads nor is read by `Manager:Triggers`
+([work execution](work-execution.md), Settings).
 
 **A narrowed list replaces the default rather than adding to it.** Leaving the key out keeps the
 defaults; a list written with no kind in it — an empty array, `null`, an empty object, or an empty
@@ -355,5 +357,6 @@ configuration — it is a legitimate thing to write — so it is said here inste
 - **Anomaly rules and reconciliation.** Neither exists; a review is the only thing that notices
   anything.
 - **Knowing what a reply says.** The runtime records that a thread moved (`inbound_reply_observed`,
-  [inbound sync](inbound-sync.md)) and wakes the manager; it never reads or classifies the reply, and
-  nothing tells a person one came. Reading it, and deciding what it calls for, is the manager's.
+  [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
+  campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
+  one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.

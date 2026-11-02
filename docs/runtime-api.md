@@ -116,13 +116,13 @@ A request that carries an `Origin` header naming anything but the runtime's own 
 - **A request that changes something may carry `actor` and `reason`.** `actor` is
   `{"type":"human","id":"…"}`, with the type `human`, `role` or `attempt`; absent, it is a person who gave no name, and
   `system` is refused because it is the runtime's own. Some operations ask for more: `approval.approve`,
-  `approval.reject`, `decision.answer`, `block.clear`, `preference.set` and `preference.unset` need an actor of type
-  `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
+  `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.answer`, `block.clear`,
+  `preference.set` and `preference.unset` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
   records the actor as the caller claims it and cannot verify it: it holds one token and knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
-  such default: given no actor, the CLI refuses all eight itself, before any request, in one sentence that names the
+  such default: given no actor, the CLI refuses all ten itself, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. `reason` is
   free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`, `contact.archive`,
   `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove` set it no limit of
@@ -231,6 +231,11 @@ that is not that attempt does not call them.
 - `approval.get`
 - `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved.
 - `approval.reject`: the work ends, carrying the decision and the person who made it.
+- `approval.set_standing`: a person's word in advance for one campaign and one category of verdict: a drafted reply
+  that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names.
+- `approval.unset_standing`: the person takes it back; what it already let go stays approved.
+- `approval.list_standing`: a campaign's standing approvals, one per category, with how many drafts each let go and
+  whether it is still in force. [`docs/work-execution.md`](work-execution.md), "Standing approvals", is the contract.
 
 ### `block`
 
@@ -244,6 +249,31 @@ that is not that attempt does not call them.
 - `decision.answer`: a person's answer.
 - `decision.get`
 - `decision.list`: what is waiting, oldest question first; pending by default.
+
+### `reply`
+
+- `reply.record`: a role's verdict on one reply of a campaign, written as the journal line `reply_classified` and
+  answered with that line. The reply is named by `plugin_id`, `thread_id`, `message_id` and `message_at`, the person by
+  an optional `contact_id`; the verdict is a `category`, which the runtime holds only to being one line of up to 100
+  characters, a `confidence` from 0 to 1, a `reaction` of `act`, `draft`, `escalate` or `none`, and an optional
+  `goal_id`, which must name one of the campaign's goals ([the `goals` key](contracts/context/goals.md)) and whose kind
+  the line copies. The line carries no word of the reply. An archived campaign still takes one; an `actor` of type
+  `attempt` must be an attempt of the same campaign's work, and the line then names its work item and attempt. The
+  line names the reply as `plugin`, `thread`, `message_id` and `message_at`, the chronicle's names, the moment to the
+  millisecond. A `reason` is the actor's reason for the verdict, never the reply's words. Each call writes a line of
+  its own, under a key that hashes the plugin, thread and message rather than the provider's bare message id; readers
+  find a verdict by its payload, and the latest for a reply stands. Where the category is a person's answer to a question
+  about the reply, an optional `decision_id` names that question, the `dec_` decision, and the runtime checks it at the
+  call: a decision of the same campaign (`decision_not_found`, as for an id that names none), answered
+  (`decision_not_answered`), by a person who gave their name (`decision_not_human`), whose chosen option is the
+  `category` recorded (`decision_option_differs`), and raised by an attempt that has recorded a verdict on this reply —
+  a `reply_classified` line of the campaign under this reply's key whose attempt is the decision's, any such line, not
+  only the latest (`decision_not_about_reply`); a role raises a question and then ends its attempt, so a question raised
+  before its asker recorded a verdict on the reply, or one about another reply, backs no verdict. Each refusal is a 400
+  and writes nothing. One decision may back repeated records on the same reply, which supersede each other as any
+  verdicts do. The line then names the decision as `decision_id` and the person as `answered_by`, their actor; both are
+  null where no decision is named.
+  `jason reply record` sends it, and `--decision` names the question.
 
 ### `report`
 
@@ -338,14 +368,17 @@ that is not that attempt does not call them.
 - **An effect performed outside Jason**, through `report.submit`, when something was sent, enrolled or replied by hand
   or through another tool and Jason should know. The report is kept as the claim it is; what it carries is in
   [the reporting skill](../skills/runtime/reporting-outside-effects/SKILL.md).
-- **A decision in a person's name**: `approval.approve`, `approval.reject` and `decision.answer`. Each needs an
-  `actor` of type `human` that names the person, and each is refused for any other type. The runtime cannot tell a
+- **A decision in a person's name**: `approval.approve`, `approval.reject`, `approval.set_standing`,
+  `approval.unset_standing` and `decision.answer`. Each needs an `actor` of type `human` that names the person, and each is refused for any other type. The runtime cannot tell a
   person from a program that holds the token, so a program records only what a person decided
   ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)).
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it
-  was created.
+  was created, unless a person's standing approval covers it: a drafted reply that names, under `reply_verdict`, the
+  verdict it answers.
+- **A verdict on a reply**, through `reply.record`: what kind of reply it is, how sure the role is, what it decided to
+  do and which goal that steers to, kept as the line `reply_classified`, which `journal.append` refuses to anyone else.
 - **A nudge**: `events.signal` asks the runtime to read one account's events sooner, for a program that receives a
   provider's webhooks. It names the account by its id from `events.sources` and carries nothing the webhook said;
   what is read is what the account's own read finds.

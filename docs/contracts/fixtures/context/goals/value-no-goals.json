@@ -1,0 +1,7 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "an empty list, which the roles read as the default goal, a demo",
+  "value": [],
+  "expect": "valid"
+}

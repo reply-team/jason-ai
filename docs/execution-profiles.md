@@ -428,8 +428,10 @@ launch envelope's section of [work-execution.md](work-execution.md).
 
 ## 9. When AI work cannot run
 
-Every one of these is decided before a child process exists, keeps its attempt so the refusal can be read, and
-is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
+Every one of these is decided before a child process exists, except `host_not_available` where a host that ran
+answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no
+byte of what the host wrote, where the host's row in §12 names the signal Jason reads. Each keeps its attempt so the
+refusal can be read, and is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
 the profile, and the attempt records how far the choice got; the last two are about the role rather than the
 profile, so there is no level to name.
 
@@ -438,7 +440,7 @@ profile, so there is no level to name.
 | `lineage_resolution_unsupported` | a run caused this work and no profile can be inherited (§4) |
 | `profile_not_found` | the profile named does not exist |
 | `profile_disabled` | it exists and is out of service |
-| `host_not_available` | its program is not on this machine, or is a script a shell would have to interpret |
+| `host_not_available` | its program is not on this machine, or is a script a shell would have to interpret; or the host ran and answered that it is not signed in (§12) |
 | `role_skill_invalid` | the role's skill could not be given to it |
 | `role_skill_unreadable` | the role's skill was being replaced while this launch tried to read it |
 | `role_not_launchable` | no profile at any level, and the role has no entry command either |
@@ -447,7 +449,8 @@ None of them is classified, and an attempt error the failure rules do not name i
 answer for every one of these: a profile that does not exist will not exist on the next scan either.
 
 The repair is to name a profile on the item, its campaign or its role — or to fix the configuration —
-**before the work is claimed**. A refused attempt fails the item, and a finished item is not changed,
+**before the work is claimed**; for a host that is not signed in, it is for the person to sign in to it on this
+machine, under their own plan. A refused attempt fails the item, and a finished item is not changed,
 so work already refused is asked for again rather than reopened. That is how every fail-closed
 refusal in this runtime behaves.
 
@@ -485,20 +488,22 @@ name. A launched role runs on a host a profile names, and a profile can name onl
 status` says which of these hosts it detected on this machine and whether every enabled profile names one of them
 (`agent_hosts`).
 
-| Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against | Tools |
-|---|---|---|---|---|---|---|---|
-| Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) |
-| Codex CLI | `codex` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | On Windows, first: Codex's elevated sandbox must be set up once by an administrator ([setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a role runs is refused and the attempt fails by the role's report. Built from the host's documentation and source for 0.166.0, npm's current release; measured on Windows with the CLI the Codex app bundles, 0.166.0-alpha.5.1; not yet run on an account ([Codex CLI](#codex-cli)) | `web_search` as `WebSearch`: granted as a live search, denied by that word; `web_fetch`: not on this host, so a grant is refused and a deny holds anyway |
-| Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
-| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
-| GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
-| Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
+| Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against | Tools | Reads a memory file by | Takes the brief |
+|---|---|---|---|---|---|---|---|---|---|
+| Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) | one `Read(//…/AGENTS.md)` rule per file, on its command line (§7) | as its prompt, on standard input, in print mode (`-p`) |
+| Codex CLI | `codex` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | On Windows, first: Codex's elevated sandbox must be set up once by an administrator ([setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a role runs is refused and the attempt fails by the role's report. Built from the host's documentation and source for 0.166.0, npm's current release; measured on Windows with the CLI the Codex app bundles, 0.166.0-alpha.5.1; not yet run on an account ([Codex CLI](#codex-cli)) | `web_search` as `WebSearch`: granted as a live search, denied by that word; `web_fetch`: not on this host, so a grant is refused and a deny holds anyway | one `"<path>"="read"` entry per file in the permissions profile on its command line (`-c permissions.jason.filesystem=…`), 0.166.0 | as its prompt, on standard input, with no prompt word on the command line (`codex exec`: instructions are read from stdin when none is given, 0.166.0) |
+| Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 
-A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there — and
-`jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
+A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there, and only
+a path of that kind detects it — and `jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
 `AGENTS.md`, a one-line import file for every host that reads a file of another name. Jason holds no key for any host:
-each runs under the person's own plan, signed in by them, and a host that does not start, or that stops because it is
-not signed in, ends the attempt with `host_not_available` and one sentence of Jason's own, never the host's words.
+each runs under the person's own plan, signed in by them. A host whose program is not on this machine ends the attempt
+with `host_not_available`; so does a host that stops because it is not signed in, where that host's row names the
+signal Jason reads for it; a host whose row names none ends such an attempt as any exit of it ends. A
+`host_not_available` carries one sentence of Jason's own, never the host's words.
 
 One rule holds every host's tools, where a profile is written: a grant of a tool the host does not have is refused,
 naming the host and the tool; a deny of a tool the host does not have is kept as the person's word, since it holds

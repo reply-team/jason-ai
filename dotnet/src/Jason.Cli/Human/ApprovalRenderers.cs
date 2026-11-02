@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
@@ -142,6 +143,59 @@ public static class ApprovalRenderers
         var who = string.IsNullOrEmpty(name) ? id : $"{name} ({id})";
         return who + (where is null ? string.Empty : $" | {channel} {where}");
     }
+
+    /// <summary>One standing approval: what it covers, its limits, and whether it still lets drafts go.</summary>
+    public static string? StandingApproval(string json)
+    {
+        var standing = RenderText.Read<StandingApprovalDto>(json);
+        if (standing?.CampaignId is null || standing.Category is null)
+        {
+            return null;
+        }
+
+        var text = new StringBuilder();
+        text.AppendLine(Line("Category:", standing.Category));
+        text.AppendLine(Line("Campaign:", standing.CampaignId));
+        text.AppendLine(Line("Covers:", Covers(standing)));
+        text.AppendLine(Line("In force:", standing.InForce ? "yes" : "no"));
+        text.AppendLine(Line("Expires:", RenderText.Moment(standing.ExpiresAt)));
+        text.AppendLine(Line("Let go:", Released(standing)));
+        text.AppendLine(Line("Set by:", RenderText.Actor(standing.SetBy)));
+        text.AppendLine(Line("Set:", RenderText.Moment(standing.SetAt)));
+        text.Append(Line("Line:", standing.LineId));
+        return text.ToString();
+    }
+
+    /// <summary>A campaign's standing approvals, as a table, one category to a row.</summary>
+    public static string? StandingApprovalList(string json)
+    {
+        var page = RenderText.Read<Page<StandingApprovalDto>>(json);
+        if (page?.Items is null)
+        {
+            return null;
+        }
+
+        var table = new HumanTable("CATEGORY", "COVERS", "IN FORCE", "EXPIRES", "LET GO", "SET BY");
+        foreach (var standing in page.Items)
+        {
+            table.Row(
+                standing.Category,
+                Covers(standing),
+                standing.InForce ? "yes" : "no",
+                RenderText.Moment(standing.ExpiresAt),
+                Released(standing),
+                RenderText.Actor(standing.SetBy));
+        }
+
+        return RenderText.WithCursor(table.Render(), page.NextCursor);
+    }
+
+    private static string? Covers(StandingApprovalDto standing) =>
+        standing.Operations is null ? null : string.Join(", ", standing.Operations);
+
+    private static string Released(StandingApprovalDto standing) => standing.MaxReleases is { } ceiling
+        ? string.Create(CultureInfo.InvariantCulture, $"{standing.Released} of {ceiling}")
+        : standing.Released.ToString(CultureInfo.InvariantCulture);
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 

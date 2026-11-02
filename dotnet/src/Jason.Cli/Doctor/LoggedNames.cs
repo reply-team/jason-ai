@@ -29,6 +29,16 @@ public static class LoggedNames
         ["Notification channel {Channel} failed ({Code}, {Class})"] = "Channel",
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    /// <summary>The values those properties carry that name no plugin: the runtime's own channel.</summary>
-    public static IReadOnlySet<string> NotAPlugin { get; } = new HashSet<string>(StringComparer.Ordinal) { ChannelKinds.Toast }.ToFrozenSet(StringComparer.Ordinal);
+    /// <summary>
+    /// The values that name no plugin, each kept to the one template whose property can carry it: the runtime's own
+    /// channel, on the line about a notification channel. The same value on any other line is a plugin's id.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlySet<string>> NotAPlugin { get; } = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+    {
+        ["Notification channel {Channel} failed ({Code}, {Class})"] = new HashSet<string>(StringComparer.Ordinal) { ChannelKinds.Toast }.ToFrozenSet(StringComparer.Ordinal),
+    }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>Whether <paramref name="value"/>, under its property on a line of <paramref name="template"/>, names a plugin.</summary>
+    public static bool NamesAPlugin(string template, string value) =>
+        !(NotAPlugin.TryGetValue(template, out var values) && values.Contains(value));
 }

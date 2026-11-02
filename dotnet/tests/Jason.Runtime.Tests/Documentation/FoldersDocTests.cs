@@ -47,6 +47,28 @@ public sealed partial class FoldersDocTests
     }
 
     /// <summary>
+    /// A level's folder holds one import file for every host of the table that reads a file of another name, so the
+    /// architecture and the repository's instructions say that rule rather than name one host's file as the only one; and
+    /// since no host is given a prompt Jason composed, the envelope's page names none that composes one.
+    /// </summary>
+    [Fact]
+    public void The_architecture_and_the_repository_instructions_say_one_import_file_per_host()
+    {
+        foreach (var path in new[] { new[] { "docs", "architecture.md" }, new[] { "CLAUDE.md" } })
+        {
+            var text = Whitespace().Replace(Page(path), " ");
+            var where = string.Join('/', path);
+
+            Assert.True(text.Contains("import file for every host that reads a file of another name", StringComparison.Ordinal), $"{where} does not state the rule.");
+            Assert.False(text.Contains("beside a `CLAUDE.md` that imports it", StringComparison.Ordinal), $"{where} names one host's file as the only one.");
+            Assert.False(text.Contains("and a `CLAUDE.md` and an empty `AGENTS.md`", StringComparison.Ordinal), $"{where} names one host's file as the only one.");
+        }
+
+        var envelope = Whitespace().Replace(Page("docs", "work-execution.md"), " ");
+        Assert.DoesNotContain("A host that composes a prompt from the envelope's parts", envelope, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// What a host composes of the three levels was measured, and the page says what was measured: a session started in a
     /// campaign's folder is given the campaign's file, and the parent levels' imports, from outside that folder, are
     /// dropped in print mode without a word. A page that said the host reads all three by itself would have a session
