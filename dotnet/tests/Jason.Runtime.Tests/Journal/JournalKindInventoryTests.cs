@@ -36,7 +36,7 @@ public sealed class JournalKindInventoryTests
         [JournalKinds.ExternalIdDiverged] = "provider identifiers",
         [JournalKinds.InboundReplyObserved] = "provider identifiers",
         [JournalKinds.ProviderEventObserved] = "provider identifiers",
-        [JournalKinds.ReplyClassified] = "provider identifiers",
+        [JournalKinds.ReplyClassified] = "the verdicts roles recorded on replies: their categories, reactions and goals",
         [JournalKinds.MessageSentObserved] = "provider identifiers",
         [JournalKinds.ProviderBlocked] = "provider identifiers",
         [JournalKinds.ExternalEffectReported] = "the effect, tool and operation a report names",
