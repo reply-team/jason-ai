@@ -249,7 +249,7 @@ public class CodexHostTests
         var workDir = Directory.CreateTempSubdirectory("jason-codex-").FullName;
         try
         {
-            Host().WriteWorkDirectory(workDir, ["Write", "web_fetch"]);
+            Host().WriteWorkDirectory(workDir, [], ["Write", "WebFetch"]);
 
             Assert.Empty(Directory.EnumerateFileSystemEntries(workDir));
         }
@@ -257,6 +257,122 @@ public class CodexHostTests
         {
             Directory.Delete(workDir, recursive: true);
         }
+    }
+
+    /// <summary>
+    /// This host mints the id of its own run and cannot be told one, so a launch names none and the provenance records
+    /// none, rather than an id the host never saw. The thread the host minted stays readable in what it printed.
+    /// </summary>
+    [Fact]
+    public void A_run_names_no_session_since_the_host_mints_its_own()
+    {
+        var launch = Host().Compose(Revision(), ["codex"], NoFiles);
+
+        Assert.False(Host().TakesSessionId);
+        Assert.Null(launch.SessionId);
+        Assert.Empty(launch.Allow);
+        Assert.Empty(launch.Deny);
+    }
+
+    /// <summary>
+    /// The host searches the web and has no tool of its own that fetches a page, so a grant of a fetch is one it does not
+    /// have and a deny of one holds already. A search is taken away by the deny word a profile writes for it.
+    /// </summary>
+    [Fact]
+    public void A_search_is_the_one_tool_the_host_has_and_a_fetch_is_not_one()
+    {
+        Assert.Equal("WebSearch", Host().ToolRule(AgentTool.WebSearch));
+        Assert.Null(Host().ToolRule(AgentTool.WebFetch));
+        Assert.Null(((IAgentHost)Host()).GrantProblem(AgentTool.WebSearch));
+        Assert.Null(((IAgentHost)Host()).GrantProblem(AgentTool.WebFetch));
+    }
+
+    /// <summary>A denied search stays off even where the revision grants it, since the host's deny wins over the grant.</summary>
+    [Fact]
+    public void A_search_the_profile_denies_stays_off_even_where_it_is_granted()
+    {
+        var command = Host().Compose(Revision(deny: ["WebSearch"], tools: [AgentTool.WebSearch]), ["codex"], NoFiles).Command;
+
+        Assert.Contains("web_search=\"disabled\"", command);
+        Assert.DoesNotContain("web_search=\"live\"", command);
+    }
+
+    /// <summary>
+    /// What a deny of a write, a search, a fetch or a read means here: no write root is granted, a search is switched
+    /// off, no fetch tool exists and the network reaches loopback alone, and a read is a path the sandbox denies.
+    /// </summary>
+    [Theory]
+    [InlineData("Write")]
+    [InlineData("Edit")]
+    [InlineData("MultiEdit")]
+    [InlineData("NotebookEdit")]
+    [InlineData("WebSearch")]
+    [InlineData("WebFetch")]
+    [InlineData("Read(//srv/secrets/**)")]
+    [InlineData("Read(~/private/notes.md)")]
+    public void A_deny_the_sandbox_holds_is_taken_as_the_person_wrote_it(string word)
+    {
+        Assert.Null(Host().DenyProblem(word));
+    }
+
+    /// <summary>
+    /// The sandbox confines every command a role runs whatever its name, and the host has no tool by these names to take
+    /// away, so a deny of one could only be dropped at a launch; it is refused where the profile is written instead.
+    /// </summary>
+    [Theory]
+    [InlineData("Bash(curl *)")]
+    [InlineData("PowerShell(Invoke-WebRequest *)")]
+    [InlineData("Glob")]
+    [InlineData("Grep")]
+    [InlineData("Task")]
+    [InlineData("mcp__made_up__send")]
+    [InlineData("Read")]
+    [InlineData("Read(notes/**)")]
+    [InlineData("Read(./notes.md)")]
+    [InlineData("web_search")]
+    public void A_deny_the_sandbox_cannot_hold_is_refused_with_its_reason(string word)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(Host().DenyProblem(word)));
+    }
+
+    [Fact]
+    public void On_windows_a_read_deny_names_a_drive()
+    {
+        var host = new CodexHost(@"C:\j", @"C:\x", @"C:\t", windows: true);
+
+        Assert.Null(host.DenyProblem("Read(//d/Shared/Finance/**)"));
+        Assert.Null(host.DenyProblem("Read(~/private/notes.md)"));
+        Assert.False(string.IsNullOrWhiteSpace(host.DenyProblem("Read(//srv/secrets/**)")));
+    }
+
+    /// <summary>
+    /// The host reads a bare word as the prompt, which would replace the brief on stdin, or as a subcommand; and it reads
+    /// <c>-cfoo</c> as <c>-c foo</c>, which no reserved flag would catch. So a profile's arguments are flags, each value
+    /// joined to its flag by <c>=</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("--model=made-up-model")]
+    [InlineData("-m=made-up-model")]
+    [InlineData("--oss")]
+    [InlineData("--color=never")]
+    [InlineData("--model=made-up-model", "--color=never")]
+    public void Arguments_that_are_flags_with_their_values_joined_are_taken(params string[] args)
+    {
+        Assert.Null(Host().ArgsProblem(args));
+    }
+
+    [Theory]
+    [InlineData("--model", "made-up-model")]
+    [InlineData("say hello")]
+    [InlineData("resume")]
+    [InlineData("-cweb_search=\"live\"")]
+    [InlineData("-mmade-up-model")]
+    [InlineData("--")]
+    [InlineData("-")]
+    [InlineData(" --model=made-up-model")]
+    public void Arguments_the_host_would_read_as_a_prompt_or_another_flag_are_refused(params string[] args)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(Host().ArgsProblem(args)));
     }
 
     [Fact]

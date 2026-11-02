@@ -122,7 +122,8 @@ public sealed class CodexHost(
         }
 
         var (entries, unreadable) = FileSystem(revision, memoryFiles);
-        var search = revision.Tools.Contains(AgentTool.WebSearch) ? "live" : "disabled";
+        // A search is live only where the revision grants it and does not deny it: the host's deny wins over the grant.
+        var search = revision.Tools.Contains(AgentTool.WebSearch) && !revision.Deny.Contains("WebSearch") ? "live" : "disabled";
 
         return new HostLaunch(
             [
@@ -166,15 +167,17 @@ public sealed class CodexHost(
                 // Last, and nothing after them: a profile adds to the shape above and never rewrites it.
                 .. revision.Args,
             ],
-            Guid.NewGuid().ToString("D"),
+            null,
             unreadable,
+            [],
             []);
     }
 
     /// <summary>Nothing: every rule of a run is on its command line, so the work directory is left as the runtime made it.</summary>
-    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> deny)
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
+        ArgumentNullException.ThrowIfNull(allow);
         ArgumentNullException.ThrowIfNull(deny);
     }
 
@@ -183,10 +186,68 @@ public sealed class CodexHost(
     /// </summary>
     public string? Unavailable(int exitCode, string? stderrTail) => null;
 
-    public string ToolRule(AgentTool tool) => tool switch
+    /// <summary>
+    /// The deny words this sandbox holds without an entry of its own: no write root is granted, a search is switched off,
+    /// and the host has no tool that fetches a page while the network reaches loopback alone.
+    /// </summary>
+    private static readonly HashSet<string> HeldDenies = new(StringComparer.Ordinal)
     {
-        AgentTool.WebSearch => "web_search",
-        AgentTool.WebFetch => "web_fetch",
+        "Write", "Edit", "MultiEdit", "NotebookEdit", "WebSearch", "WebFetch",
+    };
+
+    /// <summary>The host mints the id of every run it starts and has no flag that names one, so a launch names none.</summary>
+    public bool TakesSessionId => false;
+
+    /// <summary>
+    /// Flags only, each value joined to its flag by <c>=</c>. The host reads a bare word as the prompt, which would
+    /// replace the brief on stdin, or as a subcommand; and it reads one dash and a letter run together with more as that
+    /// letter's flag and its value, which the reserved flags would not catch.
+    /// </summary>
+    public string? ArgsProblem(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        foreach (var arg in args)
+        {
+            var flag = arg.Split('=', 2)[0];
+            var isLong = flag.Length > 2 && flag.StartsWith("--", StringComparison.Ordinal) && flag[2] != '-';
+            var isShort = flag.Length == 2 && flag[0] == '-' && flag[1] != '-';
+            if (!isLong && !isShort)
+            {
+                return $"'{arg}' is not a flag; codex reads a bare word as the prompt or a subcommand, so each argument is a flag with its value joined by '=' (--model=<name>).";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Why this sandbox cannot hold a deny: a command runs inside the sandbox whatever its name, and the host has no
+    /// tool by such a name to take away. A read is denied by a path the sandbox can name, from the root, a drive on
+    /// Windows, or the home.
+    /// </summary>
+    public string? DenyProblem(string word)
+    {
+        ArgumentNullException.ThrowIfNull(word);
+        if (HeldDenies.Contains(word) || DeniedPath(word) is not null)
+        {
+            return null;
+        }
+
+        return word.StartsWith("Read(", StringComparison.Ordinal)
+            ? windows
+                ? "a read is denied on codex by a path from a drive (Read(//d/...)) or the home (Read(~/...))."
+                : "a read is denied on codex by a path from the root (Read(//...)) or the home (Read(~/...))."
+            : "codex confines a run by its sandbox, not by a list of tools or commands, so it has no rule by this name; a command runs inside the sandbox whatever its name.";
+    }
+
+    /// <summary>
+    /// A search is the one tool of the vocabulary this host has, and a profile takes it away by the deny word written for
+    /// it. The host has no tool that fetches a page, so a grant of one is a tool it does not have.
+    /// </summary>
+    public string? ToolRule(AgentTool tool) => tool switch
+    {
+        AgentTool.WebSearch => "WebSearch",
+        AgentTool.WebFetch => null,
         _ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "A tool outside the vocabulary has no rule."),
     };
 
