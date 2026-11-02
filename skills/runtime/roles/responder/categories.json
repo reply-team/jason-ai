@@ -1,0 +1,71 @@
+{
+  "principle": "A category is the unit a standing approval is set on, so two replies whose safe reaction differs in what it reaches or in its approval class never share an id, and two replies with the same reaction share one. A new category is added as a refinement of one of these, in the person's memory files, and inherits its reaction unless its own rule says otherwise. Below the confidence question_below names, a reply is not classified alone: the person is asked which category it is.",
+  "question_below": 0.7,
+  "categories": [
+    {
+      "id": "interested",
+      "says": "They want to hear more: a yes, a 'tell me more', a request for details or pricing.",
+      "reaction": "draft: a reply that moves them toward the campaign's first goal."
+    },
+    {
+      "id": "meeting_requested",
+      "says": "They ask for a call or a meeting, or propose a time.",
+      "reaction": "draft: a reply that settles the time and how they will be invited."
+    },
+    {
+      "id": "meeting_booked",
+      "says": "They confirm a meeting is on their calendar, or tell you they booked one.",
+      "reaction": "none: nothing is sent; the summary says the goal may be reached."
+    },
+    {
+      "id": "question",
+      "says": "They ask something about the offer, the company or the message before deciding.",
+      "reaction": "draft: an answer to the question, toward the campaign's goal."
+    },
+    {
+      "id": "objection",
+      "says": "They push back: the price, a competitor they use, no need, no money set aside.",
+      "reaction": "draft: an answer to the objection, toward the campaign's goal."
+    },
+    {
+      "id": "not_now",
+      "says": "Interested perhaps, but not at this moment: later this quarter, after a project, next year.",
+      "reaction": "act: note the moment they named in the campaign's role note; nothing is sent and nothing is created."
+    },
+    {
+      "id": "wrong_person",
+      "says": "They are not the one who decides this, and name nobody else.",
+      "reaction": "draft: a short, polite close of the thread."
+    },
+    {
+      "id": "referral",
+      "says": "They are not the one who decides this, and name someone who is.",
+      "reaction": "escalate: reaching the person they named is a person's decision, every time."
+    },
+    {
+      "id": "out_of_office",
+      "says": "An automatic absence notice, with or without the day they are back.",
+      "reaction": "act: note the day they are back in the campaign's role note; nothing is sent and nothing is created."
+    },
+    {
+      "id": "auto_reply",
+      "says": "Any other machine message: an acknowledgement, a ticket number, an unmonitored mailbox.",
+      "reaction": "none: wait; nothing is sent."
+    },
+    {
+      "id": "bounce",
+      "says": "The message was not delivered: the address does not exist, the mailbox is full, the server refused it.",
+      "reaction": "act: note the contact, the channel's kind and the moment in the campaign's role note, never the bounce's text; no reply is sent."
+    },
+    {
+      "id": "opt_out",
+      "says": "They ask not to be contacted again, in any words.",
+      "reaction": "act: the do-not-contact register, then the provider's opt-out; no reply is sent."
+    },
+    {
+      "id": "other",
+      "says": "Anything the categories above do not describe.",
+      "reaction": "escalate: a question for the person that names the nearest category, why it does not fit, and what you would do, and quotes nothing."
+    }
+  ]
+}
