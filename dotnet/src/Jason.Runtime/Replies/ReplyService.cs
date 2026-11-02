@@ -20,9 +20,10 @@ namespace Jason.Runtime.Replies;
 /// </summary>
 /// <remarks>
 /// What is checked against the database: the campaign (archived ones included, as the chronicle takes lines on an
-/// archived campaign), the contact when one is named, the goal against the campaign's goals as they stand, and an attempt
-/// actor, which must be a known attempt of work in the same campaign. Everything else is checked by its shape. The call
-/// is not fenced by the attempt's lease: a verdict is a fact about a reply, and one recorded late is still true.
+/// archived campaign), the contact when one is named, the goal against the campaign's goals as they stand, an attempt
+/// actor, which must be a known attempt of work in the same campaign, and a decision when one is named, whose answer the
+/// verdict then carries. Everything else is checked by its shape. The call is not fenced by the attempt's lease: a
+/// verdict is a fact about a reply, and one recorded late is still true.
 /// </remarks>
 public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 {
@@ -68,6 +69,11 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             errors.Add("goal_id", "invalid", "goal_id names one of the campaign's goals by its id, or is left out.");
         }
 
+        if (request.DecisionId is not null && request.DecisionId.Trim().Length == 0)
+        {
+            errors.Add("decision_id", "invalid", "decision_id names the campaign's question whose answer this verdict carries, by its id, or is left out.");
+        }
+
         if (request.Reason is not null && request.Reason.Trim().Length > CampaignService.MaxReasonLength)
         {
             errors.Add("reason", "too_long", string.Create(CultureInfo.InvariantCulture, $"reason must be at most {CampaignService.MaxReasonLength} characters."));
@@ -94,6 +100,10 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
                 ?? throw new ValidationException([new ErrorDetail("goal_id", "unknown", "goal_id must name a goal the campaign's goals carry.")]);
         }
 
+        var answered = request.DecisionId is null
+            ? null
+            : await AnswerOfAsync(request.DecisionId.Trim(), campaign, category!, cancellationToken).ConfigureAwait(false);
+
         var (workItem, attempt) = await AttemptOfAsync(actor, campaign, cancellationToken).ConfigureAwait(false);
 
         var plugin = request.PluginId!.Trim();
@@ -111,6 +121,10 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             ["reaction"] = JsonSerializer.SerializeToNode(request.Reaction!.Value, JasonJson.Options),
             ["goal_id"] = goalId,
             ["goal_kind"] = goalKind,
+            ["decision_id"] = answered?.PublicId,
+            ["answered_by"] = answered is null
+                ? null
+                : JsonSerializer.SerializeToNode(new ActorRef(answered.AnsweredByType!.Value, answered.AnsweredById), JasonJson.Options),
         };
 
         var entry = journal.Append(
@@ -183,6 +197,38 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The decision whose answer the verdict carries, checked here and only here: a question of the same campaign, answered,
+    /// by a person who gave their name, who chose the very category recorded. The line names the decision and the person,
+    /// and what reads it later trusts it for that — nothing reads the decision again.
+    /// </summary>
+    private async Task<Decision> AnswerOfAsync(string id, Campaign campaign, string category, CancellationToken cancellationToken)
+    {
+        var decision = await db.Decisions.AsNoTracking()
+            .SingleOrDefaultAsync(row => row.PublicId == id, cancellationToken).ConfigureAwait(false);
+        if (decision is null || decision.CampaignId != campaign.Id)
+        {
+            throw DomainErrors.VerdictDecisionNotFound(id);
+        }
+
+        if (decision.Status != DecisionStatus.Answered)
+        {
+            throw DomainErrors.VerdictDecisionNotAnswered(decision.PublicId, decision.Status);
+        }
+
+        if (decision.AnsweredByType != ActorType.Human || string.IsNullOrWhiteSpace(decision.AnsweredById))
+        {
+            throw DomainErrors.VerdictDecisionNotHuman(decision.PublicId);
+        }
+
+        if (!string.Equals(decision.ChosenOption, category, StringComparison.Ordinal))
+        {
+            throw DomainErrors.VerdictDecisionOptionDiffers(decision.PublicId);
+        }
+
+        return decision;
     }
 
     /// <summary>

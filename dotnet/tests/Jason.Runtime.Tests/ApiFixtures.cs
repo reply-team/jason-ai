@@ -203,6 +203,7 @@ public static class ApiFixtures
         "project.update/renamed",
         "reply.record/confidence-out-of-range",
         "reply.record/recorded",
+        "reply.record/recorded-with-decision",
         "reply.record/unknown-goal",
         "role.list/all",
         "rolenote.get/client",

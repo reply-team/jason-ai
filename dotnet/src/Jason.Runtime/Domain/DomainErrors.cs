@@ -256,6 +256,33 @@ public static class DomainErrors
         new("decision_reference_unresolved", $"The {kind} reference '{id}' is not one of this campaign's own rows.");
 
     /// <summary>
+    /// A verdict that names a decision carries that person's answer, so the decision has to be one of the verdict's own
+    /// campaign: another campaign's question is no answer about this reply, and is refused as if it were not there.
+    /// </summary>
+    public static InvalidRequestException VerdictDecisionNotFound(string id) =>
+        new("decision_not_found", $"Decision '{id}' is not a question of this campaign; a verdict carries the answer to one of its own.");
+
+    /// <summary>A question nobody has answered, or one taken back, has no answer for a verdict to carry.</summary>
+    public static InvalidRequestException VerdictDecisionNotAnswered(string id, DecisionStatus status) =>
+        new(
+            "decision_not_answered",
+            $"Decision '{id}' is {SnakeCaseEnumConverter<DecisionStatus>.Format(status)}; only an answered question carries a person's answer into a verdict.");
+
+    /// <summary>
+    /// What a verdict carries as a person's word has to have been given by a person who gave their name; an answer the
+    /// row says anybody else gave is not that, whatever wrote the row.
+    /// </summary>
+    public static InvalidRequestException VerdictDecisionNotHuman(string id) =>
+        new("decision_not_human", $"Decision '{id}' was not answered by a named person; only a person's answer stands as their word in a verdict.");
+
+    /// <summary>
+    /// The verdict records the category the person chose, or it is not their answer. Neither the option nor the category is
+    /// repeated: both are words somebody wrote.
+    /// </summary>
+    public static InvalidRequestException VerdictDecisionOptionDiffers(string id) =>
+        new("decision_option_differs", $"The option chosen in decision '{id}' is not the category this verdict records; record the category the person chose.");
+
+    /// <summary>
     /// A standing approval is a decision made in advance, so it is refused to whoever may not decide: the code a decision's
     /// refusal carries, in the words of what was being done. No role and no run grants one.
     /// </summary>

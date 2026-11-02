@@ -42,7 +42,9 @@
       "confidence": 0.9,
       "reaction": "draft",
       "goal_id": "demo",
-      "goal_kind": "demo"
+      "goal_kind": "demo",
+      "decision_id": null,
+      "answered_by": null
     },
     "reason": "interested by the table; draft toward the demo",
     "contact_id": "cnt_1",

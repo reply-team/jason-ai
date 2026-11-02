@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
@@ -9,6 +10,7 @@ using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
 using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Replies;
 
@@ -27,7 +29,7 @@ public class ReplyRecordTests
 
     /// <summary>What the line carries, and all of it: identifiers, a moment, numbers and words from closed lists, and the category.</summary>
     private static readonly string[] LineFields =
-        ["plugin", "thread", "message_id", "message_at", "contact_id", "category", "confidence", "reaction", "goal_id", "goal_kind"];
+        ["plugin", "thread", "message_id", "message_at", "contact_id", "category", "confidence", "reaction", "goal_id", "goal_kind", "decision_id", "answered_by"];
 
     /// <summary>Each check the request is held to, the field it is refused at and the code it is refused with.</summary>
     public static TheoryData<string, string, string> Refusals() => new()
@@ -52,6 +54,20 @@ public class ReplyRecordTests
         { "goal longer than any id", "goal_id", "unknown" },
         { "goal the campaign does not have", "goal_id", "unknown" },
         { "reason too long", "reason", "too_long" },
+        { "decision blank", "decision_id", "invalid" },
+    };
+
+    /// <summary>Each reason a decision cannot carry a person's answer into a verdict, and the code it is refused with.</summary>
+    public static TheoryData<string, string> DecisionRefusals() => new()
+    {
+        { "a decision nobody raised", "decision_not_found" },
+        { "a decision of another campaign", "decision_not_found" },
+        { "a decision still waiting", "decision_not_answered" },
+        { "a decision cancelled", "decision_not_answered" },
+        { "a role's answer", "decision_not_human" },
+        { "an answer nobody named", "decision_not_human" },
+        { "an answer of another option", "decision_option_differs" },
+        { "an answer that chose no option", "decision_option_differs" },
     };
 
     [Fact]
@@ -164,6 +180,60 @@ public class ReplyRecordTests
         Assert.Null(line["contact_id"]);
         Assert.Null(entry.ContactId);
         Assert.Equal("none", (string?)line["reaction"]);
+        Assert.True(line.ContainsKey("decision_id") && line["decision_id"] is null);
+        Assert.True(line.ContainsKey("answered_by") && line["answered_by"] is null);
+    }
+
+    /// <summary>
+    /// A verdict may carry a person's answer to the question that asked which category a reply is. The runtime checks the
+    /// decision at the call — answered, by a named person, with the option the verdict's category is — and the line then
+    /// names the decision and the person who answered it, which is what a standing approval reads as that person's word.
+    /// </summary>
+    [Fact]
+    public async Task A_verdict_carries_a_persons_answer_through_the_decision_it_names()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var decision = await DecisionAsync(db, seed, "answered");
+
+        var entry = await Service(db).RecordAsync(
+            Request(seed) with { DecisionId = decision.PublicId, Actor = new ActorRef(ActorType.Attempt, seed.Attempt.PublicId) },
+            Ct);
+
+        var line = (JsonObject)entry.New!;
+        Assert.Equal(decision.PublicId, (string?)line["decision_id"]);
+        Assert.Equal("""{"type":"human","id":"operator"}""", line["answered_by"]!.ToJsonString());
+        Assert.Equal(new ActorRef(ActorType.Attempt, seed.Attempt.PublicId), entry.Actor);
+    }
+
+    /// <summary>
+    /// What a verdict carries as a person's word has to be one: a decision of this campaign, answered, by somebody who gave
+    /// their name and was no role, choosing the very category recorded. Each failure has a code of its own, and nothing is
+    /// written. A role's answer is refused here as it is when the role tries to give it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DecisionRefusals))]
+    public async Task Each_decision_that_cannot_carry_a_persons_answer_is_refused_with_its_code(string decision, string code)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var named = decision switch
+        {
+            "a decision nobody raised" => "dec_nobody",
+            "a decision of another campaign" => (await DecisionAsync(db, await SeedAsync(db, attemptId: "att_elsewhere"), "answered")).PublicId,
+            _ => (await DecisionAsync(db, seed, decision)).PublicId,
+        };
+        var written = await db.Journal.CountAsync(Ct);
+
+        var refused = await Assert.ThrowsAsync<InvalidRequestException>(
+            () => Service(db).RecordAsync(Request(seed) with { DecisionId = named }, Ct));
+
+        Assert.Equal(code, refused.Code);
+        Assert.Equal(400, refused.StatusCode);
+        Assert.DoesNotContain("interested", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(written, await db.Journal.CountAsync(Ct));
     }
 
     [Theory]
@@ -408,7 +478,10 @@ public class ReplyRecordTests
         Assert.Equal("invalid_request", refused.Code);
     }
 
-    /// <summary>The exchanges a consumer renders: a verdict recorded, a goal the campaign does not carry, and a confidence out of range.</summary>
+    /// <summary>
+    /// The exchanges a consumer renders: a verdict recorded, one that carries a person's answer to the question about it, a
+    /// goal the campaign does not carry, and a confidence out of range.
+    /// </summary>
     [Fact]
     public async Task The_exchanges_are_recorded()
     {
@@ -435,10 +508,66 @@ public class ReplyRecordTests
         var recorded = await api.RecordAsync<JournalEntryDto>(Operations.ReplyRecord, "recorded", verdict, Ct);
         var unknown = await api.RecordErrorAsync(Operations.ReplyRecord, "unknown-goal", verdict with { goal_id = "purchase" }, HttpStatusCode.BadRequest, Ct);
         var range = await api.RecordErrorAsync(Operations.ReplyRecord, "confidence-out-of-range", verdict with { confidence = 1.5 }, HttpStatusCode.BadRequest, Ct);
+        var question = await AnsweredQuestionAsync(api, campaign.Id);
+        var answered = await api.RecordAsync<JournalEntryDto>(
+            Operations.ReplyRecord,
+            "recorded-with-decision",
+            new
+            {
+                verdict.campaign_id,
+                verdict.plugin_id,
+                verdict.thread_id,
+                verdict.message_id,
+                verdict.message_at,
+                verdict.contact_id,
+                verdict.category,
+                confidence = 1.0,
+                verdict.reaction,
+                verdict.goal_id,
+                decision_id = question,
+                actor = new { type = "role", id = "manager" },
+                reason = "the person chose interested",
+            },
+            Ct);
 
         Assert.Equal(("reply_classified", "demo"), (recorded.Kind, (string?)recorded.New!["goal_kind"]));
         Assert.Equal(["goal_id/unknown"], unknown.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
         Assert.Equal(["confidence/invalid"], range.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
+        Assert.Equal((question, "human", "ada"), ((string?)answered.New!["decision_id"], (string?)answered.New!["answered_by"]!["type"], (string?)answered.New!["answered_by"]!["id"]));
+    }
+
+    /// <summary>The responder's question about the reply, whose options are the category ids, answered by a person: its id.</summary>
+    private static async Task<string> AnsweredQuestionAsync(RuntimeApiFixture api, string campaignId)
+    {
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var campaign = await db.Campaigns.SingleAsync(row => row.PublicId == campaignId, Ct);
+        var item = WorkItemFactory.NewAiRole(campaign, role: "responder", now: Noon);
+        item.Status = WorkItemStatus.Succeeded;
+        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Succeeded, Noon);
+        var decision = new Decision
+        {
+            PublicId = PublicId.New("dec"),
+            Campaign = campaign,
+            WorkItem = item,
+            Attempt = attempt,
+            Question = "Which kind of reply is this?",
+            Options = new JsonArray(
+                new JsonObject { ["label"] = "interested", ["detail"] = null },
+                new JsonObject { ["label"] = "not_now", ["detail"] = null }),
+            Status = DecisionStatus.Answered,
+            RaisedAt = Noon,
+            Answer = "They asked for times.",
+            ChosenOption = "interested",
+            AnsweredAt = Noon,
+            AnsweredByType = ActorType.Human,
+            AnsweredById = "ada",
+        };
+        db.WorkItems.Add(item);
+        db.Attempts.Add(attempt);
+        db.Decisions.Add(decision);
+        await db.SaveChangesAsync(Ct);
+        return decision.PublicId;
     }
 
     private static ReplyRecordRequest Changed(ReplyRecordRequest request, string change) => change switch
@@ -463,6 +592,7 @@ public class ReplyRecordTests
         "goal longer than any id" => request with { GoalId = new string('g', 65) },
         "goal the campaign does not have" => request with { GoalId = "purchase" },
         "reason too long" => request with { Reason = new string('r', 2001) },
+        "decision blank" => request with { DecisionId = "  " },
         _ => throw new ArgumentOutOfRangeException(nameof(change), change, "no such change"),
     };
 
@@ -510,6 +640,61 @@ public class ReplyRecordTests
     }
 
     private static string PublicIdFor(string attemptId) => "cnt_" + attemptId;
+
+    /// <summary>
+    /// The question the responder raised about the reply, whose options are the category ids, as it stands: answered by
+    /// a named person choosing <c>interested</c> unless the case says otherwise.
+    /// </summary>
+    private static async Task<Decision> DecisionAsync(JasonDbContext db, Seed seed, string state)
+    {
+        var decision = new Decision
+        {
+            PublicId = PublicId.New("dec"),
+            CampaignId = seed.Campaign.Id,
+            WorkItemId = seed.Item.Id,
+            AttemptId = seed.Attempt.Id,
+            Question = "Which kind of reply is this?",
+            Options = new JsonArray(
+                new JsonObject { ["label"] = "interested", ["detail"] = null },
+                new JsonObject { ["label"] = "not_now", ["detail"] = null }),
+            Status = DecisionStatus.Answered,
+            RaisedAt = Noon.AddMinutes(-20),
+            Answer = "It is a yes.",
+            ChosenOption = "interested",
+            AnsweredAt = Noon.AddMinutes(-10),
+            AnsweredByType = ActorType.Human,
+            AnsweredById = "operator",
+        };
+
+        switch (state)
+        {
+            case "a decision still waiting":
+                (decision.Status, decision.Answer, decision.ChosenOption, decision.AnsweredAt, decision.AnsweredByType, decision.AnsweredById) =
+                    (DecisionStatus.Pending, null, null, null, null, null);
+                break;
+            case "a decision cancelled":
+                (decision.Status, decision.Answer, decision.ChosenOption, decision.AnsweredAt, decision.AnsweredByType, decision.AnsweredById) =
+                    (DecisionStatus.Cancelled, null, null, null, null, null);
+                break;
+            case "a role's answer":
+                // Never written by the verb, which refuses a role; a row that says so anyway is still not a person's word.
+                (decision.AnsweredByType, decision.AnsweredById) = (ActorType.Role, "manager");
+                break;
+            case "an answer nobody named":
+                decision.AnsweredById = null;
+                break;
+            case "an answer of another option":
+                decision.ChosenOption = "not_now";
+                break;
+            case "an answer that chose no option":
+                decision.ChosenOption = null;
+                break;
+        }
+
+        db.Decisions.Add(decision);
+        await db.SaveChangesAsync(Ct);
+        return decision;
+    }
 
     private sealed record Seed(Campaign Campaign, Contact Contact, WorkItem Item, Attempt Attempt);
 }
