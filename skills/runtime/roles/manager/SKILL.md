@@ -145,10 +145,11 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 Some verdicts leave something to read, not something to do. A `bounce` is a deliverability fact and no refusal: the
-responder files no register entry for it and raises no question per bounce, and leaves a note of its own naming the
-contact by id, the channel's kind and the moment, never the bounce text. The count of them is yours at this review, and
-the business pack's `sending-guardrails` skill says when it is a problem. A `not_now` and an `out_of_office` leave a
-note with the moment the person named and no draft, so read the notes of both at this review:
+responder files no register entry for it and raises no question per bounce, and puts a note naming the contact by id, the
+channel's kind and the moment, never the bounce text, under `bounces` in its role note for the campaign. The count of them
+is yours at this review, from the `reply_classified` lines and that note, and the business pack's `sending-guardrails`
+skill says when it is a problem. A `not_now` and an `out_of_office` leave a note with the moment the person named under
+`returns` in the same role note, and no draft, so read both at this review:
 
 ```
 jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD

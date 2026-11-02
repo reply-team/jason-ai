@@ -424,8 +424,8 @@ public partial class RoleSkillTests
         var skill = Flattened("manager");
 
         Assert.Contains("A `bounce` is a deliverability fact and no refusal: the responder files no register entry for it and raises no question per bounce", skill, StringComparison.Ordinal);
-        Assert.Contains("The count of them is yours at this review, and the business pack's `sending-guardrails` skill says when it is a problem.", skill, StringComparison.Ordinal);
-        Assert.Contains("A `not_now` and an `out_of_office` leave a note with the moment the person named and no draft, so read the notes of both at this review", skill, StringComparison.Ordinal);
+        Assert.Contains("under `bounces` in its role note for the campaign. The count of them is yours at this review, from the `reply_classified` lines and that note, and the business pack's `sending-guardrails` skill says when it is a problem.", skill, StringComparison.Ordinal);
+        Assert.Contains("A `not_now` and an `out_of_office` leave a note with the moment the person named under `returns` in the same role note, and no draft, so read both at this review", skill, StringComparison.Ordinal);
         Assert.Contains("jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", SkillPack.PrintedCommands(SkillPack.Find("manager").File));
         Assert.True(File.Exists(Path.Combine(SkillPack.BusinessRoot(), "sending-guardrails", SkillPack.SkillFile)));
     }
