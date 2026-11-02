@@ -82,12 +82,33 @@ public class LaunchEnvironmentTests
     [InlineData("JASON_ANYTHING")]
     [InlineData("jason_lower")]
     [InlineData("")]
+    [InlineData("   ")]
     public void A_host_cannot_name_one_of_the_runtimes_own_variables_or_any_of_the_prefix_it_keeps(string name)
     {
         var environment = Existing();
 
         Assert.Throws<ArgumentException>(
             () => LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason", new Dictionary<string, string> { [name] = "x" }));
+
+        // Refused before anything is written: not one of the runtime's four, and no search path prefix, is there.
+        Assert.Equal(Existing().OrderBy(pair => pair.Key, StringComparer.Ordinal), environment.OrderBy(pair => pair.Key, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_refused_name_among_good_ones_leaves_the_environment_as_it_was()
+    {
+        var environment = Existing();
+
+        Assert.Throws<ArgumentException>(
+            () => LaunchEnvironment.Apply(
+                environment,
+                DataDir,
+                AttemptId,
+                WorkItemId,
+                "/opt/jason",
+                new Dictionary<string, string> { ["NO_BROWSER"] = "true", ["JASON_SNEAKY"] = "x" }));
+
+        Assert.Equal(Existing().OrderBy(pair => pair.Key, StringComparer.Ordinal), environment.OrderBy(pair => pair.Key, StringComparer.Ordinal));
     }
 
     [Fact]
