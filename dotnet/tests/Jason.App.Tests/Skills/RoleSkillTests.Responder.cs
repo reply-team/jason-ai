@@ -69,6 +69,10 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("fail with a code rather than answer a reply you have not seen", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A run whose `resumption` names your own read reads that read's result there, and never applies these branches to the brief's read again.",
+            skill,
+            StringComparison.Ordinal);
 
         // The read of its own is the runtime's read, the same thread at the same page, under a key; the wait on it names it.
         var printed = SkillPack.PrintedCommands(SkillPack.Find("responder").File);
@@ -90,8 +94,19 @@ public partial class RoleSkillTests
 
         Assert.Equal(0.7, (double)Categories()["question_below"]!);
         Assert.Contains("Where your confidence is below the file's `question_below`", skill, StringComparison.Ordinal);
-        Assert.Contains("record your best guess with its confidence first, then ask the person which category it is", skill, StringComparison.Ordinal);
-        Assert.Contains("write no draft and act on nothing", skill, StringComparison.Ordinal);
+        Assert.Contains("record your best guess with its confidence first, with `--reaction escalate`, since asking is what is done about it, then ask the person which category it is", skill, StringComparison.Ordinal);
+        Assert.Contains("write no draft and act on nothing, with one exception", skill, StringComparison.Ordinal);
+
+        // A probable stop is the one act that does not wait: the register entry is Jason's own and a person lifts it.
+        Assert.Contains(
+            "where your best guess is `opt_out`, put them on the register at once, as below, and leave the provider's `optout.record` and the proposed stop for the answer",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "the question says the entry was made and that an answer naming another category takes it off, and your summary says the entry was made",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("below `question_below` it is `escalate`", skill, StringComparison.Ordinal);
         Assert.Contains("at most ten, as many as a question holds, the most likely first, and `other` always among them", skill, StringComparison.Ordinal);
         Assert.Contains("A guess is never mirrored: the mirror follows a verdict that stands.", skill, StringComparison.Ordinal);
         Assert.Equal(10, Jason.Runtime.Decisions.DecisionLimits.MaxOptions);
@@ -115,7 +130,24 @@ public partial class RoleSkillTests
         var note = Assert.Single(
             SkillPack.PrintedCommands(SkillPack.Find("responder").File),
             line => line.StartsWith("jason rolenote set --role responder --campaign ", StringComparison.Ordinal) && line.Contains("\"bounces\"", StringComparison.Ordinal));
-        Assert.Contains("\"back_at\"", note, StringComparison.Ordinal);
+        Assert.Contains("under `returns`, each with `contact`, `category` and `back_at`", skill, StringComparison.Ordinal);
+        Assert.Contains("under `bounces`, each with `contact`, `channel` and `at`", skill, StringComparison.Ordinal);
+
+        // One shape, the one the manager reads: exactly these keys an entry, and a later moment under returns with its category.
+        var words = ShellWords.Split(note).ToList();
+        var body = JsonNode.Parse(words[words.IndexOf("--note") + 1])!.AsObject();
+        Assert.Equal(["returns", "bounces"], body.Select(member => member.Key));
+        foreach (var entry in body["returns"]!.AsArray())
+        {
+            Assert.Equal(["contact", "category", "back_at"], entry!.AsObject().Select(member => member.Key));
+        }
+
+        foreach (var entry in body["bounces"]!.AsArray())
+        {
+            Assert.Equal(["contact", "channel", "at"], entry!.AsObject().Select(member => member.Key));
+        }
+
+        Assert.Contains(body["returns"]!.AsArray(), entry => (string)entry!["category"]! == "not_now");
     }
 
     /// <summary>
@@ -448,18 +480,17 @@ public partial class RoleSkillTests
     /// never waits on the responder: it answers or parks the draft in the same run. Said without the provider's name.
     /// </summary>
     [Fact]
-    public void The_responder_answers_or_parks_at_once_because_a_follow_up_on_email_can_be_lost()
+    public void The_responder_answers_or_parks_at_once_because_a_follow_up_can_be_lost()
     {
         var skill = Flattened("responder");
 
+        // The principle only: how a given provider holds a follow-up is that provider's to document, not this skill's.
         Assert.Contains(
-            "On email, a contact's second reply that arrives before Jason's first answer is dropped at the provider's ingest and never reaches the inbox; once Jason has answered through `conversation.reply`, the contact's later replies are stored and flow.",
+            "**Act or park at once.** A provider may hold a contact's later replies only once this side has answered, so you either answer or park the draft at once, never leave a classified thread without an action, and the person's approval lag is the window in which a follow-up can be lost.",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "So you either answer or park the draft at once, never leave a classified thread without an action, and the person's approval lag is the window in which a follow-up on email can be lost.",
-            skill,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("ingest", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("On email", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -491,18 +522,38 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("responder");
 
+        // A listing carries no context, so the verdict a draft cites is read item by item.
         Assert.Contains(
-            "Where a `conversation.reply` is open whose `reply_verdict` names a verdict on this message — the same `plugin`, `thread` and `message_id` — the reply has its verdict and its draft: record nothing, draft nothing, and say so in your summary, with the outcome `nothing`.",
+            "A listing carries no context, so read each `conversation.reply` it shows with `jason workitem get` for its `context.reply_verdict`, and match that `jrn_` id to a `reply_classified` line by the line's `plugin`, `thread` and `message_id`.",
+            skill,
+            StringComparison.Ordinal);
+
+        // A verdict already standing is the verdict, whoever recorded it, and the run reacts by its word.
+        Assert.Contains(
+            "A verdict already standing on this message — the latest `reply_classified` line for the same `plugin`, `thread` and `message_id` — is the verdict, whoever recorded it: record nothing, and react as that line's reaction word says.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "- `draft`: where a `conversation.reply` citing a verdict on this message is open or has succeeded, the reply has its draft: draft nothing, and say so in your summary, with the outcome `nothing`. Where none is, write the draft under that line, naming it in `reply_verdict`.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("- `act`: do the act.", skill, StringComparison.Ordinal);
+        Assert.Contains("- `escalate`: ask, unless a question about this thread is still open", skill, StringComparison.Ordinal);
+        Assert.Contains("- `none`: nothing.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing approval exists, and your summary says so.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("`Responder:MaxAttempts` is 1 by default, and the rule holds anyway", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Where a `conversation.reply` is open whose `reply_verdict` names", skill, StringComparison.Ordinal);
 
         var printed = SkillPack.PrintedCommands(SkillPack.Find("responder").File);
         Assert.Contains(printed, line => line.StartsWith("jason journal list --campaign ", StringComparison.Ordinal) && line.Contains("--kind reply_classified", StringComparison.Ordinal));
-        var open = Assert.Single(printed, line => line.StartsWith("jason workitem list --campaign ", StringComparison.Ordinal));
-        foreach (var status in new[] { "created", "awaiting_approval", "scheduled", "processing", "waiting" })
+        Assert.Contains(printed, line => line.StartsWith("jason decision list --campaign cmp_", StringComparison.Ordinal));
+        var work = Assert.Single(printed, line => line.StartsWith("jason workitem list --campaign ", StringComparison.Ordinal));
+        foreach (var status in new[] { "created", "awaiting_approval", "scheduled", "processing", "waiting", "succeeded" })
         {
-            Assert.Contains($"--status {status}", open, StringComparison.Ordinal);
+            Assert.Contains($"--status {status}", work, StringComparison.Ordinal);
         }
     }
 
@@ -531,6 +582,11 @@ public partial class RoleSkillTests
 
         Assert.Contains("- `very_interested` refines `interested`: ", skill, StringComparison.Ordinal);
         Assert.Contains("Always escalate", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "- `assistant_forward` refines `referral`: an assistant says to write to their manager. Escalate; the question names the thread so I can read who they named.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("as they wrote it", skill, StringComparison.Ordinal);
     }
 
     /// <summary>A campaign's goals are what a draft steers to; with none, the default goal is a demo and the verdict names none.</summary>
@@ -561,6 +617,8 @@ public partial class RoleSkillTests
         Assert.Contains("Whether it goes out now or waits for a person is the runtime's to decide, never yours.", skill, StringComparison.Ordinal);
         Assert.Contains("You never set a standing approval.", skill, StringComparison.Ordinal);
         Assert.Contains("say in your summary whether the reply goes out or waits", skill, StringComparison.Ordinal);
+        Assert.Contains("find the one for the category you recorded, and whether it is `in_force`", skill, StringComparison.Ordinal);
+        Assert.NotNull(typeof(Jason.Contracts.Api.StandingApprovalDto).GetProperty("InForce"));
         Assert.Single(
             SkillPack.PrintedCommands(SkillPack.Find("responder").File),
             line => line.StartsWith("jason approval list-standing cmp_", StringComparison.Ordinal));
@@ -582,7 +640,7 @@ public partial class RoleSkillTests
         var skill = Flattened("responder");
 
         Assert.Contains(
-            "The question names the category and why it fits, in the category's own words, and the thread's identifier, so the person can open the thread.",
+            "The question names the category, in the category's own words, and the thread's identifier, so the person can open the thread.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("It quotes nothing, and it retells nothing of the reply beyond what the category says.", skill, StringComparison.Ordinal);
@@ -592,7 +650,15 @@ public partial class RoleSkillTests
             SkillPack.PrintedCommands(SkillPack.Find("responder").File),
             line => line.StartsWith("jason decision raise ", StringComparison.Ordinal));
         var words = ShellWords.Split(raise).ToList();
-        Assert.Contains("thread 501", words[words.IndexOf("--question") + 1], StringComparison.Ordinal);
+        var question = words[words.IndexOf("--question") + 1];
+        Assert.Contains("thread 501", question, StringComparison.Ordinal);
+        Assert.DoesNotContain("and why it fits", skill, StringComparison.Ordinal);
+
+        // The printed question is a referral, in referral's own words and nothing of the reply beyond them.
+        var says = (string)Categories()["categories"]!.AsArray().Single(entry => (string)entry!["id"]! == "referral")!["says"]!;
+        var own = says.TrimEnd('.').Replace(",", string.Empty, StringComparison.Ordinal);
+        Assert.Contains(char.ToLowerInvariant(own[0]) + own[1..], question, StringComparison.Ordinal);
+        Assert.DoesNotContain("colleague", question, StringComparison.Ordinal);
     }
 
     /// <summary>
