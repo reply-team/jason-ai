@@ -185,25 +185,46 @@ public class AgentHostSeamTests
 
     /// <summary>
     /// A host's stderr can carry the person's login or address, and an attempt's error reaches the journal and a
-    /// diagnostic bundle that includes it. So whatever a host makes of its end is a sentence of its own, and none of
-    /// the host's words travels in it.
+    /// diagnostic bundle that includes it. So whatever a host makes of its end is a fixed sentence of its own, and no
+    /// part of the host's words travels in it: two tails that carry the same signal and differ only in whose they are
+    /// get one sentence, and it holds no token of either — no piece where the two differ, and no piece a sentence of
+    /// plain words would not hold, such as <c>Error:</c>, an address or an id. Every exit is tried, since which exit a
+    /// host reads as its signal is the host's.
     /// </summary>
     [Theory]
     [MemberData(nameof(Kinds))]
-    public void What_a_host_says_of_its_end_never_carries_its_own_words(AgentHostKind kind)
+    public void What_a_host_says_of_its_end_is_one_fixed_sentence_and_never_a_part_of_its_words(AgentHostKind kind)
     {
         var host = Registered().Single(candidate => candidate.Kind == kind);
-        const string Said = "Error: not signed in as person@example.test (plan 7f3a9c-made-up); run login to continue";
+        const string One = "Error: not signed in as person@example.test (plan 7f3a9c-made-up); run login to continue";
+        const string Other = "Error: not signed in as someone.else@example.org (plan 0b11e2-made-up); run login to continue";
+        var tokens = Tokens(One, Other);
 
         foreach (var exit in new[] { 0, 1, 2, 41, 127, -1 })
         {
-            if (host.Unavailable(exit, Said) is { } sentence)
+            var first = host.Unavailable(exit, One);
+            Assert.Equal(first, host.Unavailable(exit, Other));
+            if (first is { } sentence)
             {
-                Assert.DoesNotContain("example.test", sentence, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain("7f3a9c", sentence, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain("person@", sentence, StringComparison.OrdinalIgnoreCase);
+                Assert.All(tokens, token => Assert.DoesNotContain(token, sentence, StringComparison.OrdinalIgnoreCase));
             }
         }
+    }
+
+    /// <summary>
+    /// The pieces of two tails a fixed sentence may not hold: each piece where the two differ, and each piece of either
+    /// that is not a plain lowercase word — a capital, a digit, an address, a bracket or a colon in it.
+    /// </summary>
+    private static IReadOnlyList<string> Tokens(string one, string other)
+    {
+        var first = one.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var second = other.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return
+        [
+            .. first.Except(second, StringComparer.Ordinal),
+            .. second.Except(first, StringComparer.Ordinal),
+            .. first.Concat(second).Where(piece => !piece.All(char.IsAsciiLetterLower)).Distinct(StringComparer.Ordinal),
+        ];
     }
 
     [Fact]
