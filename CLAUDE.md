@@ -150,7 +150,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   installation, checked against the key's schema, set and unset by a named person only, and journaled by its size and
   hash, never its value. The client, each project and each campaign have a folder under the harness root, made at the
   first create that needs it, with a marker naming its level and id and the person's memory file, `AGENTS.md`, beside a
-  `CLAUDE.md` that imports it; the runtime writes structure only — never a word of a memory file, never a delete, never
+  one-line import file for every host that reads a file of another name (`CLAUDE.md` for Claude Code); the runtime
+  writes structure only — never a word of a memory file, never a delete, never
   `git` — and moves a campaign's folder by one rename when the campaign changes project, or refuses the move. A path
   is recorded on the entity; a folder is known by its marker, never its name, and a folder the person moves is
   recorded again only by `project.link`, which reads the project's folder and each folder directly in its
