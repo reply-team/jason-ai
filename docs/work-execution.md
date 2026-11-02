@@ -303,7 +303,7 @@ campaign with `campaign_archived`. Each change is a reserved line of the campaig
 or `standing_approval_unset`, keyed by the category; the newest line for a campaign and a category is what stands, a set
 equal to the one in force writes nothing, and any other set replaces it whole, its count starting again.
 `approval.list_standing` answers each category whose newest line is a set, with how many drafts it let go and whether it
-is still in force — an archived campaign's too.
+is still in force — an archived campaign's too, shown not in force.
 
 A draft names the verdict it answers in the reserved context key `reply_verdict`, the verdict line's `jrn_` id.
 `workitem.create` checks it, and `workitem.update` whenever a patch names it or `input`: the work is a

@@ -94,9 +94,9 @@ public sealed record ApprovalListStandingRequest(string? CampaignId, int? Limit 
 
 /// <summary>
 /// One campaign's standing approval for one category, as it stands. <c>released</c> counts the work it has let go since
-/// it was set; <c>in_force</c> is false once it has expired or reached <c>max_releases</c>, and for a category that is not
-/// set, which answers with every other member null. <c>line_id</c> is the chronicle line that set it, which each line of a
-/// release under it names.
+/// it was set; <c>in_force</c> is false once it has expired or reached <c>max_releases</c>, when its campaign is archived,
+/// and for a category that is not set, which answers with every other member null. <c>line_id</c> is the chronicle line
+/// that set it, which each line of a release under it names.
 /// </summary>
 public sealed record StandingApprovalDto(
     string CampaignId,

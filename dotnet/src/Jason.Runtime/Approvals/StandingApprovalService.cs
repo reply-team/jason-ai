@@ -150,7 +150,8 @@ public sealed class StandingApprovalService(JasonDbContext db, JournalWriter jou
             record.ExpiresAt,
             record.MaxReleases,
             released,
-            InForce: !expired && !spent,
+            // An archived campaign's work is over, so nothing it set still stands, though the record of it is listed.
+            InForce: !expired && !spent && campaign.Status != CampaignStatus.Archived,
             new ActorRef(record.Line.ActorType, record.Line.ActorId),
             new DateTimeOffset(DateTime.SpecifyKind(record.Line.Ts, DateTimeKind.Utc)),
             record.Line.PublicId);

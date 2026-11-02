@@ -124,14 +124,17 @@ public class StandingApprovalServiceTests
         Assert.Empty(await db.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.StandingApprovalSet || e.Kind == JournalKinds.StandingApprovalUnset).ToListAsync(Ct));
     }
 
-    /// <summary>An archived campaign's work is over: its standing approvals no longer change, and are still listed.</summary>
+    /// <summary>
+    /// An archived campaign's work is over: its standing approvals no longer change, and are still listed, shown not in
+    /// force.
+    /// </summary>
     [Fact]
-    public async Task Standing_ArchivedCampaign_SetAndUnsetRefused_StillListed()
+    public async Task Standing_ArchivedCampaign_SetAndUnsetRefused_StillListedNotInForce()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
         var campaign = await SeedAsync(db);
-        await Service(db).SetAsync(Set(campaign), Ct);
+        Assert.True((await Service(db).SetAsync(Set(campaign), Ct)).InForce);
         campaign.Status = CampaignStatus.Archived;
         await db.SaveChangesAsync(Ct);
 
@@ -141,7 +144,7 @@ public class StandingApprovalServiceTests
         var listed = await Service(db).ListAsync(new ApprovalListStandingRequest(campaign.PublicId), Ct);
 
         Assert.Equal(("campaign_archived", "campaign_archived"), (set.Code, unset.Code));
-        Assert.Equal(["interested"], listed.Items.Select(item => item.Category));
+        Assert.Equal([("interested", false)], listed.Items.Select(item => (item.Category, item.InForce)));
     }
 
     /// <summary>What a set is held to, each refusal at its field: the category's rule is the verdict's own.</summary>
