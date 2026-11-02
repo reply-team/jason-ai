@@ -168,12 +168,12 @@ public static class ProjectCommands
         var command = new Command(
             "link",
             "Record where a project's folder is now, and its campaigns', by the markers in them. " +
-            "The folder --path names is taken as a folder at a level's path is: with no marker it is adopted, its marker written and a CLAUDE.md and an AGENTS.md only where it has none; " +
+            "The folder --path names is taken as a folder at a level's path is: with no marker it is adopted, its marker written and an import file for each host that reads one and an AGENTS.md only where it has none; " +
             "marked for the project it is relinked; marked for anything else it is refused, with nothing written. " +
             "The project is the one project-id names, or else the one the marker at --path names; with neither, it is the folder of the nearest project marker above the folder the command runs in, linked by that marker. " +
             "With a project alone, its own folder is made under the root where it has none. " +
             "It reads the project's folder and each folder directly in its campaigns/, never deeper; a campaign found there that is another project's is reported and left as it is, and a campaign with no folder gets one unless it is archived. " +
-            "It never moves, copies or deletes a folder or a file, never reads or writes a word of an AGENTS.md, and never writes over a CLAUDE.md.");
+            "It never moves, copies or deletes a folder or a file, never reads or writes a word of an AGENTS.md, and never writes over an import file.");
         var id = new Argument<string?>("project-id")
         {
             Description = "The project, as prj_.... Leave it out to link the folder --path names by its marker, or, inside a project's folder, that folder.",

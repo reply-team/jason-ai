@@ -32,7 +32,7 @@ public sealed partial class FoldersDocTests
                 System.Text.Encoding.UTF8.GetString(new HarnessMarker(HarnessMarker.Root, null).Bytes()),
                 System.Text.Encoding.UTF8.GetString(new HarnessMarker(HarnessMarker.Project, "prj_…").Bytes()),
                 System.Text.Encoding.UTF8.GetString(new HarnessMarker(HarnessMarker.Campaign, "cmp_…").Bytes()),
-                $"`{HarnessFolders.ClaudeImport}`",
+                .. Jason.Contracts.Hosts.AgentHosts.ImportFiles.Select(file => $"`{file.ImportLine}`"),
             ],
             shown => Assert.True(page.Contains(shown, StringComparison.Ordinal), $"docs/projects.md does not show {shown}."));
     }
