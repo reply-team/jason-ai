@@ -794,5 +794,6 @@ public partial class InteractiveSkillTests
         var printed = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File);
         Assert.Contains("jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", printed);
         Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied", printed);
+        Assert.Equal("approval_standing_applied", Jason.Runtime.Journal.JournalKinds.ApprovalStandingApplied);
     }
 }

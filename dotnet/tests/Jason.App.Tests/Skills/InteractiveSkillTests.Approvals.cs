@@ -183,9 +183,11 @@ public partial class InteractiveSkillTests
             StringComparison.Ordinal);
         Assert.Contains("**Where to see what went out without them.**", skill, StringComparison.Ordinal);
         Assert.Contains("is an `approved` approval whose reason is `standing_approval`", skill, StringComparison.Ordinal);
+        Assert.Equal("standing_approval", Jason.Runtime.Approvals.ApprovalGate.StandingApproval);
 
         var printed = SkillPack.PrintedCommands(SkillPack.Find("approvals-and-questions").File);
         Assert.Contains("jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status approved", printed);
         Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied", printed);
+        Assert.Equal("approval_standing_applied", Jason.Runtime.Journal.JournalKinds.ApprovalStandingApplied);
     }
 }

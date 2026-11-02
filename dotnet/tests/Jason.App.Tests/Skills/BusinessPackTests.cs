@@ -325,6 +325,8 @@ public class BusinessPackTests
         Assert.Contains("- **A standing approval nobody gave, or one on the wrong category**", skill, StringComparison.Ordinal);
 
         Assert.Contains("jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", PrintedBy("approval-boundaries"));
+        Assert.Equal("approval_standing_applied", Jason.Runtime.Journal.JournalKinds.ApprovalStandingApplied);
+        Assert.Equal("standing_approval", Jason.Runtime.Approvals.ApprovalGate.StandingApproval);
     }
 
     private static IEnumerable<string> Files() =>
