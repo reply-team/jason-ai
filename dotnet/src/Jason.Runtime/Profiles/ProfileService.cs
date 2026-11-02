@@ -87,7 +87,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             CreatedAt = now,
         };
 
-        RefuseDeniedGrant(revision);
+        RefuseWhatTheHostRefuses(revision);
 
         var profile = new ExecutionProfile
         {
@@ -202,7 +202,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             CreatedAt = now,
         };
 
-        RefuseDeniedGrant(next, request.Tools.IsSet, request.Deny.IsSet);
+        RefuseWhatTheHostRefuses(next, request.Tools.IsSet, request.Deny.IsSet, request.Args.IsSet);
 
         db.ExecutionProfileRevisions.Add(next);
         profile.CurrentRevision = next.Number;
@@ -243,11 +243,12 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         exception.InnerException is SqliteException { SqliteErrorCode: 19 };
 
     /// <summary>
-    /// The grant held against the deny of the revision as it would be launched: a patch naming one of the two meets the
-    /// other as the profile already has it, and the refusal says which list was the profile's. Checked on the whole
-    /// revision, so the host it names is the one whose words count.
+    /// What the revision's host says of its tools, its deny and its arguments, and the grant held against the deny, on the
+    /// revision as it would be launched: a patch naming one list meets the others as the profile already has them, and the
+    /// refusal says which list was the profile's. Checked on the whole revision, so the host it names is the one whose
+    /// words count — a patch that moves a profile to another host is held to that host's.
     /// </summary>
-    private void RefuseDeniedGrant(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true)
+    private void RefuseWhatTheHostRefuses(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true, bool argsNamed = true)
     {
         if (hosts.LastOrDefault(candidate => candidate.Kind == revision.Host) is not { } host)
         {
@@ -255,8 +256,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         }
 
         var errors = new ValidationErrors();
-        ProfileValidation.ValidateGrantBesideDeny(
-            revision.Tools, revision.Deny, host.ToolRule, errors, toolsNamed, denyNamed);
+        ProfileValidation.ValidateForHost(revision, host, errors, toolsNamed, denyNamed, argsNamed);
         errors.ThrowIfAny();
     }
 
