@@ -52,9 +52,9 @@ internal sealed partial class NamesMet
     }
 
     /// <summary>
-    /// The names an answer the status checks read holds: the roster's roles, the registry's plugins and every plugin a
-    /// route names. The answer was buffered by the latch every request passes, so reading it here leaves it to be read
-    /// again by whoever asked.
+    /// The names an answer the status checks read holds: the roster's roles, the registry's plugins and the plugin each
+    /// route names, and nothing else of the routes. The answer was buffered by the latch every request passes, so reading
+    /// it here leaves it to be read again by whoever asked.
     /// </summary>
     public async Task ReadAsync(string path, HttpResponseMessage response, CancellationToken cancellationToken)
     {
@@ -75,6 +75,12 @@ internal sealed partial class NamesMet
         else if (path.EndsWith(Operations.Route(Operations.PluginList), StringComparison.Ordinal) && answer?["plugins"] is JsonArray plugins)
         {
             AddAll(AliasKind.Plugin, plugins.OfType<JsonObject>().Select(plugin => Text(plugin["id"])).OfType<string>());
+        }
+        else if (path.EndsWith(Operations.Route(Operations.RouteList), StringComparison.Ordinal))
+        {
+            // Not walked: a route's binding holds whatever keys the plugin's binding names, and the rest of the answer is
+            // ids, so of the whole answer only the plugin each route names is a name.
+            AddAll(AliasKind.Plugin, Routes(answer).Select(route => Text(route["plugin_id"])).OfType<string>());
         }
         else if (answer is not null)
         {
@@ -143,6 +149,27 @@ internal sealed partial class NamesMet
         }
     }
 
+    /// <summary>Every route of a <c>route.list</c> answer: the global default and operations, then each campaign's.</summary>
+    private static IEnumerable<JsonObject> Routes(JsonNode? answer)
+    {
+        JsonNode?[] sets = [answer?["global"], .. answer?["campaigns"] is JsonArray campaigns ? campaigns : []];
+        foreach (var set in sets.OfType<JsonObject>())
+        {
+            if (set["default"] is JsonObject fallback)
+            {
+                yield return fallback;
+            }
+
+            if (set["operations"] is JsonObject operations)
+            {
+                foreach (var route in operations.Select(operation => operation.Value).OfType<JsonObject>())
+                {
+                    yield return route;
+                }
+            }
+        }
+    }
+
     /// <summary>The public repository's own address, with or without <c>.git</c> and a trailing slash, in any case.</summary>
     private static bool IsPublicRepository(string source)
     {
@@ -157,8 +184,8 @@ internal sealed partial class NamesMet
 
     /// <summary>
     /// Every <c>plugin_id</c>, every <c>role</c> and, in a log event, every plugin the runtime's line names. A route's
-    /// binding is not read: its keys are whatever the plugin's binding names, and a key called <c>role</c> there names no
-    /// role.
+    /// binding, wherever a section carries one, is not read: its keys are whatever the plugin's binding names, and a key
+    /// called <c>role</c> there names no role.
     /// </summary>
     private void Walk(JsonNode? node)
     {
@@ -166,7 +193,7 @@ internal sealed partial class NamesMet
         {
             case JsonObject members:
                 if (Text(members[LogTemplateKey]) is { } template && LoggedNames.PluginTemplates.TryGetValue(template, out var property)
-                    && Text(members[property]) is { } named && !LoggedNames.NotAPlugin.Contains(named))
+                    && Text(members[property]) is { } named && LoggedNames.NamesAPlugin(template, named))
                 {
                     Add(AliasKind.Plugin, named);
                 }

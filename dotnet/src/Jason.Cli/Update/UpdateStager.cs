@@ -108,6 +108,7 @@ public sealed class UpdateStager(HttpClient client)
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            UpdateFeed.SayWhoAsks(request);
             using var response = await client
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token)
                 .ConfigureAwait(false);

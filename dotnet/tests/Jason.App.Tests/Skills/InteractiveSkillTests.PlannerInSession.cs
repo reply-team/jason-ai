@@ -29,7 +29,7 @@ public partial class InteractiveSkillTests
     {
         var description = SkillFrontMatter.Read(SkillPack.Find("planner-in-session").File).Top.GetValueOrDefault("description") ?? string.Empty;
         Assert.Equal(
-            "Use when a person who has Jason installed brings a brief or a campaign objective and asks to plan it, in any words - help me plan this, or a pasted paragraph - and wants the planner's judgement in the conversation: what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed. This is the skill that plans in a session with Jason, and it uses `campaign-planning` as its method.",
+            "Use when a person who has Jason installed brings a brief or the goals of a campaign and asks to plan it, in any words - help me plan this, or a pasted paragraph - and wants the planner's judgement in the conversation: what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed. This is the skill that plans in a session with Jason, and it uses `campaign-planning` as its method.",
             description);
     }
 
@@ -513,4 +513,24 @@ public partial class InteractiveSkillTests
 
     [GeneratedRegex(@"[a-z0-9']+")]
     private static partial Regex ProseWord();
+
+    /// <summary>
+    /// In a person's session the goals are asked as one question once the audience and the channels are settled, with
+    /// the default said aloud where the person has not said, and they go into the campaign with the brief when it is
+    /// made, not afterwards. Without the last the campaign is made with no goals and the person is never told.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_asks_what_the_campaign_is_for_and_writes_it_with_the_campaign()
+    {
+        var skill = Flattened("planner-in-session");
+
+        Assert.Contains("**Ask what the campaign is for.**", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Ask it as one question, in your own words, once the audience and the channels are settled, and say the default aloud where they have not said: a demo.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("and its goals go in as the `goals` key of that context.", skill, StringComparison.Ordinal);
+        Assert.Contains("`managed-campaign-work` prints how, including how a change of mind on an existing campaign replaces the list whole.", skill, StringComparison.Ordinal);
+        Assert.Contains("is made with the brief as its context before anyone is added to it", skill, StringComparison.Ordinal);
+    }
 }

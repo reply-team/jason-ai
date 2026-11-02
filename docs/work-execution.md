@@ -193,15 +193,18 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in eight short steps: **expire**, **enforce**, **events**,
-**sync**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a reader
-that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
+Each tick, the dispatcher runs one scan in nine short steps: **expire**, **enforce**, **events**,
+**sync**, **respond**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a
+reader that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
-([docs/inbound-sync.md](inbound-sync.md) is the contract). Summon is
-the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
+([docs/inbound-sync.md](inbound-sync.md) is the contract). Respond reads those lines, whichever writer said them, and
+for a thread the campaign holds by its own pin queues a `conversation.get` of the thread and a responder created
+waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Summon
+is the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
 for long enough, gets a check-in put on the queue ([docs/campaign-manager.md](campaign-manager.md) is the
-contract). Both run before the claim, so a read or a check-in created this tick can be claimed this tick,
-and sync runs before summon, so a reply it says wakes the manager in the same scan. Resume releases the
+contract). All three run before the claim, so a read, a responder or a check-in created this tick can be claimed this
+tick, and sync runs before respond and summon, so a reply it says wakes the responder and the manager in the same scan;
+respond runs before summon, so the responder is queued ahead of the check-in the same line wakes. Resume releases the
 waiting work whose wait is over: every item it named has ended — `succeeded`, `failed`, `cancelled` or
 `expired`; an item retried and back in `created`, or itself waiting, has not — or any one has, or its
 deadline has come. It reads statuses and the clock, never an event, so items that ended before the wait
@@ -283,10 +286,61 @@ attempt that asked it and whose answer wakes the review that carries the work on
   rows are moved in one transaction, each guarded by the status it was read at.
 
 Journal: `workitem_awaiting_approval`, `approval_requested`, `approval_approved`, `approval_rejected`,
-`approval_superseded`, `approval_cancelled`. Those lines carry identifiers only — the approval, the
+`approval_superseded`, `approval_cancelled`, `approval_standing_applied`. Those lines carry identifiers only — the approval, the
 work item, the campaign, the operation, the subject hash, the actor and the reason. The subject and the
 preview live on the row and in what `approval.get` answers, which is where somebody entitled to read
 them reads them.
+
+### Standing approvals
+
+A person may decide in advance for one kind of reply. `approval.set_standing` names a campaign and a verdict's
+category — the word a `reply.record` verdict carries, compared exactly — and says that a drafted `conversation.reply`
+answering such a verdict goes without being asked each time; `operations` may name `message.send` too, and is
+`conversation.reply` alone when absent. `expires_at` and `max_releases` (1 to 10000) are optional limits, and there is
+none by default. Only a named person sets one or takes it back (`approval.unset_standing`), any named person: a role or
+an attempt is refused with `approval_not_human`, a person who gave no name with `actor_required`, and an archived
+campaign with `campaign_archived`. Each change is a reserved line of the campaign's chronicle, `standing_approval_set`
+or `standing_approval_unset`, keyed by the category; the newest line for a campaign and a category is what stands, a set
+equal to the one in force writes nothing, and any other set replaces it whole, its count starting again.
+`approval.list_standing` answers each category whose newest line is a set, with how many drafts it let go and whether it
+is still in force — an archived campaign's too, shown not in force.
+
+A draft names the verdict it answers in the reserved context key `reply_verdict`, the verdict line's `jrn_` id.
+`workitem.create` checks it, and `workitem.update` whenever a patch names it or `input`: the work is a
+`conversation.reply` or a `message.send`, and the line is a `reply_classified` verdict of the same campaign about the
+thread the reply answers in — or, for a message, about the same person. Anything else is refused at
+`context.reply_verdict`.
+
+**It is asked once, at the claim, where nothing has been decided about the work yet.** Work that would park and has no
+approval row of its own is covered when, in this order: its operation is one a standing approval can cover; the
+verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
+`draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
+(its `inbound_reply`), or by a person who gave their name, or carries a person's answer — a verdict whose
+`reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
+covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
+whoever drafted it; the draft's context was not changed after it was created; the
+verdict's plugin is the one the route resolved, and its thread the one the reply answers in (for a message, its person
+the work's person); the newest standing-approval line for the campaign and the verdict's category is a set; it names
+the operation; it has not expired; and fewer drafts were let go under it since it was set than its ceiling. A category
+is the verdict's word exactly: `interested` covers neither `very_interested` nor `Interested`. The decision behind
+`answered_by` was checked when the line was written — answered, by a named person, choosing the verdict's category,
+raised by the attempt that recorded a verdict on the same reply — and the claim trusts the line for that; it reads no
+decision again.
+
+Covered, the work runs in the same claim. Its `apr_` row is written `approved`, with the reason `standing_approval`,
+decided by the person who set the standing approval; an `approval_standing_applied` line by the dispatcher, keyed by the
+set line's id, names the row, the operation, the subject hash, the standing approval, the verdict and the category.
+Nobody is asked, so nothing is notified. Not covered, the work parks as any reply does, and its preview carries
+`standing_approval`: the verdict, its category, and the first condition that failed — `not_coverable`,
+`verdict_unknown`, `verdict_superseded`, `reaction_not_draft`, `verdict_not_authentic`, `not_the_verdicts_work`,
+`edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
+`ceiling_reached`. Work that names no verdict is not asked about.
+
+**A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
+even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
+the standing approval is not asked again. A question already put to a person stays theirs, whatever is set later.
+Whatever the pre-flight refuses, the do-not-contact register among it, is refused before a standing approval is asked,
+and work released under one is still held by an open block of its account.
 
 ## Leases and heartbeats
 
@@ -601,7 +655,10 @@ no rule, and every file of a role run by its own entry command, which is compose
 the same, with no rule to read it by — under a profile its read is refused — and the envelope never knows better
 than what the provenance recorded.
 
-`resumption` is null on every run that does not follow a wait. A run that does — the item's last run
+`resumption` is null on every run that does not follow a wait, and on the first run of an item created already
+waiting — a responder the respond step wrote waiting on the read of its thread ([inbound sync](inbound-sync.md) §1) —
+since no attempt waited: that run reads what it waited on by the identifiers its context carries, with
+`jason workitem get`. A run that does follow a wait — the item's last run
 ended with `workitem.wait`, and the item's latest wait was released rather than closed some other way — is told about that wait here, composed **at the
 claim** from the rows the wait left: `previous_attempt_id` is the attempt that waited, `resumption_number`
 counts the item's released waits up to this one, `waited_since` is when the wait opened, and
@@ -1010,6 +1067,11 @@ mistyped one.
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
+| `Responder:OnReply` | `true` | — | whether a reply about a campaign's own thread wakes its responder; off, the respond step still moves past the lines and creates nothing |
+| `Responder:Priority` | `50` | -1000..1000 | the priority of the thread's read and the responder; the inbound read's `conversation.list` items sit ten above it |
+| `Responder:TimeoutSeconds` | `900` | 30..86400 | how long one responder run may take |
+| `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
+| `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 
 An item may override the three per-kind numbers for itself: `timeout_seconds` (30..86400),
 `heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10). A `provider_op` item has one rule
@@ -1044,14 +1106,15 @@ waits for a person rather than being handed out again.
 
 ## Not here yet
 
-Work the runtime creates itself is no longer on this list. The dispatcher creates a manager's check-in,
-and it names its cause explicitly: lineage comes from the attempt the causing line names, or from the
+Work the runtime creates itself is no longer on this list. The dispatcher creates a reply's read and responder as
+root work ([docs/inbound-sync.md](inbound-sync.md) §1), and a manager's check-in,
+which names its cause explicitly: lineage comes from the attempt the causing line names, or from the
 item where it names one and no attempt. Root work is what is left — a review the cadence asked for, and
 a review caused by a line that names neither, which a report about a campaign rather than about a work
 item is. [docs/campaign-manager.md](campaign-manager.md) §7 has the three cases.
 
-- **Approvals beyond one decision about one item.** There are no standing approvals, no bulk
-  decisions, no expiry windows and no anomaly rules. A parked approval and a raised question are notified
+- **Approvals beyond one decision about one item and a standing approval for a kind of reply.** There are no bulk
+  decisions and no anomaly rules. A parked approval and a raised question are notified
   as a pointer ([notifications.md](notifications.md)); pull is still the floor: a person finds out what is
   waiting, and decides, by asking (`jason approval list`). What exists is the gate itself, below.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.

@@ -1,0 +1,38 @@
+{
+  "operation": "approval.set_standing",
+  "case": "set",
+  "request": {
+    "campaign_id": "cmp_1",
+    "category": "interested",
+    "operations": [
+      "conversation.reply",
+      "message.send"
+    ],
+    "expires_at": "2026-12-01T00:00:00Z",
+    "max_releases": 20,
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "the interested may hear back at once"
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "category": "interested",
+    "operations": [
+      "conversation.reply",
+      "message.send"
+    ],
+    "expires_at": "2026-12-01T00:00:00.000Z",
+    "max_releases": 20,
+    "released": 0,
+    "in_force": true,
+    "set_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "set_at": "2026-09-14T12:00:00.000Z",
+    "line_id": "jrn_1"
+  }
+}

@@ -714,7 +714,9 @@ roles; AI oversight supplements deterministic enforcement rather than replacing 
 
 Runtime owns approval state and validates whether a proposed operation has the required
 authorization. The eventual model must make approval scope mechanically enforceable; exact
-action/payload binding, duration, and standing-approval semantics are deferred.
+action/payload binding and duration are deferred. A person's standing approval for one campaign and one category
+of verdict lets the draft that verdict's own work made go without asking again (`docs/work-execution.md`,
+"Standing approvals").
 
 AI roles may escalate when they cannot safely or confidently proceed — through broader or
 more senior AI roles and ultimately to the human user. Escalation preserves structured
@@ -1642,11 +1644,14 @@ condition that requires semantic action.
 **Boundary:** the trigger is deterministic; the opportunity strategy is semantic.
 
 **In this build:** the synchronization is a scan step that reads each linked active campaign's conversations on a
-cadence and writes one `inbound_reply_observed` line for each thread that moved; that kind is a default manager
-trigger, so the line releases a manager check-in, which queues a read of the thread and the responder's work after
-it, and decides at its next review (`docs/inbound-sync.md`). A plugin that reads its accounts' events says the same
-line from the provider's own record, and a bounce, a reply the provider detected or an accepted invitation as
-`provider_event_observed`, which releases a check-in the same way (`docs/events.md`).
+cadence and writes one `inbound_reply_observed` line for each thread that moved. A respond step after it reads that
+line and, for a thread the campaign holds by its own pin, queues a read of the thread (`conversation.get`) and the
+responder's work created waiting on it — one open responder a thread, a further move recorded on it — so the reply is
+answered without waiting for a review. The kind is also a default manager trigger, so the same line releases a manager
+check-in, queued after the responder, which decides at its review what the campaign as a whole calls for
+(`docs/inbound-sync.md`). A plugin that reads its accounts' events says the same line from the provider's own record,
+and a bounce, a reply the provider detected or an accepted invitation as `provider_event_observed`, which releases a
+check-in the same way and wakes no responder (`docs/events.md`).
 
 ### 17.6 Scheduled campaign-management review
 
@@ -1867,7 +1872,7 @@ are visible — none of them should be read as settled or implemented.
 | DEF-WORK-002 | Dependencies, readiness, claims, leases, heartbeats, concurrency, fairness, starvation. | Runtime prevents duplicate managed execution and survives restarts. |
 | DEF-WORK-003 | Machine sleep, missed schedules, recurrence, cancellation, checkpoints, drain, forced termination. | Runtime is long-lived and updates through controlled drain/stop. |
 | DEF-RECOVERY-001 | Retry counts, backoff, ambiguity recovery, orphan handling, continuation checkpoints. | No blind replay of side effects; canonical failure classes and provenance required. |
-| DEF-APPROVAL-001 | Exact approval classes, standing approvals, expiry, payload binding, anomaly stop rules. | Runtime mechanically enforces deterministic approval boundaries for managed effects. |
+| DEF-APPROVAL-001 | Exact approval classes, payload binding, anomaly stop rules. | Runtime mechanically enforces deterministic approval boundaries for managed effects. |
 | DEF-ROLE-001 | Final built-in role catalog, operational metadata, permissions, coordinated skill versions. | Runtime supports roles operationally; semantic behavior remains in skills. |
 | DEF-HOST-001 | Initially supported agent hosts and concrete host-integration interfaces. | Jason owns no AI client/credentials; background work uses user-installed unattended-capable hosts. |
 | DEF-HOST-002 | Agent invocation, context hydration, progress, structured results, session continuation, cancellation, resume. | Runtime validates outcomes; agent sessions never access SQLite directly. |

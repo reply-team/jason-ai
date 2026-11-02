@@ -14,16 +14,16 @@ namespace Jason.Runtime.Tests.Documentation;
 public partial class InboundSyncDocTests
 {
     [Fact]
-    public void The_page_and_the_work_execution_contract_name_the_scan_s_eight_steps_in_the_order_the_scan_runs_them()
+    public void The_page_and_the_work_execution_contract_name_the_scan_s_nine_steps_in_the_order_the_scan_runs_them()
     {
-        const string steps = "eight short steps: **expire**, **enforce**, **events**, **sync**, **summon**, **resume**, **claim**, **notify**";
+        const string steps = "nine short steps: **expire**, **enforce**, **events**, **sync**, **respond**, **summon**, **resume**, **claim**, **notify**";
 
         Assert.Contains(steps, Flattened(Read("inbound-sync.md")), StringComparison.Ordinal);
         Assert.Contains(steps, Flattened(Read("work-execution.md")), StringComparison.Ordinal);
 
         // And the order the page states is the order the scan runs them in.
         var scan = File.ReadAllText(Path.Combine(SourceDirectory(), "Dispatch", "ScanRunner.cs"));
-        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
+        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<Responder,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
             .Select(step => scan.IndexOf(step, StringComparison.Ordinal))
             .ToList();
         Assert.All(order, at => Assert.True(at >= 0));
@@ -43,6 +43,23 @@ public partial class InboundSyncDocTests
             StringComparison.Ordinal);
         Assert.Contains(
             $"`Inbound:LookbackSeconds` | `{defaults.LookbackSeconds}` | 0..{InboundOptions.MaximumLookbackSeconds} |",
+            page,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The respond step's settings, as the contract publishes them, are the ones its validator enforces.</summary>
+    [Fact]
+    public void The_responder_settings_the_contract_publishes_are_the_ones_the_runtime_enforces()
+    {
+        var page = Flattened(Read("work-execution.md"));
+        var defaults = new ResponderOptions();
+
+        Assert.Contains($"`Responder:OnReply` | `{(defaults.OnReply ? "true" : "false")}` |", page, StringComparison.Ordinal);
+        Assert.Contains($"`Responder:Priority` | `{defaults.Priority}` | -1000..1000 |", page, StringComparison.Ordinal);
+        Assert.Contains($"`Responder:TimeoutSeconds` | `{defaults.TimeoutSeconds}` | 30..86400 |", page, StringComparison.Ordinal);
+        Assert.Contains($"`Responder:MaxAttempts` | `{defaults.MaxAttempts}` | 1..10 |", page, StringComparison.Ordinal);
+        Assert.Contains(
+            $"`Responder:MaxAgeSeconds` | `{defaults.MaxAgeSeconds}` | {ResponderOptions.MinimumMaxAgeSeconds}..{ResponderOptions.MaximumMaxAgeSeconds} |",
             page,
             StringComparison.Ordinal);
     }
@@ -160,6 +177,28 @@ public partial class InboundSyncDocTests
             $"`Inbound:LookbackSeconds` ({defaults.LookbackSeconds.ToString(CultureInfo.InvariantCulture)} by default)",
             page,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A read lists what the provider stores, so the page says, as a principle, that a provider may hold a contact's
+    /// later replies until this side has answered and that a reply is therefore acted on or parked when it is read, and sends a
+    /// reader to the plugin's own statement of the fact. It names no provider and describes none. The link names a
+    /// heading the plugin's README holds.
+    /// </summary>
+    [Fact]
+    public void The_page_says_a_provider_may_hold_later_replies_until_this_side_answers_and_points_at_the_plugin()
+    {
+        var page = Flattened(Read("inbound-sync.md"));
+        var readme = File.ReadAllText(Path.Combine(RepositoryRoot(), "plugins", "reply", "README.md"));
+
+        Assert.Contains("A read lists only what the provider stores. A provider may hold a contact's later replies until this side has answered the thread, so a reply that arrives before any answer may leave no line; a reply is therefore acted on or parked when it is read, not left for a second one.", page, StringComparison.Ordinal);
+        var start = page.IndexOf("A read lists only what the provider stores.", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The paragraph on what a provider stores is missing.");
+        var end = page.IndexOf("#what-it-cannot-do).", start, StringComparison.Ordinal);
+        Assert.True(end > start, "The paragraph on what a provider stores no longer ends at the plugin's README.");
+        Assert.DoesNotContain("Reply", page[start..end], StringComparison.Ordinal);
+        Assert.Contains("](../plugins/reply/README.md#what-it-cannot-do)", page, StringComparison.Ordinal);
+        Assert.Contains("\n## What it cannot do\n", readme.ReplaceLineEndings("\n"), StringComparison.Ordinal);
     }
 
     private static string Read(string page) => File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", page));

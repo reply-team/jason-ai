@@ -18,7 +18,7 @@ public static class SettingsVocabulary
     public static IReadOnlySet<string> Names { get; } = new[]
     {
         // The sections.
-        "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Harness",
+        "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Harness",
 
         // Runtime and Logging.
         "Port",
@@ -58,6 +58,9 @@ public static class SettingsVocabulary
 
         // Inbound; its switch is Enabled, above.
         "SyncSeconds", "LookbackSeconds",
+
+        // Responder; Priority, TimeoutSeconds and MaxAttempts are above.
+        "OnReply", "MaxAgeSeconds",
 
         // Harness.
         "Root",

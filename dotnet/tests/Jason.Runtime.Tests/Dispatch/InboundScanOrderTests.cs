@@ -9,8 +9,9 @@ using static Jason.Runtime.Tests.Dispatch.InboundSyncHarvestTests;
 namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
-/// Where the inbound read sits in a scan: after the lease enforcer and before the summon, so a reply it says wakes the
-/// manager in the same scan, and before the claim, so a read it starts is claimed in the same scan.
+/// Where the inbound read sits in a scan: after the lease enforcer and before the respond step and the summon, so a reply
+/// it says wakes the responder and the manager in the same scan, the responder first, and before the claim, so a read it
+/// starts is claimed in the same scan.
 /// </summary>
 public class InboundScanOrderTests
 {
@@ -35,6 +36,26 @@ public class InboundScanOrderTests
         var checkIn = await db.WorkItems.SingleAsync(item => item.Role == ManagerCheckIn.Role, Ct);
         Assert.Contains(line.PublicId, checkIn.Context.ToJsonString(), StringComparison.Ordinal);
         Assert.Contains(JournalKinds.InboundReplyObserved, checkIn.Context.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>The respond step runs between the read and the summon: the responder is queued before the check-in.</summary>
+    [Fact]
+    public async Task A_reply_said_by_a_scan_wakes_the_responder_before_the_manager_in_that_scan()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var read = await StartedAsync(harness);
+        Load(harness, TestPlugins.Loaded("reader", operations: ["conversation.list", Responder.ReadOperation]));
+        RouteAll(harness, "reader");
+        await SucceedAsync(harness, read, Page(Thread("th-1", Noon.AddMinutes(-5))));
+        harness.Status.State = DispatcherState.Draining;
+
+        var report = await harness.Runner.ScanOnceAsync(Ct);
+
+        Assert.Equal((1, 1, 1), (report.Observed, report.Responded, report.Summoned));
+        await using var db = harness.Open();
+        var responder = await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct);
+        var checkIn = await db.WorkItems.SingleAsync(item => item.Role == ManagerCheckIn.Role, Ct);
+        Assert.True(responder.Id < checkIn.Id);
     }
 
     [Fact]

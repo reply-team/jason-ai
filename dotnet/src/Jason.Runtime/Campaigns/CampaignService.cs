@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Decisions;
@@ -23,8 +24,16 @@ namespace Jason.Runtime.Campaigns;
 /// there is no state the journal cannot account for. A campaign made here gets its folder in its project's folder in
 /// the same request, and a campaign moved to another project takes its folder with it, or is not moved at all.
 /// </summary>
-public sealed class CampaignService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller, HarnessFolders folders)
+public sealed class CampaignService(
+    JasonDbContext db,
+    JournalWriter journal,
+    TimeProvider clock,
+    WorkItemCanceller canceller,
+    HarnessFolders folders,
+    PatternTiming? timing = null)
 {
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     public const int MaxNameLength = 200;
 
     public const int MaxReasonLength = 2000;
@@ -43,6 +52,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             errors.Add("project_id", "invalid", "project_id must name a project; leave it out for the default project.");
         }
 
+        ReservedContextKeys.Validate(request.Context, _timing, errors);
         errors.ThrowIfAny();
 
         var name = request.Name!.Trim();
@@ -376,6 +386,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             }
         }
 
+        ReservedContextKeys.Validate(request.Set, request.Unset, _timing, errors);
         errors.ThrowIfAny();
 
         var campaign = await LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);

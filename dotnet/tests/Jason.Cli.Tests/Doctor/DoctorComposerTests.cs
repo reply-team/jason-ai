@@ -93,7 +93,7 @@ public sealed class DoctorComposerTests
         Assert.Empty(header["warnings"]!.AsArray());
         Assert.Empty(bundle.Warnings);
         Assert.Contains("the capability token", Strings(header["never_carried"]));
-        Assert.Contains("journal values unless --include-journal: what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link recorded, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed", Strings(header["never_carried"]));
+        Assert.Contains("journal values unless --include-journal: what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link recorded, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed", Strings(header["never_carried"]));
         Assert.Equal(bundle.NeverCarried, Strings(header["never_carried"]));
 
         // The listing is the sections after the header, each with the size it has in the file.
@@ -2620,6 +2620,29 @@ public sealed class DoctorComposerTests
         Assert.Equal("toast", Text(slice[templates.Count]!["Channel"]));
     }
 
+    /// <summary>The lines that name a plugin under a property of their own, but for the line about a notification channel.</summary>
+    public static TheoryData<string> LinesOtherThanAChannels() =>
+        [.. LoggedNames.PluginTemplates.Keys.Where(template => template != "Notification channel {Channel} failed ({Code}, {Class})").Order(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// <c>toast</c> names no plugin only on the line about a notification channel, the one line whose property can be the
+    /// runtime's own channel: on any other line that names a plugin the same word is a plugin's id, and travels as its
+    /// alias.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LinesOtherThanAChannels))]
+    public async Task The_runtime_s_own_channel_is_left_as_it_is_only_on_the_line_about_a_channel(string template)
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.LogsDirectory);
+        var property = LoggedNames.PluginTemplates[template];
+        Write(dir.Paths.LogsDirectory, "runtime-20261004.jsonl", Event(At(0), template, "Warning", (property, "toast")));
+
+        var bundle = await ComposeAsync(dir, Running(dir));
+
+        Assert.Matches("^<plugin-[0-9]+>$", Text(Section(bundle, "logs")["slice"]![0]![property]));
+    }
+
     /// <summary>
     /// A bundle is most wanted when the runtime does not answer, and then the plugins directory is the only place that
     /// says which packages are there: a package named only in the settings — a notification plugin's key, and the
@@ -2726,22 +2749,25 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
-    /// A route's binding is the account's, and its keys are whatever the plugin's binding names: a key called <c>role</c>
-    /// or <c>plugin_id</c> in it is no role and no plugin, so its value is never taken for a name to write as an alias —
-    /// which would turn a word of the bundle's own, such as a check's state, into one.
+    /// Of the routes the runtime answers, only the plugin each route names is read for a name. A route's binding is the
+    /// account's, and its keys are whatever the plugin's binding names: a key called <c>role</c> or <c>plugin_id</c> in it
+    /// is no role and no plugin, so its value is never taken for a name to write as an alias, which would turn a word of
+    /// the bundle's own, such as a check's state, into one. The plugin a route names is the person's, here one that only
+    /// the routes name, and the route check that quotes it writes its alias.
     /// </summary>
     [Fact]
-    public async Task A_binding_s_keys_are_never_read_for_names()
+    public async Task A_route_s_plugin_is_an_alias_and_its_binding_s_keys_are_never_read_for_names()
     {
         using var dir = new TempPaths();
+        var binding = new JsonObject { ["role"] = "ok", ["plugin_id"] = "ok" };
         var routes = new JsonObject
         {
             ["routing_snapshot_id"] = "rts_01JDOCTOR",
             ["plugin_snapshot_id"] = "snp_01JDOCTOR",
             ["global"] = new JsonObject
             {
-                ["default"] = new JsonObject { ["plugin_id"] = ShippedPlugins.Ids[0], ["binding"] = new JsonObject { ["role"] = "ok", ["plugin_id"] = "ok" }, ["binding_identity"] = "sha256:ab" },
-                ["operations"] = new JsonObject(),
+                ["default"] = new JsonObject { ["plugin_id"] = "sentinelquokka", ["binding"] = binding, ["binding_identity"] = "sha256:ab" },
+                ["operations"] = new JsonObject { ["campaign.get"] = new JsonObject { ["plugin_id"] = ShippedPlugins.Ids[0], ["binding"] = binding.DeepClone(), ["binding_identity"] = "sha256:ab" } },
             },
             ["campaigns"] = new JsonArray(),
         };
@@ -2750,8 +2776,46 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, runtime);
 
+        var checks = Section(bundle, "status")["checks"]!.AsArray();
+        Assert.Matches("^Routed: default <plugin-[0-9]+>[.]$", Text(checks.Single(check => Text(check!["name"]) == "route")!["fact"]));
+        Assert.Contains(checks, check => Text(check!["state"]) == "ok");
+        AssertAbsent(bundle, "sentinelquokka", "<role-1>");
+    }
+
+    /// <summary>
+    /// Of the routes the runtime answers, nothing but a route's own <c>plugin_id</c> is read for a name: a <c>role</c> or a
+    /// <c>plugin_id</c> anywhere else in the answer, beside a section's routes or on a campaign's entry, names nothing the
+    /// bundle writes as an alias, so a word of the bundle's own, such as a check's state, travels as it is.
+    /// </summary>
+    [Theory]
+    [InlineData("global", "role")]
+    [InlineData("global", "plugin_id")]
+    [InlineData("campaign", "role")]
+    [InlineData("campaign", "plugin_id")]
+    public async Task Nothing_of_the_routes_but_a_route_s_plugin_is_read_for_a_name(string where, string key)
+    {
+        using var dir = new TempPaths();
+        var global = new JsonObject
+        {
+            ["default"] = new JsonObject { ["plugin_id"] = ShippedPlugins.Ids[0], ["binding"] = new JsonObject(), ["binding_identity"] = "sha256:ab" },
+            ["operations"] = new JsonObject(),
+        };
+        var campaign = new JsonObject { ["campaign_id"] = "cmp_01JDOCTOR", ["default"] = null, ["operations"] = new JsonObject() };
+        (where == "global" ? global : campaign)[key] = "ok";
+        var routes = new JsonObject
+        {
+            ["routing_snapshot_id"] = "rts_01JDOCTOR",
+            ["plugin_snapshot_id"] = "snp_01JDOCTOR",
+            ["global"] = global,
+            ["campaigns"] = new JsonArray(campaign),
+        };
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) => operation == Operations.RouteList ? Respond(HttpStatusCode.OK, routes.ToJsonString()) : null;
+
+        var bundle = await ComposeAsync(dir, runtime);
+
         Assert.Contains(Section(bundle, "status")["checks"]!.AsArray(), check => Text(check!["state"]) == "ok");
-        Assert.DoesNotContain("<role-1>", bundle.Serialize(), StringComparison.Ordinal);
+        AssertAbsent(bundle, "<role-1>");
     }
 
     /// <summary>

@@ -1,0 +1,62 @@
+{
+  "operation": "reply.record",
+  "case": "recorded-with-decision",
+  "request": {
+    "campaign_id": "cmp_1",
+    "plugin_id": "mailbox",
+    "thread_id": "thr-1042",
+    "message_id": "msg-77",
+    "message_at": "2026-09-14T11:30:00.250Z",
+    "contact_id": "cnt_1",
+    "category": "interested",
+    "confidence": 1,
+    "reaction": "draft",
+    "goal_id": "demo",
+    "decision_id": "dec_1",
+    "actor": {
+      "type": "attempt",
+      "id": "att_1"
+    },
+    "reason": "the person chose interested"
+  },
+  "status": 200,
+  "response": {
+    "id": "jrn_2",
+    "ts": "2026-09-14T12:00:00.000Z",
+    "actor": {
+      "type": "attempt",
+      "id": "att_1"
+    },
+    "kind": "reply_classified",
+    "campaign_id": "cmp_1",
+    "work_item_id": "wi_1",
+    "attempt_id": "att_1",
+    "key": "sha256:recorded-2",
+    "old": null,
+    "new": {
+      "plugin": "mailbox",
+      "thread": "thr-1042",
+      "message_id": "msg-77",
+      "message_at": "2026-09-14T11:30:00.250Z",
+      "contact_id": "cnt_1",
+      "category": "interested",
+      "confidence": 1,
+      "reaction": "draft",
+      "goal_id": "demo",
+      "goal_kind": "demo",
+      "decision_id": "dec_1",
+      "answered_by": {
+        "type": "human",
+        "id": "ada"
+      }
+    },
+    "reason": "the person chose interested",
+    "contact_id": "cnt_1",
+    "campaign_name": null,
+    "contact_name": null,
+    "work_item_kind": null,
+    "work_item_role": null,
+    "work_item_operation": null,
+    "actor_role": null
+  }
+}
