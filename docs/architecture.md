@@ -714,7 +714,9 @@ roles; AI oversight supplements deterministic enforcement rather than replacing 
 
 Runtime owns approval state and validates whether a proposed operation has the required
 authorization. The eventual model must make approval scope mechanically enforceable; exact
-action/payload binding, duration, and standing-approval semantics are deferred.
+action/payload binding and duration are deferred. A person's standing approval for one campaign and one category
+of verdict lets the draft that verdict's own work made go without asking again (`docs/work-execution.md`,
+"Standing approvals").
 
 AI roles may escalate when they cannot safely or confidently proceed — through broader or
 more senior AI roles and ultimately to the human user. Escalation preserves structured
@@ -1867,7 +1869,7 @@ are visible — none of them should be read as settled or implemented.
 | DEF-WORK-002 | Dependencies, readiness, claims, leases, heartbeats, concurrency, fairness, starvation. | Runtime prevents duplicate managed execution and survives restarts. |
 | DEF-WORK-003 | Machine sleep, missed schedules, recurrence, cancellation, checkpoints, drain, forced termination. | Runtime is long-lived and updates through controlled drain/stop. |
 | DEF-RECOVERY-001 | Retry counts, backoff, ambiguity recovery, orphan handling, continuation checkpoints. | No blind replay of side effects; canonical failure classes and provenance required. |
-| DEF-APPROVAL-001 | Exact approval classes, standing approvals, expiry, payload binding, anomaly stop rules. | Runtime mechanically enforces deterministic approval boundaries for managed effects. |
+| DEF-APPROVAL-001 | Exact approval classes, payload binding, anomaly stop rules. | Runtime mechanically enforces deterministic approval boundaries for managed effects. |
 | DEF-ROLE-001 | Final built-in role catalog, operational metadata, permissions, coordinated skill versions. | Runtime supports roles operationally; semantic behavior remains in skills. |
 | DEF-HOST-001 | Initially supported agent hosts and concrete host-integration interfaces. | Jason owns no AI client/credentials; background work uses user-installed unattended-capable hosts. |
 | DEF-HOST-002 | Agent invocation, context hydration, progress, structured results, session continuation, cancellation, resume. | Runtime validates outcomes; agent sessions never access SQLite directly. |
