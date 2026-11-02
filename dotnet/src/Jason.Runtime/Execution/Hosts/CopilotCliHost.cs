@@ -146,12 +146,12 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
         // for both shell tools; read each memory file the launch names; use the tools the person granted.
         var word = ProgramResolver.CliCommandFor(revision.CliCommand);
         var (reads, unreadable) = ReadRules(memoryFiles);
-        string[] allow = [$"shell({word}:*)", .. reads, .. revision.Tools.Select(ToolRule)];
+        string[] allow = [$"shell({word}:*)", .. reads, .. revision.Tools.Select(ToolRule).OfType<string>()];
 
         // What it may not: the profile's own words as written, then each tool of the vocabulary not granted, then every
         // write. A deny wins over an allow in the host, even over an allow-everything a profile's arguments carried, so
         // the last one costs nothing and holds where the tool set alone might not.
-        string[] composed = [.. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule)];
+        string[] composed = [.. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule).OfType<string>()];
         string[] deny = [.. revision.Deny.Concat(composed).Append("write").Distinct(StringComparer.Ordinal)];
 
         return new HostLaunch(
@@ -177,16 +177,18 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
             ],
             session,
             unreadable,
-            composed);
+            composed,
+            []);
     }
 
     /// <summary>
     /// Nothing: every rule travels on the command line, and the role's skill is placed by the work directory where the
     /// host reads skills. No file of the host's configuration is written, here or in the person's home.
     /// </summary>
-    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> deny)
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
+        ArgumentNullException.ThrowIfNull(allow);
         ArgumentNullException.ThrowIfNull(deny);
     }
 
@@ -199,15 +201,36 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
         exitCode != 0 && !string.IsNullOrEmpty(stderrTail) && LoginCommand.IsMatch(stderrTail) ? NotSignedIn : null;
 
     /// <summary>
-    /// The host's permission word for a tool, which allows and denies it alike: <c>url</c> for a fetch of a page. The word
-    /// for a search is the one the host's own examples name, there being no search tool in its documented tool table.
+    /// The host's permission word for a tool, which allows and denies it alike: <c>url</c> for a fetch of a page. Null for a
+    /// search, since there is no search tool in the host's documented tool table: a grant of it is refused where a profile
+    /// is written, and a deny of it holds anyway.
     /// </summary>
-    public string ToolRule(AgentTool tool) => tool switch
+    public string? ToolRule(AgentTool tool) => tool switch
     {
-        AgentTool.WebSearch => "web_search",
+        AgentTool.WebSearch => null,
         AgentTool.WebFetch => "url",
         _ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "A tool outside the vocabulary has no rule."),
     };
+
+    /// <summary>
+    /// A deny word is one rule, a kind and an argument in parentheses as the person wrote them, and travels in a
+    /// comma-separated list; a word holding a comma is two rules at the host, and a blank word is none, so neither is
+    /// written as it stands.
+    /// </summary>
+    public string? DenyProblem(string word) =>
+        string.IsNullOrWhiteSpace(word)
+            ? "an empty word is not a rule."
+            : word.Contains(',', StringComparison.Ordinal) ? "the host's list is comma-separated, so a word holding a comma is not one rule; give each rule as its own entry." : null;
+
+    /// <summary>
+    /// The reserved flags are matched as a whole argument up to an equals sign, which a short option glued to its value
+    /// slips past: the host reads <c>-pfoo</c> as the print option with a prompt. An argument of one dash and more than one
+    /// letter is therefore refused, and a long option, a value, or a short option alone is not.
+    /// </summary>
+    public string? ArgsProblem(IReadOnlyList<string> args) =>
+        args.FirstOrDefault(arg => arg.Length > 2 && arg[0] == '-' && char.IsAsciiLetter(arg[1])) is { } glued
+            ? $"'{glued}' glues a short option to its value, which the host reads as the option it starts with; write it as two arguments or as a long option."
+            : null;
 
     /// <summary>
     /// One rule for each memory file the launch names, in the order of the levels, and one only for a file named twice;

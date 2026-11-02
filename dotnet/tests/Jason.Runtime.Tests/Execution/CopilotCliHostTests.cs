@@ -123,10 +123,13 @@ public class CopilotCliHostTests
             revision.Tools.Add(AgentTool.WebSearch);
         }
 
-        var tools = Tools(new CopilotCliHost().Compose(revision, ["copilot"], NoFiles));
+        var launch = new CopilotCliHost().Compose(revision, ["copilot"], NoFiles);
+        var tools = Tools(launch);
 
         Assert.Equal(fetch, tools.Contains("web_fetch"));
         Assert.DoesNotContain("web_search", tools);
+        Assert.DoesNotContain("web_search", Allow(launch));
+        Assert.DoesNotContain("web_search", Denied(launch));
     }
 
     /// <summary>
@@ -240,8 +243,8 @@ public class CopilotCliHostTests
 
         var launch = new CopilotCliHost().Compose(revision, ["copilot"], NoFiles);
 
-        Assert.Equal(["shell(git push)", "write", "web_search", "url"], Denied(launch));
-        Assert.Equal(["web_search", "url"], launch.Deny);
+        Assert.Equal(["shell(git push)", "write", "url"], Denied(launch));
+        Assert.Equal(["url"], launch.Deny);
     }
 
     [Fact]
@@ -255,7 +258,7 @@ public class CopilotCliHostTests
         Assert.Equal($"shell({ProgramResolver.DefaultCliCommand}:*)", Allow(launch)[0]);
         Assert.Equal("url", Allow(launch)[^1]);
         Assert.DoesNotContain("url", Denied(launch));
-        Assert.Equal(["web_search"], launch.Deny);
+        Assert.Empty(launch.Deny);
         Assert.Contains("write", Denied(launch));
     }
 
@@ -335,7 +338,7 @@ public class CopilotCliHostTests
         var host = new CopilotCliHost();
 
         Assert.Equal("url", host.ToolRule(AgentTool.WebFetch));
-        Assert.Equal("web_search", host.ToolRule(AgentTool.WebSearch));
+        Assert.Null(host.ToolRule(AgentTool.WebSearch));
     }
 
     [Fact]
@@ -345,7 +348,7 @@ public class CopilotCliHostTests
         Directory.CreateDirectory(workDir);
         try
         {
-            new CopilotCliHost().WriteWorkDirectory(workDir, ["url", "web_search"]);
+            new CopilotCliHost().WriteWorkDirectory(workDir, [], ["url"]);
 
             Assert.Empty(Directory.GetFileSystemEntries(workDir));
         }
@@ -390,6 +393,67 @@ public class CopilotCliHostTests
     public void The_command_is_found_whatever_its_case_and_the_ends_of_its_words_are_one_space_or_more(string tail)
     {
         Assert.Equal(Fixed, new CopilotCliHost().Unavailable(1, tail));
+    }
+
+    /// <summary>
+    /// The host has no search tool in its documented tool table, so a search has no rule: a grant of it is refused where a
+    /// profile is written, and a deny of it is the person's word, kept, since it holds anyway. The fetch has one.
+    /// </summary>
+    [Fact]
+    public void A_search_has_no_rule_on_this_host_and_a_fetch_has_one_and_no_grant_is_unmakeable()
+    {
+        IAgentHost host = new CopilotCliHost();
+
+        Assert.Null(host.ToolRule(AgentTool.WebSearch));
+        Assert.NotNull(host.ToolRule(AgentTool.WebFetch));
+        Assert.All(Enum.GetValues<AgentTool>(), tool => Assert.Null(host.GrantProblem(tool)));
+    }
+
+    /// <summary>
+    /// The deny list is comma-separated and a rule is a kind and an argument in parentheses, so a word holding a comma is
+    /// not one rule and a blank is none: refused where the profile is written, naming the host, never split at a launch.
+    /// Every other word is written as the person wrote it.
+    /// </summary>
+    [Theory]
+    [InlineData("shell(git push)", false)]
+    [InlineData("write", false)]
+    [InlineData("url(example.test)", false)]
+    [InlineData("web_search", false)]
+    [InlineData("shell(git push),write", true)]
+    [InlineData("a, b", true)]
+    [InlineData("   ", true)]
+    public void A_deny_word_is_one_rule_or_it_is_refused(string word, bool refused)
+    {
+        Assert.Equal(refused, new CopilotCliHost().DenyProblem(word) is not null);
+    }
+
+    /// <summary>
+    /// The reserved flags are matched by the whole of an argument up to an equals sign, which a short option glued to its
+    /// value slips past: <c>-pfoo</c> is the print option with a prompt, and the host's parser reads it so. An argument of
+    /// one dash and more than one letter is refused as a whole; a long option and a value are not.
+    /// </summary>
+    [Theory]
+    [InlineData("-pfoo", true)]
+    [InlineData("-ihello", true)]
+    [InlineData("-Cfolder", true)]
+    [InlineData("-p", false)]
+    [InlineData("--model", false)]
+    [InlineData("--effort=high", false)]
+    [InlineData("high", false)]
+    [InlineData("-1", false)]
+    public void A_short_option_glued_to_its_value_is_refused_as_an_argument(string arg, bool refused)
+    {
+        Assert.Equal(refused, new CopilotCliHost().ArgsProblem(["--model", "made-up-model", arg]) is not null);
+    }
+
+    [Fact]
+    public void A_fresh_session_is_given_and_nothing_is_allowed_through_the_work_directory()
+    {
+        IAgentHost host = new CopilotCliHost();
+
+        Assert.True(host.TakesSessionId);
+        Assert.Empty(host.Compose(Revision(), ["copilot"], NoFiles).Allow);
+        Assert.Empty(host.Compose(Revision(), ["copilot"], new MemoryFileLocations(@"C:\Users\Marta\Jason\AGENTS.md", null, null)).Allow);
     }
 
     private static List<string> Tools(HostLaunch launch) => Value(launch, "--available-tools");
