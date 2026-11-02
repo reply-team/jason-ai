@@ -1,0 +1,10 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "two goals under one id, which a verdict could not tell apart",
+  "value": [
+    { "id": "demo", "kind": "demo", "title": "A demo with the operations lead", "reached_when": "a demo is on their calendar", "order": 1 },
+    { "id": "demo", "kind": "meeting", "title": "A call with the founder", "reached_when": "a call is booked", "order": 2 }
+  ],
+  "expect": { "invalid": [{ "pointer": "/1/id", "reason": "unique_items" }] }
+}

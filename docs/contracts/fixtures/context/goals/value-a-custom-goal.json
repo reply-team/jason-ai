@@ -1,0 +1,9 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "a goal of a kind the list does not name, said in the person's words",
+  "value": [
+    { "id": "partner_intro", "kind": "custom", "title": "An introduction to their channel partner", "reached_when": "they name a partner contact and agree we may write to them", "order": 1 }
+  ],
+  "expect": "valid"
+}

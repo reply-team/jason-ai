@@ -153,6 +153,14 @@ public static partial class JournalKinds
     public const string ProviderEventObserved = "provider_event_observed";
 
     /// <summary>
+    /// A role's verdict on one reply, recorded by <c>reply.record</c>: the plugin, thread and message that name the reply,
+    /// its moment, the person where one is named, the category as a word the skills own, the confidence, the reaction
+    /// decided and the goal it steers to by id and kind. Never a word of the reply, a subject or a name. Written by that
+    /// operation only, and not a default manager trigger: the verdict is itself what a reader of a reply produces.
+    /// </summary>
+    public const string ReplyClassified = "reply_classified";
+
+    /// <summary>
     /// Any send a read finds gone, once, whether it went inside the send's own call or later: keyed by the work item that
     /// made it, with the plugin, the provider's reference, the channel, the moment it went and the message's identifier in
     /// the thread, and the read that saw it. Never a subject, a body or a name. Said once per send, which the database
@@ -275,6 +283,7 @@ public static partial class JournalKinds
         NotificationSent,
         InboundReplyObserved,
         ProviderEventObserved,
+        ReplyClassified,
         MessageSentObserved,
         EventsRead,
         EventsGapObserved,

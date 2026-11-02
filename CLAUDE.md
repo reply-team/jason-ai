@@ -189,7 +189,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   recorded, campaign and work-item
   contexts as they changed, result formats, the addresses and numbers put on or taken off the
   do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered
-  with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report
+  with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies: their categories, reactions and goals, the effect, tool and operation a report
   names, the failure text and receipts notification channels reported, entries people and agents wrote
   themselves, the names actors gave, and the reasons they typed — and it prints a warning; the runtime's
   own report (`system_info`) travels projected, withholding channel detail, presence detail outside the

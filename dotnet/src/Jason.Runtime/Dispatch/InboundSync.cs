@@ -478,6 +478,14 @@ public sealed class InboundSync(
     internal static string ObservationKey(string pluginId, string thread, string moment) =>
         CanonicalJson.Hash(new JsonObject { ["plugin"] = pluginId, ["thread"] = thread, ["moment"] = moment });
 
+    /// <summary>
+    /// The key a verdict on a reply is said under: the reply's identity within the campaign — the plugin, the thread and
+    /// the message — hashed, never the bare message id, which is the provider's and which two plugins may share. Each
+    /// verdict is a line of its own; readers find one by its payload, as they find a thread's move.
+    /// </summary>
+    internal static string VerdictKey(string pluginId, string thread, string message) =>
+        CanonicalJson.Hash(new JsonObject { ["plugin"] = pluginId, ["thread"] = thread, ["message"] = message });
+
     /// <summary>A moment as every timestamp the runtime writes: ISO-8601 UTC to the millisecond.</summary>
     internal static string Instant(DateTimeOffset moment) =>
         JsonSerializer.SerializeToNode(moment, JasonJson.Options)!.GetValue<string>();

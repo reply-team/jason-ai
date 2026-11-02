@@ -1,0 +1,9 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "a kind outside the list, where custom is the kind for anything else",
+  "value": [
+    { "id": "webinar", "kind": "webinar", "title": "A seat at the spring webinar", "reached_when": "they have registered", "order": 1 }
+  ],
+  "expect": { "invalid": [{ "pointer": "/0/kind", "reason": "enum" }] }
+}
