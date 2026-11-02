@@ -193,15 +193,18 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in eight short steps: **expire**, **enforce**, **events**,
-**sync**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a reader
-that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
+Each tick, the dispatcher runs one scan in nine short steps: **expire**, **enforce**, **events**,
+**sync**, **respond**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a
+reader that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
-([docs/inbound-sync.md](inbound-sync.md) is the contract). Summon is
-the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
+([docs/inbound-sync.md](inbound-sync.md) is the contract). Respond reads those lines, whichever writer said them, and
+for a thread the campaign holds by its own pin queues a `conversation.get` of the thread and a responder created
+waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Summon
+is the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
 for long enough, gets a check-in put on the queue ([docs/campaign-manager.md](campaign-manager.md) is the
-contract). Both run before the claim, so a read or a check-in created this tick can be claimed this tick,
-and sync runs before summon, so a reply it says wakes the manager in the same scan. Resume releases the
+contract). All three run before the claim, so a read, a responder or a check-in created this tick can be claimed this
+tick, and sync runs before respond and summon, so a reply it says wakes the responder and the manager in the same scan;
+respond runs before summon, so the responder is queued ahead of the check-in the same line wakes. Resume releases the
 waiting work whose wait is over: every item it named has ended — `succeeded`, `failed`, `cancelled` or
 `expired`; an item retried and back in `created`, or itself waiting, has not — or any one has, or its
 deadline has come. It reads statuses and the clock, never an event, so items that ended before the wait
@@ -1010,6 +1013,11 @@ mistyped one.
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
+| `Responder:OnReply` | `true` | — | whether a reply about a campaign's own thread wakes its responder; off, the respond step still moves past the lines and creates nothing |
+| `Responder:Priority` | `50` | -1000..1000 | the priority of the thread's read and the responder; the inbound read's `conversation.list` items sit ten above it |
+| `Responder:TimeoutSeconds` | `900` | 30..86400 | how long one responder run may take |
+| `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
+| `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 
 An item may override the three per-kind numbers for itself: `timeout_seconds` (30..86400),
 `heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10). A `provider_op` item has one rule
@@ -1044,8 +1052,9 @@ waits for a person rather than being handed out again.
 
 ## Not here yet
 
-Work the runtime creates itself is no longer on this list. The dispatcher creates a manager's check-in,
-and it names its cause explicitly: lineage comes from the attempt the causing line names, or from the
+Work the runtime creates itself is no longer on this list. The dispatcher creates a reply's read and responder as
+root work ([docs/inbound-sync.md](inbound-sync.md) §1), and a manager's check-in,
+which names its cause explicitly: lineage comes from the attempt the causing line names, or from the
 item where it names one and no attempt. Root work is what is left — a review the cadence asked for, and
 a review caused by a line that names neither, which a report about a campaign rather than about a work
 item is. [docs/campaign-manager.md](campaign-manager.md) §7 has the three cases.
