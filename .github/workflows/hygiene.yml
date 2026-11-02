@@ -56,7 +56,8 @@ jobs:
           $found = [Collections.Generic.List[string]]::new()
           function Read-Text([string] $where, [string] $text) {
             foreach ($name in $patterns.Keys) {
-              if ([regex]::IsMatch($text, $patterns[$name])) { $found.Add("${where}: $name") }
+              $finding = "${where}: $name"
+              if ([regex]::IsMatch($text, $patterns[$name]) -and -not $found.Contains($finding)) { $found.Add($finding) }
             }
           }
 
@@ -127,8 +128,13 @@ jobs:
             }
           }
 
-          # A name is read publicly like a line: each name the change gives a file, added or by a rename.
-          foreach ($name in (Get-Changed 'AR')) { Read-Text "the file name $name" $name }
+          # A name is read publicly like a line: each name the change gives a file, added or by a rename, whole and
+          # then each folder and the file's own name on their own, as the tree's guard reads a path: a pattern that
+          # never matches after a slash in a line, as the private repository's name does not, still names a folder or
+          # a file called by it. Each finding is named once.
+          foreach ($name in (Get-Changed 'AR')) {
+            foreach ($text in @($name) + $name.Split('/')) { Read-Text "the file name $name" $text }
+          }
 
           if ($found.Count -gt 0) {
             $found | ForEach-Object { Write-Host "::error::$_" }

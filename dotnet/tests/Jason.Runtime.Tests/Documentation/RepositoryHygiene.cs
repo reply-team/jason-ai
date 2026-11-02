@@ -44,8 +44,16 @@ internal static partial class RepositoryHygiene
                 : [])),
     ];
 
-    /// <summary>Every pattern's matches in a file's path, each at line 0, a finding about the file as a whole.</summary>
-    public static IEnumerable<HygieneFinding> Name(string file) => Read(file, file).Select(finding => finding with { Line = 0 });
+    /// <summary>
+    /// Every pattern's matches in a file's path, each at line 0, a finding about the file as a whole, and each once. The
+    /// path is read whole and then each folder and the file's own name on their own: a pattern that never matches after a
+    /// slash in a line, as the private repository's name does not, still names a folder or a file called by it.
+    /// </summary>
+    public static IEnumerable<HygieneFinding> Name(string file) =>
+        new[] { file }.Concat(file.Split('/'))
+            .SelectMany(text => Read(file, text))
+            .Select(finding => finding with { Line = 0 })
+            .Distinct();
 
     /// <summary>Every pattern's matches in one text, in the order of the text.</summary>
     public static List<HygieneFinding> Read(string file, string text)

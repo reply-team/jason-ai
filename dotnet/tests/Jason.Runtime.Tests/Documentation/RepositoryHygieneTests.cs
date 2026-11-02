@@ -93,11 +93,14 @@ public sealed class RepositoryHygieneTests : IDisposable
 
     /// <summary>
     /// A file's name is read publicly like its text, so a pointer in a path is named by its kind, at line 0, whatever the
-    /// file holds: these files hold bytes that are not text, and their names are read all the same.
+    /// file holds: these files hold bytes that are not text, and their names are read all the same. Each folder and the
+    /// file's own name are read on their own as well, so a name that is a pointer on its own is one in any folder.
     /// </summary>
     [Theory]
     [InlineData("docs/fix-" + "REPLY" + "-12345.md", "a tracker key", "REPLY" + "-12345")]
     [InlineData("jason-" + "internal/readme.md", "the private repository by name", "jason-" + "internal")]
+    [InlineData("docs/jason-" + "internal/readme.md", "the private repository by name", "jason-" + "internal")]
+    [InlineData("docs/notes/jason-" + "internal.md", "the private repository by name", "jason-" + "internal")]
     [InlineData("example." + "atlassian" + ".net.txt", "an Atlassian address", "atlassian" + ".net")]
     public void A_pointer_in_a_file_name_is_named(string path, string kind, string matched)
     {
