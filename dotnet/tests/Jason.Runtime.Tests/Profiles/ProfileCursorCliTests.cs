@@ -148,6 +148,9 @@ public class ProfileCursorCliTests
 
     [Theory]
     [InlineData("agent.cmd")]
+    [InlineData(".\\agent.cmd")]
+    [InlineData("./agent.cmd")]
+    [InlineData("sub/agent.cmd")]
     [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\agent.cmd.")]
     [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\claude.cmd")]
     [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\agent.ps1")]

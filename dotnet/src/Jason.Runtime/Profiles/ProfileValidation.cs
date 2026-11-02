@@ -213,13 +213,14 @@ internal static partial class ProfileValidation
 
     /// <summary>
     /// Whether a script is the launcher the profile's own host is installed as, named by its full path: only the host
-    /// knows which file names those are, and a bare name is never one, since a bare name is looked up on the search path.
+    /// knows which file names those are, and neither a bare name, which is looked up on the search path, nor a relative
+    /// path, which would be read against the runtime's own working directory, is one.
     /// </summary>
     private static bool NamesTheHostsLauncher(string program, IAgentHost? host)
     {
         var path = program.Trim();
         return host is not null
-            && path.IndexOfAny(['/', '\\']) >= 0
+            && Path.IsPathFullyQualified(path)
             && host.NamesItsLauncher(Path.GetFileName(path));
     }
 

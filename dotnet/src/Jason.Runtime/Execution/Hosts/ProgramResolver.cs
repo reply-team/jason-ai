@@ -68,7 +68,9 @@ public sealed class ProgramResolver(ISearchPath searchPath)
 
             if (ProgramLookup.IsShellScript(path))
             {
-                return LayoutOf(host, path);
+                // Only a full path names a launcher: a relative one would be read against whatever directory the runtime
+                // happens to run in.
+                return Path.IsPathFullyQualified(program.Trim()) ? LayoutOf(host, path) : null;
             }
 
             return Runnable(program) ? [path] : null;

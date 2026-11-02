@@ -228,6 +228,17 @@ public class ProgramResolverTests : IDisposable
     }
 
     [Fact]
+    public void A_launcher_script_named_by_a_relative_path_is_no_program_because_only_a_full_path_names_it()
+    {
+        var root = CursorInstall();
+        var relative = Path.GetRelativePath(Environment.CurrentDirectory, Path.Combine(root, "agent.cmd"));
+        Assert.SkipWhen(Path.IsPathFullyQualified(relative), "The install and the working directory share no root to be relative to.");
+        Assert.Contains(Path.DirectorySeparatorChar, relative);
+
+        Assert.Null(new ProgramResolver(Search(string.Empty)).Resolve(relative, new CursorCliHost(windows: true)));
+    }
+
+    [Fact]
     public void A_path_to_a_program_is_answered_the_same_whichever_host_is_asked()
     {
         var program = Executable("host");
