@@ -583,14 +583,14 @@ lives in the runtime's store at all — is in the role-notes section of
 harness root, of the campaign's project and of the campaign ([projects.md](projects.md) says where they
 are kept) — and never their words, for the reason `role_memory` is an address. The host reads them by
 path; the runtime never reads one. **The rules let a launched role read exactly the files `memory_files`
-names, and nothing else outside its work directory**: a profile on the `claude_code` host is composed with
-one read rule per path that is not null, naming that file and never its folder
-([execution-profiles.md](execution-profiles.md) §7 gives the form, and the paths that get no rule because the
-host would read them as a pattern or split them at a parenthesis; the envelope still names such a path, and the
-role's read of it is refused). Which paths are given follows one rule: a path is given when Jason
-knows the folder is its own — the recorded `folder_path` for a project and a campaign, the root marker
-for the root, which no record holds; no existence check on a recorded path, a stale one is the host's to
-find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
+names, and nothing else outside its work directory**: each host holds this rule in its own form
+([execution-profiles.md](execution-profiles.md) §12 and the host's own section). On the `claude_code` host a
+profile is composed with one read rule per path that is not null, naming that file and never its folder (§7 there
+gives the form, and the paths that get no rule because the host would read them as a pattern or split them at a
+parenthesis; the envelope still names such a path, and the role's read of it is refused). Which paths are given
+follows one rule: a path is given when Jason knows the folder is its own — the recorded `folder_path` for a
+project and a campaign, the root marker for the root, which no record holds; no existence check on a recorded
+path, a stale one is the host's to find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
 reading order is the skill's, never the runtime's. A level whose folder Jason does not know is null: a
 project or a campaign with no folder recorded, a root that is not there or carries no root marker at
 the claim. Each path is absolute, as the platform writes it. The paths are decided **once, at the claim**,
@@ -618,9 +618,10 @@ it is told the same, because the wait it follows is still the last one.
 
 A role reads `resumption` the way it reads the rest of the envelope, because it is part of it: no new
 channel, no second message. The command that runs `ai_role` work writes the whole envelope to the
-child's standard input and composes no prompt from its parts; on the `claude_code` host, which runs in
-print mode, that standard input is the prompt, so the role's first input says whether it was woken and
-why. A host that composes a prompt from the envelope's parts composes `resumption` with them.
+child's standard input and composes no prompt from its parts, on every host. On a host that reads its
+prompt from standard input — `claude_code`, which runs in print mode, and each host §12 marks so — that
+standard input is the prompt, so the role's first input says whether it was woken and why. A host that composes a
+prompt from the envelope's parts composes `resumption` with them.
 
 Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
 version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, and `resumption` to

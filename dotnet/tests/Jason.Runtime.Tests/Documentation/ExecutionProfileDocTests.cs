@@ -424,6 +424,40 @@ public partial class ExecutionProfileDocTests
             row => Assert.Equal("—", row[7]));
     }
 
+    /// <summary>
+    /// What holds for every host is said once, in the work-execution contract, and each host's own form of it in its
+    /// row of the matrix: how a launched role is let read a memory file, and how the brief on standard input reaches the
+    /// host. A row of a host this build registers names both; a row of a host it does not know yet names neither; and
+    /// the contract states each rule for every host, with Claude Code's form as its example.
+    /// </summary>
+    [Fact]
+    public void Each_host_s_row_says_how_it_reads_a_memory_file_and_takes_the_brief_and_the_contract_states_the_rule_for_every_host()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var header = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .First(line => line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Split('|', StringSplitOptions.TrimEntries)[1..^1];
+        Assert.Equal(["Reads a memory file by", "Takes the brief"], header[8..]);
+
+        var rows = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .ToList();
+        Assert.All(rows, row =>
+        {
+            var known = Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is not null;
+            Assert.All(row[8..], cell => Assert.Equal(!known, cell == "—"));
+        });
+
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
+        Assert.Contains("each host holds this rule in its own form", contract, StringComparison.Ordinal);
+        Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 
