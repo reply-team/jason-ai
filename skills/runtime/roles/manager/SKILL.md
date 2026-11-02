@@ -166,7 +166,8 @@ nothing; acting on the answer is yours, at the answered question's line, and is 
    never from the question, so that the line which now stands loses none of them, with the reaction that category's row in
    `categories.json` gives. A person's word is no guess, so its confidence is 1. Name the answered question with
    `--decision`, so that the line carries the person's answer: the runtime refuses it unless the question is the
-   campaign's, answered by a named person, and the option they chose is the category you record, word for word:
+   campaign's, answered by a named person, the option they chose is the category you record, word for word, and the
+   question was raised by the run that recorded the verdict on this reply:
 
 ```
 jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 1 --reaction draft --goal demo --decision dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the person chose interested"

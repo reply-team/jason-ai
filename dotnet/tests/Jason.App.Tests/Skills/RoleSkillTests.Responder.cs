@@ -95,6 +95,9 @@ public partial class RoleSkillTests
         Assert.Equal(0.7, (double)Categories()["question_below"]!);
         Assert.Contains("Where your confidence is below the file's `question_below`", skill, StringComparison.Ordinal);
         Assert.Contains("record your best guess with its confidence first, with `--reaction escalate`, since asking is what is done about it, then ask the person which category it is", skill, StringComparison.Ordinal);
+
+        // The answer backs a verdict only through a question the run that recorded a verdict on the reply raised.
+        Assert.Contains("The order is load-bearing: a question raised before the guess is recorded cannot back the person's answer", skill, StringComparison.Ordinal);
         Assert.Contains("write no draft and act on nothing, with one exception", skill, StringComparison.Ordinal);
 
         // A probable stop is the one act that does not wait: the register entry is Jason's own and a person lifts it.

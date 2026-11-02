@@ -455,6 +455,7 @@ public partial class RoleSkillTests
 
         // The answer is carried by naming the question it answers, which the runtime checks against the category recorded.
         Assert.Contains("Name the answered question with `--decision`, so that the line carries the person's answer", skill, StringComparison.Ordinal);
+        Assert.Contains("the option they chose is the category you record, word for word, and the question was raised by the run that recorded the verdict on this reply", skill, StringComparison.Ordinal);
         Assert.Matches(@"--decision dec_[0-9A-Z]{26} ", printed);
     }
 
