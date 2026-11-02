@@ -192,7 +192,11 @@ public partial class InboundSyncDocTests
         var readme = File.ReadAllText(Path.Combine(RepositoryRoot(), "plugins", "reply", "README.md"));
 
         Assert.Contains("A read lists only what the provider stores. A provider may hold a contact's later replies until this side has answered the thread, so a reply that arrives before any answer may leave no line; a reply is therefore acted on or parked when it is read, not left for a second one.", page, StringComparison.Ordinal);
-        Assert.DoesNotContain("Reply", page.Replace("Responder:OnReply", ""), StringComparison.Ordinal);
+        var start = page.IndexOf("A read lists only what the provider stores.", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The paragraph on what a provider stores is missing.");
+        var end = page.IndexOf("#what-it-cannot-do).", start, StringComparison.Ordinal);
+        Assert.True(end > start, "The paragraph on what a provider stores no longer ends at the plugin's README.");
+        Assert.DoesNotContain("Reply", page[start..end], StringComparison.Ordinal);
         Assert.Contains("](../plugins/reply/README.md#what-it-cannot-do)", page, StringComparison.Ordinal);
         Assert.Contains("\n## What it cannot do\n", readme.ReplaceLineEndings("\n"), StringComparison.Ordinal);
     }
