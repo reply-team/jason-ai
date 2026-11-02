@@ -25,8 +25,10 @@ replaces the title and the body together.
 ## What is new since 0.24.0
 
 - **A reply wakes the campaign's responder at once.** Until now a reply only released the manager's next check-in, so an
-  answer waited for a review of the whole campaign. Now the reply itself wakes the campaign's `responder` role, with a
-  read of its thread already queued and ahead of the campaign's queued sends. The manager still decides at its review
+  answer waited for a review of the whole campaign. Now a reply on a thread the campaign's own operations pinned wakes the
+  campaign's `responder` role itself, with a read of its thread already queued and ahead of the campaign's queued sends.
+  A reply seen through a person another campaign shares, and a line the provider's events carry, wake the manager alone.
+  The manager still decides at its review
   what the campaign as a whole calls for, and leaves a reply a responder has taken to the responder. [The responder's
   skill](https://github.com/reply-team/jason-ai/blob/v0.25.0/skills/runtime/roles/responder/SKILL.md) is the loop it
   follows: it reads the reply, classifies it, records its verdict, and reacts as the category says.
@@ -52,8 +54,8 @@ replaces the title and the body together.
   set for one campaign and one reply category, and only by a person who gives their name: a role never sets one, and an
   agent only on a person's explicit word.
   `jason approval set-standing <campaign> --category <id> --actor human:<id>` covers a drafted `conversation.reply`.
-  `--operation` names the operations covered, `conversation.reply` when none is named, and a message to somebody new is
-  covered only where `message.send` is named. `--expires-at` and `--max-releases` (from 1 to 10000) are the limits, and
+  `--operation` names the operations covered, `conversation.reply` when none is named, and a message to the same person
+  outside the thread is covered only where `message.send` is named. `--expires-at` and `--max-releases` (from 1 to 10000) are the limits, and
   none is set unless you give it. `jason approval list-standing <campaign>` says what stands, how many drafts each one
   has let go and whether it is in force, and `jason approval unset-standing` takes one back. The skills advise one only
   where the reaction is a reply to the same person, and never for `referral`, `opt_out` or `bounce`.
@@ -75,14 +77,14 @@ replaces the title and the body together.
   `purchase` or `custom`), a title, what "reached when" means in your words, and an order. It is checked when the
   campaign is created and whenever `jason campaign update-context` names it. The planning skills settle goals with you
   when a campaign is made, and a campaign with none is valid: its roles take a demo as the goal. The responder drafts
-  toward the first goal the reply can move, and its verdict names that goal. [The goals
+  toward the first goal the reply can move, and its verdict names that goal; a campaign with none names none. [The goals
   contract](https://github.com/reply-team/jason-ai/blob/v0.25.0/docs/contracts/context/goals.md) is the document the
   runtime enforces.
 - **The reply categories are data, and yours to extend.** The thirteen base categories, `interested`,
   `meeting_requested`, `meeting_booked`, `question`, `objection`, `not_now`, `wrong_person`, `referral`, `out_of_office`,
   `auto_reply`, `bounce`, `opt_out` and `other`, are listed with what each says and its default reaction in
   [`categories.json`](https://github.com/reply-team/jason-ai/blob/v0.25.0/skills/runtime/roles/responder/categories.json),
-  beside the responder's skill, and every other skill names a category by those ids and copies none. To add or refine
+  beside the responder's skill, and every other skill this release changed names a category by those ids and copies none. To add or refine
   one, write a section headed "Reply categories" in the `AGENTS.md` memory file of your client, of a project or of a
   campaign. Each entry there refines one base category under an id of its own, with a rule for what to do, and where
   two levels disagree the nearer wins: the campaign's over the project's, the project's over the client's. A reply that
@@ -110,8 +112,9 @@ replaces the title and the body together.
   finished contact's later replies on that thread before it stores them; after this side has answered on the thread
   through `conversation.reply`, the contact's next replies on it are stored and read. A LinkedIn thread keeps later
   messages. All of this is read from how Reply is built and has not yet been observed on an account. It is why
-  answering a reply at once matters: the responder acts or parks a draft when it reads a reply, and a second reply
-  that arrives before any answer may never be seen.
+  answering a reply at once matters: a later reply on the thread can be lost until an answer goes out
+  through `conversation.reply`, so a draft parked for approval leaves that window open, and a standing approval shortens
+  it.
 
 ## Fixed since 0.24.0
 
@@ -132,8 +135,12 @@ replaces the title and the body together.
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
   and `jason plugin install reply --replace` follow.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. This release changes the text of the responder, the manager, the
-  analyst, the planning skills, inbox triage and the approval skills, and adds `categories.json` beside the responder's.
+  `brew upgrade jason`, run `jason skills update`. This release changes the text of several skills, among them the
+  responder, the manager, the analyst, the planning skills, inbox triage and the approval skills, and adds
+  `categories.json` beside the responder's.
+- **The responder is on after the upgrade.** Wherever an execution profile or an entry command resolves for the
+  `responder` role, a reply on a campaign's own thread starts waking it at once. To turn that off, set `OnReply` to
+  `false` in the `Responder` section of `settings.json`; the manager's check-ins are unchanged either way.
 - **The data directory:** this release adds one database migration, `ResponderWatermark`, a column that records how far
   each campaign's replies have been read for its responder. The first start on 0.25.0 runs it after taking a backup, as
   every migration does, and sets each campaign level with its chronicle as it stands, so no answer is owed to a reply
@@ -162,8 +169,8 @@ For a sequence email, Reply keeps at most one reply to each email it sent and dr
 on that thread before it stores them, so they reach none of `conversation.list`, `conversation.get` and the change
 feed, and Jason's inbound sync says nothing of them. After this side has answered on the thread through
 `conversation.reply`, the contact's next replies on it are stored and read as usual; a second reply that arrives
-before any answer may never be seen. A LinkedIn thread keeps later messages. Both statements are read from how Reply
-is built and have not yet been observed on an account.
+before any answer may never be seen. A LinkedIn thread keeps later messages. All of this is read from how Reply is built
+and has not yet been observed on an account.
 
 A send or an invitation through Reply carries no sending time in its own result: `sent_at` is null, because Reply's
 answer to a LinkedIn send gives a local time marked as UTC and its answer to an email gives none. `message.status`
