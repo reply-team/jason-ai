@@ -1,10 +1,14 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 
 namespace Jason.Cli.Skills;
 
-/// <summary>One place a person's agent harness looks for skills.</summary>
-/// <param name="Host">Which harness it belongs to, in the vocabulary execution profiles already use.</param>
-public sealed record HarnessRoot(AgentHostKind Host, string Directory);
+/// <summary>One place a person's agent harnesses look for skills.</summary>
+/// <param name="Hosts">
+/// The hosts that read it, in the vocabulary execution profiles already use and in the order of the table of hosts:
+/// two hosts reading one folder are one root. Empty for a directory named with <c>--root</c> and no <c>--host</c>.
+/// </param>
+public sealed record HarnessRoot(IReadOnlyList<AgentHostKind> Hosts, string Directory);
 
 /// <summary>
 /// Where the person's own harnesses keep skills.
@@ -25,12 +29,6 @@ public interface IHarnessLocator
 /// <summary>The locators this build knows how to make.</summary>
 public static class HarnessLocators
 {
-    /// <summary>The directory a Claude Code installation keeps its own configuration in.</summary>
-    private const string ClaudeCodeDirectory = ".claude";
-
-    /// <summary>And the directory inside it that holds one directory per skill.</summary>
-    private const string SkillsDirectory = "skills";
-
     /// <summary>This machine's, read from the user profile.</summary>
     public static IHarnessLocator ForThisMachine() =>
         ForHome(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
@@ -39,34 +37,58 @@ public static class HarnessLocators
     /// The same composition against a named home directory: what <see cref="ForThisMachine"/> is, with the one
     /// thing a test may not touch supplied instead of read.
     /// </summary>
-    public static IHarnessLocator ForHome(string home)
+    public static IHarnessLocator ForHome(string home) => ForHome(home, AgentHosts.All);
+
+    /// <summary>The same over a table of hosts other than the one this build ships, so the rules are proved for many.</summary>
+    internal static IHarnessLocator ForHome(string home, IReadOnlyList<AgentHostFacts> hosts)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(home);
-        return new HomeLocator(home);
+        ArgumentNullException.ThrowIfNull(hosts);
+        return new HomeLocator(home, hosts);
     }
 
     /// <summary>
     /// One named directory, which is what <c>--root</c> is: detection replaced rather than filtered, so that
     /// installing into a harness this build has never heard of is one flag instead of a careful combination.
     /// </summary>
-    public static IHarnessLocator At(string directory, AgentHostKind host = AgentHostKind.ClaudeCode)
+    /// <param name="host">The host <c>--host</c> labels the directory with, or null for none.</param>
+    public static IHarnessLocator At(string directory, AgentHostKind? host = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
-        return new NamedLocator(new HarnessRoot(host, Path.GetFullPath(directory)));
+        return new NamedLocator(new HarnessRoot(host is { } kind ? [kind] : [], Path.GetFullPath(directory)));
     }
 
-    private sealed class HomeLocator(string home) : IHarnessLocator
+    private sealed class HomeLocator(string home, IReadOnlyList<AgentHostFacts> hosts) : IHarnessLocator
     {
+        private static readonly StringComparer SamePath = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
         public IReadOnlyList<HarnessRoot> Detect()
         {
-            var claude = Path.Combine(home, ClaudeCodeDirectory);
+            // The host's marker, not the skills directory: a person who has a host and has never installed a skill
+            // still has somewhere for one to go, and creating that directory is the installer's business rather than
+            // detection's. A marker may be a file, where two hosts keep one folder and only a file tells them apart.
+            var roots = new List<(string Directory, List<AgentHostKind> Hosts)>();
+            foreach (var facts in hosts)
+            {
+                var marker = AgentHosts.Under(home, facts.HomeMarker);
+                if (!Directory.Exists(marker) && !File.Exists(marker))
+                {
+                    continue;
+                }
 
-            // The harness's own directory, not the skills directory inside it: a person who has Claude Code
-            // and has never installed a skill still has somewhere for one to go, and creating that directory
-            // is the installer's business rather than detection's.
-            return Directory.Exists(claude)
-                ? [new HarnessRoot(AgentHostKind.ClaudeCode, Path.Combine(claude, SkillsDirectory))]
-                : [];
+                var skills = AgentHosts.Under(home, facts.HomeSkills);
+                var index = roots.FindIndex(root => SamePath.Equals(root.Directory, skills));
+                if (index < 0)
+                {
+                    roots.Add((skills, [facts.Kind]));
+                }
+                else
+                {
+                    roots[index].Hosts.Add(facts.Kind);
+                }
+            }
+
+            return [.. roots.Select(root => new HarnessRoot(root.Hosts, root.Directory))];
         }
     }
 

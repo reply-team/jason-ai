@@ -125,6 +125,20 @@ public class ProfileCommandsTests
         Assert.Contains("web_search, web_fetch", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>The help names the hosts a profile can name, from the table both halves read rather than a copy of it.</summary>
+    [Theory]
+    [InlineData("create")]
+    [InlineData("update")]
+    public async Task The_help_names_the_hosts_a_profile_can_name(string verb)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("profile", verb, "--help");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("One of: " + Jason.Contracts.Hosts.AgentHosts.Vocabulary + ".", cli.Text, StringComparison.Ordinal);
+    }
+
     /// <summary>An empty list is a thing a repeatable option cannot say, and <c>--file</c> is how it is said.</summary>
     [Fact]
     public async Task Update_can_clear_a_list_through_a_file()
