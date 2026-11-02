@@ -24,12 +24,12 @@ description that promises everything matches nothing.
 
 - [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
   Turning an objective into durable campaign work and following it: the provider check, what the person has
-  already written down, the campaign, the people it is about, provider operations and AI role work, what the
-  runtime does with them afterwards, answering a conversation, and stopping or holding work.
+  already written down, the campaign and its goals, the people it is about, provider operations and AI role work, what the
+  runtime does with them afterwards, answering a conversation after the responder has been at it, and stopping or holding work.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **draft** until a host reads its new text.
   What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
   raised — including when a notification brought the person — presented in their own words and recorded as their
-  decision.
+  decision, and the standing approval a person sets in advance for one category of reply in a campaign.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
@@ -94,10 +94,10 @@ for a role that sits with a person, the judgement it shares with its session fil
   is launched for: why it was
   woken, what a noticed reply or provider-event line asks of it and whose thread it is, what it reads and in which
   order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
-  the chronicle every time.
+  the chronicle every time; and for replies, the verdicts it reads by category and the responder it defers to.
 - [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
   before it plans, the order a first campaign opens in, a campaign never split only to give some of its people
-  another tone of voice, what this build stores of a plan and what it does not, and how a horizon becomes work items a
+  another tone of voice, the goals a campaign is made with, what this build stores of a plan and what it does not, and how a horizon becomes work items a
   dispatcher will claim.
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
@@ -114,7 +114,7 @@ for a role that sits with a person, the judgement it shares with its session fil
   act of its own, a question for the person, or an answer in the person's own thread as a draft, which a person
   approves or a standing approval they set for its category releases.
 - [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the four things
-  this runtime keeps — the work items, the chronicle, the reports and the campaign's activity — and honest about
+  this runtime keeps — the work items, the chronicle, the reports and the campaign's activity, with the replies counted by category over a window — and honest about
   where the record runs out.
 - [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **draft.** What the
   do-not-contact register and the failed items say about whether anything is arriving, and what somebody
@@ -149,7 +149,7 @@ with no `METHOD.md` is taught the contract and nothing else, which is complete o
 ## A role that sits with a person
 
 Some of a role's work happens in a person's own conversation rather than on a work item: somebody who brings a
-campaign objective wants the planner's judgement while they talk, not after a launch. A role that sits with a
+campaign's goals wants the planner's judgement while they talk, not after a launch. A role that sits with a
 person has two files. **The launched role's file**, `roles/<role>/SKILL.md`, is the one the runtime hands to the
 role it launches: it answers in the shape a work item asks for and carries the launch contract. **The session
 file**, `<role>-in-session/SKILL.md`, is one of the skills a person's own session reads: it talks with the person,

@@ -137,6 +137,46 @@ An approval can also end without anybody deciding it: cancelling the work ends i
 work item's due date passing. So a question that has left the list was not necessarily answered, and
 must not be reported to anybody as agreed to.
 
+## A standing approval is a person's decision made in advance
+
+A person may decide ahead of time, for one category of reply in one campaign, that a drafted answer to such a reply
+goes without being asked each time. It is theirs in the same way an approval is: it is recorded under their name, and
+it is set only on their explicit word. **"Handle these" is not one**, and neither is a person's patience with the
+queue; the rule at the top of this skill stands. Set one only when the person has named the campaign and the category
+of reply, and you have asked who is saying it.
+
+```
+jason approval set-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_requested --expires-at 2026-12-01T00:00:00Z --max-releases 20 --actor human:ada --reason "the answers to a meeting request are always the same"
+jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_requested --actor human:ada --reason "the offer changed"
+```
+
+- **The category** is the word a verdict on a reply carries, compared exactly: `interested` covers neither
+  `very_interested` nor `Interested`. The base categories are the responder's `categories.json`, not copied here, and
+  `approval-boundaries` says which are worth setting one on and which never.
+- **The operations** it covers are `conversation.reply` when none is named; name `message.send` with `--operation` only
+  where the person says a message to somebody new is covered too, and repeat the option for both.
+- **The limits are the person's to choose, and none is the default.** `--expires-at` is when it stops, and
+  `--max-releases`, from 1 to 10000, is how many drafts it may let go. Offer both. Setting one again replaces what was
+  set and starts its count over; taking one back leaves the drafts already let go as they were.
+- **`--actor human:<their id>` is required**, as with the three verbs above. A role or an attempt is refused with
+  `approval_not_human`, and no name with `actor_required`.
+
+**What it releases is a draft nobody has been asked about, and nothing else.** A reply parked before the standing
+approval was set still waits for the person, however long ago, and setting one releases none of it; it stays theirs
+even after its question expired and the item was reopened. Say so when they set one with replies already waiting, and
+present those as this skill says. A draft the runtime does not find covered parks as any other does, and its preview
+says which condition failed.
+
+**Where to see what went out without them.** Each draft a standing approval let go is an `approved` approval whose
+reason is `standing_approval`, decided under the name of the person who set it, and a line `approval_standing_applied`
+in the campaign's chronicle. `list-standing` also says how many each one let go and whether it is still in force.
+
+```
+jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status approved
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied
+```
+
 ## What an approval covers, and what changes it
 
 An approval is about a **subject**: the operation and the version of its contract, the work item, the
