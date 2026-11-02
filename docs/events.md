@@ -113,7 +113,8 @@ For each campaign it concerns, a stored event says at most one line, written in 
 | `reply_detected`, `invitation_accepted`, `bounce` | `provider_event_observed` |
 
 Both lines are written by `system:dispatcher`, name the campaign and no work item or attempt, and are trigger kinds a
-manager is woken by under the default `Manager:Triggers`.
+manager is woken by under the default `Manager:Triggers`; an `inbound_reply_observed` line whose `attributed_by` is
+`campaign_pin` also wakes the campaign's responder ([inbound sync](inbound-sync.md) §1).
 
 - **`inbound_reply_observed`** is the line the inbound read writes, with its fields — `plugin`, `thread`, `channel`,
   `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id` — and two more, `event_id`, the stored event, and

@@ -16,7 +16,7 @@ public sealed class SettingsAllowlistTests
     internal static readonly string[] Switches =
     [
         "Dispatcher:Enabled", "Update:CheckEnabled", "Notifications:Enabled", "Notifications:Toast",
-        "Notifications:Plugins:fake-provider:Enabled", "Inbound:Enabled",
+        "Notifications:Plugins:fake-provider:Enabled", "Inbound:Enabled", "Responder:OnReply",
     ];
 
     internal static readonly string[] Words = ["Logging:MinimumLevel", "Manager:Triggers[]"];
@@ -46,6 +46,7 @@ public sealed class SettingsAllowlistTests
         "Plugins:Invoker:OutcomeBytes", "Plugins:Invoker:StderrBytes", "Plugins:Invoker:KillGraceMs",
         "Plugins:Invoker:VersionCheckTimeoutMs", "Plugins:Invoker:LogLineBytes",
         "Inbound:SyncSeconds", "Inbound:LookbackSeconds",
+        "Responder:Priority", "Responder:TimeoutSeconds", "Responder:MaxAttempts", "Responder:MaxAgeSeconds",
     ];
 
     /// <summary>Settings that are named so nobody adds one by accident: a feed, a profile, a command, a grant, a route, a binding.</summary>

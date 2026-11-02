@@ -185,6 +185,9 @@ public sealed class WorkItemService(
         var contact = await LoadMemberAsync(campaign, request.ContactId, cancellationToken).ConfigureAwait(false);
         var context = request.Context?.DeepClone().AsObject() ?? new JsonObject();
         ContextRules.EnsureWithinLimits(context);
+        await StandingApprovals.ValidateReferenceAsync(
+            db, request.Kind!.Value, Trimmed(request.Operation), campaign.Id, contact?.PublicId, context, errors, cancellationToken).ConfigureAwait(false);
+        errors.ThrowIfAny();
 
         // Read once, here, for work of every kind: what the run that asked for this hands down. After this line
         // it is a fact about the row, and nothing recomputes it.
@@ -332,10 +335,19 @@ public sealed class WorkItemService(
     /// the item is — its campaign, contact, kind, role or operation — is not patchable; work that should be
     /// something else is new work.
     /// </summary>
-    public async Task<WorkItemDto> UpdateAsync(WorkItemUpdateRequest request, CancellationToken cancellationToken)
+    public Task<WorkItemDto> UpdateAsync(WorkItemUpdateRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var actor = Actors.Resolve(request.Actor);
+        return UpdateCoreAsync(request, Actors.Resolve(request.Actor), cancellationToken);
+    }
+
+    /// <summary>
+    /// The patch, by an actor the runtime supplies rather than one the request names: the respond step records a further
+    /// move of a thread on its own open responder as the dispatcher, through the path every patch takes.
+    /// </summary>
+    internal async Task<WorkItemDto> UpdateCoreAsync(WorkItemUpdateRequest request, ActorRef actor, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
 
         var errors = new ValidationErrors();
         WorkItemValidation.ValidateReason(request.Reason, errors);
@@ -398,6 +410,7 @@ public sealed class WorkItemService(
 
         ValidateContextKeys(request.Set, request.Unset, errors);
         ValidateProviderInput(item, request.Set, request.Unset, _timing, errors);
+        await ValidateVerdictReferenceAsync(item, request.Set, request.Unset, errors, cancellationToken).ConfigureAwait(false);
         errors.ThrowIfAny();
 
         var changes = new List<FieldChange>();
@@ -515,7 +528,7 @@ public sealed class WorkItemService(
             item,
             actor,
             NormalizeReason(request.Reason),
-            await ApprovalGate.LiveAsync(db, item.Id, cancellationToken).ConfigureAwait(false),
+            await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, cancellationToken).ConfigureAwait(false),
             await OpenWaits.OfAsync(db, item.Id, cancellationToken).ConfigureAwait(false));
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         canceller.StopCancelled();
@@ -724,6 +737,39 @@ public sealed class WorkItemService(
         // The patch writes the set before it honours the unset, so a key named in both ends up gone; the contract
         // has to read the arguments the item will actually hold, not the ones the request mentions first.
         WorkItemValidation.ValidateProviderInput(item.Operation, removed ? null : set![InputKey], timing, errors);
+    }
+
+    /// <summary>
+    /// A patch that names the verdict reference, or the arguments it is compared with, is read against the context the
+    /// item will hold — the set written, then the unset honoured, as the patch applies them — by the same checks as at
+    /// create. A patch that names neither leaves a reference that was true when it was written.
+    /// </summary>
+    private async Task ValidateVerdictReferenceAsync(
+        WorkItem item, JsonObject? set, IReadOnlyList<string>? unset, ValidationErrors errors, CancellationToken cancellationToken)
+    {
+        string[] keys = [StandingApprovals.VerdictKey, InputKey];
+        var named = keys.Any(key => set?.ContainsKey(key) == true || unset?.Contains(key, StringComparer.Ordinal) == true);
+
+        // A patch already refused — its arguments not the operation's shape, say — is refused for that, as a create is
+        // before it reads a reference; the reference is asked about the work the patch would leave, and there is none.
+        if (!named || errors.Any)
+        {
+            return;
+        }
+
+        var context = item.Context.DeepClone().AsObject();
+        foreach (var (key, value) in set ?? [])
+        {
+            context[key] = value?.DeepClone();
+        }
+
+        foreach (var key in unset ?? [])
+        {
+            context.Remove(key);
+        }
+
+        await StandingApprovals.ValidateReferenceAsync(
+            db, item.Kind, item.Operation, item.CampaignId, item.Contact?.PublicId, context, errors, cancellationToken).ConfigureAwait(false);
     }
 
     private static void ValidateContextKeys(JsonObject? set, IReadOnlyList<string>? unset, ValidationErrors errors)

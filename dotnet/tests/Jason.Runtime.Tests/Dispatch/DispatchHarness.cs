@@ -79,6 +79,9 @@ internal sealed class DispatchHarness : IDisposable
 
         // The inbound read, as the runtime ships it: on. With nothing routed it reads nothing, and says so once.
         services.AddSingleton<IOptionsMonitor<InboundOptions>>(Inbound);
+
+        // The respond step, as the runtime ships it: on, so a reply the read says wakes a responder where one can launch.
+        services.AddSingleton<IOptionsMonitor<ResponderOptions>>(Responder);
         services.AddSingleton(_dir.Paths);
         services.AddSingleton(Registry);
         services.AddSingleton(Status);
@@ -146,6 +149,8 @@ internal sealed class DispatchHarness : IDisposable
     public TestOptionsMonitor<InboundOptions> Inbound { get; } = new(new InboundOptions { LookbackSeconds = 3_600 });
 
     /// <summary>The notification settings the scan reads. Off until a test turns them on.</summary>
+    public TestOptionsMonitor<ResponderOptions> Responder { get; } = new(new ResponderOptions());
+
     public TestOptionsMonitor<NotificationsOptions> Notifications { get; } = new(new NotificationsOptions { Enabled = false });
 
     /// <summary>What the notifier knows between scans, as the runtime's singleton holds it.</summary>
@@ -264,6 +269,14 @@ internal sealed class DispatchHarness : IDisposable
         using var scope = _provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
         return await scope.ServiceProvider.GetRequiredService<Resumer>().ResumeAsync(db, ct);
+    }
+
+    /// <summary>Runs one respond step, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<int> RespondAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<Responder>().RespondAsync(db, ct);
     }
 
     /// <summary>Runs one inbound read step, in a scope of its own, the way the scan runs it.</summary>

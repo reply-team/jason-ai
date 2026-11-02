@@ -1,0 +1,36 @@
+{
+  "operation": "reply.record",
+  "case": "unknown-goal",
+  "request": {
+    "campaign_id": "cmp_1",
+    "plugin_id": "mailbox",
+    "thread_id": "thr-1042",
+    "message_id": "msg-77",
+    "message_at": "2026-09-14T11:30:00.250Z",
+    "contact_id": "cnt_1",
+    "category": "interested",
+    "confidence": 0.9,
+    "reaction": "draft",
+    "goal_id": "purchase",
+    "actor": {
+      "type": "role",
+      "id": "responder"
+    },
+    "reason": "interested by the table; draft toward the demo"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: goal_id: unknown.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "goal_id",
+          "code": "unknown",
+          "message": "goal_id must name a goal the campaign's goals carry."
+        }
+      ]
+    }
+  }
+}

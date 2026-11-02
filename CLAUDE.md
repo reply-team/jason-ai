@@ -122,7 +122,11 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   that reads conversations, and linked there, once per cadence — one `conversation.list` work item per page — and
   writes one reserved `inbound_reply_observed` line per thread that moved — identifiers, moments and the provider's
   flags, never a subject, a preview or a name — said once per campaign by a key. It interprets nothing; the line is a
-  default manager trigger. `docs/inbound-sync.md` is the contract.
+  default manager trigger. A respond step between it and the summon reads those lines above a per-campaign watermark,
+  whichever writer said them, and for a thread the campaign holds by its own pin queues a `conversation.get` and a
+  `responder` created waiting on it — one open responder per thread, a further move patched onto its `inbound_reply` — with
+  identifiers and moments only, and never an idempotency key; its `conversation.list` items sit ten above
+  `Responder:Priority`, so the sends wait and detection does not. `docs/inbound-sync.md` is the contract.
 - Events: a third contract family, `events.read` under `docs/contracts/events/`, embedded like the delivery contract
   and never in the operation catalog. A provider that declares `contracts.events` reads an account by its own cursor,
   which the runtime stores per plugin and binding identity and never parses; a read pins nothing. What is read lands
@@ -186,7 +190,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   recorded, campaign and work-item
   contexts as they changed, result formats, the addresses and numbers put on or taken off the
   do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered
-  with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report
+  with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions
+  whose answers they carry, and the standing approvals
+  people set: their categories, reactions, goals and limits, the effect, tool and operation a report
   names, the failure text and receipts notification channels reported, entries people and agents wrote
   themselves, the names actors gave, and the reasons they typed — and it prints a warning; the runtime's
   own report (`system_info`) travels projected, withholding channel detail, presence detail outside the

@@ -129,7 +129,7 @@ jason campaign list --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any
 contact is added and before anything is sent. It is the campaign's shared knowledge: a role that reads the campaign
 (`jason campaign get`) reads it whole, and a role that does not works from its own work item's context alone. So its
-keys are yours to name for what they hold, and none is reserved. Keep the person's own words beside what you made of
+keys are yours to name for what they hold, apart from `goals`, the one key Jason reserves and checks (below). Keep the person's own words beside what you made of
 them, and put a link or a file in as what it says, briefly, with where it is, rather than pasted whole. This
 `jason campaign create` makes Jason's own campaign; it is not the provider operation `campaign.create`, which makes a
 campaign at a provider.
@@ -140,6 +140,18 @@ changes about it is written with `jason campaign update-context`: `--set` writes
 
 ```
 jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"audience":"founders of seed-stage startups in Mexico, Colombia and Chile"}' --reason "the person widened the audience"
+```
+
+**What the campaign is for is its `goals`.** The outcomes the campaign steers each conversation towards, settled with
+the person when the campaign is planned, are the one reserved key of the context: a list in which each goal has an
+`id`, a `kind` (`meeting`, `demo`, `trial`, `interested_reply`, `purchase` or `custom`), a `title`, what `reached_when`
+means for the person, and an `order`. Jason checks the list whenever it is written, at the create or at an
+`update-context` that names `goals`, and a patch replaces the list whole, so send every goal the campaign keeps. A
+campaign with no goals is valid, and its roles take the default goal, a demo. `docs/contracts/context/goals.md` is the
+contract. It is not `goal.get`, the catalog's read of a person's or team's target for a period, which is a different thing.
+
+```
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason "the person settled what the campaign is for"
 ```
 
 **Give every create a key you could send again.** `--idempotency-key` names that one create, in words you
@@ -363,6 +375,16 @@ once, what the operation reaches and whether that can be undone, the approval it
 reply: each of the four documents says what its work does in a paused campaign, and a paused campaign's threads are
 not read. After a pause, `jason campaign start` comes first.
 
+**A reply usually wakes the responder first.** For each thread the runtime noticed, a responder is raised on its own; it
+reads the thread, records one verdict as a `reply_classified` line, and acts, drafts an answer or asks a person:
+
+```
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder
+```
+
+So look at what it left before you draft anything, a verdict, a parked answer or a question, and never write a second
+draft for a reply it has already answered.
+
 **Read the thread before you act on it.** A reply the runtime noticed is an `inbound_reply_observed` line in the
 chronicle, or a `provider_event_observed` line of kind `reply_detected` where the provider's own events reported it,
 so list both kinds. Either line names the thread, its channel and the person (`contact_id`) but never what anybody
@@ -402,6 +424,17 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 
 Recording their decision on it is `approvals-and-questions`. Two replies are two work items and two approvals, never
 one item for both.
+
+**A person may have decided it in advance, for one kind of reply.** A standing approval is a person's own act, set per
+campaign and per category of reply, with an end and a ceiling where they chose one; it releases a drafted answer
+without a question each time, and nothing else. You do not set one: it is theirs, in `approvals-and-questions`, and an
+agent sets one only on a person's explicit word, naming them. When a drafted reply has gone out without a question, the
+chronicle says which standing approval let it:
+
+```
+jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied
+```
 
 **Closing and reopening a thread reach no person.** `conversation.close` sets it aside as worked, and
 `conversation.reopen` puts it back among those that need attention. **Filing it may reach one.**

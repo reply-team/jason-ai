@@ -134,4 +134,60 @@ public partial class InteractiveSkillTests
         // else, and a session that did not recognise the reason would work around the one guarantee here.
         Assert.Contains("input_changed", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A standing approval is a person's decision made in advance, and the skill that records their decisions says how
+    /// they set, list and unset one, in the words the runtime uses for it. It sits before "What an approval covers", it
+    /// does not soften the rule that nobody decides for a person, and it names the three verbs and the options they take,
+    /// so a session that guessed one would be corrected by the text and not by a refusal.
+    /// </summary>
+    [Fact]
+    public void The_approvals_skill_says_how_a_person_sets_lists_and_unsets_a_standing_approval()
+    {
+        var text = File.ReadAllText(SkillPack.Find("approvals-and-questions").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var skill = Flattened("approvals-and-questions");
+
+        var section = text.IndexOf("## A standing approval is a person's decision made in advance", StringComparison.Ordinal);
+        var covers = text.IndexOf("## What an approval covers, and what changes it", StringComparison.Ordinal);
+        var recording = text.IndexOf("## Recording what they decide", StringComparison.Ordinal);
+        Assert.True(
+            recording >= 0 && section > recording && covers > section,
+            $"The section on standing approvals is at {section}; it belongs after \"Recording what they decide\" ({recording}) and before \"What an approval covers\" ({covers}).");
+
+        Assert.Contains("it is set only on their explicit word. **\"Handle these\" is not one**", skill, StringComparison.Ordinal);
+        Assert.Contains("**`--actor human:<their id>` is required**", skill, StringComparison.Ordinal);
+        Assert.Contains("`approval_not_human`", skill, StringComparison.Ordinal);
+        Assert.Contains("**The limits are the person's to choose, and none is the default.**", skill, StringComparison.Ordinal);
+        Assert.Contains("Setting one again replaces what was set and starts its count over", skill, StringComparison.Ordinal);
+        Assert.Contains("`interested` covers neither `very_interested` nor `Interested`", skill, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("approvals-and-questions").File);
+        Assert.Contains(printed, line => line.StartsWith("jason approval set-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_requested ", StringComparison.Ordinal) && line.Contains(" --actor human:", StringComparison.Ordinal));
+        Assert.Contains("jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", printed);
+        Assert.Contains(printed, line => line.StartsWith("jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_requested ", StringComparison.Ordinal) && line.Contains(" --actor human:", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// What a standing approval releases is a draft nobody has been asked about. A reply parked before it was set stays the
+    /// person's, and stays theirs after its question expires and the item is reopened; the skill says so, and says where to
+    /// see what went out without them, by the two lines the runtime writes for it.
+    /// </summary>
+    [Fact]
+    public void A_reply_parked_before_the_standing_approval_stays_the_persons_and_what_went_out_is_visible()
+    {
+        var skill = Flattened("approvals-and-questions");
+
+        Assert.Contains(
+            "A reply parked before the standing approval was set still waits for the person, however long ago, and setting one releases none of it; it stays theirs even after its question expired and the item was reopened.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("**Where to see what went out without them.**", skill, StringComparison.Ordinal);
+        Assert.Contains("is an `approved` approval whose reason is `standing_approval`", skill, StringComparison.Ordinal);
+        Assert.Equal("standing_approval", Jason.Runtime.Approvals.ApprovalGate.StandingApproval);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("approvals-and-questions").File);
+        Assert.Contains("jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status approved", printed);
+        Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied", printed);
+        Assert.Equal("approval_standing_applied", Jason.Runtime.Journal.JournalKinds.ApprovalStandingApplied);
+    }
 }

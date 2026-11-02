@@ -360,6 +360,12 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("public_id");
 
+                    b.Property<int>("ResponderWatermark")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("responder_watermark");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
