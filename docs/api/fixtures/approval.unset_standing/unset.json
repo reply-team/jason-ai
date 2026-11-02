@@ -1,0 +1,26 @@
+{
+  "operation": "approval.unset_standing",
+  "case": "unset",
+  "request": {
+    "campaign_id": "cmp_1",
+    "category": "not_now",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "not now means not now"
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "category": "not_now",
+    "operations": null,
+    "expires_at": null,
+    "max_releases": null,
+    "released": 0,
+    "in_force": false,
+    "set_by": null,
+    "set_at": null,
+    "line_id": null
+  }
+}

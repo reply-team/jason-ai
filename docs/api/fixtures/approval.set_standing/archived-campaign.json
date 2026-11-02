@@ -1,0 +1,27 @@
+{
+  "operation": "approval.set_standing",
+  "case": "archived-campaign",
+  "request": {
+    "campaign_id": "cmp_1",
+    "category": "interested",
+    "operations": [
+      "conversation.reply",
+      "message.send"
+    ],
+    "expires_at": "2026-12-01T00:00:00Z",
+    "max_releases": 20,
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "the interested may hear back at once"
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "campaign_archived",
+      "message": "Campaign 'cmp_1' is archived; only journal entries can still be appended.",
+      "retryable": false
+    }
+  }
+}

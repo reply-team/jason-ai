@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Approvals;
@@ -203,6 +204,48 @@ public class StandingApprovalServiceTests
             listed.Items.Select(item => (item.Category, item.Released, item.InForce)));
         Assert.NotEqual(spent.LineId, again.LineId);
         Assert.Equal((0, true), (again.Released, again.InForce));
+    }
+
+    /// <summary>
+    /// The exchanges a consumer renders: a standing approval set with its limits, the listing, one taken back, and the
+    /// refusals a person meets — a role that tries to set one, an operation it cannot cover, and an archived campaign.
+    /// </summary>
+    [Fact]
+    public async Task The_exchanges_are_recorded()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(new DateTimeOffset(Noon)));
+        var campaign = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct);
+        var ada = new { type = "human", id = "ada" };
+        var standing = new
+        {
+            campaign_id = campaign.Id,
+            category = "interested",
+            operations = new[] { "conversation.reply", "message.send" },
+            expires_at = "2026-12-01T00:00:00Z",
+            max_releases = 20,
+            actor = ada,
+            reason = "the interested may hear back at once",
+        };
+
+        var set = await api.RecordAsync<StandingApprovalDto>(Operations.ApprovalSetStanding, "set", standing, Ct);
+        var role = await api.RecordErrorAsync(
+            Operations.ApprovalSetStanding, "role-refused", standing with { actor = new { type = "role", id = "responder" } }, HttpStatusCode.BadRequest, Ct);
+        var enrolment = await api.RecordErrorAsync(
+            Operations.ApprovalSetStanding, "operation-not-coverable", standing with { operations = new[] { "campaign.enroll" } }, HttpStatusCode.BadRequest, Ct);
+        await api.PostOkAsync<StandingApprovalDto>(
+            Operations.ApprovalSetStanding, new { campaign_id = campaign.Id, category = "not_now", actor = ada }, Ct);
+        var listed = await api.RecordAsync<Page<StandingApprovalDto>>(Operations.ApprovalListStanding, "listed", new { campaign_id = campaign.Id }, Ct);
+        var unset = await api.RecordAsync<StandingApprovalDto>(
+            Operations.ApprovalUnsetStanding, "unset", new { campaign_id = campaign.Id, category = "not_now", actor = ada, reason = "not now means not now" }, Ct);
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = campaign.Id }, Ct);
+        var archived = await api.RecordErrorAsync(Operations.ApprovalSetStanding, "archived-campaign", standing, HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal((20, 0, true), (set.MaxReleases, set.Released, set.InForce));
+        Assert.Equal("approval_not_human", role.Code);
+        Assert.Equal(["operations/invalid"], enrolment.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
+        Assert.Equal(["interested", "not_now"], listed.Items.Select(item => item.Category));
+        Assert.Equal(("not_now", false, (string?)null), (unset.Category, unset.InForce, unset.LineId));
+        Assert.Equal("campaign_archived", archived.Code);
     }
 
     private static ApprovalSetStandingRequest Set(Campaign campaign) => new(campaign.PublicId, "interested", Actor: Operator);
