@@ -40,16 +40,25 @@ public static class ApprovalGate
     /// <summary>
     /// The decision that is still about this item: the one pending, or the one approved and not yet outgrown.
     /// At most one exists — a park supersedes whatever it replaces, and the database holds the pending half of
-    /// that to one row per item.
+    /// that to one row per item. The caller names the item's campaign, which every approval of the item carries.
     /// </summary>
-    public static Task<Approval?> LiveAsync(JasonDbContext db, int workItemId, CancellationToken cancellationToken)
+    public static Task<Approval?> LiveAsync(JasonDbContext db, int campaignId, int workItemId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Approvals
-            .Where(a => a.WorkItemId == workItemId && (a.Status == ApprovalStatus.Pending || a.Status == ApprovalStatus.Approved))
-            .OrderByDescending(a => a.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        return Live(db, campaignId, workItemId).FirstOrDefaultAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// The read <see cref="LiveAsync"/> makes, through the campaign's approvals. The claim, the expirer and a cancellation
+    /// each ask it, and the table only grows: read by the item alone, SQLite answers it from the status index, which holds
+    /// every approved row the installation ever kept. Bounded by the campaign, it reads that campaign's rows and no other.
+    /// </summary>
+    internal static IQueryable<Approval> Live(JasonDbContext db, int campaignId, int workItemId) =>
+        db.Approvals.FromSqlInterpolated($"""
+            SELECT * FROM approvals INDEXED BY ix_approvals_campaign_id
+            WHERE campaign_id = {campaignId} AND work_item_id = {workItemId} AND status IN ('pending', 'approved')
+            ORDER BY id DESC LIMIT 1
+            """);
 
     /// <summary>
     /// Parks the item and writes down what is being approved. A park makes no attempt: an attempt is a run, and
