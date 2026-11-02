@@ -238,13 +238,9 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             throw DomainErrors.VerdictDecisionOptionDiffers(decision.PublicId);
         }
 
+        // The decision holds its attempt by the row's key, the chronicle by the attempt's public id.
         var asker = decision.Attempt!.PublicId;
-        var aboutThisReply = await db.Journal.AsNoTracking().AnyAsync(
-            entry => entry.CampaignId == campaign.Id
-                && entry.Kind == JournalKinds.ReplyClassified
-                && entry.Key == key
-                && entry.AttemptId == asker,
-            cancellationToken).ConfigureAwait(false);
+        var aboutThisReply = await AskersVerdict(db, campaign.Id, key, asker).AnyAsync(cancellationToken).ConfigureAwait(false);
         if (!aboutThisReply)
         {
             throw DomainErrors.VerdictDecisionNotAboutReply(decision.PublicId);
@@ -252,6 +248,18 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 
         return decision;
     }
+
+    /// <summary>
+    /// A verdict the asking attempt recorded on the reply, in the campaign: any such line, superseded or not. Read through
+    /// the kind's own index, as a standing approval reads a later verdict, so it is bounded by the verdicts and never walks
+    /// the chronicle; no index of its own is kept for it.
+    /// </summary>
+    internal static IQueryable<int> AskersVerdict(JasonDbContext db, int campaignId, string key, string attemptId) =>
+        db.Database.SqlQuery<int>($"""
+            SELECT id AS "Value" FROM journal INDEXED BY ix_journal_kind
+            WHERE kind = 'reply_classified' AND campaign_id = {campaignId} AND key = {key} AND attempt_id = {attemptId}
+            LIMIT 1
+            """);
 
     /// <summary>
     /// An attempt claims a verdict as the run that decided it, so the line follows back to its work; the claim is checked

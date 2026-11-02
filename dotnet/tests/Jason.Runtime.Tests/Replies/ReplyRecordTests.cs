@@ -196,7 +196,6 @@ public class ReplyRecordTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var seed = await SeedAsync(db);
-        await GuessAsync(db, seed, "msg-77");
         var decision = await DecisionAsync(db, seed, "answered");
 
         var entry = await Service(db).RecordAsync(Request(seed) with { DecisionId = decision.PublicId, Actor = Manager }, Ct);
@@ -221,12 +220,7 @@ public class ReplyRecordTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var seed = await SeedAsync(db);
-        if (asked == "a decision about another reply")
-        {
-            await GuessAsync(db, seed, "msg-76");
-        }
-
-        var decision = await DecisionAsync(db, seed, "answered");
+        var decision = await DecisionAsync(db, seed, "answered", guessOn: asked == "a decision about another reply" ? "msg-76" : null);
         var written = await db.Journal.CountAsync(Ct);
 
         var refused = await Assert.ThrowsAsync<InvalidRequestException>(
@@ -250,7 +244,6 @@ public class ReplyRecordTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var seed = await SeedAsync(db);
-        await GuessAsync(db, seed, "msg-77");
         var decision = await DecisionAsync(db, seed, "answered");
 
         var first = await Service(db).RecordAsync(Request(seed) with { DecisionId = decision.PublicId, Actor = Manager }, Ct);
@@ -260,6 +253,24 @@ public class ReplyRecordTests
         Assert.Equal(
             [(decision.PublicId, "interested"), (decision.PublicId, "interested")],
             new[] { first, second }.Select(entry => ((string?)entry.New!["decision_id"], (string?)entry.New!["category"])));
+    }
+
+    /// <summary>
+    /// The asker's verdict ties the decision to the reply even once a later line has superseded it: the tie is that the run
+    /// which asked recorded a verdict on this reply, never that its verdict is the one standing.
+    /// </summary>
+    [Fact]
+    public async Task A_decision_whose_askers_verdict_was_superseded_still_carries_the_answer()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var decision = await DecisionAsync(db, seed, "answered");
+        await Service(db).RecordAsync(Request(seed) with { Category = "not_now", Reaction = ReplyReaction.None }, Ct);
+
+        var entry = await Service(db).RecordAsync(Request(seed) with { DecisionId = decision.PublicId, Actor = Manager }, Ct);
+
+        Assert.Equal(decision.PublicId, (string?)entry.New!["decision_id"]);
     }
 
     /// <summary>
@@ -563,11 +574,10 @@ public class ReplyRecordTests
         var recorded = await api.RecordAsync<JournalEntryDto>(Operations.ReplyRecord, "recorded", verdict, Ct);
         var unknown = await api.RecordErrorAsync(Operations.ReplyRecord, "unknown-goal", verdict with { goal_id = "purchase" }, HttpStatusCode.BadRequest, Ct);
         var range = await api.RecordErrorAsync(Operations.ReplyRecord, "confidence-out-of-range", verdict with { confidence = 1.5 }, HttpStatusCode.BadRequest, Ct);
-        var question = await AnsweredQuestionAsync(api, campaign.Id);
-        await api.PostOkAsync<JournalEntryDto>(
-            Operations.ReplyRecord,
-            verdict with { category = "not_now", reaction = "escalate", actor = new { type = "attempt", id = question.Asker }, reason = "not sure; asking" },
-            Ct);
+        var question = await AnsweredQuestionAsync(
+            api,
+            campaign.Id,
+            asker => verdict with { category = "not_now", reaction = "escalate", actor = new { type = "attempt", id = asker }, reason = "not sure; asking" });
         var answered = await api.RecordAsync<JournalEntryDto>(
             Operations.ReplyRecord,
             "recorded-with-decision",
@@ -584,7 +594,7 @@ public class ReplyRecordTests
                 verdict.reaction,
                 verdict.goal_id,
                 decision_id = question.Id,
-                actor = new { type = "role", id = "manager" },
+                actor = new { type = "attempt", id = question.Manager },
                 reason = "the person chose interested",
             },
             Ct);
@@ -596,10 +606,11 @@ public class ReplyRecordTests
     }
 
     /// <summary>
-    /// The responder's question about the reply, whose options are the category ids, answered by a person: its id and the
-    /// attempt that asked, which records its own verdict on the reply before the answer is carried.
+    /// The responder's question about the reply, whose options are the category ids, answered by a person, raised by the
+    /// attempt that recorded its guess on the reply first, as the responder does: the question's id, and the attempt of the
+    /// manager's run that records the answer, as the manager does.
     /// </summary>
-    private static async Task<(string Id, string Asker)> AnsweredQuestionAsync(RuntimeApiFixture api, string campaignId)
+    private static async Task<(string Id, string Manager)> AnsweredQuestionAsync(RuntimeApiFixture api, string campaignId, Func<string, object> guessBy)
     {
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
@@ -625,11 +636,19 @@ public class ReplyRecordTests
             AnsweredByType = ActorType.Human,
             AnsweredById = "ada",
         };
-        db.WorkItems.Add(item);
-        db.Attempts.Add(attempt);
+        var review = WorkItemFactory.NewAiRole(campaign, role: "manager", now: Noon);
+        review.Status = WorkItemStatus.Processing;
+        review.AttemptCount = 1;
+        var run = WorkItemFactory.NewAttempt(review, 1, AttemptStatus.Running, Noon);
+        db.WorkItems.AddRange(item, review);
+        db.Attempts.AddRange(attempt, run);
+        await db.SaveChangesAsync(Ct);
+
+        await api.PostOkAsync<JournalEntryDto>(Operations.ReplyRecord, guessBy(attempt.PublicId), Ct);
+
         db.Decisions.Add(decision);
         await db.SaveChangesAsync(Ct);
-        return (decision.PublicId, attempt.PublicId);
+        return (decision.PublicId, run.PublicId);
     }
 
     private static ReplyRecordRequest Changed(ReplyRecordRequest request, string change) => change switch
@@ -720,10 +739,16 @@ public class ReplyRecordTests
 
     /// <summary>
     /// The question the responder raised about the reply, whose options are the category ids, as it stands: answered by
-    /// a named person choosing <c>interested</c> unless the case says otherwise.
+    /// a named person choosing <c>interested</c> unless the case says otherwise, and raised by the seed's attempt after it
+    /// recorded its guess on the reply it names — the seed's reply unless the case names another, none when it is null.
     /// </summary>
-    private static async Task<Decision> DecisionAsync(JasonDbContext db, Seed seed, string state)
+    private static async Task<Decision> DecisionAsync(JasonDbContext db, Seed seed, string state, string? guessOn = "msg-77")
     {
+        if (guessOn is not null)
+        {
+            await GuessAsync(db, seed, guessOn);
+        }
+
         var decision = new Decision
         {
             PublicId = PublicId.New("dec"),

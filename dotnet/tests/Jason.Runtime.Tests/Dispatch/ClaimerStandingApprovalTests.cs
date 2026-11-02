@@ -319,13 +319,15 @@ public partial class ClaimerTests
     /// A person's answer, carried by a verdict a role recorded. Where the responder asked which category a reply is and a
     /// person answered, the manager's run records the answer as the verdict that stands; carrying the decision, the line is
     /// that person's word, so the draft a later responder writes under it goes under a standing approval, whoever wrote
-    /// it. The same line without the decision is the manager's own, which no standing approval trusts.
+    /// it. The same line without the decision is the manager's own, which no standing approval trusts; and a line carrying
+    /// the answer that a later plain verdict on the same reply replaced no longer stands, so the draft under it waits.
     /// </summary>
     [Theory]
-    [InlineData(true, null)]
-    [InlineData(false, StandingApprovals.Why.VerdictNotAuthentic)]
+    [InlineData("carrying the answer", null)]
+    [InlineData("without the decision", StandingApprovals.Why.VerdictNotAuthentic)]
+    [InlineData("carrying the answer, then replaced", StandingApprovals.Why.VerdictSuperseded)]
     [Critical(Family.S2, "a standing approval: a verdict carrying a person's answer is that person's word")]
-    public async Task Standing_VerdictCarryingAPersonsAnswer_ReleasesTheRespondersDraft(bool carriesTheAnswer, string? parks)
+    public async Task Standing_VerdictCarryingAPersonsAnswer_ReleasesTheRespondersDraft(string line, string? parks)
     {
         using var harness = StandingHarness();
         using var database = new TestDatabase();
@@ -364,7 +366,12 @@ public partial class ClaimerTests
         await db.SaveChangesAsync(Ct);
 
         var answer = await VerdictAsync(
-            db, reading, new ActorRef(ActorType.Attempt, review.PublicId), decision: carriesTheAnswer ? question.PublicId : null);
+            db, reading, new ActorRef(ActorType.Attempt, review.PublicId), decision: line == "without the decision" ? null : question.PublicId);
+        if (line == "carrying the answer, then replaced")
+        {
+            await VerdictAsync(db, reading, new ActorRef(ActorType.Attempt, review.PublicId));
+        }
+
         await StandAsync(db, reading.Campaign);
         Drafted(db, reading, answer, by: new ActorRef(ActorType.Attempt, again.PublicId));
         await db.SaveChangesAsync(Ct);

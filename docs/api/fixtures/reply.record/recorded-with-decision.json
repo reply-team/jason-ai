@@ -14,8 +14,8 @@
     "goal_id": "demo",
     "decision_id": "dec_1",
     "actor": {
-      "type": "role",
-      "id": "manager"
+      "type": "attempt",
+      "id": "att_1"
     },
     "reason": "the person chose interested"
   },
@@ -24,13 +24,13 @@
     "id": "jrn_2",
     "ts": "2026-09-14T12:00:00.000Z",
     "actor": {
-      "type": "role",
-      "id": "manager"
+      "type": "attempt",
+      "id": "att_1"
     },
     "kind": "reply_classified",
     "campaign_id": "cmp_1",
-    "work_item_id": null,
-    "attempt_id": null,
+    "work_item_id": "wi_1",
+    "attempt_id": "att_1",
     "key": "sha256:recorded-2",
     "old": null,
     "new": {
