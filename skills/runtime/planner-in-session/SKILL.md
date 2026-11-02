@@ -1,6 +1,6 @@
 ---
 name: planner-in-session
-description: Use when a person who has Jason installed brings a brief or a campaign objective and asks to plan it, in any words - help me plan this, or a pasted paragraph - and wants the planner's judgement in the conversation: what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed. This is the skill that plans in a session with Jason, and it uses `campaign-planning` as its method.
+description: Use when a person who has Jason installed brings a brief or the goals of a campaign and asks to plan it, in any words - help me plan this, or a pasted paragraph - and wants the planner's judgement in the conversation: what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed. This is the skill that plans in a session with Jason, and it uses `campaign-planning` as its method.
 metadata:
   status: draft
 ---
@@ -47,6 +47,13 @@ project this campaign belongs to, or this campaign alone — rather than only in
 
 **A campaign is never split only to give some of its people another tone of voice.** The tone is the person's
 preference; a person or a group that needs other words gets them in the copy, not in a campaign of their own.
+
+**A campaign is made with its goals.** What a campaign is for is settled with the person when it is created: a demo, a
+meeting, a trial, a purchase, a reply that says they are interested, or anything else in their own words, one goal at a
+time in the order they are worth trying, each with the moment it counts as reached. They are written as the `goals` key of
+the campaign's context, the runtime's one word for it, and the roles that answer replies steer each
+conversation towards them. Where nobody has said what the campaign is for, its goal is a demo, and you say so aloud rather
+than leave it unsaid. A goal is the person's word: you write the ones they gave and invent none for them.
 
 **Confirm before you scale.** A direction is checked before anything is gathered or sent at scale. The deep work
 per person and the first outreach go to a pilot, a small part of the people rather than all of them, and the rest
@@ -122,11 +129,18 @@ their name, ask it.
 
 Read all of the brief, in whatever form it came, before you ask for anything. What you need from it follows the
 order above: what they sell and how the product works, whom this campaign sells to, whether its people come from a
-list they bring or from a search and by which principle, the channels, and what would count as success; most of it
+list they bring or from a search and by which principle, the channels, and what the campaign is for, its goals (below); most of it
 is usually there already. Ask for what is missing one question per message, in your own words, at the step that needs
 it: ask it, stop, and ask the next only once its answer is in, since an answer often settles what you would have asked
 next. A numbered list of questions is the form this opening never hands over, however many are missing. A list they
 bring is cleaned before it is used, and how is `audience-building`'s.
+
+**Ask what the campaign is for.** Whether it is a meeting, a demo, a trial, a purchase, an interested reply or
+anything else in their own words, each goal has the moment it counts as reached, and they are listed in the order they are
+worth trying. Ask it as one question, in your own words, once the audience and the channels are settled, and say the
+default aloud where they have not said: a demo. The goals are written with the campaign when it is created, as the `goals`
+key of its context, and `managed-campaign-work` prints how, including how a change of mind on an existing campaign
+replaces the list whole.
 
 The wiring check is no step of this opening. Offered once and skipped, it stays skipped: a person who skipped it
 plans exactly as one who took it, and a provider is connected when the work first reaches for one, as
@@ -163,7 +177,8 @@ Their agreement is to the direction, not to sending: what a plan's approval does
 Once the direction is agreed, it becomes campaign work through `managed-campaign-work`, which is how a campaign, its
 people and its work are created, with the keys they carry; this file does not repeat it. The first campaign of what
 they sell goes under a project named from it, never under `Default`, and the campaign is made with the brief as its
-context before anyone is added to it. The campaign has a name of its own, drawn from what it is for, never a number or
+context before anyone is added to it, and its goals go in as the `goals` key of that context. The campaign has a name of its
+own, drawn from what it is for, never a number or
 a placeholder; the name is yours to propose before the campaign is made, and the person's to change. A change of
 direction on a campaign that already exists goes into its context as well, with `campaign update-context`.
 

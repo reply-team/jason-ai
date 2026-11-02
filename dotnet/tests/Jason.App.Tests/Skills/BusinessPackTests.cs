@@ -263,6 +263,70 @@ public class BusinessPackTests
         Assert.DoesNotContain("`editorial_review.record` is written at that approval", skill, StringComparison.Ordinal);
     }
 
+    private static string Flat(string skill) =>
+        string.Join(' ', File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), skill, "SKILL.md")).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static IReadOnlyList<string> PrintedBy(string skill) =>
+        SkillPack.PrintedCommands(Path.Combine(SkillPack.BusinessRoot(), skill, "SKILL.md"));
+
+    /// <summary>
+    /// With Jason a reply has usually been worked before the inbox is opened: a responder records a verdict and acts, drafts
+    /// or asks. Triage starts from what it left and never writes a second draft beside one, for a person as for a role, and
+    /// reads the verdict by the kind the runtime writes. A skill that kept sending a person to draft from a raw queue would
+    /// put two answers in front of one prospect.
+    /// </summary>
+    [Fact]
+    public void Inbox_triage_starts_from_what_the_responder_left_and_never_drafts_a_second_answer()
+    {
+        var skill = Flat("inbox-triage");
+
+        Assert.Contains("## With Jason, the replies have usually been worked before you open the inbox", skill, StringComparison.Ordinal);
+        Assert.Contains("records one verdict on the reply — a category, how sure it is, and what it decided to do — and then acts, drafts an answer or asks a person", skill, StringComparison.Ordinal);
+        Assert.Contains("**Never write a second draft beside it**: one reply has one verdict and one draft, for a person as for a role", skill, StringComparison.Ordinal);
+        Assert.Contains("**A verdict is a role's reading**, not the person's decision.", skill, StringComparison.Ordinal);
+        Assert.Contains("**Drafting again for a reply that already has a draft.**", skill, StringComparison.Ordinal);
+        Assert.Contains("it is never one you set", skill, StringComparison.Ordinal);
+
+        var printed = PrintedBy("inbox-triage");
+        Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified", printed);
+        Assert.Contains("jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", printed);
+        Assert.Equal("reply_classified", Jason.Runtime.Journal.JournalKinds.ReplyClassified);
+    }
+
+    /// <summary>
+    /// The skill's definition of a standing approval is mapped onto Jason's: per campaign and category, its operations, its
+    /// expiry and ceiling, how it is read, what each act it authorised leaves, and that only a person sets one. The sentence
+    /// on which categories to set it on is the decided one, and the principle it follows from is stated with it.
+    /// </summary>
+    [Fact]
+    public void The_approval_boundaries_map_a_standing_approval_onto_a_campaign_and_a_category_of_reply()
+    {
+        var skill = Flat("approval-boundaries");
+
+        Assert.Contains("**In Jason, a standing approval is set per campaign and per category of reply.**", skill, StringComparison.Ordinal);
+        Assert.Contains("carries an `expires_at` where the person set one and a `max_releases` ceiling where they set one", skill, StringComparison.Ordinal);
+        Assert.Contains("It is read with `jason approval list-standing`", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Each act it authorised is an approved row whose reason is `standing_approval`, decided under the name of the person who set it, with an `approval_standing_applied` line in the campaign's chronicle",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("**Only a person sets one.** A role never does: the runtime refuses a role, and an attempt, with `approval_not_human`.", skill, StringComparison.Ordinal);
+        Assert.Contains("An agent sets one only on a person's explicit word, naming them", skill, StringComparison.Ordinal);
+        Assert.Contains("A category is the unit a standing approval is set on", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A standing approval is advisable where the reaction is a reply to the same person; never for `referral`, `opt_out` or `bounce`.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("The categories are the responder's `categories.json`, not copied here.", skill, StringComparison.Ordinal);
+
+        // What was there before still stands: a standing approval is not a lowered class, and it is a human decision with a
+        // ceiling and an expiry.
+        Assert.Contains("**It is not a lowered approval class.**", skill, StringComparison.Ordinal);
+        Assert.Contains("- **A standing approval nobody gave, or one on the wrong category**", skill, StringComparison.Ordinal);
+
+        Assert.Contains("jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", PrintedBy("approval-boundaries"));
+    }
+
     private static IEnumerable<string> Files() =>
         Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
 }

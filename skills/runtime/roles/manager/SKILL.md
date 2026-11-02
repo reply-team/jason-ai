@@ -130,6 +130,23 @@ jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+**What the responder concluded about replies.** The responder records a verdict on each reply it reads, as a
+`reply_classified` line of the chronicle. The line carries the category, the confidence, the reaction (`act`, `draft`,
+`escalate` or `none`) and the goal's id, and never a word of the reply. Read the lines since your last review and count
+them by category; where one reply has several lines, the latest stands. The base categories are the responder's
+`categories.json`, which is not copied here; a category you do not find in it is a person's own, read as it stands. A
+reaction of `draft` or `escalate` is something waiting for a person, so read what is parked and asked before you raise
+any of it yourself:
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified --since 2026-09-18T09:00:00Z
+jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+You record no verdict yourself: it is the responder's reading of a reply, and one that looks wrong to you is a question for
+the person, with the line's id.
+
 **The chronicle since the last review.** Your note carries the time of your last run; read everything after
 it, and everything there is when there is no note. Reports are what happened to the campaign where the runtime
 could not see it, told by somebody afterwards:
@@ -180,8 +197,27 @@ of the kind since your last review:
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --since 2026-09-18T09:00:00Z
 ```
 
+**The runtime has usually raised the responder already.** For a thread the campaign holds by its own pin, the runtime queues
+the read of the thread and the responder by itself, in the scan that wrote the line, so before you create anything look
+for that item. A responder it made is an `ai_role` item made by `system:dispatcher`, and its context's
+`inbound_reply.moves` names each line it answers by the line's `jrn_` id:
+
+```
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder --status created --status scheduled --status processing --status waiting --status awaiting_approval
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder --order finished
+```
+
+- **An open responder whose `inbound_reply.moves` names the line:** you defer to it. Create no read and no responder for
+  that line, and say in your note that you left it to the rule, with the item's id.
+- **One that has ended and names the line.** If it succeeded, read its result (`outcome`, `verdict`,
+  `created_work_items`) and never draft or act again on that line: a reply has one verdict and a verdict one draft, for
+  you as for the responder. If it failed, was cancelled or expired, the failed inbox above and the text below apply.
+- **No responder names the line.** The rule left it to you: it is switched off, the line is older than it answers, the
+  thread is the person's rather than this campaign's own, or no responder could be launched. The text below applies.
+
 Knowing what a person wrote takes a read of the thread through the provider, and **not in this run**: a campaign runs
-one item at a time, so an item you create is claimed only after your run has ended. Queue the read — a
+one item at a time, so an item you create is claimed only after your run has ended. Where no responder names the line,
+queue the read — a
 `conversation.get` item naming the thread by the line's `thread` — and then the responder's item, at the same priority
 and naming the read the first create answered with. Work at one priority runs oldest first, so the responder runs after
 the read and reads the reply from its result:
