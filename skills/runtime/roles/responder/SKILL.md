@@ -127,8 +127,10 @@ one verdict.
 
 Where your confidence is below the file's `question_below`, the category is the person's to settle: record your best
 guess with its confidence first, then ask the person which category it is, with the ids it could be as the options — at
-most ten, as many as a question holds. Below that line you write no draft and act on nothing; whoever acts on the
-person's answer records the verdict again, and the later line stands for the reply.
+most ten, as many as a question holds, the most likely first, and `other` always among them, so the person can name
+what none of the ids says. Below that line you write no draft and act on nothing; whoever acts on the person's answer
+records the verdict again, and the later line stands for the reply. A guess is never mirrored: the mirror follows a
+verdict that stands.
 
 **Draft toward the campaign's goals.** Read the campaign's `goals` with `jason campaign get`: the outcomes it steers each
 conversation toward, in `order`, each with the moment it counts as `reached_when`. Draft toward the first goal the reply
@@ -250,8 +252,8 @@ written as the provider names them. Where one of them is equal to the category y
 `_` as a space — `meeting_booked` meets "Meeting booked" — file it under that name, with a `provider_op` item naming
 `conversation.classify`, and under nothing else: a category a provider reserves carries a meaning of the provider's
 own, which `docs/contracts/operations/conversation.classify.md` describes. A name the provider does not hold fails
-`category_not_found`, with nothing filed. The mirror is never a second verdict, and a guess the person is asked to
-settle is not mirrored. Where no name meets, or the key is absent or empty, file nothing, and say so in your summary.
+`category_not_found`, with nothing filed. The mirror is never a second verdict.
+Where no name meets, or the key is absent or empty, file nothing, and say so in your summary.
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.classify --input '{"thread":{"external_id":"501"},"category":{"name":"Interested"}}' --reason "the verdict interested, mirrored where the campaign files it" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-classify-501

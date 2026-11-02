@@ -65,7 +65,7 @@
     {
       "id": "other",
       "says": "Anything the categories above do not describe.",
-      "reaction": "escalate: a question for the person, with what you read and what you would do."
+      "reaction": "escalate: a question for the person that names the nearest category, why it does not fit, and what you would do, and quotes nothing."
     }
   ]
 }

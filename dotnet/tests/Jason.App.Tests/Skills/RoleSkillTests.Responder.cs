@@ -92,7 +92,8 @@ public partial class RoleSkillTests
         Assert.Contains("Where your confidence is below the file's `question_below`", skill, StringComparison.Ordinal);
         Assert.Contains("record your best guess with its confidence first, then ask the person which category it is", skill, StringComparison.Ordinal);
         Assert.Contains("write no draft and act on nothing", skill, StringComparison.Ordinal);
-        Assert.Contains("at most ten, as many as a question holds", skill, StringComparison.Ordinal);
+        Assert.Contains("at most ten, as many as a question holds, the most likely first, and `other` always among them", skill, StringComparison.Ordinal);
+        Assert.Contains("A guess is never mirrored: the mirror follows a verdict that stands.", skill, StringComparison.Ordinal);
         Assert.Equal(10, Jason.Runtime.Decisions.DecisionLimits.MaxOptions);
     }
 
@@ -383,6 +384,23 @@ public partial class RoleSkillTests
         Assert.Equal("act", Word("not_now"));
         Assert.Equal("none", Word("auto_reply"));
         Assert.Equal("draft", Word("interested"));
+
+        // A reaction is what the role does, and a question it raises quotes nothing: no reaction asks for what the reply
+        // said, and the one that always asks names the nearest category instead.
+        foreach (var entry in entries)
+        {
+            var reaction = (string)entry["reaction"]!;
+            foreach (var phrase in new[] { "what you read", "what they wrote", "what they said", "the reply's text", "quote the" })
+            {
+                Assert.False(
+                    reaction.Contains(phrase, StringComparison.OrdinalIgnoreCase),
+                    $"'{(string)entry["id"]!}' reacts with \"{reaction}\", which asks for the reply's text ('{phrase}').");
+            }
+        }
+
+        var other = (string)entries.Single(entry => (string)entry["id"]! == "other")["reaction"]!;
+        Assert.Contains("the nearest category, why it does not fit, and what you would do", other, StringComparison.Ordinal);
+        Assert.Contains("quotes nothing", other, StringComparison.Ordinal);
 
         // A launch copies what the role's folder holds; the data file is among it.
         var reading = RoleSkillRules.Read(skill.Directory, "responder", int.MaxValue);
