@@ -69,6 +69,7 @@ public static class DispatcherModule
         services.AddSingleton(Seam<RolesOptions>(RolesOptions.Section));
         services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
         services.AddSingleton(Seam<InboundOptions>(InboundOptions.Section));
+        services.AddSingleton(Seam<ResponderOptions>(ResponderOptions.Section));
 
         // Named here because the summon creates work through the work-item service, and that service reads the
         // plugin section for a provider item's timeout floor. The plugin module registers the same seam; either
