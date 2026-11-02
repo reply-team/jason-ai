@@ -130,6 +130,16 @@ public class HarnessLocatorTests
             HarnessLocators.ForThisMachine().Detect().Select(root => root.Directory));
     }
 
+    /// <summary>
+    /// One comparer for two folders being one, read by detection and by the status check alike, and it is the file
+    /// system's: Windows names a folder in any case, and elsewhere two spellings are two folders.
+    /// </summary>
+    [Fact]
+    public void Two_roots_are_one_folder_by_the_file_systems_own_reading_of_a_path()
+    {
+        Assert.Same(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal, HarnessLocators.SamePath);
+    }
+
     public static TheoryData<AgentHostKind> Kinds() => [.. Enum.GetValues<AgentHostKind>()];
 
     /// <summary>

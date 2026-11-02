@@ -29,6 +29,13 @@ public interface IHarnessLocator
 /// <summary>The locators this build knows how to make.</summary>
 public static class HarnessLocators
 {
+    /// <summary>
+    /// When two roots are one folder, as the file system reads a path: in any case on Windows, by every character
+    /// elsewhere. Detection and the status check read roots by this one comparer, so neither folds two folders the other
+    /// keeps apart.
+    /// </summary>
+    public static StringComparer SamePath { get; } = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
     /// <summary>This machine's, read from the user profile.</summary>
     public static IHarnessLocator ForThisMachine() =>
         ForHome(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
@@ -60,8 +67,6 @@ public static class HarnessLocators
 
     private sealed class HomeLocator(string home, IReadOnlyList<AgentHostFacts> hosts) : IHarnessLocator
     {
-        private static readonly StringComparer SamePath = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
         public IReadOnlyList<HarnessRoot> Detect()
         {
             // The host's marker, not the skills directory: a person who has a host and has never installed a skill

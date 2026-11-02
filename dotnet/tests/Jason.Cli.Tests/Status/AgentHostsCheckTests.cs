@@ -210,5 +210,36 @@ public sealed class AgentHostsCheckTests
         Assert.Contains($"in {harness} (claude_code)", check.Fact, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Where a path is case-sensitive, two folders whose names differ only in case are two roots, each read by its own
+    /// hosts, and one named with no host says none: the check reads them by the comparer detection reads them by, so it
+    /// neither folds them into one nor lends one folder's hosts to the other.
+    /// </summary>
+    [Fact]
+    public async Task The_harness_skills_fact_keeps_two_folders_whose_names_differ_only_in_case_apart_where_paths_are_case_sensitive()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Only a case-sensitive file system holds two folders whose names differ only in case.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir);
+        var lower = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "skills")).FullName;
+        var upper = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "Skills")).FullName;
+        StatusCommandTests.Deploy(lower);
+        StatusCommandTests.Deploy(upper);
+        var locator = new Roots([new([AgentHostKind.ClaudeCode], lower), new([], upper)]);
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, harnesses: locator), Ct);
+
+        var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.Contains($"in {lower} (claude_code)", check.Fact, StringComparison.Ordinal);
+        Assert.Contains($"in {upper}", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain($"in {upper} (", check.Fact, StringComparison.Ordinal);
+    }
+
+    private sealed class Roots(IReadOnlyList<HarnessRoot> roots) : IHarnessLocator
+    {
+        public IReadOnlyList<HarnessRoot> Detect() => roots;
+    }
+
     public static TheoryData<AgentHostKind> Kinds() => [.. Enum.GetValues<AgentHostKind>()];
 }

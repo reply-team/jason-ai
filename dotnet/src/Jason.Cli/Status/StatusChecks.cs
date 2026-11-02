@@ -1225,7 +1225,7 @@ internal static class StatusChecks
         var gone = new List<string>();
         var behind = new List<string>();
         var pinned = new List<string>();
-        foreach (var root in roots.Select(root => root.Directory).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var root in roots.Select(root => root.Directory).Distinct(HarnessLocators.SamePath))
         {
             try
             {
@@ -1276,7 +1276,7 @@ internal static class StatusChecks
 
         // The hosts that read a folder, by their words, after it; a folder named with --root and no host says none.
         string ReadBy(string root) =>
-            roots.Where(found => string.Equals(found.Directory, root, StringComparison.OrdinalIgnoreCase)).SelectMany(found => found.Hosts).Distinct().ToList() is { Count: > 0 } hosts
+            roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().ToList() is { Count: > 0 } hosts
                 ? " (" + string.Join(", ", hosts.Select(AgentHosts.Word)) + ")"
                 : string.Empty;
     }
