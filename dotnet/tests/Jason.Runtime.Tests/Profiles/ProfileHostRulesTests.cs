@@ -18,8 +18,21 @@ public class ProfileHostRulesTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static Task<RuntimeApiFixture> StartAsync() =>
-        RuntimeApiFixture.StartAsync(Ct, configureServices: services => services.AddSingleton<IAgentHost>(new RuleHost()));
+    private static Task<RuntimeApiFixture> StartAsync(RuleHost? host = null) =>
+        RuntimeApiFixture.StartAsync(Ct, configureServices: services => services.AddSingleton<IAgentHost>(host ?? new RuleHost()));
+
+    /// <summary>
+    /// A profile stored while the host had no objection, with the host strict from then on: the revision a patch meets is
+    /// one the host now refuses, as a profile written before a host learned a rule would be.
+    /// </summary>
+    private static async Task<(RuntimeApiFixture Api, RuleHost Host)> StoredAsync(object create)
+    {
+        var host = new RuleHost { Strict = false };
+        var api = await StartAsync(host);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, create, Ct);
+        host.Strict = true;
+        return (api, host);
+    }
 
     [Fact]
     public async Task A_grant_of_a_tool_the_host_does_not_have_is_refused_naming_the_host_and_the_tool()
@@ -127,6 +140,94 @@ public class ProfileHostRulesTests
         Assert.Equal(1, read.Revision.Number);
     }
 
+    /// <summary>
+    /// A patch naming only the tools meets the host the profile already has: a grant of a tool that host does not have is
+    /// refused, naming the host and the tool, and the message speaks of the patch's own list rather than the profile's.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_naming_only_the_tools_is_held_to_the_stored_host_and_speaks_of_its_own_list()
+    {
+        await using var api = await StartAsync();
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "tooling", host = "claude_code", program = "claude" }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "tooling", tools = new[] { "web_fetch" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("tools[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.StartsWith("tools[0] grants web_fetch, which claude_code does not have", detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "tooling" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+    }
+
+    /// <summary>
+    /// A patch that names neither list meets the stored tools as the profile has them: a grant the host has but cannot make
+    /// true is refused, naming the host, and the message says the list is the profile's.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_that_leaves_the_tools_alone_meets_the_stored_grant_and_says_it_is_the_profiles()
+    {
+        var (api, _) = await StoredAsync(new { name = "searching", host = "claude_code", program = "claude", tools = new[] { "web_search" } });
+        await using var _api = api;
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "searching", cli_command = "jason-next" },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("tools[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.StartsWith("the profile's tools[0] grants web_search, which claude_code has and Jason cannot make true on it", detail.Message, StringComparison.Ordinal);
+        Assert.Contains(RuleHost.Why, detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A patch naming only the program meets the stored arguments: arguments the host refuses are refused, naming the host,
+    /// and the message says they are the profile's; nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_naming_only_the_program_meets_the_stored_arguments_and_says_they_are_the_profiles()
+    {
+        var (api, _) = await StoredAsync(new { name = "bare-word", host = "claude_code", program = "claude", args = new[] { RuleHost.BareWord } });
+        await using var _api = api;
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "bare-word", program = "claude-next" },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args", "invalid"), (detail.Field, detail.Code));
+        Assert.StartsWith("the profile's args are refused on claude_code: ", detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "bare-word" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+    }
+
+    /// <summary>Arguments a patch names are its own, and the refusal says so: no owner before them.</summary>
+    [Fact]
+    public async Task A_patch_naming_arguments_the_host_refuses_speaks_of_its_own_arguments()
+    {
+        await using var api = await StartAsync();
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "arguing", host = "claude_code", program = "claude" }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "arguing", args = new[] { RuleHost.BareWord } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args", "invalid"), (detail.Field, detail.Code));
+        Assert.StartsWith("args are refused on claude_code: ", detail.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>The one that ships, with every answer a host may give: a tool it lacks, one it cannot make true, a deny it cannot write and arguments it refuses.</summary>
     private sealed class RuleHost : IAgentHost
     {
@@ -138,17 +239,20 @@ public class ProfileHostRulesTests
 
         private readonly ClaudeCodeHost _inner = new();
 
+        /// <summary>Whether the stand-in gives its answers; off, it answers as the host that ships.</summary>
+        public bool Strict { get; set; } = true;
+
         public AgentHostKind Kind => _inner.Kind;
 
         public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
 
-        public string? ToolRule(AgentTool tool) => tool == AgentTool.WebFetch ? null : _inner.ToolRule(tool);
+        public string? ToolRule(AgentTool tool) => Strict && tool == AgentTool.WebFetch ? null : _inner.ToolRule(tool);
 
-        public string? GrantProblem(AgentTool tool) => tool == AgentTool.WebSearch ? Why : null;
+        public string? GrantProblem(AgentTool tool) => Strict && tool == AgentTool.WebSearch ? Why : null;
 
-        public string? DenyProblem(string word) => string.Equals(word, Undeniable, StringComparison.Ordinal) ? Why : null;
+        public string? DenyProblem(string word) => Strict && string.Equals(word, Undeniable, StringComparison.Ordinal) ? Why : null;
 
-        public string? ArgsProblem(IReadOnlyList<string> args) => args.Contains(BareWord, StringComparer.Ordinal) ? Why : null;
+        public string? ArgsProblem(IReadOnlyList<string> args) => Strict && args.Contains(BareWord, StringComparer.Ordinal) ? Why : null;
 
         public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
             _inner.Compose(revision, launch, memoryFiles);
