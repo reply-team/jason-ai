@@ -249,7 +249,7 @@ public static class StandingApprovals
         var work = await db.WorkItems.AsNoTracking()
             .FirstOrDefaultAsync(row => row.PublicId == verdict.WorkItemId, ct)
             .ConfigureAwait(false);
-        if (work is null || work.CampaignId != item.CampaignId || work.Context["inbound_reply"] is not JsonObject inbound)
+        if (work is null || work.CampaignId != item.CampaignId || work.Context[Responder.InboundReplyKey] is not JsonObject inbound)
         {
             return null;
         }
