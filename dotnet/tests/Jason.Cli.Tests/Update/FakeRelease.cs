@@ -112,6 +112,9 @@ public sealed class FakeRelease : HttpMessageHandler
     /// <summary>Every address this handler was asked for, so a test can assert what was fetched and from where.</summary>
     public List<string> Requested { get; } = [];
 
+    /// <summary>The <c>User-Agent</c> each request carried, by the address it asked for, the last one kept.</summary>
+    public Dictionary<string, string> UserAgents { get; } = new(StringComparer.Ordinal);
+
     /// <summary>
     /// The length the UI's package is said to be, where a test wants a server that says less than it sends: a proxy, or
     /// the wrong file at the address. Unset, the length is the body's.
@@ -172,6 +175,7 @@ public sealed class FakeRelease : HttpMessageHandler
         ArgumentNullException.ThrowIfNull(request);
         var path = request.RequestUri!.AbsolutePath;
         Requested.Add(path);
+        UserAgents[path] = request.Headers.UserAgent.ToString();
 
         if (FailWith is { } failure)
         {

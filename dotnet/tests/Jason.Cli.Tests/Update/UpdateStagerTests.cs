@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Jason.Cli.Update;
+using Jason.Contracts;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
@@ -154,6 +155,46 @@ public class UpdateStagerTests
         Assert.Equal(
             ["/releases/latest/download/" + release.Asset],
             release.Requested);
+    }
+
+    /// <summary>
+    /// The archive is asked for as the feed is, saying which version asks: what this product tells a web page about itself
+    /// is one line, whichever of its requests carries it.
+    /// </summary>
+    [Fact]
+    public async Task A_download_says_which_version_is_asking_as_the_feed_does()
+    {
+        using var dir = new TempTree();
+        using var release = new FakeRelease(Next);
+
+        await StageAsync(release, dir);
+
+        Assert.Equal($"jason/{JasonVersion.Current}", release.UserAgents["/releases/latest/download/" + release.Asset]);
+    }
+
+    /// <summary>
+    /// The files beside the archives, a release's checksums, its UI build and its plugin packages, are asked for through
+    /// one routine, and it says which version asks as the feed and the archive do.
+    /// </summary>
+    [Fact]
+    public async Task A_file_beside_the_archives_says_which_version_is_asking_as_the_archive_does()
+    {
+        using var release = new FakeRelease(Next);
+        using var client = new HttpClient(release, disposeHandler: false);
+        var path = $"/releases/download/v{Next}/{ReleaseAssets.Checksums}";
+
+        await ReleaseFiles.FetchAsync(
+            client,
+            new Uri("https://127.0.0.1" + path),
+            ReleaseFiles.MaxChecksumsBytes,
+            $"a release's {ReleaseAssets.Checksums}",
+            TimeSpan.FromSeconds(30),
+            message => new InvalidOperationException(message),
+            message => new InvalidOperationException(message),
+            Ct,
+            Ct);
+
+        Assert.Equal($"jason/{JasonVersion.Current}", release.UserAgents[path]);
     }
 
     [Fact]
