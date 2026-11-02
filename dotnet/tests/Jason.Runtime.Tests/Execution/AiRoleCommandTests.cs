@@ -88,6 +88,36 @@ public class AiRoleCommandTests
         Assert.Contains("behaviour=crash", exited.StderrTail!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The allow rules a host writes into the work directory travel where its deny rules do: handed to the host that
+    /// writes them and kept on the attempt's launch beside the deny, and absent there where a host allows nothing that way.
+    /// </summary>
+    [Fact]
+    public async Task The_work_directory_allow_reaches_the_host_and_is_kept_beside_the_deny()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        var host = new SentenceHost();
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), deny: ["Write"], host: host, allow: ["Shell(jason)"]);
+
+        Assert.Equal(["Shell(jason)"], host.Allow);
+        var launch = Assert.IsType<CommandOutcome.Exited>(outcome).Launch;
+        Assert.Equal(["Shell(jason)"], launch.Allow);
+        Assert.Equal(["Write"], launch.Deny);
+    }
+
+    [Fact]
+    public async Task A_launch_that_allows_nothing_through_the_work_directory_records_no_allow()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), host: new ClaudeCodeHost());
+
+        Assert.Null(Assert.IsType<CommandOutcome.Exited>(outcome).Launch.Allow);
+    }
+
     [Fact]
     public async Task A_host_that_says_nothing_of_its_end_leaves_the_end_as_it_was()
     {
@@ -394,7 +424,8 @@ public class AiRoleCommandTests
         string? projectId = null,
         MemoryFileLocations? memoryFiles = null,
         Resumption? resumption = null,
-        IAgentHost? host = null)
+        IAgentHost? host = null,
+        IReadOnlyList<string>? allow = null)
     {
         var command = new AiRoleCommand(
             paths,
@@ -422,7 +453,8 @@ public class AiRoleCommandTests
             ProjectId: projectId,
             MemoryFiles: memoryFiles,
             Resumption: resumption,
-            Host: host?.Kind);
+            Host: host?.Kind,
+            Allow: allow);
 
         return command.RunAsync(context, Ct);
     }
@@ -494,12 +526,19 @@ file sealed class SentenceHost : IAgentHost
 
     public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
 
-    public string ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+    /// <summary>The allow list the work directory was last written with.</summary>
+    public IReadOnlyList<string>? Allow { get; private set; }
+
+    public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
 
     public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
         _inner.Compose(revision, launch, memoryFiles);
 
-    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> deny) => _inner.WriteWorkDirectory(workDir, deny);
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
+    {
+        Allow = allow;
+        _inner.WriteWorkDirectory(workDir, allow, deny);
+    }
 
     public string? Unavailable(int exitCode, string? stderrTail) => exitCode == 3 ? Sentence : null;
 }

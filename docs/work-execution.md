@@ -431,9 +431,9 @@ happened, so an absent profile name is a fact rather than an inference.
 
 An agent attempt's `provenance.agent` is written at the claim and never rewritten: the level that chose the
 profile, its id, name and revision, the revision it inherited where lineage chose, the host, the program, the
-whole argument list as launched, the host version the profile was verified against, the session id, and
-`tools` — the tools that revision granted, in the API's words and empty where it granted none, beside the
-revision they came from. A launch the machine refused keeps as much of it as the claim had decided, the grant
+whole argument list as launched, the host version the profile was verified against, the session id where the host
+takes one from the runtime, and `tools` — the tools that revision granted, in the API's words and empty where it
+granted none, beside the revision they came from. A launch the machine refused keeps as much of it as the claim had decided, the grant
 included. An attempt run by a role's own entry command names no profile and no grant.
 
 ### The agent pre-flight, in the order it is checked
@@ -1055,8 +1055,8 @@ item is. [docs/campaign-manager.md](campaign-manager.md) §7 has the three cases
   as a pointer ([notifications.md](notifications.md)); pull is still the floor: a person finds out what is
   waiting, and decides, by asking (`jason approval list`). What exists is the gate itself, below.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.
-  The session id is minted per attempt and recorded, which is what a nudge would need, but nothing
-  uses it yet.
+  The session id is minted per attempt and recorded where the host takes one, which is what a nudge would
+  need, but nothing uses it yet.
 - **Anything above one hop.** Lineage is materialized once, from the run that created the item. There
   is no resolver walking a graph, and no branch selection.
 - **Backoff.** The retry delay is linear in the failure count; the tick and the one-item-per-campaign

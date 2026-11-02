@@ -33,8 +33,8 @@ keep doing it. It has four parts, and each has one job.
   same API.
 - **Your agents think and decide, inside what you allowed.** Jason ships no AI model and holds no model credentials.
   Your own interactive session plans and decides with you; background work runs as roles, launched in an agent host
-  you installed and signed in to yourself, and in this release that host is Claude Code. A role that cannot decide
-  something alone asks you, and your answer carries the work on.
+  you installed and signed in to yourself, one of those the [host matrix](execution-profiles.md#12-the-hosts) names.
+  A role that cannot decide something alone asks you, and your answer carries the work on.
 - **Plugins reach the providers.** A plugin performs a provider operation, such as enrolling a person or sending a
   message, against one provider's account, in a process of its own, and reports what happened in Jason's terms.
 - **Skills teach the trade.** The [runtime skills](../skills/runtime/README.md) teach an agent to operate Jason; the
@@ -137,8 +137,8 @@ Jason is built to do as much as it can on its own and nothing that should be you
   you, and pauses or starts a campaign; it is not a place where outreach is designed.
 - **Someone with no provider, or no agent.** Jason performs no sending of its own: without a provider account and its
   plugin, it can plan and keep records, and nothing reaches anyone. Without an agent host, the runtime still keeps its
-  state and performs the provider operations already decided, but the value is in the agent, and launched roles run in
-  Claude Code in this release.
+  state and performs the provider operations already decided, but the value is in the agent, and launched roles run on
+  the hosts the [host matrix](execution-profiles.md#12-the-hosts) names.
 - **Someone who wants messages sent without a person deciding.** Every operation that reaches a real person asks for an
   approval, and its contract, not a setting, says so.
 - **A team that needs one shared system.** An installation is one person's, with its own register and its own history; a

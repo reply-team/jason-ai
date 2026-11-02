@@ -65,13 +65,35 @@ public class AgentHostSeamTests
         Assert.All(Enum.GetValues<AgentHostKind>(), kind => Assert.Contains(AgentHosts.Word(kind), detail.Message, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A tool's rule is the host's own name for it, or null where the host does not have the tool: then a grant of it is
+    /// refused where a profile is written, and a deny of it holds anyway. Never a blank name, which no host reads.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Kinds))]
-    public void Every_tool_of_the_vocabulary_has_a_rule_in_the_hosts_own_name(AgentHostKind kind)
+    public void A_tools_rule_is_the_hosts_own_name_or_null_where_the_host_does_not_have_it(AgentHostKind kind)
     {
         var host = Registered().Single(candidate => candidate.Kind == kind);
 
-        Assert.All(Enum.GetValues<AgentTool>(), tool => Assert.False(string.IsNullOrWhiteSpace(host.ToolRule(tool))));
+        Assert.All(Enum.GetValues<AgentTool>(), tool => Assert.True(host.ToolRule(tool) is null || !string.IsNullOrWhiteSpace(host.ToolRule(tool))));
+    }
+
+    /// <summary>
+    /// Claude Code answers every word as it always did: a rule for every tool of the vocabulary, no deny word, grant or
+    /// argument refused on the host's account, a session the runtime mints, and nothing allowed through the work
+    /// directory, since its allow rules travel on the command line.
+    /// </summary>
+    [Fact]
+    public void Claude_code_has_every_tool_and_refuses_no_word_on_its_own_account()
+    {
+        var host = Registered().Single(candidate => candidate.Kind == AgentHostKind.ClaudeCode);
+
+        Assert.All(Enum.GetValues<AgentTool>(), tool => Assert.NotNull(host.ToolRule(tool)));
+        Assert.All(Enum.GetValues<AgentTool>(), tool => Assert.Null(host.GrantProblem(tool)));
+        Assert.All(["WebFetch", "WebSearch", "Bash(rm *)", "Read(//c/notes/*)", "any words at all"], word => Assert.Null(host.DenyProblem(word)));
+        Assert.Null(host.ArgsProblem(["--model", "made-up-model", "bare"]));
+        Assert.True(host.TakesSessionId);
+        Assert.Empty(host.Compose(Revision(AgentHostKind.ClaudeCode), [host.Facts.CommandWord], NoFiles).Allow);
     }
 
     [Theory]
@@ -105,17 +127,44 @@ public class AgentHostSeamTests
         Assert.All(flags, flag => Assert.Contains(flag, host.ReservedFlags));
     }
 
+    /// <summary>
+    /// Every attempt is its own session: a fresh, non-empty id where the host takes one from the runtime, and none where
+    /// the host mints its own, so the provenance never names a session the runtime did not give.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Kinds))]
-    public void Every_attempt_is_its_own_session(AgentHostKind kind)
+    public void Every_attempt_is_its_own_session_where_the_host_takes_one(AgentHostKind kind)
     {
         var host = Registered().Single(candidate => candidate.Kind == kind);
 
         var first = host.Compose(Revision(kind), [host.Facts.CommandWord], NoFiles);
         var second = host.Compose(Revision(kind), [host.Facts.CommandWord], NoFiles);
 
-        Assert.False(string.IsNullOrWhiteSpace(first.SessionId));
-        Assert.NotEqual(first.SessionId, second.SessionId);
+        if (host.TakesSessionId)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(first.SessionId));
+            Assert.NotEqual(first.SessionId, second.SessionId);
+        }
+        else
+        {
+            Assert.Null(first.SessionId);
+            Assert.Null(second.SessionId);
+        }
+    }
+
+    /// <summary>
+    /// What a host writes into the work directory is given the directory and the two lists, allow first, and nothing
+    /// else: a parameter added here is a door for the envelope or the capability token into a file.
+    /// </summary>
+    [Fact]
+    public void Writing_the_work_directory_is_given_the_directory_the_allow_and_the_deny_and_nothing_else()
+    {
+        var write = typeof(IAgentHost).GetMethod(nameof(IAgentHost.WriteWorkDirectory))!;
+
+        Assert.Equal(["workDir", "allow", "deny"], write.GetParameters().Select(parameter => parameter.Name));
+        Assert.Equal(
+            [typeof(string), typeof(IReadOnlyList<string>), typeof(IReadOnlyList<string>)],
+            write.GetParameters().Select(parameter => parameter.ParameterType));
     }
 
     /// <summary>

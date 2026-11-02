@@ -177,7 +177,11 @@ public sealed class ClaudeCodeHost(bool windows) : IAgentHost
             ],
             session,
             unreadable,
-            deny);
+            deny,
+
+            // Nothing is allowed through the work directory: an allow rule there is ignored in a directory the host
+            // does not trust, so every allow rule above is on the command line.
+            []);
     }
 
     /// <summary>The folder of a directory the host reads project settings from; its skills folder is inside it.</summary>
@@ -194,7 +198,8 @@ public sealed class ClaudeCodeHost(bool windows) : IAgentHost
 
     private static readonly JsonSerializerOptions Settings = new() { WriteIndented = true };
 
-    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> deny) => WriteSettings(workDir, deny);
+    /// <summary>The deny rules and the exclusions; <paramref name="allow"/> is always empty for this host.</summary>
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) => WriteSettings(workDir, deny);
 
     /// <summary>
     /// Writes the work directory's project settings: the deny rules, and the exclusions that keep every instruction file
