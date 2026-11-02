@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Dispatch;
@@ -472,6 +473,41 @@ public partial class ClaimerTests
         await using var fresh = database.Open();
         var waiting = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal(ApprovalStatus.Pending, waiting.Status);
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).Status);
+        Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
+    }
+
+    /// <summary>
+    /// A draft put to a person stays theirs even when the question is gone: it expired unanswered, which cancelled its row,
+    /// a standing approval was set, and a new deadline returned it to the queue. It comes to the claim with no live row,
+    /// and it is parked for a person again rather than released, because somebody was already asked about it.
+    /// </summary>
+    [Fact]
+    public async Task Standing_ParkedThenExpiredThenReopened_StaysWithThePerson()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var item = Drafted(db, reading, await VerdictAsync(db, reading, RunOf(reading)));
+        item.DueAt = Noon.AddHours(1);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        var later = new FixedClock(new DateTimeOffset(Noon.AddHours(2)));
+        Assert.Equal(1, await new Expirer(new JournalWriter(later), later).ExpireAsync(db, Ct));
+        await StandAsync(db, reading.Campaign);
+        var clock = new FixedClock(new DateTimeOffset(Noon));
+        await new WorkItemService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestOptions.PluginSettings()).UpdateAsync(
+            new WorkItemUpdateRequest(item.PublicId, null, null, default, Optional<DateTimeOffset?>.Of(new DateTimeOffset(Noon.AddHours(3))), default, default, default, default, default, default, Operator, null),
+            Ct);
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        Assert.Equal(
+            [ApprovalStatus.Cancelled, ApprovalStatus.Pending],
+            await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).Select(a => a.Status).ToListAsync(Ct));
         Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).Status);
         Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
     }

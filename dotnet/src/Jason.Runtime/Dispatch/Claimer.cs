@@ -493,10 +493,13 @@ public sealed class Claimer(
             item.Contact,
             CanonicalInput.ConsumedChannel(plan.Contract, item));
 
-        // Only where nothing has been decided about this work yet: a decision a person made, or a question already put to
-        // them, is theirs, and a later standing approval never answers it. A standing approval decides once, here, and
-        // its row then authorises a retry of the same subject as a person's would.
-        if (live is null && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } answer)
+        // Only about work nobody was ever asked about: a decision a person made, or a question already put to them, is
+        // theirs, and a later standing approval never answers it — not even once the question is gone, cancelled by an
+        // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
+        // retry of the same subject as a person's would.
+        if (live is null
+            && !await db.Approvals.AnyAsync(row => row.WorkItemId == item.Id, ct).ConfigureAwait(false)
+            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } answer)
         {
             if (answer.Cover is { } cover)
             {
