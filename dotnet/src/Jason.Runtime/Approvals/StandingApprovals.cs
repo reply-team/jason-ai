@@ -104,6 +104,17 @@ public static class StandingApprovals
             LIMIT 1
             """);
 
+    /// <summary>
+    /// Whether anybody was ever asked about a work item: any approval row of its own, whatever became of it. Read through
+    /// the campaign's approvals, so it is bounded by the campaign rather than by every approval the installation holds.
+    /// </summary>
+    internal static IQueryable<int> Asked(JasonDbContext db, int campaignId, int workItemId) =>
+        db.Database.SqlQuery<int>($"""
+            SELECT id AS "Value" FROM approvals INDEXED BY ix_approvals_campaign_id
+            WHERE campaign_id = {campaignId} AND work_item_id = {workItemId}
+            LIMIT 1
+            """);
+
     /// <summary>The standing approval a line sets, as the record it holds.</summary>
     internal static Record Read(JournalEntry set)
     {

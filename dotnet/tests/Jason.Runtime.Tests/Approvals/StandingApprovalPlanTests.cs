@@ -9,8 +9,8 @@ namespace Jason.Runtime.Tests.Approvals;
 /// <summary>
 /// Each read a standing approval makes of the chronicle names the index it is answered from, and SQLite answers it from
 /// that index, bounded as the reason in <see cref="StandingApprovals"/> says: by the kind, and for a count or a later
-/// verdict by the kind and the line's own place in the chronicle. The plans are read from the very queries the claim and
-/// the verbs run.
+/// verdict by the kind and the line's own place in the chronicle. Its one read of the approvals is bounded by the
+/// campaign. The plans are read from the very queries the claim and the verbs run.
 /// </summary>
 public class StandingApprovalPlanTests
 {
@@ -43,6 +43,24 @@ public class StandingApprovalPlanTests
             plan.Any(detail => detail.Contains("SEARCH journal USING INDEX " + search, StringComparison.Ordinal)),
             $"The plan of {read} is: {string.Join(" | ", plan)}");
         Assert.DoesNotContain(plan, detail => detail.StartsWith("SCAN journal", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Whether anybody was asked about the work is read through the campaign's approvals, never by walking every approval
+    /// the installation holds: the table only grows, and the claim asks this of each draft it may release.
+    /// </summary>
+    [Fact]
+    public async Task StandingApprovals_AskedBefore_ReadsTheCampaignsApprovals()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+
+        var plan = await PlanAsync(db, StandingApprovals.Asked(db, 3, 7).ToQueryString());
+
+        Assert.True(
+            plan.Any(detail => detail.Contains("SEARCH approvals USING INDEX ix_approvals_campaign_id (campaign_id=?)", StringComparison.Ordinal)),
+            $"The plan is: {string.Join(" | ", plan)}");
+        Assert.DoesNotContain(plan, detail => detail.StartsWith("SCAN approvals", StringComparison.Ordinal));
     }
 
     /// <summary>The query as EF Core writes it, its parameters bound as it binds them, asked for its plan.</summary>

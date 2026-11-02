@@ -498,7 +498,7 @@ public sealed class Claimer(
         // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
         // retry of the same subject as a person's would.
         if (live is null
-            && !await db.Approvals.AnyAsync(row => row.WorkItemId == item.Id, ct).ConfigureAwait(false)
+            && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false)
             && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } answer)
         {
             if (answer.Cover is { } cover)
