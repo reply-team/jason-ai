@@ -70,6 +70,14 @@ public interface IAgentHost
     bool TakesSessionId => true;
 
     /// <summary>
+    /// The constants this host's child runs with beside the runtime's own four: a fact of the host class that a launch
+    /// cannot change, since no revision, memory file, setting or person is an input of it. Never a secret, never the
+    /// token, and never a name of the runtime's own or one that starts with its prefix; <see cref="LaunchEnvironment"/>
+    /// refuses such a name. The default adds nothing.
+    /// </summary>
+    IReadOnlyDictionary<string, string> Environment => EmptyEnvironment.Value;
+
+    /// <summary>
     /// The command one attempt of <paramref name="revision"/> is started with. Called once per attempt: the
     /// session it names is minted here and belongs to that attempt alone.
     /// </summary>
@@ -110,4 +118,10 @@ public interface IAgentHost
     /// bundle carry. An attempt ended this way is final, since a repeat would meet the same machine.
     /// </summary>
     string? Unavailable(int exitCode, string? stderrTail);
+}
+
+/// <summary>The environment of a host that declares no constants.</summary>
+internal static class EmptyEnvironment
+{
+    public static IReadOnlyDictionary<string, string> Value { get; } = new Dictionary<string, string>();
 }

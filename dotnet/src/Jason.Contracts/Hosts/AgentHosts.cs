@@ -55,6 +55,11 @@ public static class AgentHosts
     public static IReadOnlyList<AgentHostFacts> All { get; } =
     [
         new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile), HomeMarkerKind.Directory),
+
+        // Gemini CLI, from its documentation and source at 0.66.0. The marker is the settings file the host keeps in its own
+        // folder: that folder is also where Antigravity keeps files of its own, so the folder alone would detect Gemini CLI
+        // on every Antigravity install, where this file is written by Gemini CLI only.
+        new(AgentHostKind.GeminiCli, "gemini", ".gemini/settings.json", ".agents/skills", ".agents/skills", new("GEMINI.md", "@" + MemoryFile), HomeMarkerKind.File),
     ];
 
     /// <summary>The instruction files a harness folder holds beside the memory file, each name once.</summary>

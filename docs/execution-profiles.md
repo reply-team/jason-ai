@@ -41,9 +41,10 @@ A revision holds:
 **A profile cannot hold a credential, because there is nowhere to put one.** No environment field, no
 secret field, no free-form bag. The host a profile names was installed and authenticated by a person,
 and the profile only says which one to start. A launched child's environment is the runtime's own plus
-four values and not one more — the data directory, the attempt, the work item, and this build's own
-directory at the front of `PATH` — every one of them non-secret and already in the launch envelope or
-known to the process. The capability token is in none of them, and in nothing else the child can
+the runtime's four and the constants a host's row of §12 declares, never a secret and never a value
+taken from a person. The four are the data directory, the attempt, the work item, and this build's own
+directory at the front of `PATH`; every one of them is non-secret and already in the launch envelope or
+known to the process, and a host's constants are fixed in its own row. The capability token is in none of them, and in nothing else the child can
 read: [docs/work-execution.md](work-execution.md) has the whole list.
 
 There is **no model or effort field**. `--model` exists in Claude Code's flag surface at 2.1.275 but
@@ -492,7 +493,7 @@ status` says which of these hosts it detected on this machine and whether every 
 |---|---|---|---|---|---|---|---|---|---|
 | Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) | one `Read(//…/AGENTS.md)` rule per file, on its command line (§7) | as its prompt, on standard input, in print mode (`-p`) |
 | Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
-| Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | `GEMINI.md` (`@AGENTS.md`) | yes | built from the host's documentation and source for version 0.66.0; not yet run on an account (notes below) | `web_search` as `google_web_search`, `web_fetch` as `web_fetch`: each granted by an allow rule of the policy file and denied by a deny rule of it (notes below) | one `--include-directories` folder for each level the launch names, and the host reads that folder whole (notes below) | as its prompt, on standard input, with no prompt flag, in a non-interactive run |
 | Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
@@ -516,3 +517,38 @@ A host that reads its allow rules from the work directory rather than its comman
 deny rules — the command word that calls the runtime back and the memory files' paths, never the capability token or
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
+
+### Gemini CLI
+
+`gemini_cli` is written from Gemini CLI's documentation and source at version 0.66.0. No run on an account backs it:
+Jason holds no key and the sign-in is the person's own, so the row says so and a profile may record the version it was
+proven against in `host_version_verified`. Google has moved individual plans to Antigravity CLI; `gemini_cli` runs on a
+Code Assist Standard or Enterprise sign-in, and the row's first cell links Google's notice. What follows is what this
+build does, and what it has not measured.
+
+- **Command.** The brief is the whole of standard input and the command carries no prompt. The flags composed are
+  `--output-format=stream-json`, `--approval-mode=default`, `--skip-trust`, `--session-id=<id>`, a policy
+  (`--admin-policy=.jason-policy`), a list of MCP servers that names none, no extensions, and one
+  `--include-directories` for each folder holding a memory file the launch names. A profile's own `args` come last and
+  may not name any of these, nor the prompt, the sandbox, the worktree or the resume flags; they are flags with their
+  value joined by `=`, since a bare word is read as the prompt.
+- **Environment.** The one constant this host declares is `NO_BROWSER=true`: without it a signed-out run opens a
+  browser or waits for a line on standard input, and with it the run fails at once with the host's authentication exit.
+  That exit, 41, ends the attempt as `host_not_available` with Jason's own sentence, and no byte of what the host wrote.
+- **Tools.** The policy file is `.jason-policy/jason.toml` in the work directory, read at the host's highest tier, so a
+  person's own rules cannot widen it. Everything is denied first at the lowest priority; then the read tools, the
+  role's own to-do list and `activate_skill` are allowed; then the runtime's command word is allowed as a shell prefix;
+  then each granted tool is allowed; then what the role may not do is denied above every allow: `write_file`,
+  `replace` and `ask_user` always, and the revision's `deny` words, where `run_shell_command(<prefix>)` is a prefix
+  deny. A role writes through `jason`, never to disk. The policy holds the command word and the tool names only, never
+  the capability token or the envelope.
+- **Memory files.** The host's file tools are confined to the workspace, so a memory file outside it is readable only
+  where its folder is included. The included folders are exactly the folders of the levels the launch names, and none
+  when it names none. The host reads an included folder whole, which is wider than the one file.
+  `GEMINI.md` imports `AGENTS.md`, and the work directory's `.gemini/settings.json` pins that file name and turns
+  the person's hooks off.
+- **Not measured.** The shell on Windows for the command prefix; whether `activate_skill` asks a person even where it is
+  allowed; `--session-id` and `--admin-policy`, which are in the 0.66.0 source but not in its options table; a system
+  policy directory that holds any `.toml` file, which makes the host ignore the supplemental admin policy, so the role
+  then fails closed; the person's own `~/.gemini/GEMINI.md` and `includeDirectories`, which reach every role; and a
+  leftover `~/.gemini/settings.json` from a person who has moved to Antigravity CLI, which still detects this host.

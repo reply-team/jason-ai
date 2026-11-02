@@ -481,6 +481,37 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A launched child's environment is the runtime's four and the constants a host's row declares, and the two pages that
+    /// state it say so in the same words; every constant a registered host declares is named in that host's row, as
+    /// <c>NAME=value</c>, so a person can read what the host's child is given beyond the four.
+    /// </summary>
+    [Fact]
+    public void The_environment_is_the_runtimes_four_and_the_constants_a_hosts_row_declares_and_each_constant_is_in_its_row()
+    {
+        const string Sentence = "the runtime's four and the constants a host's row of";
+        foreach (var page in new[] { "execution-profiles.md", "work-execution.md" })
+        {
+            var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), page)));
+            Assert.Contains(Sentence, contract, StringComparison.Ordinal);
+            Assert.Contains("never a secret and never a value taken from a person", contract, StringComparison.Ordinal);
+            Assert.DoesNotContain("four values and not one more", contract, StringComparison.Ordinal);
+        }
+
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        var notes = text[text.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
+        foreach (var host in Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<Jason.Runtime.Execution.Hosts.IAgentHost>(provider))
+        {
+            foreach (var (name, value) in host.Environment)
+            {
+                Assert.Contains($"`{name}={value}`", notes, StringComparison.Ordinal);
+            }
+        }
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 

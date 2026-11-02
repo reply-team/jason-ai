@@ -5,9 +5,9 @@ using Jason.Runtime.Execution.Hosts;
 namespace Jason.Runtime.Tests.Execution;
 
 /// <summary>
-/// The environment a launched agent runs in. It is the runtime's own plus four values and not one more: an
-/// agent host dumps its environment when it is unhappy, and everything that is in there is in the transcript
-/// the user keeps.
+/// The environment a launched agent runs in. It is the runtime's own plus four values, and the constants a host's own row
+/// declares, and not one more: an agent host dumps its environment when it is unhappy, and everything that is in there is
+/// in the transcript the user keeps.
 /// </summary>
 public class LaunchEnvironmentTests
 {
@@ -52,6 +52,51 @@ public class LaunchEnvironmentTests
         // Of what was already there, only the search path was touched.
         var changed = before.Keys.Where(key => before[key] != after[key]).ToArray();
         Assert.Equal(["PATH"], changed);
+    }
+
+    /// <summary>
+    /// A host's constants are added after the four and nothing else changes: they are a fact of the host class, never a
+    /// value taken from a person, and never one of the runtime's own names.
+    /// </summary>
+    [Fact]
+    [Critical(Family.B1, "no stray variable reaches a child")]
+    public void A_hosts_constants_are_added_after_the_four_and_nothing_else_is_touched()
+    {
+        var before = Existing();
+        var after = Existing();
+
+        LaunchEnvironment.Apply(after, DataDir, AttemptId, WorkItemId, "/opt/jason", new Dictionary<string, string> { ["NO_BROWSER"] = "true" });
+
+        var added = after.Keys.Except(before.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal);
+        Assert.Equal(
+            new[] { ExecutionEnvironment.AttemptIdVariable, JasonPaths.DataDirectoryVariable, "NO_BROWSER", ExecutionEnvironment.WorkItemIdVariable }.Order(StringComparer.Ordinal),
+            added);
+        Assert.Equal("true", after["NO_BROWSER"]);
+        Assert.Equal(["PATH"], before.Keys.Where(key => before[key] != after[key]));
+    }
+
+    [Theory]
+    [InlineData("PATH")]
+    [InlineData("path")]
+    [InlineData("JASON_DATA_DIR")]
+    [InlineData("JASON_ANYTHING")]
+    [InlineData("jason_lower")]
+    [InlineData("")]
+    public void A_host_cannot_name_one_of_the_runtimes_own_variables_or_any_of_the_prefix_it_keeps(string name)
+    {
+        var environment = Existing();
+
+        Assert.Throws<ArgumentException>(
+            () => LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason", new Dictionary<string, string> { [name] = "x" }));
+    }
+
+    [Fact]
+    public void A_host_cannot_name_the_attempt_or_the_work_item_variable()
+    {
+        Assert.All(
+            [ExecutionEnvironment.AttemptIdVariable, ExecutionEnvironment.WorkItemIdVariable, JasonPaths.DataDirectoryVariable],
+            name => Assert.Throws<ArgumentException>(
+                () => LaunchEnvironment.Apply(Existing(), DataDir, AttemptId, WorkItemId, "/opt/jason", new Dictionary<string, string> { [name] = "x" })));
     }
 
     [Fact]
