@@ -2726,22 +2726,25 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
-    /// A route's binding is the account's, and its keys are whatever the plugin's binding names: a key called <c>role</c>
-    /// or <c>plugin_id</c> in it is no role and no plugin, so its value is never taken for a name to write as an alias —
-    /// which would turn a word of the bundle's own, such as a check's state, into one.
+    /// Of the routes the runtime answers, only the plugin each route names is read for a name. A route's binding is the
+    /// account's, and its keys are whatever the plugin's binding names: a key called <c>role</c> or <c>plugin_id</c> in it
+    /// is no role and no plugin, so its value is never taken for a name to write as an alias, which would turn a word of
+    /// the bundle's own, such as a check's state, into one. The plugin a route names is the person's, here one that only
+    /// the routes name, and the route check that quotes it writes its alias.
     /// </summary>
     [Fact]
-    public async Task A_binding_s_keys_are_never_read_for_names()
+    public async Task A_route_s_plugin_is_an_alias_and_its_binding_s_keys_are_never_read_for_names()
     {
         using var dir = new TempPaths();
+        var binding = new JsonObject { ["role"] = "ok", ["plugin_id"] = "ok" };
         var routes = new JsonObject
         {
             ["routing_snapshot_id"] = "rts_01JDOCTOR",
             ["plugin_snapshot_id"] = "snp_01JDOCTOR",
             ["global"] = new JsonObject
             {
-                ["default"] = new JsonObject { ["plugin_id"] = ShippedPlugins.Ids[0], ["binding"] = new JsonObject { ["role"] = "ok", ["plugin_id"] = "ok" }, ["binding_identity"] = "sha256:ab" },
-                ["operations"] = new JsonObject(),
+                ["default"] = new JsonObject { ["plugin_id"] = "sentinelquokka", ["binding"] = binding, ["binding_identity"] = "sha256:ab" },
+                ["operations"] = new JsonObject { ["campaign.get"] = new JsonObject { ["plugin_id"] = ShippedPlugins.Ids[0], ["binding"] = binding.DeepClone(), ["binding_identity"] = "sha256:ab" } },
             },
             ["campaigns"] = new JsonArray(),
         };
@@ -2750,8 +2753,10 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, runtime);
 
-        Assert.Contains(Section(bundle, "status")["checks"]!.AsArray(), check => Text(check!["state"]) == "ok");
-        Assert.DoesNotContain("<role-1>", bundle.Serialize(), StringComparison.Ordinal);
+        var checks = Section(bundle, "status")["checks"]!.AsArray();
+        Assert.Matches("^Routed: default <plugin-[0-9]+>[.]$", Text(checks.Single(check => Text(check!["name"]) == "route")!["fact"]));
+        Assert.Contains(checks, check => Text(check!["state"]) == "ok");
+        AssertAbsent(bundle, "sentinelquokka", "<role-1>");
     }
 
     /// <summary>
