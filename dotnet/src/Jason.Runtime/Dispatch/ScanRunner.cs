@@ -13,19 +13,22 @@ namespace Jason.Runtime.Dispatch;
 /// What one scan did. Zeros are the normal answer: most ticks find nothing to do. <paramref name="Synced"/> counts the
 /// conversation reads the scan started, <paramref name="Observed"/> the threads it said had moved, and
 /// <paramref name="EventReads"/> the read of an account's events it handed to the reader, one at most, and
-/// <paramref name="Resumed"/> the waiting items it released into the queue.
+/// <paramref name="Resumed"/> the waiting items it released into the queue, and <paramref name="Responded"/> the responders
+/// a reply woke.
 /// </summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0);
 
 /// <summary>
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, hand the reader the next read of an
-/// account's events, read the live campaigns' conversations, summon a manager where a campaign wants one, release the
+/// account's events, read the live campaigns' conversations, wake a responder for a reply about a campaign's own thread,
+/// summon a manager where a campaign wants one, release the
 /// waiting work whose wait is over, hand out what is ready, and, last, say once that something waits for a person:
 /// after the dispatch, so nothing the notifier does can strand work already claimed. In that order and in short
 /// transactions, so no step holds the writer while another thinks. The events step only hands a read over — the
 /// reader reads off the scan — and comes before the inbound read, which leaves a campaign to the events only while
-/// their source is healthy. The read comes before the summon so that a reply it says wakes the manager in the same
-/// scan, and before the claim so that a read it starts is claimed in the same scan. The summon comes before the claim
+/// their source is healthy. The read comes before the respond step and the summon so that a reply it says wakes the
+/// responder and the manager in the same scan, and before the claim so that a read it starts is claimed in the same
+/// scan. The respond step comes before the summon, so the responder is queued ahead of the check-in the same reply wakes. The summon comes before the claim
 /// because a check-in created now should be claimable now, and after the lease enforcer because a review of a lost
 /// attempt is summoned by the line that lost it. The release comes after the lease enforcer, so an item whose last
 /// attempt was lost for good releases what waits on it in the same scan, and before the claim, so released work is
@@ -110,6 +113,7 @@ public sealed class ScanRunner(
         var lost = await InScopeAsync<LeaseEnforcer, int>((step, db) => step.EnforceAsync(db, ct)).ConfigureAwait(false);
         var events = await InScopeAsync<EventScan, int>((step, db) => step.ScanAsync(db, ct)).ConfigureAwait(false);
         var inbound = await InScopeAsync<InboundSync, InboundReport>((step, db) => step.SyncAsync(db, ct)).ConfigureAwait(false);
+        var responded = await InScopeAsync<Responder, int>((step, db) => step.RespondAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
         var resumed = await InScopeAsync<Resumer, int>((step, db) => step.ResumeAsync(db, ct)).ConfigureAwait(false);
         var claimed = status.State == DispatcherState.Running
@@ -162,7 +166,7 @@ public sealed class ScanRunner(
         }
 
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

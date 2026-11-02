@@ -51,6 +51,13 @@ public sealed class Campaign
     public int ManagerEventWatermark { get; set; }
 
     /// <summary>
+    /// The highest journal entry the respond step has read for this campaign. It reads the replies said above it, so a
+    /// reply is answered once whichever reader said it. Its own number, not the manager's: a narrowed list of what wakes a
+    /// manager must not stop a reply from waking the responder, nor the other way round.
+    /// </summary>
+    public int ResponderWatermark { get; set; }
+
+    /// <summary>
     /// What the cadence is measured from: the campaign going live, and every check-in since. Null while a
     /// campaign has never been live, which is also why such a campaign is never due.
     /// </summary>

@@ -1,0 +1,9 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "a goal without its kind",
+  "value": [
+    { "id": "demo", "title": "A demo with the operations lead", "reached_when": "a demo is on their calendar", "order": 1 }
+  ],
+  "expect": { "invalid": [{ "pointer": "/0/kind", "reason": "required" }] }
+}

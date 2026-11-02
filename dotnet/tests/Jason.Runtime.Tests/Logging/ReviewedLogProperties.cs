@@ -48,7 +48,8 @@ internal static class ReviewedLogProperties
 
         // Codes and closed words, and the envelope's level. A code is the runtime's own constant or a plugin outcome's
         // code, which the outcome validator holds to a snake_case token of at most 64 characters before anything logs it
-        // (Code: Claimer, PluginInvoker, NotificationSender, UpdateChecker). Verdict is "succeeded", "unknown", or
+        // (Code: Claimer, PluginInvoker, NotificationSender, UpdateChecker, and Responder, whose codes are its own skip
+        // codes and the code of a domain error that refused a line). Verdict is "succeeded", "unknown", or
         // "failed" or "protocol_failure" followed by a closed failure class and such a code (PluginInvoker).
         "Code", "Codes", "Class", "Verdict", "Source", "Console", "Section", "Channel", "Activated", "Operation",
         "EnvName", "SourceContext", "EventId", "@l",
@@ -103,7 +104,7 @@ internal static class ReviewedLogProperties
         // LiveSettings: validator and binding sentences, which name a setting by its path and describe a refused text
         // by its length. ParseFailure: a read failure's type and where the reader stopped, and for a stored value the
         // table and column the model names it by. InboundSync: why a read's result is not a page, a closed word or the
-        // ParseFailure sentence.
+        // ParseFailure sentence. Responder: the ParseFailure sentence.
         "Failure",
     };
 

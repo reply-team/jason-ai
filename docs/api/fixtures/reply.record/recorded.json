@@ -1,0 +1,56 @@
+{
+  "operation": "reply.record",
+  "case": "recorded",
+  "request": {
+    "campaign_id": "cmp_1",
+    "plugin_id": "mailbox",
+    "thread_id": "thr-1042",
+    "message_id": "msg-77",
+    "message_at": "2026-09-14T11:30:00.250Z",
+    "contact_id": "cnt_1",
+    "category": "interested",
+    "confidence": 0.9,
+    "reaction": "draft",
+    "goal_id": "demo",
+    "actor": {
+      "type": "role",
+      "id": "responder"
+    },
+    "reason": "interested by the table; draft toward the demo"
+  },
+  "status": 200,
+  "response": {
+    "id": "jrn_1",
+    "ts": "2026-09-14T12:00:00.000Z",
+    "actor": {
+      "type": "role",
+      "id": "responder"
+    },
+    "kind": "reply_classified",
+    "campaign_id": "cmp_1",
+    "work_item_id": null,
+    "attempt_id": null,
+    "key": "sha256:recorded-1",
+    "old": null,
+    "new": {
+      "plugin": "mailbox",
+      "thread": "thr-1042",
+      "message_id": "msg-77",
+      "message_at": "2026-09-14T11:30:00.250Z",
+      "contact_id": "cnt_1",
+      "category": "interested",
+      "confidence": 0.9,
+      "reaction": "draft",
+      "goal_id": "demo",
+      "goal_kind": "demo"
+    },
+    "reason": "interested by the table; draft toward the demo",
+    "contact_id": "cnt_1",
+    "campaign_name": null,
+    "contact_name": null,
+    "work_item_kind": null,
+    "work_item_role": null,
+    "work_item_operation": null,
+    "actor_role": null
+  }
+}

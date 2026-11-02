@@ -1,0 +1,9 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "an order written as a word instead of a whole number",
+  "value": [
+    { "id": "demo", "kind": "demo", "title": "A demo with the operations lead", "reached_when": "a demo is on their calendar", "order": "first" }
+  ],
+  "expect": { "invalid": [{ "pointer": "/0/order", "reason": "type" }] }
+}

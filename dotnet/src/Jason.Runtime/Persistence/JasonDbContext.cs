@@ -178,6 +178,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.Property(c => c.Context).HasColumnName("context_json").IsRequired().HasDefaultValueSql("'{}'");
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);
+            campaign.Property(c => c.ResponderWatermark).HasDefaultValue(0);
 
             // One key names one campaign, and the database is what says so: two creates deciding "is it free?" by
             // looking would both see yes. A campaign made without a key is in nobody's way.

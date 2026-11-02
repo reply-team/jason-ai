@@ -3,18 +3,64 @@
 A campaign's manager is woken by what the runtime records ([campaign manager](campaign-manager.md)), and a reply is
 something worth waking it for. Inbound sync is how the runtime comes to record one: on a cadence, the dispatcher reads
 each live campaign's conversations at its provider, and for each thread that moved it writes one
-`inbound_reply_observed` line to the chronicle. That line wakes the campaign's manager like a failed item or an
-answered question does.
+`inbound_reply_observed` line to the chronicle. That line wakes the campaign's responder at once, when the thread is the
+campaign's own (§1), and it wakes the campaign's manager like a failed item or an answered question does.
 
 It interprets nothing. A line says that a thread moved, when, and who it belongs to — never what anybody wrote. What a
-reply means, and what to do about it, is the manager's.
+reply means, and what to do about it, is the responder's first and the manager's at its check-in.
 
 ## 1. Where it runs
 
-Each scan runs in eight short steps: **expire**, **enforce**, **events**, **sync**, **summon**, **resume**, **claim**,
-**notify** ([work execution](work-execution.md)). Sync comes before the summon, so a reply it says wakes the manager in the same
-scan, and before the claim, so a read it starts can be claimed in the same scan. Events, before it, hands a read of an
-account's events to a reader that runs off the scan ([events](events.md) §5).
+Each scan runs in nine short steps: **expire**, **enforce**, **events**, **sync**, **respond**, **summon**, **resume**,
+**claim**, **notify** ([work execution](work-execution.md)). Sync comes before the respond step and the summon, so a reply
+it says wakes the responder and the manager in the same scan, and before the claim, so a read it starts can be claimed in
+the same scan. Events, before it, hands a read of an account's events to a reader that runs off the scan
+([events](events.md) §5).
+
+**Respond** reads each active campaign's `inbound_reply_observed` lines above a watermark of its own, whichever writer
+said them — this read or the events store, which say a move under one key — at most 100 a campaign a scan, each in one
+short transaction with the watermark's guarded move. For a line about a thread the campaign holds by its own pin — every
+line this read says, and an events line whose `attributed_by` is `campaign_pin` — it queues two work items:
+
+- a read of the thread, a `conversation.get` `provider_op` whose input is the thread's identifier, a page of 20 and
+  offset 0, made when the campaign's route for that operation names the plugin the reply was read at;
+- the **responder**, an `ai_role` item the dispatcher creates as root work, at `Responder:Priority`, with the result
+  format the responder's skill answers in and a context of identifiers and moments only:
+
+```json
+{"trigger": "inbound_reply_observed",
+ "inbound_reply": {"plugin": "…", "thread": "…", "channel": "email", "contact_id": "cnt_…", "read": "wi_…",
+                   "last_activity_at": "…", "moves": [{"line": "jrn_…", "at": "…"}], "move_count": 1}}
+```
+
+The responder is created already waiting on the read, through the same record a `workitem.wait` writes: it is not
+claimed until the read has ended or the wait's deadline, `Dispatcher:AiRole:MaxWaitSeconds`, has come — under a
+provider block or not — and spends no launch waiting. While a provider block holds the read the campaign has nothing
+scheduled, so the manager's check-in the same line wakes may be claimed before the responder. At the deadline it is released with `read` naming an item that
+has not ended, and finds the thread itself. The wait was written before any run, so no attempt waited and the first run
+is told of no resumption: its envelope's `resumption` is null, and it reads the item `inbound_reply.read` names with
+`jason workitem get`, which says whether the read succeeded and what it read. With no read (no route for it, another
+plugin's route, or an identifier its input refuses), `read` is null and the responder is created ready, to find the
+thread itself. `contact_id` is the person the
+line names; the items' own contact column is set only when that person is a member of the campaign who is not excluded
+and not archived.
+
+One thread has at most one open responder: while a responder the runtime created for the same plugin and thread has not
+ended, a further move is recorded on it — the move appended to `inbound_reply.moves` (the newest 20 kept),
+`move_count` one higher, `last_activity_at` the new moment — through the same patch any update makes, never a second
+item. A move after it
+ended makes a new pair. A responder is never given an `idempotency_key`.
+
+The step creates nothing, and still moves past the line, when `Responder:OnReply` is false; for a line older than
+`Responder:MaxAgeSeconds` (`reply_too_old`); for an events line found through a person the campaign shares rather than
+its own pin, which the manager reads across campaigns before anyone answers (`thread_not_campaign_own`); and when no
+responder could be launched — no execution profile anywhere and no entry command for the role or by default, the case
+the claim would end `role_not_launchable` (`responder_not_configured`). Each code is logged once per campaign, by id and
+code. A line whose write the database refuses by a constraint, or a domain rule refuses, is rolled back, logged once by its
+code, and passed over alone; any other failure — a write that failed for another reason included — stops that campaign
+for this scan, and the next scan tries again. A paused campaign is not read, so its lines wait for it; a campaign with
+no new line has its watermark moved to its own last line, and a line said in another campaign or by the installation
+writes nothing for it.
 
 It runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.
@@ -186,17 +232,31 @@ Each read also keeps the page it read as its result, up to 100 threads with thei
 does. And a reply, or a read that failed, can wake the campaign's manager: what a check-in costs is in
 [campaign manager](campaign-manager.md).
 
+A reply about the campaign's own thread also costs a pair: one `conversation.get` (one plugin child, seconds) and one
+responder launch of up to `Responder:TimeoutSeconds`, with the lifecycle lines of both items in the chronicle; a further
+move into a thread whose responder is still open costs one patch and no launch. The claim paces them — one item per
+campaign at a time — so a burst of fifty threads in one campaign is answered one after another over a few hours, and
+other campaigns are not held up. Meanwhile the campaign's own sends, at priority 0, wait behind its responders. The
+sends wait, detection does not: this read's `conversation.list` items sit ten above `Responder:Priority`, so the
+campaign's next read is claimed ahead of the responders still queued — those queued before an edit that lowered
+`Responder:Priority` by more than ten keep the priority they were created with, and sit above the new reads until they
+are claimed.
+
 ## 9. Upgrading
 
 `inbound_reply_observed` joins the default `Manager:Triggers`. An installation that narrowed its triggers before the
 kind existed keeps its own list, and is not woken by replies until it adds the kind.
 
+The respond step's watermark is set, at the upgrade that adds it, to the chronicle's last line for every campaign, so no
+reply said before the upgrade wakes a responder, and the first scan after it writes nothing for a campaign with no new
+line; a campaign created later starts at the beginning, and has no older
+line.
+
 ## 10. Not here yet
 
-- **Reading a reply.** A line names a thread; reading what it says is a `conversation.get` work item, or the
-  responder's work.
-- **Meaning.** Nothing classifies a reply, and nothing but the manager decides what it calls for.
-- **Telling a person.** A reply is not notified; the manager's check-in is what it wakes.
+- **Reading a reply for meaning.** A line names a thread; the respond step (§1) queues the `conversation.get` that reads
+  it and the responder that decides what it calls for. Nothing in the runtime reads what it says.
+- **Telling a person.** A reply is not notified; the responder and the manager's check-in are what it wakes.
 - **A cadence per campaign,** and a read of any plugin but the one the campaign's route names.
 - **Telling a person that a source of events keeps failing.** Nothing notifies it; while it fails, its campaigns are
   read here.
