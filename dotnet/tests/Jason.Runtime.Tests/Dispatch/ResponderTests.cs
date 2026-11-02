@@ -8,6 +8,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using static Jason.Runtime.Tests.Dispatch.InboundSyncHarvestTests;
 
@@ -62,7 +63,7 @@ public class ResponderTests
         Assert.Null(responder.DueAt);
         Assert.True(JsonNode.DeepEquals(Responder.ResultFormat, responder.ResultFormat));
         Assert.Equal(
-            $$$"""{"trigger":"inbound_reply_observed","reply":{"plugin":"reader","thread":"th-1","channel":"email","contact_id":null,"read":"{{{get.PublicId}}}","last_activity_at":"2026-10-06T11:55:00.000Z","moves":[{"line":"{{{line.PublicId}}}","at":"2026-10-06T11:55:00.000Z"}],"move_count":1}}""",
+            $$$"""{"trigger":"inbound_reply_observed","inbound_reply":{"plugin":"reader","thread":"th-1","channel":"email","contact_id":null,"read":"{{{get.PublicId}}}","last_activity_at":"2026-10-06T11:55:00.000Z","moves":[{"line":"{{{line.PublicId}}}","at":"2026-10-06T11:55:00.000Z"}],"move_count":1}}""",
             responder.Context.ToJsonString());
 
         // Created already waiting on the read: no attempt behind the wait, released when the read ends.
@@ -74,9 +75,15 @@ public class ResponderTests
         Assert.Equal("a reply to answer", reason);
     }
 
-    /// <summary>The read ends, the resume step releases the responder, and the claim takes it ahead of ordinary work.</summary>
-    [Fact]
-    public async Task Responder_WaitingOnItsRead_IsReleasedWhenTheReadEnds()
+    /// <summary>
+    /// The read ends — read, failed or cancelled alike — the resume step releases the responder, and the claim takes it: a
+    /// read that failed leaves the responder to find the thread itself, never stranded waiting.
+    /// </summary>
+    [Theory]
+    [InlineData(WorkItemStatus.Succeeded)]
+    [InlineData(WorkItemStatus.Failed)]
+    [InlineData(WorkItemStatus.Cancelled)]
+    public async Task Responder_WaitingOnItsRead_IsReleasedWhenTheReadEnds_AndRuns(WorkItemStatus ended)
     {
         using var harness = new DispatchHarness(Noon);
         var campaign = await CampaignAsync(harness);
@@ -85,11 +92,19 @@ public class ResponderTests
         Assert.Equal(1, await harness.RespondAsync(Ct));
 
         Assert.Equal(0, await harness.ResumeAsync(Ct));
-        await EndAsync(harness, Responder.ReadOperation, WorkItemStatus.Succeeded);
+        await EndAsync(harness, Responder.ReadOperation, ended);
         Assert.Equal(1, await harness.ResumeAsync(Ct));
 
-        await using var db = harness.Open();
-        Assert.Equal(WorkItemStatus.Created, (await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct)).Status);
+        string responder;
+        await using (var db = harness.Open())
+        {
+            var item = await db.WorkItems.SingleAsync(row => row.Role == Responder.Role, Ct);
+            Assert.Equal(WorkItemStatus.Created, item.Status);
+            responder = item.PublicId;
+        }
+
+        var claimed = await harness.ClaimAsync(Ct);
+        Assert.Equal([responder], claimed.Select(work => work.WorkItemPublicId));
     }
 
     [Fact]
@@ -107,7 +122,7 @@ public class ResponderTests
         var responder = await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct);
         var get = await db.WorkItems.SingleAsync(item => item.Operation == Responder.ReadOperation, Ct);
         Assert.Equal(
-            $$$"""{"trigger":"inbound_reply_observed","reply":{"plugin":"reader","thread":"th-9","channel":"email","contact_id":null,"read":"{{{get.PublicId}}}","last_activity_at":"2026-10-06T11:57:00.000Z","moves":[{"line":"{{{line}}}","at":"2026-10-06T11:57:00.000Z"}],"move_count":1}}""",
+            $$$"""{"trigger":"inbound_reply_observed","inbound_reply":{"plugin":"reader","thread":"th-9","channel":"email","contact_id":null,"read":"{{{get.PublicId}}}","last_activity_at":"2026-10-06T11:57:00.000Z","moves":[{"line":"{{{line}}}","at":"2026-10-06T11:57:00.000Z"}],"move_count":1}}""",
             responder.Context.ToJsonString());
     }
 
@@ -134,6 +149,8 @@ public class ResponderTests
 
     [Theory]
     [InlineData(WorkItemStatus.Created)]
+    [InlineData(WorkItemStatus.AwaitingApproval)]
+    [InlineData(WorkItemStatus.Scheduled)]
     [InlineData(WorkItemStatus.Processing)]
     [InlineData(WorkItemStatus.Waiting)]
     public async Task Responder_SecondMoveWhileOpen_PatchesReplyNoSecondItem(WorkItemStatus status)
@@ -152,7 +169,7 @@ public class ResponderTests
         var responder = await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct);
         Assert.Equal(1, await db.WorkItems.CountAsync(item => item.Operation == Responder.ReadOperation, Ct));
         Assert.Equal(status, responder.Status);
-        var reply = responder.Context["reply"]!;
+        var reply = responder.Context["inbound_reply"]!;
         Assert.Equal(
             $$"""[{"line":"{{first}}","at":"2026-10-06T11:40:00.000Z"},{"line":"{{second}}","at":"2026-10-06T11:58:00.000Z"}]""",
             reply["moves"]!.ToJsonString());
@@ -161,7 +178,7 @@ public class ResponderTests
 
         // Recorded through the path every patch takes, by the dispatcher.
         var patch = await db.Journal.SingleAsync(e => e.WorkItemId == responder.PublicId && e.Kind == JournalKinds.WorkItemContextUpdated, Ct);
-        Assert.Equal(("reply", ActorType.System, "dispatcher"), (patch.Key, patch.ActorType, patch.ActorId));
+        Assert.Equal(("inbound_reply", ActorType.System, "dispatcher"), (patch.Key, patch.ActorType, patch.ActorId));
     }
 
     [Fact]
@@ -178,7 +195,7 @@ public class ResponderTests
         Assert.Equal(1, await harness.RespondAsync(Ct));
 
         await using var db = harness.Open();
-        var reply = (await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct)).Context["reply"]!;
+        var reply = (await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct)).Context["inbound_reply"]!;
         Assert.Equal(25, (int)reply["move_count"]!);
         var moves = reply["moves"]!.AsArray();
         Assert.Equal(20, moves.Count);
@@ -219,7 +236,7 @@ public class ResponderTests
             db.WorkItems.Add(WorkItemFactory.NewAiRole(row, role: Responder.Role, now: Noon, configure: item =>
             {
                 item.CreatedByType = ActorType.Human;
-                item.Context = new JsonObject { ["reply"] = new JsonObject { ["plugin"] = Reader, ["thread"] = "th-1" } };
+                item.Context = new JsonObject { ["inbound_reply"] = new JsonObject { ["plugin"] = Reader, ["thread"] = "th-1" } };
             }));
             await db.SaveChangesAsync(Ct);
         }
@@ -353,7 +370,7 @@ public class ResponderTests
         Assert.Equal(2, items.Count);
         var column = person == Person.Member ? contact : null;
         Assert.All(items, item => Assert.Equal(column, item.Contact?.PublicId));
-        Assert.Equal(contact, (string?)items.Single(item => item.Role == Responder.Role).Context["reply"]!["contact_id"]);
+        Assert.Equal(contact, (string?)items.Single(item => item.Role == Responder.Role).Context["inbound_reply"]!["contact_id"]);
     }
 
     /// <summary>
@@ -408,7 +425,7 @@ public class ResponderTests
         var responder = await db.WorkItems.SingleAsync(Ct);
         Assert.Equal(Responder.Role, responder.Role);
         Assert.Equal(WorkItemStatus.Created, responder.Status);
-        Assert.Null((string?)responder.Context["reply"]!["read"]);
+        Assert.Null((string?)responder.Context["inbound_reply"]!["read"]);
         Assert.Empty(await db.WorkItemWaits.ToListAsync(Ct));
     }
 
@@ -426,8 +443,8 @@ public class ResponderTests
         await using var db = harness.Open();
         var responder = await db.WorkItems.SingleAsync(Ct);
         Assert.Equal((Responder.Role, WorkItemStatus.Created), (responder.Role, responder.Status));
-        Assert.Null((string?)responder.Context["reply"]!["read"]);
-        Assert.Equal(thread, (string?)responder.Context["reply"]!["thread"]);
+        Assert.Null((string?)responder.Context["inbound_reply"]!["read"]);
+        Assert.Equal(thread, (string?)responder.Context["inbound_reply"]!["thread"]);
     }
 
     /// <summary>
@@ -447,10 +464,55 @@ public class ResponderTests
 
         await using var db = harness.Open();
         var responder = await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct);
-        Assert.Equal("th-2", (string?)responder.Context["reply"]!["thread"]);
+        Assert.Equal("th-2", (string?)responder.Context["inbound_reply"]!["thread"]);
         Assert.Equal(await IdOfAsync(harness, next), await WatermarkAsync(harness, campaign));
         Assert.Equal(1, harness.Logs.All.Count(l => l.StartsWith("The respond step passed over a line of campaign ", StringComparison.Ordinal)));
         Assert.True(await IdOfAsync(harness, poisoned) < await IdOfAsync(harness, next));
+    }
+
+    /// <summary>
+    /// A write the database refuses by a constraint is the line's, and passed over; one that fails for any other reason —
+    /// here a statement the database cannot run, standing in for a disk that failed — is not the line's fault: the
+    /// campaign is left for this scan with its watermark where it was, and the next scan acts on the line.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Responder_OnlyAConstraintPassesALineOver_AnyOtherWriteFailureWaitsForTheNextScan(bool refusal)
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness);
+        RoutedTo(harness, Reader);
+        var line = await LineAsync(harness, campaign, "th-1", Noon.AddMinutes(-5));
+        await using (var db = harness.Open())
+        {
+            var failing = refusal
+                ? "CREATE TRIGGER failing_write BEFORE INSERT ON work_items BEGIN SELECT RAISE(ABORT, 'refused'); END"
+                : "CREATE TRIGGER failing_write BEFORE INSERT ON work_items BEGIN SELECT no_such_function(); END";
+            await db.Database.ExecuteSqlRawAsync(failing, Ct);
+        }
+
+        Assert.Equal(0, await harness.RespondAsync(Ct));
+
+        await using (var db = harness.Open())
+        {
+            Assert.Equal(0, await db.WorkItems.CountAsync(Ct));
+            await db.Database.ExecuteSqlRawAsync("DROP TRIGGER failing_write", Ct);
+        }
+
+        if (refusal)
+        {
+            Assert.Equal(await IdOfAsync(harness, line), await WatermarkAsync(harness, campaign));
+            Assert.Single(harness.Logs.All, l => l.StartsWith("The respond step passed over a line of campaign ", StringComparison.Ordinal));
+            Assert.Equal(0, await harness.RespondAsync(Ct));
+        }
+        else
+        {
+            Assert.Equal(0, await WatermarkAsync(harness, campaign));
+            Assert.DoesNotContain(harness.Logs.All, l => l.StartsWith("The respond step passed over", StringComparison.Ordinal));
+            Assert.Single(harness.Logs.All, l => l.StartsWith("The respond step for campaign ", StringComparison.Ordinal));
+            Assert.Equal(1, await harness.RespondAsync(Ct));
+        }
     }
 
     [Fact]
@@ -470,16 +532,66 @@ public class ResponderTests
         Assert.Equal(await IdOfAsync(harness, lines[149]), await WatermarkAsync(harness, campaign));
     }
 
-    /// <summary>A campaign whose chronicle says no reply is moved to the chronicle's last line, and never read again for it.</summary>
+    /// <summary>
+    /// A campaign whose chronicle says no reply is moved to its own last line, never read again for it; a line said
+    /// anywhere else — another campaign's, or the installation's — leaves it where it is, so a quiet campaign costs no write.
+    /// </summary>
     [Fact]
-    public async Task Responder_NoLine_MovesTheWatermarkToTheChroniclesLastLine()
+    public async Task Responder_NoLine_MovesTheWatermarkToTheCampaignsOwnLastLine()
     {
         using var harness = new DispatchHarness(Noon);
         var campaign = await CampaignAsync(harness);
-        var last = await harness.WriteLineAsync(JournalKinds.CampaignCreated, Ct);
+        var other = await CampaignAsync(harness);
+        var own = await CampaignLineAsync(harness, campaign);
+        await CampaignLineAsync(harness, other);
+        await harness.WriteLineAsync(JournalKinds.CampaignCreated, Ct);
 
         Assert.Equal(0, await harness.RespondAsync(Ct));
-        Assert.Equal(last.Id, await WatermarkAsync(harness, campaign));
+        Assert.Equal(own, await WatermarkAsync(harness, campaign));
+
+        // Every campaign level with its own chronicle: an installation's line writes nothing for any of them.
+        await harness.WriteLineAsync(JournalKinds.CampaignCreated, Ct);
+        harness.Commands.Clear();
+        Assert.Equal(0, await harness.RespondAsync(Ct));
+        Assert.Equal(own, await WatermarkAsync(harness, campaign));
+        Assert.DoesNotContain(harness.Commands.Texts, text => text.Contains("UPDATE", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The thread's open responder is looked for under the writer's lock, so the query is held to a plan: the campaign's
+    /// items in the statuses that are not final, by the index on campaign and status, and only the three columns it reads.
+    /// </summary>
+    [Fact]
+    public async Task Responder_OpenResponderQuery_SeeksTheCampaignsLiveItemsByIndex()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness);
+        RoutedTo(harness, Reader);
+        await LineAsync(harness, campaign, "th-1", Noon.AddMinutes(-20));
+        Assert.Equal(1, await harness.RespondAsync(Ct));
+        await LineAsync(harness, campaign, "th-1", Noon.AddMinutes(-2));
+
+        harness.Commands.Clear();
+        Assert.Equal(0, await harness.RespondAsync(Ct));
+
+        var sent = Assert.Single(harness.Commands.Texts, text => text.StartsWith("SELECT", StringComparison.Ordinal)
+            && text.Contains("FROM \"work_items\"", StringComparison.Ordinal)
+            && text.Contains("'responder'", StringComparison.Ordinal));
+        var selected = sent[..sent.IndexOf("FROM", StringComparison.Ordinal)];
+        Assert.Equal(3, selected.Split(',').Length);
+        Assert.DoesNotContain("result_json", selected, StringComparison.Ordinal);
+
+        var plan = PlanOf(harness, sent);
+        var said = string.Join(" / ", plan);
+        Assert.False(plan.Any(step => step.StartsWith("SCAN", StringComparison.Ordinal)), $"The open responder query scans: {said}");
+        Assert.True(
+            plan.SequenceEqual(
+            [
+                "SEARCH w USING INDEX ix_work_items_campaign_id_status (campaign_id=? AND status=?)",
+                // Sorting what the seek found: the campaign's live items, never its history.
+                "USE TEMP B-TREE FOR ORDER BY",
+            ]),
+            $"The open responder query's plan changed: {said}");
     }
 
     [Fact]
@@ -514,7 +626,7 @@ public class ResponderTests
         Assert.Equal(1, await harness.RespondAsync(Ct));
 
         await using var db = harness.Open();
-        Assert.Equal("th-new", (string?)(await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct)).Context["reply"]!["thread"]);
+        Assert.Equal("th-new", (string?)(await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct)).Context["inbound_reply"]!["thread"]);
         Assert.Equal(1, harness.Logs.All.Count(l => l.EndsWith(": reply_too_old", StringComparison.Ordinal)));
     }
 
@@ -673,6 +785,42 @@ public class ResponderTests
             updated: said);
         await db.SaveChangesAsync(Ct);
         return entry.PublicId;
+    }
+
+    /// <summary>A line of the campaign's own that says no reply; answers its id.</summary>
+    private static async Task<int> CampaignLineAsync(DispatchHarness harness, int campaignId)
+    {
+        await using var db = harness.Open();
+        var campaign = await db.Campaigns.SingleAsync(c => c.Id == campaignId, Ct);
+        var entry = new JournalWriter(harness.Clock).Append(db, Actors.Runtime, JournalKinds.CampaignCreated, campaign);
+        await db.SaveChangesAsync(Ct);
+        return entry.Id;
+    }
+
+    /// <summary>What SQLite plans for a command the step sent, its parameters bound to whole numbers; one step a line.</summary>
+    private static List<string> PlanOf(DispatchHarness harness, string text)
+    {
+        using var db = harness.Open();
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        connection.Open();
+        using var explain = connection.CreateCommand();
+        explain.CommandText = "EXPLAIN QUERY PLAN " + text;
+        foreach (System.Text.RegularExpressions.Match name in System.Text.RegularExpressions.Regex.Matches(text, @"@\w+"))
+        {
+            if (!explain.Parameters.Contains(name.Value))
+            {
+                explain.Parameters.AddWithValue(name.Value, 1);
+            }
+        }
+
+        using var reader = explain.ExecuteReader();
+        var plan = new List<string>();
+        while (reader.Read())
+        {
+            plan.Add(reader.GetString(3));
+        }
+
+        return plan;
     }
 
     private static async Task<int> IdOfAsync(DispatchHarness harness, string line)

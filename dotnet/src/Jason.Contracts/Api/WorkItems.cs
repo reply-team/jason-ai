@@ -403,7 +403,8 @@ public sealed record WorkItemResumeRequest(string? WorkItemId, ActorRef? Actor, 
 /// The open wait of a waiting item: what it waits for and until when. Identifiers, statuses and moments only, so it
 /// reads the same whatever the items are about.
 /// </summary>
-/// <param name="AttemptId">The attempt that ended by waiting; every wait a role makes has one.</param>
+/// <param name="AttemptId">The attempt that ended by waiting; null for a wait no attempt asked for — an item parked on a
+/// provider block, or a responder the runtime created already waiting on the read of its thread.</param>
 /// <param name="On">The named work items in the order they were named, each with where it stands now.</param>
 /// <param name="Mode">Whether every named item must end, or any one; null for a wait on a moment alone.</param>
 /// <param name="Until">The moment the wait named; null where it named none.</param>

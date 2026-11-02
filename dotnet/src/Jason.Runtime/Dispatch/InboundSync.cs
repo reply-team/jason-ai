@@ -628,8 +628,9 @@ public sealed class InboundSync(
 
     /// <summary>
     /// Where a read sits in the queue: ten above the responders a reply wakes, so a campaign's read of its conversations is
-    /// never claimed after its responders — the sends wait behind them, detection does not. Taken from the responders'
-    /// own setting rather than set apart, so no edit can put the read beneath them.
+    /// not claimed after its responders — the sends wait behind them, detection does not. Taken from the responders'
+    /// own setting rather than set apart, so no edit puts a read made after it beneath them; responders queued before an
+    /// edit that lowered their priority by more than ten keep the one they were made with until they are claimed.
     /// </summary>
     internal int ReadPriority() => responder.Current.Priority + ReadAboveResponders;
 

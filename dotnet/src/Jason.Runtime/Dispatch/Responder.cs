@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
@@ -11,6 +10,7 @@ using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -52,11 +52,10 @@ public sealed class Responder(
     public const string ReadOperation = "conversation.get";
 
     /// <summary>
-    /// The reserved context key the runtime writes the reply into, and reads an open responder's thread from. It is the
-    /// wire name of the record it carries, by the snake_case rule every wire name follows; spelled as a bare word it
-    /// would read, to the guard that keeps the sources vendor-neutral, as a plugin's id.
+    /// The reserved context key the runtime writes the inbound reply that woke the responder into, and reads an open
+    /// responder's thread from; named as the line kind that says it is.
     /// </summary>
-    public static readonly string ReplyKey = JsonNamingPolicy.SnakeCaseLower.ConvertName(nameof(Reply));
+    public const string InboundReplyKey = "inbound_reply";
 
     /// <summary>How many lines one scan reads of one campaign at most; the rest are read by the scans after it.</summary>
     public const int LinesPerScan = 100;
@@ -251,7 +250,7 @@ public sealed class Responder(
                 db.ChangeTracker.Clear();
                 return outcome;
             }
-            catch (Exception ex) when (ex is DbUpdateException or DomainException)
+            catch (Exception ex) when (ex is DomainException || Refused(ex))
             {
                 await transaction.RollbackAsync(ct).ConfigureAwait(false);
                 db.ChangeTracker.Clear();
@@ -264,6 +263,8 @@ public sealed class Responder(
         }
 
         // Past the poisoned line alone, so it is not tried again on every scan and the lines after it are still read.
+        // Only a refusal is the line's: a write that failed for any other reason, a disk or a lock, is rethrown above and
+        // fails the campaign for this scan, so the next scan reads the line again.
         await using var passing = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         if (await AccountForAsync(db, campaign.Id, before, line.Id, ct).ConfigureAwait(false) == 0)
         {
@@ -281,7 +282,7 @@ public sealed class Responder(
         var open = await OpenResponderAsync(db, campaign.Id, reply, ct).ConfigureAwait(false);
         if (open is not null)
         {
-            var recorded = open.Context[ReplyKey]!.DeepClone().AsObject();
+            var recorded = open.Context[InboundReplyKey]!.DeepClone().AsObject();
             var moves = recorded["moves"] as JsonArray ?? [];
             var kept = moves.Select(node => node?.DeepClone()).Append(move).TakeLast(MovesKept).ToArray();
             recorded["moves"] = new JsonArray(kept);
@@ -291,7 +292,7 @@ public sealed class Responder(
             await items.UpdateCoreAsync(
                 new WorkItemUpdateRequest(
                     open.PublicId,
-                    new JsonObject { [ReplyKey] = recorded },
+                    new JsonObject { [InboundReplyKey] = recorded },
                     Unset: null,
                     default,
                     default,
@@ -328,7 +329,7 @@ public sealed class Responder(
                 new JsonObject
                 {
                     ["trigger"] = JournalKinds.InboundReplyObserved,
-                    [ReplyKey] = new JsonObject
+                    [InboundReplyKey] = new JsonObject
                     {
                         ["plugin"] = reply.Plugin,
                         ["thread"] = reply.Thread,
@@ -347,8 +348,9 @@ public sealed class Responder(
             LineageRecord.Root,
             ct).ConfigureAwait(false);
 
-        // Waiting on the read from the start: the responder is never claimed before the read has ended, under a provider
-        // block or not, and spends no launch waiting for it.
+        // Waiting on the read from the start: the responder is not claimed until the read has ended or the wait's deadline
+        // has come, under a provider block or not, and spends no launch waiting for it. No attempt waited, so its first
+        // run is told of no resumption and reads the read named in its context.
         if (read is not null)
         {
             outcomes.WaitFromCreation(db, responder, [read], Actors.Dispatcher);
@@ -413,19 +415,26 @@ public sealed class Responder(
     /// The thread's open responder: one the runtime itself created, in this campaign, not yet final, whose reply names the
     /// same plugin and thread. A responder a role or a person created is theirs, and not looked at.
     /// </summary>
-    private static async Task<WorkItem?> OpenResponderAsync(JasonDbContext db, int campaignId, Reply reply, CancellationToken ct)
+    private static async Task<OpenResponder?> OpenResponderAsync(JasonDbContext db, int campaignId, Reply reply, CancellationToken ct)
     {
+        // The statuses that are not final, named rather than negated, so the query seeks the campaign's live items by the
+        // index on campaign and status instead of walking every item the campaign ever had, under the writer's lock.
         var open = await db.WorkItems
             .AsNoTracking()
             .Where(item => item.CampaignId == campaignId
+                && (item.Status == WorkItemStatus.Created
+                    || item.Status == WorkItemStatus.AwaitingApproval
+                    || item.Status == WorkItemStatus.Scheduled
+                    || item.Status == WorkItemStatus.Processing
+                    || item.Status == WorkItemStatus.Waiting)
                 && item.Role == Role
-                && item.CreatedByType == ActorType.System
-                && !WorkItemTransitions.Final.Contains(item.Status))
+                && item.CreatedByType == ActorType.System)
             .OrderBy(item => item.Id)
+            .Select(item => new OpenResponder(item.Id, item.PublicId, item.Context))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return open.FirstOrDefault(item => item.Context[ReplyKey] is JsonObject recorded
+        return open.FirstOrDefault(item => item.Context[InboundReplyKey] is JsonObject recorded
             && recorded["plugin"] is JsonValue plugin && plugin.TryGetValue<string>(out var p) && p == reply.Plugin
             && recorded["thread"] is JsonValue thread && thread.TryGetValue<string>(out var t) && t == reply.Thread);
     }
@@ -480,13 +489,13 @@ public sealed class Responder(
     }
 
     /// <summary>
-    /// No new line: the watermark goes to the chronicle's last line, read inside the transaction that writes it, so a
-    /// line said meanwhile is either seen here and left for the next scan or written after the move. A quiet campaign is
-    /// then never read again for what it already said.
+    /// No new line: the watermark goes to the campaign's own last line, read again inside the transaction that writes
+    /// it, so a line said meanwhile is either seen here and left for the next scan or written after the move. A line said
+    /// anywhere else leaves a level campaign alone, with no transaction: a quiet campaign costs one seek a scan.
     /// </summary>
     private static async Task LevelAsync(JasonDbContext db, Active campaign, int before, CancellationToken ct)
     {
-        var last = await db.Journal.MaxAsync(entry => (int?)entry.Id, ct).ConfigureAwait(false) ?? 0;
+        var last = await OwnLastLineAsync(db, campaign.Id, ct).ConfigureAwait(false);
         if (last <= before)
         {
             return;
@@ -496,7 +505,7 @@ public sealed class Responder(
         var said = await db.Journal
             .AnyAsync(entry => entry.CampaignId == campaign.Id && entry.Id > before && entry.Kind == JournalKinds.InboundReplyObserved, ct)
             .ConfigureAwait(false);
-        last = await db.Journal.MaxAsync(entry => (int?)entry.Id, ct).ConfigureAwait(false) ?? 0;
+        last = await OwnLastLineAsync(db, campaign.Id, ct).ConfigureAwait(false);
         if (said || await AccountForAsync(db, campaign.Id, before, last, ct).ConfigureAwait(false) == 0)
         {
             await transaction.RollbackAsync(ct).ConfigureAwait(false);
@@ -505,6 +514,17 @@ public sealed class Responder(
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
     }
+
+    /// <summary>A write the database refused by a constraint, which the line caused; every other failure of a write is not its own.</summary>
+    private static bool Refused(Exception exception) =>
+        exception is DbUpdateException { InnerException: SqliteException { SqliteErrorCode: 19 } };
+
+    /// <summary>The campaign's own last line, by the index on campaign and id; 0 for a campaign with none.</summary>
+    private static async Task<int> OwnLastLineAsync(JasonDbContext db, int campaignId, CancellationToken ct) =>
+        await db.Journal
+            .Where(entry => entry.CampaignId == campaignId)
+            .MaxAsync(entry => (int?)entry.Id, ct)
+            .ConfigureAwait(false) ?? 0;
 
     /// <summary>Moves a campaign's watermark, and only from the value this step read.</summary>
     private static Task<int> AccountForAsync(JasonDbContext db, int campaignId, int before, int after, CancellationToken ct) =>
@@ -523,6 +543,8 @@ public sealed class Responder(
             .ConfigureAwait(false);
 
     private sealed record Active(int Id, string PublicId, int Watermark, string? ExecutionProfile);
+
+    private sealed record OpenResponder(int Id, string PublicId, JsonObject Context);
 
     private sealed record Line(int Id, string PublicId, JsonNode? New);
 
