@@ -90,6 +90,16 @@ public sealed class UpdateFeed(HttpClient client)
             : throw new UpdateFeedException(UpdateFeedException.Invalid, $"'{asset}' is not an asset name this build will fetch.");
     }
 
+    /// <summary>
+    /// Puts the <c>User-Agent</c> of <c>jason/&lt;version&gt;</c> on a request: what this product tells a web page about
+    /// itself, one line in one place for every request to a release, the feed, the archive and the files beside them.
+    /// </summary>
+    public static void SayWhoAsks(HttpRequestMessage request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("jason", JasonVersion.Current));
+    }
+
     /// <exception cref="UpdateFeedException">The feed could not be read, or what it answered is not a manifest.</exception>
     public async Task<UpdateManifest> ReadAsync(Uri feed, CancellationToken cancellationToken)
     {
@@ -98,9 +108,8 @@ public sealed class UpdateFeed(HttpClient client)
 
         using var request = new HttpRequestMessage(HttpMethod.Get, feed);
 
-        // Set per request rather than on the client: a caller that built its own client cannot forget it, and
-        // what this product tells a web page about itself stays one line in one place.
-        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("jason", JasonVersion.Current));
+        // Set per request rather than on the client: a caller that built its own client cannot forget it.
+        SayWhoAsks(request);
 
         // The whole exchange under one deadline, because reading the headers and reading the body are two waits
         // and the client's own timeout covers only the first: with ResponseHeadersRead it is satisfied the

@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Jason.Cli.Update;
+using Jason.Contracts;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
@@ -154,6 +155,21 @@ public class UpdateStagerTests
         Assert.Equal(
             ["/releases/latest/download/" + release.Asset],
             release.Requested);
+    }
+
+    /// <summary>
+    /// The archive is asked for as the feed is, saying which version asks: what this product tells a web page about itself
+    /// is one line, whichever of its requests carries it.
+    /// </summary>
+    [Fact]
+    public async Task A_download_says_which_version_is_asking_as_the_feed_does()
+    {
+        using var dir = new TempTree();
+        using var release = new FakeRelease(Next);
+
+        await StageAsync(release, dir);
+
+        Assert.Equal($"jason/{JasonVersion.Current}", release.UserAgents["/releases/latest/download/" + release.Asset]);
     }
 
     [Fact]
