@@ -465,7 +465,7 @@ public sealed class Claimer(
     {
         var plan = verdict.Plan!;
         var subject = ApprovalSubject.Of(plan, item);
-        var live = await ApprovalGate.LiveAsync(db, item.Id, ct).ConfigureAwait(false);
+        var live = await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, ct).ConfigureAwait(false);
 
         if (live is { Status: ApprovalStatus.Approved }
             && string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal))

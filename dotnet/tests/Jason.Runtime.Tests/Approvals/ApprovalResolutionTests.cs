@@ -156,12 +156,13 @@ public class ApprovalResolutionTests
         item.Status = WorkItemStatus.AwaitingApproval;
         item.DueAt = dueAt;
         db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
 
         var approval = new Approval
         {
             PublicId = PublicId.New(ApprovalGate.IdPrefix),
             WorkItem = item,
-            CampaignId = campaign.Id,
+            CampaignId = item.CampaignId,
             Operation = "campaign.enroll",
             OperationVersion = 1,
             Subject = new JsonObject { ["operation"] = "campaign.enroll" },

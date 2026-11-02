@@ -1,7 +1,5 @@
-using System.Globalization;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Persistence;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Approvals;
@@ -37,7 +35,7 @@ public class StandingApprovalPlanTests
             _ => throw new ArgumentOutOfRangeException(nameof(read), read, "no such read"),
         };
 
-        var plan = await PlanAsync(db, query.ToQueryString());
+        var plan = await QueryPlans.PlanAsync(db, query.ToQueryString(), Ct);
 
         Assert.True(
             plan.Any(detail => detail.Contains("SEARCH journal USING INDEX " + search, StringComparison.Ordinal)),
@@ -55,48 +53,11 @@ public class StandingApprovalPlanTests
         using var database = new TestDatabase();
         await using var db = database.Open();
 
-        var plan = await PlanAsync(db, StandingApprovals.Asked(db, 3, 7).ToQueryString());
+        var plan = await QueryPlans.PlanAsync(db, StandingApprovals.Asked(db, 3, 7).ToQueryString(), Ct);
 
         Assert.True(
             plan.Any(detail => detail.Contains("SEARCH approvals USING INDEX ix_approvals_campaign_id (campaign_id=?)", StringComparison.Ordinal)),
             $"The plan is: {string.Join(" | ", plan)}");
         Assert.DoesNotContain(plan, detail => detail.StartsWith("SCAN approvals", StringComparison.Ordinal));
-    }
-
-    /// <summary>The query as EF Core writes it, its parameters bound as it binds them, asked for its plan.</summary>
-    private static async Task<List<string>> PlanAsync(JasonDbContext db, string written)
-    {
-        await using var connection = new SqliteConnection(db.Database.GetConnectionString());
-        await connection.OpenAsync(Ct);
-        await using var command = connection.CreateCommand();
-        var sql = new List<string>();
-        foreach (var text in written.Split('\n'))
-        {
-            var row = text.TrimEnd('\r');
-            if (row.StartsWith(".param set ", StringComparison.Ordinal))
-            {
-                var parts = row[".param set ".Length..].Split(' ', 2);
-                var value = parts[1];
-                command.Parameters.AddWithValue(
-                    parts[0],
-                    value.StartsWith('\'')
-                        ? value[1..^1].Replace("''", "'", StringComparison.Ordinal)
-                        : long.Parse(value, CultureInfo.InvariantCulture));
-            }
-            else
-            {
-                sql.Add(row);
-            }
-        }
-
-        command.CommandText = "EXPLAIN QUERY PLAN " + string.Join('\n', sql).Trim();
-        var plan = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync(Ct);
-        while (await reader.ReadAsync(Ct))
-        {
-            plan.Add(reader.GetString(reader.GetOrdinal("detail")));
-        }
-
-        return plan;
     }
 }
