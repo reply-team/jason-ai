@@ -208,7 +208,12 @@ the runtime's: `journal.append` refuses it to every other writer. It carries the
 thread, the message's provider identifier and moment, the category as a string, the confidence from 0 to 1, the
 reaction (`act`, `draft`, `escalate` or `none`), the goal's id and kind, and the actor, and never a word a person
 wrote: no subject, no body, no preview, no name. The runtime checks that the category is one non-empty line of text
-and nothing more; what a category means is the skills' business, never the runtime's.
+and nothing more; what a category means is the skills' business, never the runtime's. Where the category is a
+person's answer to a question about the reply, `reply.record`'s optional `decision_id` argument names that decision;
+the runtime checks at the call that it is the campaign's (`decision_not_found`), answered (`decision_not_answered`) by a
+named person (`decision_not_human`), with the category as the chosen option (`decision_option_differs`), and raised by
+the attempt that recorded a verdict on this reply (`decision_not_about_reply`), and the line then carries the
+decision's id as `decision_id` and the person's actor as `answered_by`.
 
 **Three reserved lines beside it.** A person's word in advance about one category of verdict in one campaign is a
 standing approval: `approval.set_standing` writes `standing_approval_set` and `approval.unset_standing` writes

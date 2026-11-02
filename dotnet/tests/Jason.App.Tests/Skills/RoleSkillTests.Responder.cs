@@ -95,6 +95,10 @@ public partial class RoleSkillTests
         Assert.Equal(0.7, (double)Categories()["question_below"]!);
         Assert.Contains("Where your confidence is below the file's `question_below`", skill, StringComparison.Ordinal);
         Assert.Contains("record your best guess with its confidence first, with `--reaction escalate`, since asking is what is done about it, then ask the person which category it is", skill, StringComparison.Ordinal);
+
+        // The answer backs a verdict only through a question the run that recorded a verdict on the reply raised.
+        Assert.Contains("The order is load-bearing: a question raised before the guess is recorded cannot back the person's answer", skill, StringComparison.Ordinal);
+        Assert.Contains("The guess is recorded from your own attempt, with no actor typed, never as `role:responder`: a line recorded by the role names no attempt, and then no answer to your question can back a verdict.", skill, StringComparison.Ordinal);
         Assert.Contains("write no draft and act on nothing, with one exception", skill, StringComparison.Ordinal);
 
         // A probable stop is the one act that does not wait: the register entry is Jason's own and a person lifts it.
@@ -541,7 +545,7 @@ public partial class RoleSkillTests
         Assert.Contains("- `escalate`: ask, unless a question about this thread is still open", skill, StringComparison.Ordinal);
         Assert.Contains("- `none`: nothing.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing approval exists, and your summary says so.",
+            "A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing approval exists, unless the line carries a person's answer through a decision (its `answered_by` is not null), and your summary says so.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("`Responder:MaxAttempts` is 1 by default, and the rule holds anyway", skill, StringComparison.Ordinal);

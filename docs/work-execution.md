@@ -315,12 +315,17 @@ thread the reply answers in — or, for a message, about the same person. Anythi
 approval row of its own is covered when, in this order: its operation is one a standing approval can cover; the
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
-(its `inbound_reply`), or by a person who gave their name; a run's verdict covers only a draft a run of that same work
-created, while a person's covers whoever drafted it; the draft's context was not changed after it was created; the
+(its `inbound_reply`), or by a person who gave their name, or carries a person's answer — a verdict whose
+`reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
+covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
+whoever drafted it; the draft's context was not changed after it was created; the
 verdict's plugin is the one the route resolved, and its thread the one the reply answers in (for a message, its person
 the work's person); the newest standing-approval line for the campaign and the verdict's category is a set; it names
 the operation; it has not expired; and fewer drafts were let go under it since it was set than its ceiling. A category
-is the verdict's word exactly: `interested` covers neither `very_interested` nor `Interested`.
+is the verdict's word exactly: `interested` covers neither `very_interested` nor `Interested`. The decision behind
+`answered_by` was checked when the line was written — answered, by a named person, choosing the verdict's category,
+raised by the attempt that recorded a verdict on the same reply — and the claim trusts the line for that; it reads no
+decision again.
 
 Covered, the work runs in the same claim. Its `apr_` row is written `approved`, with the reason `standing_approval`,
 decided by the person who set the standing approval; an `approval_standing_applied` line by the dispatcher, keyed by the
