@@ -92,6 +92,13 @@ replaces the title and the body together.
   and records a person's answer to a doubtful category as a second verdict, which wakes the reaction it names. The
   analyst counts replies by category over a window and reports bounces as a deliverability figure, and inbox triage
   starts from what the responder left and never drafts a second answer to a reply that has one.
+- **The Reply package states what Reply does with a contact's later replies.** Its README no longer says that only a
+  contact's first reply is read. For a sequence email, Reply keeps at most one reply to each email it sent and drops a
+  finished contact's later replies on that thread before it stores them; after this side has answered on the thread
+  through `conversation.reply`, the contact's next replies on it are stored and read. A LinkedIn thread keeps later
+  messages. All of this is read from how Reply is built and has not yet been observed on an account. It is why
+  answering a reply at once matters: the responder acts or parks a draft when it reads a reply, and a second reply
+  that arrives before any answer may never be seen.
 
 ## Fixed since 0.24.0
 
@@ -118,7 +125,9 @@ replaces the title and the body together.
   each campaign's replies have been read for its responder. The first start on 0.25.0 runs it after taking a backup, as
   every migration does, and sets each campaign level with its chronicle as it stands, so no answer is owed to a reply
   said before the upgrade. Your projects, campaigns, work items and chronicle stay as they were.
-- **The Reply plugin** is published as 0.14.3, unchanged since 0.24.0, and needs reply-cli 0.18.0 or newer.
+- **The Reply plugin** is published as 0.14.4 and needs reply-cli 0.18.0 or newer. What this version carries is the
+  README's statement about a contact's later replies, as this release's list of what is new says; no call, code or
+  message changed.
 - **From 0.23.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the first known issue below says.
@@ -135,6 +144,13 @@ by its reference, and the inbox change feed - reach Reply's accounts on Reply's 
 has a route, the Reply package answers `capability_not_offered` for that operation or argument, and the account's
 replies are read thread by thread in place of the feed, as its README says; nothing in Jason needs updating when the
 route arrives.
+
+For a sequence email, Reply keeps at most one reply to each email it sent and drops a finished contact's later replies
+on that thread before it stores them, so they reach none of `conversation.list`, `conversation.get` and the change
+feed, and Jason's inbound sync says nothing of them. After this side has answered on the thread through
+`conversation.reply`, the contact's next replies on it are stored and read as usual; a second reply that arrives
+before any answer may never be seen. A LinkedIn thread keeps later messages. Both statements are read from how Reply
+is built and have not yet been observed on an account.
 
 A send or an invitation through Reply carries no sending time in its own result: `sent_at` is null, because Reply's
 answer to a LinkedIn send gives a local time marked as UTC and its answer to an email gives none. `message.status`
