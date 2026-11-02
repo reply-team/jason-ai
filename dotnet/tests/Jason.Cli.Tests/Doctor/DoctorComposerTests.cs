@@ -49,7 +49,7 @@ public sealed class DoctorComposerTests
     ];
 
     private static readonly string[] Reads =
-        [Operations.SystemInfo, Operations.RoleList, Operations.RouteList, Operations.PluginList, Operations.JournalList, Operations.WorkItemList, Operations.WorkItemGet];
+        [Operations.SystemInfo, Operations.RoleList, Operations.RouteList, Operations.ProfileList, Operations.PluginList, Operations.JournalList, Operations.WorkItemList, Operations.WorkItemGet];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -860,7 +860,7 @@ public sealed class DoctorComposerTests
     {
         using var dir = new TempPaths();
         var clock = new PassingClock();
-        var hangs = new HangsAfter(Running(dir), clock, Timeout, Operations.SystemInfo, Operations.RoleList, Operations.RouteList)
+        var hangs = new HangsAfter(Running(dir), clock, Timeout, Operations.SystemInfo, Operations.RoleList, Operations.RouteList, Operations.ProfileList)
         {
             AnsweredOnce = [Operations.PluginList],
         };
@@ -2482,6 +2482,25 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// A profile's name is the person's: the agent hosts' readiness fact travels with the profiles counted by host, the
+    /// host words as Jason wrote them, and no name — in the fact or in its repair — and the bundle says it never carries one.
+    /// </summary>
+    [Fact]
+    public async Task The_agent_hosts_fact_counts_profiles_by_host_and_carries_no_profile_name()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Profiles = [("sentinel-night-run", "claude_code"), ("sentinel-local", "claude_code")];
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        AssertAbsent(bundle, "sentinel-night-run", "sentinel-local");
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "agent_hosts")!;
+        Assert.Equal("No agent host was detected on this machine. Profiles by host: claude_code 2, not detected.", Text(check["fact"]));
+        Assert.Contains("the names of execution profiles", Strings(Section(bundle, "bundle")["never_carried"]));
+    }
+
+    /// <summary>
     /// A skill source given with <c>--source</c> other than the public repository — a fork's address, a folder of the
     /// person's own — names whose copy it is, and so does the branch or tag it was taken at. Both are written as
     /// <c>&lt;skill-source&gt;</c> in the two readiness facts that quote a deployment, the role skills and the skills
@@ -3231,6 +3250,9 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
     /// <summary>What <c>plugin.list</c> answers, where a test says; otherwise two plugins.</summary>
     public PluginRegistryDto? Registry { get; set; }
 
+    /// <summary>The enabled profiles <c>profile.list</c> answers with, each by its name and host; none unless a test says.</summary>
+    public IReadOnlyList<(string Name, string Host)> Profiles { get; set; } = [];
+
     /// <summary>A response, or a throw, for the nth call of an operation; null answers it as usual.</summary>
     public Func<string, int, HttpResponseMessage?>? Fails { get; set; }
 
@@ -3334,6 +3356,11 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
             Operations.RoleList => Answer(new Page<RoleDto>([.. Roster.Select(role => new RoleDto($"rol_{role.Name}", role.Name, role.Builtin, null, [], new JsonObject(), null, Now, Now))], null)),
             Operations.RouteList => Answer(new RoutesDto("rts_EMPTY", "snp_EMPTY", new RouteSetDto(null, new Dictionary<string, RouteDto>()), [])),
             Operations.PluginList => Answer(Registry ?? TwoPlugins()),
+            Operations.ProfileList => Answer(new JsonObject
+            {
+                ["items"] = new JsonArray([.. Profiles.Select(profile => new JsonObject { ["id"] = "epf_1", ["name"] = profile.Name, ["disabled"] = false, ["revision"] = new JsonObject { ["host"] = profile.Host } })]),
+                ["next_cursor"] = null,
+            }),
             Operations.JournalList => Answer(JournalPage(body)),
             Operations.WorkItemList => Answer(WorkItemPage(body)),
             Operations.WorkItemGet => Answer(WithRole(WorkItem(int.Parse(Text(body["work_item_id"])[3..], CultureInfo.InvariantCulture), WorkItemStatus.Failed))),

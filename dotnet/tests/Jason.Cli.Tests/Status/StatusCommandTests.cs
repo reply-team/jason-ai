@@ -1108,6 +1108,45 @@ public class StatusCommandTests
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<RoleDto>> OwnRoles = [];
 
+    /// <summary>
+    /// The enabled profiles <c>profile.list</c> answers with, one to a page so every page is read, each with its host as
+    /// the runtime wrote it. Without them the operation goes unanswered, as it fails.
+    /// </summary>
+    internal static void Profiles(TempPaths dir, params (string Name, string Host)[] profiles) => ProfileAnswers[dir.Paths.Root] = profiles;
+
+    /// <summary>The bodies <c>profile.list</c> was asked with, in order.</summary>
+    internal static IReadOnlyList<string> ProfileReads(TempPaths dir) => [.. ProfileRequests.GetValueOrDefault(dir.Paths.Root, [])];
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Name, string Host)[]> ProfileAnswers = [];
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<string>> ProfileRequests = [];
+
+    private static HttpResponseMessage ProfilePage(TempPaths dir, (string Name, string Host)[] profiles, HttpRequestMessage request)
+    {
+        var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "{}";
+        var reads = ProfileRequests.GetOrAdd(dir.Paths.Root, _ => []);
+        lock (reads)
+        {
+            reads.Add(body);
+        }
+
+        var at = System.Text.Json.Nodes.JsonNode.Parse(body)?["cursor"] is System.Text.Json.Nodes.JsonValue cursor ? int.Parse(cursor.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture) : 0;
+        var items = new System.Text.Json.Nodes.JsonArray(
+            [.. profiles.Skip(at).Take(1).Select(profile => new System.Text.Json.Nodes.JsonObject
+            {
+                ["id"] = "epf_" + profile.Name,
+                ["name"] = profile.Name,
+                ["disabled"] = false,
+                ["revision"] = new System.Text.Json.Nodes.JsonObject { ["number"] = 1, ["host"] = profile.Host, ["program"] = "host" },
+            })]);
+        var page = new System.Text.Json.Nodes.JsonObject
+        {
+            ["items"] = items,
+            ["next_cursor"] = at + 1 < profiles.Length ? (at + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
+        };
+        return RuntimeVerbs.Response(HttpStatusCode.OK, page.ToJsonString());
+    }
+
     /// <summary>The version the runtime here says it is, and the build the CLI under test goes by, unless a fact names others.</summary>
     internal const string Version = "0.1.0-dev";
 
@@ -1191,6 +1230,11 @@ public class StatusCommandTests
         {
             var routes = new RoutesDto("rts_EMPTY", "snp_EMPTY", new RouteSetDto(null, new Dictionary<string, RouteDto>()), []);
             return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(routes, JasonJson.Options));
+        }
+
+        if (route.EndsWith(Operations.ProfileList, StringComparison.Ordinal) && ProfileAnswers.TryGetValue(dir.Paths.Root, out var profiles))
+        {
+            return ProfilePage(dir, profiles, request);
         }
 
         throw new HttpRequestException($"nothing answers {route} here");

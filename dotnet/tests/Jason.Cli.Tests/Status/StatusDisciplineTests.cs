@@ -304,9 +304,10 @@ public partial class StatusDisciplineTests
                 // "Repair." too, and is a repair spelled here rather than there. One member is handed something
                 // other than the environment, and only it, and only a record's source: the role repair that keeps
                 // the source a deployment came from. Its prefix is a constant the guard above types, and the fact
-                // below types what it composes.
+                // below types what it composes. And one is handed a profile and a host: the agent hosts' repair,
+                // whose whole line is the literal the guard above types.
                 Assert.True(
-                    fix is "null"
+                    fix is "null" or "Repair.MoveProfile(profile, host)"
                     || System.Text.RegularExpressions.Regex.IsMatch(fix, @"^Repair\.[A-Za-z]+(\(env\))?$")
                     || System.Text.RegularExpressions.Regex.IsMatch(fix, @"^Repair\.InstallRolesFrom\([A-Za-z]+\.Source\)$"),
                     $"{name}:{line} gives a check the repair `{fix}`. Every repair is composed in the Repair "

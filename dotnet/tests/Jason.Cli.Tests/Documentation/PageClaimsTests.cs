@@ -236,7 +236,7 @@ public partial class PageClaimsTests
         var readme = Flat(Page("README.md"));
 
         Assert.Contains(
-            "of the runtime it asks only what the runtime says about itself, its roles and routes, and the journal and work-item pages it counts",
+            "of the runtime it asks only what the runtime says about itself, its roles, profiles and routes, and the journal and work-item pages it counts",
             notes,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -244,7 +244,7 @@ public partial class PageClaimsTests
             readme,
             StringComparison.Ordinal);
         Assert.Contains(
-            "the database, plugin packages, a route's account and its identity, or anything read from the folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only `--include-journal` adds",
+            "the database, plugin packages, a route's account and its identity, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only `--include-journal` adds",
             readme,
             StringComparison.Ordinal);
     }
@@ -1920,6 +1920,7 @@ public partial class PageClaimsTests
 
         Assert.Equal(printed, rows);
         Assert.Contains("notifications reach you", rows);
+        Assert.Contains("every enabled profile names an agent host detected on this machine", rows);
     }
 
     /// <summary>

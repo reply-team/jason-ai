@@ -172,8 +172,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   `plugin reload` asks and never starts a runtime, and the verb-map tests hold the `ui` group to its three
   operations and `install` and the `plugin` group to its two and `install`); `jason logs` reads the
   installation's log files, which the runtime writes and is never asked about; and `jason doctor` collects one installation into one file, half of which is not the
-  runtime's to know — of the runtime it asks only what the runtime says about itself, its roles and
-  routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
+  runtime's to know — of the runtime it asks only what the runtime says about itself, its roles,
+  profiles and routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
   values. `status`, `logs` and
   `doctor` exit 0 or 1 and **never 3** — `logs` never asks the runtime, and for the other two "I could
   not ask the runtime" is an answer rather than a reason there is none — and the body of `status`

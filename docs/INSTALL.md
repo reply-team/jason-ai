@@ -359,6 +359,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
+| | every enabled profile names an agent host detected on this machine |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
