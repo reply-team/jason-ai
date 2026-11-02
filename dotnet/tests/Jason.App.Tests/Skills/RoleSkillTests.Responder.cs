@@ -570,6 +570,29 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A question the responder raises says the category in the category's own words and the thread to open, and
+    /// neither quotes nor retells the reply: the person reads the reply in the thread, never in the question.
+    /// </summary>
+    [Fact]
+    public void The_responder_asks_in_the_category_s_words_and_names_the_thread()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains(
+            "The question names the category and why it fits, in the category's own words, and the thread's identifier, so the person can open the thread.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("It quotes nothing, and it retells nothing of the reply beyond what the category says.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Say what you read in your own words", skill, StringComparison.Ordinal);
+
+        var raise = Assert.Single(
+            SkillPack.PrintedCommands(SkillPack.Find("responder").File),
+            line => line.StartsWith("jason decision raise ", StringComparison.Ordinal));
+        var words = ShellWords.Split(raise).ToList();
+        Assert.Contains("thread 501", words[words.IndexOf("--question") + 1], StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The result the skill prints is the shape the runtime holds a responder to, read from the runtime's own format, so
     /// the skill and the code cannot name different outcomes.
     /// </summary>

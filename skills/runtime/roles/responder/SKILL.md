@@ -209,11 +209,13 @@ person.
 Somebody who asked to stop is sent no answer: recording the stop is the whole of what you do about that reply.
 
 **Ask the person where the category escalates.** A question goes to the person through your own item; its id goes into
-your result's `decisions_raised`, and the outcome is `escalated`. Say what you read in your own words, what you would
-do, and offer the answers a person can pick.
+your result's `decisions_raised`, and the outcome is `escalated`. The question names the category and why it fits, in
+the category's own words, and the thread's identifier, so the person can open the thread. It says what you would do and
+offers the answers a person can pick. It quotes nothing, and it retells nothing of the reply beyond what the category
+says.
 
 ```
-jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "They name a colleague who owns this. Reach the colleague with a first message, or close the thread?" --option "reach the colleague" --option "close the thread" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "referral escalates by the base table"
+jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "In thread 501 they name a colleague who owns this. Reach the colleague with a first message, or close the thread?" --option "reach the colleague" --option "close the thread" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "referral escalates by the base table"
 ```
 
 **Greet the person by the name Jason holds, and say when the thread names them otherwise.** The greeting in what you
