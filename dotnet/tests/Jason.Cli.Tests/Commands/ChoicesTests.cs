@@ -174,6 +174,7 @@ public class ChoicesTests
         { "campaign list-contacts", "--summary", Words<CampaignSummaryFilter>() },
         { "contact list", "--order", Words<ContactListOrder>() },
         { "decision list", "--status", Words<DecisionStatus>() },
+        { "reply record", "--reaction", Words<ReplyReaction>() },
         { "workitem complete", "--status", Words<CompletionStatus>() },
         { "workitem count", "--kind", Words<WorkItemKind>() },
         { "workitem count", "--order", Words<WorkItemListOrder>() },
