@@ -493,6 +493,24 @@ public sealed class Claimer(
             item.Contact,
             CanonicalInput.ConsumedChannel(plan.Contract, item));
 
+        // Only about work nobody was ever asked about: a decision a person made, or a question already put to them, is
+        // theirs, and a later standing approval never answers it — not even once the question is gone, cancelled by an
+        // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
+        // retry of the same subject as a person's would.
+        if (live is null
+            && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false)
+            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } answer)
+        {
+            if (answer.Cover is { } cover)
+            {
+                return ApprovalGate.ReleaseUnderStanding(db, journal, item, plan, subject, preview, cover, now);
+            }
+
+            // Why the standing approval did not let it go is said where the person deciding reads: in the preview, which
+            // is not part of what is approved.
+            preview["standing_approval"] = answer.Uncovered!.ToJson();
+        }
+
         ApprovalGate.Park(
             db,
             journal,

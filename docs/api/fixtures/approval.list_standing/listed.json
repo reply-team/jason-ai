@@ -1,0 +1,48 @@
+{
+  "operation": "approval.list_standing",
+  "case": "listed",
+  "request": {
+    "campaign_id": "cmp_1"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "campaign_id": "cmp_1",
+        "category": "interested",
+        "operations": [
+          "conversation.reply",
+          "message.send"
+        ],
+        "expires_at": "2026-12-01T00:00:00.000Z",
+        "max_releases": 20,
+        "released": 0,
+        "in_force": true,
+        "set_by": {
+          "type": "human",
+          "id": "ada"
+        },
+        "set_at": "2026-09-14T12:00:00.000Z",
+        "line_id": "jrn_1"
+      },
+      {
+        "campaign_id": "cmp_1",
+        "category": "not_now",
+        "operations": [
+          "conversation.reply"
+        ],
+        "expires_at": null,
+        "max_releases": null,
+        "released": 0,
+        "in_force": true,
+        "set_by": {
+          "type": "human",
+          "id": "ada"
+        },
+        "set_at": "2026-09-14T12:00:00.000Z",
+        "line_id": "jrn_2"
+      }
+    ],
+    "next_cursor": null
+  }
+}
