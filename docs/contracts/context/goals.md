@@ -33,8 +33,10 @@ has been settled, and the roles take the default goal, a demo.
   keeps naming the same goal for the campaign's life: a goal whose title or wording is edited keeps its id, and a goal
   that means something else is a new goal with a new id. A list that leaves out an id a verdict once named is
   accepted as written: the verdict's line copied the goal's id and kind when it was recorded, so it still reads
-  without the list, and only a later verdict is held to the goals as they then stand. A reader of an old line relies
-  on the line's `goal_kind`, never on a join to the current goals by id.
+  without the list, and only a later verdict is held to the goals as they then stand. A dropped id may be reused by
+  a later list for another goal, and the runtime keeps no history of goals to refuse it, so a reader of an earlier
+  verdict line takes the goal's kind from the line itself and reads the id as the goal's name at that time, never
+  joining it to the current list.
 - `kind` is one of `meeting`, `demo`, `trial`, `interested_reply`, `purchase` and `custom`; `custom` is the kind for
   a goal the list does not name, which its title and `reached_when` then say.
 - `title` names the goal for a person reading a list of them.
