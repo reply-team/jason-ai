@@ -330,6 +330,25 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// A host that is not on the machine ends the attempt as <c>host_not_available</c>, whichever host it is; one that
+    /// stops because it is not signed in does so only where that host reads a signal for it, which its row names. A host
+    /// that reads none, a host whose not-signed-in exit looks like any other, ends as any exit does, so the page may not
+    /// promise every host the code.
+    /// </summary>
+    [Fact]
+    public void The_host_matrix_says_a_signed_out_host_ends_as_host_not_available_only_where_its_row_names_the_signal()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains("A host whose program is not on this machine ends the attempt with `host_not_available`", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            "so does a host that stops because it is not signed in, where that host's row names the signal Jason reads for it; a host whose row names none ends such an attempt as any exit of it ends",
+            contract,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("or that stops because it is not signed in, ends the attempt", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The host matrix has one home, §12, and it is held to the table the CLI and the runtime both read: every host this
     /// build knows has a row that says yes, with the skills root, the work directory's folder and the import file the
     /// table names; and a row for a host this build does not know yet says so, in the words a profile naming it meets.
