@@ -1311,9 +1311,10 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// Every plugin package's JavaScript is parsed by node, on the one runner that has it, before anything of the UI is
-    /// installed: the files are found under <c>plugins/*/</c>, so a package joins by being there, and the step names
-    /// none. Pinned by its text: node may be absent where these tests run.
+    /// Every plugin package's JavaScript is parsed by node, on the one runner that has it, before the runtime is built and
+    /// anything of the UI is installed, so a syntax error is reported in seconds rather than after a full build: the files
+    /// are found under <c>plugins/*/</c>, so a package joins by being there, and the step names none. Pinned by its text:
+    /// node may be absent where these tests run.
     /// </summary>
     [Fact]
     public void Every_plugin_package_s_javascript_is_parsed_by_node_whichever_packages_there_are()
@@ -1326,8 +1327,10 @@ public class CiRunsTests
         Assert.Equal(".", Scalar(parsing, "working-directory"));
 
         var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
+        var build = steps.FindIndex(step => Scalar(step, "run")?.StartsWith("dotnet build ", StringComparison.Ordinal) == true);
         var install = steps.FindIndex(step => Scalar(step, "run") == "npm ci");
-        Assert.InRange(steps.IndexOf(parsing), node + 1, install - 1);
+        Assert.True(node >= 0 && build >= 0 && install >= 0);
+        Assert.InRange(steps.IndexOf(parsing), node + 1, Math.Min(build, install) - 1);
 
         var packages = Directory.GetDirectories(Path.Combine(RepositoryRoot(), "plugins")).Select(Path.GetFileName).OfType<string>().ToList();
         Assert.NotEmpty(packages);

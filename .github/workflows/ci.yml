@@ -1526,14 +1526,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: ./.github/actions/setup-dotnet
-        with:
-          sdk-version: ${{ needs.version.outputs.sdk }}
-
-      - name: Build the runtime the smoke drives
-        working-directory: .
-        run: dotnet build dotnet/src/Jason.App --configuration Release -p:Version=${{ needs.version.outputs.version }}
-
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -1541,11 +1533,20 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       # Every file of every package under plugins/, found rather than listed, so a new package is parsed without an
-      # edit here. node --check reads one file at a time.
+      # edit here. node --check reads one file at a time. Before the runtime's build, so a syntax error is reported in
+      # seconds rather than after it.
       - name: Every plugin's JavaScript parses
         working-directory: .
         shell: bash
         run: find plugins/*/ -name '*.js' -print0 | xargs -0 -r -n1 node --check
+
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
+
+      - name: Build the runtime the smoke drives
+        working-directory: .
+        run: dotnet build dotnet/src/Jason.App --configuration Release -p:Version=${{ needs.version.outputs.version }}
 
       - name: Install
         run: npm ci
