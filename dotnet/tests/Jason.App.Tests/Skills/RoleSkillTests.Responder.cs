@@ -561,6 +561,9 @@ public partial class RoleSkillTests
         Assert.Contains("Whether it goes out now or waits for a person is the runtime's to decide, never yours.", skill, StringComparison.Ordinal);
         Assert.Contains("You never set a standing approval.", skill, StringComparison.Ordinal);
         Assert.Contains("say in your summary whether the reply goes out or waits", skill, StringComparison.Ordinal);
+        Assert.Single(
+            SkillPack.PrintedCommands(SkillPack.Find("responder").File),
+            line => line.StartsWith("jason approval list-standing cmp_", StringComparison.Ordinal));
 
         var draft = Assert.Single(printed, line => line.Contains("--operation conversation.reply", StringComparison.Ordinal));
         Assert.Contains("--context '{\"reply_verdict\":\"jrn_", draft, StringComparison.Ordinal);

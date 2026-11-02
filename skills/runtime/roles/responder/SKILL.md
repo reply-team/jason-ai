@@ -242,7 +242,12 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 Whether it goes out now or waits for a person is the runtime's to decide, never yours. A person may have set a standing
 approval for this campaign and this category, under which the runtime releases your draft without asking them; without
 one, it parks for a person's approval, and you do not approve it. You never set a standing approval. Read which are set
-with `jason approval list-standing` and the campaign's id, and say in your summary whether the reply goes out or waits.
+for the campaign, and say in your summary whether the reply goes out or waits.
+
+```
+jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
 One work item is one reply to one person and one approval: two replies are two work items, never one item for both.
 What the operation checks before anything goes out — that the thread's person is the one the item names — is its
 document's, `docs/contracts/operations/conversation.reply.md`, and a mismatch comes back as the item's error
