@@ -414,26 +414,28 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// A bounce is read at the review as a count and never filed as a refusal, the two notes the responder leaves for a
-    /// later moment are read at the review, and the guardrails say when the count is a problem. The ids are the ones the
-    /// runtime's categories use.
+    /// A bounce is read at the review as a count and never filed as a refusal, the two lists the responder keeps for a
+    /// later moment are read at the review under the keys and fields the responder writes, and the guardrails say when
+    /// the count is a problem. The ids are the ones the runtime's categories use.
     /// </summary>
     [Fact]
-    public void The_manager_reads_bounces_as_a_count_and_the_notes_of_the_replies_that_wait_for_a_moment()
+    public void The_manager_reads_bounces_as_a_count_and_the_lists_of_the_replies_that_wait_for_a_moment()
     {
         var skill = Flattened("manager");
 
         Assert.Contains("A `bounce` is a deliverability fact and no refusal: the responder files no register entry for it and raises no question per bounce", skill, StringComparison.Ordinal);
-        Assert.Contains("under `bounces` in its role note for the campaign. The count of them is yours at this review, from the `reply_classified` lines and that note, and the business pack's `sending-guardrails` skill says when it is a problem.", skill, StringComparison.Ordinal);
-        Assert.Contains("A `not_now` and an `out_of_office` leave a note with the moment the person named under `returns` in the same role note, and no draft, so read both at this review", skill, StringComparison.Ordinal);
+        Assert.Contains("adds `{contact, channel, at}` to the `bounces` list of its role note for the campaign", skill, StringComparison.Ordinal);
+        Assert.Contains("The count of them is yours at this review, from the `reply_classified` lines and that list, and the business pack's `sending-guardrails` skill says when it is a problem.", skill, StringComparison.Ordinal);
+        Assert.Contains("A `not_now` and an `out_of_office` add `{contact, category, back_at}` to the `returns` list of the same note, `not_now` carrying its own category, and leave no draft, so read both lists at this review", skill, StringComparison.Ordinal);
         Assert.Contains("jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", SkillPack.PrintedCommands(SkillPack.Find("manager").File));
         Assert.True(File.Exists(Path.Combine(SkillPack.BusinessRoot(), "sending-guardrails", SkillPack.SkillFile)));
     }
 
     /// <summary>
     /// Below its threshold the responder records a guess and asks; the person's answer is recorded by the manager as a
-    /// second verdict for the same reply, whose identifiers come from the first verdict line and not from the question.
-    /// The printed command names every field the verb requires, so the second one meets the first.
+    /// second verdict for the same reply, and the line that now stands keeps everything the first named: the reply, the
+    /// person and the goal come from the first verdict line and not from the question. The printed command carries every
+    /// option the verb takes for them.
     /// </summary>
     [Fact]
     public void The_manager_records_a_persons_answer_to_a_question_of_the_responder_as_a_second_verdict()
@@ -441,14 +443,43 @@ public partial class RoleSkillTests
         var skill = Flattened("manager");
 
         Assert.Contains("The one you do record is a person's answer.", skill, StringComparison.Ordinal);
-        Assert.Contains("raises a question whose options are the category ids, and drafts nothing; acting on the answer is yours, at the answered question's line.", skill, StringComparison.Ordinal);
-        Assert.Contains("from the first verdict line, never from the question", skill, StringComparison.Ordinal);
-        Assert.Contains("as a second verdict for the same reply, which supersedes the first", skill, StringComparison.Ordinal);
+        Assert.Contains("raises a question whose options are the category ids, and drafts nothing; acting on the answer is yours, at the answered question's line, and is exactly this and nothing more", skill, StringComparison.Ordinal);
+        Assert.Contains("Record the person's category as a second verdict for the same reply, which supersedes the first.", skill, StringComparison.Ordinal);
+        Assert.Contains("`plugin`, `thread`, `message_id` and `message_at`, and its `contact_id` and `goal_id`, from the first verdict line, never from the question, so that the line which now stands loses none of them", skill, StringComparison.Ordinal);
 
         var printed = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason reply record ", StringComparison.Ordinal));
-        foreach (var option in new[] { "--plugin", "--thread", "--message", "--message-at", "--category", "--confidence", "--reaction" })
+        foreach (var option in new[] { "--plugin", "--thread", "--message", "--message-at", "--contact", "--category", "--confidence", "--reaction", "--goal" })
         {
             Assert.Contains(option + " ", printed, StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// What the manager does with an answer beyond the record is two things and no more: where the guess was an opt-out and
+    /// the answer is another category it lifts the register entry the responder made, with a reason naming the decision, and
+    /// where the answer's reaction is not none it queues the read and the responder as for a line no responder names.
+    /// Every other answer is a record and nothing else, and a draft after it waits for a person.
+    /// </summary>
+    [Fact]
+    public void The_manager_lifts_a_register_entry_made_on_a_guess_and_queues_the_responder_and_does_nothing_else_on_an_answer()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("Where the responder's guess was `opt_out` and the answer names another category, the register entry the responder made for that person was made on a guess: remove it, with a reason that names the decision.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the answered category's reaction is not `none`, queue the thread's read and a responder for it, exactly as for a line no responder names, below.", skill, StringComparison.Ordinal);
+        Assert.Contains("where the answer confirmed `opt_out`, it finds the register entry already there and goes on to the provider's half", skill, StringComparison.Ordinal);
+        Assert.Contains("Every other answer stays as written: you draft nothing and act on nothing on the reply yourself.", skill, StringComparison.Ordinal);
+        Assert.Contains("A draft written after your verdict always waits for a person, whatever standing approval exists, because its attempt is neither the run the runtime gave that reply nor a named person.", skill, StringComparison.Ordinal);
+
+        var removal = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason suppression remove ", StringComparison.Ordinal));
+        Assert.Contains("--channel email ", removal, StringComparison.Ordinal);
+        Assert.Contains("--value ", removal, StringComparison.Ordinal);
+        Assert.Matches(@"--reason ""[^""]*dec_[0-9A-Z]{26}", removal);
+
+        // The queueing the answer points at is the one the skill prints for a line no responder names, further down.
+        Assert.True(
+            skill.IndexOf("exactly as for a line no responder names, below.", StringComparison.Ordinal)
+            < skill.IndexOf("**No responder names the line.**", StringComparison.Ordinal),
+            "The answer's queueing must point to a section further down.");
     }
 }

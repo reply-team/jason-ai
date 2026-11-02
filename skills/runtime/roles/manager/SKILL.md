@@ -145,11 +145,12 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 Some verdicts leave something to read, not something to do. A `bounce` is a deliverability fact and no refusal: the
-responder files no register entry for it and raises no question per bounce, and puts a note naming the contact by id, the
-channel's kind and the moment, never the bounce text, under `bounces` in its role note for the campaign. The count of them
-is yours at this review, from the `reply_classified` lines and that note, and the business pack's `sending-guardrails`
-skill says when it is a problem. A `not_now` and an `out_of_office` leave a note with the moment the person named under
-`returns` in the same role note, and no draft, so read both at this review:
+responder files no register entry for it and raises no question per bounce, and adds `{contact, channel, at}` to the
+`bounces` list of its role note for the campaign, naming the contact by id, the channel's kind and the moment, never the
+bounce text. The count of them is yours at this review, from the `reply_classified` lines and that list, and the business
+pack's `sending-guardrails` skill says when it is a problem. A `not_now` and an `out_of_office` add
+`{contact, category, back_at}` to the `returns` list of the same note, `not_now` carrying its own category, and leave no
+draft, so read both lists at this review:
 
 ```
 jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
@@ -158,14 +159,32 @@ jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 You record no verdict of your own reading: a verdict is the responder's reading of a reply, and one that looks wrong to
 you is a question for the person, with the line's id. The one you do record is a person's answer. Below its confidence
 threshold the responder records its best guess and raises a question whose options are the category ids, and drafts
-nothing; acting on the answer is yours, at the answered question's line. Take the reply's `plugin`, `thread`,
-`message_id` and `message_at` from the first verdict line, never from the question, and record the person's category as a
-second verdict for the same reply, which supersedes the first, with the reaction that category's row in `categories.json`
-gives. A person's word is no guess, so its confidence is 1:
+nothing; acting on the answer is yours, at the answered question's line, and is exactly this and nothing more:
+
+1. Record the person's category as a second verdict for the same reply, which supersedes the first. Take the reply's
+   `plugin`, `thread`, `message_id` and `message_at`, and its `contact_id` and `goal_id`, from the first verdict line,
+   never from the question, so that the line which now stands loses none of them, with the reaction that category's row in
+   `categories.json` gives. A person's word is no guess, so its confidence is 1:
 
 ```
-jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --category interested --confidence 1 --reaction draft --reason "the person chose interested"
+jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 1 --reaction draft --goal demo --reason "the person chose interested"
 ```
+
+2. Where the responder's guess was `opt_out` and the answer names another category, the register entry the responder made
+   for that person was made on a guess: remove it, with a reason that names the decision.
+
+```
+jason suppression remove --channel email --value marta@example.com --reason "the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD says this was not an opt-out"
+```
+
+3. Where the answered category's reaction is not `none`, queue the thread's read and a responder for it, exactly as for a
+   line no responder names, below. It finds your verdict standing and reacts as that line's reaction says; where the answer
+   confirmed `opt_out`, it finds the register entry already there and goes on to the provider's half. This is the one case
+   in which you queue a responder for a line whose responder has ended.
+
+Every other answer stays as written: you draft nothing and act on nothing on the reply yourself. A draft written after
+your verdict always waits for a person, whatever standing approval exists, because its attempt is neither the run the
+runtime gave that reply nor a named person.
 
 **The chronicle since the last review.** Your note carries the time of your last run; read everything after
 it, and everything there is when there is no note. Reports are what happened to the campaign where the runtime
