@@ -541,7 +541,7 @@ public partial class RoleSkillTests
         Assert.Contains("- `escalate`: ask, unless a question about this thread is still open", skill, StringComparison.Ordinal);
         Assert.Contains("- `none`: nothing.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing approval exists, and your summary says so.",
+            "A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing approval exists, unless the line carries a person's answer through a decision (its `answered_by` is not null), and your summary says so.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("`Responder:MaxAttempts` is 1 by default, and the rule holds anyway", skill, StringComparison.Ordinal);

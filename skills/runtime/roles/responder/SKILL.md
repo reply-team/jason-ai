@@ -110,7 +110,8 @@ it, as below.
 - `none`: nothing.
 
 A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing
-approval exists, and your summary says so. `Responder:MaxAttempts` is 1 by default, and the rule holds anyway: a run
+approval exists, unless the line carries a person's answer through a decision (its `answered_by` is not null), and your
+summary says so. `Responder:MaxAttempts` is 1 by default, and the rule holds anyway: a run
 launched again, by a person or by a setting, must not answer one message twice.
 
 **Classify by the categories, then by the person's own rules.** The base categories are data: `categories.json`,
