@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Programs;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution.Hosts;
@@ -118,16 +119,7 @@ internal static partial class ProfileValidation
     /// The host as the closed vocabulary spells it. A value outside it is a name this build has no launcher for,
     /// and the message says what it does have rather than leaving the caller to guess.
     /// </summary>
-    public static AgentHostKind? ParseHost(string? host)
-    {
-        var text = host?.Trim();
-        return text is null
-            ? null
-            : Enum.GetValues<AgentHostKind>()
-                .Where(kind => string.Equals(SnakeCaseEnumConverter<AgentHostKind>.Format(kind), text, StringComparison.Ordinal))
-                .Select(kind => (AgentHostKind?)kind)
-                .FirstOrDefault();
-    }
+    public static AgentHostKind? ParseHost(string? host) => AgentHosts.Parse(host);
 
     /// <summary>A granted tool as the closed vocabulary spells it, or nothing for a word outside it.</summary>
     public static AgentTool? ParseTool(string? tool)
@@ -180,7 +172,7 @@ internal static partial class ProfileValidation
 
         if (ParseHost(host) is null)
         {
-            errors.Add("host", "invalid", "host must be one of: " + string.Join(", ", Hosts()) + ".");
+            errors.Add("host", "invalid", "host must be one of: " + AgentHosts.Vocabulary + ".");
         }
     }
 
@@ -451,10 +443,6 @@ internal static partial class ProfileValidation
             errors.Add("reason", "too_long", string.Create(CultureInfo.InvariantCulture, $"reason must be at most {ProfileService.MaxReasonLength} characters."));
         }
     }
-
-    /// <summary>The vocabulary as the API spells it, so the message names values a caller can send back.</summary>
-    private static IEnumerable<string> Hosts() =>
-        Enum.GetValues<AgentHostKind>().Select(SnakeCaseEnumConverter<AgentHostKind>.Format);
 
     [GeneratedRegex(@"^[a-z][a-z0-9-]{0,63}\z")]
     private static partial Regex Name();
