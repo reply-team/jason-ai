@@ -349,6 +349,29 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// Every refusal of AI work is decided before a child exists but one: a host that ran and answered that it is not
+    /// signed in ends its attempt as <c>host_not_available</c> after the child ran. Both pages that list the codes say so,
+    /// and that such an end carries the fixed sentence and no byte of what the host wrote; neither says every code is
+    /// decided before a child exists.
+    /// </summary>
+    [Fact]
+    public void Both_pages_say_host_not_available_also_ends_an_attempt_after_the_child_ran()
+    {
+        foreach (var page in new[] { "execution-profiles.md", "work-execution.md" })
+        {
+            var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), page)));
+
+            Assert.Contains(
+                "except `host_not_available` where a host that ran answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no byte of what the host wrote",
+                contract,
+                StringComparison.Ordinal);
+            Assert.DoesNotMatch(
+                "Every one of these is decided before a child process exists(?!, except `host_not_available`)",
+                contract.Replace("**", "", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
     /// The host matrix has one home, §12, and it is held to the table the CLI and the runtime both read: every host this
     /// build knows has a row that says yes, with the skills root, the work directory's folder and the import file the
     /// table names; and a row for a host this build does not know yet says so, in the words a profile naming it meets.

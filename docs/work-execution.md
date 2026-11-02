@@ -438,8 +438,10 @@ included. An attempt run by a role's own entry command names no profile and no g
 
 ### The agent pre-flight, in the order it is checked
 
-Every one of these is decided **before a child process exists**, and the first that fails is the one
-the attempt records. The attempt is kept either way, with the context it was claimed with and the
+Every one of these is decided **before a child process exists**, except `host_not_available` where a host that ran
+answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no
+byte of what the host wrote, where the host's row in [execution-profiles.md §12](execution-profiles.md#12-the-hosts)
+names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
 existed. It is the same rule the twenty provider checks follow.
@@ -449,7 +451,7 @@ existed. It is the same rule the twenty provider checks follow.
 | 1 | `lineage_resolution_unsupported` | a run created this work and no profile can be inherited from it. Name one on the item, its campaign or its role |
 | 2 | `profile_not_found` | the profile a level named does not exist. The message says which level named it |
 | 3 | `profile_disabled` | it exists and is out of service. Enable it, or name another |
-| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret. Install it, or point the profile at the program itself |
+| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret. Install it, or point the profile at the program itself. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
 | 5 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
 | 5 | `role_skill_unreadable` | the role's skill was being replaced by a deployment and could not be read consistently while this launch waited |
 | 6 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |

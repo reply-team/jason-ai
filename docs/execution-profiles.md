@@ -428,8 +428,10 @@ launch envelope's section of [work-execution.md](work-execution.md).
 
 ## 9. When AI work cannot run
 
-Every one of these is decided before a child process exists, keeps its attempt so the refusal can be read, and
-is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
+Every one of these is decided before a child process exists, except `host_not_available` where a host that ran
+answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no
+byte of what the host wrote, where the host's row in §12 names the signal Jason reads. Each keeps its attempt so the
+refusal can be read, and is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
 the profile, and the attempt records how far the choice got; the last two are about the role rather than the
 profile, so there is no level to name.
 
@@ -438,7 +440,7 @@ profile, so there is no level to name.
 | `lineage_resolution_unsupported` | a run caused this work and no profile can be inherited (§4) |
 | `profile_not_found` | the profile named does not exist |
 | `profile_disabled` | it exists and is out of service |
-| `host_not_available` | its program is not on this machine, or is a script a shell would have to interpret |
+| `host_not_available` | its program is not on this machine, or is a script a shell would have to interpret; or the host ran and answered that it is not signed in (§12) |
 | `role_skill_invalid` | the role's skill could not be given to it |
 | `role_skill_unreadable` | the role's skill was being replaced while this launch tried to read it |
 | `role_not_launchable` | no profile at any level, and the role has no entry command either |
@@ -447,7 +449,8 @@ None of them is classified, and an attempt error the failure rules do not name i
 answer for every one of these: a profile that does not exist will not exist on the next scan either.
 
 The repair is to name a profile on the item, its campaign or its role — or to fix the configuration —
-**before the work is claimed**. A refused attempt fails the item, and a finished item is not changed,
+**before the work is claimed**; for a host that is not signed in, it is for the person to sign in to it on this
+machine, under their own plan. A refused attempt fails the item, and a finished item is not changed,
 so work already refused is asked for again rather than reopened. That is how every fail-closed
 refusal in this runtime behaves.
 

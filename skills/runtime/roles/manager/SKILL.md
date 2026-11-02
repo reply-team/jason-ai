@@ -65,7 +65,8 @@ jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 Read the error code before you decide anything. `no_route`, `plugin_unavailable`, `profile_not_found` and
-`host_not_available` are somebody's configuration, and no work item you create will fix them; `input_invalid`
+`host_not_available` are somebody's configuration, and no work item you create will fix them — the last also where
+a host ran and is not signed in, which only the person can repair by signing in; `input_invalid`
 is an argument, and a corrected item might; `approval_required` and `suppressed` are answers rather than
 failures. A failed item is finished and is not reopened — if the work is still wanted, it is new work.
 
