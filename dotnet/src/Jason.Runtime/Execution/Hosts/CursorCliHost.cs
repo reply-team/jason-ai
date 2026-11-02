@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
@@ -96,9 +98,20 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
 
         var session = Guid.NewGuid().ToString("D");
 
-        // Written into the work directory, where a deny is honoured: writing is denied wholly, and a fetch is denied
-        // unless the revision grants it.
-        string[] deny = ["Write(**)", .. Enum.GetValues<AgentTool>().Except(revision.Tools).Where(tool => tool != AgentTool.WebSearch).Select(ToolRule)];
+        // What the agent may do: run the command that calls this runtime back, read the person's memory files the
+        // launch names, one rule per file, and use the tools the person granted that the host has a rule for. It is
+        // written into the work directory, beside the deny.
+        var (reads, unreadable) = ReadRules(memoryFiles);
+        string[] allow =
+        [
+            $"Shell({ProgramResolver.CliCommandFor(revision.CliCommand)})",
+            .. reads,
+            .. revision.Tools.Select(ToolRule).OfType<string>(),
+        ];
+
+        // Written into the work directory, where a deny is honoured: writing is denied wholly, and a tool of the
+        // vocabulary the revision does not grant is denied by its rule, where the host has one. A search has none.
+        string[] deny = ["Write(**)", .. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule).OfType<string>()];
 
         return new HostLaunch(
             [
@@ -119,12 +132,36 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
                 .. revision.Args,
             ],
             session,
-            [],
-            deny);
+            unreadable,
+            deny,
+            allow);
     }
 
-    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> deny)
+    /// <summary>
+    /// The host reads a project's permissions from <c>.cursor/cli.json</c> in the directory it works in, and takes the
+    /// union of the allow and deny lists of every layer it finds, a deny winning over an allow. So this adds to the
+    /// person's own rules and never replaces them. The file carries permissions and nothing else.
+    /// </summary>
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
+        ArgumentNullException.ThrowIfNull(allow);
+        ArgumentNullException.ThrowIfNull(deny);
+
+        var document = new JsonObject
+        {
+            ["version"] = 1,
+            ["editor"] = new JsonObject { ["vimMode"] = false },
+            ["permissions"] = new JsonObject
+            {
+                ["allow"] = new JsonArray([.. allow.Select(rule => (JsonNode)JsonValue.Create(rule)!)]),
+                ["deny"] = new JsonArray([.. deny.Select(rule => (JsonNode)JsonValue.Create(rule)!)]),
+            },
+        };
+
+        var directory = Path.Combine(workDir, ".cursor");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "cli.json"), document.ToJsonString(), new UTF8Encoding(false));
     }
 
     /// <summary>
@@ -145,12 +182,114 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
             : null;
     }
 
-    public string ToolRule(AgentTool tool) => tool switch
+    /// <summary>
+    /// A fetch of any address, which is how the host writes the tool. A search has no rule at all: the host has no token
+    /// for it in either list, and whether it runs is the person's own setting.
+    /// </summary>
+    public string? ToolRule(AgentTool tool) => tool switch
     {
         AgentTool.WebFetch => "WebFetch(*)",
-        AgentTool.WebSearch => "WebSearch",
+        AgentTool.WebSearch => null,
         _ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "A tool outside the vocabulary has no rule."),
     };
+
+    private const string SearchSetting =
+        "Cursor CLI has no rule for web search in either list: the person's own autoAcceptWebSearch setting decides whether it runs";
+
+    /// <summary>A search is the one tool this host has and Jason cannot grant, since the person's setting decides it.</summary>
+    public string? GrantProblem(AgentTool tool) => tool == AgentTool.WebSearch ? SearchSetting + ", so a grant of it cannot be made true." : null;
+
+    /// <summary>
+    /// A deny is written into the permission file as the person wrote it, and the host reads five heads — a shell
+    /// command, a read, a write, a fetch and an MCP tool, each with or without what it applies to in parentheses. Web
+    /// search in either spelling cannot be denied, and anything else is a word the host would not read as a rule.
+    /// </summary>
+    public string? DenyProblem(string word)
+    {
+        ArgumentNullException.ThrowIfNull(word);
+
+        if (SearchSpelling().IsMatch(word))
+        {
+            return SearchSetting + ", so it cannot be denied here.";
+        }
+
+        return PermissionRule().IsMatch(word)
+            ? null
+            : "Cursor CLI reads a rule as Shell(command), Read(path), Write(path), WebFetch(domain) or Mcp(server:tool), with the part in parentheses optional.";
+    }
+
+    /// <summary>
+    /// The host takes its prompt from stdin only when no word for one stands on its command line, so an argument that is
+    /// a bare word, or a value apart from its flag, would be read as the prompt and stdin would be ignored. A flag takes
+    /// its value joined by an equals sign, and no double dash is taken.
+    /// </summary>
+    public string? ArgsProblem(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        return args.Any(arg => !arg.StartsWith('-') || arg == "--")
+            ? "an argument that is a bare word, or a flag's value apart from the flag, would be read as the prompt and stdin would be ignored: write a flag with its value joined by an equals sign, as --model=name, and no double dash"
+            : null;
+    }
+
+    [GeneratedRegex(@"^(Shell|Read|Write|WebFetch|Mcp)(\(.+\))?\z", RegexOptions.CultureInvariant)]
+    private static partial Regex PermissionRule();
+
+    [GeneratedRegex(@"^web[ _-]?search(\(.*\))?\z", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex SearchSpelling();
+
+    private static readonly char[] PatternCharacters = ['*', '?', '[', ']', '(', ')'];
+
+    /// <summary>
+    /// One rule for each memory file the launch names, in the order of the levels, and one only for a file named twice;
+    /// and the levels whose file was named and could not be written as one rule. A level the launch does not know is null
+    /// and gets nothing: never a folder, never a pattern.
+    /// </summary>
+    private (List<string> Rules, List<string> Unreadable) ReadRules(MemoryFileLocations memoryFiles)
+    {
+        var rules = new List<string>();
+        var unreadable = new List<string>();
+        foreach (var (level, path) in new[] { ("client", memoryFiles.Client), ("project", memoryFiles.Project), ("campaign", memoryFiles.Campaign) })
+        {
+            if (path is null)
+            {
+                continue;
+            }
+
+            if (ReadRule(path) is not { } rule)
+            {
+                unreadable.Add(level);
+            }
+            else if (!rules.Contains(rule, StringComparer.Ordinal))
+            {
+                rules.Add(rule);
+            }
+        }
+
+        return (rules, unreadable);
+    }
+
+    /// <summary>
+    /// The host's form of "this one file, by its absolute path", or null where the path cannot be written as one file:
+    /// it holds a character the host would read as a pattern, or it is not an absolute path of this machine's kind. On
+    /// Windows the drive form is written with forward slashes, which is how the rule was read in the bundle and has not
+    /// been run on an account.
+    /// </summary>
+    private string? ReadRule(string path)
+    {
+        if (path.IndexOfAny(PatternCharacters) >= 0)
+        {
+            return null;
+        }
+
+        if (windows)
+        {
+            var drive = path.Length > 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/';
+            return drive ? $"Read({path.Replace('\\', '/')})" : null;
+        }
+
+        return path.StartsWith('/') && !path.Contains('\\', StringComparison.Ordinal) ? $"Read({path})" : null;
+    }
 
     /// <summary>
     /// Whether a file name is one of the two this host's installer gives its launcher script. A name only: a profile

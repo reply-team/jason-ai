@@ -20,7 +20,7 @@ internal static partial class ProfileValidation
     /// <summary>The same shape as a role's name: work, campaigns, roles and settings all spell it from memory.</summary>
     public static Regex ProfileName { get; } = Name();
 
-    public static void ValidateCreate(ProfileCreateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
+    public static void ValidateCreate(ProfileCreateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors, IAgentHost? host = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -28,7 +28,7 @@ internal static partial class ProfileValidation
         ValidateName(request.Name, errors);
         ValidateDescription(request.Description, errors);
         ValidateHost(request.Host, errors);
-        ValidateProgram(request.Program, errors);
+        ValidateProgram(request.Program, host, errors);
         ValidateArgs(request.Args, reserved, errors);
         ValidateDeny(request.Deny, errors);
         ValidateTools(request.Tools, errors);
@@ -41,7 +41,7 @@ internal static partial class ProfileValidation
     /// A patch is checked for what it names. An absent field is not a value the caller offered, so there is
     /// nothing to hold it to; a present one is held to exactly the rule it would have been held to at creation.
     /// </summary>
-    public static void ValidateUpdate(ProfileUpdateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
+    public static void ValidateUpdate(ProfileUpdateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors, IAgentHost? host = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -61,7 +61,7 @@ internal static partial class ProfileValidation
 
         if (request.Program.IsSet)
         {
-            ValidateProgram(request.Program.Value, errors);
+            ValidateProgram(request.Program.Value, host, errors);
         }
 
         if (request.Args.IsSet)
@@ -176,7 +176,7 @@ internal static partial class ProfileValidation
         }
     }
 
-    private static void ValidateProgram(string? program, ValidationErrors errors)
+    private static void ValidateProgram(string? program, IAgentHost? host, ValidationErrors errors)
     {
         if (string.IsNullOrWhiteSpace(program))
         {
@@ -201,7 +201,7 @@ internal static partial class ProfileValidation
         // profile could only ever fail at the claim. Refused here in the lookup's words; a bare name without the
         // extension is looked up on the search path (on Windows as an .exe, a .com or npm's own shim). Read as the operating system reads the path too, so
         // a script whose name Windows trims back to one is refused here and not started at the claim.
-        if (ProgramResolver.NamesShellScript(program))
+        if (ProgramResolver.NamesShellScript(program) && !NamesTheHostsLauncher(program, host))
         {
             errors.Add(
                 "program",
@@ -209,6 +209,18 @@ internal static partial class ProfileValidation
                 "program must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
                 + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).");
         }
+    }
+
+    /// <summary>
+    /// Whether a script is the launcher the profile's own host is installed as, named by its full path: only the host
+    /// knows which file names those are, and a bare name is never one, since a bare name is looked up on the search path.
+    /// </summary>
+    private static bool NamesTheHostsLauncher(string program, IAgentHost? host)
+    {
+        var path = program.Trim();
+        return host is not null
+            && path.IndexOfAny(['/', '\\']) >= 0
+            && host.NamesItsLauncher(Path.GetFileName(path));
     }
 
     /// <summary>The list as it will be stored, once it is known to be one. Blank entries never reach here.</summary>

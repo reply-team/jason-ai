@@ -492,7 +492,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
 | Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
 | GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
-| Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — |
+| Cursor CLI | `cursor_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation and the installed bundle for version 2026.10.22-27dcf5f; not yet run on an account | `web_fetch` as `WebFetch(*)`, granted and denied by that rule; `web_search` has no rule, and is neither granted nor denied (the person's own `autoAcceptWebSearch` setting decides it) |
 
 A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there — and
 `jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
@@ -511,3 +511,46 @@ A host that reads its allow rules from the work directory rather than its comman
 deny rules — the command word that calls the runtime back and the memory files' paths, never the capability token or
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
+
+### Cursor CLI
+
+The row above was built from Cursor's documentation and from the bundle of the installed version, 2026.10.22-27dcf5f,
+read as text. It has not been run on an account: Jason holds no key, and the sign-in is the person's own, made as
+themselves with `agent login`. Each note says what a person relying on this host should know, and the first is the one
+thing that decides whether the host works at all.
+
+1. **Not yet measured: whether an allowed callback runs unattended.** A launch writes `Shell(<cli word>)` into the
+   allow list, which is the command that calls the runtime back. Whether the host runs a command that is allow-listed
+   without asking, in print mode and without `--force`, has not been seen on a signed-in run. Jason passes none of
+   `--force`, `--yolo`, `--auto-review`, `--sandbox` or `--approve-mcps`, and none of them is the answer if the callback
+   is not run: a profile's arguments may not carry them, and a session that cannot call back ends by its own report.
+2. **Reads are the widest of the five hosts.** Cursor takes the union of the allow and deny lists of every
+   configuration layer it finds, the person's user level and the work directory's own, a deny winning over an allow, and
+   it reads user-level skills. Jason confines nothing it reads: the `Read(<file>)` rules a launch writes name the memory
+   files the session may read, and do not narrow what else the signed-in person's account can read. Of the hosts a
+   profile can name, this is the widest read form, so a profile for it belongs on an account whose files a role may see.
+3. **The three forms.** Reads: as in the note above. Call-home: the one allowed shell command, the runtime's own, as
+   in the first note. Deny: `Write(**)` always, and `WebFetch(*)` unless the revision grants a fetch, then the profile's
+   own deny words, written to `.cursor/cli.json` in the attempt's work directory, a file that carries permissions and
+   nothing else. A deny word is one of `Shell(...)`, `Read(...)`, `Write(...)`, `WebFetch(...)` or `Mcp(...)`, written as
+   given; whether a head without parentheses, such as `Write`, is read as a rule has not been seen.
+4. **Web search is neither granted nor denied.** The host has no rule for it in either list, and whether it runs is the
+   person's own `autoAcceptWebSearch` setting, so a profile that grants `web_search` or denies it, in either spelling, is
+   refused when it is written, naming the host.
+5. **The trust marker.** The host reads a project's permission file only in a directory it trusts, and `--trust` makes
+   an attempt's work directory one. It leaves one marker for each attempt under the person's own `~/.cursor`, which
+   Jason does not remove.
+6. **On Windows the program is a launcher script.** `agent.cmd` and `cursor-agent.cmd` start a PowerShell script, which
+   starts the newest version's `node.exe` with its `index.js`; a script is never started through a shell, so Jason starts
+   those two itself, choosing the version directory as that script does, newest date first, and never running the
+   staging script beside them. `--program agent` is looked up on the search path, and an autostarted runtime's search
+   path can differ from a terminal's, so where it is not found the profile names the launcher by its full path:
+   `jason profile create <name> --host cursor_cli --program C:\Users\<you>\AppData\Local\cursor-agent\agent.cmd`.
+   This holds for those two file names under this host, and for no other script under any host.
+7. **One sentence when the host is not signed in.** An attempt that ends because the host reports no sign-in, or a
+   stored one the server refused, ends with `host_not_available` and a fixed sentence: run `agent login` as yourself.
+8. **A session id is told to the host.** `--new-session-id` is not in the host's help text; the bundle validates it as a
+   version-4 UUID, and the attempt records the one Jason minted. A profile may not name it, nor `--resume`.
+9. **The brief goes on stdin.** In print mode the host takes its prompt from the whole of stdin when no word for one is
+   on its command line, and ignores stdin when one is, so no composed argument is a bare word and a profile's arguments
+   take a value joined to its flag by an equals sign (`--model=name`), never a bare word and never a double dash.

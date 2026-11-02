@@ -182,6 +182,172 @@ public class CursorCliHostTests : IDisposable
         Assert.Null(new CursorCliHost().Unavailable(exit, tail));
     }
 
+    [Fact]
+    public void A_session_is_told_to_the_host_and_recorded()
+    {
+        IAgentHost host = new CursorCliHost();
+        Assert.True(host.TakesSessionId);
+    }
+
+    [Fact]
+    public void Writing_is_denied_wholly_and_a_fetch_is_denied_unless_the_revision_grants_it()
+    {
+        var host = new CursorCliHost();
+
+        Assert.Equal(["Write(**)", "WebFetch(*)"], host.Compose(Revision(), ["agent"], NoFiles).Deny);
+        Assert.Equal(["Write(**)"], host.Compose(Revision(AgentTool.WebFetch), ["agent"], NoFiles).Deny);
+    }
+
+    [Fact]
+    public void The_callback_the_memory_files_and_a_granted_fetch_are_allowed_and_nothing_else()
+    {
+        var files = new MemoryFileLocations("C:\\Jason\\AGENTS.md", null, "C:\\Jason\\campaigns\\acme\\AGENTS.md");
+
+        var launch = new CursorCliHost(windows: true).Compose(Revision(AgentTool.WebFetch), ["agent"], files);
+
+        Assert.Equal(
+            [$"Shell({ProgramResolver.DefaultCliCommand})", "Read(C:/Jason/AGENTS.md)", "Read(C:/Jason/campaigns/acme/AGENTS.md)", "WebFetch(*)"],
+            launch.Allow);
+        Assert.Empty(launch.Unreadable);
+    }
+
+    [Fact]
+    public void The_callback_word_is_the_profiles_when_it_names_one()
+    {
+        var revision = Revision();
+        revision.CliCommand = "jason-dev";
+
+        Assert.Equal(["Shell(jason-dev)"], new CursorCliHost().Compose(revision, ["agent"], NoFiles).Allow);
+    }
+
+    [Theory]
+    [InlineData("C:\\Jason\\Acme (EU)\\AGENTS.md")]
+    [InlineData("C:\\Jason\\notes[1]\\AGENTS.md")]
+    [InlineData("C:\\Jason\\what?\\AGENTS.md")]
+    [InlineData("C:\\Jason\\*\\AGENTS.md")]
+    public void A_memory_file_whose_path_the_host_would_read_as_a_pattern_is_unreadable_and_says_so(string path)
+    {
+        var launch = new CursorCliHost(windows: true).Compose(Revision(), ["agent"], new MemoryFileLocations(null, path, null));
+
+        Assert.Equal(["project"], launch.Unreadable);
+        Assert.Equal([$"Shell({ProgramResolver.DefaultCliCommand})"], launch.Allow);
+    }
+
+    [Fact]
+    public void A_file_named_at_two_levels_is_one_rule()
+    {
+        var files = new MemoryFileLocations("C:\\Jason\\AGENTS.md", "C:\\Jason\\AGENTS.md", null);
+
+        Assert.Equal(
+            [$"Shell({ProgramResolver.DefaultCliCommand})", "Read(C:/Jason/AGENTS.md)"],
+            new CursorCliHost(windows: true).Compose(Revision(), ["agent"], files).Allow);
+    }
+
+    [Fact]
+    public void A_fetch_has_a_rule_and_a_search_has_none()
+    {
+        var host = new CursorCliHost();
+
+        Assert.Equal("WebFetch(*)", host.ToolRule(AgentTool.WebFetch));
+        Assert.Null(host.ToolRule(AgentTool.WebSearch));
+    }
+
+    [Fact]
+    public void A_grant_of_web_search_is_one_jason_cannot_make_true_because_the_persons_own_setting_decides_it()
+    {
+        var host = new CursorCliHost();
+
+        Assert.Contains("autoAcceptWebSearch", host.GrantProblem(AgentTool.WebSearch), StringComparison.Ordinal);
+        Assert.Null(host.GrantProblem(AgentTool.WebFetch));
+    }
+
+    [Theory]
+    [InlineData("Shell(rm)")]
+    [InlineData("Read(**/.env)")]
+    [InlineData("Write(**)")]
+    [InlineData("WebFetch(*)")]
+    [InlineData("WebFetch(domain:example.test)")]
+    [InlineData("Mcp(server:tool)")]
+    [InlineData("Write")]
+    public void The_five_heads_the_host_reads_are_written_as_they_were_given(string word)
+    {
+        Assert.Null(new CursorCliHost().DenyProblem(word));
+    }
+
+    [Theory]
+    [InlineData("WebSearch")]
+    [InlineData("web_search")]
+    [InlineData("WebSearch(*)")]
+    [InlineData("Web-Search")]
+    public void A_deny_of_web_search_in_either_spelling_is_refused_because_the_host_has_no_way_to_deny_it(string word)
+    {
+        var problem = new CursorCliHost().DenyProblem(word);
+
+        Assert.NotNull(problem);
+        Assert.Contains("autoAcceptWebSearch", problem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Bash(rm *)")]
+    [InlineData("PowerShell(rm)")]
+    [InlineData("shell(rm)")]
+    [InlineData("Delete")]
+    [InlineData("any words at all")]
+    [InlineData("Shell(rm")]
+    [InlineData("")]
+    public void A_deny_that_is_none_of_the_five_heads_is_refused(string word)
+    {
+        Assert.NotNull(new CursorCliHost().DenyProblem(word));
+    }
+
+    [Theory]
+    [InlineData("--model=made-up-model")]
+    [InlineData("-m=made-up-model")]
+    [InlineData("--model=made-up-model", "--list-models")]
+    public void Flags_with_their_values_joined_by_an_equals_sign_are_taken(params string[] args)
+    {
+        Assert.Null(new CursorCliHost().ArgsProblem(args));
+    }
+
+    [Theory]
+    [InlineData("--model", "made-up-model")]
+    [InlineData("summarise the account")]
+    [InlineData("--")]
+    [InlineData("--model=x", "bare")]
+    public void A_bare_word_or_a_double_dash_is_refused_because_a_word_would_be_the_prompt_and_stdin_would_be_ignored(params string[] args)
+    {
+        var problem = new CursorCliHost().ArgsProblem(args);
+
+        Assert.NotNull(problem);
+        Assert.Contains("stdin", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void No_arguments_are_taken_without_a_problem()
+    {
+        Assert.Null(new CursorCliHost().ArgsProblem([]));
+    }
+
+    /// <summary>
+    /// The host reads a project's permissions from <c>.cursor/cli.json</c> in the directory it works in, and it unions
+    /// the allow and deny lists of every layer it finds, so what the work directory writes is added to the person's own
+    /// and never replaces it. The file is the whole of what is written: permissions, nothing else.
+    /// </summary>
+    [Fact]
+    public void The_work_directory_carries_the_allow_and_deny_rules_in_the_hosts_project_permission_file()
+    {
+        new CursorCliHost().WriteWorkDirectory(_directory, ["Shell(jason)", "Read(C:/Jason/AGENTS.md)"], ["Write(**)", "WebFetch(*)", "Shell(rm)"]);
+
+        var written = File.ReadAllText(Path.Combine(_directory, ".cursor", "cli.json"));
+        var document = System.Text.Json.Nodes.JsonNode.Parse(written)!.AsObject();
+        Assert.Equal(1, (int)document["version"]!);
+        Assert.False((bool)document["editor"]!["vimMode"]!);
+        Assert.Equal(["Shell(jason)", "Read(C:/Jason/AGENTS.md)"], document["permissions"]!["allow"]!.AsArray().Select(rule => (string)rule!));
+        Assert.Equal(["Write(**)", "WebFetch(*)", "Shell(rm)"], document["permissions"]!["deny"]!.AsArray().Select(rule => (string)rule!));
+        Assert.Equal(["editor", "permissions", "version"], document.Select(property => property.Key).Order());
+        Assert.Equal(["cli.json"], Directory.GetFiles(Path.Combine(_directory, ".cursor")).Select(Path.GetFileName));
+    }
+
     // ---------------------------------------------------------------------------------------------------------
     // Where the program is on Windows: the layout the host's own launcher script reads.
     // ---------------------------------------------------------------------------------------------------------
@@ -371,5 +537,13 @@ public class CursorCliHostTests : IDisposable
         Host = AgentHostKind.CursorCli,
         Program = "agent",
         Args = [.. args],
+    };
+
+    private static ExecutionProfileRevision Revision(AgentTool tool) => new()
+    {
+        Number = 1,
+        Host = AgentHostKind.CursorCli,
+        Program = "agent",
+        Tools = [tool],
     };
 }
