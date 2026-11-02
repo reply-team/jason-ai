@@ -155,7 +155,7 @@ jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_
   `very_interested` nor `Interested`. The base categories are the responder's `categories.json`, not copied here, and
   `approval-boundaries` says which are worth setting one on and which never.
 - **The operations** it covers are `conversation.reply` when none is named; name `message.send` with `--operation` only
-  where the person says a message to somebody new is covered too, and repeat the option for both.
+  where the person says a message to the same person outside the thread is covered too, and repeat the option for both.
 - **The limits are the person's to choose, and none is the default.** `--expires-at` is when it stops, and
   `--max-releases`, from 1 to 10000, is how many drafts it may let go. Offer both. Setting one again replaces what was
   set and starts its count over; taking one back leaves the drafts already let go as they were.
