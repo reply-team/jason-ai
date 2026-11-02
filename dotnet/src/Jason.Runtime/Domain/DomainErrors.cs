@@ -256,10 +256,6 @@ public static class DomainErrors
         new("decision_reference_unresolved", $"The {kind} reference '{id}' is not one of this campaign's own rows.");
 
     /// <summary>
-    /// An absent actor is an anonymous human, which is right for creating work and wrong for deciding it: an
-    /// accountable decision names the person who made it.
-    /// </summary>
-    /// <summary>
     /// A standing approval is a decision made in advance, so it is refused to whoever may not decide: the code a decision's
     /// refusal carries, in the words of what was being done. No role and no run grants one.
     /// </summary>
@@ -271,6 +267,10 @@ public static class DomainErrors
     public static InvalidRequestException StandingApprovalActorRequired() =>
         new("actor_required", "actor.id is required on a standing approval: what is recorded has to name the person whose decision it is.");
 
+    /// <summary>
+    /// An absent actor is an anonymous human, which is right for creating work and wrong for deciding it: an
+    /// accountable decision names the person who made it.
+    /// </summary>
     public static InvalidRequestException ActorRequired() =>
         new("actor_required", "actor.id is required on a decision: what is recorded has to name the person who made it.");
 
