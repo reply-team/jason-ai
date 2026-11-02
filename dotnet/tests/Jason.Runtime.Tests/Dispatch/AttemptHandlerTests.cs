@@ -150,6 +150,37 @@ public class AttemptHandlerTests
         Assert.Equal(2718, attempt.Launch!.Pid);
     }
 
+    /// <summary>
+    /// The same end, read where else it lands: the journal line that ends the item carries the sentence, and neither the
+    /// journal nor the log carries a piece of what the host wrote — a login, an address, the host's own first word.
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_says_it_cannot_run_here_leaves_none_of_its_words_in_the_journal_or_the_log()
+    {
+        const string Sentence = "The agent host is not signed in on this machine.";
+        const string Tail = "Error: not signed in as person@example.test (plan 7f3a9c-made-up)";
+        var command = FakeCommand.Returning(new CommandOutcome.Exited(1, Tail, Launch(2718), Sentence));
+        using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0, commands: command);
+        var seeded = await harness.SeedClaimableAsync(Ct);
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+        await AttemptHandler.RunAsync(harness.Scopes, work, harness.Registry, harness.Resolve<ILoggerFactory>().CreateLogger("Jason.Runtime.Tests"));
+
+        var journal = await harness.ReadJournalAsync(seeded.PublicId, Ct);
+        var failed = Assert.Single(journal, entry => entry.Kind == JournalKinds.WorkItemFailed);
+        Assert.Contains(Sentence, failed.New!.ToJsonString(), StringComparison.Ordinal);
+        var written = journal
+            .SelectMany(entry => new[] { entry.Old?.ToJsonString(), entry.New?.ToJsonString(), entry.Reason, entry.Key })
+            .Concat(harness.Logs.Lines.SelectMany(line =>
+                line.Scope.Values.Select(value => value?.ToString()).Append(line.Message).Append(line.Exception?.ToString())))
+            .OfType<string>()
+            .ToList();
+        foreach (var piece in new[] { "person@example.test", "example.test", "7f3a9c", "Error:" })
+        {
+            Assert.DoesNotContain(written, text => text.Contains(piece, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     [Fact]
     public async Task An_attempt_the_executor_already_finished_is_left_alone()
     {
