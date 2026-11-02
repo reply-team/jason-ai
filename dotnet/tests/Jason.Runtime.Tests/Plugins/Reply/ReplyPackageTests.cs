@@ -719,9 +719,8 @@ public class ReplyPackageTests
     /// <summary>
     /// A LinkedIn message may name a Reply sending schedule from 0.14.3, so the texts say what it meets: the changelog's
     /// entry names the flag, Reply's refusals of a schedule and the cancel Reply could not confirm; the README's paragraph
-    /// says Reply answers such a message as it answers an email under the scheduled reference; and no release notes keep
-    /// the known issue that a schedule times an email only. The package's item in the notes of its own release, 0.23.0,
-    /// stays at that release's tag; a later release's notes are not held to it.
+    /// says Reply answers such a message as it answers an email under the scheduled reference. What the release's notes
+    /// no longer say is held with the notes, by <see cref="ReleaseNotesTests"/>.
     /// </summary>
     [Fact]
     public void The_texts_say_a_linkedin_message_may_name_a_sending_schedule()
@@ -741,9 +740,6 @@ public class ReplyPackageTests
         var paragraph = Flat(Assert.Single(readme, item => item.StartsWith("A LinkedIn message, InMail or voice message names a schedule", StringComparison.Ordinal)));
         Assert.Contains("answers it as it answers such an email", paragraph, StringComparison.Ordinal);
         Assert.Contains("`linkedin-scheduled-<n>`", paragraph, StringComparison.Ordinal);
-
-        var notes = Items(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "RELEASE-NOTES.md")));
-        Assert.DoesNotContain(notes, item => Flat(item).Contains("a sending schedule times an email only", StringComparison.Ordinal));
     }
 
     /// <summary>A page's items: each list item and each paragraph, whole, however it is wrapped.</summary>

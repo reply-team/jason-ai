@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
-using System.Net.Http.Headers;
-using Jason.Contracts;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Update;
 
@@ -38,7 +37,7 @@ internal static class ReleaseFiles
         ArgumentNullException.ThrowIfNull(notPublished);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, address);
-        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("jason", JasonVersion.Current));
+        UpdateFeed.SayWhoAsks(request);
         try
         {
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline).ConfigureAwait(false);

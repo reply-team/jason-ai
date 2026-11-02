@@ -7,7 +7,8 @@ namespace Jason.Contracts.Tests;
 /// </summary>
 public class PlatformTests
 {
-    // The zones are chosen for standard offsets that no daylight rule or pending law moves: a legislature moved one row once.
+    // The zones are chosen for standard offsets that no daylight rule or pending law moves: a legislature moved one
+    // row once.
     [Theory]
     [InlineData("Europe/Kyiv", 2)]
     [InlineData("Pacific/Honolulu", -10)]
