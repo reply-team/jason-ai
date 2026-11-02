@@ -180,6 +180,8 @@ gets one document here, and a key that is not published here is the caller's own
 
 - [`goals`](context/goals.md) — what the campaign is for: the outcomes its roles steer each conversation towards.
 
+The next expected key is a campaign's ideal-customer-profile record.
+
 A document is `{key, version, summary, value_schema}`, with `distinct_by` beside them for a list whose items a member
 tells apart, and nothing else: no work item names a key, no route carries one and no plugin is invoked for one, so it
 is under `context/` and read by a catalog of its own. A key is one lower-case word of letters, digits and underscores,

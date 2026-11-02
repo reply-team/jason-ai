@@ -31,7 +31,9 @@ has been settled, and the roles take the default goal, a demo.
 - `id` names the goal within the campaign: a lower-case word of letters, digits and underscores, starting with a
   letter. No two goals of a campaign share one. A verdict on a reply names the goal it steers to by this id, so an id
   keeps naming the same goal for the campaign's life: a goal whose title or wording is edited keeps its id, and a goal
-  that means something else is a new goal with a new id.
+  that means something else is a new goal with a new id. A list that leaves out an id a verdict once named is
+  accepted as written: the verdict's line copied the goal's id and kind when it was recorded, so it still reads
+  without the list, and only a later verdict is held to the goals as they then stand.
 - `kind` is one of `meeting`, `demo`, `trial`, `interested_reply`, `purchase` and `custom`; `custom` is the kind for
   a goal the list does not name, which its title and `reached_when` then say.
 - `title` names the goal for a person reading a list of them.

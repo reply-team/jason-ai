@@ -1,10 +1,12 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
+using Jason.Runtime.Tests.Harness;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Replies;
@@ -208,6 +210,40 @@ public class ReplyRecordTests
         var refused = await Assert.ThrowsAsync<ValidationException>(() => Service(db).RecordAsync(Request(seed), Ct));
 
         Assert.Equal(("goal_id", "unknown"), (Assert.Single(refused.Details!).Field, refused.Details![0].Code));
+    }
+
+    /// <summary>
+    /// The goals may be rewritten without the id a verdict named: the list is accepted as written, the line already
+    /// written keeps the goal's id and kind, so it reads without the list, and only a later verdict is held to the goals
+    /// as they now stand.
+    /// </summary>
+    [Fact]
+    public async Task A_list_that_drops_a_goal_is_accepted_and_the_lines_that_named_it_keep_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var first = await Service(db).RecordAsync(Request(seed), Ct);
+        var clock = new FixedClock(new DateTimeOffset(Noon));
+        var campaigns = new CampaignService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestHarness.FoldersFor(db));
+
+        var updated = await campaigns.UpdateContextAsync(
+            new CampaignUpdateContextRequest(
+                seed.Campaign.PublicId,
+                new JsonObject { ["goals"] = JsonNode.Parse("""[{"id":"trial","kind":"trial","title":"A trial","reached_when":"signed up","order":1}]""") },
+                null,
+                null,
+                "the demo is off the table"),
+            Ct);
+
+        Assert.Equal("trial", (string?)updated.Context["goals"]![0]!["id"]);
+        var kept = await db.Journal.SingleAsync(row => row.PublicId == first.Id, Ct);
+        var line = (JsonObject)JournalWriter.ToDto(kept, seed.Campaign.PublicId).New!;
+        Assert.Equal(("demo", "demo"), ((string?)line["goal_id"], (string?)line["goal_kind"]));
+        var refused = await Assert.ThrowsAsync<ValidationException>(() => Service(db).RecordAsync(Request(seed), Ct));
+        Assert.Equal(("goal_id", "unknown"), (Assert.Single(refused.Details!).Field, refused.Details![0].Code));
+        var later = await Service(db).RecordAsync(Request(seed) with { GoalId = "trial" }, Ct);
+        Assert.Equal("trial", (string?)later.New!["goal_kind"]);
     }
 
     /// <summary>
