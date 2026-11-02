@@ -335,10 +335,19 @@ public sealed class WorkItemService(
     /// the item is — its campaign, contact, kind, role or operation — is not patchable; work that should be
     /// something else is new work.
     /// </summary>
-    public async Task<WorkItemDto> UpdateAsync(WorkItemUpdateRequest request, CancellationToken cancellationToken)
+    public Task<WorkItemDto> UpdateAsync(WorkItemUpdateRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var actor = Actors.Resolve(request.Actor);
+        return UpdateCoreAsync(request, Actors.Resolve(request.Actor), cancellationToken);
+    }
+
+    /// <summary>
+    /// The patch, by an actor the runtime supplies rather than one the request names: the respond step records a further
+    /// move of a thread on its own open responder as the dispatcher, through the path every patch takes.
+    /// </summary>
+    internal async Task<WorkItemDto> UpdateCoreAsync(WorkItemUpdateRequest request, ActorRef actor, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
 
         var errors = new ValidationErrors();
         WorkItemValidation.ValidateReason(request.Reason, errors);

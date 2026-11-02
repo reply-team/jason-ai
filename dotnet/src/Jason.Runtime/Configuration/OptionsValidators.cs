@@ -428,6 +428,31 @@ public sealed class InboundOptionsValidator : IValidateOptions<InboundOptions>
 }
 
 /// <summary>
+/// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to, and an age
+/// between an hour and thirty days.
+/// </summary>
+public sealed class ResponderOptionsValidator : IValidateOptions<ResponderOptions>
+{
+    public ValidateOptionsResult Validate(string? name, ResponderOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        OptionRules.Range(failures, "Responder:Priority", options.Priority, -1_000, 1_000);
+        OptionRules.Range(failures, "Responder:TimeoutSeconds", options.TimeoutSeconds, 30, 86_400);
+        OptionRules.Range(failures, "Responder:MaxAttempts", options.MaxAttempts, 1, 10);
+        OptionRules.Range(
+            failures,
+            "Responder:MaxAgeSeconds",
+            options.MaxAgeSeconds,
+            ResponderOptions.MinimumMaxAgeSeconds,
+            ResponderOptions.MaximumMaxAgeSeconds);
+
+        return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
 /// The harness root, refused where it may never be: a relative path; the home directory, a folder holding it or the top
 /// of a drive, where every session of the account would read its memory files; the data directory, a folder inside it
 /// or one holding it (<see cref="HarnessRoot.Refusal"/>), each compared where it leads. Nothing here makes or opens a

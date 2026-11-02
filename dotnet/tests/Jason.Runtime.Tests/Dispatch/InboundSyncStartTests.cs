@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -41,7 +42,8 @@ public class InboundSyncStartTests
         Assert.Equal("conversation.list", item.Operation);
         Assert.Null(item.ContactId);
         Assert.Null(item.Role);
-        Assert.Equal(0, item.Priority);
+        // Ten above the responders' priority: detecting a reply never waits behind answering one.
+        Assert.Equal(new ResponderOptions().Priority + InboundSync.ReadAboveResponders, item.Priority);
         Assert.Equal(ActorType.System, item.CreatedByType);
         Assert.Equal("dispatcher", item.CreatedById);
         Assert.Equal(LineageState.Root, item.LineageState);

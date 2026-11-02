@@ -1644,11 +1644,14 @@ condition that requires semantic action.
 **Boundary:** the trigger is deterministic; the opportunity strategy is semantic.
 
 **In this build:** the synchronization is a scan step that reads each linked active campaign's conversations on a
-cadence and writes one `inbound_reply_observed` line for each thread that moved; that kind is a default manager
-trigger, so the line releases a manager check-in, which queues a read of the thread and the responder's work after
-it, and decides at its next review (`docs/inbound-sync.md`). A plugin that reads its accounts' events says the same
-line from the provider's own record, and a bounce, a reply the provider detected or an accepted invitation as
-`provider_event_observed`, which releases a check-in the same way (`docs/events.md`).
+cadence and writes one `inbound_reply_observed` line for each thread that moved. A respond step after it reads that
+line and, for a thread the campaign holds by its own pin, queues a read of the thread (`conversation.get`) and the
+responder's work created waiting on it — one open responder a thread, a further move recorded on it — so the reply is
+answered without waiting for a review. The kind is also a default manager trigger, so the same line releases a manager
+check-in, queued after the responder, which decides at its review what the campaign as a whole calls for
+(`docs/inbound-sync.md`). A plugin that reads its accounts' events says the same line from the provider's own record,
+and a bounce, a reply the provider detected or an accepted invitation as `provider_event_observed`, which releases a
+check-in the same way and wakes no responder (`docs/events.md`).
 
 ### 17.6 Scheduled campaign-management review
 

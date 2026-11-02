@@ -265,6 +265,7 @@ public class SettingsBindingTests
             NotificationsOptions.Section => Refusal<NotificationsOptions>(settings),
             RoutesOptions.Section => Refusal<RoutesOptions>(settings),
             InboundOptions.Section => Refusal<InboundOptions>(settings),
+            ResponderOptions.Section => Refusal<ResponderOptions>(settings),
             HarnessOptions.Section => Refusal<HarnessOptions>(settings),
             _ => throw new ArgumentOutOfRangeException(nameof(section), section, "a section this test does not know"),
         };
@@ -315,6 +316,7 @@ public class SettingsBindingTests
         (NotificationsOptions.Section, """{"Notifications":{"QuietSeconds":"SENTINEL"}}""", "Notifications:QuietSeconds could not be read as System.Int32."),
         (RoutesOptions.Section, """{"Routes":{"Operations":"SENTINEL"}}""", "Routes:Operations could not be read as a map of Jason.Runtime.Configuration.RouteEntry."),
         (InboundOptions.Section, """{"Inbound":{"SyncSeconds":"SENTINEL"}}""", "Inbound:SyncSeconds could not be read as System.Int32."),
+        (ResponderOptions.Section, """{"Responder":{"MaxAgeSeconds":"SENTINEL"}}""", "Responder:MaxAgeSeconds could not be read as System.Int32."),
         (HarnessOptions.Section, """{"Harness":{"Root":{"x":"SENTINEL"}}}""", "Harness:Root could not be read as System.String."),
     ];
 

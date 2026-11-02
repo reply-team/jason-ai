@@ -46,6 +46,7 @@ public sealed class InboundSync(
     TimeProvider clock,
     LiveSettings<InboundOptions> settings,
     LiveSettings<DispatcherOptions> dispatcher,
+    LiveSettings<ResponderOptions> responder,
     PluginRegistry plugins,
     RouteRegistry routes,
     InboundSkips skips,
@@ -276,7 +277,7 @@ public sealed class InboundSync(
         int accounted;
         if (page.HasMore == true && returned > 0 && next <= MaximumOffset)
         {
-            var following = await items.CreateCoreAsync(Request(campaign.PublicId, since, next), Actors.Dispatcher, LineageRecord.Root, ct)
+            var following = await items.CreateCoreAsync(Request(campaign.PublicId, since, next, ReadPriority()), Actors.Dispatcher, LineageRecord.Root, ct)
                 .ConfigureAwait(false);
             accounted = await Reading(db, campaign)
                 .ExecuteUpdateAsync(
@@ -559,7 +560,7 @@ public sealed class InboundSync(
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         // A read always starts from the first page: a page offset means something only while its read is outstanding.
         var item = await items.CreateCoreAsync(
-            Request(campaign.PublicId, watermark, offset: 0),
+            Request(campaign.PublicId, watermark, offset: 0, ReadPriority()),
             Actors.Dispatcher,
             LineageRecord.Root,
             ct).ConfigureAwait(false);
@@ -634,11 +635,22 @@ public sealed class InboundSync(
             && row.InboundSyncedAt == campaign.SyncedAt);
 
     /// <summary>
+    /// Where a read sits in the queue: ten above the responders a reply wakes, so a campaign's read of its conversations is
+    /// not claimed after its responders — the sends wait behind them, detection does not. Taken from the responders'
+    /// own setting rather than set apart, so no edit puts a read made after it beneath them; responders queued before an
+    /// edit that lowered their priority by more than ten keep the one they were made with until they are claimed.
+    /// </summary>
+    internal int ReadPriority() => responder.Current.Priority + ReadAboveResponders;
+
+    /// <summary>How far above the responders' priority a read of conversations sits.</summary>
+    public const int ReadAboveResponders = 10;
+
+    /// <summary>
     /// One page of a read: the threads the other side wrote into that moved at or after the watermark, a full page at a
     /// time, from the offset the read is at. The watermark is written to the second, rounded down, so the read never
     /// starts later than the watermark says.
     /// </summary>
-    private static WorkItemCreateRequest Request(string campaignId, DateTime since, int offset) =>
+    private static WorkItemCreateRequest Request(string campaignId, DateTime since, int offset, int priority) =>
         new(
             campaignId,
             WorkItemKind.ProviderOp,
@@ -646,7 +658,7 @@ public sealed class InboundSync(
             Operation,
             ContactId: null,
             ExecutionProfile: null,
-            Priority: null,
+            priority,
             NotBefore: null,
             DueAt: null,
             TimeoutSeconds: null,
