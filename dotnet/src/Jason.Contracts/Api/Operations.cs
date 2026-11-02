@@ -86,6 +86,8 @@ public static class Operations
     public const string ReportGet = "report.get";
     public const string ReportList = "report.list";
 
+    public const string ReplyRecord = "reply.record";
+
     public const string RoleList = "role.list";
     public const string RoleAdd = "role.add";
     public const string RoleSetProfile = "role.set_profile";

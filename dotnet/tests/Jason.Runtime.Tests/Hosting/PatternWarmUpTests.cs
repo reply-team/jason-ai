@@ -51,17 +51,19 @@ public sealed class PatternWarmUpTests
     }
 
     [Fact]
-    public void The_published_schemas_are_every_operation_s_the_delivery_contract_s_the_events_contract_s_and_every_preference_s()
+    public void The_published_schemas_are_every_operation_s_the_delivery_contract_s_the_events_contract_s_every_preference_s_and_every_reserved_context_key_s()
     {
         var schemas = PatternWarmUp.PublishedSchemas().ToList();
 
         Assert.Equal(
             ((OperationCatalog.All.Count + Jason.Contracts.Notifications.DeliveryCatalog.All.Count + Jason.Contracts.Events.EventsCatalog.All.Count) * 2)
-            + Jason.Contracts.Preferences.PreferenceCatalog.All.Count,
+            + Jason.Contracts.Preferences.PreferenceCatalog.All.Count
+            + Jason.Contracts.Context.ContextKeyCatalog.All.Count,
             schemas.Count);
         Assert.Contains(OperationCatalog.Find("list_membership.add")!.InputSchema, schemas);
         Assert.Contains(Jason.Contracts.Events.EventsCatalog.Find("events.read")!.OutputSchema, schemas);
         Assert.Contains(Jason.Contracts.Preferences.PreferenceCatalog.Find("sender.identity")!.ValueSchema, schemas);
+        Assert.Contains(Jason.Contracts.Context.ContextKeyCatalog.Find("goals")!.ValueSchema, schemas);
     }
 
     /// <summary>Every <c>pattern</c> written anywhere in a schema, read as plain JSON rather than through the validator.</summary>

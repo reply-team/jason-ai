@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Context;
 using Jason.Contracts.Events;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
@@ -46,13 +47,14 @@ public sealed class PatternWarmUp(PatternTiming timing, ILogger<PatternWarmUp> l
 
     /// <summary>
     /// Every schema this build publishes and the runtime applies: the operations' first, then the delivery family's, the
-    /// events family's and each named preference's value schema.
+    /// events family's, each named preference's value schema and each reserved context key's.
     /// </summary>
     public static IEnumerable<JsonObject> PublishedSchemas() =>
         OperationCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema })
             .Concat(DeliveryCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }))
             .Concat(EventsCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }))
-            .Concat(PreferenceCatalog.All.Select(contract => contract.ValueSchema));
+            .Concat(PreferenceCatalog.All.Select(contract => contract.ValueSchema))
+            .Concat(ContextKeyCatalog.All.Select(contract => contract.ValueSchema));
 
     public Task StartAsync(CancellationToken cancellationToken)
     {

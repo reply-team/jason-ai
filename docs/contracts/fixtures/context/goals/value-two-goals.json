@@ -1,0 +1,10 @@
+{
+  "key": "goals",
+  "version": 1,
+  "case": "a demo first, a trial when a demo is too much",
+  "value": [
+    { "id": "demo", "kind": "demo", "title": "A demo with the operations lead", "reached_when": "a demo is on their calendar", "order": 1 },
+    { "id": "trial", "kind": "trial", "title": "A two-week trial", "reached_when": "their team has signed up for the trial", "order": 2 }
+  ],
+  "expect": "valid"
+}

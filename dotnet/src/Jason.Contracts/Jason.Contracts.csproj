@@ -16,6 +16,9 @@
     <!-- The named preferences are a fourth family: a fact about the client a person states is no work anybody performs,
          so it is read under a prefix of its own by PreferenceCatalog. -->
     <EmbeddedResource Include="..\..\..\docs\contracts\preferences\*.json" Link="Preferences\%(Filename)%(Extension)" />
+    <!-- The reserved keys of a campaign's context are a fifth family: a part of one campaign's context is no work anybody
+         performs and no fact about the client, so it is read under a prefix of its own by ContextKeyCatalog. -->
+    <EmbeddedResource Include="..\..\..\docs\contracts\context\*.json" Link="Context\%(Filename)%(Extension)" />
     <!-- The provider block is one document every operation's failure of class `blocked` carries: no operation, delivery,
          read or preference, so it is read by name, by ProviderBlockContract. -->
     <EmbeddedResource Include="..\..\..\docs\contracts\block\*.json" Link="Blocks\%(Filename)%(Extension)" />

@@ -44,6 +44,9 @@ docs/contracts/
   preferences/<key>.json           a named preference of the client, a fourth family, embedded the same way
   preferences/<key>.md             the same preference explained, with a generated block
   fixtures/preferences/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
+  context/<key>.json               a reserved key of a campaign's context, a fifth family, embedded the same way
+  context/<key>.md                 the same key explained, with a generated block
+  fixtures/context/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
   block/provider_block.json        the provider block a blocked failure carries, written once for every operation
   block/provider_block.md          the same block explained
   fixtures/block/value-*.json      blocks, accepted and refused, with the pointer and reason of each refusal
@@ -167,6 +170,37 @@ field, which raises the document's version, so a skill reading the document know
 else is a new key. There is one value per key for the whole installation, set and unset by a person
 and read by everyone else. Its fixtures live under [`fixtures/preferences/`](fixtures/preferences) and are run by the
 same tests.
+
+## The reserved context keys
+
+A fifth family is published here, and it is no work either: the **reserved keys of a campaign's context**. A campaign's
+context is the caller's own JSON object, and the runtime reads none of it, except the keys this family publishes, each
+with a schema the runtime holds its value to whenever the key is written. Every reserved key of a campaign's context
+gets one document here, and a key that is not published here is the caller's own. One is published:
+
+- [`goals`](context/goals.md) — what the campaign is for: the outcomes its roles steer each conversation towards.
+
+A document is `{key, version, summary, value_schema}`, with `distinct_by` beside them for a list whose items a member
+tells apart, and nothing else: no work item names a key, no route carries one and no plugin is invoked for one, so it
+is under `context/` and read by a catalog of its own. A key is one lower-case word of letters, digits and underscores,
+starting with a letter, at most 64 characters, and its document is named for it. The value is checked against the
+key's `value_schema` in the dialect below, and then, where the document names `distinct_by`, no two items of the list
+may share that member: the later one is refused at its member's pointer as `unique_items`. It is checked at
+`campaign.create` and at every `campaign.update_context` whose `set` names the key, as `context.input` is checked at
+`workitem.create` and `workitem.update`: a refusal is `validation_failed`, each problem at the field `context.<key>`
+followed by its pointer, with the code `invalid`; a JSON `null` under the key reads as the key absent, and a patch that
+does not name the key never checks it again. A key's schema changes only by gaining an optional field, which raises
+the document's version; anything else is a new key. Its fixtures live under
+[`fixtures/context/`](fixtures/context) and are run by the same tests.
+
+**A reserved journal line beside the goals.** A role records its verdict on a reply — the category it read, its
+confidence, the reaction it chose and the goal it steers to — through the Runtime API's `reply.record`
+([`docs/runtime-api.md`](../runtime-api.md)), which writes one reserved journal line, `reply_classified`. The line is
+the runtime's: `journal.append` refuses it to every other writer. It carries the campaign, the contact, the plugin and
+thread, the message's provider identifier and moment, the category as a string, the confidence from 0 to 1, the
+reaction (`act`, `draft`, `escalate` or `none`), the goal's id and kind, and the actor, and never a word a person
+wrote: no subject, no body, no preview, no name. The runtime checks that the category is one non-empty line of text
+and nothing more; what a category means is the skills' business, never the runtime's.
 
 ## What a document states
 
