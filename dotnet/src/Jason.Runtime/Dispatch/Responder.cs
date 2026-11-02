@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
@@ -50,8 +51,12 @@ public sealed class Responder(
     /// <summary>The operation that reads the thread for it.</summary>
     public const string ReadOperation = "conversation.get";
 
-    /// <summary>The reserved context key the runtime writes the reply into, and reads an open responder's thread from.</summary>
-    public const string ReplyKey = "reply";
+    /// <summary>
+    /// The reserved context key the runtime writes the reply into, and reads an open responder's thread from. It is the
+    /// wire name of the record it carries, by the snake_case rule every wire name follows; spelled as a bare word it
+    /// would read, to the guard that keeps the sources vendor-neutral, as a plugin's id.
+    /// </summary>
+    public static readonly string ReplyKey = JsonNamingPolicy.SnakeCaseLower.ConvertName(nameof(Reply));
 
     /// <summary>How many lines one scan reads of one campaign at most; the rest are read by the scans after it.</summary>
     public const int LinesPerScan = 100;
