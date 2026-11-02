@@ -2783,6 +2783,42 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// Of the routes the runtime answers, nothing but a route's own <c>plugin_id</c> is read for a name: a <c>role</c> or a
+    /// <c>plugin_id</c> anywhere else in the answer, beside a section's routes or on a campaign's entry, names nothing the
+    /// bundle writes as an alias, so a word of the bundle's own, such as a check's state, travels as it is.
+    /// </summary>
+    [Theory]
+    [InlineData("global", "role")]
+    [InlineData("global", "plugin_id")]
+    [InlineData("campaign", "role")]
+    [InlineData("campaign", "plugin_id")]
+    public async Task Nothing_of_the_routes_but_a_route_s_plugin_is_read_for_a_name(string where, string key)
+    {
+        using var dir = new TempPaths();
+        var global = new JsonObject
+        {
+            ["default"] = new JsonObject { ["plugin_id"] = ShippedPlugins.Ids[0], ["binding"] = new JsonObject(), ["binding_identity"] = "sha256:ab" },
+            ["operations"] = new JsonObject(),
+        };
+        var campaign = new JsonObject { ["campaign_id"] = "cmp_01JDOCTOR", ["default"] = null, ["operations"] = new JsonObject() };
+        (where == "global" ? global : campaign)[key] = "ok";
+        var routes = new JsonObject
+        {
+            ["routing_snapshot_id"] = "rts_01JDOCTOR",
+            ["plugin_snapshot_id"] = "snp_01JDOCTOR",
+            ["global"] = global,
+            ["campaigns"] = new JsonArray(campaign),
+        };
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) => operation == Operations.RouteList ? Respond(HttpStatusCode.OK, routes.ToJsonString()) : null;
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        Assert.Contains(Section(bundle, "status")["checks"]!.AsArray(), check => Text(check!["state"]) == "ok");
+        AssertAbsent(bundle, "<role-1>");
+    }
+
+    /// <summary>
     /// The folder the <c>jason</c> on the PATH is in, outside home, is a name somebody chose — <c>Q:\Tools\Acme</c> — and
     /// the path check quotes it: it is written as its mark, and the header says so.
     /// </summary>
