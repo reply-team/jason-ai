@@ -119,6 +119,35 @@ public class ReplyVerdictReferenceTests
         }
     }
 
+    /// <summary>
+    /// A patch whose arguments are not the operation's shape, on a reply that names a true verdict, is refused for its
+    /// arguments, as any patch is: the reference is not read against a thread that is not there, and nothing fails on
+    /// the way.
+    /// </summary>
+    [Theory]
+    [InlineData("the arguments as a string")]
+    [InlineData("the thread as a string")]
+    public async Task ReplyVerdict_MalformedArgumentsAtUpdate_RefusedForTheArguments(string patched)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SceneAsync(db);
+        var item = await Service(db).CreateAsync(Create(scene, "conversation.reply", scene.Verdict), Ct);
+        JsonNode input = patched switch
+        {
+            "the arguments as a string" => "Thursday at 10 works.",
+            "the thread as a string" => new JsonObject { ["channel"] = "email", ["thread"] = "501", ["body"] = "Thursday at 10 works." },
+            _ => throw new ArgumentOutOfRangeException(nameof(patched), patched, "no such patch"),
+        };
+        var request = new WorkItemUpdateRequest(
+            item.Id, new JsonObject { [WorkItemService.InputKey] = input }, null, default, default, default, default, default, default, default, default, null, null);
+
+        var error = await Assert.ThrowsAsync<ValidationException>(() => Service(db).UpdateAsync(request, Ct));
+
+        Assert.NotEmpty(error.Details!);
+        Assert.All(error.Details!, detail => Assert.StartsWith("context.input", detail.Field, StringComparison.Ordinal));
+    }
+
     private static WorkItemCreateRequest Create(Scene scene, string operation, string? verdict) => new(
         scene.Campaign.PublicId,
         WorkItemKind.ProviderOp,

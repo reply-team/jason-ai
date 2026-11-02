@@ -749,7 +749,10 @@ public sealed class WorkItemService(
     {
         string[] keys = [StandingApprovals.VerdictKey, InputKey];
         var named = keys.Any(key => set?.ContainsKey(key) == true || unset?.Contains(key, StringComparer.Ordinal) == true);
-        if (!named)
+
+        // A patch already refused — its arguments not the operation's shape, say — is refused for that, as a create is
+        // before it reads a reference; the reference is asked about the work the patch would leave, and there is none.
+        if (!named || errors.Any)
         {
             return;
         }

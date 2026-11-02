@@ -352,7 +352,10 @@ public static class StandingApprovals
             return;
         }
 
-        if (!string.Equals(Text(said["thread"]), Text(context[WorkItemService.InputKey]?["thread"]?["external_id"]), StringComparison.Ordinal))
+        // Read without assuming a shape: at an update the arguments' own errors are collected and not yet thrown, so what
+        // stands here may be anything a patch sent, and a reference is never measured against a thread that is not there.
+        var thread = ((context[WorkItemService.InputKey] as JsonObject)?["thread"] as JsonObject)?["external_id"];
+        if (!string.Equals(Text(said["thread"]), Text(thread), StringComparison.Ordinal))
         {
             errors.Add(Field, "invalid", "reply_verdict must name a verdict about the thread the reply answers in.");
         }
