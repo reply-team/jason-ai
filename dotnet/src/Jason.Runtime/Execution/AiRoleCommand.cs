@@ -81,7 +81,8 @@ public sealed class AiRoleCommand(
             context.Role,
             paths.RoleSkillsDirectory,
             roles.Current.MaxSkillBytes,
-            host);
+            host,
+            context.Allow);
         if (prepared.RefusalCode is { } refusal)
         {
             return new CommandOutcome.LaunchFailed(prepared.Message!, launch, refusal);
@@ -89,7 +90,7 @@ public sealed class AiRoleCommand(
 
         // What this attempt was given, kept where the rest of the launch is kept: which rules the agent ran
         // under, and whether it was taught anything at all.
-        launch = launch with { Deny = context.Deny, RoleSkill = prepared.Skill };
+        launch = launch with { Deny = context.Deny, Allow = context.Allow is { Count: > 0 } allow ? allow : null, RoleSkill = prepared.Skill };
 
         // Where the person's memory files are, as the claim decided it with the command that may read them: named
         // here as they are, never looked up again, so the envelope cannot know better than the provenance.

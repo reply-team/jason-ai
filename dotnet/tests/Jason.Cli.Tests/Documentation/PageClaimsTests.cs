@@ -236,7 +236,7 @@ public partial class PageClaimsTests
         var readme = Flat(Page("README.md"));
 
         Assert.Contains(
-            "of the runtime it asks only what the runtime says about itself, its roles and routes, and the journal and work-item pages it counts",
+            "of the runtime it asks only what the runtime says about itself, its roles, profiles and routes, and the journal and work-item pages it counts",
             notes,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -244,7 +244,7 @@ public partial class PageClaimsTests
             readme,
             StringComparison.Ordinal);
         Assert.Contains(
-            "the database, plugin packages, a route's account and its identity, or anything read from the folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only `--include-journal` adds",
+            "the database, plugin packages, a route's account and its identity, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only `--include-journal` adds",
             readme,
             StringComparison.Ordinal);
     }
@@ -1920,6 +1920,7 @@ public partial class PageClaimsTests
 
         Assert.Equal(printed, rows);
         Assert.Contains("notifications reach you", rows);
+        Assert.Contains("every enabled profile names an agent host detected on this machine", rows);
     }
 
     /// <summary>
@@ -1977,7 +1978,7 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// And it says what the lines leave unsaid: where the folder is elsewhere and which one is in force, that the install
-    /// makes none, what each level gets — the marker, the memory file and the file Claude Code reads beside it — how a
+    /// makes none, what each level gets — the marker, the memory file and each file a host reads beside it — how a
     /// folder already there is taken and when it is not, that the setting before the first create is all it takes and a
     /// folder moved later is recorded again, and that <c>git</c> in it is the person's act, never Jason's.
     /// </summary>
@@ -1985,7 +1986,7 @@ public partial class PageClaimsTests
     [InlineData("That folder, the harness root, is `Jason` in your home directory — `/home/marta/Jason` on Linux, `/Users/marta/Jason` on macOS — unless `Harness:Root` in `~/.jason/config/settings.json` names another;")]
     [InlineData("a script cannot know what the runtime makes of its settings, so it says \"by default\", and `jason status` names the root in force.")]
     [InlineData("The install makes no folder there. The runtime makes the root the first time a project or a campaign is created,")]
-    [InlineData("each with the marker that makes it Jason's, `.jason/marker.json`, an empty `AGENTS.md` for your own words, and one line, `@AGENTS.md`, in the file Claude Code reads (`~/Jason/CLAUDE.md` at the root), so that it reads them too;")]
+    [InlineData("each with the marker that makes it Jason's, `.jason/marker.json`, an empty `AGENTS.md` for your own words, and one line, `@AGENTS.md`, in each file a host reads in its place (`~/Jason/CLAUDE.md` at the root for Claude Code; the [host matrix](execution-profiles.md#12-the-hosts) lists them), so that it reads them too;")]
     [InlineData("a `Jason` folder already there is taken as the root then, its marker written and nothing it holds changed, unless it is marked as something else, which `jason status` reports.")]
     [InlineData("`Harness:Root` set before that first create is all it takes. A folder you move later is recorded again with `jason project link`, the root's once `Harness:Root` names where it is now.")]
     [InlineData("Jason never writes a word of those memory files, never runs `git` there and never writes a `.gitignore`.")]

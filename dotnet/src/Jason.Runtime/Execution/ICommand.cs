@@ -59,7 +59,8 @@ public sealed record CommandContext(
     string? ProjectId = null,
     MemoryFileLocations? MemoryFiles = null,
     Resumption? Resumption = null,
-    AgentHostKind? Host = null);
+    AgentHostKind? Host = null,
+    IReadOnlyList<string>? Allow = null);
 
 /// <summary>How the run ended, as the command saw it. What it means for the work item is decided elsewhere.</summary>
 public abstract record CommandOutcome

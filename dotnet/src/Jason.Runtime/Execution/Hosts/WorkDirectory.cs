@@ -48,13 +48,15 @@ public static class WorkDirectory
     /// command starts whatever it starts: the directory is then laid out as it always was, the layout of the one host
     /// Jason had before there were several.
     /// </param>
+    /// <param name="allow">What the host allows through the work directory; none where it is null.</param>
     public static WorkDirectoryReport Prepare(
         string workDir,
         IReadOnlyList<string> deny,
         string? role,
         string roleSkillsRoot,
         int maxSkillBytes,
-        IAgentHost? host = null)
+        IAgentHost? host = null,
+        IReadOnlyList<string>? allow = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
         ArgumentNullException.ThrowIfNull(deny);
@@ -69,7 +71,7 @@ public static class WorkDirectory
         }
         else
         {
-            host.WriteWorkDirectory(workDir, deny);
+            host.WriteWorkDirectory(workDir, allow ?? [], deny);
             facts = host.Facts;
         }
 

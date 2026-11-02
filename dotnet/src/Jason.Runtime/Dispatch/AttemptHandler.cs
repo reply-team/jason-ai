@@ -407,5 +407,6 @@ public static class AttemptHandler
         work.ProjectPublicId,
         work.MemoryFiles,
         work.Resumption,
-        work.Agent?.Host);
+        work.Agent?.Host,
+        work.Agent?.Allow);
 }

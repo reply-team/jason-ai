@@ -56,5 +56,6 @@ public sealed record ClaimedWork(
     Resumption? Resumption = null);
 
 /// <summary>The per-item half of an agent launch, as the claim resolved it.</summary>
+/// <param name="Allow">What the host allows through the work directory; empty for a host whose allow rules travel on its command line.</param>
 /// <param name="Host">The host the profile names, so the work directory is laid out where that host reads it.</param>
-public sealed record AgentLaunch(IReadOnlyList<string> Deny, string CliCommand, AgentHostKind Host);
+public sealed record AgentLaunch(IReadOnlyList<string> Deny, IReadOnlyList<string> Allow, string CliCommand, AgentHostKind Host);

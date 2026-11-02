@@ -19,6 +19,7 @@ namespace Jason.Runtime.Dispatch;
 public sealed record AgentPlan(
     IReadOnlyList<string> Command,
     IReadOnlyList<string> Deny,
+    IReadOnlyList<string> Allow,
     string CliCommand,
     AgentProvenanceDto Provenance,
     MemoryFileLocations MemoryFiles,
@@ -168,6 +169,9 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         return new AgentLaunchDecision.Ready(new AgentPlan(
             composed.Command,
             [.. revision.Deny.Concat(composed.Deny).Distinct(StringComparer.Ordinal)],
+
+            // What the host allows through the work directory, beside the deny and carried where it is.
+            composed.Allow,
             ProgramResolver.CliCommandFor(revision.CliCommand),
             provenance,
             memoryFiles,

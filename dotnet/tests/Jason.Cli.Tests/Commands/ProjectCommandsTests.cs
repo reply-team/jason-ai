@@ -174,4 +174,21 @@ public class ProjectCommandsTests
         Assert.Matches("(?m)^/home/marta/Clients/acme-corp/campaigns/beta-launch +another_project +cmp_B +prj_B\r?$", cli.Text);
         Assert.DoesNotContain("Acme Corp", cli.Text, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The link's help speaks of the files a host reads in place of the memory file, every one of the table of hosts, rather
+    /// than of the one host's file.
+    /// </summary>
+    [Fact]
+    public async Task The_link_help_speaks_of_each_host_s_import_file_and_never_writing_over_one()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("project", "link", "--help");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var help = string.Join(' ', cli.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("an import file for each host that reads one and an AGENTS.md only where it has none", help, StringComparison.Ordinal);
+        Assert.Contains("and never writes over an import file.", help, StringComparison.Ordinal);
+    }
 }
