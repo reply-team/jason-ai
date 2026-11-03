@@ -529,16 +529,22 @@ thing that decides whether the host works at all.
    without asking, in print mode and without `--force`, has not been seen on a signed-in run. Jason passes none of
    `--force`, `--yolo`, `--auto-review`, `--sandbox` or `--approve-mcps`, and none of them is the answer if the callback
    is not run: a profile's arguments may not carry them, and a session that cannot call back ends by its own report.
-2. **Reads are the widest of the five hosts.** Cursor takes the union of the allow and deny lists of every
+2. **Reads are the widest of the hosts of the matrix.** Cursor takes the union of the allow and deny lists of every
    configuration layer it finds, the person's user level and the work directory's own, a deny winning over an allow, and
-   it reads user-level skills. Jason confines nothing it reads: the `Read(<file>)` rules a launch writes name the memory
-   files the session may read, and do not narrow what else the signed-in person's account can read. Of the hosts a
-   profile can name, this is the widest read form, so a profile for it belongs on an account whose files a role may see.
-3. **The three forms.** Reads: as in the note above. Call-home: the one allowed shell command, the runtime's own, as
-   in the first note. Deny: `Write(**)` always, and `WebFetch(*)` unless the revision grants a fetch, then the profile's
-   own deny words, written to `.cursor/cli.json` in the attempt's work directory, a file that carries permissions and
-   nothing else. A deny word is one of `Shell(...)`, `Read(...)`, `Write(...)`, `WebFetch(...)` or `Mcp(...)`, written as
-   given; whether a head without parentheses, such as `Write`, is read as a rule has not been seen.
+   it reads user-level skills. Note that the union holds for every kind of allow rule, not for reads only: what the person's own
+   configuration allows, a shell command or a write among it, stands beside what Jason writes. The person's own
+   `approvalMode` at the user level (an allowlist, auto-review, or unrestricted "Run Everything") is theirs too, and
+   Jason does not set it. Jason confines nothing it reads: the `Read(<file>)` rules a launch writes
+   name the memory files the session may read, and do not narrow what else the signed-in person's account can read. Of
+   the hosts a profile can name, this is the widest read form of the matrix, so a profile for it belongs on an account
+   whose files a role may see.
+3. **The three forms.** Reads: as in the note above. Call-home: the one shell command Jason allows, the runtime's own,
+   as in the first note; the person's own user-level configuration may allow more, and Jason cannot narrow it, so
+   `Write(**)` does not stop a shell command that writes. Deny: `Write(**)` always, and `WebFetch(*)` unless the revision
+   grants a fetch, then the profile's own deny words, written to `.cursor/cli.json` in the attempt's work directory, a
+   file that carries permissions, the file's version key and the editor mode off, nothing else. A deny word is one of
+   `Shell(...)`, `Read(...)`, `Write(...)`, `WebFetch(...)` or `Mcp(...)`, written as given; whether a head without
+   parentheses, such as `Write`, is read as a rule has not been seen.
 4. **Web search is neither granted nor denied.** The host has no rule for it in either list, and whether it runs is the
    person's own `autoAcceptWebSearch` setting, so a profile that grants `web_search` or denies it, in either spelling, is
    refused when it is written, naming the host.
@@ -547,17 +553,22 @@ thing that decides whether the host works at all.
    Jason does not remove.
 6. **On Windows the program is a launcher script.** `agent.cmd` and `cursor-agent.cmd` start a PowerShell script, which
    starts the newest version's `node.exe` with its `index.js`; a script is never started through a shell, so Jason starts
-   those two itself, choosing the version directory as that script does, newest date first, and never running the
-   staging script beside them. `--program agent` is looked up on the search path, and an autostarted runtime's search
+   those two itself, choosing the version directory as that script does: a flat installation root is read first, where a
+   `node.exe` and an `index.js` stand beside the launcher, and otherwise the newest date wins, and within one day Jason
+   breaks a tie by name, which the script leaves unordered. Jason never runs the staging script beside them, and the
+   person's own run of the launcher promotes a staged update, so the version Jason starts can change after one.
+   `--program agent` is looked up on the search path, and an autostarted runtime's search
    path can differ from a terminal's, so where it is not found the profile names the launcher by its full path:
    `jason profile create <name> --host cursor_cli --program C:\Users\<you>\AppData\Local\cursor-agent\agent.cmd`.
    This holds for those two file names under this host, and for no other script under any host.
 7. **One sentence when the host is not signed in.** The signal Jason reads is an exit that is not zero whose last
-   words of standard error hold `agent login` (no sign-in) or `stored authentication is invalid` (one the server
-   refused), both read from the bundle. Such an attempt ends with `host_not_available` and a fixed sentence: run
-   `agent login` as yourself. Nothing of what the host wrote is carried.
+   words of standard error hold `agent login`, `cursor agent login` or `agent-local login` (no sign-in) or
+   `stored authentication is invalid` (one the server refused), all read from the bundle. Such an attempt ends with
+   `host_not_available` and a fixed sentence: run `agent login` as yourself. Nothing of what the host wrote is carried.
 8. **A session id is told to the host.** `--new-session-id` is not in the host's help text; the bundle validates it as a
    version-4 UUID, and the attempt records the one Jason minted. A profile may not name it, nor `--resume`.
 9. **The brief goes on stdin.** In print mode the host takes its prompt from the whole of stdin when no word for one is
    on its command line, and ignores stdin when one is, so no composed argument is a bare word and a profile's arguments
-   take a value joined to its flag by an equals sign (`--model=name`), never a bare word and never a double dash.
+   take a value joined to its flag by an equals sign (`--model=name`), never a bare word and never a double dash. The
+   host reads a short flag with more letters or a value after it as other flags or as a flag with a value, and a lone
+   dash as the prompt, so a profile's arguments carry no such word either; a short flag stands alone, as `-f`.

@@ -218,6 +218,17 @@ public class ProgramResolverTests : IDisposable
         Assert.Null(new ProgramResolver(Search(string.Empty)).Resolve(Path.Combine(root, "claude.cmd"), new CursorCliHost(windows: true)));
     }
 
+    /// <summary>A full path names a file, so the launcher is the program only where that file is there, whatever stands beside where it would be.</summary>
+    [Fact]
+    public void A_full_path_to_a_launcher_that_is_not_there_is_no_program_though_its_script_and_versions_are()
+    {
+        var root = CursorInstall();
+        File.Delete(Path.Combine(root, "agent.cmd"));
+
+        Assert.Null(new ProgramResolver(Search(string.Empty)).Resolve(Path.Combine(root, "agent.cmd"), new CursorCliHost(windows: true)));
+        Assert.NotNull(new ProgramResolver(Search(string.Empty)).Resolve(Path.Combine(root, "cursor-agent.cmd"), new CursorCliHost(windows: true)));
+    }
+
     [Fact]
     public void A_launcher_script_with_nothing_installed_beside_it_is_no_program()
     {

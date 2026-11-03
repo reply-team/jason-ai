@@ -111,6 +111,27 @@ public class AgentHostSeamTests
     }
 
     /// <summary>
+    /// A command-line parser expands a word of one dash and several letters into one flag per letter, and reads the text
+    /// after a short flag that takes a value as its value, so a reserved short flag written inside such a word is the
+    /// flag itself and a check of whole words does not see it. A host that reserves a short flag therefore refuses, in
+    /// its own argument rule, the words that carry it: the flag followed by a letter, a letter followed by the flag, and
+    /// the flag followed by a value. A host with no reserved short flag has nothing to refuse.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void A_reserved_short_flag_is_refused_inside_a_cluster_and_with_a_value_joined_to_it(AgentHostKind kind)
+    {
+        var host = Registered().Single(candidate => candidate.Kind == kind);
+        var shortFlags = host.ReservedFlags.Where(flag => flag.Length == 2 && flag[0] == '-' && flag[1] != '-').ToArray();
+
+        Assert.All(
+            shortFlags,
+            flag => Assert.All(
+                [flag + "y", "-y" + flag[1], flag + "http://127.0.0.1:9"],
+                word => Assert.True(host.ArgsProblem([word]) is not null, $"{kind} reserves {flag} and takes {word}")));
+    }
+
+    /// <summary>
     /// A flag the runtime composes is one a profile may not carry: a host's parser takes the last value it is given, so
     /// a flag of the shape left unreserved is one a profile's arguments could quietly replace.
     /// </summary>

@@ -143,6 +143,41 @@ public class CursorCliHostTests : IDisposable
         Assert.Contains(flag, new CursorCliHost().ReservedFlags);
     }
 
+    [Theory]
+    [InlineData("--base-url")]
+    [InlineData("--local-agent-api-key")]
+    [InlineData("--enable-bedrock")]
+    [InlineData("--enable-local-bedrock")]
+    [InlineData("--authless")]
+    [InlineData("--agent-endpoint")]
+    [InlineData("--website-url")]
+    [InlineData("--repo-endpoint")]
+    public void A_flag_that_hands_the_session_another_account_provider_or_endpoint_is_reserved(string flag)
+    {
+        Assert.Contains(flag, new CursorCliHost().ReservedFlags);
+    }
+
+    [Theory]
+    [InlineData("-k")]
+    [InlineData("--insecure")]
+    [InlineData("--repo-insecure")]
+    public void A_flag_that_loosens_the_hosts_transport_security_is_reserved(string flag)
+    {
+        Assert.Contains(flag, new CursorCliHost().ReservedFlags);
+    }
+
+    [Theory]
+    [InlineData("--allowed-tools")]
+    [InlineData("--system-prompt")]
+    [InlineData("--harness")]
+    [InlineData("--exclude-workspace-context")]
+    [InlineData("--conversation-history-file")]
+    [InlineData("--data-dir")]
+    public void A_flag_that_hands_the_session_another_tool_set_prompt_history_or_directory_is_reserved(string flag)
+    {
+        Assert.Contains(flag, new CursorCliHost().ReservedFlags);
+    }
+
     [Fact]
     public void A_model_is_not_reserved()
     {
@@ -156,6 +191,21 @@ public class CursorCliHostTests : IDisposable
     {
         Assert.NotNull(why);
 
+        var sentence = new CursorCliHost().Unavailable(1, said);
+
+        Assert.Equal("Cursor CLI is not signed in on this account: run `agent login` as yourself.", sentence);
+    }
+
+    /// <summary>
+    /// The bundle prints the sign-in command in three forms, by how the host was started: its own word, the editor's
+    /// word with it, and the local-mode word. Each is the same fixed sentence.
+    /// </summary>
+    [Theory]
+    [InlineData("Authentication required. Please run 'agent login' first.")]
+    [InlineData("Authentication required. Please run 'cursor agent login' first.")]
+    [InlineData("Authentication required. Please run 'agent-local login' first.")]
+    public void The_sign_in_command_is_read_in_each_of_the_three_forms_the_host_prints_it(string said)
+    {
         var sentence = new CursorCliHost().Unavailable(1, said);
 
         Assert.Equal("Cursor CLI is not signed in on this account: run `agent login` as yourself.", sentence);
@@ -225,6 +275,8 @@ public class CursorCliHostTests : IDisposable
     [InlineData("C:\\Jason\\notes[1]\\AGENTS.md")]
     [InlineData("C:\\Jason\\what?\\AGENTS.md")]
     [InlineData("C:\\Jason\\*\\AGENTS.md")]
+    [InlineData("C:\\Jason\\{a,b}\\AGENTS.md")]
+    [InlineData("C:\\Jason\\{x}\\AGENTS.md")]
     public void A_memory_file_whose_path_the_host_would_read_as_a_pattern_is_unreadable_and_says_so(string path)
     {
         var launch = new CursorCliHost(windows: true).Compose(Revision(), ["agent"], new MemoryFileLocations(null, path, null));
@@ -302,7 +354,6 @@ public class CursorCliHostTests : IDisposable
 
     [Theory]
     [InlineData("--model=made-up-model")]
-    [InlineData("-m=made-up-model")]
     [InlineData("--model=made-up-model", "--list-models")]
     public void Flags_with_their_values_joined_by_an_equals_sign_are_taken(params string[] args)
     {
@@ -322,6 +373,25 @@ public class CursorCliHostTests : IDisposable
         Assert.Contains("stdin", problem, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The host's parser expands a single-dash word of several letters into one flag per letter, and reads the text after
+    /// a short flag that takes a value as that value, so <c>-fp</c> is <c>-f -p</c> and <c>-ehttp://127.0.0.1:9</c> is
+    /// <c>-e</c> with an address. A lone dash is read as the prompt. None of them is a word a person could mean, and a
+    /// reserved short flag written inside one would slip past a check of whole words.
+    /// </summary>
+    [Theory]
+    [InlineData("-fp")]
+    [InlineData("-pf")]
+    [InlineData("-ehttp://127.0.0.1:9")]
+    [InlineData("-")]
+    [InlineData("--model=x", "-fp")]
+    public void A_single_dash_word_of_more_than_one_letter_and_a_lone_dash_are_refused(params string[] args)
+    {
+        var problem = new CursorCliHost().ArgsProblem(args);
+
+        Assert.NotNull(problem);
+    }
+
     [Fact]
     public void No_arguments_are_taken_without_a_problem()
     {
@@ -331,7 +401,7 @@ public class CursorCliHostTests : IDisposable
     /// <summary>
     /// The host reads a project's permissions from <c>.cursor/cli.json</c> in the directory it works in, and it unions
     /// the allow and deny lists of every layer it finds, so what the work directory writes is added to the person's own
-    /// and never replaces it. The file is the whole of what is written: permissions, nothing else.
+    /// and never replaces it. The file is the whole of what is written: the permissions, the file's version key and the editor mode set off, nothing else.
     /// </summary>
     [Fact]
     public void The_work_directory_carries_the_allow_and_deny_rules_in_the_hosts_project_permission_file()
@@ -393,7 +463,7 @@ public class CursorCliHostTests : IDisposable
     }
 
     [Fact]
-    public void A_date_is_compared_as_a_number_so_a_month_written_with_one_digit_is_older_than_one_written_with_two()
+    public void A_date_is_compared_as_a_number_so_within_one_year_a_month_written_with_one_digit_is_older_than_one_written_with_two()
     {
         var root = InstallRoot("2026.9.5-bbbbbbb", "2026.10.1-ccccccc");
 
@@ -410,6 +480,40 @@ public class CursorCliHostTests : IDisposable
         var layout = new CursorCliHost(windows: true).ProgramLayout(Path.Combine(root, "agent.cmd"));
 
         Assert.Equal(Path.Combine(root, "versions", "2026.10.22-27dcf5f", "node.exe"), layout![0]);
+    }
+
+    /// <summary>
+    /// The launcher script matches a name by letters and digits of its own alphabet, where a digit of another script would
+    /// read as a digit to a looser rule and then fail to parse as a number: such a name is no version.
+    /// </summary>
+    [Fact]
+    public void A_directory_named_with_digits_of_another_script_is_no_version()
+    {
+        var root = InstallRoot("2026.10.22-27dcf5f", "٢٠٢٦.10.23-ccccccc");
+
+        var layout = new CursorCliHost(windows: true).ProgramLayout(Path.Combine(root, "agent.cmd"));
+
+        Assert.Equal(Path.Combine(root, "versions", "2026.10.22-27dcf5f", "node.exe"), layout![0]);
+    }
+
+    [Fact]
+    public void A_hash_in_capital_letters_is_still_a_version_as_the_launcher_script_reads_it()
+    {
+        var root = InstallRoot("2026.10.22-27dcf5f", "2026.11.01-ABC");
+
+        var layout = new CursorCliHost(windows: true).ProgramLayout(Path.Combine(root, "agent.cmd"));
+
+        Assert.Equal(Path.Combine(root, "versions", "2026.11.01-ABC", "node.exe"), layout![0]);
+    }
+
+    [Fact]
+    public void A_launcher_that_is_not_there_has_no_layout_though_its_script_and_versions_are()
+    {
+        var root = InstallRoot("2026.10.22-27dcf5f");
+        File.Delete(Path.Combine(root, "agent.cmd"));
+
+        Assert.Null(new CursorCliHost(windows: true).ProgramLayout(Path.Combine(root, "agent.cmd")));
+        Assert.NotNull(new CursorCliHost(windows: true).ProgramLayout(Path.Combine(root, "cursor-agent.cmd")));
     }
 
     [Fact]

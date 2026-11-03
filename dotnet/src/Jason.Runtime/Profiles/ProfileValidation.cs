@@ -203,13 +203,13 @@ internal static partial class ProfileValidation
         // a script whose name Windows trims back to one is refused here and not started at the claim.
         if (ProgramResolver.NamesShellScript(program) && !NamesTheHostsLauncher(program, host))
         {
-            errors.Add(
-                "program",
-                "shell_script",
-                "program must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
-                + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).");
+            errors.Add("program", "shell_script", ShellScriptMessage("program"));
         }
     }
+
+    private static string ShellScriptMessage(string subject) =>
+        subject + " must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
+        + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).";
 
     /// <summary>
     /// Whether a script is the launcher the profile's own host is installed as, named by its full path: only the host
@@ -278,7 +278,7 @@ internal static partial class ProfileValidation
     /// of such a tool is kept as the person's word, since it holds anyway; a deny of a tool the host has and cannot take
     /// away, or of a word it does not read as a rule, is refused naming the host; and so is a grant of a tool the host
     /// has but Jason cannot make true, and arguments the host's own reading refuses. Each is <c>invalid</c>; stored
-    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>. Every message
+    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>, and a stored program it leaves alone to the host's rule for a script, <c>shell_script</c>. Every message
     /// names the host and the word; then the grant is held beside the deny. Where a patch did not name a list,
     /// the message says it is the profile's.
     /// </summary>
@@ -288,13 +288,22 @@ internal static partial class ProfileValidation
         ValidationErrors errors,
         bool toolsNamed = true,
         bool denyNamed = true,
-        bool argsNamed = true)
+        bool argsNamed = true,
+        bool programNamed = true)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(errors);
 
         var word = AgentHosts.Word(host.Kind);
+
+        // The program a request names was held to this host where it was read. One it leaves alone is the stored one, and
+        // a patch that moves the profile to another host would otherwise start a script that is this host's launcher
+        // under a host that is not installed as one, or a script that is no launcher under this one.
+        if (!programNamed && ProgramResolver.NamesShellScript(revision.Program) && !NamesTheHostsLauncher(revision.Program, host))
+        {
+            errors.Add("program", "shell_script", ShellScriptMessage("the profile's program"));
+        }
 
         // Arguments a request names were held to this host's flags where they were read. Arguments it leaves alone are
         // the stored ones, and a patch that moves the profile to another host would otherwise launch them after the

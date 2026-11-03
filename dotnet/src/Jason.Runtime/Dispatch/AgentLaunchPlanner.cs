@@ -140,7 +140,23 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         // and either this machine has it or the work cannot run and says which program was missing.
         // A script is the other way to have no program: a profile stored before the rule keeps its program, and the
         // refusal names what it is rather than calling it missing.
-        if (programs.Resolve(revision.Program, host) is not { Count: > 0 } startedAs)
+        // A host answers what its own install starts, and its code is not the claim's: nothing it throws leaves the
+        // claim. It ends this item as a program that cannot be started does, in a sentence that carries no word of the
+        // exception, and the scan goes on to the next candidate.
+        IReadOnlyList<string>? resolved;
+        try
+        {
+            resolved = programs.Resolve(revision.Program, host);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new AgentLaunchDecision.Refused(
+                AttemptErrors.HostNotAvailable,
+                $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', whose installation could not be read on this machine.",
+                Chosen(launch));
+        }
+
+        if (resolved is not { Count: > 0 } startedAs)
         {
             return new AgentLaunchDecision.Refused(
                 AttemptErrors.HostNotAvailable,
@@ -191,7 +207,14 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
     {
         var launcher = host.Facts.CommandWord + ".cmd";
         var named = $"The execution profile '{profile}' runs '{program}'";
-        if (host.NamesItsLauncher(launcher))
+
+        // The launcher sentence is for a program that is the launcher: its bare word, or a path to one of its files. A script
+        // that is something else is a script a shell would run, whichever host it is under.
+        var isTheLauncher = host.NamesItsLauncher(launcher)
+            && (host.NamesItsLauncher(Path.GetFileName(program.Trim()))
+                || (!program.Contains('/', StringComparison.Ordinal) && !program.Contains('\\', StringComparison.Ordinal)
+                    && host.NamesItsLauncher(program.Trim() + ".cmd")));
+        if (isTheLauncher)
         {
             return $"{named}, which this machine cannot start: it is not installed, or nothing was found to start. "
                 + "This host is installed as a launcher script, and Jason starts what that script starts, a node.exe and an index.js in its newest version directory, never the script itself. "

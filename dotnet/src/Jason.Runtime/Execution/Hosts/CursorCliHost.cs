@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -45,8 +46,9 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
 
     /// <summary>
     /// Everything this host reads that would change the shape composed below, plus the ones that would undo the
-    /// confinement it rests on or hand the session an account, an endpoint or a directory of someone else's. Read from
-    /// the help text and the bundle of 2026.10.22-27dcf5f.
+    /// confinement it rests on. The rule for the second kind: anything that hands the session another account, provider,
+    /// endpoint, transport security setting, tool set, prompt, conversation history or directory than the ones the
+    /// runtime composed. Read from the help text and the bundle of 2026.10.22-27dcf5f.
     /// </summary>
     public IReadOnlySet<string> ReservedFlags { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -84,6 +86,26 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
         "--auth-token",
         "-H", "--header",
         "-e", "--endpoint",
+        "--base-url",
+        "--local-agent-api-key",
+        "--enable-bedrock",
+        "--enable-local-bedrock",
+        "--authless",
+        "--agent-endpoint",
+        "--website-url",
+        "--repo-endpoint",
+
+        // Whether the host checks the certificate of the address it calls.
+        "-k", "--insecure",
+        "--repo-insecure",
+
+        // Another tool set, prompt, harness, conversation or data directory than the composed ones.
+        "--allowed-tools",
+        "--system-prompt",
+        "--harness",
+        "--exclude-workspace-context",
+        "--conversation-history-file",
+        "--data-dir",
     };
 
     public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles)
@@ -140,7 +162,7 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     /// <summary>
     /// The host reads a project's permissions from <c>.cursor/cli.json</c> in the directory it works in, and takes the
     /// union of the allow and deny lists of every layer it finds, a deny winning over an allow. So this adds to the
-    /// person's own rules and never replaces them. The file carries permissions and nothing else.
+    /// person's own rules and never replaces them. The file carries the permissions, the file's version key and the editor mode set off, nothing else.
     /// </summary>
     public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
     {
@@ -176,7 +198,10 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
             return null;
         }
 
+        // The bundle prints the sign-in command as `agent login`, `cursor agent login` or `agent-local login`, by how
+        // the host was started, and a stored sign-in the server refused in its own words.
         return stderrTail.Contains("agent login", StringComparison.OrdinalIgnoreCase)
+            || stderrTail.Contains("agent-local login", StringComparison.OrdinalIgnoreCase)
             || stderrTail.Contains("stored authentication is invalid", StringComparison.OrdinalIgnoreCase)
             ? "Cursor CLI is not signed in on this account: run `agent login` as yourself."
             : null;
@@ -221,14 +246,17 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     /// <summary>
     /// The host takes its prompt from stdin only when no word for one stands on its command line, so an argument that is
     /// a bare word, or a value apart from its flag, would be read as the prompt and stdin would be ignored. A flag takes
-    /// its value joined by an equals sign, and no double dash is taken.
+    /// its value joined by an equals sign, and no double dash is taken. The host's parser also expands a word of one dash
+    /// and several letters into a flag per letter and reads the text after a short flag as its value, and reads a lone
+    /// dash as the prompt, so a single-dash word is taken only as one letter; a reserved short flag cannot be written
+    /// inside another word.
     /// </summary>
     public string? ArgsProblem(IReadOnlyList<string> args)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        return args.Any(arg => !arg.StartsWith('-') || arg == "--")
-            ? "an argument that is a bare word, or a flag's value apart from the flag, would be read as the prompt and stdin would be ignored: write a flag with its value joined by an equals sign, as --model=name, and no double dash"
+        return args.Any(arg => !arg.StartsWith('-') || arg == "--" || arg == "-" || (arg[1] != '-' && arg.Length > 2))
+            ? "an argument that is a bare word, a lone dash, a flag's value apart from the flag, or a short flag with more letters or a value after it would be read as the prompt or as other flags and stdin would be ignored: write a flag with its value joined by an equals sign, as --model=name, and no double dash"
             : null;
     }
 
@@ -238,7 +266,7 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     [GeneratedRegex(@"^web[ _-]?search(\(.*\))?\z", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex SearchSpelling();
 
-    private static readonly char[] PatternCharacters = ['*', '?', '[', ']', '(', ')'];
+    private static readonly char[] PatternCharacters = ['*', '?', '[', ']', '(', ')', '{', '}'];
 
     /// <summary>
     /// One rule for each memory file the launch names, in the order of the levels, and one only for a file named twice;
@@ -301,7 +329,7 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     /// <summary>
     /// What the launcher script starts, as a command: the interpreter, then the entry script. Where a <c>node.exe</c>
     /// and an <c>index.js</c> stand beside the launcher the script starts those, and otherwise the newest directory
-    /// under <c>versions</c> whose name reads as a version, newest by its date taken as a number — so a month written
+    /// under <c>versions</c> whose name reads as a version, newest by its date taken as a number — so, within one year, a month written
     /// with one digit is older than one written with two — and by name when two share a day, which the script leaves
     /// unordered. A staged or previous directory is never one. Nothing is remembered between calls: a version installed
     /// since is the answer the next time. Null where this is not Windows, where the file is not one of the two
@@ -314,7 +342,7 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
         try
         {
             if (!windows || !NamesItsLauncher(Path.GetFileName(shimFile)) || Path.GetDirectoryName(shimFile) is not { Length: > 0 } root
-                || !File.Exists(Path.Combine(root, LauncherScript)))
+                || !File.Exists(shimFile) || !File.Exists(Path.Combine(root, LauncherScript)))
             {
                 return null;
             }
@@ -347,7 +375,7 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     }
 
     /// <summary>A version directory's name as the launcher script reads one: a date, an optional time, and a hash.</summary>
-    [GeneratedRegex(@"^(?<year>\d{4})\.(?<month>\d{1,2})\.(?<day>\d{1,2})(-\d{2}-\d{2}-\d{2})?-[a-f0-9]+\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(?<year>[0-9]{4})\.(?<month>[0-9]{1,2})\.(?<day>[0-9]{1,2})(-[0-9]{2}-[0-9]{2}-[0-9]{2})?-[a-f0-9]+\z", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex VersionName();
 
     private static string[]? Pair(string directory)
@@ -361,7 +389,10 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     {
         var match = VersionName().Match(name);
         return match.Success
-            ? (long.Parse(match.Groups["year"].Value) * 10_000) + (long.Parse(match.Groups["month"].Value) * 100) + long.Parse(match.Groups["day"].Value)
+            && long.TryParse(match.Groups["year"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var year)
+            && long.TryParse(match.Groups["month"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var month)
+            && long.TryParse(match.Groups["day"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var day)
+            ? (year * 10_000) + (month * 100) + day
             : null;
     }
 }

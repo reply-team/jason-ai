@@ -1,6 +1,8 @@
 using System.Net;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
+using Jason.Runtime.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Profiles;
 
@@ -166,6 +168,105 @@ public class ProfileCursorCliTests
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
+    /// The host's parser expands <c>-fp</c> into two flags and reads <c>-ehttp://...</c> as <c>-e</c> with a value, and a
+    /// lone dash as the prompt, so none of them may be written as an argument, at create or at an update. A short flag
+    /// of the reserved set is refused as itself.
+    /// </summary>
+    [Theory]
+    [InlineData("-fp")]
+    [InlineData("-pf")]
+    [InlineData("-ehttp://127.0.0.1:9")]
+    [InlineData("-k")]
+    [InlineData("-")]
+    public async Task A_short_flag_cluster_a_short_flag_with_a_joined_value_and_a_lone_dash_are_refused_at_create_and_at_update(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "clustered", host = "cursor_cli", program = "agent", args = new[] { word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        Assert.StartsWith("args", Assert.Single(created.Details!).Field, StringComparison.Ordinal);
+
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "plain", host = "cursor_cli", program = "agent" }, Ct);
+        var updated = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "plain", args = new[] { word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        Assert.StartsWith("args", Assert.Single(updated.Details!).Field, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A patch that names only the host is held to the new host's rule for the program the profile already has: the
+    /// launcher script of this host is not a program of another, and no other script is one of this.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_moving_a_launcher_profile_to_another_host_is_refused_for_the_stored_program()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The host is installed as a launcher script on Windows only.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "scripted", host = "cursor_cli", program = Launcher }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "scripted", host = "claude_code" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+        Assert.Contains("the profile's program", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_patch_moving_a_stored_script_to_this_host_is_refused_unless_the_script_is_its_launcher()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await StoreAsync(api, "older-script", "C:\\tools\\run.cmd", "AAAA");
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "older-script", host = "cursor_cli" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+        Assert.Contains("the profile's program", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_patch_moving_a_stored_launcher_path_to_this_host_is_taken_on_windows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The host is installed as a launcher script on Windows only.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await StoreAsync(api, "older-launcher", Launcher, "BBBB");
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "older-launcher", host = "cursor_cli" }, Ct);
+
+        Assert.Equal(Launcher, updated.Revision.Program);
+    }
+
+    /// <summary>A profile as a build before the rule would have stored it, so a patch meets what is already there.</summary>
+    private static async Task StoreAsync(RuntimeApiFixture api, string name, string program, string idEnd)
+    {
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var now = DateTime.UtcNow;
+        var profile = new ExecutionProfile { PublicId = "prf_01K0000000000000000000" + idEnd, Name = name, CurrentRevision = 1, CreatedAt = now, UpdatedAt = now };
+        profile.Revisions.Add(new ExecutionProfileRevision
+        {
+            Number = 1,
+            Host = AgentHostKind.ClaudeCode,
+            Program = program,
+            HostVersionVerified = "stand-in",
+            CreatedByType = ActorType.Human,
+            CreatedAt = now,
+        });
+        db.ExecutionProfiles.Add(profile);
+        await db.SaveChangesAsync(Ct);
     }
 
     [Fact]

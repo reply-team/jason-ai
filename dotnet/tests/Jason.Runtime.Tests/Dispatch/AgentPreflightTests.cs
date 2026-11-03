@@ -376,6 +376,102 @@ public class AgentPreflightTests
         Assert.Contains("agent.cmd", stored.LastError.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A host's reading of its own install is the host's code, and the claim is the runtime's: an exception out of it
+    /// never leaves the claim. It ends that item the way a program that cannot be started ends it, with a fixed sentence
+    /// that carries no word of the exception, and the other candidates of the scan are claimed as they would have been.
+    /// </summary>
+    [Fact]
+    public async Task A_host_whose_layout_throws_fails_its_own_item_with_a_fixed_sentence_and_the_scan_goes_on()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new ThrowingLayoutHost()]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var root = harness.CursorInstall("2026.10.22-27dcf5f");
+        await SeedProfileAsync(db, "cursor", System.IO.Path.Combine(root, "agent.cmd"), host: AgentHostKind.CursorCli);
+        await SeedProfileAsync(db, "house", "claude");
+        var broken = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+        var fine = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "house");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Single(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == broken.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.False(stored.LastError.Retriable);
+        Assert.DoesNotContain(ThrowingLayoutHost.Secret, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("could not be read", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.NotNull((await AgentOf(database, fine)).Program);
+    }
+
+    /// <summary>
+    /// The reason a program cannot be started is the one that is true of it: a script that is no launcher is a script a
+    /// shell would run, under this host as under any other, and the launcher sentence is for a program that is the launcher.
+    /// </summary>
+    [Fact]
+    public async Task A_script_that_is_not_the_launcher_is_refused_as_a_shell_script_under_a_launcher_host()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var script = harness.Script("run.cmd");
+        await SeedProfileAsync(db, "cursor", script, host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains(ProgramLookup.ShellScript, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("launcher script", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_hosts_bare_word_with_nothing_installed_is_refused_with_the_launcher_sentence()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "cursor", "agent", host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains("launcher script", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("--program", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A host whose reading of its own install throws, with a word in the exception that must never reach an attempt.</summary>
+    private sealed class ThrowingLayoutHost : IAgentHost
+    {
+        public const string Secret = "the-exception-text-that-names-a-path";
+
+        private readonly CursorCliHost _inner = new(windows: true);
+
+        public AgentHostKind Kind => _inner.Kind;
+
+        public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+        public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+        public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+            _inner.Compose(revision, launch, memoryFiles);
+
+        public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) =>
+            _inner.WriteWorkDirectory(workDir, allow, deny);
+
+        public string? Unavailable(int exitCode, string? stderrTail) => null;
+
+        public bool NamesItsLauncher(string fileName) => _inner.NamesItsLauncher(fileName);
+
+        public IReadOnlyList<string>? ProgramLayout(string shimFile) => throw new FormatException(Secret);
+    }
+
     /// <summary>The host is named before the program is looked for, so a host this build lacks is said so and not blamed on its program.</summary>
     [Fact]
     public async Task A_host_this_build_cannot_start_is_refused_before_its_program_is_looked_for()
