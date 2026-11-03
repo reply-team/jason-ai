@@ -33,7 +33,7 @@ where there are any, for the version [the host matrix](https://github.com/reply-
 names; none has yet been run on a signed-in account. The tests prove the command Jason composes and the launch around it
 against a stand-in program.
 
-- **Codex CLI.** Install it with `npm install -g @openai/codex`, sign in with `codex login`, then
+- **Codex CLI.** Install it from [its own page](https://github.com/openai/codex), sign in with `codex login`, then
   `jason profile create local-codex --host codex --program codex`. A role is confined by a Codex sandbox rather than by a
   list of commands: the runtime names a permissions profile of its own on the command line, and every command the role
   runs is held by it. On Windows an administrator sets up Codex's elevated sandbox once first. [The Codex
@@ -45,8 +45,8 @@ against a stand-in program.
   one shell command allowed, the memory files are the reads, and every write is denied. On Windows, Jason starts the
   host's `agent.cmd` launcher itself, and a profile names it by its full path where the runtime's search path does not
   find `agent`. [The Cursor section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#cursor-cli)
-  has the nine notes.
-- **GitHub Copilot CLI.** Install it (`npm install -g @github/copilot`, or another way the host's page gives), sign in with
+  says what it reads and what was not measured.
+- **GitHub Copilot CLI.** Install it from [GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), sign in with
   `copilot login`, then `jason profile create copilot --host copilot_cli --program copilot`. A role is confined by the
   tool set and the allow and deny rules Jason composes on the host's command line, with nothing written into the work
   directory, and a profile's own arguments are limited to the few documented options a person owns, such as `--model=`.
@@ -57,7 +57,7 @@ against a stand-in program.
   sign-in. A role is confined by a policy file,
   `.jason-policy/jason.toml` in the work directory, which the host reads above the person's own rules: everything is
   denied first, then the reads, the runtime's own command and the tools the profile grants are allowed, and writing is
-  denied above every allow. The host reads a memory file through a `GEMINI.md` that imports `AGENTS.md`. [The Gemini
+  denied above every allow. The host reads a memory file through a `GEMINI.md` that imports `AGENTS.md`. A role's run sends no telemetry, whatever your own setting says. [The Gemini
   section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#gemini-cli) says what was not
   measured.
 - **Claude Code refuses more arguments in a profile.** A host's parser reads a short flag with more letters, or with a
