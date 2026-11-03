@@ -57,6 +57,12 @@ its README says and unzipped into `ui/custom`, and do not build anything yoursel
 the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served,
 names `jason ui install` where none is or the default one is another release's, and never decides readiness.
 
+`jason session open --approval <id>` (or `--question <id>`) opens a new terminal on the person's desktop running their
+own agent host on that one item, so run it only when they ask for a session on it. Which host it starts is the named
+preference `agent.interactive_host`, a person's own word like every preference:
+`jason preference set agent.interactive_host --value '{"host":"codex"}' --actor human:<their-name>`, and `unset` goes
+back to `claude_code`. `--dry-run` prints what would start and starts nothing.
+
 ## Starting and stopping it
 
 ```

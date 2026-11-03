@@ -368,9 +368,10 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of eight names in
+One question — "can this installation start work?" — answered check by check. It is one of nine names in
 this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and
-`update` nouns, and `ui install` and `plugin install`, which change this installation's files as those two do — and it cannot be
+`update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and
+`session open`, which starts your own agent host in a terminal — and it cannot be
 otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |

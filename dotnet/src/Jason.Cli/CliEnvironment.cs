@@ -97,7 +97,13 @@ namespace Jason.Cli;
 /// for the reason <paramref name="Identity"/> gives: a test that read the real name would write the developer's own into
 /// the requests it checks.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null, IClipboard? Clipboard = null)
+/// <param name="Terminals">
+/// How a new terminal window is started — the seventh seam whose default is the refusal, for the reason
+/// <paramref name="Opener"/> gives: a verb that started a terminal for itself would open a window, and the person's own
+/// agent host in it, on whoever runs the suite. Null starts nothing and says how to do it by hand;
+/// <see cref="Default()"/> names this platform's.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null, IClipboard? Clipboard = null, Session.ITerminalStarter? Terminals = null)
 {
     public static CliEnvironment Default() => Default(Console.Out, Console.Error, Console.OutputEncoding);
 
@@ -122,7 +128,8 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             Opener: new PlatformUrlOpener(),
             WorkingDirectory: WorkingDirectoryOf(() => Environment.CurrentDirectory),
             AccountName: AccountNameOf(() => Environment.UserName),
-            Clipboard: OperatingSystem.IsWindows() ? new WindowsClipboard() : null);
+            Clipboard: OperatingSystem.IsWindows() ? new WindowsClipboard() : null,
+            Terminals: new Session.PlatformTerminalStarter());
 
     /// <summary>
     /// The folder the command was typed in, or null where the platform cannot name it — on Linux and macOS, a folder

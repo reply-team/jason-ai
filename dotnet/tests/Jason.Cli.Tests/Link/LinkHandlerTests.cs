@@ -4,6 +4,7 @@ using Jason.Cli.Link;
 using Jason.Cli.Process;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Human;
+using Jason.Cli.Tests.Session;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 
@@ -181,6 +182,46 @@ public sealed class LinkHandlerTests
 
         Assert.Equal(ExitCodes.RuntimeUnavailable, exit);
         Assert.Empty(clipboard.Texts);
+    }
+
+    /// <summary>
+    /// A session link starts what <c>jason session open</c> starts for the same item: the item read by its kind's own get,
+    /// the host the preference names in one new terminal at the campaign's folder, the brief as its first input, and no
+    /// page opened.
+    /// </summary>
+    [Theory]
+    [InlineData("jason://attention/approvals/" + Approval + "/session", "approval.get", "{\"approval_id\":\"" + Approval + "\"}", "approval.txt")]
+    [InlineData("jason://attention/questions/" + Question + "/session", "decision.get", "{\"decision_id\":\"" + Question + "\"}", "question.txt")]
+    public async Task A_session_link_starts_the_session_jason_session_open_starts(string link, string operation, string body, string published)
+    {
+        using var run = new SessionOpenerTests.SessionRuntime();
+        var claude = run.Programs.AddProgram("claude");
+
+        var exit = await run.Link(link);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([operation, "campaign.get", "preference.list"], run.Asked);
+        Assert.Equal(body, run.Bodies[0]);
+        var launch = Assert.Single(run.Terminals.Launches);
+        var text = File.ReadAllText(Path.Combine(CopyPromptTests.RepositoryRoot(), "docs", "prompts", published)).Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
+        Assert.Equal([run.ConsoleHost, "--", claude, text.Replace(SessionOpenerTests.SessionRuntime.RecordedFolder, run.CampaignFolder, StringComparison.Ordinal)], launch.Argv);
+        Assert.Equal(run.CampaignFolder, launch.WorkingDirectory);
+    }
+
+    /// <summary>An item that no longer waits starts nothing from a link either.</summary>
+    [Fact]
+    public async Task A_session_link_on_an_item_that_no_longer_waits_starts_nothing()
+    {
+        using var run = new SessionOpenerTests.SessionRuntime();
+        var decided = System.Text.Json.Nodes.JsonNode.Parse(run.Item!)!;
+        decided["status"] = "approved";
+        run.Item = decided.ToJsonString();
+        run.Programs.AddProgram("claude");
+
+        var exit = await run.Link("jason://attention/approvals/" + Approval + "/session");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(run.Terminals.Launches);
     }
 
     /// <summary>A runtime that answers the item's get and the campaign's, and refuses every other read.</summary>

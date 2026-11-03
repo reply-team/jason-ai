@@ -140,7 +140,7 @@ does it too, and leaves something behind if the run is cut short.
 What the person has said about the work comes in layers. Read them before you decide anything, in this order,
 and where two say different things, the later one wins:
 
-1. The client's two named preferences, who messages are written as and how the company sounds:
+1. Two of the client's named preferences, who messages are written as and how the company sounds:
    `jason preference list` answers both, and one nobody has set has no value.
 2. The client's memory file, at `memory_files.client`: the person's standing words for all of their work. It
    never overrides a preference on the preference's own subject: where the two disagree, the preference wins, and you

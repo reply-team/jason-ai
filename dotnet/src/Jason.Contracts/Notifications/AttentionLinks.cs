@@ -16,6 +16,12 @@ public enum AttentionAct
     /// prints, and open nothing.
     /// </summary>
     Prompt,
+
+    /// <summary>
+    /// Start the person's own agent host on one item in a new terminal, as <c>jason session open --approval</c> or
+    /// <c>--question</c> does, and decide nothing.
+    /// </summary>
+    Session,
 }
 
 /// <summary>Which kind of item a link names.</summary>
@@ -77,6 +83,8 @@ public static class AttentionLinks
         new(AttentionKind.Question, "questions", QuestionPrefix, null, AttentionAct.Open),
         new(AttentionKind.Approval, "approvals", ApprovalPrefix, "prompt", AttentionAct.Prompt),
         new(AttentionKind.Question, "questions", QuestionPrefix, "prompt", AttentionAct.Prompt),
+        new(AttentionKind.Approval, "approvals", ApprovalPrefix, "session", AttentionAct.Session),
+        new(AttentionKind.Question, "questions", QuestionPrefix, "session", AttentionAct.Session),
     ];
 
     /// <summary>The link that opens one item, or null for anything but a well-formed approval or question id.</summary>
@@ -87,6 +95,12 @@ public static class AttentionLinks
     /// approval or question id.
     /// </summary>
     public static string? Prompt(string? id) => Link(id, AttentionAct.Prompt);
+
+    /// <summary>
+    /// The link that starts a session on one item, the UI's Open an AI session link, or null for anything but a
+    /// well-formed approval or question id.
+    /// </summary>
+    public static string? Session(string? id) => Link(id, AttentionAct.Session);
 
     /// <summary>The link of an act on an item, from the row that holds both, or null where no row does.</summary>
     private static string? Link(string? id, AttentionAct act)

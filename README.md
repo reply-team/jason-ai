@@ -235,9 +235,10 @@ would later refuse to launch, rather than writing one.
 [`skills/README.md`](skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of eight names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and
-`plugin install`, which change this installation's files as those two do — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
+One question, answered check by check. It is one of nine names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and
+`plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
+agent host in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 
@@ -528,7 +529,17 @@ jason approval approve <approval-id> --actor human:you@example.com --reason "che
 
 `--prompt` prints, in place of the item, the text that briefs an agent session on it: what waits, the campaign and its
 folder, the skill to use and what to bring back, and that the session decides nothing. It holds nothing of the item
-itself, and it is the text the UI's Copy prompt button copies (`docs/ui.md`).
+itself, and it is the text the UI's Copy prompt button copies (`docs/ui.md`). To start your own agent host on the item
+with that text as its first message, in a new terminal at the campaign's folder:
+
+```sh
+jason session open --approval <approval-id>
+jason session open --question <decision-id> --dry-run
+```
+
+The named preference `agent.interactive_host` says which host (`claude_code` while it is unset); `--dry-run` starts
+nothing and prints the whole command. The session proposes, and the decision stays yours. The UI's Open an AI session
+link does the same on Windows (`docs/ui.md`).
 
 A launched role that cannot decide something for itself asks a person instead, and the answer wakes the
 review that carries the work on:

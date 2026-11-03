@@ -103,7 +103,7 @@ wants another one, and moving it is a change to the installation, which is `oper
 
 ## Who writes, and how the company sounds
 
-These two are the person's named preferences, and their word. Read them before your first question:
+These two of the person's named preferences are their word. Read them before your first question:
 
 ```
 jason preference list
