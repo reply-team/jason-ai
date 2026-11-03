@@ -49,6 +49,7 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal(Path.Combine(Root, "projects", "acme"), folder);
         Assert.Equal("""{"marker_version":1,"kind":"root"}""", Text(Root, ".jason", "marker.json"));
         Assert.Equal("@AGENTS.md", Text(Root, "CLAUDE.md"));
+        Assert.Equal("@AGENTS.md", Text(Root, "GEMINI.md"));
         Assert.Equal(string.Empty, Text(Root, "AGENTS.md"));
         Assert.Equal($$"""{"marker_version":1,"kind":"project","id":"{{Project}}"}""", Text(folder, ".jason", "marker.json"));
         Assert.Equal("@AGENTS.md", Text(folder, "CLAUDE.md"));
@@ -102,10 +103,10 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal($$"""{"marker_version":1,"kind":"campaign","id":"{{Campaign}}"}""", Text(campaign, ".jason", "marker.json"));
         string[] expected =
         [
-            "AGENTS.md", "CLAUDE.md", ".jason/marker.json",
-            "projects/acme/AGENTS.md", "projects/acme/CLAUDE.md", "projects/acme/.jason/marker.json",
+            "AGENTS.md", "CLAUDE.md", "GEMINI.md", ".jason/marker.json",
+            "projects/acme/AGENTS.md", "projects/acme/CLAUDE.md", "projects/acme/GEMINI.md", "projects/acme/.jason/marker.json",
             "projects/acme/campaigns/q3-marketing-leads/AGENTS.md", "projects/acme/campaigns/q3-marketing-leads/CLAUDE.md",
-            "projects/acme/campaigns/q3-marketing-leads/.jason/marker.json",
+            "projects/acme/campaigns/q3-marketing-leads/GEMINI.md", "projects/acme/campaigns/q3-marketing-leads/.jason/marker.json",
         ];
         Assert.Equal(expected.Order(StringComparer.Ordinal), Files(Root));
     }

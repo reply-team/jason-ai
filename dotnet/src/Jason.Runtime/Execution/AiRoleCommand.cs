@@ -116,7 +116,8 @@ public sealed class AiRoleCommand(
             paths.Root,
             context.AttemptId,
             context.WorkItemId,
-            ProgramResolver.ExecutableDirectory);
+            ProgramResolver.ExecutableDirectory,
+            host?.Environment);
 
         // And one thing is taken away: the mark of an update's own launch says whose start this runtime was, and an
         // agent that ran `jason runtime run` with it would start a runtime around an update it is no part of.

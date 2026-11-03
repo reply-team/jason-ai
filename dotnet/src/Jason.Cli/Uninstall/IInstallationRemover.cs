@@ -472,33 +472,16 @@ public static class InstallationRemovers
             // The host passes the directories it resolved native libraries from, and for a build that unpacked
             // them the one it unpacked into is among them -- measured on a published build, where it is the
             // only entry. Nothing else in this process knows which directory that was.
-            if (!IsRunningImage(executable) || AppContext.GetData("NATIVE_DLL_SEARCH_DIRECTORIES") is not string searched)
+            if (!IsRunningImage(executable) || AppContext.GetData(ExtractedLibraries.SearchDirectoriesProperty) is not string searched)
             {
                 return null;
             }
 
-            var name = Path.GetFileNameWithoutExtension(executable);
-            var installed = Trimmed(Path.GetDirectoryName(Path.GetFullPath(executable))!);
-
-            foreach (var entry in searched.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                var directory = Trimmed(Path.GetFullPath(entry));
-
-                // The host names it <base>/<program>/<bundle id>, and holds nothing in it but files it unpacked.
-                // Anything else it searches -- the directory the executable itself is in, above all -- is not
-                // something it unpacked, and is not this verb's to remove.
-                if (string.Equals(directory, installed, StringComparison.OrdinalIgnoreCase)
-                    || !string.Equals(Path.GetFileName(Path.GetDirectoryName(directory)), name, StringComparison.OrdinalIgnoreCase)
-                    || !Directory.Exists(directory)
-                    || Directory.EnumerateDirectories(directory).Any())
-                {
-                    continue;
-                }
-
-                return directory;
-            }
-
-            return null;
+            // The host names it <base>/<program>/<bundle id>, and holds nothing in it but files it unpacked. Anything
+            // else it searches -- the directory the executable itself is in, above all -- is not something it
+            // unpacked, and is not this verb's to remove; nor is a folder that holds a folder of its own.
+            return ExtractedLibraries.Candidates(searched, executable)
+                .FirstOrDefault(directory => Directory.Exists(directory) && !Directory.EnumerateDirectories(directory).Any());
         }
 
         /// <summary>
@@ -546,8 +529,6 @@ public static class InstallationRemovers
 
             Held(directory, isDirectory: true, () => DirectoryTrees.Delete(directory));
         }
-
-        private static string Trimmed(string path) => path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         /// <summary>Whether that path is the image this process is running as.</summary>
         private static bool IsRunningImage(string path) =>

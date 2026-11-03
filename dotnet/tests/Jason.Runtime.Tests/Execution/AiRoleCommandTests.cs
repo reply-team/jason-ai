@@ -185,6 +185,38 @@ public class AiRoleCommandTests
         Assert.Contains("token-in-env=false", stderr, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The constants a host's row declares reach its child, after the runtime's own, and the token is still nowhere in
+    /// the environment: the same child that is told a host's constant is told nothing a person typed.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S3, "the token never reaches a child's environment")]
+    public async Task A_hosts_constants_reach_the_child_and_the_token_still_does_not()
+    {
+        using var directory = new TempDataDir();
+        WriteDescriptor(directory.Paths);
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"), host: new ConstantHost());
+
+        var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
+        Assert.Contains("host-constant-in-env=yes", stderr, StringComparison.Ordinal);
+        Assert.Contains("token-in-env=false", stderr, StringComparison.Ordinal);
+        Assert.Contains("attempt-in-env=" + AttemptId, stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_host_with_no_constants_leaves_the_childs_environment_as_it_was()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"), host: new ClaudeCodeHost());
+
+        var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
+        Assert.Contains("host-constant-in-env=unset", stderr, StringComparison.Ordinal);
+    }
+
     [Fact]
     [Critical(Family.S3, "a leaked token is redacted everywhere")]
     public async Task A_host_that_spills_the_token_leaves_none_of_it_on_disk_or_in_the_outcome()
@@ -576,4 +608,26 @@ file sealed class SentenceHost : IAgentHost
     }
 
     public string? Unavailable(int exitCode, string? stderrTail) => exitCode == 3 ? Sentence : null;
+}
+
+/// <summary>The host that ships, with one constant of its own for the child's environment.</summary>
+file sealed class ConstantHost : IAgentHost
+{
+    private readonly ClaudeCodeHost _inner = new();
+
+    public AgentHostKind Kind => _inner.Kind;
+
+    public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+    public IReadOnlyDictionary<string, string> Environment { get; } = new Dictionary<string, string> { ["HOST_CONSTANT_FOR_TESTS"] = "yes" };
+
+    public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+    public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+        _inner.Compose(revision, launch, memoryFiles);
+
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) =>
+        _inner.WriteWorkDirectory(workDir, allow, deny);
+
+    public string? Unavailable(int exitCode, string? stderrTail) => null;
 }

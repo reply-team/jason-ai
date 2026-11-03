@@ -62,7 +62,10 @@ public enum DecisionReferenceKind
 public enum AgentHostKind
 {
     ClaudeCode,
-
+    Codex,
+    CopilotCli,
+    CursorCli,
+    GeminiCli,
     AntigravityCli,
 }
 

@@ -84,6 +84,42 @@ public class AgentHostsTests
         Assert.Equal(new HostInstructionFile("CLAUDE.md", "@AGENTS.md"), facts.Instructions);
     }
 
+    /// <summary>
+    /// Codex keeps its sign-in and settings in its own home folder and reads skills from the folder several hosts share,
+    /// both in the home and in the folder it runs in; it reads <c>AGENTS.md</c> itself, so no import file is written.
+    /// </summary>
+    [Fact]
+    public void Codex_reads_the_shared_skills_folder_and_the_memory_file_itself()
+    {
+        var facts = AgentHosts.Of(AgentHostKind.Codex);
+
+        Assert.Equal("codex", AgentHosts.Word(AgentHostKind.Codex));
+        Assert.Equal("codex", facts.CommandWord);
+        Assert.Equal(".codex", facts.HomeMarker);
+        Assert.Equal(".agents/skills", facts.HomeSkills);
+        Assert.Equal(".agents/skills", facts.WorkSkills);
+        Assert.Null(facts.Instructions);
+    }
+
+    /// <summary>
+    /// Gemini CLI keeps a settings file of its own under its folder, which Antigravity does not write, so the marker is
+    /// that file and never the folder both keep; the skills are the shared <c>.agents/skills</c>; and the instruction file
+    /// it reads is <c>GEMINI.md</c>, which imports the memory file by the host's documented <c>@file</c> form.
+    /// </summary>
+    [Fact]
+    public void Gemini_cli_is_detected_by_its_own_settings_file_and_imports_the_memory_file_through_gemini_md()
+    {
+        var facts = AgentHosts.Of(AgentHostKind.GeminiCli);
+
+        Assert.Equal("gemini_cli", AgentHosts.Word(AgentHostKind.GeminiCli));
+        Assert.Equal("gemini", facts.CommandWord);
+        Assert.Equal(".gemini/settings.json", facts.HomeMarker);
+        Assert.Equal(HomeMarkerKind.File, facts.MarkerKind);
+        Assert.Equal(".agents/skills", facts.HomeSkills);
+        Assert.Equal(".agents/skills", facts.WorkSkills);
+        Assert.Equal(new HostInstructionFile("GEMINI.md", "@AGENTS.md"), facts.Instructions);
+    }
+
     [Fact]
     public void Antigravity_cli_is_found_by_the_folder_only_it_keeps_and_reads_the_memory_file_itself()
     {

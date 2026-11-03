@@ -266,10 +266,16 @@ internal static class Behaviours
     /// </summary>
     private static async Task<int> SayAsync(IReadOnlyList<string> options)
     {
-        await Console.Out.WriteLineAsync(Option(options, "--stdout") ?? string.Empty).ConfigureAwait(false);
-        await Console.Error.WriteLineAsync(Option(options, "--stderr") ?? string.Empty).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(Spaced(Option(options, "--stdout"))).ConfigureAwait(false);
+        await Console.Error.WriteLineAsync(Spaced(Option(options, "--stderr"))).ConfigureAwait(false);
         return Crashed;
     }
+
+    /// <summary>
+    /// A line as the behaviour was told it: one word of an argument list cannot hold a space, so a <c>+</c> stands for
+    /// one. Nothing a test says through <c>say</c> holds a plus of its own.
+    /// </summary>
+    private static string Spaced(string? line) => (line ?? string.Empty).Replace('+', ' ');
 
     /// <summary>Writes back exactly what it was handed, so a test can assert on the envelope the launcher composed.</summary>
     private static async Task<int> EchoEnvelopeAsync(string rawEnvelope)

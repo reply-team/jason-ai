@@ -491,6 +491,285 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The GitHub Copilot CLI page holds what the host's host-row and section promise, held by words so that a rewrite
+    /// that drops one is red: the matrix row's standing sentences (the version it was read at, the parser not read, the
+    /// cost of that), the flags a launch composes to close what the person's settings would leave open, each thing the
+    /// person's own setup can still do, what the skill tool reaches, what is and is not denied, what a call no rule
+    /// allows becomes, and what has not been measured.
+    /// </summary>
+    [Fact]
+    public void The_copilot_page_says_what_a_launch_closes_what_it_cannot_and_what_is_not_measured()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var start = contract.IndexOf("| GitHub Copilot CLI | `copilot_cli` |", StringComparison.Ordinal);
+        Assert.True(start >= 0, "the matrix has no row for the host");
+        var row = contract[start..contract.IndexOf(" |", contract.IndexOf("built from the host's documentation", start, StringComparison.Ordinal), StringComparison.Ordinal)];
+        var section = contract[contract.IndexOf("### GitHub Copilot CLI", StringComparison.Ordinal)..];
+
+        // (a) the row's standing sentences.
+        foreach (var sentence in new[]
+        {
+            "built from the host's documentation for version 1.0.105, the version the allowlist was read at",
+            "parser not read, so a profile's arguments are only the documented options the person owns",
+            "No undocumented flag, however harmless, is taken this release.",
+            "Not signed in is a non-zero exit whose stderr names `copilot login`.",
+            "Not yet run on an account",
+        })
+        {
+            Assert.Contains(sentence, row, StringComparison.Ordinal);
+        }
+
+        // (b) the flags a launch composes, each named.
+        foreach (var flag in new[] { "`--disallow-temp-dir`", "`--sync-session=off`", "`--mode=interactive`", "`--no-bash-env`" })
+        {
+            Assert.Contains(flag, section, StringComparison.Ordinal);
+        }
+
+        // (c) what the person's own setup can still do, one entry each.
+        foreach (var entry in new[]
+        {
+            "user-level hooks",
+            "MCP servers of their own",
+            "`COPILOT_ASSISTED_APPROVAL=true`",
+            "`defaultPermissionMode` set to `\"allow-all\"`",
+            "`skillDirectories`",
+            "`COPILOT_SKILLS_DIRS`",
+            "keyed by the git root of the folder the run is in",
+            "`COPILOT_ALLOW_ALL` is equal to `--allow-all`",
+            "only the exact value `true` also trusts the folder",
+        })
+        {
+            Assert.Contains(entry, section, StringComparison.Ordinal);
+        }
+
+        // (d) what the skill tool reaches, and the person's remedies.
+        Assert.Contains("every skill the host discovers, the person's and plugins' included, not the role's own alone", section, StringComparison.Ordinal);
+        Assert.Contains("`ignoredSkillsLocations`", section, StringComparison.Ordinal);
+        Assert.Contains("`disabledSkills`", section, StringComparison.Ordinal);
+
+        // (e) what is denied, said as it is.
+        Assert.Contains("The file-writing tools are denied and not offered; the shell is held to the command word by the allow rule.", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("any writing is denied", section, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("own environment trusts the folder", section, StringComparison.Ordinal);
+
+        // (f) what has not been measured, as the list stands.
+        var measured = section[section.IndexOf("**Not measured.**", StringComparison.Ordinal)..];
+        foreach (var item in new[]
+        {
+            "whether a rule naming one file lets the role read it outside the work directory",
+            "whether a run in a folder the host does not trust stops to ask",
+            "whether the work directory's skills load there",
+            "whether shell redirection by the callback can write a file the deny list names",
+            "whether `taskbarPresence`",
+            "whether version 1.0.105 accepts every flag above",
+        })
+        {
+            Assert.Contains(item, measured, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("refused, or waits", measured, StringComparison.Ordinal);
+
+        // (g) what a call no rule allows becomes.
+        Assert.Contains(
+            "a call no rule allows is denied, and the reason goes back to the role; the reference says so, no run has shown it",
+            section,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The profile's fields say what an argument may not be, for the host that ships as for the others: a short flag stands alone.</summary>
+    [Fact]
+    public void The_args_field_says_a_short_flag_stands_alone_and_a_lone_or_double_dash_is_refused()
+    {
+        var page = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var row = page[page.IndexOf("| `args` |", StringComparison.Ordinal)..];
+        row = row[..row.IndexOf(" | `deny` |", StringComparison.Ordinal)];
+
+        Assert.Contains("a short flag stands alone", row, StringComparison.Ordinal);
+        Assert.Contains("a short flag with more letters or a value after it, a lone dash and a double dash are refused", row, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What a person relying on the Cursor CLI host is told, as the page's notes say it: that the person's own
+    /// configuration can allow more than Jason does and Jason cannot narrow it, that the union of the layers holds for
+    /// every kind of rule and the person's approval mode is theirs, which shell command Jason allows, what the settings
+    /// file carries and nothing else, how the Windows launcher chooses a version and what a person's own run does to a
+    /// staged update, and that all three spellings of the sign-in word are read. It names no count of hosts, which is a
+    /// sentence that goes stale when the matrix grows.
+    /// </summary>
+    [Fact]
+    public void The_Cursor_CLI_notes_say_what_the_persons_own_configuration_can_do_and_count_no_hosts()
+    {
+        var page = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var start = page.IndexOf("### Cursor CLI", StringComparison.Ordinal);
+        Assert.True(start > 0, "execution-profiles.md has no 'Cursor CLI' section.");
+        var section = page[start..];
+        var end = section.IndexOf(" ## ", StringComparison.Ordinal);
+        section = end > 0 ? section[..end] : section;
+
+        Assert.DoesNotMatch(@"\b(?:two|three|four|five|six|seven|eight|nine|ten) hosts\b", section);
+        Assert.Contains("the widest of the hosts of the matrix", section, StringComparison.Ordinal);
+        Assert.Contains("this is the widest read form of the matrix", section, StringComparison.Ordinal);
+        Assert.Contains("the union holds for every kind of allow rule, not for reads only", section, StringComparison.Ordinal);
+        Assert.Contains("`approvalMode`", section, StringComparison.Ordinal);
+        Assert.Contains("Run Everything", section, StringComparison.Ordinal);
+        Assert.Contains("the one shell command Jason allows", section, StringComparison.Ordinal);
+        Assert.Contains("the person's own user-level configuration may allow more, and Jason cannot narrow it, so `Write(**)` does not stop a shell command that writes", section, StringComparison.Ordinal);
+        Assert.Contains("permissions, the file's version key and the editor mode off, nothing else", section, StringComparison.Ordinal);
+        Assert.Contains("a flat installation root is read first", section, StringComparison.Ordinal);
+        Assert.Contains("within one day Jason breaks a tie by name", section, StringComparison.Ordinal);
+        Assert.Contains("the person's own run of the launcher promotes a staged update", section, StringComparison.Ordinal);
+        Assert.Contains("`agent login`, `cursor agent login` or `agent-local login`", section, StringComparison.Ordinal);
+        Assert.Contains("a short flag with more letters or a value after it", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Codex's row carries, one sentence each, what a person must know before naming it, and its section holds the
+    /// detail: commands are not confined by name, the loopback-only network rests on an experimental feature, Windows may
+    /// let a role read more than the list, the person's global <c>AGENTS.md</c> and skills reach every role, and calling
+    /// home is not yet checked on any system. The section gives a refused fetch grant its own reason, names macOS beside
+    /// Linux and Windows, and says what a folder holding a pattern character costs.
+    /// </summary>
+    [Fact]
+    public void Codex_s_row_carries_one_sentence_for_each_thing_its_section_holds()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var hosts = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
+        var row = hosts
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .Single(cells => cells[1] == "`codex`");
+        Assert.StartsWith("On Windows, first:", row[6], StringComparison.Ordinal);
+        foreach (var sentence in new[]
+                 {
+                     "Commands are not confined by name: any program a role can read runs, inside the sandbox.",
+                     "Holding the network to loopback rests on Codex's network proxy, an experimental feature in 0.166.0.",
+                     "On Windows, the elevated sandbox may let a role read more than the list.",
+                     "The person's global `AGENTS.md` and their skills reach every Codex role.",
+                     "Whether `jason` reaches the runtime from inside the sandbox is not yet checked on Linux, macOS or Windows.",
+                 })
+        {
+            Assert.Contains(sentence, row[6], StringComparison.Ordinal);
+        }
+
+        var start = hosts.IndexOf("\n### Codex CLI\n", StringComparison.Ordinal);
+        Assert.True(start > 0, "execution-profiles.md has no section 'Codex CLI'.");
+        var end = hosts.IndexOf("\n## ", start, StringComparison.Ordinal) is var next and > 0 ? next : hosts.Length;
+        var section = Flattened(hosts[start..end]);
+        foreach (var fragment in new[]
+                 {
+                     "Codex offers every role the skills in `~/.agents/skills`, in `$CODEX_HOME/skills` and in its own system cache",
+                     "A grant of `web_fetch` is refused because Codex has no tool that fetches a page",
+                     "On macOS, whether `jason` reaches the runtime from inside the sandbox is not yet checked.",
+                     "the claim refuses the work with `host_not_available`, naming the path",
+                 })
+        {
+            Assert.Contains(fragment, section, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("for the same reason", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the launcher writes into a work directory is said once for every host, by the host's row of section 12, and
+    /// Claude Code's files are its example rather than the rule.
+    /// </summary>
+    [Fact]
+    public void The_work_directory_holds_the_files_the_host_s_row_names()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
+
+        Assert.Contains("the files the host's row of section 12 names", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("The launcher puts two things in that directory", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A launched child's environment is the runtime's four and the constants a host's row declares, and the two pages that
+    /// state it say so in the same words; every constant a registered host declares is named in that host's row, as
+    /// <c>NAME=value</c>, so a person can read what the host's child is given beyond the four.
+    /// </summary>
+    [Fact]
+    public void The_environment_is_the_runtimes_four_and_the_constants_a_hosts_row_declares_and_each_constant_is_in_its_row()
+    {
+        const string Sentence = "the runtime's four and the constants a host's row of";
+        foreach (var page in new[] { "execution-profiles.md", "work-execution.md" })
+        {
+            var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), page)));
+            Assert.Contains(Sentence, contract, StringComparison.Ordinal);
+            Assert.Contains("never a secret and never a value taken from a person", contract, StringComparison.Ordinal);
+            Assert.DoesNotContain("four values and not one more", contract, StringComparison.Ordinal);
+
+            // A count of the hosts that declare one goes stale with the next host; the page points at each host's row instead.
+            Assert.DoesNotContain("Today one host declares", contract, StringComparison.Ordinal);
+        }
+
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        var notes = text[text.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
+        foreach (var host in Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<Jason.Runtime.Execution.Hosts.IAgentHost>(provider))
+        {
+            foreach (var (name, value) in host.Environment)
+            {
+                Assert.Contains($"`{name}={value}`", notes, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What the Gemini CLI notes say a person cannot see in the host's row: which names a profile's arguments may not use,
+    /// what the exit of a failed authentication also means, that the client level is the harness root and so every
+    /// project's and campaign's memory file under it is readable, what the person's own setup adds to every role, and what
+    /// detection does not read.
+    /// </summary>
+    [Fact]
+    public void The_gemini_cli_notes_state_the_facts_a_person_cannot_see_in_the_row()
+    {
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var notes = Flattened(text[text.IndexOf("\n### Gemini CLI\n", StringComparison.Ordinal)..]);
+
+        string[] fragments =
+        [
+            "a long flag's name is letters and digits with single dashes between them",
+            "`GEMINI_CLI_IDE_WORKSPACE_PATH=`",
+            "A value may hold a space and no control character",
+            "declares no telemetry flag",
+            "`GEMINI_TELEMETRY_ENABLED=false`",
+            "A role's run sends no telemetry whatever the person's own setting says",
+            "runs the host themselves; making it a profile's choice is for a later release",
+            "also an enforced sign-in type that does not match",
+            "\"could not authenticate\"",
+            "the client level is the harness root, so a role reads every project's and campaign's memory file under it",
+            "the person's own skills in `~/.gemini/skills` and `~/.agents/skills`",
+            "`GEMINI_CLI_HOME`",
+            "turns a bare `@AGENTS.md` into a pointer to the file without inlining it",
+            "a short option's letter written with two dashes, `--y` being `-y`",
+            "holds any entry whose name ends in `.toml`",
+            "the attempt is refused before a child exists, as `host_not_available`, with a sentence that names the folder",
+            "`/Library/Application Support/GeminiCli/policies`",
+        ];
+        foreach (var fragment in fragments)
+        {
+            Assert.Contains(fragment, notes, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("which this runtime does not hold back", notes, StringComparison.Ordinal);
+    }
+
+    /// <summary>The row of the host table names the sign-in signal in one clause, so a person reading only the table knows what a signed-out run looks like.</summary>
+    [Fact]
+    public void The_gemini_cli_row_names_the_exit_of_a_failed_sign_in()
+    {
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var row = text.Split('\n').Single(line => line.Contains("| `gemini_cli` |", StringComparison.Ordinal));
+
+        Assert.Contains("a signed-out run ends with exit 41, which the notes read as \"could not authenticate\"", Flattened(row), StringComparison.Ordinal);
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 

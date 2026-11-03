@@ -111,6 +111,27 @@ public class AgentHostSeamTests
     }
 
     /// <summary>
+    /// A command-line parser expands a word of one dash and several letters into one flag per letter, and reads the text
+    /// after a short flag that takes a value as its value, so a reserved short flag written inside such a word is the
+    /// flag itself and a check of whole words does not see it. A host that reserves a short flag therefore refuses, in
+    /// its own argument rule, the words that carry it: the flag followed by a letter, a letter followed by the flag, and
+    /// the flag followed by a value. A host with no reserved short flag has nothing to refuse.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void A_reserved_short_flag_is_refused_inside_a_cluster_and_with_a_value_joined_to_it(AgentHostKind kind)
+    {
+        var host = Registered().Single(candidate => candidate.Kind == kind);
+        var shortFlags = host.ReservedFlags.Where(flag => flag.Length == 2 && flag[0] == '-' && flag[1] != '-').ToArray();
+
+        Assert.All(
+            shortFlags,
+            flag => Assert.All(
+                [flag + "y", "-y" + flag[1], flag + "http://127.0.0.1:9"],
+                word => Assert.True(host.ArgsProblem([word]) is not null, $"{kind} reserves {flag} and takes {word}")));
+    }
+
+    /// <summary>
     /// A flag the runtime composes is one a profile may not carry: a host's parser takes the last value it is given, so
     /// a flag of the shape left unreserved is one a profile's arguments could quietly replace.
     /// </summary>
@@ -150,6 +171,43 @@ public class AgentHostSeamTests
             Assert.Null(first.SessionId);
             Assert.Null(second.SessionId);
         }
+    }
+
+    /// <summary>
+    /// The environment a host adds to its child is a constant of the host class: read twice it is the same, whichever
+    /// revision and memory files the launch composes, since the member takes none. None of it is named as one of the
+    /// runtime's own variables or starts with the runtime's prefix, and none of it holds anything but a plain value —
+    /// never the token, which lives only in the descriptor file.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void What_a_host_adds_to_its_childs_environment_is_the_same_constants_every_time_and_never_the_runtimes_own(AgentHostKind kind)
+    {
+        var host = Registered().Single(candidate => candidate.Kind == kind);
+        var before = host.Environment.ToDictionary(pair => pair.Key, pair => pair.Value);
+
+        host.Compose(Revision(kind, "--model=a"), [host.Facts.CommandWord], new MemoryFileLocations("/c/AGENTS.md", "/p/AGENTS.md", null));
+        host.Compose(Revision(kind), [host.Facts.CommandWord], NoFiles);
+
+        Assert.Equal(before, host.Environment.ToDictionary(pair => pair.Key, pair => pair.Value));
+        string[] ours = ["PATH", Jason.Contracts.Discovery.JasonPaths.DataDirectoryVariable, ExecutionEnvironment.AttemptIdVariable, ExecutionEnvironment.WorkItemIdVariable];
+        Assert.All(
+            before,
+            pair =>
+            {
+                Assert.DoesNotContain(pair.Key, ours, StringComparer.OrdinalIgnoreCase);
+                Assert.False(pair.Key.StartsWith("JASON_", StringComparison.OrdinalIgnoreCase));
+                Assert.False(string.IsNullOrWhiteSpace(pair.Key));
+                Assert.DoesNotContain("token", pair.Key + pair.Value, StringComparison.OrdinalIgnoreCase);
+            });
+    }
+
+    [Fact]
+    public void Claude_code_adds_nothing_to_its_childs_environment()
+    {
+        var host = Registered().Single(candidate => candidate.Kind == AgentHostKind.ClaudeCode);
+
+        Assert.Empty(host.Environment);
     }
 
     /// <summary>
