@@ -10,20 +10,23 @@ namespace Jason.Cli.Link;
 /// What a click on a <c>jason:</c> link does: the shell starts this executable with the link as its one argument, and
 /// it is read against <see cref="AttentionLinks"/>, the table the toast's links are written from. A mode of the
 /// executable, like <c>toast-host</c>, and never a verb: nothing is typed, and the runtime is asked only what
-/// <c>jason ui open</c> asks, or for a prompt link what <c>approval get --prompt</c> and <c>decision get --prompt</c> ask.
+/// <c>jason ui open</c> asks, for a prompt link what <c>approval get --prompt</c> and <c>decision get --prompt</c> ask,
+/// and for a session link what <c>jason session open</c> asks.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Any web page can navigate to a <c>jason:</c> link after the browser's own confirmation. So every act is local and
 /// leaves nothing decided: it opens the person's own UI on an id they could have typed, or puts on the clipboard the
-/// prompt <c>--prompt</c> prints for that id, which replaces what the clipboard held. The link's text reaches no log
+/// prompt <c>--prompt</c> prints for that id, which replaces what the clipboard held, or starts the person's own agent
+/// host on that id in a new terminal, where it reads and proposes and decides nothing. The link's text reaches no log
 /// and no child: what is sent is re-made from the parsed, checked id, and a link the table does not know is refused
 /// without being repeated.
 /// </para>
 /// <para>
 /// Exit codes are the CLI's: 0 done, 1 refused by the runtime or the clipboard, 2 a link the table does not know, 3 no
-/// runtime to ask. Started by the shell, nobody reads what it prints; the person sees the browser open, or a prompt to
-/// paste, or nothing. A prompt link prints nothing on stdout when it succeeds.
+/// runtime to ask. Started by the shell, nobody reads what it prints; the person sees the browser open, a prompt to
+/// paste, a terminal window, or nothing. A prompt link prints nothing on stdout when it succeeds; a session link prints
+/// what <c>jason session open</c> prints.
 /// </para>
 /// </remarks>
 public static class LinkHandler
@@ -46,9 +49,12 @@ public static class LinkHandler
             body = body.Set(target.Kind == AttentionKind.Approval ? "approval_id" : "decision_id", id);
         }
 
-        return target.Act == AttentionAct.Prompt
-            ? CopyPromptAsync(env, target.Kind == AttentionKind.Approval, body, cancellationToken)
-            : UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken);
+        return target.Act switch
+        {
+            AttentionAct.Prompt => CopyPromptAsync(env, target.Kind == AttentionKind.Approval, body, cancellationToken),
+            AttentionAct.Session => Session.SessionOpener.OpenAsync(env, target.Kind == AttentionKind.Approval ? PromptKind.Approval : PromptKind.Question, target.Id!, dryRun: false, human: false, cancellationToken),
+            _ => UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken),
+        };
     }
 
     /// <summary>

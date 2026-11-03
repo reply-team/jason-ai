@@ -402,7 +402,12 @@ public sealed class SessionOpenerTests : IDisposable
 
         public Task<int> Cli(params string[] args) => Cli(terminals: true, args);
 
-        public Task<int> Cli(bool terminals, params string[] args)
+        public Task<int> Cli(bool terminals, params string[] args) => CliApp.RunAsync(args, Environment(terminals), Ct);
+
+        /// <summary>A click on a link, as the shell starts the executable with it.</summary>
+        public Task<int> Link(string link) => Jason.Cli.Link.LinkHandler.RunAsync([link], Environment(terminals: true), Ct);
+
+        private CliEnvironment Environment(bool terminals)
         {
             if (Descriptor)
             {
@@ -426,7 +431,7 @@ public sealed class SessionOpenerTests : IDisposable
                     ? new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{\"error\":{\"code\":\"not_found\",\"message\":\"Not found.\",\"retryable\":false}}") }
                     : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(answer, System.Text.Encoding.UTF8, "application/json") };
             });
-            var env = new CliEnvironment(
+            return new CliEnvironment(
                 Output,
                 Error,
                 _dir.Paths,
@@ -435,7 +440,6 @@ public sealed class SessionOpenerTests : IDisposable
                 Identity: new IdentityFacts(Home, "marta", "DESK-1", null, null),
                 Variables: new Dictionary<string, string>(),
                 Terminals: terminals ? Terminals : null);
-            return CliApp.RunAsync(args, env, Ct);
         }
 
         private string Preferences()
