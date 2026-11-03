@@ -25,7 +25,8 @@ public interface IUserRegistry
 /// <summary>
 /// The per-user key a toast is shown under: <c>HKCU\Software\Classes\AppUserModelId\ai.jason.runtime</c> with
 /// <c>DisplayName</c> = <c>Jason</c>, which is all an unpackaged program's toast needs to appear. Written only where it
-/// is absent or says something else, and never with an icon or an activator: a pointer opens nothing.
+/// is absent or says something else, and never with an icon or an activator; a click launches the <c>jason:</c> link
+/// (<see cref="SchemeRegistration"/>).
 /// </summary>
 public static class AppUserModelIdRegistration
 {

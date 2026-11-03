@@ -145,7 +145,7 @@ public sealed class NotificationSender(
             return null;
         }
 
-        var (approvals, decisions) = await PendingAsync(ct).ConfigureAwait(false);
+        var (approvals, decisions, item) = await PendingAsync(ct).ConfigureAwait(false);
         var failedWork = await FailedAsync(request, ct).ConfigureAwait(false);
         var gaps = await GapsAsync(request, ct).ConfigureAwait(false);
         var blocks = await BlocksAsync(request, ct).ConfigureAwait(false);
@@ -155,7 +155,7 @@ public sealed class NotificationSender(
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
@@ -324,13 +324,23 @@ public sealed class NotificationSender(
     private static Task<int?> IdOfAsync(JasonDbContext db, string publicId, CancellationToken ct) =>
         db.Journal.AsNoTracking().Where(e => e.PublicId == publicId).Select(e => (int?)e.Id).FirstOrDefaultAsync(ct);
 
-    private async Task<(int Approvals, int Decisions)> PendingAsync(CancellationToken ct)
+    /// <summary>
+    /// How many approvals and questions wait, and, when exactly one does, its public id: the one thing a click can open.
+    /// The id is read after the counts, so a race that answers it in between reads none and the click opens the list.
+    /// </summary>
+    private async Task<(int Approvals, int Decisions, string? Item)> PendingAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
         var approvals = await db.Approvals.AsNoTracking().CountAsync(a => a.Status == ApprovalStatus.Pending, ct).ConfigureAwait(false);
         var decisions = await db.Decisions.AsNoTracking().CountAsync(d => d.Status == DecisionStatus.Pending, ct).ConfigureAwait(false);
-        return (approvals, decisions);
+        var item = (approvals, decisions) switch
+        {
+            (1, 0) => await db.Approvals.AsNoTracking().Where(a => a.Status == ApprovalStatus.Pending).Select(a => a.PublicId).FirstOrDefaultAsync(ct).ConfigureAwait(false),
+            (0, 1) => await db.Decisions.AsNoTracking().Where(d => d.Status == DecisionStatus.Pending).Select(d => d.PublicId).FirstOrDefaultAsync(ct).ConfigureAwait(false),
+            _ => null,
+        };
+        return (approvals, decisions, item);
     }
 
     private async Task<ChannelOutcome> DeliverAsync(INotificationChannel channel, NotificationMessage message, string notificationId, CancellationToken ct)

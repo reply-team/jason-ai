@@ -70,12 +70,127 @@ public sealed class ToastHostTests
         var payload = new ToastHostPayload(ToastCommands.Protocol, ToastRegistration.Aumid, ToastRegistration.DisplayName, "Jason", ["one", "two"]);
 
 #pragma warning disable CA1416 // Driven with fakes: the registry and the toast are this test's, and nothing reaches Windows.
-        var outcome = ToastHost.Show(payload, new RegisteredAlready(), (_, _) => toast);
+        var outcome = ToastHost.Show(payload, new RegisteredAlready(), Self, (_, _) => toast);
 #pragma warning restore CA1416
 
         Assert.Equal(["show", "setting"], toast.Order);
         Assert.Equal(("0x00000000", "0x00000000", (int?)0), (outcome.ShowHr, outcome.SettingAfterHr, outcome.SettingAfter));
     }
+
+    private const string Approval = "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6";
+
+    private static readonly string[] Self = [@"C:\jason\jason.exe"];
+
+    private static ToastHostPayload Shown(string? item = null) =>
+        new(ToastCommands.Protocol, ToastRegistration.Aumid, ToastRegistration.DisplayName, "Jason", ["one", "two"], item);
+
+    /// <summary>What the toast was made from, and how many registry writes had been made by then.</summary>
+    private sealed class Made
+    {
+        public string? Xml { get; private set; }
+
+        public int WritesBefore { get; private set; } = -1;
+
+        public Func<string, string, IPreparedToast> Prepare(FakeUserRegistry registry, OrderedToast toast) => (_, xml) =>
+        {
+            Xml = xml;
+            WritesBefore = registry.Writes.Count;
+            return toast;
+        };
+    }
+
+#pragma warning disable CA1416 // Driven with fakes: the registry and the toast are this test's, and nothing reaches Windows.
+
+    /// <summary>The AppUserModelID key first, then the link registration, and only then is the toast made.</summary>
+    [Fact]
+    public void The_link_is_registered_after_the_app_user_model_id_and_before_the_toast_is_made()
+    {
+        var registry = new FakeUserRegistry();
+        var toast = new OrderedToast();
+        var made = new Made();
+
+        var outcome = ToastHost.Show(Shown(), registry, Self, made.Prepare(registry, toast));
+
+        Assert.Equal(ToastRegistration.Key, registry.Writes[0].Key);
+        Assert.All(registry.Writes.Skip(1), write => Assert.StartsWith(LinkRegistration.Key, write.Key, StringComparison.Ordinal));
+        Assert.Equal(5, made.WritesBefore);
+        Assert.Equal(registry.Writes.Count, made.WritesBefore);
+        Assert.Equal(("written", "written", (string?)null), (outcome.Registration, outcome.Scheme, outcome.SchemeHr));
+        Assert.Equal(["show", "setting"], toast.Order);
+    }
+
+    [Fact]
+    public void One_item_s_toast_launches_that_item()
+    {
+        var registry = new FakeUserRegistry();
+        var made = new Made();
+
+        ToastHost.Show(Shown(Approval), registry, Self, made.Prepare(registry, new OrderedToast()));
+
+        Assert.StartsWith($"<toast activationType=\"protocol\" launch=\"jason://attention/approvals/{Approval}\">", made.Xml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_toast_with_no_item_launches_the_list()
+    {
+        var registry = new FakeUserRegistry();
+        var made = new Made();
+
+        ToastHost.Show(Shown(), registry, Self, made.Prepare(registry, new OrderedToast()));
+
+        Assert.StartsWith("<toast activationType=\"protocol\" launch=\"jason://attention\">", made.Xml, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Another program owns <c>jason:</c>: the toast is still shown, with no link at all, so a click can never hand an
+    /// id to that program.
+    /// </summary>
+    [Fact]
+    public void A_foreign_link_registration_shows_the_toast_without_a_link()
+    {
+        var registry = new FakeUserRegistry();
+        registry.Classes[(LinkRegistration.ClassesKey, LinkRegistration.ProtocolValue)] = string.Empty;
+        var toast = new OrderedToast();
+        var made = new Made();
+
+        var outcome = ToastHost.Show(Shown(Approval), registry, Self, made.Prepare(registry, toast));
+
+        Assert.Equal("foreign", outcome.Scheme);
+        Assert.StartsWith("<toast><visual>", made.Xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason:", made.Xml, StringComparison.Ordinal);
+        Assert.Equal(["show", "setting"], toast.Order);
+    }
+
+    /// <summary>A link registration that failed never fails the delivery: the toast is shown without a link.</summary>
+    [Fact]
+    public void A_failed_link_registration_shows_the_toast_without_a_link()
+    {
+        var registry = new FakeUserRegistry { Refuse = new UnauthorizedAccessException("denied"), RefuseAfter = 1 };
+        var toast = new OrderedToast();
+        var made = new Made();
+
+        var outcome = ToastHost.Show(Shown(Approval), registry, Self, made.Prepare(registry, toast));
+
+        Assert.Equal(("written", "failed", "0x80070005"), (outcome.Registration, outcome.Scheme, outcome.SchemeHr));
+        Assert.DoesNotContain("launch=", made.Xml, StringComparison.Ordinal);
+        Assert.Equal(["show", "setting"], toast.Order);
+    }
+
+    /// <summary>The AppUserModelID key refused ends the toast where it ended before: nothing more is written or made.</summary>
+    [Fact]
+    public void A_refused_app_user_model_id_still_ends_before_the_link_and_the_toast()
+    {
+        var registry = new FakeUserRegistry { Refuse = new UnauthorizedAccessException("denied") };
+        var made = new Made();
+
+        var outcome = ToastHost.Show(Shown(Approval), registry, Self, made.Prepare(registry, new OrderedToast()));
+
+        Assert.Equal(("failed", (string?)null), (outcome.Registration, outcome.Scheme));
+        Assert.Null(made.Xml);
+        Assert.Empty(registry.Writes);
+    }
+
+#pragma warning restore CA1416
 
     /// <summary>
     /// The payload and the outcome are escaped JSON, ASCII on the wire both ways, and read back as they were written. The
@@ -134,6 +249,10 @@ public sealed class ToastHostTests
     [InlineData("""{"protocol_version":1,"aumid":"ai.jason.runtime","display_name":"Not Jason","title":"Jason","lines":["one","two"]}""", "says it is from Jason")]
     [InlineData("""{"protocol_version":1,"aumid":"ai.jason.runtime","display_name":"Jason","title":"Jason","lines":["one","two","three"]}""", "at most two lines")]
     [InlineData("""{"protocol_version":2,"aumid":"ai.jason.runtime","display_name":"Jason","title":"Jason","lines":["one","two"]}""", "protocol_version 1")]
+    [InlineData("""{"protocol_version":1,"aumid":"ai.jason.runtime","display_name":"Jason","title":"Jason","lines":["one","two"],"item":"cmp_01JBZ3X7Q9K2M4N6P8R0S2T4V6"}""", "neither an approval nor a question")]
+    [InlineData("""{"protocol_version":1,"aumid":"ai.jason.runtime","display_name":"Jason","title":"Jason","lines":["one","two"],"item":"apr_01jbz3x7q9k2m4n6p8r0s2t4v6"}""", "neither an approval nor a question")]
+    [InlineData("""{"protocol_version":1,"aumid":"ai.jason.runtime","display_name":"Jason","title":"Jason","lines":["one","two"],"item":"apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6/prompt"}""", "neither an approval nor a question")]
+    [InlineData("""{"protocol_version":1,"aumid":"ai.jason.runtime","display_name":"Jason","title":"Jason","lines":["one","two"],"item":""}""", "neither an approval nor a question")]
     public async Task A_payload_it_cannot_show_is_rejected(string payload, string reason)
     {
         var (exit, stdout, stderr) = await RunAsync(["--protocol", "1"], payload);
@@ -159,6 +278,29 @@ public sealed class ToastHostTests
         Assert.Empty(stdout);
         Assert.Contains("could not be read as JSON", stderr, StringComparison.Ordinal);
         Assert.DoesNotContain(Sentinel, stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>A malformed item is refused by what it is, never quoted.</summary>
+    [Fact]
+    public async Task A_malformed_item_is_rejected_without_being_quoted()
+    {
+        const string Sentinel = "apr_SENTINEL";
+        var payload = Payload(ToastRegistration.Aumid);
+        payload["item"] = Sentinel;
+
+        var (exit, stdout, stderr) = await RunAsync(["--protocol", "1"], payload.ToJsonString());
+
+        Assert.Equal(3, exit);
+        Assert.Empty(stdout);
+        Assert.DoesNotContain(Sentinel, stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>A payload of a runtime from before there was an item reads as one with none, so an update mid-way still shows a toast.</summary>
+    [Fact]
+    public void A_payload_without_an_item_reads_as_one_with_none()
+    {
+        Assert.Null(ToastHost.Refusal(Payload(ToastRegistration.Aumid).ToJsonString(), out var payload));
+        Assert.Null(payload.Item);
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public static class ToastCommands
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(message);
-        var payload = new ToastHostPayload(Protocol, ToastRegistration.Aumid, ToastRegistration.DisplayName, message.Title, [message.Summary, message.Look]);
+        var payload = new ToastHostPayload(Protocol, ToastRegistration.Aumid, ToastRegistration.DisplayName, message.Title, [message.Summary, message.Look], message.Item);
         return new ToastLaunch([.. self, "toast-host", "--protocol", Protocol.ToString(CultureInfo.InvariantCulture)], JsonSerializer.Serialize(payload, ToastHostJson.Options), Empty);
     }
 

@@ -298,6 +298,25 @@ public sealed class PluginNotificationChannelTests
         Assert.Equal((ChannelResult.Delivered, "walk:3:1"), (outcome.Result, outcome.Receipt));
     }
 
+    /// <summary>
+    /// The one item a Windows toast carries by its id never reaches a plugin: the input is the title, the message and the
+    /// counts, as it was before there was an item.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_is_given_the_title_the_message_and_the_counts_and_never_the_item()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "carrier",
+            "export function invoke(operation, input, context) { var text = JSON.stringify(input); return { result: { receipt: Object.keys(input).sort().join(',') + (text.indexOf('apr_') >= 0 || text.indexOf('dec_') >= 0 ? ':id' : ':none') } }; }"));
+        var one = NotificationComposer.Compose(1, 0, item: "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6");
+        Assert.NotNull(one.Item);
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(one, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Delivered, "counts,message,title:none"), (outcome.Result, outcome.Receipt));
+    }
+
     /// <summary>An answer the contract's result schema refuses is a pointer that may have arrived: ambiguous, never repeated.</summary>
     [Fact]
     public async Task An_answer_outside_the_contract_is_an_ambiguous_failure()

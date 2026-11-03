@@ -79,6 +79,52 @@ public sealed class NotificationSenderTests
         Assert.Equal(toast.Messages, other.Messages);
     }
 
+    /// <summary>The one approval that waits is read beside the counts, and travels to the channels by its public id alone.</summary>
+    [Fact]
+    public async Task The_one_approval_that_waits_is_given_by_its_id()
+    {
+        using var harness = Harness();
+        await Waiting.ApprovalsAsync(harness, 1, Ct);
+        string approval;
+        await using (var db = harness.Open())
+        {
+            approval = (await db.Approvals.AsNoTracking().SingleAsync(Ct)).PublicId;
+        }
+
+        var toast = FakeChannel.Delivering();
+        await Sender(harness, toast).SendAsync(Request(), Ct);
+
+        var message = Assert.Single(toast.Messages);
+        Assert.Equal(approval, message.Item);
+        Assert.Equal(NotificationComposer.Compose(1, 0).Text, message.Text);
+    }
+
+    [Fact]
+    public async Task The_one_question_that_waits_is_given_by_its_id()
+    {
+        using var harness = Harness();
+        var question = await Waiting.DecisionAsync(harness, Ct);
+        var toast = FakeChannel.Delivering();
+
+        await Sender(harness, toast).SendAsync(Request(), Ct);
+
+        Assert.Equal(question.Id, Assert.Single(toast.Messages).Item);
+    }
+
+    /// <summary>More than one thing waiting is no item: a click opens the list, and no id is read.</summary>
+    [Fact]
+    public async Task Two_things_waiting_give_no_item()
+    {
+        using var harness = Harness();
+        await Waiting.ApprovalsAsync(harness, 1, Ct);
+        await Waiting.DecisionAsync(harness, Ct);
+        var toast = FakeChannel.Delivering();
+
+        await Sender(harness, toast).SendAsync(Request(), Ct);
+
+        Assert.Null(Assert.Single(toast.Messages).Item);
+    }
+
     /// <summary>
     /// Everything was answered between the hand-over and the send: nothing waits, so nothing is said, nothing goes back,
     /// and the notification is released.
