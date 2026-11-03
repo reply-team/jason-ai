@@ -34,7 +34,7 @@ public class AgentHostSeamTests
     public static TheoryData<AgentHostKind> Kinds() => [.. Enum.GetValues<AgentHostKind>()];
 
     [Fact]
-    [Critical(Family.S5, "a host value without its row or its registration is the first thing a new host gets wrong")]
+    [Critical(Family.S6, "a host value without its row or its registration is the first thing a new host gets wrong")]
     public void The_table_the_enum_and_the_registrations_name_the_same_hosts_once_each()
     {
         var registered = Registered().Select(host => host.Kind).Order().ToArray();
