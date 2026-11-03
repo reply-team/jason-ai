@@ -198,8 +198,9 @@ public static class SessionOpener
 
     /// <summary>
     /// The host's program and what goes before its own arguments, found by its command word as Jason finds every program it
-    /// starts by name: an <c>.exe</c>, npm's shim read for its interpreter and entry script, or Cursor CLI's launcher read
-    /// for what it starts; never a script through a shell. Null where none of those answers.
+    /// starts by name: an <c>.exe</c>, npm's shim read for what it starts (the interpreter and entry script it names, or
+    /// the executable its package ships), or Cursor CLI's launcher read for what it starts; never a script through a
+    /// shell. Null where none of those answers.
     /// </summary>
     private static (IReadOnlyList<string>? Program, FoundProgram Found) HostProgram(CliEnvironment env, AgentHostKind host)
     {
@@ -227,6 +228,8 @@ public static class SessionOpener
             $"{hostWord}'s program '{command}' resolves only to {file}, {ProgramLookup.ShellScript}, so nothing was started: {ProgramLookup.ProgramsNotShells}.",
         { Outcome: ProgramLookupOutcome.RefusedShim, File: { } file } =>
             $"{hostWord}'s program '{command}' resolves only to {file}, which {found.Refusal}, so nothing was started: starting it would mean cmd.exe interprets the arguments.",
+        { Outcome: ProgramLookupOutcome.NotFound, File: { } shim } =>
+            $"{hostWord}'s program '{command}' resolves to {shim}, npm's shim, whose executable is not there, so nothing was started.",
         _ => $"{hostWord}'s program '{command}' is not on this machine's search path, so nothing was started.",
     };
 

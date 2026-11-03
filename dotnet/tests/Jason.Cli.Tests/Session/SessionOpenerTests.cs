@@ -372,6 +372,25 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("jason preference unset agent.interactive_host --actor human:<your-name>", said, StringComparison.Ordinal);
     }
 
+    /// <summary>A host whose shim names an executable the disk does not hold is named by its shim, not as a name nothing answers for.</summary>
+    [Fact]
+    public async Task A_host_whose_npm_shim_names_an_executable_that_is_not_there_is_named_by_its_shim()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows has npm's cmd shim.");
+        _run.Programs.AddNested(
+            @"node_modules\@anthropic-ai\claude-code\package.json", "{\"name\":\"@anthropic-ai/claude-code\",\"bin\":{\"claude\":\"bin/claude.exe\"}}");
+        var shim = _run.Programs.Add("claude.cmd", TestPrograms.NpmNativeShim(@"@anthropic-ai\claude-code", @"bin\claude.exe"));
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Contains(
+            $"claude_code's program 'claude' resolves to {shim}, npm's shim, whose executable is not there, so nothing was started.",
+            _run.Error.ToString(),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A host that is installed but found only as a shim Jason refuses is not "not on the search path": the line names the
     /// file and the rule it broke, as <c>jason status</c> does, so the person knows what to put right.

@@ -1080,7 +1080,8 @@ internal static class StatusChecks
         }
 
         // What the name came to is said first: a person reading "did not answer" has to know which file did not, and
-        // on Windows that is often not the file the name suggests.
+        // on Windows that is often not the file the name suggests. A program found as itself has File equal to Path; only
+        // npm's shim sets them apart, by the interpreter it names or by the executable it starts.
         var resolved = found.Outcome switch
         {
             ProgramLookupOutcome.NpmShim =>
@@ -1108,7 +1109,8 @@ internal static class StatusChecks
 
     /// <summary>
     /// The provider CLI as Jason finds every program it starts by name (<see cref="ProgramLookup"/>): on Windows an
-    /// <c>.exe</c> or a <c>.com</c>, or npm's shim read for the interpreter and entry script it names, and never a script
+    /// <c>.exe</c> or a <c>.com</c>, or npm's shim read for what it starts (the interpreter and entry script it names, or
+    /// the executable its package ships), and never a script
     /// a shell would have to interpret. A value with a directory in it is a path, looked up in that directory alone by
     /// the same rule; the directory comes back with the answer, so a name not found there says where it was looked for.
     /// A shim found there takes its interpreter from the search path, as the shim itself would when it runs.
@@ -1202,6 +1204,8 @@ internal static class StatusChecks
             $"'{providerCli}' resolves only to {Listed(found.File!)}, {ProgramLookup.ShellScript}, so '{command}' was not run: {ProgramLookup.ProgramsNotShells}; {Instead(found.Name)}",
         ProgramLookupOutcome.RefusedShim =>
             $"'{providerCli}' resolves only to {Listed(found.File!)}, which {found.Refusal}, so '{command}' was not run: starting it would mean cmd.exe interprets the arguments; {Instead(found.Name)}",
+        ProgramLookupOutcome.NotFound when found.File is { } shim =>
+            $"'{providerCli}' resolves to {Listed(shim)}, npm's shim, whose executable is not there, so '{command}' was not run.",
         _ when script is not null =>
             $"'{providerCli}' resolves only to {Listed(script)}, {ProgramLookup.ShellScript}, so '{command}' was not run: {ProgramLookup.ProgramsNotShells}; give '{providerCli[..^System.IO.Path.GetExtension(providerCli).Length]}', the name without its extension, and Jason looks for an .exe, a .com or npm's own shim for it.",
         _ when directory is not null => $"'{found.Name}' was not found in {directory}, so '{command}' was not run.",
