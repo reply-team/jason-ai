@@ -271,7 +271,7 @@ public static class SessionOpener
     {
         PromptFolderLevel.HarnessRoot => $"The harness root at {folder.Path} is not there, so nothing was started.",
         _ => $"The {(folder.Level == PromptFolderLevel.Campaign ? "campaign's" : "project's")} folder recorded at {folder.Path} is not there, so nothing was started; "
-            + "if it was moved, `jason project link --path <where-it-is-now>` records it again.",
+            + "if it was moved, `jason project link --path <the project's folder, where it is now>` records it and its campaigns again.",
     };
 
     private static string Level(PromptFolderLevel level) => level switch

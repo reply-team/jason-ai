@@ -389,7 +389,7 @@ public sealed class SessionOpenerTests : IDisposable
         var said = _run.Error.ToString().TrimEnd().Split('\n');
         Assert.Equal(2, said.Length);
         Assert.Equal(
-            "The campaign's folder recorded at " + SessionRuntime.RecordedFolder + " is not there, so nothing was started; if it was moved, `jason project link --path <where-it-is-now>` records it again.",
+            "The campaign's folder recorded at " + SessionRuntime.RecordedFolder + " is not there, so nothing was started; if it was moved, `jason project link --path <the project's folder, where it is now>` records it and its campaigns again.",
             said[0].TrimEnd('\r'));
         Assert.Contains("jason approval get apr_1 --prompt", said[1], StringComparison.Ordinal);
     }
