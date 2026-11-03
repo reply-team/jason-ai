@@ -99,6 +99,9 @@ against a stand-in program.
 - **Harness folders:** the root gains a missing import file, `GEMINI.md`, at the next project or campaign create, over no file
   that is there. A project's or a campaign's folder made before 0.26.0 keeps its `CLAUDE.md` alone unless you add a
   `GEMINI.md` holding `@AGENTS.md`. Jason writes no word of a memory file.
+- **`--host` on the skills verbs:** `jason skills install --host` and `jason skills update --host` take the host's own word
+  only, such as `claude_code`; `ClaudeCode` and `claudecode`, which 0.25.0 took, are refused. Without `--root`, a host that is
+  not detected on the machine is refused with exit 1.
 - **The Reply plugin** is unchanged.
 - **From 0.24.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
