@@ -454,8 +454,10 @@ then name it:
 jason profile create local-antigravity --host antigravity_cli --program agy
 ```
 
-The host takes its permission rules from your own settings file, `~/.gemini/antigravity-cli/settings.json`, in its
-`permissions.allow` array, and from nowhere a run can carry them, so you add two rules there once, `command(jason)` and
+Each run is given its permissions by a workspace hook the launch writes, which approves the call back to the runtime,
+the memory files and the result file; that route is built from the host's hooks page and has not yet been run on an
+account. If a role is refused on `antigravity_cli`, add two rules to your own settings file,
+`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array: `command(jason)` and
 `read_file(<your harness folder>)`; on Windows shells write the first as `command(regex:jason .*)`. The
 [host matrix](docs/execution-profiles.md#12-the-hosts) gives the two lines of JSON, says why, and says what was built from
 documentation and has not yet been run on an account.

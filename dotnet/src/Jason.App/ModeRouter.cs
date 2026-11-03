@@ -6,6 +6,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Update;
 using Jason.PluginHost;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Notifications.Desktop;
 
@@ -17,6 +18,7 @@ public enum Mode
     RuntimeService,
     PluginHost,
     ToastHost,
+    HostHook,
     Link,
     Cli,
 }
@@ -39,6 +41,7 @@ public static class ModeRouter
             ["runtime", "run", ..] => Mode.RuntimeService,
             ["plugin-host", ..] => Mode.PluginHost,
             ["toast-host", ..] => Mode.ToastHost,
+            ["host-hook", ..] => Mode.HostHook,
             [var first, ..] when first.StartsWith(LinkPrefix, StringComparison.OrdinalIgnoreCase) => Mode.Link,
             _ => Mode.Cli,
         };
@@ -50,6 +53,7 @@ public static class ModeRouter
         Mode.RuntimeService => RunRuntimeService(args, cancellationToken),
         Mode.PluginHost => RunPluginHost(args, cancellationToken),
         Mode.ToastHost => RunToastHost(args, cancellationToken),
+        Mode.HostHook => RunHostHook(args, cancellationToken),
         Mode.Link => RunLink(args, cancellationToken),
         _ => RunCli(args, cancellationToken),
     };
@@ -141,6 +145,17 @@ public static class ModeRouter
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunToastHost(string[] args, CancellationToken cancellationToken) =>
         ToastHost.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
+
+    /// <summary>
+    /// The short-lived child an agent host starts to ask whether one tool call is allowed: the call on stdin, one answer
+    /// line on stdout, no runtime, no child, no file and no environment read.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Task<int> RunHostHook(string[] args, CancellationToken cancellationToken) =>
+        AntigravityHook.RunAsync(args[1..], HostHookInput(), Console.Out, Console.Error, cancellationToken);
+
+    /// <summary>Where the hook reads its call: the process's standard input as bytes, never a console reader. A test swaps it.</summary>
+    public static Func<Stream> HostHookInput { get; set; } = Console.OpenStandardInput;
 
     /// <summary>
     /// A click on a <c>jason:</c> link: the shell starts this executable with the link as its one argument, and the CLI
