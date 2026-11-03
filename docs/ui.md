@@ -20,6 +20,9 @@ waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>`
 `jason ui open` does, and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7).
 `jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
 put that item's prompt on the clipboard and open nothing: the text of [Copy prompt](#copy-prompt) below.
+`jason://attention/approvals/<id>/session` and `jason://attention/questions/<id>/session` start an agent session on
+that item, as `jason session open` does ([Open an AI session](#open-an-ai-session) below). Windows learns these links when
+the first toast is shown; before that a browser has no program for them.
 
 If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
@@ -133,6 +136,31 @@ same words with `jason approval get <approval-id> --prompt` and `jason decision 
 for an approval is [prompts/approval.txt](prompts/approval.txt) and for a question [prompts/question.txt](prompts/question.txt),
 as the command line prints them for the recorded exchanges under `docs/api/fixtures/`; the page's test holds the button to
 those two files, and the command line's test holds them to the command line.
+
+## Open an AI session
+
+Beside Copy prompt, the panel shows the command that starts your own agent host on that one item —
+`jason session open --approval <approval-id>` or `jason session open --question <decision-id>` — to run in a terminal,
+and on Windows an **Open an AI session** link that does the same when clicked. Either opens a new terminal window at the
+folder Copy prompt names (your home folder when none is recorded), running the host the named preference
+`agent.interactive_host` names (`claude_code` when it is unset), with the Copy prompt text as its first message. The
+session reads the item and proposes; approving, rejecting and answering stay with you, and nothing is decided by opening
+it. An item that no longer waits starts nothing, and a host that is not on the search path is named, never replaced by
+another.
+
+- **Windows** starts the console host, `conhost.exe` from the system folder, which hands the window to Windows Terminal
+  where that is your default terminal; where your default terminal is the console host itself, you get a plain console
+  window. The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
+  ([notifications.md](notifications.md), §7); until then the command beside it is the way.
+- **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
+  folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked
+  by tests here; it has not been watched on a Mac.
+- **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, with the host after `-e`, the
+  form Debian Policy 11.8.3 gives every terminal emulator.
+
+The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
+and prints the whole command, the brief included, and on macOS the script. Each host's own form for a first message is in
+[execution-profiles.md](execution-profiles.md), §12.
 
 ## What the page may do
 

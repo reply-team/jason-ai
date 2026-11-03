@@ -527,7 +527,17 @@ jason approval approve <approval-id> --actor human:you@example.com --reason "che
 
 `--prompt` prints, in place of the item, the text that briefs an agent session on it: what waits, the campaign and its
 folder, the skill to use and what to bring back, and that the session decides nothing. It holds nothing of the item
-itself, and it is the text the UI's Copy prompt button copies (`docs/ui.md`).
+itself, and it is the text the UI's Copy prompt button copies (`docs/ui.md`). To start your own agent host on the item
+with that text as its first message, in a new terminal at the campaign's folder:
+
+```sh
+jason session open --approval <approval-id>
+jason session open --question <decision-id> --dry-run
+```
+
+The named preference `agent.interactive_host` says which host (`claude_code` while it is unset); `--dry-run` starts
+nothing and prints the whole command. The session proposes, and the decision stays yours. The UI's Open an AI session
+link does the same on Windows (`docs/ui.md`).
 
 A launched role that cannot decide something for itself asks a person instead, and the answer wakes the
 review that carries the work on:
