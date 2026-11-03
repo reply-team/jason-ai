@@ -156,18 +156,90 @@ public class GeminiCliHostTests
     /// </summary>
     [Theory]
     [InlineData("bare")]
+    [InlineData("-")]
     [InlineData("--")]
     [InlineData("-mmodel")]
-    public void Arguments_the_host_would_read_as_a_prompt_or_as_a_glued_option_are_refused(string word)
+    [InlineData("-m=other")]
+    // The parser expands a short group into its letters, so each of these is -y and another flag, or -y and its value.
+    [InlineData("-yo")]
+    [InlineData("-oy")]
+    [InlineData("-yfoo")]
+    [InlineData("-sy")]
+    [InlineData("-pfoo")]
+    // The parser reads a dot in a flag's name as a path into an object, which it assigns to the flag's own key.
+    [InlineData("--include-directories.0=/etc")]
+    [InlineData("--approval-mode.x=1")]
+    [InlineData("--model.x=1")]
+    public void Arguments_the_host_would_read_as_a_prompt_a_group_or_a_glued_option_are_refused(string word)
     {
         Assert.NotNull(_host.ArgsProblem(["--model=made-up", word]));
     }
 
     [Fact]
-    public void Flags_with_values_joined_by_an_equals_sign_are_accepted()
+    public void Long_flags_with_values_joined_by_an_equals_sign_are_accepted_and_a_short_one_stands_alone()
     {
-        Assert.Null(_host.ArgsProblem(["--model=made-up", "-m=other", "--debug"]));
+        Assert.Null(_host.ArgsProblem(["--model=made-up", "--debug", "-d"]));
+        Assert.Null(_host.ArgsProblem(["--model=gemini-2.5-pro"]));
         Assert.Null(_host.ArgsProblem([]));
+    }
+
+    /// <summary>
+    /// The parser sets one option under every spelling it knows: the camel-case twin of a kebab-case name, and the
+    /// <c>--no-</c> form of either, which negates it. Each is the same option, so a spelling left out would be launched
+    /// after the composed flag, where the last value wins.
+    /// </summary>
+    [Theory]
+    [InlineData("--approvalMode")]
+    [InlineData("--promptInteractive")]
+    [InlineData("--outputFormat")]
+    [InlineData("--rawOutput")]
+    [InlineData("--acceptRawOutputRisk")]
+    [InlineData("--skipTrust")]
+    [InlineData("--sessionId")]
+    [InlineData("--sessionFile")]
+    [InlineData("--listSessions")]
+    [InlineData("--deleteSession")]
+    [InlineData("--adminPolicy")]
+    [InlineData("--allowedMcpServerNames")]
+    [InlineData("--allowedTools")]
+    [InlineData("--listExtensions")]
+    [InlineData("--includeDirectories")]
+    [InlineData("--experimentalAcp")]
+    [InlineData("--fakeResponses")]
+    [InlineData("--fakeResponsesNonStrict")]
+    [InlineData("--recordResponses")]
+    [InlineData("--no-yolo")]
+    [InlineData("--no-skip-trust")]
+    [InlineData("--no-skipTrust")]
+    [InlineData("--no-sandbox")]
+    [InlineData("--no-approval-mode")]
+    [InlineData("--no-approvalMode")]
+    [InlineData("--no-include-directories")]
+    [InlineData("--no-admin-policy")]
+    [InlineData("--no-worktree")]
+    [InlineData("--query")]
+    [InlineData("--isCommand")]
+    [InlineData("--is-command")]
+    public void Every_spelling_the_parser_knows_for_a_reserved_flag_is_reserved(string flag)
+    {
+        Assert.Contains(flag, _host.ReservedFlags);
+    }
+
+    /// <summary>The same rule, derived: whatever long flag is reserved has its twin and its negations reserved.</summary>
+    [Fact]
+    public void Each_reserved_long_flag_has_its_camel_case_twin_and_its_negations_reserved()
+    {
+        var longs = _host.ReservedFlags.Where(flag => flag.StartsWith("--", StringComparison.Ordinal) && !flag.StartsWith("--no-", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(longs);
+        foreach (var flag in longs)
+        {
+            var kebab = flag[2..];
+            var parts = kebab.Split('-');
+            var camel = parts[0] + string.Concat(parts.Skip(1).Select(part => part.Length == 0 ? part : char.ToUpperInvariant(part[0]) + part[1..]));
+            Assert.Contains("--" + camel, _host.ReservedFlags);
+            Assert.Contains("--no-" + kebab, _host.ReservedFlags);
+            Assert.Contains("--no-" + camel, _host.ReservedFlags);
+        }
     }
 
     [Fact]

@@ -530,8 +530,11 @@ build does, and what it has not measured.
   `--output-format=stream-json`, `--approval-mode=default`, `--skip-trust`, `--session-id=<id>`, a policy
   (`--admin-policy=.jason-policy`), a list of MCP servers that names none, no extensions, and one
   `--include-directories` for each folder holding a memory file the launch names. A profile's own `args` come last and
-  may not name any of these, nor the prompt, the sandbox, the worktree or the resume flags; they are flags with their
-  value joined by `=`, since a bare word is read as the prompt.
+  may not name any of these, nor the prompt, the sandbox, the worktree or the resume flags, in any spelling the host's
+  parser reads as the same option (the camel-case twin of a kebab-case name, and the `--no-` form of either). They are
+  long flags with their value joined by `=`, since a bare word is read as the prompt; a short option may stand only
+  alone, since the parser reads `-yo` as two options and `-pfoo` as an option and its value; and a flag's name has no
+  dot, which the parser reads as a path into the flag's own value.
 - **Environment.** The one constant this host declares is `NO_BROWSER=true`: without it a signed-out run opens a
   browser or waits for a line on standard input, and with it the run fails at once with the host's authentication exit.
   That exit, 41, ends the attempt as `host_not_available` with Jason's own sentence, and no byte of what the host wrote.

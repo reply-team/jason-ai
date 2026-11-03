@@ -73,32 +73,47 @@ public sealed class GeminiCliHost : IAgentHost
     /// </summary>
     public IReadOnlyDictionary<string, string> Environment { get; } = new Dictionary<string, string> { ["NO_BROWSER"] = "true" };
 
-    public IReadOnlySet<string> ReservedFlags { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// Every spelling the host's parser knows for an option that would widen or replace what is composed. Read from the
+    /// declarations in the host's source at 0.66.0, never from its help: the long names and the short ones, the hidden
+    /// internal option, and the positional <c>query</c>, which an option of that name also sets. The parser sets one option
+    /// under its kebab-case name and its camel-case twin alike, and a <c>--no-</c> form of either negates it, so
+    /// <see cref="Spellings"/> adds those to each long name.
+    /// </summary>
+    public IReadOnlySet<string> ReservedFlags { get; } = Spellings(
+        ShortReserved,
+        [
+            "prompt", "prompt-interactive", "output-format", "raw-output", "accept-raw-output-risk",
+            "approval-mode", "yolo", "skip-trust", "query", "is-command",
+
+            // A session of this attempt's own, and no other: a run that resumed or named a file would be another attempt's.
+            "session-id", "session-file", "resume", "list-sessions", "delete-session",
+
+            // The confinement is only as good as what cannot be added after it: another policy, a server, an extension, a
+            // second directory to read, a sandbox that changes where the run happens, or a protocol that is not this one.
+            "policy", "admin-policy", "allowed-mcp-server-names", "allowed-tools", "extensions", "list-extensions",
+            "include-directories", "sandbox", "worktree", "acp", "experimental-acp",
+            "fake-responses", "fake-responses-non-strict", "record-responses",
+        ]);
+
+    private static readonly string[] ShortReserved = ["-p", "-i", "-o", "-y", "-r", "-e", "-l", "-s", "-w"];
+
+    private static HashSet<string> Spellings(string[] shorts, string[] longs)
     {
-        "-p", "--prompt",
-        "-i", "--prompt-interactive",
-        "-o", "--output-format",
-        "--raw-output", "--accept-raw-output-risk",
-        "--approval-mode",
-        "-y", "--yolo",
-        "--skip-trust",
+        var all = new HashSet<string>(shorts, StringComparer.OrdinalIgnoreCase);
+        foreach (var kebab in longs)
+        {
+            var parts = kebab.Split('-');
+            var camel = parts[0] + string.Concat(parts.Skip(1).Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
+            foreach (var name in new[] { kebab, camel })
+            {
+                all.Add("--" + name);
+                all.Add("--no-" + name);
+            }
+        }
 
-        // A session of this attempt's own, and no other: a run that resumed or named a file would be another attempt's.
-        "--session-id", "--session-file",
-        "-r", "--resume",
-        "--list-sessions", "--delete-session",
-
-        // The confinement is only as good as what cannot be added after it: another policy, a server, an extension, a
-        // second directory to read, a sandbox that changes where the run happens, or a protocol that is not this one.
-        "--policy", "--admin-policy",
-        "--allowed-mcp-server-names", "--allowed-tools",
-        "-e", "--extensions", "-l", "--list-extensions",
-        "--include-directories",
-        "-s", "--sandbox",
-        "-w", "--worktree",
-        "--acp", "--experimental-acp",
-        "--fake-responses", "--fake-responses-non-strict", "--record-responses",
-    };
+        return all;
+    }
 
     public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles)
     {
@@ -222,9 +237,24 @@ public sealed class GeminiCliHost : IAgentHost
                 return "'--' ends the host's flags and the words after it are read as the prompt.";
             }
 
-            if (arg.Length > 2 && arg[1] != '-' && char.IsAsciiLetter(arg[1]) && arg[2] != '=')
+            // The bare dash stands for the standard input, which is already the prompt.
+            if (arg == "-")
             {
-                return $"'{arg}' glues a short option to its value, which the host reads as the option it starts with; write it as a long option or as -x=value.";
+                return "'-' stands for standard input, which the runtime already gives the host as the prompt.";
+            }
+
+            // A single dash is a short group: the parser reads -yo as -y and -o, and -pfoo as -p with the value foo, so only
+            // a short option alone is a word of its own.
+            if (arg[1] != '-' && arg.Length > 2)
+            {
+                return $"'{arg}' is a short option with more after it, which the host reads as several options or as the option and its value; write a long option as --flag=value.";
+            }
+
+            // The parser reads a dot in a name as a path into an object, assigned to the option of the part before it.
+            var name = arg.Split('=', 2)[0];
+            if (name.Contains('.', StringComparison.Ordinal))
+            {
+                return $"'{arg}' names a flag with a dot, which the host reads as a path into the flag's own value; a flag's name has none.";
             }
         }
 
