@@ -224,31 +224,51 @@ public static partial class ProgramLookup
             return null;
         }
 
+        // A scoped install is two directories under node_modules, `@scope` and the name, and an unscoped one is one;
+        // the entry is what follows them.
+        string? scope = null;
         var package = call.Groups["package"].Value;
+        var rest = call.Groups["entry"].Value;
         if (package.StartsWith('@'))
         {
-            // A scoped install is two directories under node_modules and this reader knows one. Saying which
-            // rule that is beats leaving the author of a scoped CLI to guess.
-            rule = "names a scoped package, and only a package one directory under node_modules is read";
-            return null;
+            if (!PackageName().IsMatch(package[1..]))
+            {
+                // The scope reads as a name before any path is built from it, for the reason the package does below;
+                // a bare `@` is no scope at all.
+                rule = "names a scope whose name is not one npm could have written";
+                return null;
+            }
+
+            var separator = rest.IndexOf('\\', StringComparison.Ordinal);
+            if (separator < 0)
+            {
+                rule = "names a scope and no package under it";
+                return null;
+            }
+
+            scope = package;
+            package = rest[..separator];
+            rest = rest[(separator + 1)..];
         }
 
         if (!PackageName().IsMatch(package))
         {
             // A segment is a package name or it is nothing: `..` would climb out of node_modules and a drive
-            // letter would leave the tree altogether, both while still reading as one segment.
+            // letter would leave the tree altogether, both while still reading as one segment. A scope under a
+            // scope fails here too, since a name never begins with `@`.
             rule = "names a package whose name is not one npm could have written";
             return null;
         }
 
-        var relative = NormalizeEntry(call.Groups["entry"].Value);
+        string[] segments = scope is null ? [package] : [scope, package];
+        var relative = NormalizeEntry(rest);
         var modules = Path.Combine(directory, "node_modules");
-        var root = Path.Combine(modules, package);
+        var root = Path.Combine([modules, .. segments]);
 
         // The entry as the shim means it, and the package root as the disk really holds it. A junction at
-        // node_modules or at the package leaves the entry lexically inside while the file lives anywhere at
-        // all, so the two sides are computed differently on purpose and then have to agree.
-        var realRoot = FinalDirectory(Path.Combine(FinalDirectory(modules) ?? modules, package));
+        // node_modules, at the scope or at the package leaves the entry lexically inside while the file lives
+        // anywhere at all, so the two sides are computed differently on purpose and then have to agree.
+        var realRoot = RealDirectory(modules, segments);
         string entry;
         try
         {
@@ -279,7 +299,7 @@ public static partial class ProgramLookup
         }
 
         var manifest = ReadCapped(Path.Combine(root, "package.json"), MaxPackageJsonBytes);
-        if (manifest is null || !Declares(manifest, name, relative))
+        if (manifest is null || !Declares(manifest, name, relative, scope))
         {
             rule = "names an entry its package does not declare";
             return null;
@@ -298,7 +318,7 @@ public static partial class ProgramLookup
 
     /// <summary>
     /// The shim's last line, exactly as cmd-shim writes it. The package is one segment — a scoped install
-    /// therefore captures its scope here and is refused by name above rather than by accident.
+    /// therefore captures its scope here, and the name under the scope is taken from the entry above.
     /// </summary>
     [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"]+)" %\*\z""")]
     private static partial Regex NpmShimCall();
@@ -309,11 +329,13 @@ public static partial class ProgramLookup
 
     /// <summary>
     /// The package's own <c>bin</c>, in the two shapes npm publishes: a map from command name to script, and a
-    /// bare string for a package whose single command is its own name. Anything else is a shape this reader
-    /// does not know, which is a refusal rather than a guess.
+    /// bare string for a package whose single command is its own name, without its scope where it has one, so the
+    /// package's own name is then the scope and the command. Anything else is a shape this reader does not know,
+    /// which is a refusal rather than a guess.
     /// </summary>
-    private static bool Declares(string manifest, string name, string entry)
+    private static bool Declares(string manifest, string name, string entry, string? scope)
     {
+        var packageNamed = scope is null ? name : scope + "/" + name;
         try
         {
             using var document = JsonDocument.Parse(manifest);
@@ -333,7 +355,7 @@ public static partial class ProgramLookup
             return bin.ValueKind == JsonValueKind.String
                 && document.RootElement.TryGetProperty("name", out var packageName)
                 && packageName.ValueKind == JsonValueKind.String
-                && string.Equals(packageName.GetString(), name, StringComparison.Ordinal)
+                && string.Equals(packageName.GetString(), packageNamed, StringComparison.Ordinal)
                 && SameEntry(bin.GetString(), entry);
         }
         catch (JsonException)
@@ -355,6 +377,26 @@ public static partial class ProgramLookup
         }
 
         return normalized;
+    }
+
+    /// <summary>
+    /// The package's directory as the disk really holds it: <c>node_modules</c>, then each directory under it, every
+    /// one followed to its end before the next is joined to it, so a link at any level is where the walk goes on from.
+    /// Null where a directory on the way is not there.
+    /// </summary>
+    private static string? RealDirectory(string modules, IEnumerable<string> segments)
+    {
+        string? current = FinalDirectory(modules) ?? modules;
+        foreach (var segment in segments)
+        {
+            current = FinalDirectory(Path.Combine(current, segment));
+            if (current is null)
+            {
+                return null;
+            }
+        }
+
+        return current;
     }
 
     /// <summary>A directory as the disk really holds it, with every link on the way followed to its end.</summary>

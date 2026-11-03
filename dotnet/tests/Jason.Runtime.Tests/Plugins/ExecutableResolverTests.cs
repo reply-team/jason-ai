@@ -293,7 +293,7 @@ public class ExecutableResolverTests
         programs.AddNested(Path.Combine("node_modules", package, entry), "// the entry point");
         programs.AddNested(
             Path.Combine("node_modules", package, "package.json"),
-            "{\"name\":\"" + package + "\",\"bin\":{\"vendor\":\"" + (declared ?? entry).Replace('\\', '/') + "\"}}");
+            "{\"name\":\"" + package.Replace('\\', '/') + "\",\"bin\":{\"vendor\":\"" + (declared ?? entry).Replace('\\', '/') + "\"}}");
         programs.Add("vendor.cmd", TestPrograms.NpmShim(package, entry));
     }
 
@@ -405,23 +405,108 @@ public class ExecutableResolverTests
         Assert.Contains("its package does not declare", resolved.Problem.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A scoped package is two directories under <c>node_modules</c>, the scope and the name, and its shim is read the
+    /// way an unscoped one is, through the same lookup every caller asks.
+    /// </summary>
     [Fact]
-    public void A_shim_for_a_scoped_package_is_refused_and_says_so()
+    public void A_shim_for_a_scoped_package_resolves_to_the_interpreter_and_the_entry_script_it_names()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        var node = programs.AddInterpreter("node.exe");
+        InstallVendorCli(programs, package: @"@vendor\cli");
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Problem);
+        Assert.Equal(node, resolved.Path);
+        Assert.Equal([Path.Combine(programs.Root, "node_modules", "@vendor", "cli", "dist", "index.js")], resolved.Launch);
+    }
+
+    /// <summary>
+    /// A bare <c>bin</c> string names one command, and npm names it after the package without its scope: the package
+    /// <c>@vendor/vendor</c> answers for <c>vendor</c>, and only a package whose own name is the scope and the directory
+    /// the shim names does.
+    /// </summary>
+    [Theory]
+    [InlineData("@vendor/vendor", true)]
+    [InlineData("@other/vendor", false)]
+    [InlineData("vendor", false)]
+    public void A_scoped_package_whose_bin_is_a_bare_string_answers_for_its_name_without_the_scope(string packageName, bool read)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
         using var programs = new TestPrograms();
         programs.AddInterpreter("node.exe");
-        programs.AddNested(@"node_modules\@vendor\cli\dist\index.js", "// the entry point");
-        programs.AddNested(@"node_modules\@vendor\cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/index.js"}}""");
+        programs.AddNested(@"node_modules\@vendor\vendor\cli.js", "// the entry point");
+        programs.AddNested(@"node_modules\@vendor\vendor\package.json", "{\"name\":\"" + packageName + "\",\"bin\":\"cli.js\"}");
+        programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\vendor", "cli.js"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Equal(read, resolved.Problem is null);
+        if (!read)
+        {
+            Assert.Contains("its package does not declare", resolved.Problem!.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Each of a scoped install's two directories reads as a name before any path is built from it: the scope as
+    /// <c>@</c> and a package name, the package as a package name. <c>..</c> climbs, a drive letter leaves the tree, a
+    /// bare <c>@</c> is no scope, a scope inside a scope is a directory npm never writes, and a scope with nothing
+    /// under it names no package; each is refused with its rule, never by where it would have landed.
+    /// </summary>
+    [Theory]
+    [InlineData(@"@..\cli", "names a scope whose name is not one npm could have written")]
+    [InlineData(@"@C:\cli", "names a scope whose name is not one npm could have written")]
+    [InlineData(@"@\cli", "names a scope whose name is not one npm could have written")]
+    [InlineData(@"@vendor\..", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@vendor\C:", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@vendor\@other", "names a package whose name is not one npm could have written")]
+    [InlineData("@vendor", "names a scope and no package under it")]
+    public void A_shim_whose_scope_or_scoped_package_is_not_a_name_is_refused(string package, string rule)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        programs.AddInterpreter("node.exe");
+        programs.Add("evil.js", "// outside node_modules altogether");
+        programs.Add("package.json", """{"name":"vendor","bin":{"vendor":"evil.js"}}""");
+        Directory.CreateDirectory(Path.Combine(programs.Root, "node_modules", "@vendor"));
+        programs.Add("vendor.cmd", TestPrograms.NpmShim(package, "evil.js"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains(rule, resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The scope's directory is one more place a junction could stand: the entry would still read as inside
+    /// <c>node_modules\@vendor\cli</c> while the file lived anywhere, so the package's real directory is followed
+    /// through the scope as well.
+    /// </summary>
+    [Fact]
+    public void A_scope_directory_that_is_a_junction_out_of_the_tree_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        using var elsewhere = new TestPrograms();
+        programs.AddInterpreter("node.exe");
+        elsewhere.AddNested(@"cli\dist\index.js", "// the entry point, in somebody else's tree");
+        elsewhere.AddNested(@"cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/index.js"}}""");
+        Directory.CreateDirectory(Path.Combine(programs.Root, "node_modules"));
+        Assert.SkipUnless(
+            TryJunction(Path.Combine(programs.Root, "node_modules", "@vendor"), elsewhere.Root),
+            "this machine would not create a directory junction.");
         programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\cli", @"dist\index.js"));
 
         var resolved = Resolve(programs, "vendor");
 
-        // A scoped package is two directories under node_modules, and the reader knows one. Saying so is the
-        // difference between an author reading why and an author guessing.
         Assert.Null(resolved.Path);
         Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
-        Assert.Contains("scoped package", resolved.Problem.Message, StringComparison.Ordinal);
+        Assert.Contains("outside the package", resolved.Problem.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
