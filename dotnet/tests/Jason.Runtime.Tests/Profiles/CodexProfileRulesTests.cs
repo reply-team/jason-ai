@@ -87,6 +87,58 @@ public class CodexProfileRulesTests
     }
 
     /// <summary>
+    /// The host's parser takes a flag by a second name its help never prints. Each of them sets what a flag the runtime
+    /// composes sets, and <c>--yolo</c> runs every command with no sandbox at all, so the second name is held as the first.
+    /// </summary>
+    [Theory]
+    [InlineData("--yolo")]
+    [InlineData("--not-so-yolo")]
+    [InlineData("--experimental-json")]
+    public async Task A_second_name_of_a_flag_codex_composes_is_refused_naming_the_flag(string flag)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "aliased", host = "codex", program = "codex", args = new[] { flag } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args[0]", "reserved"), (detail.Field, detail.Code));
+        Assert.Contains($"'{flag}'", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The host's parser reads one dash and a letter followed by more as that letter's flag with its value glued on, or
+    /// as several letters' flags run together, so <c>-sdanger-full-access</c> and <c>-sp</c> both set <c>-s</c>. A word
+    /// of one dash is a flag of one letter or nothing, and the letter with its value after <c>=</c> is that letter's flag.
+    /// </summary>
+    [Theory]
+    [InlineData("-sdanger-full-access", "args", "invalid")]
+    [InlineData("-sp", "args", "invalid")]
+    [InlineData("-ms", "args", "invalid")]
+    [InlineData("-Cfar/away", "args", "invalid")]
+    [InlineData("-", "args", "invalid")]
+    [InlineData("--", "args", "invalid")]
+    [InlineData("-s=danger-full-access", "args[0]", "reserved")]
+    public async Task A_short_flag_codex_composes_cannot_be_reached_by_running_letters_or_a_value_together(
+        string word, string field, string code)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "clustered", host = "codex", program = "codex", args = new[] { word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal((field, code), (detail.Field, detail.Code));
+        Assert.Contains(code == "reserved" ? "'-s'" : "codex", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A flag one host leaves to the person may be one another host composes. A patch that moves a profile to Codex and
     /// leaves its arguments alone would launch the stored ones after the flags Codex composes, where the last value wins,
     /// so the stored arguments are held to Codex's flags and the profile keeps the revision it had.

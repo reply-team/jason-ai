@@ -70,13 +70,14 @@ public sealed class CodexHost(
 
     /// <summary>
     /// Everything that would change the shape composed below or undo the sandbox it rests on, read from
-    /// <c>codex exec --help</c> of 0.166.0-alpha.5.1. <c>-c</c> is reserved whole: one more setting after the runtime's
-    /// could replace any of them. A model is the person's to choose.
+    /// <c>codex exec --help</c> of 0.166.0-alpha.5.1, with the second names the parser of 0.166.0 takes and its help
+    /// never prints. <c>-c</c> is reserved whole: one more setting after the runtime's could replace any of them. A model
+    /// is the person's to choose.
     /// </summary>
     public IReadOnlySet<string> ReservedFlags { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         "exec",
-        "--json",
+        "--json", "--experimental-json",
         "--skip-git-repo-check",
         "--ephemeral",
         "--ignore-user-config",
@@ -86,8 +87,8 @@ public sealed class CodexHost(
         "--enable", "--disable",
         "-s", "--sandbox",
         "-a", "--ask-for-approval",
-        "--approve-for-me",
-        "--dangerously-bypass-approvals-and-sandbox",
+        "--approve-for-me", "--not-so-yolo",
+        "--dangerously-bypass-approvals-and-sandbox", "--yolo",
         "--dangerously-bypass-hook-trust",
         "-P", "--permission-profile",
         "-p", "--profile",
