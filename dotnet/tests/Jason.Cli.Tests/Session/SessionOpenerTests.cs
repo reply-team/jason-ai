@@ -205,6 +205,33 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal("Started claude_code in conhost at your home folder.", _run.Output.ToString().TrimEnd());
     }
 
+    /// <summary>
+    /// The UI's Open an AI session link and the command shown beside it are this build's: the command parses through the
+    /// program's own parser to <c>session open</c>, and the link is the one the table the click is read with writes, so a
+    /// renamed option or a moved row turns this red rather than a dead link on the page.
+    /// </summary>
+    [Theory]
+    [InlineData("approval", "approvals", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
+    [InlineData("question", "questions", "dec_01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
+    public void The_uis_session_link_and_command_are_ones_this_build_takes(string kind, string collection, string id)
+    {
+        var source = File.ReadAllText(Path.Combine(CopyPromptTests.RepositoryRoot(), "ui", "src", "screens", "attention", "session-link.tsx"));
+        Assert.Contains("`jason session open --${kind} ${itemId}`", source, StringComparison.Ordinal);
+        Assert.Contains("`jason://attention/${collection}/${itemId}/session`", source, StringComparison.Ordinal);
+        Assert.Contains($"kind === 'approval' ? 'approvals' : 'questions'", source, StringComparison.Ordinal);
+
+        var command = $"jason session open --{kind} {id}";
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var parsed = root.Parse(command.Split(' ').Skip(1).ToArray());
+        Assert.Empty(parsed.Errors);
+        Assert.Equal("open", parsed.CommandResult.Command.Name);
+        Assert.Equal("session", parsed.CommandResult.Command.Parents.OfType<System.CommandLine.Command>().First().Name);
+
+        Assert.Equal($"jason://attention/{collection}/{id}/session", Jason.Contracts.Notifications.AttentionLinks.Session(id));
+        Assert.Equal(Jason.Contracts.Notifications.AttentionAct.Session, Jason.Contracts.Notifications.AttentionLinks.Parse($"jason://attention/{collection}/{id}/session")?.Act);
+    }
+
     [Theory]
     [InlineData]
     [InlineData("--approval", "apr_1", "--question", "dec_1")]
