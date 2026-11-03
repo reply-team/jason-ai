@@ -223,15 +223,36 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
             : word.Contains(',', StringComparison.Ordinal) ? "the host's list is comma-separated, so a word holding a comma is not one rule; give each rule as its own entry." : null;
 
     /// <summary>
-    /// The reserved flags are matched as a whole argument up to an equals sign, which a short option clustered with another
-    /// or glued to its value slips past: the host reads <c>-pfoo</c> as the print option with a prompt. An argument of one
-    /// dash and more than two characters is therefore refused, whatever follows the dash, and so is the dash alone; a long
-    /// option, a value, or a short option alone is not.
+    /// The options a profile may carry that take a value, each documented for the host and each the person's own: which
+    /// model, how hard it reasons, how much it logs, and a soft limit on credits. None changes what the role may touch,
+    /// how the host is told to run or where the brief goes.
+    /// </summary>
+    private static readonly string[] ValueOptions = ["--model", "--effort", "--reasoning-effort", "--log-level", "--max-ai-credits"];
+
+    /// <summary>The documented options a profile may carry that take no value.</summary>
+    private static readonly string[] FlagOptions = ["--no-color", "--disable-client-telemetry"];
+
+    /// <summary>
+    /// The host's parser is closed and was not read, so a hidden alias of a flag the runtime composes, a cluster of short
+    /// options or a value glued to one cannot be ruled out by a list of what is reserved. A profile's arguments are an
+    /// allowlist instead: only the documented options a person owns, each as one argument, <c>--name=value</c> for the ones
+    /// that take a value and the bare flag for the two that do not. Anything else is refused, however it is spelled.
     /// </summary>
     public string? ArgsProblem(IReadOnlyList<string> args) =>
-        args.FirstOrDefault(arg => arg == "-" || (arg.Length > 2 && arg[0] == '-' && arg[1] != '-')) is { } refused
-            ? $"'{refused}' is a single-dash word the host's parser may read as a cluster of short options or as one with a value glued to it; write each option as its own argument or as a long option."
+        args.FirstOrDefault(arg => !IsOwnedOption(arg)) is { } refused
+            ? $"'{refused}' is not one of the options a profile may carry on this host, whose parser was not read: {string.Join(", ", ValueOptions.Select(option => option + "="))} (each with a value in the same argument), {string.Join(", ", FlagOptions)}."
             : null;
+
+    private static bool IsOwnedOption(string arg)
+    {
+        if (Array.IndexOf(FlagOptions, arg) >= 0)
+        {
+            return true;
+        }
+
+        var equals = arg.IndexOf('=', StringComparison.Ordinal);
+        return equals > 0 && equals < arg.Length - 1 && Array.IndexOf(ValueOptions, arg[..equals]) >= 0;
+    }
 
     /// <summary>
     /// One rule for each memory file the launch names, in the order of the levels, and one only for a file named twice;

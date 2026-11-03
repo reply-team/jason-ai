@@ -428,30 +428,46 @@ public class CopilotCliHostTests
     }
 
     /// <summary>
-    /// The reserved flags are matched by the whole of an argument up to an equals sign, which a short option glued to its
-    /// value slips past: <c>-pfoo</c> is the print option with a prompt, and the host's parser reads it so. An argument of
-    /// one dash and more than two characters is refused as a whole, whatever follows the dash, and so is the dash alone: a
-    /// cluster of short options, a value glued to one and a number are all that shape. A long option, a short option alone
-    /// and a value are not.
+    /// The host's parser is closed and was not read, so a flag the documentation does not name cannot be ruled out as a
+    /// hidden alias of one the runtime composes, nor as a cluster or a glued value. A profile's arguments are therefore an
+    /// allowlist of the documented options a person owns, each as one argument: <c>--name=value</c>, or the bare flag for
+    /// the two that take none. Anything else is refused, however it is spelled.
     /// </summary>
     [Theory]
-    [InlineData("-pfoo", true)]
-    [InlineData("-ihello", true)]
-    [InlineData("-Cfolder", true)]
-    [InlineData("-pi", true)]
-    [InlineData("-ip", true)]
-    [InlineData("-p=foo", true)]
-    [InlineData("-1x", true)]
-    [InlineData("-10", true)]
-    [InlineData("-", true)]
-    [InlineData("-p", false)]
-    [InlineData("--model", false)]
+    [InlineData("--model=made-up-model", false)]
     [InlineData("--effort=high", false)]
-    [InlineData("high", false)]
-    [InlineData("-1", false)]
-    public void A_single_dash_word_longer_than_two_characters_and_the_bare_dash_are_refused_as_arguments(string arg, bool refused)
+    [InlineData("--reasoning-effort=low", false)]
+    [InlineData("--log-level=debug", false)]
+    [InlineData("--max-ai-credits=5", false)]
+    [InlineData("--no-color", false)]
+    [InlineData("--disable-client-telemetry", false)]
+    [InlineData("--model", true)]
+    [InlineData("--model=", true)]
+    [InlineData("--no-color=1", true)]
+    [InlineData("--MODEL=made-up-model", true)]
+    [InlineData("--model made-up-model", true)]
+    [InlineData("made-up-model", true)]
+    [InlineData("--unknown-option", true)]
+    [InlineData("--unknown-option=1", true)]
+    [InlineData("--yolo", true)]
+    [InlineData("--", true)]
+    [InlineData("-", true)]
+    [InlineData("-1", true)]
+    [InlineData("-p", true)]
+    [InlineData("-pfoo", true)]
+    [InlineData("-pi", true)]
+    [InlineData("-1x", true)]
+    [InlineData("-Cfolder", true)]
+    [InlineData("", true)]
+    public void Only_a_documented_option_a_person_owns_is_taken_as_an_argument(string arg, bool refused)
     {
-        Assert.Equal(refused, new CopilotCliHost().ArgsProblem(["--model", "made-up-model", arg]) is not null);
+        var problem = new CopilotCliHost().ArgsProblem(["--model=made-up-model", arg]);
+
+        Assert.Equal(refused, problem is not null);
+        if (refused)
+        {
+            Assert.Contains("--model=", problem, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

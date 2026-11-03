@@ -545,9 +545,11 @@ keeps and never parses: the outcome comes back through the CLI), `--no-ask-user`
 `--no-custom-instructions`, `--disable-builtin-mcps`, a fresh `--session-id` minted for the attempt, and then three lists
 — `--available-tools`, `--allow-tool` and `--deny-tool` — and last the profile's own arguments. Nothing is written into
 the work directory and nothing of the person's own configuration is touched. No flag that trusts the folder or allows
-every tool, path or address is composed, and a profile may not carry one; neither may it carry a word of one dash and more
-than two characters (`-pfoo`, `-pi`, `-1x`) or a dash alone, which the host's parser may read as a cluster or a glued value
-and the reserved list cannot see.
+every tool, path or address is composed, and a profile may not carry one. The host's parser is closed and was not read
+(the reserved list is from its documentation), so a hidden alias of a composed flag, a cluster of short options or a value
+glued to one cannot be ruled out; a profile's arguments are therefore an allowlist of the documented options a person
+owns, each as one argument: `--model=`, `--effort=` (or `--reasoning-effort=`), `--log-level=`, `--max-ai-credits=`, and the
+bare `--no-color` and `--disable-client-telemetry`. Anything else is refused.
 
 | Tool the host offers a role | Why |
 |---|---|
