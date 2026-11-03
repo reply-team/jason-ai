@@ -14,7 +14,8 @@ public static class ProfileRenderers
     /// <summary>
     /// One profile, at the revision that was asked for. The revision line says which one this is, and says so
     /// against the one in force — reading an old revision and thinking it is the live one is the one mistake
-    /// this page can cause.
+    /// this page can cause. A <c>Refused:</c> line names what this build's rules for the host refuse in the revision the
+    /// answer carries.
     /// </summary>
     public static string? Profile(string json)
     {

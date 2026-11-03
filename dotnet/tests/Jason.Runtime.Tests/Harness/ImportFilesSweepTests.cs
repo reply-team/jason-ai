@@ -88,6 +88,19 @@ public sealed class ImportFilesSweepTests : IDisposable
         Assert.DoesNotContain(logs.Lines, line => Says(line, "secret-name") || Says(line, _tree.Root));
     }
 
+    /// <summary>A recorded folder that now carries another entity's marker is not this one's: it gains nothing.</summary>
+    [Fact]
+    public async Task A_campaigns_folder_that_carries_another_entitys_marker_gains_nothing()
+    {
+        var folders = TestHarness.Folders(Home);
+        var theirs = MarkedFolder("elsewhere", HarnessMarker.Campaign, "cmp_other");
+        Record(projectFolder: null, campaignFolder: theirs);
+
+        await StartAsync(folders, new RecordingLogs());
+
+        Assert.Empty(Directory.GetFiles(theirs));
+    }
+
     private static bool Says(RecordingLogs.Line line, string text) =>
         line.Message.Contains(text, StringComparison.Ordinal)
         || line.Scope.Values.Any(value => value?.ToString()?.Contains(text, StringComparison.Ordinal) == true)

@@ -28,4 +28,11 @@ public class TomlTextTests
         Assert.Equal("\"na\u00EFve \u0416 \u65E5\u672C\"", TomlText.BasicString("na\u00EFve \u0416 \u65E5\u672C"));
         Assert.Equal("\"\"", TomlText.BasicString(""));
     }
+
+    /// <summary>U+0085 is no control character the format forbids raw, so it comes back between the quotes as it went in.</summary>
+    [Fact]
+    public void The_next_line_character_is_kept_raw_between_the_quotes()
+    {
+        Assert.Equal("\"a\u0085b\"", TomlText.BasicString("a\u0085b"));
+    }
 }

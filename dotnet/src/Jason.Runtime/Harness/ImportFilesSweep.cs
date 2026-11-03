@@ -15,7 +15,7 @@ namespace Jason.Runtime.Harness;
 /// <remarks>
 /// It writes only what <see cref="HarnessFolders.CompleteImportFiles"/> writes: a file that is there is left alone, never
 /// opened, and no word of any <c>AGENTS.md</c> is read or written; nothing is deleted and <c>git</c> is never run. A folder
-/// that is not there, or no longer carries its marker, is skipped and said by its level and identifier alone, since a path
+/// that is not there, no longer carries its marker, or refused the write, is skipped and said by its level and identifier alone, since a path
 /// carries a name a person gave. Nothing here fails the start.
 /// </remarks>
 public sealed class ImportFilesSweep(IServiceScopeFactory scopes, HarnessFolders folders, ILogger<ImportFilesSweep> logger) : IHostedService
@@ -28,7 +28,7 @@ public sealed class ImportFilesSweep(IServiceScopeFactory scopes, HarnessFolders
     private static readonly Action<ILogger, string, string?, Exception?> Skipped = LoggerMessage.Define<string, string?>(
         LogLevel.Information,
         new EventId(2, nameof(Skipped)),
-        "The import-file sweep skipped a recorded {Level} folder that is not there or no longer carries its marker: {EntityId}");
+        "The import-file sweep skipped a recorded {Level} folder that is not there, no longer carries its marker, or refused the write: {EntityId}");
 
     private static readonly Action<ILogger, Exception?> Failed = LoggerMessage.Define(
         LogLevel.Warning,

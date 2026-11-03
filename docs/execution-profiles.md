@@ -75,8 +75,8 @@ attempt ran under, not how many times somebody edited the sentence describing it
 with the executable, and a revision written under an older build's rules may be one this build refuses after an
 update: an argument that host now reserves, say. Nothing is rewritten, because a revision is never changed. The
 fact is on the profile: `profile get` and `profile list` carry `problems`, a list of the field and a code for each
-word the current revision is refused for (`args[2]`, `reserved`), computed on each read and empty where the revision
-is clean. Work that would run under such a revision ends at once, before a child exists, with the attempt kept and
+word the revision the answer carries is refused for (`args[2]`, `reserved`), computed on each read and empty where
+that revision is clean. Work that would run under such a revision ends at once, before a child exists, with the attempt kept and
 the code `profile_revision_refused` (§9); the runtime's start log counts those profiles and names none, and
 `jason status` names them under `agent_hosts` with `jason profile get <name>` to read what is refused. The repair is
 `jason profile update`, which appends a revision under the rules as they stand.
@@ -442,7 +442,7 @@ launch envelope's section of [work-execution.md](work-execution.md).
 Every one of these is decided before a child process exists, except `host_not_available` where a host that ran
 answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no
 byte of what the host wrote, where the host's row in §12 names the signal Jason reads. Each keeps its attempt so the
-refusal can be read, and is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
+refusal can be read, and is **not retried** — nothing about the work changes between two scans. The first five name the level that chose
 the profile, and the attempt records how far the choice got; the last two are about the role rather than the
 profile, so there is no level to name.
 
