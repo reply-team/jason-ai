@@ -107,7 +107,7 @@ against a stand-in program.
 ## Known issues
 
 Codex CLI on Windows needs its elevated sandbox set up once by an administrator before a role can run a command; until
-then every command a role runs is refused and the attempt fails by the role's report, and Jason does not check for the
+then every command a role runs is refused, so the role cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal; Jason does not check for the
 setup when the attempt starts.
 
 Whether `jason` reaches the runtime from inside Codex's sandbox has not been checked on Linux, macOS or Windows, and on
@@ -116,7 +116,7 @@ Windows it is not yet checked whether the elevated sandbox reads only the list J
 Codex role.
 
 Whether Cursor CLI runs the allow-listed `jason` command without asking, in print mode, has not been seen on a signed-in
-run. If it does not, a role cannot call the runtime back and ends by its own report. Cursor CLI also reads more than the
+run. If it does not, a role cannot call the runtime back, so it cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal. Cursor CLI also reads more than the
 memory files Jason names, since it takes the union of every configuration layer it finds, yours included, and each attempt
 leaves one trust marker under `~/.cursor` that Jason does not remove.
 
