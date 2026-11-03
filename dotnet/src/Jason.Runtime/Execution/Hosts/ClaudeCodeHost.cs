@@ -103,6 +103,19 @@ public sealed class ClaudeCodeHost(bool windows) : IAgentHost
         "--attach-serve",
     };
 
+    /// <summary>
+    /// A short flag's letters are read one by one by this host's parser, and a value may be joined to the last, so a
+    /// single-dash word of more than one letter can carry a reserved short flag the list above never sees:
+    /// <c>-pf</c> is <c>-p</c> and <c>-f</c>. A short flag stands alone.
+    /// </summary>
+    public string? ArgsProblem(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        return args.Any(arg => arg.Length > 2 && arg[0] == '-' && arg[1] != '-')
+            ? "a short flag with more letters or a value after it is read as several flags or as a flag and its value, so a reserved flag could stand inside it: write a short flag alone, as -f, and a long flag with its value joined by an equals sign"
+            : null;
+    }
+
     public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles)
     {
         ArgumentNullException.ThrowIfNull(revision);
