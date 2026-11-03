@@ -53,6 +53,7 @@ public static class DispatcherModule
 
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
+        services.AddSingleton<IAgentHost, AntigravityCliHost>();
 
         // The plugin module registers the same seam for its own executable checks, and whichever module is added
         // first is the one that answers. Named here too because this module now needs it: a registration a

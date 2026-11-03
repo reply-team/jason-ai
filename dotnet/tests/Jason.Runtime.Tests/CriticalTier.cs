@@ -48,7 +48,7 @@ internal static partial class CriticalTier
         [Family.W4] =  [  0,   0,   0,   0,  17],
         [Family.W5] =  [  0,   0,   6,   2,  22],
         [Family.W6] =  [  0,   0,   0,   0,  10],
-        [Family.W7] =  [  0,   0,   2,   0,  15],
+        [Family.W7] =  [  0,   0,   2,   0,  16],
         [Family.W8] =  [  0,   1,   1,   0,  12],
         [Family.W9] =  [  0,   0,   0,   0,   7],
         [Family.W10] = [  0,   0,   0,   0,  15],
@@ -104,7 +104,7 @@ internal static partial class CriticalTier
         (148, 1688, 2790),    // Jason.Cli.Tests
         (102, 513, 2069),     // Jason.Contracts.Tests
         (41, 185, 277),       // Jason.PluginHost.Tests
-        (517, 4326, 8128),    // Jason.Runtime.Tests
+        (518, 4450, 8335),    // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>

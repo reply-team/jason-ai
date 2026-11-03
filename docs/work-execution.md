@@ -680,7 +680,10 @@ channel, no second message. The command that runs `ai_role` work writes the whol
 child's standard input and composes no prompt from its parts, on every host. On a host that reads its
 prompt from standard input — `claude_code`, which runs in print mode, and each host §12 marks so — that
 standard input is the prompt, so the role's first input says whether it was woken and why. On every host
-`resumption` reaches the role inside that envelope, beside every other field, never in a prompt Jason composed.
+`resumption` reaches the role inside that envelope, beside every other field, never in a prompt Jason composed. A
+host that reads a stream of lines rather than plain text is given the same envelope as the content of one line of
+that stream, by its own framing, and nothing else is written: the host's section of
+[execution-profiles.md](execution-profiles.md) §12 says which.
 
 Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
 version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, and `resumption` to

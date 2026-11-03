@@ -410,6 +410,19 @@ jason workitem create <campaign-id> --kind ai_role --role researcher --execution
 jason rolenote get --role researcher --campaign <campaign-id>
 ```
 
+Antigravity CLI (`agy`) can run the background roles on an individual Google plan. Install it from Google's own pages
+([antigravity.google/docs/install](https://antigravity.google/docs/install/)), run `agy` once and sign in as yourself,
+then name it:
+
+```sh
+jason profile create local-antigravity --host antigravity_cli --program agy
+```
+
+The host takes its permission rules from your own settings and from nowhere a run can carry them, so you add two rules
+there once, `command(jason)` and `read_file(<your harness folder>)`; the
+[host matrix](docs/execution-profiles.md#12-the-hosts) says why, and what was built from documentation and has not yet
+been run on an account.
+
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
 and a cadence does it anyway when nothing has happened at all. Replies are found by reading each live

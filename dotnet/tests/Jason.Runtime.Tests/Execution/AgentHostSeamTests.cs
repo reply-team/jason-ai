@@ -184,6 +184,47 @@ public class AgentHostSeamTests
     }
 
     /// <summary>
+    /// What goes on a host's standard input is made of the envelope and nothing else: framing it is given one string and
+    /// returns one string, so no member added here is a door for the capability token or a second source of bytes.
+    /// </summary>
+    [Fact]
+    public void Framing_the_standard_input_is_given_one_string_and_returns_one_string_and_nothing_else()
+    {
+        var frame = typeof(IAgentHost).GetMethod(nameof(IAgentHost.FrameStdin))!;
+
+        Assert.Equal([typeof(string)], frame.GetParameters().Select(parameter => parameter.ParameterType));
+        Assert.Equal(typeof(string), frame.ReturnType);
+    }
+
+    /// <summary>
+    /// A host that reads plain text gets the envelope back byte for byte, and a host that reads a stream gets exactly one
+    /// line that parses, whose content is the envelope, however the envelope is written: quotes, backslashes, line breaks
+    /// and characters outside ASCII are the payload's, never the frame's.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void Whatever_a_host_frames_the_envelope_in_it_is_carried_whole(AgentHostKind kind)
+    {
+        var host = Registered().Single(candidate => candidate.Kind == kind);
+        const string Payload = "{\"brief\":\"say \\\"hi\\\" in C:\\work\\x\",\"text\":\"two\nlines\r\nand \u00fcn\u00ef \u65e5\u672c \ud83d\ude00\"}\nsecond line\r\n\t\"";
+
+        var framed = host.FrameStdin(Payload);
+
+        if (kind == AgentHostKind.AntigravityCli)
+        {
+            Assert.EndsWith("\n", framed, StringComparison.Ordinal);
+            Assert.DoesNotContain('\n', framed[..^1]);
+            using var line = System.Text.Json.JsonDocument.Parse(framed);
+            Assert.Equal("user", line.RootElement.GetProperty("event").GetString());
+            Assert.Equal(Payload, line.RootElement.GetProperty("message").GetProperty("content").GetString());
+        }
+        else
+        {
+            Assert.Equal(Payload, framed);
+        }
+    }
+
+    /// <summary>
     /// A host's stderr can carry the person's login or address, and an attempt's error reaches the journal and a
     /// diagnostic bundle that includes it. So whatever a host makes of its end is a fixed sentence of its own, and no
     /// part of the host's words travels in it: two tails that carry the same signal and differ only in whose they are

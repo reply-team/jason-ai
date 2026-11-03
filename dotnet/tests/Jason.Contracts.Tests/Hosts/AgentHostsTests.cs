@@ -85,6 +85,20 @@ public class AgentHostsTests
     }
 
     [Fact]
+    public void Antigravity_cli_is_found_by_the_folder_only_it_keeps_and_reads_the_memory_file_itself()
+    {
+        var facts = AgentHosts.Of(AgentHostKind.AntigravityCli);
+
+        Assert.Equal("antigravity_cli", AgentHosts.Word(AgentHostKind.AntigravityCli));
+        Assert.Equal("agy", facts.CommandWord);
+        Assert.Equal(".gemini/antigravity-cli", facts.HomeMarker);
+        Assert.Equal(HomeMarkerKind.Directory, facts.MarkerKind);
+        Assert.Equal(".gemini/antigravity-cli/skills", facts.HomeSkills);
+        Assert.Equal(".agents/skills", facts.WorkSkills);
+        Assert.Null(facts.Instructions);
+    }
+
+    [Fact]
     public void The_import_files_are_each_file_once_and_never_the_memory_file_itself()
     {
         var files = AgentHosts.ImportFiles;

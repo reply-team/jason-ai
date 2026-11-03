@@ -18,6 +18,11 @@ checkout instead, with `--source`.
 You also need a directory you can write to, and — if you want an agent harness taught — that
 harness installed, so §4 has somewhere to deploy.
 
+For Antigravity CLI, install `agy` from [Google's own page](https://antigravity.google/docs/install/), run `agy` once to
+sign in as yourself, and `jason profile create <name> --host antigravity_cli --program agy`. It reads its permission
+rules from your own settings, so add `command(jason)` and `read_file(<harness folder>)` there; the
+[host matrix](execution-profiles.md#12-the-hosts) has the details.
+
 ### If an agent installs it
 
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their

@@ -412,6 +412,41 @@ public class AiRoleCommandTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A host that reads a stream of lines is handed the envelope as one user event and then end of file: what the child
+    /// reads is exactly one line, the envelope is its content, nothing of it is on the command line, the stream is
+    /// closed behind it (a child that reads to the end would otherwise wait out the whole attempt), and a token placed
+    /// in the brief reaches the kept transcript only as the mask, since the child echoes everything it was given.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W7, "the launch envelope on stdin, framed for a host that reads a stream")]
+    public async Task A_host_that_reads_a_stream_is_given_the_envelope_as_one_closed_user_line_and_none_of_it_on_the_command_line()
+    {
+        using var directory = new TempDataDir();
+        WriteDescriptor(directory.Paths);
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        using var kill = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var entry = FakeAgentHost.EntryCommand("echo-stdin");
+        var brief = new JsonObject { ["goal"] = "say \"hi\" at C:\\work\nthen " + Token };
+
+        var outcome = await RunAsync(directory.Paths, workDir, entry, kill: kill, brief: brief, host: new AntigravityCliHost());
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(0, exited.ExitCode);
+        Assert.Equal(entry, exited.Launch.EntryCommand);
+        Assert.DoesNotContain(exited.Launch.EntryCommand, word => word.Contains("envelope_version", StringComparison.Ordinal) || word.Contains(Token, StringComparison.Ordinal));
+
+        var stdout = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
+        Assert.DoesNotContain(Token, stdout, StringComparison.Ordinal);
+        Assert.Contains(TokenRedactor.Mask, stdout, StringComparison.Ordinal);
+        var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var line = Assert.Single(lines);
+        using var document = JsonDocument.Parse(line);
+        Assert.Equal("user", document.RootElement.GetProperty("event").GetString());
+        var content = document.RootElement.GetProperty("message").GetProperty("content").GetString()!;
+        Assert.Contains("\"envelope_version\":5", content, StringComparison.Ordinal);
+    }
+
     /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
     internal static Task<CommandOutcome> RunAsync(
         JasonPaths paths,

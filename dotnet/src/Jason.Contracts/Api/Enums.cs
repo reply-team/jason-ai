@@ -62,6 +62,8 @@ public enum DecisionReferenceKind
 public enum AgentHostKind
 {
     ClaudeCode,
+
+    AntigravityCli,
 }
 
 /// <summary>

@@ -110,4 +110,12 @@ public interface IAgentHost
     /// bundle carry. An attempt ended this way is final, since a repeat would meet the same machine.
     /// </summary>
     string? Unavailable(int exitCode, string? stderrTail);
+
+    /// <summary>
+    /// What is written on the child's standard input for the launch envelope <paramref name="envelopeJson"/>, which is the
+    /// envelope as one JSON document. A host that reads plain text on standard input gets it back unchanged; a host that
+    /// reads a stream of lines gets it as the content of one line. It is given the envelope and nothing else, called once
+    /// per attempt, and what it returns is written as it is before the stream is closed.
+    /// </summary>
+    string FrameStdin(string envelopeJson) => envelopeJson;
 }

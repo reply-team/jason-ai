@@ -165,7 +165,7 @@ public sealed class AiRoleCommand(
             var transcript = OutputPump.PumpAsync(process.StandardOutput, Path.Combine(context.WorkDir, "stdout.log"), redactor, null, StderrTailBytes, maxBytes);
             var diagnostics = OutputPump.PumpAsync(process.StandardError, Path.Combine(context.WorkDir, "stderr.log"), redactor, tail, StderrTailBytes, maxBytes);
 
-            await WriteEnvelopeAsync(process, context, memoryFiles).ConfigureAwait(false);
+            await WriteEnvelopeAsync(process, context, memoryFiles, host).ConfigureAwait(false);
 
             // Deliberately not the runtime's own token: a shutdown drains and lets children finish, and a
             // survivor completes its attempt against the next runtime instance rather than dying with this one.
@@ -231,9 +231,10 @@ public sealed class AiRoleCommand(
 
     /// <summary>
     /// One JSON object, then end of file. Closing stdin is part of the contract: a host reads until the stream
-    /// ends rather than guessing where the envelope stops.
+    /// ends rather than guessing where the envelope stops. A host that reads a stream of lines is given the document as
+    /// the content of one, by its own framing.
     /// </summary>
-    private async Task WriteEnvelopeAsync(Process process, CommandContext context, MemoryFileLocations memoryFiles)
+    private async Task WriteEnvelopeAsync(Process process, CommandContext context, MemoryFileLocations memoryFiles, IAgentHost? host)
     {
         var envelope = new LaunchEnvelope(
             LaunchEnvelope.CurrentVersion,
@@ -265,7 +266,10 @@ public sealed class AiRoleCommand(
 
         try
         {
-            await process.StandardInput.WriteAsync(JsonSerializer.Serialize(envelope, JasonJson.Options)).ConfigureAwait(false);
+            // The host decides how the one document is carried on its standard input, once, and what it returns is what
+            // is written: no other source of bytes reaches the stream.
+            var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
+            await process.StandardInput.WriteAsync(host?.FrameStdin(json) ?? json).ConfigureAwait(false);
             process.StandardInput.Close();
         }
         catch (IOException)
