@@ -414,6 +414,46 @@ public class ProfileLaunchTests
         Assert.Null(blocked.Attempts[0].Provenance?.Agent);
     }
 
+    /// <summary>
+    /// A role launched through a profile that names the Antigravity CLI host: the command is the host's own, the brief goes
+    /// to the child as one stream-json user line, and the child, which unwraps that line as the host would, reads the
+    /// envelope, calls the runtime back and completes the attempt. So the frame is held from the claim to the report, not
+    /// only as bytes that arrive.
+    /// </summary>
+    [Fact]
+    public async Task A_role_on_a_host_that_reads_a_stream_reads_its_brief_from_the_frame_and_reports_through_the_api()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        await host.Fixture.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "local-stream", host = "antigravity_cli", program = ProfileFixture.Program, host_version_verified = "0.0.0-stand-in" },
+            Ct);
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("streamed", Ct, "silent");
+
+        var item = await host.CreateAsync(
+            new
+            {
+                campaign_id = campaign,
+                kind = "ai_role",
+                role = "streamed",
+                execution_profile = "local-stream",
+                context = new { behaviour = "succeed" },
+            },
+            Ct);
+
+        await host.ScanAsync(Ct);
+        var done = await host.WaitForStatusAsync(item.Id, WorkItemStatus.Succeeded, Ct);
+
+        var attempt = done.Attempts![0];
+        Assert.Equal(AgentHostKind.AntigravityCli, attempt.Provenance!.Agent!.Host);
+        Assert.Null(attempt.Provenance.Agent.SessionId);
+        Assert.Equal(ProfileFixture.Program, attempt.Provenance.Agent.Args![0]);
+        Assert.Equal(
+            ["--input-format", "stream-json", "--output-format", "stream-json", "--print-timeout=0s"],
+            attempt.Provenance.Agent.Args.Skip(1));
+    }
+
     private static async Task UnresolveAsync(FakeHostRuntime host, string workItemId)
     {
         await using var scope = host.Fixture.Resolve<IServiceScopeFactory>().CreateAsyncScope();

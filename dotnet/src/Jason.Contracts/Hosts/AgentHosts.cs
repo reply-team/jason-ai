@@ -66,6 +66,9 @@ public static class AgentHosts
         // folder: that folder is also where Antigravity keeps files of its own, so the folder alone would detect Gemini CLI
         // on every Antigravity install, where this file is written by Gemini CLI only.
         new(AgentHostKind.GeminiCli, "gemini", ".gemini/settings.json", ".agents/skills", ".agents/skills", new("GEMINI.md", "@" + MemoryFile), HomeMarkerKind.File),
+
+        // Antigravity CLI keeps its sign-in and settings in its own folder under ~/.gemini and reads AGENTS.md itself.
+        new(AgentHostKind.AntigravityCli, "agy", ".gemini/antigravity-cli", ".gemini/antigravity-cli/skills", ".agents/skills", null, HomeMarkerKind.Directory),
     ];
 
     /// <summary>The instruction files a harness folder holds beside the memory file, each name once.</summary>

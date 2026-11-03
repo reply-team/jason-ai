@@ -25,6 +25,13 @@ Windows or `curl https://cursor.com/install -fsS | bash` elsewhere, as
 `jason profile create <name> --host cursor_cli --program agent`. On Windows, where `agent` is not found by the runtime's
 search path, name the launcher by its full path: `--program <full path of agent.cmd>`.
 
+For Antigravity CLI, install `agy` from the CLI tab of [Google's quickstart](https://antigravity.google/docs/getting-started?tab=cli),
+run `agy` once to sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)), and
+`jason profile create <name> --host antigravity_cli --program agy`. It reads its permission rules from your own
+`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array, so add `command(jason)` (on Windows shells,
+`command(regex:jason .*)`) and `read_file(<harness folder>)` there; the
+[host matrix](execution-profiles.md#12-the-hosts) has the two lines of JSON and the details.
+
 ### If an agent installs it
 
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their

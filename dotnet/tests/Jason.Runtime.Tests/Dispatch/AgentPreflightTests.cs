@@ -675,7 +675,7 @@ public class AgentPreflightTests
         var line = Assert.Single(harness.Logs.Lines, each => each.Message.Contains("memory file", StringComparison.Ordinal));
         Assert.Equal(LogLevel.Warning, line.Level);
         Assert.Equal(
-            $"Attempt {claimed.AttemptPublicId} of work item {item.PublicId}: the campaign memory file's path cannot be written as a read rule, so the role cannot read it",
+            $"Attempt {claimed.AttemptPublicId} of work item {item.PublicId}: the campaign memory file's path cannot be written as a read rule",
             line.Message);
         Assert.Equal(claimed.AttemptPublicId, line.Scope["AttemptId"]);
         Assert.False(harness.Logs.Mentions(folder), $"a log line names the campaign's folder '{folder}'");

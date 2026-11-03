@@ -26,11 +26,21 @@ if (args is ["linger"])
     return 0;
 }
 
+// Not a behaviour either: a host whose standard input is the thing under test. It reads to the end of the stream,
+// which only a stream the launcher closed has, and says every byte it read on standard output, as one host that
+// echoes what it is given would, so that what the launcher kept of it can be read back.
+if (args is ["echo-stdin", ..])
+{
+    var echoed = await Console.In.ReadToEndAsync();
+    await Console.Out.WriteAsync(echoed);
+    return 0;
+}
+
 string raw;
 LaunchEnvelope envelope;
 try
 {
-    raw = await Console.In.ReadToEndAsync();
+    raw = Unframed(await Console.In.ReadToEndAsync());
     envelope = JsonSerializer.Deserialize<LaunchEnvelope>(raw, JasonJson.Options)
         ?? throw new JsonException("it was empty");
 }
@@ -64,3 +74,21 @@ await Diagnostics.WriteStartLineAsync(behaviour, envelope, descriptor?.Token);
 Watchdog.Start(envelope, api, sawRuntime: descriptor is not null, options);
 
 return await Behaviours.RunAsync(behaviour, options, envelope, raw, api);
+
+// A host that reads a stream of lines is handed the envelope as the content of one user event; this stand-in reads
+// that as such a host would, and any other input is the envelope itself.
+static string Unframed(string input)
+{
+    var text = input.TrimEnd('\n');
+    if (!text.StartsWith("{\"event\":\"user\"", StringComparison.Ordinal) || text.Contains('\n'))
+    {
+        return input;
+    }
+
+    using var line = JsonDocument.Parse(text);
+    return line.RootElement.TryGetProperty("message", out var message)
+        && message.TryGetProperty("content", out var content)
+        && content.ValueKind == JsonValueKind.String
+            ? content.GetString()!
+            : input;
+}
