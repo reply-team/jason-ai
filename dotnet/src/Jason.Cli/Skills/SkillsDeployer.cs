@@ -66,7 +66,7 @@ public static class SkillsDeployer
             // completed rather than trusted, and said out loud: one that silently repaired itself would hide
             // that something went wrong once.
             // Only where skills this plan owns are already on disk with no record of them. Firing on any
-            // non-empty root meant firing on the first install on every machine that has Claude Code, which
+            // non-empty root meant firing on the first install on every machine that has an agent host, which
             // is how a real incomplete-deployment warning gets trained out of an operator.
             var unrecorded = record.Packs.Count == 0
                 && plan.Packs
