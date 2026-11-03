@@ -27,7 +27,7 @@ replaces the title and the body together.
 A launched role no longer has to run on Claude Code. Each host below is a program you install yourself and sign in to as
 yourself, under your own plan: Jason holds no key for any of them. `jason skills install --host <host>` deploys the
 skills into that host's folder, and Codex CLI, GitHub Copilot CLI, Cursor CLI and Gemini CLI all read `~/.agents/skills`, so
-they share one deployment. `jason status` says which hosts it found on the machine and whether every enabled profile names
+they share one deployment; Antigravity CLI keeps its own folder, `~/.gemini/antigravity-cli/skills`. `jason status` says which hosts it found on the machine and whether every enabled profile names
 one. Every host added in this release is built from the host's own documentation, and from its source or installed files
 where there are any, for the version [the host matrix](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#12-the-hosts)
 names; none has yet been run on a signed-in account. The tests prove the command Jason composes and the launch around it
@@ -54,12 +54,19 @@ against a stand-in program.
   lists them.
 - **Gemini CLI.** Install it from [its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself, then
   `jason profile create <name> --host gemini_cli --program gemini`. It runs on a Code Assist Standard or Enterprise
-  sign-in. A role is confined by a policy file,
+  sign-in; individual Google plans run Antigravity CLI. A role is confined by a policy file,
   `.jason-policy/jason.toml` in the work directory, which the host reads above the person's own rules: everything is
   denied first, then the reads, the runtime's own command and the tools the profile grants are allowed, and writing is
   denied above every allow. The host reads a memory file through a `GEMINI.md` that imports `AGENTS.md`. A role's run sends no telemetry, whatever your own setting says. [The Gemini
   section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#gemini-cli) says what was not
   measured.
+- **Antigravity CLI.** Install it from [Google's quickstart](https://antigravity.google/docs/getting-started?tab=cli), run
+  `agy` once and sign in as yourself, then `jason profile create antigravity --host antigravity_cli --program agy`. It
+  is the host individual Google plans run. Jason cannot give a launched session its permissions run by run on this host,
+  so for a role to work you add two rules to your own `~/.gemini/antigravity-cli/settings.json`, in `permissions.allow`:
+  `command(jason)` so the role can call the runtime back (on Windows shells `command(regex:jason .*)`) and
+  `read_file(<your harness folder>)` so it can read the memory files. [The Antigravity
+  section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#antigravity-cli) shows both and says what was not measured.
 - **Claude Code refuses more arguments in a profile.** A host's parser reads a short flag with more letters, or with a
   value after it, as several flags or as a flag and its value, so a reserved flag could stand inside one: `-pf` is `-p`
   and `-f`. A short flag with more letters or a value after it, a lone dash and a double dash are now refused when a
@@ -82,8 +89,11 @@ against a stand-in program.
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
   and `jason plugin install reply --replace` follow.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. Three skills changed in their wording: the manager, the campaign-work skill and the
-  troubleshooting skill say that `host_not_available` can come after a host started and said it is not signed in.
+  `brew upgrade jason`, run `jason skills update`. Three skills changed in their wording. The manager, the campaign-work skill and the troubleshooting skill say that
+  `host_not_available` can also come after a host started and said it is not signed in, which only you can repair by
+  signing in; the troubleshooting skill also says that on Antigravity CLI an `executor_exited` after the host exited 0
+  usually means your `command` rule is missing from its settings. The skills' READMEs point to the host matrix for the
+  other hosts' skill folders.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
   as they were.
 - **The Reply plugin** is unchanged.
@@ -113,6 +123,13 @@ holds a `.toml` file, since the host would then ignore the policy Jason gives it
 
 GitHub Copilot CLI's reads outside the work directory, which a role needs for its memory files, are documented but have not
 been seen to reach there.
+
+A role on Antigravity CLI works only once you have added the two rules to your own settings, `command(jason)` and
+`read_file(<your harness folder>)`; per-run permissions for that host are not built in this release. Without the
+`command` rule a role is denied the call that reports, ends with the host's exit 0 and without a report, and the
+attempt is retried against the same denial. Whether the host runs an allowed command unattended, and whether the plain
+`command(jason)` covers the report on Windows, has not been seen on a signed-in run. The host also reads your own global
+`AGENTS.md` and `GEMINI.md` under `~/.gemini` for every role.
 
 Flags and variables that move a host's own traffic, a proxy among them, are yours to set: Jason sets none of them and
 reserves none of them.
