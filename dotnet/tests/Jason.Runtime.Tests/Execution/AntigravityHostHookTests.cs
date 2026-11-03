@@ -41,6 +41,11 @@ public sealed class AntigravityHostHookTests
         }.ToJsonString();
     }
 
+    private static string CallWith(string tool, JsonObject arguments) => new JsonObject
+    {
+        ["toolCall"] = new JsonObject { ["name"] = tool, ["args"] = arguments },
+    }.ToJsonString();
+
     private static string Command(string line) => Call("run_command", ("CommandLine", line), ("Cwd", WorkDir));
 
     private static MemoryStream Bytes(string text) => new(System.Text.Encoding.UTF8.GetBytes(text));
@@ -54,6 +59,7 @@ public sealed class AntigravityHostHookTests
     [Theory]
     [InlineData("jason workitem complete wi_01 --attempt att_01 --status succeeded --result-file result.json")]
     [InlineData("jason workitem complete wi_01 --attempt att_01 --status succeeded --result '{\"summary\":\"all done, see the notes\"}'")]
+    [InlineData("jason workitem complete wi_01 --result '{\"summary\":\"it\\u2019s done\"}'")]
     [InlineData("jason   workitem\tget wi_01 --human")]
     [InlineData("jason")]
     [InlineData("jason workitem complete wi_01 --result='{\"a\":1}'")]
@@ -73,6 +79,15 @@ public sealed class AntigravityHostHookTests
     [InlineData("jason workitem get `whoami`")]
     [InlineData("jason workitem get wi_01 > out.txt")]
     [InlineData("jason workitem get wi_01 < in.txt")]
+    [InlineData("jason workitem complete wi_01 --result 'two\nlines'")]
+    [InlineData("jason workitem complete wi_01 --result 'it\u2019s'")]
+    [InlineData("jason workitem complete wi_01 --result '\u2018x'")]
+    [InlineData("jason workitem complete wi_01 --result 'caf\u00e9'")]
+    [InlineData("jason workitem get caf\u00e9")]
+    [InlineData("jason workitem complete wi_01 --result 'a\\'")]
+    [InlineData("jason workitem complete wi_01 --result 'a\\\"b'")]
+    [InlineData("jason workitem complete wi_01 --result \"{}\"")]
+    [InlineData("jason workitem get wi_01 \"")]
     [InlineData("jason workitem get wi_01\nrm x")]
     [InlineData("jason workitem get wi_01\r\nrm x")]
     [InlineData("jason workitem get wi_01 &")]
@@ -125,7 +140,6 @@ public sealed class AntigravityHostHookTests
     [InlineData("jason workitem complete wi_01 --result 'a ^ b'")]
     [InlineData("jason workitem complete wi_01 --result '100%'")]
     [InlineData("jason workitem complete wi_01 --result 'done!'")]
-    [InlineData("jason workitem complete wi_01 --result 'two\nlines'")]
     public void A_quoted_span_that_windows_would_read_as_syntax_is_delegated_there_and_approved_elsewhere(string line)
     {
         Assert.Equal("allow", Decide(Command(line), windows: true));
@@ -176,8 +190,68 @@ public sealed class AntigravityHostHookTests
         Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", Path.Combine(WorkDir, "sub", "result.json")))));
         Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", Path.Combine(WorkDir, "..", "result.json")))));
         Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", MemoryFile("client")))));
-        Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", "result.json"))));
+        Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", "sub/result.json"))));
         Assert.Equal("deny", Decide(Call("write_to_file")));
+    }
+
+    /// <summary>A relative path is the work directory's, which is where the host runs.</summary>
+    [Fact]
+    public void A_relative_path_of_the_result_is_read_against_the_work_directory()
+    {
+        Assert.Equal("auto_approve", Decide(Call("write_to_file", ("TargetFile", "result.json"))));
+        Assert.Equal("auto_approve", Decide(Call("write_to_file", ("TargetFile", "./result.json"))));
+        Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", "../result.json"))));
+    }
+
+    /// <summary>A write that replaces a file is not the one the role was given, so only a fresh write is approved.</summary>
+    [Fact]
+    [Critical(Family.S6, "the result is written once, never over a file that is there")]
+    public void A_write_that_overwrites_is_denied_even_for_the_result_file()
+    {
+        Assert.Equal("auto_approve", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = ResultFile, ["Overwrite"] = false })));
+        Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = ResultFile, ["Overwrite"] = true })));
+        Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = ResultFile, ["Overwrite"] = "true" })));
+    }
+
+    /// <summary>A command is approved only as a foreground one in the work directory.</summary>
+    [Fact]
+    [Critical(Family.S6, "the callback is a foreground command of the work directory")]
+    public void A_command_that_persists_or_runs_elsewhere_is_delegated()
+    {
+        JsonObject Args(string name, JsonNode? value) => new() { ["CommandLine"] = "jason workitem get wi_01", [name] = value };
+
+        Assert.Equal("auto_approve", Decide(CallWith("run_command", new JsonObject { ["CommandLine"] = "jason workitem get wi_01" })));
+        Assert.Equal("auto_approve", Decide(CallWith("run_command", Args("RunPersistent", false))));
+        Assert.Equal("auto_approve", Decide(CallWith("run_command", Args("Cwd", WorkDir))));
+        Assert.Equal("allow", Decide(CallWith("run_command", Args("RunPersistent", true))));
+        Assert.Equal("allow", Decide(CallWith("run_command", Args("RunPersistent", "false"))));
+        Assert.Equal("allow", Decide(CallWith("run_command", Args("Cwd", Path.Combine(Root, "elsewhere")))));
+        Assert.Equal("allow", Decide(CallWith("run_command", Args("Cwd", null))));
+    }
+
+    [Fact]
+    public void A_slash_form_of_the_result_and_of_a_memory_file_is_the_file_only_on_windows()
+    {
+        var slashed = ResultFile.Replace('\\', '/');
+
+        Assert.Equal("auto_approve", Decide(Call("write_to_file", ("TargetFile", slashed)), windows: true));
+        Assert.Equal("auto_approve", Decide(Call("view_file", ("AbsolutePath", MemoryFile("client").Replace('\\', '/'))), windows: true));
+    }
+
+    [Theory]
+    [InlineData("invoke_subagent")]
+    [InlineData("define_subagent")]
+    [InlineData("manage_subagents")]
+    [InlineData("send_message")]
+    [InlineData("schedule")]
+    [InlineData("manage_task")]
+    [InlineData("ask_permission")]
+    [InlineData("generate_image")]
+    [Critical(Family.S6, "a sub-agent, a message, a schedule, a task, a permission request and an image are never allowed to a role")]
+    public void A_tool_that_outlives_the_attempt_or_asks_for_more_is_denied_whatever_it_names(string tool)
+    {
+        Assert.Equal("deny", Decide(Call(tool)));
+        Assert.Equal("deny", Decide(Call(tool), Rules(approve: [tool])));
     }
 
     [Theory]
@@ -413,6 +487,9 @@ public sealed class AntigravityHostHookTests
     [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"name\":\"list_dir\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\"}}}")]
     [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\"},\"Args\":{}}}")]
     [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\"}},\"toolcall\":{}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\",\"Other\":{\"x\":1,\"X\":2}}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\",\"Other\":[{\"x\":1,\"x\":2}]}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\"}},\"extra\":{\"a\":{\"b\":1,\"B\":1}}}")]
     [Critical(Family.S6, "a key read two ways is not read")]
     public void A_key_the_hook_reads_that_appears_twice_makes_the_call_unreadable(string call) =>
         Assert.Equal("deny", Decide(call));

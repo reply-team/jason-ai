@@ -335,9 +335,10 @@ public class AntigravityCliHostTests
         [
             "run_command", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "ask_question",
             "read_url_content", "search_web", "browser_navigate", "browser_click", "list_dir",
+            "invoke_subagent", "define_subagent", "manage_subagents", "send_message", "schedule", "manage_task", "ask_permission", "generate_image",
         ];
         Assert.All(hooked, tool => Assert.Matches(pattern, tool));
-        string[] left = ["find_by_name", "grep_search", "invoke_subagent", "run_commands", "xrun_command", "my_browser_x", "browser"];
+        string[] left = ["find_by_name", "grep_search", "list_permissions", "run_commands", "xrun_command", "my_browser_x", "browser"];
         Assert.All(left, tool => Assert.DoesNotMatch(pattern, tool));
     }
 
@@ -390,7 +391,6 @@ public class AntigravityCliHostTests
     [InlineData("generate_image")]
     [InlineData("read_url_content")]
     [InlineData("search_web")]
-    [InlineData("write_to_file")]
     public void A_deny_of_a_tool_name_of_the_hooks_table_is_taken(string word)
     {
         Assert.Null(Host.DenyProblem(word));
@@ -418,6 +418,7 @@ public class AntigravityCliHostTests
     [Theory]
     [InlineData("run_command")]
     [InlineData("view_file")]
+    [InlineData("write_to_file")]
     public void A_deny_of_the_tool_the_callback_or_the_memory_files_go_through_is_refused_saying_so(string word)
     {
         var problem = Host.DenyProblem(word);

@@ -127,11 +127,7 @@ public sealed class AntigravityCliHost : IAgentHost
     private const string CommandPrefix = "command(";
 
     /// <summary>The tools whose call the hook always decides about, whether or not a profile names them.</summary>
-    private static readonly string[] HookedTools =
-    [
-        "run_command", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "ask_question",
-        "read_url_content", "search_web",
-    ];
+    private static readonly string[] HookedTools = ["run_command", "view_file", "write_to_file", "read_url_content", "search_web", .. AntigravityHook.FloorTools];
 
     /// <summary>
     /// Every tool the host's hooks page lists, which is the whole vocabulary a profile's deny may use here. The two a role
@@ -145,7 +141,7 @@ public sealed class AntigravityCliHost : IAgentHost
         "ask_permission", "invoke_subagent", "define_subagent", "send_message", "manage_subagents", "ask_question", "generate_image",
     ];
 
-    private static readonly string[] Essential = ["run_command", "view_file"];
+    private static readonly string[] Essential = ["run_command", "view_file", "write_to_file"];
 
     /// <summary>
     /// The workspace hook: <c>.agents/hooks.json</c> in the directory the host works in, one pre-tool-use handler whose
@@ -228,7 +224,7 @@ public sealed class AntigravityCliHost : IAgentHost
 
         if (Essential.Contains(word, StringComparer.Ordinal))
         {
-            return $"'{word}' is the tool a role calls the runtime back with or reads its memory files with, so it cannot be denied: the callback and the memory files go through it.";
+            return $"'{word}' is one of the tools a role needs for its callback, which runs the CLI and writes its result file, and for its memory files, so it cannot be denied.";
         }
 
         return HostTools.Contains(word, StringComparer.Ordinal)

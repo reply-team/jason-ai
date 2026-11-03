@@ -40,7 +40,14 @@ public static class AntigravityHook
     private static readonly HookDecision Delegated = new(Allow, "Jason does not settle this; the person's own rules and the host's default decide.");
 
     /// <summary>The tools a role is never allowed, whatever a profile says: an edit of any file, and a question to the person.</summary>
-    private static readonly string[] FloorTools = ["replace_file_content", "multi_replace_file_content", "ask_question"];
+    internal static readonly string[] FloorTools =
+    [
+        "replace_file_content", "multi_replace_file_content", "ask_question",
+
+        // No permission action of a person's names these, and no role needs one: sub-agents, messages, schedules, tasks,
+        // permission requests and images.
+        "invoke_subagent", "define_subagent", "manage_subagents", "send_message", "schedule", "manage_task", "ask_permission", "generate_image",
+    ];
 
     /// <summary>
     /// Reads standard input as bytes, never through a console code page: a child started without a window of its own gets
@@ -90,22 +97,21 @@ public static class AntigravityHook
 
             using var document = JsonDocument.Parse(input);
             if (document.RootElement.ValueKind != JsonValueKind.Object
-                || AntigravityHookRules.HoldsAKeyTwice(document.RootElement, "toolCall")
+                || AntigravityHookRules.HoldsAKeyTwice(document.RootElement)
                 || !document.RootElement.TryGetProperty("toolCall", out var call) || call.ValueKind != JsonValueKind.Object
-                || AntigravityHookRules.HoldsAKeyTwice(call, "name", "args")
                 || !call.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String
                 || nameElement.GetString() is not { Length: > 0 } name
-                || !call.TryGetProperty("args", out var args) || args.ValueKind != JsonValueKind.Object
-                || AntigravityHookRules.HoldsAKeyTwice(args, "CommandLine", "AbsolutePath", "TargetFile"))
+                || !call.TryGetProperty("args", out var args) || args.ValueKind != JsonValueKind.Object)
             {
                 return Unreadable;
             }
 
             return Decide(rules, name, args, windows);
         }
-        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or FormatException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // A lone surrogate in a string is an argument exception at the first read of it, not a parse failure.
+            // Whatever the decision throws is a call it could not read: a lone surrogate in a string is an argument
+            // exception at the first read of it, not a parse failure, and a pass is never the answer to a failure.
             return Unreadable;
         }
     }
@@ -126,13 +132,31 @@ public static class AntigravityHook
         switch (name)
         {
             case "run_command":
-                return Text(args, "CommandLine") is not { } line ? Unreadable : CallsTheCliAlone(line, rules.Cli, windows) ? Approved : Delegated;
+                // Approved only for a foreground command in the work directory: a persistent one outlives the call, and a
+                // command run elsewhere is not the callback.
+                if (Text(args, "CommandLine") is not { } line)
+                {
+                    return Unreadable;
+                }
+
+                return CallsTheCliAlone(line, rules.Cli, windows) && IsFalseOrAbsent(args, "RunPersistent") && InWorkDirectoryOrAbsent(args, rules.Write, windows)
+                    ? Approved
+                    : Delegated;
 
             case "view_file":
                 return Text(args, "AbsolutePath") is not { } viewed ? Unreadable : rules.Read.Any(file => SamePath(viewed, file, windows)) ? Approved : Delegated;
 
             case "write_to_file":
-                return Text(args, "TargetFile") is not { } target ? Unreadable : SamePath(target, rules.Write, windows) ? Approved : Floor;
+                // A relative path is read against the work directory, the one the host runs in; and a write that
+                // overwrites is never approved.
+                if (Text(args, "TargetFile") is not { } target)
+                {
+                    return Unreadable;
+                }
+
+                var workDirectory = Path.GetDirectoryName(rules.Write) ?? "";
+                var full = Path.IsPathFullyQualified(target) || workDirectory.Length == 0 ? target : Path.Combine(workDirectory, target);
+                return SamePath(full, rules.Write, windows) && IsFalseOrAbsent(args, "Overwrite") ? Approved : Floor;
 
             case "read_url_content":
             case "search_web":
@@ -150,6 +174,24 @@ public static class AntigravityHook
                 return Delegated;
         }
     }
+
+    private static bool IsFalseOrAbsent(JsonElement args, string name)
+    {
+        foreach (var property in args.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value.ValueKind == JsonValueKind.False;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool InWorkDirectoryOrAbsent(JsonElement args, string result, bool windows) =>
+        Text(args, "Cwd") is not { } cwd
+            ? args.EnumerateObject().All(property => !string.Equals(property.Name, "Cwd", StringComparison.OrdinalIgnoreCase))
+            : Path.GetDirectoryName(result) is { Length: > 0 } work && SamePath(cwd, work, windows);
 
     private static string? Text(JsonElement args, string name)
     {
@@ -172,7 +214,12 @@ public static class AntigravityHook
     /// </summary>
     internal static bool CallsTheCliAlone(string line, string cli, bool windows)
     {
-        if (cli.Length == 0 || !cli.All(IsBare))
+        // Printable ASCII and the tab, on every system: a character outside it can close a quote in a shell that reads it as
+        // one (the typographic single quotes close a PowerShell string), and a line break ends the command. A backslash
+        // before a quote is the escape of a shell that reads one, so it is refused wherever it stands. Text that is not
+        // ASCII reaches the command as JSON escapes or through a file.
+        if (cli.Length == 0 || !cli.All(IsBare) || line.Any(character => character is not ('\t' or (>= ' ' and <= '~')))
+            || line.Contains("\\'", StringComparison.Ordinal) || line.Contains("\\\"", StringComparison.Ordinal))
         {
             return false;
         }

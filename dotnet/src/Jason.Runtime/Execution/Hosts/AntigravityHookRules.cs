@@ -50,7 +50,7 @@ public sealed record AntigravityHookRules(string Cli, IReadOnlyList<string> Read
             using var document = JsonDocument.Parse(Convert.FromBase64String(padded));
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object
-                || HoldsAKeyTwice(root, "v", "cli", "write", "read", "approve", "deny")
+                || HoldsAKeyTwice(root)
                 || !root.TryGetProperty("v", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number != Version
                 || !root.TryGetProperty("cli", out var cli) || cli.ValueKind != JsonValueKind.String
                 || !root.TryGetProperty("write", out var write) || write.ValueKind != JsonValueKind.String
@@ -70,22 +70,31 @@ public sealed record AntigravityHookRules(string Cli, IReadOnlyList<string> Read
     }
 
     /// <summary>
-    /// Whether an object holds a key the hook reads more than once, compared without regard to case. Readers disagree on which
+    /// Whether a document holds an object, at any depth, with a key twice, compared without regard to case. Readers disagree on which
     /// of two equal keys wins, so a document that holds one is not read at all.
     /// </summary>
-    internal static bool HoldsAKeyTwice(JsonElement element, params string[] keys)
+    internal static bool HoldsAKeyTwice(JsonElement element)
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var property in element.EnumerateObject())
+        switch (element.ValueKind)
         {
-            var name = property.Name;
-            if (keys.Contains(name, StringComparer.OrdinalIgnoreCase) && !seen.Add(name))
-            {
-                return true;
-            }
-        }
+            case JsonValueKind.Object:
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (!seen.Add(property.Name) || HoldsAKeyTwice(property.Value))
+                    {
+                        return true;
+                    }
+                }
 
-        return false;
+                return false;
+
+            case JsonValueKind.Array:
+                return element.EnumerateArray().Any(HoldsAKeyTwice);
+
+            default:
+                return false;
+        }
     }
 
     private static JsonArray Strings(IEnumerable<string> values) => new([.. values.Select(value => (JsonNode)JsonValue.Create(value)!)]);
