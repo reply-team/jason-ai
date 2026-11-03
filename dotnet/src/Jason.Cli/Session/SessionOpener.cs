@@ -83,10 +83,10 @@ public static class SessionOpener
         }
 
         var hostWord = AgentHosts.Word(host);
-        var program = HostProgram(env, host);
+        var (program, found) = HostProgram(env, host);
         if (program is null)
         {
-            env.Error.WriteLine($"{hostWord}'s program '{AgentHosts.Of(host).CommandWord}' is not on this machine's search path, so nothing was started.");
+            env.Error.WriteLine(NotFound(hostWord, AgentHosts.Of(host).CommandWord, found));
             env.Error.WriteLine(ChooseAnother);
             env.Error.WriteLine(byHand);
             return ExitCodes.ApiError;
@@ -183,7 +183,7 @@ public static class SessionOpener
     /// starts by name: an <c>.exe</c>, npm's shim read for its interpreter and entry script, or Cursor CLI's launcher read
     /// for what it starts; never a script through a shell. Null where none of those answers.
     /// </summary>
-    private static IReadOnlyList<string>? HostProgram(CliEnvironment env, AgentHostKind host)
+    private static (IReadOnlyList<string>? Program, FoundProgram Found) HostProgram(CliEnvironment env, AgentHostKind host)
     {
         var pathExt = OperatingSystem.IsWindows() ? Variable(env, "PATHEXT") : null;
         var onPath = new ProgramSearchPath(SearchPath(env), pathExt);
@@ -191,13 +191,26 @@ public static class SessionOpener
         switch (found.Outcome)
         {
             case ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim when found.Path is { } path:
-                return [path, .. found.Launch];
+                return ([path, .. found.Launch], found);
             case ProgramLookupOutcome.RefusedShim when host == AgentHostKind.CursorCli && found.File is { } file:
-                return new CursorCliLauncher(OperatingSystem.IsWindows()).ProgramLayout(file);
+                return (new CursorCliLauncher(OperatingSystem.IsWindows()).ProgramLayout(file), found);
             default:
-                return null;
+                return (null, found);
         }
     }
+
+    /// <summary>
+    /// Why no program was found for the host, by the lookup's outcome: nothing answered for the name, or only a file Jason
+    /// refuses to start, named with the rule it broke as <c>jason status</c> names it.
+    /// </summary>
+    private static string NotFound(string hostWord, string command, FoundProgram found) => found switch
+    {
+        { Outcome: ProgramLookupOutcome.ShellOnly, File: { } file } =>
+            $"{hostWord}'s program '{command}' resolves only to {file}, {ProgramLookup.ShellScript}, so nothing was started: {ProgramLookup.ProgramsNotShells}.",
+        { Outcome: ProgramLookupOutcome.RefusedShim, File: { } file } =>
+            $"{hostWord}'s program '{command}' resolves only to {file}, which {found.Refusal}, so nothing was started: starting it would mean cmd.exe interprets the arguments.",
+        _ => $"{hostWord}'s program '{command}' is not on this machine's search path, so nothing was started.",
+    };
 
     private static string? SearchPath(CliEnvironment env) => env.SearchPath ?? Environment.GetEnvironmentVariable("PATH");
 

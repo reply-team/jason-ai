@@ -327,6 +327,30 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("jason preference unset agent.interactive_host --actor human:<your-name>", said, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A host that is installed but found only as a shim Jason refuses is not "not on the search path": the line names the
+    /// file and the rule it broke, as <c>jason status</c> does, so the person knows what to put right.
+    /// </summary>
+    [Fact]
+    public async Task A_host_found_only_as_a_refused_shim_is_refused_by_the_file_and_its_rule()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows has npm's cmd shim.");
+        _run.Preference = "{\"host\":\"gemini_cli\"}";
+        _run.Programs.Add("node.exe", executable: true);
+        var shim = _run.Programs.Add("gemini.cmd", TestPrograms.NpmShim(@"@vendor\gemini-cli", @"dist\index.js"));
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        var said = _run.Error.ToString();
+        Assert.DoesNotContain("is not on this machine's search path", said, StringComparison.Ordinal);
+        Assert.Contains("gemini_cli's program 'gemini' resolves only to ", said, StringComparison.Ordinal);
+        Assert.Contains(Path.GetFileName(shim), said, StringComparison.Ordinal);
+        Assert.Contains("which names a scoped package, and only a package one directory under node_modules is read, so nothing was started", said, StringComparison.Ordinal);
+        Assert.Contains("jason approval get apr_1 --prompt", said, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task No_terminal_is_refused_with_the_way_to_do_it_by_hand()
     {
