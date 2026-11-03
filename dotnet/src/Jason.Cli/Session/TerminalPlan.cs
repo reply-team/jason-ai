@@ -124,6 +124,11 @@ public static class TerminalPlan
     }
 
     /// <summary>A program by its absolute path, or a bare name on the search path in its order; a relative path is neither.</summary>
+    /// <remarks>
+    /// A second lookup beside <c>ProgramLookup</c>, which reads the real operating system (its extensions and its shims):
+    /// the plan's Linux rows run on Windows too, so the Linux rule is applied here whatever the machine is, and only the
+    /// executable bit, which Windows does not keep, is read from the machine.
+    /// </remarks>
     private static string? Locate(string program, string? searchPath)
     {
         if (program.Contains('/', StringComparison.Ordinal) || program.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal))
