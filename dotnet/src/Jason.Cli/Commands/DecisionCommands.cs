@@ -65,16 +65,27 @@ public static class DecisionCommands
         var command = new Command("get", "One question: what is asked, the answers the asker named, what to read first, and the answer if there is one.");
         var id = DecisionId();
         var human = VerbOptions.Human();
+        var prompt = VerbOptions.Prompt();
         command.Arguments.Add(id);
         command.Options.Add(human);
+        command.Options.Add(prompt);
 
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor));
+            VerbOptions.OneRendering(parseResult.GetValue(human), parseResult.GetValue(prompt));
             var body = RequestBody.Empty().Set("decision_id", parseResult.GetValue(id));
 
             return OperationRunner.RunAsync(
-                env, Operations.DecisionGet, body, new RunOptions(parseResult.GetValue(human), DecisionRenderers.Decision), cancellationToken);
+                env,
+                Operations.DecisionGet,
+                body,
+                new RunOptions(parseResult.GetValue(human), DecisionRenderers.Decision)
+                {
+                    Prompt = parseResult.GetValue(prompt),
+                    RenderPromptAsync = PromptRenderers.Question(env),
+                },
+                cancellationToken);
         });
 
         return command;

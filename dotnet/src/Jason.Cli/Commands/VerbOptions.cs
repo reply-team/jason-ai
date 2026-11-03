@@ -16,6 +16,20 @@ internal static class VerbOptions
         Description = "Render for people instead of printing the JSON response.",
     };
 
+    public static Option<bool> Prompt() => new("--prompt")
+    {
+        Description = "Print the text that briefs an agent session on this item, instead of the JSON response: what waits, where to stand, the skill to use and what to bring back. It holds nothing of the item itself. Not with --human.",
+    };
+
+    /// <summary>The two renderings are two answers to one question; asking for both says nothing.</summary>
+    public static void OneRendering(bool human, bool prompt)
+    {
+        if (human && prompt)
+        {
+            throw new UsageException("--human and --prompt are two renderings of the answer; give one.");
+        }
+    }
+
     /// <summary><paramref name="shape"/> names the fields the object may hold, so the help page is the reference for the body.</summary>
     public static Option<string?> File(string shape) => new("--file")
     {

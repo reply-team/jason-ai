@@ -1,0 +1,15 @@
+Jason is waiting for a person's decision on an approval: apr_1, in campaign cmp_1.
+
+Campaign folder: ~/Jason/projects/acme-corp/campaigns/q3-leads
+Read its memory file, AGENTS.md: it holds what the person keeps about this campaign. If you can, work from that folder.
+
+Use the skill approvals-and-questions. If your agent host does not have it, install the skills for the host you are running in with jason skills install --host <host>, where <host> is one of: claude_code, codex, copilot_cli, cursor_cli, gemini_cli, antigravity_cli. Then start the skill.
+
+What to do:
+1. Read the approval: jason approval get apr_1
+2. Read the campaign and its timeline: jason campaign get cmp_1 and jason journal list --campaign cmp_1
+3. Read the work item that raised it: jason workitem get wi_1; it names its role. Then that role's note, jason rolenote get --role <role> --campaign cmp_1, and the other roles' as you need them (jason rolenote list --campaign cmp_1).
+4. Research whatever else you need to understand the request.
+5. Come back to the person with a short summary and a proposed decision, with your reasons.
+
+You decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. Do not run jason approval approve, jason approval reject, jason approval set-standing or jason decision answer.
