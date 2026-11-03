@@ -443,7 +443,7 @@ Every one of these is decided before a child process exists, except `host_not_av
 answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no
 byte of what the host wrote, where the host's row in §12 names the signal Jason reads. Each keeps its attempt so the
 refusal can be read, and is **not retried** — nothing about the work changes between two scans. The first five name the level that chose
-the profile, and the attempt records how far the choice got; the last two are about the role rather than the
+the profile, and the attempt records how far the choice got; the last three are about the role rather than the
 profile, so there is no level to name.
 
 | Code | Meaning |
