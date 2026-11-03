@@ -481,6 +481,24 @@ public class CopilotCliHostTests
         Assert.Empty(host.Compose(Revision(), ["copilot"], new MemoryFileLocations(@"C:\Users\Marta\Jason\AGENTS.md", null, null)).Allow);
     }
 
+    /// <summary>
+    /// The callback is allowed by one rule: the host reads the allow list by commas, so a command word is one rule only
+    /// while it holds none, which the profile's validation holds for every host. With the default word and with a word of
+    /// dots, dashes and underscores the list carries exactly one shell rule, the one that names the word.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("my_jason-2.exe")]
+    public void The_allow_list_carries_exactly_one_shell_rule_naming_the_command_word(string? word)
+    {
+        var revision = Revision();
+        revision.CliCommand = word;
+
+        var shell = Allow(new CopilotCliHost().Compose(revision, ["copilot"], NoFiles)).Where(rule => rule.StartsWith("shell", StringComparison.Ordinal)).ToList();
+
+        Assert.Equal([$"shell({word ?? ProgramResolver.CliCommandFor(null)}:*)"], shell);
+    }
+
     private static List<string> Tools(HostLaunch launch) => Value(launch, "--available-tools");
 
     private static List<string> Allow(HostLaunch launch) => Value(launch, "--allow-tool");

@@ -135,4 +135,18 @@ public class CopilotCliProfileTests
         Assert.Equal(["--model=made-up-model"], created.Revision.Args);
         Assert.Equal(owned, updated.Revision.Args);
     }
+
+    [Fact]
+    public async Task A_command_word_with_commas_is_refused_so_the_callback_stays_one_rule()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "three-rules", host = "copilot_cli", program = "copilot", cli_command = "jason,shell,x" },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal("cli_command", Assert.Single(error.Details!).Field);
+    }
 }

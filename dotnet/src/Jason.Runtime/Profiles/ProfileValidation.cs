@@ -468,7 +468,7 @@ internal static partial class ProfileValidation
         entry is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     /// <summary>
-    /// A bare file name, because this is what the launched agent types to call home and the runtime is what puts
+    /// A bare command word, because this is what the launched agent types to call home and the runtime is what puts
     /// something of that name within its reach. A path would name a program the runtime did not put there.
     /// </summary>
     private static void ValidateCliCommand(string? cliCommand, ValidationErrors errors)
@@ -491,20 +491,23 @@ internal static partial class ProfileValidation
             return;
         }
 
-        // One word, and nothing that could turn the allow rule into a different rule. The rule is built by
-        // putting this word inside a pattern, so a space or a bracket here does not break the word — it changes
-        // what the agent is permitted to run, which is the one thing that rule exists to state exactly.
-        var shaped = value.AsSpan().IndexOfAny('/', '\\', ':') >= 0
-            || value.Any(character => char.IsControl(character) || char.IsWhiteSpace(character))
-            || value.AsSpan().IndexOfAny("()*\"'") >= 0;
-        if (shaped || value is "." or "..")
+        // One word of plain characters, and nothing that could turn the allow rule into a different rule. The rule is
+        // built by putting this word inside a pattern, and the hosts read other characters in one: a comma ends a rule
+        // in a list, a bracket or a star makes a pattern, a semicolon, a bar or an ampersand ends a command. So the word
+        // is held to an allowlist instead of a list of what is known to go wrong.
+        if (!IsCommandWord(value))
         {
             errors.Add(
                 "cli_command",
                 "invalid",
-                "cli_command must be a bare command word: no directory, no path, no drive, no spaces and no brackets.");
+                "cli_command must be a bare command word: letters, digits, dots, dashes and underscores, starting with a letter or a digit.");
         }
     }
+
+    /// <summary>Letters, digits, dots, dashes and underscores, the first a letter or a digit, all of them ASCII.</summary>
+    private static bool IsCommandWord(string value) =>
+        char.IsAsciiLetterOrDigit(value[0])
+        && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
 
     /// <summary>
     /// A host version is a version: three numbers, and a pre-release after `-` if any. It is journaled as metadata on that
