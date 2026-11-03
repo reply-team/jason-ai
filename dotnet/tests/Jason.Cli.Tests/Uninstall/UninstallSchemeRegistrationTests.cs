@@ -229,7 +229,7 @@ public sealed class UninstallSchemeRegistrationTests
     [Theory]
     [InlineData("on Windows, the notification registration: the AppUserModelID key the toast was shown under, the two entries Windows made for it, and the jason: link registration where its command names this executable")]
     [InlineData("a jason: link registration another program or another installation owns")]
-    [InlineData("the logon registration, the notification registration, the jason: link registration and the agent harnesses")]
+    [InlineData("This account's, not this installation's: the logon registration, the notification registration and the agent harnesses. Uninstalling a second installation on one account takes the first one's registrations and harness skills too. The jason: link goes only where its command names this executable.")]
     public async Task The_help_says_what_it_takes_away_and_what_it_leaves(string published)
     {
         using var dir = new TempPaths();

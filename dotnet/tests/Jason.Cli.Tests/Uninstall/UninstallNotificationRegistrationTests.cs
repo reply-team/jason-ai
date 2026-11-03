@@ -141,7 +141,7 @@ public sealed class UninstallNotificationRegistrationTests
     [Theory]
     [InlineData("on Windows, the notification registration: the AppUserModelID key the toast was shown under, the two entries Windows made for it")]
     [InlineData("the notifications already in the notification center, which are the person's to dismiss")]
-    [InlineData("the logon registration, the notification registration, the jason: link registration and the agent harnesses")]
+    [InlineData("the logon registration, the notification registration and the agent harnesses")]
     public async Task The_help_says_what_it_takes_away_and_what_it_leaves(string published)
     {
         using var dir = new TempPaths();

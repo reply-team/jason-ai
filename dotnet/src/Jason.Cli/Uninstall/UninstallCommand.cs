@@ -79,9 +79,9 @@ public static class UninstallCommand
         Installed by a package manager (Homebrew, winget): steps 5 and 6 are the manager's. The executable, its
         directory and the PATH entry that reaches it are left to it, and the plan names the command that takes
         them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
-        This account's, not this installation's: the logon registration, the notification registration, the
-        jason: link registration and the agent harnesses. Uninstalling a second installation on one account takes the first one's registrations
-        and harness skills too.
+        This account's, not this installation's: the logon registration, the notification registration and the
+        agent harnesses. Uninstalling a second installation on one account takes the first one's registrations
+        and harness skills too. The jason: link goes only where its command names this executable.
 
         Exit codes: 0 when everything it set out to remove is gone. 1 when it did not get there: it refused
         (a runtime that would not stop), or something it set out to remove is still there (a record it cannot

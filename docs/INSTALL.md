@@ -551,9 +551,9 @@ package manager's: the dry run and the report list them as left to it, with the 
 runtime stopped first.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
-registration and the `jason:` link on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
-source beside a release, a copy — takes the registrations and the harness skills the first one made as well. Look
-at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
+registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
+source beside a release, a copy — takes the registrations and the harness skills the first one made as well. The
+`jason:` link goes only where its command names this executable. Look at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason
 wrote and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway:
