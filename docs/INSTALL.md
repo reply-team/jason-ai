@@ -26,6 +26,13 @@ search path, name the launcher by its full path: `--program <full path of agent.
 For Gemini CLI, install it from [its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself and
 run `jason profile create <name> --host gemini_cli --program gemini`.
 
+For Antigravity CLI, install `agy` from the CLI tab of [Google's quickstart](https://antigravity.google/docs/getting-started?tab=cli),
+run `agy` once to sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)), and
+`jason profile create <name> --host antigravity_cli --program agy`. It reads its permission rules from your own
+`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array, so add `command(jason)` (on Windows shells,
+`command(regex:jason .*)`) and `read_file(<harness folder>)` there; the
+[host matrix](execution-profiles.md#12-the-hosts) has the two lines of JSON and the details.
+
 ### If an agent installs it
 
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their

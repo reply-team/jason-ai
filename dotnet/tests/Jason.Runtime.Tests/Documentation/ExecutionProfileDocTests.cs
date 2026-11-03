@@ -476,6 +476,16 @@ public partial class ExecutionProfileDocTests
             Assert.All(row[8..], cell => Assert.Equal(!known, cell == "—"));
         });
 
+        // A host that frames the envelope says so in its own row, where it takes the brief.
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        foreach (var host in Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<Jason.Runtime.Execution.Hosts.IAgentHost>(provider))
+        {
+            var row = Assert.Single(rows, row => row[1] == $"`{Jason.Contracts.Hosts.AgentHosts.Word(host.Kind)}`");
+            Assert.Equal(host.FrameStdin("{}") != "{}", row[9].Contains("stream-json", StringComparison.Ordinal));
+        }
+
         var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
         Assert.Contains("each host holds this rule in its own form", contract, StringComparison.Ordinal);
         Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);

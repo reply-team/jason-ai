@@ -65,6 +65,10 @@ public static class DispatcherModule
         // ignore the one a run is given, so the host is told which folder this platform keeps them in.
         services.AddSingleton<IAgentHost>(_ => new GeminiCliHost(GeminiCliHost.PlatformSystemPoliciesDirectory()));
 
+        // Antigravity CLI takes its permission rules from the person's own settings file and nothing a run carries, so the
+        // host is composed with no folder of its own to name.
+        services.AddSingleton<IAgentHost, AntigravityCliHost>();
+
         // The plugin module registers the same seam for its own executable checks, and whichever module is added
         // first is the one that answers. Named here too because this module now needs it: a registration a
         // module depends on but never states is one a smaller composition silently lacks.

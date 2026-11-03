@@ -66,6 +66,7 @@ public enum AgentHostKind
     CopilotCli,
     CursorCli,
     GeminiCli,
+    AntigravityCli,
 }
 
 /// <summary>
