@@ -130,8 +130,16 @@ jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campai
 
 **What it means.** Nobody's work item will fix this. Somebody must configure something — install a plugin,
 write a route, enable a profile, make an agent host available, correct a role's skill — and that is an
-operator's deliberate act. Nothing was started and nothing was spent. Name what is missing and hand it over;
-setting it up is `operating-the-installation`.
+operator's deliberate act. Nothing was started and nothing was spent — except where `host_not_available`
+says the host ran and answered that it is not signed in: the child started and stopped there, and the repair
+is the person's own, signing in to that host on this machine under their own plan. Name what is missing and
+hand it over; setting it up is `operating-the-installation`.
+
+Not this state, but a repair of the same kind, the person's own: on `antigravity_cli`, `executor_exited` after the host exited 0
+usually means the person's own `command(<cli word>)` permission rule is missing from `~/.gemini/antigravity-cli/settings.json`
+(on Windows shells the rule is `command(regex:<cli word> .*)`), so the role was denied the call that reports. The attempt
+is retried, and each retry meets the same denial. Jason cannot write that rule; the person adds it, with
+`read_file(<harness folder>)` beside it for the memory files.
 
 ### 5. The person is on the do-not-contact register
 

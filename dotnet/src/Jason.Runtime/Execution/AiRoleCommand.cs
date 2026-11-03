@@ -29,6 +29,7 @@ public sealed class AiRoleCommand(
     JasonPaths paths,
     TokenRedactor redactor,
     LiveSettings<RolesOptions> roles,
+    IEnumerable<IAgentHost> hosts,
     ILogger<AiRoleCommand> logger) : ICommand
 {
     /// <summary>What the envelope names where the claim handed over no memory files: every level unknown.</summary>
@@ -58,14 +59,30 @@ public sealed class AiRoleCommand(
             return new CommandOutcome.LaunchFailed("The role has no entry command.", launch);
         }
 
+        // The host the claim's profile names, by the one implementation registered for it; none where no profile ran
+        // the work, and a host the claim named that this build no longer registers is refused rather than guessed at.
+        IAgentHost? host = null;
+        if (context.Host is { } kind)
+        {
+            host = hosts.LastOrDefault(candidate => candidate.Kind == kind);
+            if (host is null)
+            {
+                return new CommandOutcome.LaunchFailed(
+                    "The execution profile names a host this build cannot start.", launch, AttemptErrors.HostNotAvailable);
+            }
+        }
+
         // What the agent will find where it runs: what it may not do, and how to do the job. Both are written
-        // before the child exists, and a role whose skill a host would silently ignore ends the attempt here.
+        // before the child exists, laid out where the host reads them, and a role whose skill a host would silently
+        // ignore ends the attempt here.
         var prepared = WorkDirectory.Prepare(
             context.WorkDir,
             context.Deny ?? [],
             context.Role,
             paths.RoleSkillsDirectory,
-            roles.Current.MaxSkillBytes);
+            roles.Current.MaxSkillBytes,
+            host,
+            context.Allow);
         if (prepared.RefusalCode is { } refusal)
         {
             return new CommandOutcome.LaunchFailed(prepared.Message!, launch, refusal);
@@ -73,7 +90,7 @@ public sealed class AiRoleCommand(
 
         // What this attempt was given, kept where the rest of the launch is kept: which rules the agent ran
         // under, and whether it was taught anything at all.
-        launch = launch with { Deny = context.Deny, RoleSkill = prepared.Skill };
+        launch = launch with { Deny = context.Deny, Allow = context.Allow is { Count: > 0 } allow ? allow : null, RoleSkill = prepared.Skill };
 
         // Where the person's memory files are, as the claim decided it with the command that may read them: named
         // here as they are, never looked up again, so the envelope cannot know better than the provenance.
@@ -99,7 +116,8 @@ public sealed class AiRoleCommand(
             paths.Root,
             context.AttemptId,
             context.WorkItemId,
-            ProgramResolver.ExecutableDirectory);
+            ProgramResolver.ExecutableDirectory,
+            host?.Environment);
 
         // And one thing is taken away: the mark of an update's own launch says whose start this runtime was, and an
         // agent that ran `jason runtime run` with it would start a runtime around an update it is no part of.
@@ -148,7 +166,7 @@ public sealed class AiRoleCommand(
             var transcript = OutputPump.PumpAsync(process.StandardOutput, Path.Combine(context.WorkDir, "stdout.log"), redactor, null, StderrTailBytes, maxBytes);
             var diagnostics = OutputPump.PumpAsync(process.StandardError, Path.Combine(context.WorkDir, "stderr.log"), redactor, tail, StderrTailBytes, maxBytes);
 
-            await WriteEnvelopeAsync(process, context, memoryFiles).ConfigureAwait(false);
+            await WriteEnvelopeAsync(process, context, memoryFiles, host).ConfigureAwait(false);
 
             // Deliberately not the runtime's own token: a shutdown drains and lets children finish, and a
             // survivor completes its attempt against the next runtime instance rather than dying with this one.
@@ -173,9 +191,15 @@ public sealed class AiRoleCommand(
                 context.WorkItemId,
                 process.ExitCode);
 
-            return context.Kill.IsCancellationRequested
-                ? new CommandOutcome.Killed(launch)
-                : new CommandOutcome.Exited(process.ExitCode, tail.ToString(), launch);
+            if (context.Kill.IsCancellationRequested)
+            {
+                return new CommandOutcome.Killed(launch);
+            }
+
+            // The host reads its own end: an exit that says it cannot run here becomes its sentence, and the tail it
+            // wrote stays the trace of an ordinary exit only.
+            var stderrTail = tail.ToString();
+            return new CommandOutcome.Exited(process.ExitCode, stderrTail, launch, host?.Unavailable(process.ExitCode, stderrTail));
         }
     }
 
@@ -208,9 +232,10 @@ public sealed class AiRoleCommand(
 
     /// <summary>
     /// One JSON object, then end of file. Closing stdin is part of the contract: a host reads until the stream
-    /// ends rather than guessing where the envelope stops.
+    /// ends rather than guessing where the envelope stops. A host that reads a stream of lines is given the document as
+    /// the content of one, by its own framing.
     /// </summary>
-    private async Task WriteEnvelopeAsync(Process process, CommandContext context, MemoryFileLocations memoryFiles)
+    private async Task WriteEnvelopeAsync(Process process, CommandContext context, MemoryFileLocations memoryFiles, IAgentHost? host)
     {
         var envelope = new LaunchEnvelope(
             LaunchEnvelope.CurrentVersion,
@@ -242,7 +267,10 @@ public sealed class AiRoleCommand(
 
         try
         {
-            await process.StandardInput.WriteAsync(JsonSerializer.Serialize(envelope, JasonJson.Options)).ConfigureAwait(false);
+            // The host decides how the one document is carried on its standard input, once, and what it returns is what
+            // is written: no other source of bytes reaches the stream.
+            var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
+            await process.StandardInput.WriteAsync(host?.FrameStdin(json) ?? json).ConfigureAwait(false);
             process.StandardInput.Close();
         }
         catch (IOException)

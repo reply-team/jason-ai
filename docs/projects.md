@@ -249,9 +249,11 @@ with its value from the answer it already has.
 
 What a person tells Jason about their business in their own words is kept in plain files they can read and edit: a
 memory file, `AGENTS.md`, for the client, for each project and for each campaign, each in a folder of its own, nested in
-that order under the harness root. Each level's `CLAUDE.md` imports the `AGENTS.md` beside it, and Claude Code loads
-the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in print mode it drops, without
-asking, an import of a file outside the folder it started in, so a session started in a campaign's folder is given the
+that order under the harness root. Each level carries, beside its `AGENTS.md`, a one-line import file for every host
+that reads a file of another name — `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI (the [host matrix](execution-profiles.md#12-the-hosts)
+lists them). A folder made before a host's import file existed has the files it had: the root gains a missing import file at the next project or campaign create, and a project's or a campaign's folder keeps what it has until the person adds the file. Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
+print mode it drops, without asking, an import of a file outside the folder it started in, so a session started in a
+campaign's folder is given the
 campaign's file and neither the project's nor the client's (measured with Claude Code 2.1.309; its documentation says
 an interactive session asks once whether to allow such imports). The session skills therefore read the root's and the project's files by path,
 and a role the runtime launches reads all three by the paths its launch envelope gives. A memory file is the person's
@@ -262,16 +264,19 @@ records, the record wins.
 ~/Jason/                                  the root: the client's level, Harness:Root
   AGENTS.md                               the client's memory file
   CLAUDE.md                               @AGENTS.md
+  GEMINI.md                               @AGENTS.md
   .jason/marker.json                      {"marker_version":1,"kind":"root"}
   projects/
     acme-corp/                            a project's folder, named by its slug
       AGENTS.md
       CLAUDE.md
+      GEMINI.md
       .jason/marker.json                  {"marker_version":1,"kind":"project","id":"prj_…"}
       campaigns/
         q3-marketing-leads/               a campaign's folder, named from its name
           AGENTS.md
           CLAUDE.md
+          GEMINI.md
           .jason/marker.json              {"marker_version":1,"kind":"campaign","id":"cmp_…"}
 ```
 
@@ -283,8 +288,8 @@ records, the record wins.
 
 The root is named in `settings.json` (`{"Harness":{"Root":"…"}}`) or by `JASON_Harness__Root`, like every other setting.
 It is an absolute path, starting at a drive, a share or `/`, since a relative one would mean wherever the runtime
-happened to start; `~` is a shell's word that the runtime does not expand. A `CLAUDE.md` at the root is read by every
-agent session started anywhere below it, so the root is never the home directory itself, a folder that holds it, or the
+happened to start; `~` is a shell's word that the runtime does not expand. A `CLAUDE.md` or `GEMINI.md` at the root is read by every
+agent session of that host started anywhere below it, so the root is never the home directory itself, a folder that holds it, or the
 top of a drive, a share or the file system; and the data directory is the runtime's own, so the root is never the data
 directory, a folder inside it or a folder that holds it. Each is compared where it leads, not as it is spelled: a
 junction, a symbolic link or a Windows device prefix such as `\\?\` does not make the home or the data directory
@@ -313,8 +318,9 @@ wherever that is, and only a project with none gets one under the root as it is 
 Nothing is asked before the first folder is made. The first `project.create` or `campaign.create` makes the root if it
 is not there, and the folders the request needs:
 
-- **The root.** Made with its marker, a `CLAUDE.md` and an `AGENTS.md`. A folder already there with no marker is taken
-  as the root by writing its marker, and `CLAUDE.md` and `AGENTS.md` where it has none; nothing it holds is changed. A
+- **The root.** Made with its marker, an `AGENTS.md` and an import file for every host that reads a file of another name.
+  A folder already there with no marker is taken as the root by writing its marker, and `AGENTS.md` and each import file
+  where it has none; nothing it holds is changed. A
   folder whose marker names anything but a root — a project's folder, a campaign's, a marker this runtime cannot read —
   is refused as `harness_root_taken`, and nothing is written into it.
 - **A project's folder**, `projects/<slug>/`, made by `project.create`, and by `campaign.create` or a campaign's move for
@@ -329,7 +335,7 @@ is not there, and the folders the request needs:
 
 A folder already at a level's path is a fact the person must see, never one Jason walks around:
 
-- **With no marker**, it becomes the level's as the root does: its marker is written, and `CLAUDE.md` and `AGENTS.md`
+- **With no marker**, it becomes the level's as the root does: its marker is written, and `AGENTS.md` and each import file
   where it has none; not a word of what it holds changes.
 - **Marked for this very project or campaign** — left by a create that was refused after it made it — it is used again.
 - **Marked for another campaign this runtime holds**, at a campaign's leaf, the leaf is followed by `-2`, `-3` and so
@@ -369,10 +375,10 @@ so. The data directory `~/.jason` has no marker and is never taken for a level.
 
 ### What the runtime never does
 
-It writes structure only: a directory, its marker, and, where none is there, a `CLAUDE.md` holding exactly `@AGENTS.md`
-and an empty `AGENTS.md`. Then it leaves them to the person.
+It writes structure only: a directory, its marker, and, where none is there, an import file for every host that reads a file of another name, each holding exactly its one line (`@AGENTS.md`),
+and an empty `AGENTS.md`. Then it leaves them to the person. The import files are `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI.
 
-- It never reads, writes or deletes a word of any `AGENTS.md`, and never writes over a `CLAUDE.md` that is there, the
+- It never reads, writes or deletes a word of any `AGENTS.md`, and never writes over an import file that is there, the
   person's own included: whether one is there is asked of its name, and it is never opened.
 - It never deletes a folder or a file. Archiving a campaign leaves its folder where it is.
 - It never runs `git` and never writes a `.gitignore`: the root is a repository only if the person makes it one.
@@ -414,8 +420,8 @@ a fact the runtime holds, and that fact is only ever a recorded path. A rename n
 
 A path given is taken by the rule a folder already at a level's path meets (above), applied to that path:
 
-- **With no marker** — a folder of the person's own — it is **adopted**: its marker is written, and a `CLAUDE.md` and an
-  `AGENTS.md` where there are none; not a word of what it holds changes, and a `CLAUDE.md` of the person's own does not
+- **With no marker** — a folder of the person's own — it is **adopted**: its marker is written, and an `AGENTS.md` and each import file
+  where there are none; not a word of what it holds changes, and an import file of the person's own does not
   import `AGENTS.md` until they make it. `project_id` names the project it becomes.
 - **Marked for this project** — the folder moved — it is **relinked**: the path is recorded for the project again.
   Without `project_id`, the project is the one the marker names; with it, the marker must name that project.

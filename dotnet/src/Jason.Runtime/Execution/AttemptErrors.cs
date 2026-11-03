@@ -36,7 +36,8 @@ public static class AttemptErrors
 
     /// <summary>
     /// The resolved profile's program is not on this machine, or is a script only a shell could start, so no host can be
-    /// started.
+    /// started; or the host refuses to start here by its own check of the machine, the profile names a host this build
+    /// does not register, or the host's installation could not be read.
     /// </summary>
     public const string HostNotAvailable = "host_not_available";
 

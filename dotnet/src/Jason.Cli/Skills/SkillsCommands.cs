@@ -4,6 +4,7 @@ using System.Text.Json;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 
@@ -52,7 +53,7 @@ public static class SkillsCommands
         var update = new Command("update", "Re-run the deployment against the source its record names, at the ref this build carries unless the record chose another.");
 
         var root = new Option<string?>("--root") { Description = "Update this directory as a harness root, instead of detection." };
-        var host = new Option<string?>("--host") { Description = "Update only this detected harness." };
+        var host = new Option<string?>("--host") { Description = "Update only this host's skills root: one of " + AgentHosts.Vocabulary + "." };
         var pack = new Option<string?>("--pack") { Description = "Update only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
@@ -100,7 +101,7 @@ public static class SkillsCommands
         // The role root is Jason's own and is never detected, but it is a root a deployment wrote into and so
         // is one an update has to carry.
         var roleRoot = env.Paths.RoleSkillsDirectory;
-        var roots = harnesses.Select(harness => harness.Directory).Append(roleRoot).Distinct(StringComparer.OrdinalIgnoreCase);
+        var roots = harnesses.Select(harness => harness.Directory).Append(roleRoot).Distinct(HarnessLocators.SamePath);
 
         // Each pack in each root, from that pack's own record in that root. This took the newest deployment
         // anywhere and re-ran it everywhere: after a full install from one source and --roles-only from another,
@@ -219,7 +220,7 @@ public static class SkillsCommands
         var source = new Option<string?>("--source") { Description = "Where the packs come from: a directory on this machine, or a git source. Defaults to the repository this build was published from." };
         var reference = new Option<string?>("--ref") { Description = "Which ref to take. Defaults to the pin this build carries." };
         var root = new Option<string?>("--root") { Description = "Deploy into this directory as a harness root, instead of detection." };
-        var host = new Option<string?>("--host") { Description = "Deploy only into this detected harness." };
+        var host = new Option<string?>("--host") { Description = "Deploy only into this host's skills root: one of " + AgentHosts.Vocabulary + ". With --root, the host that directory is for." };
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
@@ -399,12 +400,22 @@ public static class SkillsCommands
         return (report.Succeeded ? ExitCodes.Success : ExitCodes.ApiError, said, Refusal());
     }
 
-    /// <summary>Where the interactive packs go. <c>--root</c> replaces detection rather than narrowing it.</summary>
+    /// <summary>
+    /// Where the interactive packs go. <c>--root</c> replaces detection rather than narrowing it, and <c>--host</c> with
+    /// it labels the named directory; <c>--host</c> alone narrows detection to the one root that host reads, and a host
+    /// that was not detected is refused rather than deployed into nothing.
+    /// </summary>
     private static IReadOnlyList<HarnessRoot> Roots(CliEnvironment env, InstallOptions options)
     {
+        AgentHostKind? host = null;
+        if (options.Host is { } word)
+        {
+            host = AgentHosts.Parse(word) ?? throw new SkillsRefused($"'{word}' is not a host this build knows. They are: {AgentHosts.Vocabulary}.");
+        }
+
         if (options.Root is { } named)
         {
-            return HarnessLocators.At(named).Detect();
+            return HarnessLocators.At(named, host).Detect();
         }
 
         if (env.Harnesses is not { } locator)
@@ -413,17 +424,15 @@ public static class SkillsCommands
         }
 
         var detected = locator.Detect();
-        if (options.Host is { } only)
+        if (host is not { } kind)
         {
-            if (!Enum.TryParse<AgentHostKind>(only.Replace("_", string.Empty, StringComparison.Ordinal), ignoreCase: true, out var kind))
-            {
-                throw new SkillsRefused($"'{only}' is not a harness this build knows.");
-            }
-
-            detected = [.. detected.Where(root => root.Host == kind)];
+            return detected;
         }
 
-        return detected;
+        IReadOnlyList<HarnessRoot> chosen = [.. detected.Where(root => root.Hosts.Contains(kind))];
+        return chosen.Count > 0
+            ? chosen
+            : throw new SkillsRefused($"'{AgentHosts.Word(kind)}' was not detected on this machine: there is no {(AgentHosts.Of(kind).MarkerKind == HomeMarkerKind.File ? "file" : "directory")} at ~/{AgentHosts.Of(kind).HomeMarker}. Install it, or name a directory with --root.");
     }
 
     /// <summary>

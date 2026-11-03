@@ -17,10 +17,10 @@ internal sealed record HygieneFinding(string File, int Line, string Kind, string
 
 /// <summary>
 /// What no file of this repository carries, since every file of it is read publicly: a tracker key, an Atlassian
-/// address, an attribution trailer, a session link, or another repository of ours. Every text file the tree holds is
-/// read, code and comments included; a binary file holds no words. Every file's path is read too, whatever the file
-/// holds, since a name is read publicly like a line. Each pattern is written so that it does not match itself, so the
-/// file that holds them is read like any other.
+/// address, an attribution trailer, a session link, another repository of ours, or a review's label for a point it
+/// raises. Every text file the tree holds is read, code and comments included; a binary file holds no words. Every
+/// file's path is read too, whatever the file holds, since a name is read publicly like a line. Each pattern is written
+/// so that it does not match itself, so the file that holds them is read like any other.
 /// </summary>
 internal static partial class RepositoryHygiene
 {
@@ -33,6 +33,7 @@ internal static partial class RepositoryHygiene
         ("a session link", SessionLink()),
         ("another repository of ours", OtherRepository()),
         ("the private repository by name", PrivateRepository()),
+        ("a review label", ReviewLabel()),
     ];
 
     /// <summary>Every finding in the paths and the text files of the tree under <paramref name="root"/>, file by file.</summary>
@@ -97,4 +98,11 @@ internal static partial class RepositoryHygiene
     /// <summary>The private repository's name on its own, never part of a longer name or a path.</summary>
     [GeneratedRegex(@"(?<![\w/-])jason-interna[l](?![\w-])")]
     private static partial Regex PrivateRepository();
+
+    /// <summary>
+    /// The label a review gives a point it raises: the name of the reader, then the word for what a reader finds, apart
+    /// by whitespace, in any case. The shipped role of that name is not one, nor is the word alone.
+    /// </summary>
+    [GeneratedRegex(@"critic\s+findin[g]", RegexOptions.IgnoreCase)]
+    private static partial Regex ReviewLabel();
 }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Hosts;
 
 namespace Jason.FakeAgentHost;
 
@@ -265,10 +266,16 @@ internal static class Behaviours
     /// </summary>
     private static async Task<int> SayAsync(IReadOnlyList<string> options)
     {
-        await Console.Out.WriteLineAsync(Option(options, "--stdout") ?? string.Empty).ConfigureAwait(false);
-        await Console.Error.WriteLineAsync(Option(options, "--stderr") ?? string.Empty).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(Spaced(Option(options, "--stdout"))).ConfigureAwait(false);
+        await Console.Error.WriteLineAsync(Spaced(Option(options, "--stderr"))).ConfigureAwait(false);
         return Crashed;
     }
+
+    /// <summary>
+    /// A line as the behaviour was told it: one word of an argument list cannot hold a space, so a <c>+</c> stands for
+    /// one. Nothing a test says through <c>say</c> holds a plus of its own.
+    /// </summary>
+    private static string Spaced(string? line) => (line ?? string.Empty).Replace('+', ' ');
 
     /// <summary>Writes back exactly what it was handed, so a test can assert on the envelope the launcher composed.</summary>
     private static async Task<int> EchoEnvelopeAsync(string rawEnvelope)
@@ -516,7 +523,8 @@ internal static class Behaviours
     /// <summary>
     /// The name the skill in this attempt's own work directory gives itself, or null where none arrived. Read
     /// out of the file rather than assumed from the envelope: what is being proved is that the runtime really
-    /// put the skill where a host looks for it.
+    /// put the skill where a host looks for it. Started under a host's own command word, the stand-in looks only
+    /// where that host reads skills; under its own name it looks where any host of the table would.
     /// </summary>
     private static string? SkillName(LaunchEnvelope envelope)
     {
@@ -525,7 +533,27 @@ internal static class Behaviours
             return null;
         }
 
-        var file = Path.Combine(envelope.WorkDir, ".claude", "skills", role, "SKILL.md");
+        foreach (var skills in SkillFolders())
+        {
+            if (SkillNameIn(Path.Combine(AgentHosts.Under(envelope.WorkDir, skills), role, "SKILL.md")) is { } name)
+            {
+                return name;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The work directory's skill folders this process reads, by the name it was started under.</summary>
+    private static IEnumerable<string> SkillFolders()
+    {
+        var self = Path.GetFileNameWithoutExtension(Environment.ProcessPath);
+        var own = AgentHosts.All.Where(facts => string.Equals(facts.CommandWord, self, StringComparison.OrdinalIgnoreCase)).ToList();
+        return (own.Count > 0 ? own : AgentHosts.All).Select(facts => facts.WorkSkills).Distinct(StringComparer.Ordinal);
+    }
+
+    private static string? SkillNameIn(string file)
+    {
         try
         {
             foreach (var line in File.ReadLines(file).Take(64))

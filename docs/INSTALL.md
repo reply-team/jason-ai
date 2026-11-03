@@ -18,6 +18,27 @@ checkout instead, with `--source`.
 You also need a directory you can write to, and — if you want an agent harness taught — that
 harness installed, so §4 has somewhere to deploy.
 
+To have a host other than Claude Code run the background roles, install it from its own documentation and sign in
+as yourself; Jason holds no key. For Cursor CLI, install it from
+[its installation page](https://cursor.com/docs/cli/installation.md), run `agent login` and
+`jason profile create <name> --host cursor_cli --program agent`. On Windows, where `agent` is not found by the runtime's
+search path, name the launcher by its full path: `--program <full path of agent.cmd>`.
+For Codex CLI, install it from [its own page](https://github.com/openai/codex), run `codex login` and
+`jason profile create <name> --host codex --program codex`. On Windows, Codex needs a one-time setup by an
+administrator first, which [the Codex section](execution-profiles.md#codex-cli) describes.
+For GitHub Copilot CLI, install it from
+[GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli),
+run `copilot login` and `jason profile create <name> --host copilot_cli --program copilot`.
+For Gemini CLI, install it from [its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself and
+run `jason profile create <name> --host gemini_cli --program gemini`.
+
+For Antigravity CLI, install `agy` from the CLI tab of [Google's quickstart](https://antigravity.google/docs/getting-started?tab=cli),
+run `agy` once to sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)), and
+`jason profile create <name> --host antigravity_cli --program agy`. It reads its permission rules from your own
+`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array, so add `command(jason)` (on Windows shells,
+`command(regex:jason .*)`) and `read_file(<harness folder>)` there; the
+[host matrix](execution-profiles.md#12-the-hosts) has the two lines of JSON and the details.
+
 ### If an agent installs it
 
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their
@@ -111,8 +132,9 @@ on macOS — unless `Harness:Root` in `~/.jason/config/settings.json` names anot
 runtime makes of its settings, so it says "by default", and `jason status` names the root in force. The install makes
 no folder there. The runtime makes the root the first time a project or a campaign is created, and each project and
 campaign a folder of its own below it, each with the marker that makes it Jason's, `.jason/marker.json`, an empty
-`AGENTS.md` for your own words, and one line, `@AGENTS.md`, in the file Claude Code reads (`~/Jason/CLAUDE.md` at the
-root), so that it reads them too; a `Jason` folder already there is taken as the root then, its marker written and
+`AGENTS.md` for your own words, and one line, `@AGENTS.md`, in each file a host reads in its place (`~/Jason/CLAUDE.md`
+at the root for Claude Code; the [host matrix](execution-profiles.md#12-the-hosts) lists them), so that it reads them
+too; a `Jason` folder already there is taken as the root then, its marker written and
 nothing it holds changed, unless it is marked as something else, which `jason status` reports. `Harness:Root` set
 before that first create is all it takes. A folder you move later is recorded
 again with `jason project link`, the root's once `Harness:Root` names where it is now. Jason never writes a word of
@@ -277,8 +299,9 @@ It downloads `jason-ui.zip` from the release this build was published as, checks
 source has no published UI, so it refuses and says where a build of `ui/` goes instead: `ui/custom/` in the data
 directory, which is served first whenever it holds one.
 
-The role skills are everything a runtime needs, and none of these lines writes outside its data directory. The other two packs go into your agent's own
-configuration — for Claude Code, `~/.claude/skills` — which is yours to allow rather than Jason's to assume.
+The role skills are everything a runtime needs, and none of these lines writes outside its data directory. The other two packs go into the
+skills root of each agent host found on this machine (the [host matrix](execution-profiles.md#12-the-hosts) names
+them) — which is yours to allow rather than Jason's to assume.
 
 **Ask first.** Without `--roles-only` the same verb deploys all three, again printing every root before it writes
 any:
@@ -359,6 +382,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
+| | every enabled profile names an agent host detected on this machine |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |

@@ -32,7 +32,7 @@ public sealed partial class FoldersDocTests
                 System.Text.Encoding.UTF8.GetString(new HarnessMarker(HarnessMarker.Root, null).Bytes()),
                 System.Text.Encoding.UTF8.GetString(new HarnessMarker(HarnessMarker.Project, "prj_…").Bytes()),
                 System.Text.Encoding.UTF8.GetString(new HarnessMarker(HarnessMarker.Campaign, "cmp_…").Bytes()),
-                $"`{HarnessFolders.ClaudeImport}`",
+                .. Jason.Contracts.Hosts.AgentHosts.ImportFiles.Select(file => $"`{file.ImportLine}`"),
             ],
             shown => Assert.True(page.Contains(shown, StringComparison.Ordinal), $"docs/projects.md does not show {shown}."));
     }
@@ -44,6 +44,28 @@ public sealed partial class FoldersDocTests
 
         Assert.Contains("| DEC-HARNESS-001 |", architecture, StringComparison.Ordinal);
         Assert.Contains("| INV-FILE-002 |", architecture, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A level's folder holds one import file for every host of the table that reads a file of another name, so the
+    /// architecture and the repository's instructions say that rule rather than name one host's file as the only one; and
+    /// since no host is given a prompt Jason composed, the envelope's page names none that composes one.
+    /// </summary>
+    [Fact]
+    public void The_architecture_and_the_repository_instructions_say_one_import_file_per_host()
+    {
+        foreach (var path in new[] { new[] { "docs", "architecture.md" }, new[] { "CLAUDE.md" } })
+        {
+            var text = Whitespace().Replace(Page(path), " ");
+            var where = string.Join('/', path);
+
+            Assert.True(text.Contains("import file for every host that reads a file of another name", StringComparison.Ordinal), $"{where} does not state the rule.");
+            Assert.False(text.Contains("beside a `CLAUDE.md` that imports it", StringComparison.Ordinal), $"{where} names one host's file as the only one.");
+            Assert.False(text.Contains("and a `CLAUDE.md` and an empty `AGENTS.md`", StringComparison.Ordinal), $"{where} names one host's file as the only one.");
+        }
+
+        var envelope = Whitespace().Replace(Page("docs", "work-execution.md"), " ");
+        Assert.DoesNotContain("A host that composes a prompt from the envelope's parts", envelope, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -61,6 +83,44 @@ public sealed partial class FoldersDocTests
         Assert.Contains("in print mode it drops, without asking, an import of a file outside the folder it started in", page, StringComparison.Ordinal);
         Assert.Contains("The session skills therefore read the root's and the project's files by path", page, StringComparison.Ordinal);
         Assert.Contains("a role the runtime launches reads all three by the paths its launch envelope gives", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the runtime writes in a folder is the memory file and one import file for every host of the table that reads a
+    /// file of another name, each only where nothing of that name is there; the projects contract says that in each place
+    /// it says what is written, and names no one host's file as the only one. It names every file the table holds, so a host
+    /// added to the table that reads a file of its own turns this red until the page names it.
+    /// </summary>
+    [Fact]
+    public void The_projects_contract_says_what_is_written_in_a_folder_is_an_import_file_for_every_host_that_reads_one()
+    {
+        var page = Whitespace().Replace(Page("docs", "projects.md"), " ");
+        var sentences = new[]
+        {
+            "Made with its marker, an `AGENTS.md` and an import file for every host that reads a file of another name",
+            "by writing its marker, and `AGENTS.md` and each import file where it has none",
+            "where none is there, an import file for every host that reads a file of another name, each holding exactly its one line (`@AGENTS.md`), and an empty `AGENTS.md`",
+            "never writes over an import file that is there",
+            "and an `AGENTS.md` and each import file where there are none",
+        };
+        Assert.All(sentences, sentence => Assert.True(page.Contains(sentence, StringComparison.Ordinal), $"docs/projects.md does not say: {sentence}"));
+
+        var written = page[page.IndexOf("### What the runtime never does", StringComparison.Ordinal)..];
+        Assert.All(
+            Jason.Contracts.Hosts.AgentHosts.ImportFiles,
+            file => Assert.True(written.Contains($"`{file.FileName}`", StringComparison.Ordinal), $"what the runtime writes does not name `{file.FileName}`."));
+
+        foreach (var old in new[]
+        {
+            "Made with its marker, a `CLAUDE.md` and an `AGENTS.md`",
+            "and `CLAUDE.md` and `AGENTS.md` where it has none",
+            "where none is there, a `CLAUDE.md` holding exactly `@AGENTS.md`",
+            "never writes over a `CLAUDE.md` that is there",
+            "and a `CLAUDE.md` and an `AGENTS.md` where there are none",
+        })
+        {
+            Assert.DoesNotContain(old, page, StringComparison.Ordinal);
+        }
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\s+")]

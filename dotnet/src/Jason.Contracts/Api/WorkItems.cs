@@ -38,6 +38,10 @@ public sealed record AttemptErrorDto(
 /// What the role was taught: the skill copied in for it, or that there was none to copy. Whether a launched role
 /// had its instructions is otherwise unrecoverable after the fact.
 /// </param>
+/// <param name="Allow">
+/// The allow rules written into the work directory for this attempt, as they were written, beside the deny; absent for
+/// a host whose allow rules travel on its command line, which the entry command shows.
+/// </param>
 public sealed record AttemptLaunchDto(
     IReadOnlyList<string> EntryCommand,
     string WorkDir,
@@ -46,7 +50,8 @@ public sealed record AttemptLaunchDto(
     bool StdoutTruncated = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OutputAbandoned = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Deny = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RoleSkillDto? RoleSkill = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RoleSkillDto? RoleSkill = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Allow = null);
 
 /// <summary>Whether the role that ran this attempt was given its skill, and how large the one it was given was.</summary>
 public sealed record RoleSkillDto(bool Copied, string Name, long Bytes);

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Skills;
@@ -15,7 +16,8 @@ public sealed record PlannedFile(string Source, string Target, string Sha256);
 public sealed record PlannedUnit(string Name, string Unit, IReadOnlyList<PlannedFile> Files);
 
 /// <summary>Everything one pack would put in one root.</summary>
-public sealed record PlannedPack(string Pack, string Root, IReadOnlyList<PlannedUnit> Units)
+/// <param name="Hosts">The hosts that read the root, named in the plan; none for the runtime's own role root.</param>
+public sealed record PlannedPack(string Pack, string Root, IReadOnlyList<PlannedUnit> Units, IReadOnlyList<AgentHostKind>? Hosts = null)
 {
     public IEnumerable<PlannedFile> Files => Units.SelectMany(unit => unit.Files);
 }
@@ -105,7 +107,7 @@ public static class SkillsPlanner
 
             foreach (var harness in harnesses)
             {
-                packs.Add(new PlannedPack(SkillPacks.Runtime, harness.Directory, [.. Units(runtimePack, harness.Directory, cap, isRole: false, refusals)]));
+                packs.Add(new PlannedPack(SkillPacks.Runtime, harness.Directory, [.. Units(runtimePack, harness.Directory, cap, isRole: false, refusals)], harness.Hosts));
             }
         }
 
@@ -113,7 +115,7 @@ public static class SkillsPlanner
         {
             foreach (var harness in harnesses)
             {
-                packs.Add(new PlannedPack(SkillPacks.Business, harness.Directory, [.. Units(businessPack, harness.Directory, cap, isRole: false, refusals)]));
+                packs.Add(new PlannedPack(SkillPacks.Business, harness.Directory, [.. Units(businessPack, harness.Directory, cap, isRole: false, refusals)], harness.Hosts));
             }
         }
 
@@ -200,7 +202,7 @@ public static class SkillsPlanner
         {
             output.WriteLine(string.Create(
                 CultureInfo.InvariantCulture,
-                $"Target:  {pack.Units.Count} skills of {pack.Pack} into {pack.Root}"));
+                $"Target:  {pack.Units.Count} skills of {pack.Pack} into {pack.Root}{(pack.Hosts is { Count: > 0 } hosts ? $" ({string.Join(", ", hosts.Select(AgentHosts.Word))})" : string.Empty)}"));
         }
 
         if (dryRun)

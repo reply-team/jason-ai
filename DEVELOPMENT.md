@@ -56,7 +56,7 @@ What it leaves you with:
   (`%JASON_DEV%\bin\jason.exe` on Windows).
 - **The role skills as this checkout has them**, uncommitted edits included. `jason skills update` reads the same
   checkout again. Without `--roles-only` the interactive and business packs go into your agent's own configuration
-  (`~/.claude/skills` for Claude Code), which an installed release shares.
+  (each detected host's skills root), which an installed release shares.
 - **The UI served from `ui/dist`**, linked as the data directory's `ui/custom/`, which the runtime serves before
   anything else. `npm run build` writes the `manifest.json` the runtime asks for, so every later build is served by the
   next request; while you work on the UI, `npm run dev` in `ui/` rebuilds on every change.

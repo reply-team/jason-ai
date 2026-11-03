@@ -154,7 +154,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   installation, checked against the key's schema, set and unset by a named person only, and journaled by its size and
   hash, never its value. The client, each project and each campaign have a folder under the harness root, made at the
   first create that needs it, with a marker naming its level and id and the person's memory file, `AGENTS.md`, beside a
-  `CLAUDE.md` that imports it; the runtime writes structure only — never a word of a memory file, never a delete, never
+  one-line import file for every host that reads a file of another name (`CLAUDE.md` for Claude Code); the runtime
+  writes structure only — never a word of a memory file, never a delete, never
   `git` — and moves a campaign's folder by one rename when the campaign changes project, or refuses the move. A path
   is recorded on the entity; a folder is known by its marker, never its name, and a folder the person moves is
   recorded again only by `project.link`, which reads the project's folder and each folder directly in its
@@ -176,8 +177,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   `plugin reload` asks and never starts a runtime, and the verb-map tests hold the `ui` group to its three
   operations and `install` and the `plugin` group to its two and `install`); `jason logs` reads the
   installation's log files, which the runtime writes and is never asked about; and `jason doctor` collects one installation into one file, half of which is not the
-  runtime's to know — of the runtime it asks only what the runtime says about itself, its roles and
-  routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
+  runtime's to know — of the runtime it asks only what the runtime says about itself, its roles,
+  profiles and routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
   values. `status`, `logs` and
   `doctor` exit 0 or 1 and **never 3** — `logs` never asks the runtime, and for the other two "I could
   not ask the runtime" is an answer rather than a reason there is none — and the body of `status`

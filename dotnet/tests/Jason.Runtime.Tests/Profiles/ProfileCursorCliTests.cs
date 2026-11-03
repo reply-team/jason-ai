@@ -1,0 +1,399 @@
+using System.Net;
+using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
+using Jason.Runtime.Persistence;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Jason.Runtime.Tests.Profiles;
+
+/// <summary>
+/// What a profile of the Cursor CLI host is held to where it is written, with the host that ships: a web search can be
+/// neither granted nor denied, since the person's own setting decides it; a fetch is a grant like any other; arguments
+/// take their values joined by an equals sign; and on Windows the launcher script the host is installed as may be named
+/// by its full path, although it is a script, and by no other script and no bare name.
+/// </summary>
+public class ProfileCursorCliTests
+{
+    private const string Launcher = "C:\\Users\\someone\\AppData\\Local\\cursor-agent\\agent.cmd";
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task A_grant_of_web_search_is_refused_naming_the_host_and_the_persons_own_setting()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "searching", host = "cursor_cli", program = "agent", tools = new[] { "web_search" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("tools[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("cursor_cli", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("autoAcceptWebSearch", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("grants web_search, which Jason cannot make true on cursor_cli: ", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("web_search")]
+    [InlineData("WebSearch")]
+    public async Task A_deny_of_web_search_in_either_spelling_is_refused_naming_the_host(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "undeniable", host = "cursor_cli", program = "agent", deny = new[] { "Shell(rm)", word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("deny[1]", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("cursor_cli", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("autoAcceptWebSearch", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_grant_of_a_fetch_and_the_five_deny_heads_are_taken()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new
+            {
+                name = "fetching",
+                host = "cursor_cli",
+                program = "agent",
+                tools = new[] { "web_fetch" },
+                deny = new[] { "Shell(rm)", "Read(**/.env)", "Write(**)", "WebFetch(domain:example.test)", "Mcp(server:tool)" },
+            },
+            Ct);
+
+        Assert.Equal([AgentTool.WebFetch], created.Revision.Tools);
+        Assert.Equal(5, created.Revision.Deny.Count);
+    }
+
+    [Fact]
+    public async Task A_deny_that_is_not_one_of_the_five_heads_is_refused_naming_the_host_and_the_word()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "wrong-head", host = "cursor_cli", program = "agent", deny = new[] { "Bash(rm *)" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("deny[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("cursor_cli", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("Bash(rm *)", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_bare_word_among_the_arguments_is_refused_because_it_would_be_the_prompt()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "bare-word", host = "cursor_cli", program = "agent", args = new[] { "--model", "made-up-model" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("cursor_cli", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("stdin", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_flag_with_its_value_joined_by_an_equals_sign_is_taken()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "joined", host = "cursor_cli", program = "agent", args = new[] { "--model=made-up-model" } },
+            Ct);
+
+        Assert.Equal(["--model=made-up-model"], created.Revision.Args);
+    }
+
+    [Fact]
+    public async Task The_launcher_script_is_taken_by_its_full_path_on_windows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The host is installed as a launcher script on Windows only.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "scripted", host = "cursor_cli", program = Launcher }, Ct);
+
+        Assert.Equal(Launcher, created.Revision.Program);
+    }
+
+    [Fact]
+    public async Task The_launcher_script_is_taken_by_a_patch_on_windows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The host is installed as a launcher script on Windows only.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "patched", host = "cursor_cli", program = "agent" }, Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "patched", program = Launcher }, Ct);
+
+        Assert.Equal(Launcher, updated.Revision.Program);
+    }
+
+    [Theory]
+    [InlineData("agent.cmd")]
+    [InlineData(".\\agent.cmd")]
+    [InlineData("./agent.cmd")]
+    [InlineData("sub/agent.cmd")]
+    [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\claude.cmd")]
+    [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\agent.ps1")]
+    public async Task Any_other_script_and_a_bare_launcher_name_stay_refused(string program)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "other-script", host = "cursor_cli", program },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
+    /// Windows trims the dot that ends a file name, so <c>agent.cmd.</c> starts the launcher script itself, and the
+    /// exception for the launcher's full path does not stretch to a name the operating system reads as that script.
+    /// </summary>
+    [Fact]
+    public async Task A_launcher_path_that_Windows_trims_back_to_the_launcher_stays_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Trimming the dots and spaces that end a path is Windows' own.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "trimmed-launcher", host = "cursor_cli", program = Launcher + "." },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
+    /// Where the operating system does not trim a name, the dot that ends it is part of the name, which then has no
+    /// extension and is no script, so the profile is taken with the program stored as written.
+    /// </summary>
+    [Fact]
+    public async Task A_dot_ending_a_launcher_name_is_part_of_the_name_elsewhere()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "On Windows the dot that ends a file name is trimmed, so the name is the launcher's.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var program = Launcher + ".";
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "dotted-launcher", host = "cursor_cli", program }, Ct);
+
+        Assert.Equal(program, created.Revision.Program);
+    }
+
+    /// <summary>
+    /// The host's parser expands <c>-fp</c> into two flags and reads <c>-ehttp://...</c> as <c>-e</c> with a value, and a
+    /// lone dash as the prompt, so none of them may be written as an argument, at create or at an update. A short flag
+    /// of the reserved set is refused as itself.
+    /// </summary>
+    [Theory]
+    [InlineData("-fp")]
+    [InlineData("-pf")]
+    [InlineData("-ehttp://127.0.0.1:9")]
+    [InlineData("-k")]
+    [InlineData("-")]
+    public async Task A_short_flag_cluster_a_short_flag_with_a_joined_value_and_a_lone_dash_are_refused_at_create_and_at_update(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "clustered", host = "cursor_cli", program = "agent", args = new[] { word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        Assert.StartsWith("args", Assert.Single(created.Details!).Field, StringComparison.Ordinal);
+
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "plain", host = "cursor_cli", program = "agent" }, Ct);
+        var updated = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "plain", args = new[] { word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        Assert.StartsWith("args", Assert.Single(updated.Details!).Field, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A patch that names only the host is held to the new host's rule for the program the profile already has: the
+    /// launcher script of this host is not a program of another, and no other script is one of this.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_moving_a_launcher_profile_to_another_host_is_refused_for_the_stored_program()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The host is installed as a launcher script on Windows only.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "scripted", host = "cursor_cli", program = Launcher }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "scripted", host = "claude_code" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+        Assert.Contains("the profile's program", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_patch_moving_a_stored_script_to_this_host_is_refused_unless_the_script_is_its_launcher()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await StoreAsync(api, "older-script", "C:\\tools\\run.cmd", "AAAA");
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "older-script", host = "cursor_cli" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+        Assert.Contains("the profile's program", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_patch_moving_a_stored_launcher_path_to_this_host_is_taken_on_windows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The host is installed as a launcher script on Windows only.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await StoreAsync(api, "older-launcher", Launcher, "BBBB");
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "older-launcher", host = "cursor_cli" }, Ct);
+
+        Assert.Equal(Launcher, updated.Revision.Program);
+    }
+
+    /// <summary>
+    /// A patch that names only the host moves the profile's stored program to a host it was not written for. The program is
+    /// kept where it is its new host's own word, or that host's own launcher; anything else is refused and the person is
+    /// told to name the program, since a program of another host would be started with this host's arguments.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_that_names_only_the_host_is_refused_when_the_stored_program_is_another_hosts_word()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "wordy", host = "claude_code", program = "claude" }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "wordy", host = "cursor_cli" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("name the program", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("cursor_cli", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("agent")]
+    [InlineData("agent.exe")]
+    [InlineData("/opt/cursor/agent")]
+    public async Task A_patch_that_names_only_the_host_is_taken_when_the_stored_program_is_the_new_hosts_word(string program)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "fitting", host = "claude_code", program }, Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "fitting", host = "cursor_cli" }, Ct);
+
+        Assert.Equal(program, updated.Revision.Program);
+    }
+
+    /// <summary>The rule is for a patch that moves the host; one that leaves it alone keeps a program the person wrote for it, wrapper or not.</summary>
+    [Fact]
+    public async Task A_patch_that_leaves_the_host_alone_keeps_a_program_that_is_not_the_hosts_word()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "wrapped", host = "claude_code", program = "my-wrapper" }, Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "wrapped", description = "a wrapper of the host" }, Ct);
+
+        Assert.Equal("my-wrapper", updated.Revision.Program);
+    }
+
+    public static TheoryData<AgentHostKind> OtherKinds() =>
+        [.. Enum.GetValues<AgentHostKind>().Where(kind => kind != AgentHostKind.ClaudeCode)];
+
+    /// <summary>The same rule for every host the build registers: a program of the shipped host is refused under each of them, and each one's own word is taken.</summary>
+    [Theory]
+    [MemberData(nameof(OtherKinds))]
+    public async Task A_patch_that_names_only_the_host_is_held_to_each_registered_hosts_word(AgentHostKind kind)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var host = api.Resolve<IEnumerable<Jason.Runtime.Execution.Hosts.IAgentHost>>().LastOrDefault(candidate => candidate.Kind == kind);
+        Assert.SkipWhen(host is null, "The host is not registered in this build.");
+        var word = Jason.Contracts.Hosts.AgentHosts.Word(kind);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, new { name = "shipped", host = "claude_code", program = "claude" }, Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, new { name = "own", host = "claude_code", program = host!.Facts.CommandWord }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "shipped", host = word }, HttpStatusCode.BadRequest, Ct);
+        var taken = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileUpdate, new { name = "own", host = word }, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("name the program", detail.Message, StringComparison.Ordinal);
+        Assert.Equal(host.Facts.CommandWord, taken.Revision.Program);
+    }
+
+    /// <summary>A profile as a build before the rule would have stored it, so a patch meets what is already there.</summary>
+    private static async Task StoreAsync(RuntimeApiFixture api, string name, string program, string idEnd)
+    {
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var now = DateTime.UtcNow;
+        var profile = new ExecutionProfile { PublicId = "prf_01K0000000000000000000" + idEnd, Name = name, CurrentRevision = 1, CreatedAt = now, UpdatedAt = now };
+        profile.Revisions.Add(new ExecutionProfileRevision
+        {
+            Number = 1,
+            Host = AgentHostKind.ClaudeCode,
+            Program = program,
+            HostVersionVerified = "stand-in",
+            CreatedByType = ActorType.Human,
+            CreatedAt = now,
+        });
+        db.ExecutionProfiles.Add(profile);
+        await db.SaveChangesAsync(Ct);
+    }
+
+    [Fact]
+    public async Task The_launcher_script_is_refused_under_a_host_that_is_not_installed_as_one()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "wrong-host", host = "claude_code", program = Launcher },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+    }
+}

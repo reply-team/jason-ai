@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Harness;
+using Jason.Contracts.Hosts;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Projects;
@@ -9,13 +10,14 @@ namespace Jason.Runtime.Harness;
 
 /// <summary>
 /// The folder policy: the harness root, <c>projects/&lt;slug&gt;/</c> for a project and
-/// <c>projects/&lt;slug&gt;/campaigns/&lt;leaf&gt;/</c> for a campaign, each level with its marker, a <c>CLAUDE.md</c> that
-/// imports <c>AGENTS.md</c> and an empty <c>AGENTS.md</c>, the two written only where absent (<c>docs/projects.md</c>).
+/// <c>projects/&lt;slug&gt;/campaigns/&lt;leaf&gt;/</c> for a campaign, each level with its marker, an import file for each host that reads one
+/// (<see cref="AgentHosts.ImportFiles"/>) holding the line that imports <c>AGENTS.md</c>, and an empty <c>AGENTS.md</c>, each written
+/// only where absent (<c>docs/projects.md</c>).
 /// </summary>
 /// <remarks>
 /// <para>
-/// It writes structure only: a directory, a marker, and the two files where there are none. It never reads, writes or
-/// deletes a word of any <c>AGENTS.md</c>, never writes over a <c>CLAUDE.md</c>, never deletes a folder or a file, never
+/// It writes structure only: a directory, a marker, and the files where there are none. It never reads, writes or
+/// deletes a word of any <c>AGENTS.md</c>, never writes over an import file, never deletes a folder or a file, never
 /// runs <c>git</c> and never writes a <c>.gitignore</c>. The one thing it moves is a campaign's folder, by one rename, when
 /// the campaign changes project.
 /// </para>
@@ -38,11 +40,8 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
 
     public const string CampaignsDirectory = "campaigns";
 
-    /// <summary>What a level's <c>CLAUDE.md</c> holds when the runtime writes one: the import of the level's <c>AGENTS.md</c>, and nothing else.</summary>
-    public const string ClaudeImport = "@AGENTS.md";
-
     /// <summary>A level's memory file, the person's own words: made empty where absent, and never opened.</summary>
-    public const string MemoryFile = "AGENTS.md";
+    public const string MemoryFile = AgentHosts.MemoryFile;
 
     /// <summary>How many numbered leaves are tried for one campaign before the disk is said to have none free.</summary>
     private const int MaxNumbered = 999;
@@ -280,7 +279,7 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     }
 
     /// <summary>
-    /// Takes a folder of the person's own, one with no marker, as a project's: its marker first, then a <c>CLAUDE.md</c> and
+    /// Takes a folder of the person's own, one with no marker, as a project's: its marker first, then the import files and
     /// an <c>AGENTS.md</c> where it has none, and not a word of anything it holds. A marker of something else that turned out
     /// to be there first is refused as taken, with nothing written.
     /// </summary>
@@ -445,10 +444,11 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     }
 
     /// <summary>
-    /// The root as a level of the policy: made with its marker and the two files where there is no folder; an existing
-    /// folder with no marker adopted by writing its marker and the two files where absent, never a word of what is in
+    /// The root as a level of the policy: made with its marker and its files where there is no folder; an existing
+    /// folder with no marker adopted by writing its marker and the files where absent, never a word of what is in
     /// it; one whose marker names anything but a root refused, with nothing written. A root that has its marker is used as
-    /// it is: what the person did with its files since is theirs.
+    /// it is, but for the import files of hosts that came after it was made: those it lacks are written, over nothing. What
+    /// the person did with its other files since is theirs.
     /// </summary>
     private static void EnsureRoot(string root)
     {
@@ -458,6 +458,9 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
             var (standing, _) = Look(root, mine);
             if (standing == Standing.Own)
             {
+                // A root made before a host's import file existed has its marker and the files it had: it gains the import
+                // file it lacks here, at the next create, and a file that is there is never opened.
+                WriteImportFilesIfAbsent(root);
                 return;
             }
 
@@ -492,7 +495,7 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
 
     /// <summary>
     /// Takes <paramref name="folder"/> as a level: makes it where it is absent, writes its marker where it has none, and
-    /// gives it the two files where absent. The marker comes first, so a folder whose marker of something else turned out
+    /// gives it the import files and the memory file where absent. The marker comes first, so a folder whose marker of something else turned out
     /// to be there first is refused with nothing written in it, and the answer is then false. A step that fails after the
     /// marker leaves the folder marked for the id it was made for: the same level's next attempt finishes it, and a create
     /// taken back leaves it for the next one that reaches its path to name.
@@ -561,12 +564,24 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     }
 
     /// <summary>
-    /// <c>CLAUDE.md</c> holding exactly <see cref="ClaudeImport"/> and an empty <c>AGENTS.md</c>, each only where nothing of
-    /// that name is there: an existing one is never opened, read or written.
+    /// Each file a host reads in place of the memory file, holding exactly its line of the table of hosts, each only where
+    /// nothing of that name is there: an existing one is never opened, read or written.
+    /// </summary>
+    private static void WriteImportFilesIfAbsent(string folder)
+    {
+        foreach (var file in AgentHosts.ImportFiles)
+        {
+            TryCreate(Path.Combine(folder, file.FileName), System.Text.Encoding.UTF8.GetBytes(file.ImportLine));
+        }
+    }
+
+    /// <summary>
+    /// Each file a host reads in place of the memory file, holding exactly its line of the table of hosts, and an empty
+    /// <c>AGENTS.md</c>, each only where nothing of that name is there: an existing one is never opened, read or written.
     /// </summary>
     private static void WriteFilesIfAbsent(string folder)
     {
-        TryCreate(Path.Combine(folder, "CLAUDE.md"), System.Text.Encoding.UTF8.GetBytes(ClaudeImport));
+        WriteImportFilesIfAbsent(folder);
         TryCreate(Path.Combine(folder, MemoryFile), []);
     }
 

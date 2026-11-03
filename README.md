@@ -251,6 +251,7 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
+| | every enabled profile names an agent host detected on this machine |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
@@ -296,7 +297,7 @@ problem codes, which plugin performs which operation, here and per campaign, by 
 name — never which account a route binds — and the journal and the work items counted, with the newest entries by kind and ids and the
 newest failures by their error's code — never by what they say. It never holds the capability token,
 request or response bodies, prompts, work-item results, the database, plugin packages, a route's
-account and its identity, or anything read from the folder Jason keeps what it learns about your business in —
+account and its identity, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in —
 `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only
 `--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
 project link recorded, campaign
@@ -398,9 +399,9 @@ attempt at a time, and whatever performs it reports what happened through the sa
 <id> --human` shows its attempts and how each ended.
 
 Which agent host runs a piece of AI work is named by an **execution profile**, and each attempt keeps the
-revision of the profile it ran under. In this release the host a profile can name is Claude Code; a profile naming
-another is refused when it is written. When no profile can run a piece of AI work it waits, blocked, and
-everything else keeps running:
+revision of the profile it ran under. The hosts a profile can name are those of the
+[host matrix](docs/execution-profiles.md#12-the-hosts); a profile naming another is refused when it is written.
+When no profile can run a piece of AI work it waits, blocked, and everything else keeps running:
 
 ```sh
 jason profile create local-claude --host claude_code --program claude   --deny Write --host-version-verified 2.1.275
@@ -408,6 +409,55 @@ jason profile list --human
 jason workitem create <campaign-id> --kind ai_role --role researcher --execution-profile local-claude
 jason rolenote get --role researcher --campaign <campaign-id>
 ```
+
+Cursor CLI can run the background roles too. Install it from
+[Cursor's installation page](https://cursor.com/docs/cli/installation.md), where its commands are kept current, sign in as
+yourself, then name it:
+
+```sh
+agent login
+jason profile create local-cursor --host cursor_cli --program agent
+```
+
+The [host matrix](docs/execution-profiles.md#12-the-hosts) says what was built from documentation and what has not yet
+been run on an account.
+
+Codex CLI is named the same way: install it from [its own page](https://github.com/openai/codex), sign in with
+`codex login`, then name it. On Windows, Codex needs a one-time setup by an administrator first, which
+[the Codex section](docs/execution-profiles.md#codex-cli) describes.
+
+```sh
+codex login
+jason profile create local-codex --host codex --program codex
+```
+
+GitHub Copilot CLI too: install it from
+[GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli),
+sign in with `copilot login`, then name it:
+
+```sh
+copilot login
+jason profile create copilot --host copilot_cli --program copilot
+```
+
+Gemini CLI is named the same way, on a Code Assist Standard or Enterprise sign-in: install it from
+[its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself, then
+`jason profile create local-gemini --host gemini_cli --program gemini`.
+
+Antigravity CLI (`agy`) is the host individual Google plans run. Install it from the CLI tab of
+Google's quickstart ([antigravity.google/docs/getting-started?tab=cli](https://antigravity.google/docs/getting-started?tab=cli)),
+run `agy` once and sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)),
+then name it:
+
+```sh
+jason profile create local-antigravity --host antigravity_cli --program agy
+```
+
+The host takes its permission rules from your own settings file, `~/.gemini/antigravity-cli/settings.json`, in its
+`permissions.allow` array, and from nowhere a run can carry them, so you add two rules there once, `command(jason)` and
+`read_file(<your harness folder>)`; on Windows shells write the first as `command(regex:jason .*)`. The
+[host matrix](docs/execution-profiles.md#12-the-hosts) gives the two lines of JSON, says why, and says what was built from
+documentation and has not yet been run on an account.
 
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,

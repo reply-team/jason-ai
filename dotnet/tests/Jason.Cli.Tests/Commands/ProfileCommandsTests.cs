@@ -125,6 +125,20 @@ public class ProfileCommandsTests
         Assert.Contains("web_search, web_fetch", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>The help names the hosts a profile can name, from the table both halves read rather than a copy of it.</summary>
+    [Theory]
+    [InlineData("create")]
+    [InlineData("update")]
+    public async Task The_help_names_the_hosts_a_profile_can_name(string verb)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("profile", verb, "--help");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("One of: " + Jason.Contracts.Hosts.AgentHosts.Vocabulary + ".", cli.Text, StringComparison.Ordinal);
+    }
+
     /// <summary>An empty list is a thing a repeatable option cannot say, and <c>--file</c> is how it is said.</summary>
     [Fact]
     public async Task Update_can_clear_a_list_through_a_file()
@@ -197,10 +211,10 @@ public class ProfileCommandsTests
             "{\"error\":{\"code\":\"validation_failed\",\"message\":\"Validation failed: host: invalid.\",\"retryable\":false}}",
             status: System.Net.HttpStatusCode.BadRequest);
 
-        var exit = await cli.RunAsync("profile", "create", "someday", "--host", "codex", "--program", "codex");
+        var exit = await cli.RunAsync("profile", "create", "someday", "--host", "made_up_host", "--program", "made-up");
 
         Assert.Equal(ExitCodes.ApiError, exit);
-        cli.AssertPosted(Operations.ProfileCreate, "{\"name\":\"someday\",\"host\":\"codex\",\"program\":\"codex\"}");
+        cli.AssertPosted(Operations.ProfileCreate, "{\"name\":\"someday\",\"host\":\"made_up_host\",\"program\":\"made-up\"}");
 
         // The API's own answer, verbatim on stdout: stderr is diagnostics, and the envelope is the answer.
         Assert.Contains("host: invalid", cli.Text, StringComparison.Ordinal);

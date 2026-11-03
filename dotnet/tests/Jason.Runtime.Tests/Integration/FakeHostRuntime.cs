@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Hosts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Tests.Dispatch;
@@ -39,8 +40,11 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
     /// </summary>
     private readonly Dictionary<int, OwnedChild.Held> _children = [];
 
-    /// <summary>The names a host child answers to: the shared host that runs its assembly, or its own program.</summary>
-    private static readonly string[] HostNames = ["dotnet", "Jason.FakeAgentHost"];
+    /// <summary>
+    /// The names a host child answers to: the shared host that runs its assembly, its own program, or a host's command
+    /// word, which the stand-in is copied under to stand on a search path as that host (<see cref="StubHost"/>).
+    /// </summary>
+    private static readonly string[] HostNames = ["dotnet", "Jason.FakeAgentHost", .. AgentHosts.All.Select(facts => facts.CommandWord)];
 
     private FakeHostRuntime(RuntimeApiFixture fixture, FixedClock clock)
     {

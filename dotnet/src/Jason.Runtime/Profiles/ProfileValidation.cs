@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Programs;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution.Hosts;
@@ -19,7 +20,7 @@ internal static partial class ProfileValidation
     /// <summary>The same shape as a role's name: work, campaigns, roles and settings all spell it from memory.</summary>
     public static Regex ProfileName { get; } = Name();
 
-    public static void ValidateCreate(ProfileCreateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
+    public static void ValidateCreate(ProfileCreateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors, IAgentHost? host = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -27,7 +28,7 @@ internal static partial class ProfileValidation
         ValidateName(request.Name, errors);
         ValidateDescription(request.Description, errors);
         ValidateHost(request.Host, errors);
-        ValidateProgram(request.Program, errors);
+        ValidateProgram(request.Program, host, errors);
         ValidateArgs(request.Args, reserved, errors);
         ValidateDeny(request.Deny, errors);
         ValidateTools(request.Tools, errors);
@@ -40,7 +41,7 @@ internal static partial class ProfileValidation
     /// A patch is checked for what it names. An absent field is not a value the caller offered, so there is
     /// nothing to hold it to; a present one is held to exactly the rule it would have been held to at creation.
     /// </summary>
-    public static void ValidateUpdate(ProfileUpdateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
+    public static void ValidateUpdate(ProfileUpdateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors, IAgentHost? host = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -60,7 +61,7 @@ internal static partial class ProfileValidation
 
         if (request.Program.IsSet)
         {
-            ValidateProgram(request.Program.Value, errors);
+            ValidateProgram(request.Program.Value, host, errors);
         }
 
         if (request.Args.IsSet)
@@ -118,16 +119,7 @@ internal static partial class ProfileValidation
     /// The host as the closed vocabulary spells it. A value outside it is a name this build has no launcher for,
     /// and the message says what it does have rather than leaving the caller to guess.
     /// </summary>
-    public static AgentHostKind? ParseHost(string? host)
-    {
-        var text = host?.Trim();
-        return text is null
-            ? null
-            : Enum.GetValues<AgentHostKind>()
-                .Where(kind => string.Equals(SnakeCaseEnumConverter<AgentHostKind>.Format(kind), text, StringComparison.Ordinal))
-                .Select(kind => (AgentHostKind?)kind)
-                .FirstOrDefault();
-    }
+    public static AgentHostKind? ParseHost(string? host) => AgentHosts.Parse(host);
 
     /// <summary>A granted tool as the closed vocabulary spells it, or nothing for a word outside it.</summary>
     public static AgentTool? ParseTool(string? tool)
@@ -180,11 +172,11 @@ internal static partial class ProfileValidation
 
         if (ParseHost(host) is null)
         {
-            errors.Add("host", "invalid", "host must be one of: " + string.Join(", ", Hosts()) + ".");
+            errors.Add("host", "invalid", "host must be one of: " + AgentHosts.Vocabulary + ".");
         }
     }
 
-    private static void ValidateProgram(string? program, ValidationErrors errors)
+    private static void ValidateProgram(string? program, IAgentHost? host, ValidationErrors errors)
     {
         if (string.IsNullOrWhiteSpace(program))
         {
@@ -209,14 +201,39 @@ internal static partial class ProfileValidation
         // profile could only ever fail at the claim. Refused here in the lookup's words; a bare name without the
         // extension is looked up on the search path (on Windows as an .exe, a .com or npm's own shim). Read as the operating system reads the path too, so
         // a script whose name Windows trims back to one is refused here and not started at the claim.
-        if (ProgramResolver.NamesShellScript(program))
+        if (ProgramResolver.NamesShellScript(program) && !NamesTheHostsLauncher(program, host))
         {
-            errors.Add(
-                "program",
-                "shell_script",
-                "program must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
-                + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).");
+            errors.Add("program", "shell_script", ShellScriptMessage("program"));
         }
+    }
+
+    private static string ShellScriptMessage(string subject) =>
+        subject + " must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
+        + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).";
+
+    /// <summary>
+    /// Whether a script is the launcher the profile's own host is installed as, named by its full path: only the host
+    /// knows which file names those are, and neither a bare name, which is looked up on the search path, nor a relative
+    /// path, which would be read against the runtime's own working directory, is one.
+    /// </summary>
+    private static bool NamesTheHostsLauncher(string program, IAgentHost? host)
+    {
+        var path = program.Trim();
+        return host is not null
+            && Path.IsPathFullyQualified(path)
+            && host.NamesItsLauncher(Path.GetFileName(path));
+    }
+
+    /// <summary>
+    /// Whether a stored program is one this host starts: its file name, without the extension, is the host's command word,
+    /// or the host itself takes it, as it takes its own launcher named by its full path.
+    /// </summary>
+    private static bool IsTheHostsProgram(string program, IAgentHost host)
+    {
+        var path = program.Trim();
+        var name = path[(path.LastIndexOfAny(['/', '\\']) + 1)..];
+        return string.Equals(Path.GetFileNameWithoutExtension(name), host.Facts.CommandWord, StringComparison.OrdinalIgnoreCase)
+            || NamesTheHostsLauncher(path, host);
     }
 
     /// <summary>The list as it will be stored, once it is known to be one. Blank entries never reach here.</summary>
@@ -226,7 +243,29 @@ internal static partial class ProfileValidation
     private static void ValidateArgs(IReadOnlyList<JsonNode?>? args, IReadOnlySet<string>? reserved, ValidationErrors errors)
     {
         ValidateStrings(args, "args", ProfileService.MaxArgs, ProfileService.MaxArgLength, errors);
-        if (args is null || reserved is null)
+        if (args is null)
+        {
+            return;
+        }
+
+        // A NUL ends a command line and another control character splits one, on every host, so an argument carrying
+        // one is never a word anybody meant. Refused once here for every host, as `program` is, rather than by each
+        // host's own reading. A list over the cap was answered above and is not read entry by entry.
+        if (args.Count <= ProfileService.MaxArgs)
+        {
+            for (var index = 0; index < args.Count; index++)
+            {
+                if (Text(args[index]) is { } entry && !string.IsNullOrWhiteSpace(entry) && entry.Any(char.IsControl))
+                {
+                    errors.Add(
+                        string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
+                        "invalid",
+                        "an args entry must not contain control characters.");
+                }
+            }
+        }
+
+        if (reserved is null)
         {
             return;
         }
@@ -244,14 +283,7 @@ internal static partial class ProfileValidation
                 continue;
             }
 
-            var flag = value.Trim();
-            var separator = flag.IndexOf('=', StringComparison.Ordinal);
-            if (separator > 0)
-            {
-                flag = flag[..separator];
-            }
-
-            if (reserved.Contains(flag))
+            if (ReservedFlag(value, reserved) is { } flag)
             {
                 errors.Add(
                     string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
@@ -261,18 +293,132 @@ internal static partial class ProfileValidation
         }
     }
 
+    /// <summary>The flag an argument names, the text before any <c>=</c>, when the host composes it; otherwise null.</summary>
+    private static string? ReservedFlag(string value, IReadOnlySet<string> reserved)
+    {
+        var flag = value.Trim();
+        var separator = flag.IndexOf('=', StringComparison.Ordinal);
+        if (separator > 0)
+        {
+            flag = flag[..separator];
+        }
+
+        return reserved.Contains(flag) ? flag : null;
+    }
+
+    /// <summary>
+    /// What the revision's host says of its words, once the host is parsed, held to the revision as it would be launched.
+    /// One rule for every host: a grant of a tool the host does not have is refused, naming the host and the tool; a deny
+    /// of such a tool is kept as the person's word, since it holds anyway; a deny of a tool the host has and cannot take
+    /// away, or of a word it does not read as a rule, is refused naming the host; and so is a grant of a tool the host
+    /// has but Jason cannot make true, and arguments the host's own reading refuses. Each is <c>invalid</c>; stored
+    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>, and a stored program it leaves alone to the host's rule for a script, <c>shell_script</c>, and, where the patch moves the host, to the new host's own word or launcher, <c>invalid</c>. Every message
+    /// names the host and the word; then the grant is held beside the deny. Where a patch did not name a list,
+    /// the message says it is the profile's.
+    /// </summary>
+    public static void ValidateForHost(
+        ExecutionProfileRevision revision,
+        IAgentHost host,
+        ValidationErrors errors,
+        bool toolsNamed = true,
+        bool denyNamed = true,
+        bool argsNamed = true,
+        bool programNamed = true,
+        bool hostMoved = false)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        var word = AgentHosts.Word(host.Kind);
+
+        // The program a request names was held to this host where it was read. One it leaves alone is the stored one, and
+        // a patch that moves the profile to another host would otherwise start a script that is this host's launcher
+        // under a host that is not installed as one, or a script that is no launcher under this one.
+        if (!programNamed && ProgramResolver.NamesShellScript(revision.Program) && !NamesTheHostsLauncher(revision.Program, host))
+        {
+            errors.Add("program", "shell_script", ShellScriptMessage("the profile's program"));
+        }
+        else if (!programNamed && hostMoved && !IsTheHostsProgram(revision.Program, host))
+        {
+            // A program written for one host is not started under another with that host's arguments: the person says which.
+            errors.Add(
+                "program",
+                "invalid",
+                $"the profile's program is not {word}'s: a patch that moves the profile to {word} without naming the program must keep one that is {host.Facts.CommandWord} (or, where the host is installed as one, its launcher); name the program.");
+        }
+
+        // Arguments a request names were held to this host's flags where they were read. Arguments it leaves alone are
+        // the stored ones, and a patch that moves the profile to another host would otherwise launch them after the
+        // flags that host composes, where the last value wins.
+        if (!argsNamed)
+        {
+            for (var index = 0; index < revision.Args.Count; index++)
+            {
+                if (ReservedFlag(revision.Args[index], host.ReservedFlags) is { } flag)
+                {
+                    errors.Add(
+                        string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
+                        "reserved",
+                        $"the profile's args[{index}] '{flag}' is composed by the runtime on {word} for every attempt and cannot be set by a profile.");
+                }
+            }
+        }
+
+        if (host.ArgsProblem(revision.Args) is { } refused)
+        {
+            errors.Add("args", "invalid", $"{(argsNamed ? "" : "the profile's ")}args are refused on {word}: {refused}");
+        }
+
+        var toolsOwner = toolsNamed ? "" : "the profile's ";
+        for (var index = 0; index < revision.Tools.Count; index++)
+        {
+            var tool = revision.Tools[index];
+            var field = string.Create(CultureInfo.InvariantCulture, $"tools[{index}]");
+            var name = SnakeCaseEnumConverter<AgentTool>.Format(tool);
+            if (host.GrantProblem(tool) is { } untrue)
+            {
+                errors.Add(field, "invalid", $"{toolsOwner}{field} grants {name}, which Jason cannot make true on {word}: {untrue}");
+            }
+            else if (host.ToolRule(tool) is null)
+            {
+                errors.Add(field, "invalid", $"{toolsOwner}{field} grants {name}, which {word} does not have; a deny of it is kept, since it holds anyway.");
+            }
+        }
+
+        var denyOwner = denyNamed ? "" : "the profile's ";
+        for (var index = 0; index < revision.Deny.Count; index++)
+        {
+            if (host.DenyProblem(revision.Deny[index]) is { } undeniable)
+            {
+                var field = string.Create(CultureInfo.InvariantCulture, $"deny[{index}]");
+                errors.Add(field, "invalid", $"{denyOwner}{field} '{revision.Deny[index]}' cannot be denied on {word}: {undeniable}");
+            }
+        }
+
+        // A grant refused above is not held beside the deny as well: one problem per grant.
+        ValidateGrantBesideDeny(
+            revision.Tools,
+            revision.Deny,
+            tool => host.GrantProblem(tool) is null ? host.ToolRule(tool) : null,
+            errors,
+            toolsNamed,
+            denyNamed);
+    }
+
     /// <summary>
     /// A grant the revision's own deny takes away. The host's deny wins over an allow rule, so a tool granted and
     /// denied by the host's own name for it would be a grant no launch can use; the pair is refused on the grant,
     /// naming the deny. Only the bare name, spelled as the host spells it, collides: a deny that is a pattern, such as
     /// <c>WebFetch(domain:example.com)</c>, is not refused and is written beside the grant, and how much of the grant
     /// it leaves is the host's to decide. Where a patch did not name one of the two lists, the message says that
-    /// index is the profile's, since the request carried no such list.
+    /// index is the profile's, since the request carried no such list. A tool the host has no rule for collides with
+    /// nothing.
     /// </summary>
     public static void ValidateGrantBesideDeny(
         IReadOnlyList<AgentTool> tools,
         IReadOnlyList<string> deny,
-        Func<AgentTool, string> rule,
+        Func<AgentTool, string?> rule,
         ValidationErrors errors,
         bool toolsNamed = true,
         bool denyNamed = true)
@@ -286,7 +432,11 @@ internal static partial class ProfileValidation
         var denyOwner = denyNamed ? "" : "the profile's ";
         for (var index = 0; index < tools.Count; index++)
         {
-            var name = rule(tools[index]);
+            if (rule(tools[index]) is not { } name)
+            {
+                continue;
+            }
+
             var denied = -1;
             for (var entry = 0; entry < deny.Count; entry++)
             {
@@ -383,7 +533,7 @@ internal static partial class ProfileValidation
         entry is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     /// <summary>
-    /// A bare file name, because this is what the launched agent types to call home and the runtime is what puts
+    /// A bare command word, because this is what the launched agent types to call home and the runtime is what puts
     /// something of that name within its reach. A path would name a program the runtime did not put there.
     /// </summary>
     private static void ValidateCliCommand(string? cliCommand, ValidationErrors errors)
@@ -406,20 +556,23 @@ internal static partial class ProfileValidation
             return;
         }
 
-        // One word, and nothing that could turn the allow rule into a different rule. The rule is built by
-        // putting this word inside a pattern, so a space or a bracket here does not break the word — it changes
-        // what the agent is permitted to run, which is the one thing that rule exists to state exactly.
-        var shaped = value.AsSpan().IndexOfAny('/', '\\', ':') >= 0
-            || value.Any(character => char.IsControl(character) || char.IsWhiteSpace(character))
-            || value.AsSpan().IndexOfAny("()*\"'") >= 0;
-        if (shaped || value is "." or "..")
+        // One word of plain characters, and nothing that could turn the allow rule into a different rule. The rule is
+        // built by putting this word inside a pattern, and the hosts read other characters in one: a comma ends a rule
+        // in a list, a bracket or a star makes a pattern, a semicolon, a bar or an ampersand ends a command. So the word
+        // is held to an allowlist instead of a list of what is known to go wrong.
+        if (!IsCommandWord(value))
         {
             errors.Add(
                 "cli_command",
                 "invalid",
-                "cli_command must be a bare command word: no directory, no path, no drive, no spaces and no brackets.");
+                "cli_command must be a bare command word: letters, digits, dots, dashes and underscores, starting with a letter or a digit.");
         }
     }
+
+    /// <summary>Letters, digits, dots, dashes and underscores, the first a letter or a digit, all of them ASCII.</summary>
+    private static bool IsCommandWord(string value) =>
+        char.IsAsciiLetterOrDigit(value[0])
+        && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
 
     /// <summary>
     /// A host version is a version: three numbers, and a pre-release after `-` if any. It is journaled as metadata on that
@@ -451,10 +604,6 @@ internal static partial class ProfileValidation
             errors.Add("reason", "too_long", string.Create(CultureInfo.InvariantCulture, $"reason must be at most {ProfileService.MaxReasonLength} characters."));
         }
     }
-
-    /// <summary>The vocabulary as the API spells it, so the message names values a caller can send back.</summary>
-    private static IEnumerable<string> Hosts() =>
-        Enum.GetValues<AgentHostKind>().Select(SnakeCaseEnumConverter<AgentHostKind>.Format);
 
     [GeneratedRegex(@"^[a-z][a-z0-9-]{0,63}\z")]
     private static partial Regex Name();

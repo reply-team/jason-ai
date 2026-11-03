@@ -327,6 +327,268 @@ public class AgentPreflightTests
     }
 
     /// <summary>
+    /// Codex reads a path holding <c>*</c>, <c>?</c>, <c>[</c>, <c>]</c>, <c>{</c> or <c>}</c> as a pattern, and a pattern
+    /// may only deny, so a run whose own folders hold one could not call the runtime back. The claim refuses it before a
+    /// child exists, with a sentence naming the folder, rather than leaving the person a pattern message from codex.
+    /// </summary>
+    [Theory]
+    [InlineData("/home/some[1]one/.jason/run", "/home/someone/.local/bin/jason", "/home/someone/.net/jason/a1b2c3", "/home/some[1]one/.jason/run")]
+    [InlineData("/home/someone/.jason/run", "/home/someone/{tools}/jason", "/home/someone/.net/jason/a1b2c3", "/home/someone/{tools}/jason")]
+    [InlineData("/home/someone/.jason/run", "/home/someone/.local/bin/jason", "/home/someone/.net*/jason/a1b2c3", "/home/someone/.net*/jason/a1b2c3")]
+    public async Task A_codex_run_whose_own_folders_hold_a_pattern_character_is_refused_naming_the_folder(
+        string run, string executable, string extraction, string named)
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CodexHost(run, executable, extraction, windows: false, home: "/home/someone")]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "codex", "codex", host: AgentHostKind.Codex);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "codex");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains($"'{named}'", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("glob", stored.LastError.Message, StringComparison.OrdinalIgnoreCase);
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(Ct);
+        Assert.Null(attempt.Launch);
+    }
+
+    /// <summary>The same run from folders that hold none of those characters is claimed and started.</summary>
+    [Fact]
+    public async Task A_codex_run_from_plain_folders_is_claimed()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CodexHost(
+            "/home/someone/.jason/run", "/home/someone/.local/bin/jason", "/home/someone/.net/jason/a1b2c3", windows: false, home: "/home/someone")]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "codex", "codex", host: AgentHostKind.Codex);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "codex");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        var agent = await AgentOf(database, item);
+        Assert.Equal(AgentHostKind.Codex, agent.Host);
+    }
+
+    /// <summary>
+    /// A host installed as a launcher script starts what that script starts. The claim asks the profile's own host
+    /// about the script rather than refusing it, so a profile naming Cursor's launcher by its full path starts the
+    /// interpreter and entry script the launcher would, with nothing started through a shell.
+    /// </summary>
+    [Fact]
+    public async Task A_profile_naming_its_hosts_launcher_script_starts_what_the_script_starts()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var root = harness.CursorInstall("2026.10.22-27dcf5f");
+        await SeedProfileAsync(db, "cursor", System.IO.Path.Combine(root, "agent.cmd"), host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        var agent = await AgentOf(database, item);
+        var version = System.IO.Path.Combine(root, "versions", "2026.10.22-27dcf5f");
+        Assert.Equal(System.IO.Path.Combine(version, "node.exe"), agent.Program);
+        Assert.Equal(
+            [System.IO.Path.Combine(version, "node.exe"), System.IO.Path.Combine(version, "index.js"), "-p"],
+            agent.Args!.Take(3));
+    }
+
+    /// <summary>
+    /// A launcher with nothing installed beside it is no program, and the refusal says what was expected and how to point
+    /// at the launcher by its full path, rather than calling the program missing or naming a script a shell would run.
+    /// </summary>
+    [Fact]
+    public async Task A_launcher_script_with_no_version_beside_it_is_refused_naming_the_launcher_by_its_full_path()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var root = harness.CursorInstall();
+        await SeedProfileAsync(db, "cursor", System.IO.Path.Combine(root, "agent.cmd"), host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains(System.IO.Path.Combine(root, "agent.cmd"), stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("--program", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("agent.cmd", stored.LastError.Message, StringComparison.Ordinal);
+
+        // The pair is read beside the launcher first and then in its newest version directory, and the sentence says both.
+        Assert.Contains("a node.exe and an index.js beside it, or in its newest version directory", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A host's reading of its own install is the host's code, and the claim is the runtime's: an exception out of it
+    /// never leaves the claim. It ends that item the way a program that cannot be started ends it, with a fixed sentence
+    /// that carries no word of the exception, and the other candidates of the scan are claimed as they would have been.
+    /// </summary>
+    [Fact]
+    public async Task A_host_whose_layout_throws_fails_its_own_item_with_a_fixed_sentence_and_the_scan_goes_on()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new ThrowingLayoutHost()]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var root = harness.CursorInstall("2026.10.22-27dcf5f");
+        await SeedProfileAsync(db, "cursor", System.IO.Path.Combine(root, "agent.cmd"), host: AgentHostKind.CursorCli);
+        await SeedProfileAsync(db, "house", "claude");
+        var broken = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+        var fine = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "house");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Single(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == broken.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.False(stored.LastError.Retriable);
+        Assert.DoesNotContain(ThrowingLayoutHost.Secret, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("could not be read", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.NotNull((await AgentOf(database, fine)).Program);
+    }
+
+    /// <summary>
+    /// The reason a program cannot be started is the one that is true of it: a script that is no launcher is a script a
+    /// shell would run, under this host as under any other, and the launcher sentence is for a program that is the launcher.
+    /// </summary>
+    [Fact]
+    public async Task A_script_that_is_not_the_launcher_is_refused_as_a_shell_script_under_a_launcher_host()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var script = harness.Script("run.cmd");
+        await SeedProfileAsync(db, "cursor", script, host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains(ProgramLookup.ShellScript, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("launcher script", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_hosts_bare_word_with_nothing_installed_is_refused_with_the_launcher_sentence()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CursorCliHost(windows: true)]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "cursor", "agent", host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains("launcher script", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("--program", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A host's reading of the machine for its own launch (a folder of policies, say) is the host's code too, and an
+    /// exception out of it never leaves the claim either: the item ends as it does when the install cannot be read, in the
+    /// same fixed sentence with no word of the exception.
+    /// </summary>
+    [Fact]
+    public async Task A_host_whose_launch_check_throws_fails_its_own_item_with_the_fixed_sentence()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new ThrowingLaunchProblemHost()]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "house", "claude");
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "house");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.False(stored.LastError.Retriable);
+        Assert.DoesNotContain(ThrowingLaunchProblemHost.Secret, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("could not be read", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A host whose check of the machine throws, with a word in the exception that must never reach an attempt.</summary>
+    private sealed class ThrowingLaunchProblemHost : IAgentHost
+    {
+        public const string Secret = "the-launch-exception-text-that-names-a-folder";
+
+        private readonly ClaudeCodeHost _inner = new();
+
+        public AgentHostKind Kind => _inner.Kind;
+
+        public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+        public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+        public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+            _inner.Compose(revision, launch, memoryFiles);
+
+        public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) =>
+            _inner.WriteWorkDirectory(workDir, allow, deny);
+
+        public string? Unavailable(int exitCode, string? stderrTail) => null;
+
+        public string? LaunchProblem() => throw new IOException(Secret);
+    }
+
+    /// <summary>A host whose reading of its own install throws, with a word in the exception that must never reach an attempt.</summary>
+    private sealed class ThrowingLayoutHost : IAgentHost
+    {
+        public const string Secret = "the-exception-text-that-names-a-path";
+
+        private readonly CursorCliHost _inner = new(windows: true);
+
+        public AgentHostKind Kind => _inner.Kind;
+
+        public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+        public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+        public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+            _inner.Compose(revision, launch, memoryFiles);
+
+        public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) =>
+            _inner.WriteWorkDirectory(workDir, allow, deny);
+
+        public string? Unavailable(int exitCode, string? stderrTail) => null;
+
+        public bool NamesItsLauncher(string fileName) => _inner.NamesItsLauncher(fileName);
+
+        public IReadOnlyList<string>? ProgramLayout(string shimFile) => throw new FormatException(Secret);
+    }
+
+    /// <summary>The host is named before the program is looked for, so a host this build lacks is said so and not blamed on its program.</summary>
+    [Fact]
+    public async Task A_host_this_build_cannot_start_is_refused_before_its_program_is_looked_for()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost()]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "cursor", "a-host-nobody-installed", host: AgentHostKind.CursorCli);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "cursor");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains("cannot start", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A profile stored before its program was held to the rule keeps that program, so the claim holds it there too: a
     /// path to a script would be started through cmd.exe, and the claim refuses it before a child exists, naming the
     /// script rather than calling it missing.
@@ -381,6 +643,9 @@ public class AgentPreflightTests
             Path.Combine(projectFolder, "AGENTS.md"),
             Path.Combine(campaignFolder, "AGENTS.md"));
         Assert.Equal(expected, claimed.MemoryFiles);
+
+        // The host the profile names travels with the launch, so the work directory is laid out where that host reads.
+        Assert.Equal(AgentHostKind.ClaudeCode, claimed.Agent!.Host);
 
         var recorded = Reads((await AgentOf(database, item)).Args!);
         var composed = Reads(new ClaudeCodeHost().Compose(new ExecutionProfileRevision { Program = "claude" }, ["claude"], expected).Command);
@@ -462,7 +727,7 @@ public class AgentPreflightTests
         var line = Assert.Single(harness.Logs.Lines, each => each.Message.Contains("memory file", StringComparison.Ordinal));
         Assert.Equal(LogLevel.Warning, line.Level);
         Assert.Equal(
-            $"Attempt {claimed.AttemptPublicId} of work item {item.PublicId}: the campaign memory file's path cannot be written as a read rule, so the role cannot read it",
+            $"Attempt {claimed.AttemptPublicId} of work item {item.PublicId}: the campaign memory file's path cannot be written as a read rule",
             line.Message);
         Assert.Equal(claimed.AttemptPublicId, line.Scope["AttemptId"]);
         Assert.False(harness.Logs.Mentions(folder), $"a log line names the campaign's folder '{folder}'");
@@ -510,7 +775,7 @@ public class AgentPreflightTests
         await db.SaveChangesAsync(Ct);
     }
 
-    private static async Task SeedProfileAsync(JasonDbContext db, string name, string program, bool disabled = false)
+    private static async Task SeedProfileAsync(JasonDbContext db, string name, string program, bool disabled = false, AgentHostKind host = AgentHostKind.ClaudeCode)
     {
         var profile = new ExecutionProfile
         {
@@ -525,7 +790,7 @@ public class AgentPreflightTests
         profile.Revisions.Add(new ExecutionProfileRevision
         {
             Number = 1,
-            Host = AgentHostKind.ClaudeCode,
+            Host = host,
             Program = program,
             Deny = ["Write"],
             CreatedByType = ActorType.Human,
@@ -571,7 +836,7 @@ public class AgentPreflightTests
         private readonly TempDataDir _dir = new();
         private readonly ILoggerFactory _logging;
 
-        public Harness(string? globalDefault = null)
+        public Harness(string? globalDefault = null, IReadOnlyList<IAgentHost>? hosts = null)
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
             Folders = global::Jason.Runtime.Tests.Harness.TestHarness.Folders(_dir.Home);
@@ -588,8 +853,8 @@ public class AgentPreflightTests
                 new EntryCommandResolver(roles),
                 new AgentLaunchPlanner(
                     new AgentPreflight(),
-                    new ProgramResolver(new OneProgramOnly(_dir.Paths.Root)),
-                    [new ClaudeCodeHost()],
+                    new ProgramResolver(new TheseProgramsOnly(_dir.Paths.Root, hosts is null || !hosts.Any(h => h is CodexHost) ? ["claude"] : ["claude", "codex"])),
+                    hosts ?? [new ClaudeCodeHost()],
                     Folders),
                 roles,
                 plugins,
@@ -621,6 +886,27 @@ public class AgentPreflightTests
             return file;
         }
 
+        /// <summary>A Cursor install root as the Windows installer makes one, with the versions named, outside the search path.</summary>
+        public string CursorInstall(params string[] versions)
+        {
+            var root = System.IO.Path.Combine(_dir.Paths.Root, "cursor-agent");
+            Directory.CreateDirectory(System.IO.Path.Combine(root, "versions"));
+            foreach (var file in new[] { "agent.cmd", "cursor-agent.cmd", "cursor-agent.ps1" })
+            {
+                File.WriteAllText(System.IO.Path.Combine(root, file), string.Empty);
+            }
+
+            foreach (var version in versions)
+            {
+                var directory = System.IO.Path.Combine(root, "versions", version);
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(System.IO.Path.Combine(directory, "node.exe"), string.Empty);
+                File.WriteAllText(System.IO.Path.Combine(directory, "index.js"), string.Empty);
+            }
+
+            return root;
+        }
+
         /// <summary>The folders the claim finds the memory files by: a root of this test's own, made only where a test makes it.</summary>
         public HarnessFolders Folders { get; }
 
@@ -633,18 +919,23 @@ public class AgentPreflightTests
             _dir.Dispose();
         }
 
-        /// <summary>A search path holding one directory, in which only <c>claude</c> can be found.</summary>
-        private sealed class OneProgramOnly : ISearchPath
+        /// <summary>
+        /// A search path holding one directory, in which only the programs named can be found: <c>claude</c>, and
+        /// <c>codex</c> where a test registers that host.
+        /// </summary>
+        private sealed class TheseProgramsOnly : ISearchPath
         {
-            public OneProgramOnly(string root)
+            public TheseProgramsOnly(string root, IReadOnlyList<string> names)
             {
                 Directory.CreateDirectory(root);
-                var name = OperatingSystem.IsWindows() ? "claude.exe" : "claude";
-                var program = System.IO.Path.Combine(root, name);
-                File.WriteAllText(program, "#!/bin/sh\nexit 0\n");
-                if (!OperatingSystem.IsWindows())
+                foreach (var name in names)
                 {
-                    File.SetUnixFileMode(program, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+                    var program = System.IO.Path.Combine(root, OperatingSystem.IsWindows() ? name + ".exe" : name);
+                    File.WriteAllText(program, "#!/bin/sh\nexit 0\n");
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        File.SetUnixFileMode(program, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+                    }
                 }
 
                 Path = root;

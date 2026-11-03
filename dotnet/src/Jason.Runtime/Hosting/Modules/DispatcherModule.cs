@@ -1,3 +1,4 @@
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
@@ -53,6 +54,20 @@ public static class DispatcherModule
 
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
+
+        // Codex's sandbox lists what a run may read, and calling home reads the descriptor in the data directory, the
+        // executable and what it unpacks when it starts. A composition with no data directory of its own names none.
+        services.AddSingleton<IAgentHost>(provider => CodexHost.ForThisProcess(provider.GetService<JasonPaths>()));
+        services.AddSingleton<IAgentHost, CopilotCliHost>();
+        services.AddSingleton<IAgentHost, CursorCliHost>();
+
+        // Gemini CLI reads policies an organisation sets for every user from a folder of its own, and a file there makes it
+        // ignore the one a run is given, so the host is told which folder this platform keeps them in.
+        services.AddSingleton<IAgentHost>(_ => new GeminiCliHost(GeminiCliHost.PlatformSystemPoliciesDirectory()));
+
+        // Antigravity CLI takes its permission rules from the person's own settings file and nothing a run carries, so the
+        // host is composed with no folder of its own to name.
+        services.AddSingleton<IAgentHost, AntigravityCliHost>();
 
         // The plugin module registers the same seam for its own executable checks, and whichever module is added
         // first is the one that answers. Named here too because this module now needs it: a registration a

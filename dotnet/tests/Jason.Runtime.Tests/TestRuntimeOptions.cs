@@ -1,5 +1,6 @@
 using System.Net;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -57,12 +58,25 @@ public static class TestRuntimeOptions
 
     /// <summary>
     /// Both things a runtime does on its own toward somebody outside the test: it asks the release feed, and it
-    /// notifies a person. A test runtime does neither unless the test turns one back on.
+    /// notifies a person. A test runtime does neither unless the test turns one back on. Nor does it read a folder the
+    /// machine keeps for itself: the host that checks one is registered again with none to check.
     /// </summary>
     public static void TurnTheOutsideOff(IServiceCollection services)
     {
         TurnTheUpdateCheckOff(services);
         TurnNotificationsOff(services);
+        KeepTheMachinesPolicyFolderOut(services);
+    }
+
+    /// <summary>
+    /// Gemini CLI is refused a launch where the machine's own system policy folder holds a policy file, so a row that runs
+    /// a role under it would depend on the machine it runs on. Registered after the runtime's own, and the last
+    /// registration of a host is the one a claim resolves, so the runtime of a test checks no folder.
+    /// </summary>
+    public static void KeepTheMachinesPolicyFolderOut(IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton<IAgentHost>(new GeminiCliHost(null));
     }
 
     /// <summary>

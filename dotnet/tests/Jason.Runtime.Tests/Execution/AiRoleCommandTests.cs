@@ -10,6 +10,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -69,6 +70,65 @@ public class AiRoleCommandTests
         Assert.Contains("behaviour=crash", exited.StderrTail!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The host the claim named is asked what its end means, and what it says is its own sentence; the tail it wrote
+    /// stays where the launcher keeps the child's output.
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_says_it_cannot_run_here_hands_back_its_sentence()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), host: new SentenceHost());
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(3, exited.ExitCode);
+        Assert.Equal(SentenceHost.Sentence, exited.Unavailable);
+        Assert.Contains("behaviour=crash", exited.StderrTail!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The allow rules a host writes into the work directory travel where its deny rules do: handed to the host that
+    /// writes them and kept on the attempt's launch beside the deny, and absent there where a host allows nothing that way.
+    /// </summary>
+    [Fact]
+    public async Task The_work_directory_allow_reaches_the_host_and_is_kept_beside_the_deny()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        var host = new SentenceHost();
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), deny: ["Write"], host: host, allow: ["Shell(jason)"]);
+
+        Assert.Equal(["Shell(jason)"], host.Allow);
+        var launch = Assert.IsType<CommandOutcome.Exited>(outcome).Launch;
+        Assert.Equal(["Shell(jason)"], launch.Allow);
+        Assert.Equal(["Write"], launch.Deny);
+    }
+
+    [Fact]
+    public async Task A_launch_that_allows_nothing_through_the_work_directory_records_no_allow()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), host: new ClaudeCodeHost());
+
+        Assert.Null(Assert.IsType<CommandOutcome.Exited>(outcome).Launch.Allow);
+    }
+
+    [Fact]
+    public async Task A_host_that_says_nothing_of_its_end_leaves_the_end_as_it_was()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("crash"), host: new ClaudeCodeHost());
+
+        Assert.Null(Assert.IsType<CommandOutcome.Exited>(outcome).Unavailable);
+    }
+
     [Fact]
     public async Task The_kill_signal_ends_the_child_and_the_outcome_says_so()
     {
@@ -123,6 +183,38 @@ public class AiRoleCommandTests
 
         var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
         Assert.Contains("token-in-env=false", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The constants a host's row declares reach its child, after the runtime's own, and the token is still nowhere in
+    /// the environment: the same child that is told a host's constant is told nothing a person typed.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S3, "the token never reaches a child's environment")]
+    public async Task A_hosts_constants_reach_the_child_and_the_token_still_does_not()
+    {
+        using var directory = new TempDataDir();
+        WriteDescriptor(directory.Paths);
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"), host: new ConstantHost());
+
+        var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
+        Assert.Contains("host-constant-in-env=yes", stderr, StringComparison.Ordinal);
+        Assert.Contains("token-in-env=false", stderr, StringComparison.Ordinal);
+        Assert.Contains("attempt-in-env=" + AttemptId, stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_host_with_no_constants_leaves_the_childs_environment_as_it_was()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"), host: new ClaudeCodeHost());
+
+        var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
+        Assert.Contains("host-constant-in-env=unset", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -352,6 +444,41 @@ public class AiRoleCommandTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A host that reads a stream of lines is handed the envelope as one user event and then end of file: what the child
+    /// reads is exactly one line, the envelope is its content, nothing of it is on the command line, the stream is
+    /// closed behind it (a child that reads to the end would otherwise wait out the whole attempt), and a token placed
+    /// in the brief reaches the kept transcript only as the mask, since the child echoes everything it was given.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W7, "the launch envelope on stdin, framed for a host that reads a stream")]
+    public async Task A_host_that_reads_a_stream_is_given_the_envelope_as_one_closed_user_line_and_none_of_it_on_the_command_line()
+    {
+        using var directory = new TempDataDir();
+        WriteDescriptor(directory.Paths);
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        using var kill = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var entry = FakeAgentHost.EntryCommand("echo-stdin");
+        var brief = new JsonObject { ["goal"] = "say \"hi\" at C:\\work\nthen " + Token };
+
+        var outcome = await RunAsync(directory.Paths, workDir, entry, kill: kill, brief: brief, host: new AntigravityCliHost());
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(0, exited.ExitCode);
+        Assert.Equal(entry, exited.Launch.EntryCommand);
+        Assert.DoesNotContain(exited.Launch.EntryCommand, word => word.Contains("envelope_version", StringComparison.Ordinal) || word.Contains(Token, StringComparison.Ordinal));
+
+        var stdout = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
+        Assert.DoesNotContain(Token, stdout, StringComparison.Ordinal);
+        Assert.Contains(TokenRedactor.Mask, stdout, StringComparison.Ordinal);
+        var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var line = Assert.Single(lines);
+        using var document = JsonDocument.Parse(line);
+        Assert.Equal("user", document.RootElement.GetProperty("event").GetString());
+        var content = document.RootElement.GetProperty("message").GetProperty("content").GetString()!;
+        Assert.Contains("\"envelope_version\":5", content, StringComparison.Ordinal);
+    }
+
     /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
     internal static Task<CommandOutcome> RunAsync(
         JasonPaths paths,
@@ -363,12 +490,15 @@ public class AiRoleCommandTests
         JsonObject? brief = null,
         string? projectId = null,
         MemoryFileLocations? memoryFiles = null,
-        Resumption? resumption = null)
+        Resumption? resumption = null,
+        IAgentHost? host = null,
+        IReadOnlyList<string>? allow = null)
     {
         var command = new AiRoleCommand(
             paths,
             new TokenRedactor(new RuntimeSecrets(Token)),
             TestOptions.RoleSettings(roles),
+            host is null ? [] : [host],
             NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
             WorkItemId,
@@ -389,7 +519,9 @@ public class AiRoleCommandTests
             Deny: deny,
             ProjectId: projectId,
             MemoryFiles: memoryFiles,
-            Resumption: resumption);
+            Resumption: resumption,
+            Host: host?.Kind,
+            Allow: allow);
 
         return command.RunAsync(context, Ct);
     }
@@ -448,4 +580,54 @@ public class AiRoleCommandTests
 
         Assert.Fail(string.Create(CultureInfo.InvariantCulture, $"process {pid} was still running five seconds after the kill"));
     }
+}
+
+/// <summary>A host that reads every end with exit code 3 as "cannot run here", and is otherwise the one that ships.</summary>
+file sealed class SentenceHost : IAgentHost
+{
+    public const string Sentence = "The agent host cannot run on this machine.";
+
+    private readonly ClaudeCodeHost _inner = new();
+
+    public AgentHostKind Kind => _inner.Kind;
+
+    public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+    /// <summary>The allow list the work directory was last written with.</summary>
+    public IReadOnlyList<string>? Allow { get; private set; }
+
+    public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+    public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+        _inner.Compose(revision, launch, memoryFiles);
+
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
+    {
+        Allow = allow;
+        _inner.WriteWorkDirectory(workDir, allow, deny);
+    }
+
+    public string? Unavailable(int exitCode, string? stderrTail) => exitCode == 3 ? Sentence : null;
+}
+
+/// <summary>The host that ships, with one constant of its own for the child's environment.</summary>
+file sealed class ConstantHost : IAgentHost
+{
+    private readonly ClaudeCodeHost _inner = new();
+
+    public AgentHostKind Kind => _inner.Kind;
+
+    public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+    public IReadOnlyDictionary<string, string> Environment { get; } = new Dictionary<string, string> { ["HOST_CONSTANT_FOR_TESTS"] = "yes" };
+
+    public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+    public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+        _inner.Compose(revision, launch, memoryFiles);
+
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) =>
+        _inner.WriteWorkDirectory(workDir, allow, deny);
+
+    public string? Unavailable(int exitCode, string? stderrTail) => null;
 }

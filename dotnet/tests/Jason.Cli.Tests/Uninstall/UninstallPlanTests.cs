@@ -2,6 +2,8 @@ using System.Text.Json;
 using Jason.Cli;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
+using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Tests;
@@ -67,6 +69,28 @@ public class UninstallPlanTests
 
         Assert.Empty(plan.Roots);
         Assert.Empty(plan.Unknown);
+    }
+
+    /// <summary>
+    /// Two roots are one only where detection and the status check would call them one: where a path's case is a different
+    /// folder, two roots that differ only in case are two, and each is planned by its own record. Only such a machine can
+    /// tell the comparers apart.
+    /// </summary>
+    [Fact]
+    public void Two_roots_that_differ_only_in_case_are_two_where_case_makes_two_folders()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "only where the file system keeps two folders whose names differ in case apart");
+        using var dir = new TempPaths();
+        var lower = Path.Combine(dir.Paths.Root, "harness");
+        var upper = Path.Combine(dir.Paths.Root, "HARNESS");
+        Record(lower, ("runtime", [Relative(lower, Deploy(lower, "operating-the-installation"))]));
+        Record(upper, ("runtime", [Relative(upper, Deploy(upper, "operating-the-installation"))]));
+
+        var plan = UninstallReader.Read(Machine(dir, lower) with { Harnesses = new Roots([new([], lower), new([], upper)]) }, purgeData: false);
+
+        Assert.Equal(
+            new[] { lower, upper }.Order(StringComparer.Ordinal),
+            plan.Roots.Select(root => root.Root).Order(StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -167,6 +191,31 @@ public class UninstallPlanTests
         Assert.True(File.Exists(mine), "--dry-run removed a file.");
     }
 
+    /// <summary>
+    /// Four hosts read one folder outside their own markers, so a person who removed every one of them before Jason keeps
+    /// what a deployment recorded there. The plan still finds it, by the record, under the home the locator was made for;
+    /// and a file beside it that no record names is left where it is.
+    /// </summary>
+    [Fact]
+    public void A_recorded_deployment_in_a_shared_root_is_planned_when_no_host_that_reads_it_is_left()
+    {
+        using var dir = new TempPaths();
+        var home = Path.Combine(dir.Paths.Root, "home");
+        var shared = AgentHosts.Under(home, AgentHosts.Of(AgentHostKind.Codex).HomeSkills);
+        var mine = Deploy(shared, "operating-the-installation");
+        var theirs = Write(Path.Combine(shared, "someone-elses-skill", "SKILL.md"), "# not ours");
+        Record(shared, ("runtime", [Relative(shared, mine)]));
+        Assert.Empty(HarnessLocators.ForHome(home).Detect());
+
+        var plan = UninstallReader.Read(
+            new(new StringWriter(), new StringWriter(), dir.Paths, Harnesses: HarnessLocators.ForHome(home)),
+            purgeData: false);
+
+        var root = Assert.Single(plan.Roots, candidate => Same(candidate.Root, shared));
+        Assert.Contains(root.Files, file => Same(file.Path, mine));
+        Assert.DoesNotContain(plan.Roots.SelectMany(candidate => candidate.Files), file => Same(file.Path, theirs));
+    }
+
     private static bool Same(string left, string right) =>
         string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
 
@@ -196,6 +245,11 @@ public class UninstallPlanTests
                 [.. pack.Files.Select(file => new DeployedFile(
                     file,
                     SkillsRecord.Digest(Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar)))))]))]));
+
+    private sealed class Roots(IReadOnlyList<HarnessRoot> roots) : IHarnessLocator
+    {
+        public IReadOnlyList<HarnessRoot> Detect() => roots;
+    }
 
     private static CliEnvironment Machine(TempPaths dir, string harnessRoot, TextWriter? output = null, IInstallationRemover? remover = null) =>
         new(

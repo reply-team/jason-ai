@@ -276,6 +276,21 @@ public static class AttemptHandler
                     .RecordAsync(db, item, attempt, plan.Contract, plan.Plugin.Manifest.Id, keyed, provider.Result, CancellationToken.None, plan.Input)
                     .ConfigureAwait(false);
                 break;
+            case CommandOutcome.Exited { Unavailable: { } sentence }:
+
+                // The host said it cannot run on this machine. A fact about the machine, which a repeat would only
+                // meet again, so the code is final; and the sentence is the host's class's own, so none of what the
+                // host wrote — its login, an address — reaches the attempt's error and the journal that carries it.
+                outcomes.Fail(
+                    db,
+                    item,
+                    attempt,
+                    AttemptErrors.HostNotAvailable,
+                    sentence,
+                    trace: null,
+                    details: null,
+                    Actors.Dispatcher);
+                break;
             case CommandOutcome.Exited exited:
                 outcomes.Fail(
                     db,
@@ -391,5 +406,7 @@ public static class AttemptHandler
         work.Agent?.CliCommand,
         work.ProjectPublicId,
         work.MemoryFiles,
-        work.Resumption);
+        work.Resumption,
+        work.Agent?.Host,
+        work.Agent?.Allow);
 }

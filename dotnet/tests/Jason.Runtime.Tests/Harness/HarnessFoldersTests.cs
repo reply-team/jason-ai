@@ -3,6 +3,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using Jason.Contracts.Harness;
+using Jason.Contracts.Hosts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Harness;
 using Jason.Runtime.Projects;
@@ -48,10 +49,42 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal(Path.Combine(Root, "projects", "acme"), folder);
         Assert.Equal("""{"marker_version":1,"kind":"root"}""", Text(Root, ".jason", "marker.json"));
         Assert.Equal("@AGENTS.md", Text(Root, "CLAUDE.md"));
+        Assert.Equal("@AGENTS.md", Text(Root, "GEMINI.md"));
         Assert.Equal(string.Empty, Text(Root, "AGENTS.md"));
         Assert.Equal($$"""{"marker_version":1,"kind":"project","id":"{{Project}}"}""", Text(folder, ".jason", "marker.json"));
         Assert.Equal("@AGENTS.md", Text(folder, "CLAUDE.md"));
         Assert.Equal(string.Empty, Text(folder, "AGENTS.md"));
+    }
+
+    /// <summary>
+    /// Every file a host reads in place of the memory file is written at each level where absent, holding exactly the line
+    /// of the table of hosts that imports the memory file, and one the person wrote is never opened.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ImportFiles))]
+    public async Task Every_host_s_import_file_is_written_at_each_level_where_absent_and_never_over_one(string file, string line)
+    {
+        Directory.CreateDirectory(Root);
+        File.WriteAllText(Path.Combine(Root, file), "Read the notes first.\n");
+        var folders = TestHarness.Folders(Home);
+
+        var project = folders.MakeProjectFolder(Project, "acme");
+        var campaign = await MakeAsync(folders, project, Campaign, "Q3 Marketing Leads");
+
+        Assert.Equal("Read the notes first.\n", Text(Root, file));
+        Assert.Equal(line, Text(project, file));
+        Assert.Equal(line, Text(campaign, file));
+    }
+
+    public static TheoryData<string, string> ImportFiles()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var file in AgentHosts.ImportFiles)
+        {
+            data.Add(file.FileName, file.ImportLine);
+        }
+
+        return data;
     }
 
     /// <summary>
@@ -70,10 +103,10 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal($$"""{"marker_version":1,"kind":"campaign","id":"{{Campaign}}"}""", Text(campaign, ".jason", "marker.json"));
         string[] expected =
         [
-            "AGENTS.md", "CLAUDE.md", ".jason/marker.json",
-            "projects/acme/AGENTS.md", "projects/acme/CLAUDE.md", "projects/acme/.jason/marker.json",
+            "AGENTS.md", "CLAUDE.md", "GEMINI.md", ".jason/marker.json",
+            "projects/acme/AGENTS.md", "projects/acme/CLAUDE.md", "projects/acme/GEMINI.md", "projects/acme/.jason/marker.json",
             "projects/acme/campaigns/q3-marketing-leads/AGENTS.md", "projects/acme/campaigns/q3-marketing-leads/CLAUDE.md",
-            "projects/acme/campaigns/q3-marketing-leads/.jason/marker.json",
+            "projects/acme/campaigns/q3-marketing-leads/GEMINI.md", "projects/acme/campaigns/q3-marketing-leads/.jason/marker.json",
         ];
         Assert.Equal(expected.Order(StringComparer.Ordinal), Files(Root));
     }
@@ -106,6 +139,28 @@ public sealed class HarnessFoldersTests : IDisposable
 
         Assert.Equal("@AGENTS.md", Text(Root, "CLAUDE.md"));
         Assert.Equal(string.Empty, Text(Root, "AGENTS.md"));
+    }
+
+    /// <summary>
+    /// A root made before a host's import file existed has its marker and the files it had. The next create that reaches it
+    /// gives it the import file it lacks, holding the table's line, and writes over nothing: the file it already had is
+    /// byte for byte what it was, and a memory file the person removed stays removed.
+    /// </summary>
+    [Fact]
+    public void A_root_that_has_its_marker_gains_a_missing_import_file_at_the_next_create_and_nothing_else()
+    {
+        var folders = TestHarness.Folders(Home);
+        folders.MakeProjectFolder(Project, "acme");
+        File.WriteAllText(Path.Combine(Root, "CLAUDE.md"), "Read the notes first.\n");
+        File.Delete(Path.Combine(Root, "GEMINI.md"));
+        File.Delete(Path.Combine(Root, "AGENTS.md"));
+        var claude = File.ReadAllBytes(Path.Combine(Root, "CLAUDE.md"));
+
+        folders.MakeProjectFolder(Other, "other");
+
+        Assert.Equal("@AGENTS.md", Text(Root, "GEMINI.md"));
+        Assert.Equal(claude, File.ReadAllBytes(Path.Combine(Root, "CLAUDE.md")));
+        Assert.False(File.Exists(Path.Combine(Root, "AGENTS.md")), "a memory file the person removed from the root was written again.");
     }
 
     /// <summary>A root that has its marker is used as it is: nothing at the root is written again.</summary>

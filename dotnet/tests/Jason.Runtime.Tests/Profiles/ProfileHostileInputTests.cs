@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Programs;
 using Jason.Runtime.Profiles;
 
@@ -151,7 +152,7 @@ public class ProfileHostileInputTests
     /// vocabulary is closed: the alternative is discovering it when work is claimed and a child is due to start.
     /// </summary>
     [Theory]
-    [InlineData("codex")]
+    [InlineData("made_up_host")]
     [InlineData("ClaudeCode")]
     [InlineData("claude-code")]
     [InlineData("")]
@@ -166,15 +167,53 @@ public class ProfileHostileInputTests
         Assert.Equal("host", Assert.Single(error.Details!).Field);
     }
 
-    [Fact]
-    public async Task A_host_the_vocabulary_does_know_is_the_one_that_is_accepted()
+    public static TheoryData<AgentHostKind> Kinds() => [.. Enum.GetValues<AgentHostKind>()];
+
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public async Task A_host_the_vocabulary_does_know_is_the_one_that_is_accepted(AgentHostKind kind)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var facts = AgentHosts.Of(kind);
 
         var created = await api.PostOkAsync<ExecutionProfileDto>(
-            Operations.ProfileCreate, new { name = "known-host", host = "claude_code", program = "claude" }, Ct);
+            Operations.ProfileCreate, new { name = "known-host", host = AgentHosts.Word(kind), program = facts.CommandWord }, Ct);
 
-        Assert.Equal(AgentHostKind.ClaudeCode, created.Revision.Host);
+        Assert.Equal(kind, created.Revision.Host);
+    }
+
+    /// <summary>
+    /// A control character ends a command line (a NUL) or splits one, on every host, so an argument carrying one is
+    /// refused once where the profile is written, whichever host the profile is for and whether it is created or patched.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public async Task An_argument_with_a_control_character_is_refused_for_every_host(AgentHostKind kind)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var word = AgentHosts.Word(kind);
+        var program = AgentHosts.Of(kind).CommandWord;
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "control", host = word, program, args = new[] { "--model=a\u0000b" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(created.Details!);
+        Assert.Equal(("args[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("control character", detail.Message, StringComparison.Ordinal);
+
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "patched-control", host = word, program }, Ct);
+        var patched = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "patched-control", args = new[] { "--model", "a\tb" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var patchedDetail = Assert.Single(patched.Details!);
+        Assert.Equal(("args[1]", "invalid"), (patchedDetail.Field, patchedDetail.Code));
     }
 
     /// <summary>An edit is held to the same rules as a creation; a patch is not a way around them.</summary>
@@ -185,7 +224,7 @@ public class ProfileHostileInputTests
         await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, ProfileRevisionTests.Minimal("patched"), Ct);
 
         var host = await api.PostErrorAsync(
-            Operations.ProfileUpdate, new { name = "patched", host = "codex" }, HttpStatusCode.BadRequest, Ct);
+            Operations.ProfileUpdate, new { name = "patched", host = "made_up_host" }, HttpStatusCode.BadRequest, Ct);
         Assert.Equal("host", Assert.Single(host.Details!).Field);
 
         var cleared = await api.PostErrorAsync(
