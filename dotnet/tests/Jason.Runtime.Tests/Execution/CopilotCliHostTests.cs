@@ -409,21 +409,60 @@ public class CopilotCliHostTests
     }
 
     /// <summary>
-    /// The deny list is comma-separated and a rule is a kind and an argument in parentheses, so a word holding a comma is
-    /// not one rule and a blank is none: refused where the profile is written, naming the host, never split at a launch.
-    /// Every other word is written as the person wrote it.
+    /// The deny list is comma-separated and a rule is one of the host's five kinds (memory, read, shell, url, write, in
+    /// that case) and an argument in parentheses. A word whose head is any other word is read by the host as an MCP
+    /// server's name and denies nothing the role is offered, so it is refused where the profile is written rather than
+    /// stored as a rule: a wrong-case kind, another host's word for a tool, the vocabulary word of a tool the host has.
+    /// The two search words are the exception, kept as the person's own: the host has no search tool, so the deny holds
+    /// anyway.
     /// </summary>
     [Theory]
     [InlineData("shell(git push)", false)]
+    [InlineData("shell", false)]
     [InlineData("write", false)]
+    [InlineData("read(.env)", false)]
+    [InlineData("memory", false)]
     [InlineData("url(example.test)", false)]
     [InlineData("web_search", false)]
+    [InlineData("WebSearch", false)]
     [InlineData("shell(git push),write", true)]
     [InlineData("a, b", true)]
     [InlineData("   ", true)]
-    public void A_deny_word_is_one_rule_or_it_is_refused(string word, bool refused)
+    [InlineData("web_fetch", true)]
+    [InlineData("WebFetch", true)]
+    [InlineData("Shell(rm:*)", true)]
+    [InlineData("Write", true)]
+    [InlineData("Bash(rm:*)", true)]
+    [InlineData("bash", true)]
+    [InlineData("made-up-server", true)]
+    [InlineData("made-up-server(some_tool)", true)]
+    [InlineData("(shell)", true)]
+    public void A_deny_word_is_one_rule_of_a_kind_the_host_reads_or_it_is_refused(string word, bool refused)
     {
         Assert.Equal(refused, new CopilotCliHost().DenyProblem(word) is not null);
+    }
+
+    [Theory]
+    [InlineData("web_fetch")]
+    [InlineData("WebFetch")]
+    public void A_deny_by_the_name_of_the_fetch_tool_is_refused_naming_the_word_the_host_reads(string word)
+    {
+        var problem = new CopilotCliHost().DenyProblem(word);
+
+        Assert.NotNull(problem);
+        Assert.Contains("url", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_deny_of_the_five_kinds_names_them_when_it_is_refused()
+    {
+        var problem = new CopilotCliHost().DenyProblem("made-up-server");
+
+        Assert.NotNull(problem);
+        foreach (var kind in new[] { "memory", "read", "shell", "url", "write" })
+        {
+            Assert.Contains(kind, problem, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

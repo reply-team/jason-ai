@@ -149,4 +149,74 @@ public class CopilotCliProfileTests
 
         Assert.Equal("cli_command", Assert.Single(error.Details!).Field);
     }
+
+    /// <summary>
+    /// A deny the host reads as an MCP server's name, and so as nothing the role is offered, is refused where a profile is
+    /// written: at create, at update, and where a patch moves a stored profile to this host and leaves its deny alone.
+    /// A grant of the fetch tool beside a deny of it by its own name is the case that matters: the fetch the person meant
+    /// to take away would stay.
+    /// </summary>
+    [Theory]
+    [InlineData("web_fetch")]
+    [InlineData("WebFetch")]
+    [InlineData("Shell(rm:*)")]
+    [InlineData("Write")]
+    [InlineData("made-up-server")]
+    public async Task A_deny_the_host_does_not_read_as_a_rule_is_refused_at_create_at_update_and_on_a_move(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "refused-at-create", host = "copilot_cli", program = "copilot", tools = new[] { "web_fetch" }, deny = new[] { word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "refused-at-update", host = "copilot_cli", program = "copilot" }, Ct);
+        var updated = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "refused-at-update", deny = new[] { word } }, HttpStatusCode.BadRequest, Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "refused-on-move", host = "claude_code", program = "claude", deny = new[] { word } }, Ct);
+        var moved = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "refused-on-move", host = "copilot_cli", program = "copilot" }, HttpStatusCode.BadRequest, Ct);
+
+        Assert.All(new[] { created, updated }, error =>
+        {
+            var detail = Assert.Single(error.Details!, detail => detail.Field == "deny[0]");
+            Assert.Equal("invalid", detail.Code);
+            Assert.Contains("copilot_cli", detail.Message, StringComparison.Ordinal);
+            Assert.Contains(word, detail.Message, StringComparison.Ordinal);
+        });
+        var onMove = Assert.Single(moved.Details!, detail => detail.Field == "deny[0]");
+        Assert.StartsWith("the profile's deny[0]", onMove.Message, StringComparison.Ordinal);
+        Assert.Contains("copilot_cli", onMove.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_deny_of_the_fetch_tool_by_its_own_name_is_refused_naming_the_word_the_host_reads()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "fetch-and-deny", host = "copilot_cli", program = "copilot", tools = new[] { "web_fetch" }, deny = new[] { "web_fetch" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!, detail => detail.Field == "deny[0]");
+        Assert.Contains("url", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("web_search")]
+    [InlineData("WebSearch")]
+    public async Task A_deny_of_a_search_stays_kept_whichever_way_it_is_spelled(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "no-search", host = "copilot_cli", program = "copilot", deny = new[] { word } }, Ct);
+
+        Assert.Equal([word], created.Revision.Deny);
+    }
 }

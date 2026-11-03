@@ -214,13 +214,44 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
 
     /// <summary>
     /// A deny word is one rule, a kind and an argument in parentheses as the person wrote them, and travels in a
-    /// comma-separated list; a word holding a comma is two rules at the host, and a blank word is none, so neither is
-    /// written as it stands.
+    /// comma-separated list. A word holding a comma is two rules at the host, and a blank word is none. The host reads a
+    /// rule's head as one of five kinds, memory, read, shell, url and write, in exactly that case; any other head is an
+    /// MCP server's name, which denies nothing the role is offered, so it is refused here rather than stored as a rule
+    /// that holds nothing. That covers another host's word for a tool, a kind in another case, and the vocabulary word of
+    /// a tool this host has: a deny of the fetch tool by its own name would leave the fetch allowed, so the message names
+    /// the word the host reads. The two search words are kept as the person's own: the host has no search tool, so the
+    /// deny holds whatever its spelling.
     /// </summary>
-    public string? DenyProblem(string word) =>
-        string.IsNullOrWhiteSpace(word)
-            ? "an empty word is not a rule."
-            : word.Contains(',', StringComparison.Ordinal) ? "the host's list is comma-separated, so a word holding a comma is not one rule; give each rule as its own entry." : null;
+    public string? DenyProblem(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word))
+        {
+            return "an empty word is not a rule.";
+        }
+
+        if (word.Contains(',', StringComparison.Ordinal))
+        {
+            return "the host's list is comma-separated, so a word holding a comma is not one rule; give each rule as its own entry.";
+        }
+
+        if (word is "web_search" or "WebSearch")
+        {
+            return null;
+        }
+
+        if (word is "web_fetch" or "WebFetch")
+        {
+            return "the host reads a rule by its kind, and the kind for a fetch is 'url': write 'url' or 'url(<address>)'.";
+        }
+
+        var open = word.IndexOf('(', StringComparison.Ordinal);
+        var head = open < 0 ? word : word[..open];
+        return DenyKinds.Contains(head, StringComparer.Ordinal)
+            ? null
+            : "the host reads a rule's head as one of memory, read, shell, url or write, in that case, with or without a part in parentheses; any other head is read as an MCP server's name and denies nothing the role is offered.";
+    }
+
+    private static readonly string[] DenyKinds = ["memory", "read", "shell", "url", "write"];
 
     /// <summary>
     /// The options a profile may carry that take a value, each documented for the host and each the person's own: which
