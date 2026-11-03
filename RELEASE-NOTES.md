@@ -128,11 +128,14 @@ Gemini CLI reads the whole folder of each level a role's memory files are in, an
 root, so a role reads every memory file under it. A role on Gemini CLI is also refused when the host's system policy folder
 holds a `.toml` file, since the host would then ignore the policy Jason gives it.
 Gemini CLI's `--session-id` and `--admin-policy`, which Jason passes, are in the 0.66.0 source and not in its options table.
+Gemini CLI also reads your own `~/.gemini/GEMINI.md`, `includeDirectories` and skills for every role.
 
 GitHub Copilot CLI's reads outside the work directory, which a role needs for its memory files, are documented but have not
 been seen to reach there.
 Whether Copilot CLI 1.0.105 accepts every flag Jason composes is not said by its changelog, so its launch is composed from the
 reference and not from a run.
+A role on Copilot CLI runs under your own user-level hooks, and a `COPILOT_ALLOW_ALL` in your environment reaches it as the
+host's own allow-all, minus what the deny list names.
 
 A role on Antigravity CLI works only once you have added the two rules to your own settings, `command(jason)` and
 `read_file(<your harness folder>)`; per-run permissions for that host are not built in this release. Without the
