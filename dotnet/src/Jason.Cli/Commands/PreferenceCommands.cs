@@ -134,5 +134,5 @@ public static class PreferenceCommands
     }
 
     private static Argument<string> KeyArgument() =>
-        new("key") { Description = "The preference, as preference list shows it: sender.identity, tone_of_voice." };
+        new("key") { Description = "The preference, as preference list shows it: agent.interactive_host, sender.identity, tone_of_voice." };
 }

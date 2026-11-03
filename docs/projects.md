@@ -180,10 +180,11 @@ A named preference is a structured fact about the client that a person states, w
 skill can check that it is set before it writes for a person to send and a screen can show it. The catalog is a contract
 family of its own, one document per key under `docs/contracts/preferences/`, embedded into the runtime and read by a
 catalog of its own, never the operation catalog: no work item names a key, no route carries one and no plugin is
-invoked for one ([the contracts README](contracts/README.md) describes the family). It holds two keys:
+invoked for one ([the contracts README](contracts/README.md) describes the family). It holds three keys:
 
 | Key | What it says |
 |---|---|
+| `agent.interactive_host` | The agent host `jason session open` starts for the person in a terminal of their own: one of the host words. Unset means `claude_code`. |
 | `sender.identity` | Who messages are written as: one or more senders, the first of whom writes whenever a campaign names no other — each with the name they sign with, the forms a message uses for them in a language that marks them, and what else a writer needs. |
 | `tone_of_voice` | How the company sounds: the tone in words, how formal it is, how a first message opens and closes, and up to three messages the person likes. |
 
@@ -202,7 +203,9 @@ schema.
   outside ASCII takes six bytes and one outside the Basic Multilingual Plane twelve; a chronicle line written now can so
   carry an `old` size in that measure beside a `new` one in UTF-8. A key's schema changes only by
   gaining an optional field, which raises the document's version, so a skill reading the document knows which fields
-  may be present; anything else is a new key.
+  may be present; anything else is a new key. The one other change is a list of host words, as
+  `agent.interactive_host` holds: it may gain a word, raising the key's version, since a wider list never makes a
+  stored value invalid; a test holds that list equal to the hosts Jason knows.
 - **A person's word.** Only a person sets or unsets a preference, and the request names them, as a decision on an
   approval does: an actor that is not a person is refused as `preference_not_human`, and one that names nobody as
   `actor_required`. In the planner's session, on the person's answer, the session skill runs

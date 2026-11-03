@@ -1,0 +1,7 @@
+{
+  "key": "agent.interactive_host",
+  "version": 1,
+  "case": "a member the key does not hold: the session's settings are the host's own",
+  "value": { "host": "codex", "model": "a-model" },
+  "expect": { "invalid": [{ "pointer": "/model", "reason": "additional_properties" }] }
+}

@@ -1,0 +1,7 @@
+{
+  "key": "agent.interactive_host",
+  "version": 1,
+  "case": "the person's host is gemini_cli",
+  "value": { "host": "gemini_cli" },
+  "expect": "valid"
+}
