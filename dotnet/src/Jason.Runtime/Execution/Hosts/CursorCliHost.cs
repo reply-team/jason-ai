@@ -1,9 +1,9 @@
-using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Execution.Hosts;
@@ -31,11 +31,7 @@ namespace Jason.Runtime.Execution.Hosts;
 /// </param>
 public sealed partial class CursorCliHost(bool windows) : IAgentHost
 {
-    /// <summary>The two names the installer gives the launcher script, which is the host's own and nobody else's.</summary>
-    private static readonly string[] LauncherNames = ["agent.cmd", "cursor-agent.cmd"];
-
-    /// <summary>The script both launchers run, which chooses the version directory.</summary>
-    private const string LauncherScript = "cursor-agent.ps1";
+    private readonly CursorCliLauncher _launcher = new(windows);
 
     public CursorCliHost()
         : this(OperatingSystem.IsWindows())
@@ -325,78 +321,14 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
 
     /// <summary>
     /// Whether a file name is one of the two this host's installer gives its launcher script. A name only: a profile
-    /// is written before it is known whether the file is there.
+    /// is written before it is known whether the file is there. <see cref="CursorCliLauncher"/> holds the rule, which the
+    /// CLI reads too.
     /// </summary>
-    public bool NamesItsLauncher(string fileName) =>
-        windows && LauncherNames.Contains(fileName, StringComparer.OrdinalIgnoreCase);
+    public bool NamesItsLauncher(string fileName) => _launcher.NamesItsLauncher(fileName);
 
     /// <summary>
-    /// What the launcher script starts, as a command: the interpreter, then the entry script. Where a <c>node.exe</c>
-    /// and an <c>index.js</c> stand beside the launcher the script starts those, and otherwise the newest directory
-    /// under <c>versions</c> whose name reads as a version, newest by its date taken as a number — so, within one year, a month written
-    /// with one digit is older than one written with two — and by name when two share a day, which the script leaves
-    /// unordered. A staged or previous directory is never one. Nothing is remembered between calls: a version installed
-    /// since is the answer the next time. Null where this is not Windows, where the file is not one of the two
-    /// launchers or its script is not beside it, or where the chosen directory lacks either file.
+    /// What the launcher script starts, as a command: the interpreter, then the entry script, by the rule
+    /// <see cref="CursorCliLauncher.ProgramLayout"/> states. Null where there is no such layout.
     /// </summary>
-    public IReadOnlyList<string>? ProgramLayout(string shimFile)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(shimFile);
-
-        try
-        {
-            if (!windows || !NamesItsLauncher(Path.GetFileName(shimFile)) || Path.GetDirectoryName(shimFile) is not { Length: > 0 } root
-                || !File.Exists(shimFile) || !File.Exists(Path.Combine(root, LauncherScript)))
-            {
-                return null;
-            }
-
-            if (Pair(root) is { } beside)
-            {
-                return beside;
-            }
-
-            var versions = Path.Combine(root, "versions");
-            if (!Directory.Exists(versions))
-            {
-                return null;
-            }
-
-            var newest = Directory.EnumerateDirectories(versions)
-                .Select(directory => (Directory: directory, Date: DateOf(Path.GetFileName(directory))))
-                .Where(version => version.Date is not null)
-                .OrderByDescending(version => version.Date)
-                .ThenByDescending(version => Path.GetFileName(version.Directory), StringComparer.Ordinal)
-                .Select(version => version.Directory)
-                .FirstOrDefault();
-
-            return newest is null ? null : Pair(newest);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>A version directory's name as the launcher script reads one: a date, an optional time, and a hash.</summary>
-    [GeneratedRegex(@"^(?<year>[0-9]{4})\.(?<month>[0-9]{1,2})\.(?<day>[0-9]{1,2})(-[0-9]{2}-[0-9]{2}-[0-9]{2})?-[a-f0-9]+\z", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
-    private static partial Regex VersionName();
-
-    private static string[]? Pair(string directory)
-    {
-        var node = Path.Combine(directory, "node.exe");
-        var entry = Path.Combine(directory, "index.js");
-        return File.Exists(node) && File.Exists(entry) ? [node, entry] : null;
-    }
-
-    private static long? DateOf(string name)
-    {
-        var match = VersionName().Match(name);
-        return match.Success
-            && long.TryParse(match.Groups["year"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var year)
-            && long.TryParse(match.Groups["month"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var month)
-            && long.TryParse(match.Groups["day"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var day)
-            ? (year * 10_000) + (month * 100) + day
-            : null;
-    }
+    public IReadOnlyList<string>? ProgramLayout(string shimFile) => _launcher.ProgramLayout(shimFile);
 }
