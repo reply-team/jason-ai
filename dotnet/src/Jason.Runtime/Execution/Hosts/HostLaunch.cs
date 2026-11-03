@@ -24,8 +24,9 @@ namespace Jason.Runtime.Execution.Hosts;
 /// </param>
 /// <param name="Allow">
 /// What the host allows through the work directory, carried exactly where <paramref name="Deny"/> is carried: the
-/// command word that calls the runtime back and the memory files' paths in the host's own form, never the capability
-/// token or the envelope. Empty for a host whose allow rules travel on the command line.
+/// command word that calls the runtime back, the memory files' paths in the host's own form, and a granted tool's rule
+/// where it travels through the work directory, never the capability token or the envelope. Empty for a host whose allow
+/// rules travel on the command line.
 /// </param>
 public sealed record HostLaunch(
     IReadOnlyList<string> Command,

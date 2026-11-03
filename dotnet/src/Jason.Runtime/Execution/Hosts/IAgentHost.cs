@@ -113,8 +113,9 @@ public interface IAgentHost
     /// <param name="workDir">The attempt's own directory, which exists; nothing is written outside it.</param>
     /// <param name="allow">
     /// What the launched agent may do, for a host that reads its allow rules from the work directory rather than its
-    /// command line: the command word that calls the runtime back and the memory files' paths, never the capability token
-    /// or the envelope. Empty for a host whose allow rules travel on the command line.
+    /// command line: the command word that calls the runtime back, the memory files' paths, and a granted tool's rule where it
+    /// travels through the work directory, never the capability token or the envelope. Empty for a host whose allow rules
+    /// travel on the command line.
     /// </param>
     /// <param name="deny">What the launched agent may not do, in this host's own vocabulary.</param>
     void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny);

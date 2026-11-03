@@ -42,6 +42,9 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     {
     }
 
+    /// <summary>The rule that denies every write, which the permission file carries whatever the launch denies.</summary>
+    private const string DenyEveryWrite = "Write(**)";
+
     public AgentHostKind Kind => AgentHostKind.CursorCli;
 
     /// <summary>
@@ -131,9 +134,10 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
             .. revision.Tools.Select(ToolRule).OfType<string>(),
         ];
 
-        // Written into the work directory, where a deny is honoured: writing is denied wholly, and a tool of the
-        // vocabulary the revision does not grant is denied by its rule, where the host has one. A search has none.
-        string[] deny = ["Write(**)", .. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule).OfType<string>()];
+        // Written into the work directory, where a deny is honoured: a tool of the vocabulary the revision does not grant is
+        // denied by its rule, where the host has one. A search has none. Writing is denied wholly in the file itself,
+        // whatever the revision grants.
+        string[] deny = [.. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule).OfType<string>()];
 
         return new HostLaunch(
             [
@@ -162,7 +166,7 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     /// <summary>
     /// The host reads a project's permissions from <c>.cursor/cli.json</c> in the directory it works in, and takes the
     /// union of the allow and deny lists of every layer it finds, a deny winning over an allow. So this adds to the
-    /// person's own rules and never replaces them. The file carries the permissions, the file's version key and the editor mode set off, nothing else.
+    /// person's own rules and never replaces them. Every write is denied in it, whatever <paramref name="deny"/> holds. The file carries the permissions, the file's version key and the editor mode set off, nothing else.
     /// </summary>
     public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
     {
@@ -177,7 +181,7 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
             ["permissions"] = new JsonObject
             {
                 ["allow"] = new JsonArray([.. allow.Select(rule => (JsonNode)JsonValue.Create(rule)!)]),
-                ["deny"] = new JsonArray([.. deny.Select(rule => (JsonNode)JsonValue.Create(rule)!)]),
+                ["deny"] = new JsonArray([.. deny.Prepend(DenyEveryWrite).Distinct(StringComparer.Ordinal).Select(rule => (JsonNode)JsonValue.Create(rule)!)]),
             },
         };
 
