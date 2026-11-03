@@ -48,7 +48,7 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
     /// The command the host's own startup errors recommend to a person who is not signed in. The recommendation is
     /// documented; the exact text of the error around it is not, so only the command is looked for.
     /// </summary>
-    private static readonly Regex LoginCommand = new(@"\bcopilot\s+login\b",RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex LoginCommand = new(@"\bcopilot\s+login\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// The characters that end or change a rule's argument in a list: the list is comma-separated, the argument is

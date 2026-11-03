@@ -480,6 +480,7 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("each host holds this rule in its own form", contract, StringComparison.Ordinal);
         Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
     }
+
     /// <summary>
     /// The GitHub Copilot CLI page holds what the host's host-row and section promise, held by words so that a rewrite
     /// that drops one is red: the matrix row's standing sentences (the version it was read at, the parser not read, the
@@ -565,7 +566,6 @@ public partial class ExecutionProfileDocTests
             section,
             StringComparison.Ordinal);
     }
-
 
     /// <summary>The profile's fields say what an argument may not be, for the host that ships as for the others: a short flag stands alone.</summary>
     [Fact]

@@ -375,6 +375,7 @@ public class CopilotCliHostTests
     {
         Assert.Contains(flag, new CopilotCliHost().ReservedFlags);
     }
+
     /// <summary>
     /// The web fetch has a rule under the host's permission kind, the word that allows and denies it alike, and the search
     /// tool has the word the host's own examples use. Neither is a tool name of the tool table, which is a different
