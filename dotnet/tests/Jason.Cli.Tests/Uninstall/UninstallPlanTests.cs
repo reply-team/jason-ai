@@ -2,6 +2,8 @@ using System.Text.Json;
 using Jason.Cli;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
+using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Tests;
@@ -187,6 +189,31 @@ public class UninstallPlanTests
 
         Assert.Empty(remover.Calls);
         Assert.True(File.Exists(mine), "--dry-run removed a file.");
+    }
+
+    /// <summary>
+    /// Four hosts read one folder outside their own markers, so a person who removed every one of them before Jason keeps
+    /// what a deployment recorded there. The plan still finds it, by the record, under the home the locator was made for;
+    /// and a file beside it that no record names is left where it is.
+    /// </summary>
+    [Fact]
+    public void A_recorded_deployment_in_a_shared_root_is_planned_when_no_host_that_reads_it_is_left()
+    {
+        using var dir = new TempPaths();
+        var home = Path.Combine(dir.Paths.Root, "home");
+        var shared = AgentHosts.Under(home, AgentHosts.Of(AgentHostKind.Codex).HomeSkills);
+        var mine = Deploy(shared, "operating-the-installation");
+        var theirs = Write(Path.Combine(shared, "someone-elses-skill", "SKILL.md"), "# not ours");
+        Record(shared, ("runtime", [Relative(shared, mine)]));
+        Assert.Empty(HarnessLocators.ForHome(home).Detect());
+
+        var plan = UninstallReader.Read(
+            new(new StringWriter(), new StringWriter(), dir.Paths, Harnesses: HarnessLocators.ForHome(home)),
+            purgeData: false);
+
+        var root = Assert.Single(plan.Roots, candidate => Same(candidate.Root, shared));
+        Assert.Contains(root.Files, file => Same(file.Path, mine));
+        Assert.DoesNotContain(plan.Roots.SelectMany(candidate => candidate.Files), file => Same(file.Path, theirs));
     }
 
     private static bool Same(string left, string right) =>
