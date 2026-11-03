@@ -36,7 +36,7 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(["approval.get", "campaign.get", "preference.list"], _run.Asked);
         Assert.Equal("{\"approval_id\":\"apr_1\"}", _run.Bodies[0]);
         var launch = Assert.Single(_run.Terminals.Launches);
-        var folder = "~/Jason/projects/acme-corp/campaigns/q3-leads";
+        var folder = _run.CampaignFolder;
         var prompt = CopyPrompt.Compose(PromptKind.Approval, "apr_1", "cmp_1", "wi_1", new PromptFolder(PromptFolderLevel.Campaign, folder));
         Assert.Equal([_run.ConsoleHost, "--", claude, prompt], launch.Argv);
         Assert.Equal(folder, launch.WorkingDirectory);
@@ -58,7 +58,9 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(["decision.get", "campaign.get", "preference.list"], _run.Asked);
         Assert.Equal("{\"decision_id\":\"dec_1\"}", _run.Bodies[0]);
         var published = File.ReadAllText(Path.Combine(CopyPromptTests.RepositoryRoot(), "docs", "prompts", "question.txt")).Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
-        Assert.Equal(published, Assert.Single(_run.Terminals.Launches).Argv[^1]);
+
+        // The published brief names the recorded folder; the answer here names this machine's in its place, and nothing else.
+        Assert.Equal(published.Replace(SessionRuntime.RecordedFolder, _run.CampaignFolder, StringComparison.Ordinal), Assert.Single(_run.Terminals.Launches).Argv[^1]);
         Assert.Contains("\"kind\":\"question\",\"id\":\"dec_1\"", _run.Output.ToString(), StringComparison.Ordinal);
     }
 
@@ -170,7 +172,7 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(["/usr/bin/open", "-a", "Terminal", "jason-apr_1.command"], printed["argv"]!.AsArray().Select(word => word!.GetValue<string>()));
         var script = printed["script"]!.GetValue<string>();
         Assert.StartsWith("#!/bin/sh\nrm -f -- \"$0\"\n", script, StringComparison.Ordinal);
-        Assert.Contains("cd -- '~/Jason/projects/acme-corp/campaigns/q3-leads' || exit 1", script, StringComparison.Ordinal);
+        Assert.Contains("cd -- '" + _run.CampaignFolder + "' || exit 1", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -181,7 +183,7 @@ public sealed class SessionOpenerTests : IDisposable
         var exit = await _run.Cli("session", "open", "--approval", "apr_1", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal("Started claude_code in conhost at ~/Jason/projects/acme-corp/campaigns/q3-leads.", _run.Output.ToString().TrimEnd());
+        Assert.Equal("Started claude_code in conhost at " + _run.CampaignFolder + ".", _run.Output.ToString().TrimEnd());
     }
 
     /// <summary>
@@ -362,9 +364,32 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Empty(_run.Terminals.Launches);
         Assert.Contains(
-            "No terminal was found to start claude_code in. In a terminal of your own, at ~/Jason/projects/acme-corp/campaigns/q3-leads, run `jason approval get apr_1 --prompt` and give the brief to your host.",
+            "No terminal was found to start claude_code in. In a terminal of your own, at " + _run.CampaignFolder + ", run `jason approval get apr_1 --prompt` and give the brief to your host.",
             _run.Error.ToString(),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder the runtime recorded that is not on this machine any more is refused before anything starts: a terminal
+    /// started there would open somewhere else, or nowhere. The line names the path and the repair.
+    /// </summary>
+    [Fact]
+    public async Task A_recorded_folder_that_is_not_there_is_refused_before_the_start()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.Campaign = CopyPromptTests.Fixture("campaign.get", "in-project-with-folder");
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Empty(_run.Output.ToString());
+        var said = _run.Error.ToString().TrimEnd().Split('\n');
+        Assert.Equal(2, said.Length);
+        Assert.Equal(
+            "The campaign's folder recorded at " + SessionRuntime.RecordedFolder + " is not there, so nothing was started; if it was moved, `jason project link --path <where-it-is-now>` records it again.",
+            said[0].TrimEnd('\r'));
+        Assert.Contains("jason approval get apr_1 --prompt", said[1], StringComparison.Ordinal);
     }
 
     /// <summary>Where nothing is set up to start a terminal, which is every environment but the real one, nothing is started.</summary>
@@ -425,7 +450,19 @@ public sealed class SessionOpenerTests : IDisposable
             File.WriteAllBytes(ConsoleHost, []);
             Home = Path.Combine(_dir.Paths.Root, "home");
             Terminals = new RecordingTerminals { SystemDirectory = _system };
+
+            // The recorded exchange names a folder under a home of its own; a start needs one that is there, so the answer
+            // names a real one in its place, written with forward slashes so the JSON needs no escape.
+            CampaignFolder = Path.Combine(_dir.Paths.Root, "Jason", "projects", "acme-corp", "campaigns", "q3-leads").Replace('\\', '/');
+            Directory.CreateDirectory(CampaignFolder);
+            Campaign = CopyPromptTests.Fixture("campaign.get", "in-project-with-folder").Replace(RecordedFolder, CampaignFolder, StringComparison.Ordinal);
         }
+
+        /// <summary>The campaign's folder as the recorded exchange names it.</summary>
+        public const string RecordedFolder = "~/Jason/projects/acme-corp/campaigns/q3-leads";
+
+        /// <summary>The campaign's folder this machine has, which the default answer names.</summary>
+        public string CampaignFolder { get; }
 
         public TestPrograms Programs { get; } = new();
 
@@ -437,7 +474,7 @@ public sealed class SessionOpenerTests : IDisposable
 
         public string? Item { get; set; } = CopyPromptTests.Fixture("approval.get", "pending-with-preview");
 
-        public string? Campaign { get; set; } = CopyPromptTests.Fixture("campaign.get", "in-project-with-folder");
+        public string? Campaign { get; set; }
 
         /// <summary>The value of <c>agent.interactive_host</c>, or null for a key that is unset.</summary>
         public string? Preference { get; set; }

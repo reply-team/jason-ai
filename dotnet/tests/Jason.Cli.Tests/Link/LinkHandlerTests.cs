@@ -204,8 +204,8 @@ public sealed class LinkHandlerTests
         Assert.Equal(body, run.Bodies[0]);
         var launch = Assert.Single(run.Terminals.Launches);
         var text = File.ReadAllText(Path.Combine(CopyPromptTests.RepositoryRoot(), "docs", "prompts", published)).Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
-        Assert.Equal([run.ConsoleHost, "--", claude, text], launch.Argv);
-        Assert.Equal("~/Jason/projects/acme-corp/campaigns/q3-leads", launch.WorkingDirectory);
+        Assert.Equal([run.ConsoleHost, "--", claude, text.Replace(SessionOpenerTests.SessionRuntime.RecordedFolder, run.CampaignFolder, StringComparison.Ordinal)], launch.Argv);
+        Assert.Equal(run.CampaignFolder, launch.WorkingDirectory);
     }
 
     /// <summary>An item that no longer waits starts nothing from a link either.</summary>

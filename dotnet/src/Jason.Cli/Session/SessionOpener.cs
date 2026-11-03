@@ -18,9 +18,9 @@ namespace Jason.Cli.Session;
 /// </summary>
 /// <remarks>
 /// Exit codes are the CLI's: 0 the terminal started (or, for a dry run, would be), 1 refused — by the runtime, or because
-/// nothing waits on the item, the host is unknown or not installed, or no terminal is found or starts — and 3 no runtime to
-/// ask. Every refusal that leaves the item waiting says how to do the same by hand. Stdout is one compact object of the
-/// CLI's own, never the prompt.
+/// nothing waits on the item, the host is unknown or not installed, the recorded folder is not there, or no terminal is
+/// found or starts — and 3 no runtime to ask. Every refusal that leaves the item waiting says how to do the same by hand.
+/// Stdout is one compact object of the CLI's own, never the prompt.
 /// </remarks>
 public static class SessionOpener
 {
@@ -88,6 +88,13 @@ public static class SessionOpener
         {
             env.Error.WriteLine(NotFound(hostWord, AgentHosts.Of(host).CommandWord, found));
             env.Error.WriteLine(ChooseAnother);
+            env.Error.WriteLine(byHand);
+            return ExitCodes.ApiError;
+        }
+
+        if (folder is not null && !Directory.Exists(folder.Path))
+        {
+            env.Error.WriteLine(Missing(folder));
             env.Error.WriteLine(byHand);
             return ExitCodes.ApiError;
         }
@@ -244,6 +251,17 @@ public static class SessionOpener
 
         return printed.ToJsonString(JasonJson.Options);
     }
+
+    /// <summary>
+    /// Why a recorded folder that is not on disk starts nothing: a terminal started there would open somewhere else. A
+    /// campaign's or a project's folder a person moved is recorded again by <c>jason project link</c>.
+    /// </summary>
+    private static string Missing(PromptFolder folder) => folder.Level switch
+    {
+        PromptFolderLevel.HarnessRoot => $"The harness root at {folder.Path} is not there, so nothing was started.",
+        _ => $"The {(folder.Level == PromptFolderLevel.Campaign ? "campaign's" : "project's")} folder recorded at {folder.Path} is not there, so nothing was started; "
+            + "if it was moved, `jason project link --path <where-it-is-now>` records it again.",
+    };
 
     private static string Level(PromptFolderLevel level) => level switch
     {
