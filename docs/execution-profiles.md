@@ -35,7 +35,7 @@ A revision holds:
 | `args` | what this profile adds after the arguments the runtime composes. A host's parser reads a short flag with more letters or a value after it as several flags, or as a flag and its value, and a lone dash as the prompt, so a short flag stands alone: a short flag with more letters or a value after it, a lone dash and a double dash are refused when the profile is written, naming the host, under Claude Code and under Cursor CLI |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
 | `tools` | the tools the person grants the launched agent, by name: `web_search`, `web_fetch`, each at most once. A closed vocabulary — any other word is refused when the profile is written, and so is a word named twice, or one the revision's `deny` takes away by the host's name for it. Empty unless somebody names one (§7) |
-| `cli_command` | the bare command word the agent calls home with; defaults to the runtime's own executable name |
+| `cli_command` | the bare command word the agent calls home with, of letters, digits, dots, dashes and underscores and starting with a letter or a digit; defaults to the runtime's own executable name |
 | `host_version_verified` | the host version this profile was proven against, as a version such as `2.1.289`: three numbers, and a pre-release after `-` if any. Recorded and reported; not enforced. A profile stored before the version shape was required keeps what it has; a write that names the field is held to it |
 
 **A profile cannot hold a credential, because there is nowhere to put one.** No environment field, no
@@ -494,7 +494,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Codex CLI | `codex` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | On Windows, first: Codex's elevated sandbox must be set up once by an administrator ([setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a role runs is refused and the attempt fails by the role's report. Commands are not confined by name: any program a role can read runs, inside the sandbox. Holding the network to loopback rests on Codex's network proxy, an experimental feature in 0.166.0. On Windows, the elevated sandbox may let a role read more than the list. The person's global `AGENTS.md` and their skills reach every Codex role. Whether `jason` reaches the runtime from inside the sandbox is not yet checked on Linux, macOS or Windows. Built from the host's documentation and source for 0.166.0, npm's current release; measured on Windows with the CLI the Codex app bundles, 0.166.0-alpha.5.1; not yet run on an account ([Codex CLI](#codex-cli)) | `web_search` as `WebSearch`: granted as a live search, denied by that word; `web_fetch`: not on this host, so a grant is refused and a deny holds anyway | one `"<path>"="read"` entry per file in the permissions profile on its command line (`-c permissions.jason.filesystem=…`), 0.166.0 | as its prompt, on standard input, with no prompt word on the command line (`codex exec`: instructions are read from stdin when none is given, 0.166.0) |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
-| GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| GitHub Copilot CLI | `copilot_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.0.105, the version the allowlist was read at; parser not read, so a profile's arguments are only the documented options the person owns: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, `--no-color` and `--disable-client-telemetry`. No undocumented flag, however harmless, is taken this release. Not signed in is a non-zero exit whose stderr names `copilot login`. Not yet run on an account | `web_fetch` as `url`; the host documents no search tool, so a grant of `web_search` is refused and a deny of it is kept | one `read(<absolute path>)` rule per file in its `--allow-tool` list, on its command line (documented for version 1.0.105; not yet measured to reach outside the work directory) | as its prompt, on standard input, with no `-p`; nothing of the envelope on its command line |
 | Cursor CLI | `cursor_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation and the installed bundle for version 2026.10.22-27dcf5f; not yet run on an account | `web_fetch` as `WebFetch(*)`, granted and denied by that rule; `web_search` has no rule, and is neither granted nor denied (the person's own `autoAcceptWebSearch` setting decides it) | one `Read(<absolute path>)` rule per file, in `.cursor/cli.json` in the work directory and never on its command line (version 2026.10.22-27dcf5f, from the bundle; not yet run on an account) | as its prompt, on standard input, in print mode (`-p`), when no word for a prompt stands on its command line (version 2026.10.22-27dcf5f, from the bundle; not yet run on an account) |
 
 A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there, and only
@@ -578,6 +578,118 @@ refused by every name Codex's parser gives it, including the ones its help never
 **What an attempt records.** Codex mints the id of its own run and takes none, so the attempt records none; the id Codex
 printed is in the attempt's `stdout.log`. An end without a report is read as any other end: Codex says nothing stable
 about a missing sign-in.
+
+### GitHub Copilot CLI
+
+`copilot_cli` is built from the host's documentation for version 1.0.105 and **has not yet been run on an account**:
+every form below is the documented one, the tests prove the command Jason composes and the launch around it against a
+stand-in under the host's command word, and a sentence that says "not measured" is one the documentation leaves open.
+The host is installed by a person — `npm install -g @github/copilot`, `winget install GitHub.Copilot`,
+`brew install copilot-cli` or the install script the host's page gives — and signed in by them with `copilot login`;
+Jason holds no key for it, and a token the person's own environment carries (`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`,
+`GITHUB_TOKEN`) is theirs and is not read or set. Then:
+
+```
+jason profile create copilot --host copilot_cli --program copilot
+```
+
+`jason skills install --host copilot_cli` deploys into `~/.agents/skills`, which the host reads as personal skills; a
+user-level skill there reaches every launched role of this host as well as the role's own, which is placed in the work
+directory under `.agents/skills/<role>/`. The host is found by `~/.copilot/config.json`, which is also what Visual Studio
+Code's own download of a `copilot` command leaves, so a machine can be reported as having the host when it has only
+that; a person who moved the host's folder with `COPILOT_HOME` is not detected, and deploys with `--root`. Instructions:
+the host reads `AGENTS.md` itself, so the harness folder carries no import file for it, and a launched role is told not to
+load the person's own instruction files (`--no-custom-instructions`), reading the memory files its launch names by rule.
+
+**What a launch is.** The brief goes to the host on stdin, which it reads when it is given no prompt of its own, so the
+command carries no print flag and nothing of the envelope. It is `--output-format json` (a transcript, which the runtime
+keeps and never parses: the outcome comes back through the CLI), `--no-ask-user`, `--no-auto-update`,
+`--no-custom-instructions`, `--disable-builtin-mcps`, a fresh `--session-id` minted for the attempt, four flags that
+close what the person's own settings would otherwise decide — `--disallow-temp-dir` (the system temporary folder is not
+opened to the role), `--sync-session=off` (the host's history of the run is not synced), `--mode=interactive` (a setting
+cannot make the run autopilot) and `--no-bash-env` (no startup file named by `BASH_ENV` is read by the shell) — and then
+three lists — `--available-tools`, `--allow-tool` and `--deny-tool` — and last the profile's own arguments. Nothing is
+written into the work directory and nothing of the person's own configuration is touched. No flag that trusts the folder
+or allows every tool, path or address is composed, and a profile may not carry one: every flag above is reserved, with the
+other documented flags that load, reach or say more. The host's parser is closed and was not read
+(the reserved list is from its documentation), so a hidden alias of a composed flag, a cluster of short options or a value
+glued to one cannot be ruled out; a profile's arguments are therefore an allowlist of the documented options a person
+owns, each as one argument: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, and the
+bare `--no-color` and `--disable-client-telemetry`. Anything else is refused, harmless or not: the cost of a closed parser;
+so is a value holding a control character, which a space does not.
+The log level and the log directory are not among them: they change what the host writes outside the work directory.
+
+| Tool the host offers a role | Why |
+|---|---|
+| `view`, `glob`, `grep` | reading, inside the work directory |
+| `skill` | loading a skill: every skill the host discovers, the person's and plugins' included, not the role's own alone |
+| `bash` and its `read_`, `list_`, `stop_` companions; on Windows `powershell` and its three | the callback to the runtime, and reading a long one back |
+| `web_fetch` | only where the profile grants `web_fetch` |
+
+The host offers no tool that writes or patches a file, asks a person, starts another agent or keeps a memory, and
+documents no search tool. A tool the host is not offered is unavailable even where a rule allows it, which is why the
+list is the confinement and the rules below are what the role may then do.
+
+**The three forms, as the host documents them for 1.0.105.**
+
+- **What a role may read:** `read(<absolute path>)` for each memory file the launch names, in the order client, project,
+  campaign, once for a file named twice, forward slashes on Windows. A path holding a comma, a parenthesis or a pattern
+  character gets no rule, because the list is comma-separated and the host documents no pattern rule for `read`; the
+  level is reported as unreadable and the role reports the refusal. **Not measured:** whether a rule for one file lets the
+  role read it outside the work directory, which the host's pages do not say.
+- **How it calls back:** `shell(jason:*)`, the runtime's command word followed by anything, which the host reads as every
+  subcommand of it; one rule of the `shell` kind covers both shell tools. The bare word with no argument is not matched.
+- **What deny means:** a deny wins over an allow in the host, even over an allow-everything, so a web fetch not granted is
+  denied (`url`) and left out of the tool set, and every `write` is denied beside the profile's own `deny` words, which are
+  the host's `kind(argument)` rules as the person wrote them, one per entry. The host reads a rule's head as one of
+  `memory`, `read`, `shell`, `url` or `write`, in that case, with or without a part in parentheses, and any other head as an
+  MCP server's name, which denies nothing the role is offered; so a deny with another head is refused when the profile is
+  written, naming the host, and so is a deny by the name of the fetch tool (`web_fetch`), whose word is `url`. A deny of
+  `web_search` is kept as the person's word and holds anyway, since the host has no such tool.
+
+**When no rule allows a call.** In a run, a call no rule allows is denied, and the reason goes back to the role; the
+reference says so, no run has shown it. A run has no terminal to ask, and `--no-ask-user` takes the question tool away as
+well.
+
+**What is not confined.** Jason composes what a flag can close, and a flag cannot close the person's own setup. The
+history of the run stays under the person's `~/.copilot` only because the launch turns the host's session sync off; the
+host keeps it there whatever the work directory says. Beyond that, the host's own documentation puts these outside any
+flag, and each is the person's, not Jason's, to change:
+
+| What the person's setup can do | Where it lives |
+|---|---|
+| Run user-level hooks: the run loads no repository hooks, but the person's own apply to every session | `~/.copilot/hooks/` and the `hooks` key of `~/.copilot/settings.json` |
+| Start MCP servers of their own, which the tool set keeps out of the role's reach but which still start; the host has a flag to disable one server by name and none to disable all | the person's MCP configuration |
+| Turn on assisted approval for a run with no terminal | `COPILOT_ASSISTED_APPROVAL=true` in the environment |
+| Make allow-all the default permission mode | `defaultPermissionMode` set to `"allow-all"` in the user settings |
+| Add skill folders, which the role can then load | `skillDirectories` in the user settings and `COPILOT_SKILLS_DIRS` in the environment |
+| Have a saved approval apply, keyed by the git root of the folder the run is in; a deny still wins over it | `~/.copilot/permissions-config.json` |
+| Allow everything: `COPILOT_ALLOW_ALL` is equal to `--allow-all`, which is every tool, every path and every URL, minus what the deny list names; only the exact value `true` also trusts the folder | the environment |
+
+Jason does not read or clear any of these. A person who wants the `skill` tool to reach less than every skill the host
+discovers, the person's and plugins' included, excludes folders with `ignoredSkillsLocations` or turns a skill off with
+`disabledSkills`, both in the user settings; a skill's own `allowed-tools` can open the shell to every command with `"*"`,
+and the allow rule that holds the shell to the runtime's command word does not stop a skill that names it.
+
+The file-writing tools are denied and not offered; the shell is held to the command word by the allow rule. What shell
+redirection by the callback can write is not measured. The run is in a folder the host does not trust, and the host
+documents that such a run loads no hooks, workspace servers, repository plugin settings or project extensions.
+
+**Not measured.** The documentation leaves these open, and no run has answered them:
+
+- whether a rule naming one file lets the role read it outside the work directory;
+- whether a run in a folder the host does not trust stops to ask;
+- whether the work directory's skills load there;
+- whether shell redirection by the callback can write a file the deny list names;
+- whether `taskbarPresence`, a Windows setting, does anything in a run with no desktop;
+- whether version 1.0.105 accepts every flag above: the host's changelog does not say when `--disallow-temp-dir` and
+  `--sync-session` appeared, so a launch is composed from the reference and not from a run.
+
+**Not signed in.** An end without a report whose exit is not zero and whose stderr names `copilot login`, the command the
+host's startup errors recommend, is final and says `host_not_available` with one sentence of Jason's own, never the
+host's words. That signal is the documented recommendation and **not a measured text**: the host's pages state no exit code
+and no message for a signed-out run, so a signed-out host that says it differently ends as an ordinary attempt that
+reported nothing.
 
 ### Cursor CLI
 

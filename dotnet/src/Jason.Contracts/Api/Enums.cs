@@ -63,6 +63,7 @@ public enum AgentHostKind
 {
     ClaudeCode,
     Codex,
+    CopilotCli,
     CursorCli,
 }
 
