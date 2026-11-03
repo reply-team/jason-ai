@@ -480,7 +480,8 @@ a shell: arguments go through an argument array, one at a time. A name that is n
 name containing `/`, `\` or `:` — fails with `executable_not_allowed`.
 
 A name may resolve to a program **plus leading arguments** — on Windows, where npm installed the CLI
-as a cmd shim, that is `node.exe` and the entry script the shim named (§13). Those arguments are the
+as a cmd shim that names an entry script, that is `node.exe` and the script (§13); a shim that names an
+executable the package ships resolves to that executable with no leading arguments. Those arguments are the
 runtime's: they go ahead of everything in `args`, a plugin can neither see nor set them, and they are
 not counted against the `args` cap, because a limit should not depend on how a vendor packaged its
 CLI. They travel in the envelope as the grant's `launch` and are recorded on the `exec` line, so what

@@ -32,8 +32,8 @@ does not know is refused by `jason session open` with exit 1, naming the word an
 started.
 
 The host's program is looked up on the search path the CLI runs with, by its command word (`claude`, `codex`, `copilot`,
-`agent`, `gemini`, `agy`), as `jason status` finds a program: an `.exe`, npm's shim read for the interpreter it
-names, or, for Cursor CLI, its launcher script read for the program it starts, as the runtime reads it; never a script
+`agent`, `gemini`, `agy`), as `jason status` finds a program: an `.exe`, npm's shim read for what it starts (the
+interpreter and entry script it names, or the executable its package ships), or, for Cursor CLI, its launcher script read for the program it starts, as the runtime reads it; never a script
 through a shell. A host that is not there is refused with exit 1, saying which program was not found and how to choose
 another host, and a host found only as a file Jason refuses is refused naming that file and the rule it broke; Jason
 never falls back to another host, since the person named one.
