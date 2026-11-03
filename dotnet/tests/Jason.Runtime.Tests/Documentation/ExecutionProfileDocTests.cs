@@ -657,6 +657,16 @@ public partial class ExecutionProfileDocTests
         }
     }
 
+    /// <summary>The row of the host table names the sign-in signal in one clause, so a person reading only the table knows what a signed-out run looks like.</summary>
+    [Fact]
+    public void The_gemini_cli_row_names_the_exit_of_a_failed_sign_in()
+    {
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var row = text.Split('\n').Single(line => line.Contains("| `gemini_cli` |", StringComparison.Ordinal));
+
+        Assert.Contains("a signed-out run ends with exit 41, which the notes read as \"could not authenticate\"", Flattened(row), StringComparison.Ordinal);
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 
