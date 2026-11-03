@@ -550,7 +550,8 @@ into (where it names none, the base a build unpacks under: `.net` in the home, a
 character the sandbox reads as a pattern (`* ? [ ] { }`) is left unreadable. Where `<data>/run`, the executable or its
 unpack folder holds one, a role could not call the runtime back, so the claim refuses the work with
 `host_not_available`, naming the path, before a child exists. A path the profile denies reading is denied, even one
-this list names: a deny wins over a read. On Windows, whether the elevated
+this list names: a deny wins over a read. On Windows every path of the list is written as a drive and forward slashes, as a
+deny's is, so a deny of a file the list names is the same key and replaces the read. Whether the elevated
 sandbox reads only this list is not yet checked; Codex documents the paths it denies there rather than a list of the
 paths it reads, so a role may read more than this list. What no flag reaches: Codex reads its own global `AGENTS.md`
 (in `~/.codex`, or `$CODEX_HOME`) for every run, so that file reaches every Codex role and should carry nothing a role
