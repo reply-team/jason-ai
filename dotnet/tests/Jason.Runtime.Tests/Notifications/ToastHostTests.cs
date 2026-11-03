@@ -28,6 +28,8 @@ public sealed class ToastHostTests
     {
         public string? ReadString(string key, string name) => ToastRegistration.DisplayName;
 
+        public string? ReadClassesString(string key, string name) => null;
+
         public void WriteString(string key, string name, string value) => throw new InvalidOperationException("nothing is written here");
     }
 

@@ -19,6 +19,8 @@ public sealed class AppUserModelIdRegistrationTests
 
         public string? ReadString(string key, string name) => Values.GetValueOrDefault((key, name));
 
+        public string? ReadClassesString(string key, string name) => null;
+
         public void WriteString(string key, string name, string value)
         {
             if (Refuse is not null)

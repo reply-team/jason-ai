@@ -14,6 +14,12 @@ public interface IUserRegistry
 
     /// <summary>Writes a string value, creating the key if needed.</summary>
     void WriteString(string key, string name, string value);
+
+    /// <summary>
+    /// A string value under <c>HKEY_CLASSES_ROOT</c>, the merged view Windows resolves a class through, where a
+    /// machine-wide key shows beside this account's own; null where the key or the value is absent. Read only.
+    /// </summary>
+    string? ReadClassesString(string key, string name);
 }
 
 /// <summary>
@@ -67,5 +73,11 @@ public sealed class RegistryUserRegistry : IUserRegistry
     {
         using var created = Registry.CurrentUser.CreateSubKey(key, writable: true);
         created.SetValue(name, value, RegistryValueKind.String);
+    }
+
+    public string? ReadClassesString(string key, string name)
+    {
+        using var opened = Registry.ClassesRoot.OpenSubKey(key, writable: false);
+        return opened?.GetValue(name) as string;
     }
 }
