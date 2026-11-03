@@ -198,6 +198,26 @@ public class CodexHostTests
     }
 
     /// <summary>
+    /// A deny of a path from the home is written in the one form every deny word is written in on Windows, a drive and
+    /// forward slashes, whichever way the platform spells the home and whether it ends in a separator: the home's own
+    /// backslashes are not carried into a path whose rest is forward slashes.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\someone", "C:/Users/someone/private/notes.md")]
+    [InlineData(@"C:\Users\someone\", "C:/Users/someone/private/notes.md")]
+    [InlineData("C:/Users/someone", "C:/Users/someone/private/notes.md")]
+    public void A_windows_deny_from_the_home_is_one_form_with_forward_slashes(string home, string path)
+    {
+        var revision = Revision(deny: ["Read(~/private/notes.md)"]);
+
+        var command = new CodexHost(@"C:\j", @"C:\x", @"C:\t", windows: true, home: home).Compose(revision, ["codex"], NoFiles).Command;
+
+        var filesystem = Assert.Single(command, item => item.StartsWith("permissions.jason.filesystem=", StringComparison.Ordinal));
+        Assert.Contains($"\"{path}\"=\"deny\"", filesystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("someone\\private", filesystem, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Where the runtime holds no data directory of its own — a composition of the dispatcher alone, in a test — the
     /// descriptor's folder is not named rather than guessed.
     /// </summary>
