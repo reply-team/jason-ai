@@ -23,9 +23,15 @@ public interface ITerminalStarter
 
 /// <summary>
 /// The terminal of this machine, started as every child of Jason's is: through <see cref="ChildProcess"/>, with an argument
-/// list and no shell, and never waited for. On macOS the script Terminal runs is written first, into a folder of its own
-/// under the temporary folder that only this account can read, and it removes itself and that folder when it runs.
+/// list and no shell. On Windows and Linux the terminal is never waited for. On macOS the script Terminal runs is written
+/// first, into a folder of its own under the temporary folder that only this account can read, and it removes itself and
+/// that folder when it runs; <c>/usr/bin/open</c> hands the script to Terminal and exits, so it is waited for, for ten
+/// seconds at most, and an exit other than zero is a start that failed: the folder is removed and the problem returned.
 /// </summary>
+/// <remarks>
+/// No test runs this class, since every run would open a window on whoever runs the suite; the suite holds that by a
+/// guard, and what it starts is composed by <see cref="TerminalPlan"/>, which the tests do run.
+/// </remarks>
 public sealed class PlatformTerminalStarter : ITerminalStarter
 {
     public TerminalPlatform Platform { get; } = OperatingSystem.IsWindows()
@@ -33,6 +39,9 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
         : OperatingSystem.IsMacOS() ? TerminalPlatform.MacOs : TerminalPlatform.Linux;
 
     public string? SystemDirectory { get; } = OperatingSystem.IsWindows() ? Environment.SystemDirectory : null;
+
+    /// <summary>How long macOS's opener is waited for: it exits once Terminal has the script, and a hang is not a refusal.</summary>
+    private static readonly TimeSpan OpenerWait = TimeSpan.FromSeconds(10);
 
     public bool Start(TerminalLaunch launch, out string? problem)
     {
@@ -59,6 +68,10 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
             if (process is null)
             {
                 problem = "no process was started";
+            }
+            else if (launch.Script is not null && process.WaitForExit(OpenerWait) && process.ExitCode != 0)
+            {
+                problem = $"{Path.GetFileName(argv[0])} exited with code {process.ExitCode}";
             }
         }
         catch (Exception refused) when (refused is Win32Exception or InvalidOperationException or PlatformNotSupportedException or IOException or UnauthorizedAccessException)
