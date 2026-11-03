@@ -1,5 +1,7 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Notifications;
 
 namespace Jason.Runtime.Notifications.Desktop;
@@ -12,8 +14,9 @@ namespace Jason.Runtime.Notifications.Desktop;
 /// </summary>
 /// <remarks>
 /// It is a mode rather than code in the runtime because a fault in the hand-written interop ends this child, which is
-/// recorded as a failed toast, and never the runtime. It registers nothing but <see cref="ToastRegistration.Aumid"/>:
-/// a payload naming anything else is rejected before the registry is touched.
+/// recorded as a failed toast, and never the runtime. It registers nothing but <see cref="ToastRegistration.Aumid"/>
+/// and the <c>jason:</c> link that starts this executable: a payload naming anything else is rejected before the
+/// registry is touched.
 /// </remarks>
 public static class ToastHost
 {
@@ -56,7 +59,7 @@ public static class ToastHost
 
         try
         {
-            var outcome = Show(payload, new RegistryUserRegistry(), WindowsToast.Prepare);
+            var outcome = Show(payload, new RegistryUserRegistry(), SelfExecutable.Command, WindowsToast.Prepare);
             await stdout.WriteLineAsync(JsonSerializer.Serialize(outcome, ToastHostJson.Options)).ConfigureAwait(false);
             return Outcome;
         }
@@ -111,16 +114,31 @@ public static class ToastHost
             return $"every line is text of at most {MaxLine} characters";
         }
 
+        // By what it is and never by what it says: the item is the one field a person's toast carries from the database.
+        if (read.Item is { } item
+            && !PublicId.IsWellFormed(AttentionLinks.ApprovalPrefix, item)
+            && !PublicId.IsWellFormed(AttentionLinks.QuestionPrefix, item))
+        {
+            return "an item is neither an approval nor a question by its public id";
+        }
+
         payload = read;
         return null;
     }
 
     /// <summary>
-    /// The measured sequence: ensure the key, every call on the path to Show, Show, then the Setting. The registry and
-    /// the toast come in through the seam, so a test holds the order with fakes.
+    /// The measured sequence: ensure the key, ensure the <c>jason:</c> link, every call on the path to Show, Show, then
+    /// the Setting. The registry and the toast come in through the seam, so a test holds the order with fakes.
     /// </summary>
+    /// <remarks>
+    /// The link never fails a toast. Present or written, a click launches the one item's link, or the list's when the
+    /// payload names no item, and one item's toast has the Copy prompt button, which launches that item's prompt link;
+    /// another program's or refused, the toast is the one shown before there was a link, with no button, so a click can
+    /// hand nothing to a program that is not Jason.
+    /// </remarks>
+    /// <param name="self">How this executable is started, which the link's command names.</param>
     [SupportedOSPlatform("windows")]
-    internal static ToastHostOutcome Show(ToastHostPayload payload, IUserRegistry registry, Func<string, string, IPreparedToast> prepare)
+    internal static ToastHostOutcome Show(ToastHostPayload payload, IUserRegistry registry, IReadOnlyList<string> self, Func<string, string, IPreparedToast> prepare)
     {
         var (registration, registrationHr) = AppUserModelIdRegistration.Ensure(registry);
         if (registration == AppUserModelIdRegistration.Failed)
@@ -128,11 +146,15 @@ public static class ToastHost
             return new ToastHostOutcome(ToastCommands.Protocol, registration, registrationHr, [], null, null, null, null);
         }
 
-        using var prepared = prepare(payload.Aumid, WindowsToast.Xml(payload.Title, payload.Lines));
+        var (scheme, schemeHr) = SchemeRegistration.Ensure(registry, self);
+        var linked = scheme is SchemeRegistration.Present or SchemeRegistration.Written;
+        var launch = linked ? AttentionLinks.Item(payload.Item) ?? AttentionLinks.List : null;
+        var copyPrompt = linked ? AttentionLinks.Prompt(payload.Item) : null;
+        using var prepared = prepare(payload.Aumid, ToastXml.Compose(payload.Title, payload.Lines, launch, copyPrompt));
         var calls = prepared.Calls.Select(call => new ToastHostCall(call.Step, WindowsToast.Hr(call.Hr))).ToList();
         if (prepared.FailedStep is { } failed)
         {
-            return new ToastHostOutcome(ToastCommands.Protocol, registration, null, calls, failed, null, null, null);
+            return new ToastHostOutcome(ToastCommands.Protocol, registration, null, calls, failed, null, null, null, scheme, schemeHr);
         }
 
         var shown = prepared.Show();
@@ -145,6 +167,8 @@ public static class ToastHost
             null,
             WindowsToast.Hr(shown),
             WindowsToast.Hr(settingHr),
-            setting);
+            setting,
+            scheme,
+            schemeHr);
     }
 }

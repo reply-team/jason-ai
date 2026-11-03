@@ -42,8 +42,9 @@ public static class UninstallCommand
           1. the logon registration, first, so a logon part-way through cannot start what is going: this
              account's, on Windows including the task an earlier version registered as Jason
           2. the runtime — and if it will not stop, nothing further is removed
-          3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, and
-             the two entries Windows made for it
+          3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, the
+             two entries Windows made for it, and the jason: link registration where its command names this
+             executable
           4. every skill a deployment recorded, by the paths its record names
           5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason — the
              executable, its two notice files and what an upgrade left beside it: the marked block in a login
@@ -69,7 +70,8 @@ public static class UninstallCommand
         Never touched:             a skill there is no receipt for, any other skill in an agent harness,
                                    any provider CLI, any model credential, a PATH entry the installer did
                                    not write, another account's logon registration, the notifications
-                                   already in the notification center, which are the person's to dismiss.
+                                   already in the notification center, which are the person's to dismiss,
+                                   a jason: link registration another program or another installation owns.
                                    And the harness root (Harness:Root, ~/Jason by default) with every
                                    folder and file in it, --purge-data included: the purge empties the
                                    data directory, never the root. A link in the data directory is
@@ -79,7 +81,7 @@ public static class UninstallCommand
         them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
         This account's, not this installation's: the logon registration, the notification registration and the
         agent harnesses. Uninstalling a second installation on one account takes the first one's registrations
-        and harness skills too.
+        and harness skills too. The jason: link goes only where its command names this executable.
 
         Exit codes: 0 when everything it set out to remove is gone. 1 when it did not get there: it refused
         (a runtime that would not stop), or something it set out to remove is still there (a record it cannot
@@ -311,6 +313,16 @@ public static class UninstallCommand
             env.Out.WriteLine($"  the notification registration, which could not be read: {unreadable}");
         }
 
+        if (plan.Link is { Fate: LinkRegistrationFate.Removed })
+        {
+            env.Out.WriteLine($@"  the jason: link registration at HKCU\{Jason.Contracts.Notifications.LinkRegistration.Key}");
+        }
+
+        if (plan.LinkUnreadable is { } linkUnreadable)
+        {
+            env.Out.WriteLine($"  the jason: link registration, which could not be read: {linkUnreadable}");
+        }
+
         foreach (var root in plan.Roots)
         {
             env.Out.WriteLine(string.Create(
@@ -364,6 +376,15 @@ public static class UninstallCommand
         if (plan.OtherExtractedLibrariesLeft is { } left)
         {
             env.Out.WriteLine($"  NOT touched: {left}");
+        }
+
+        if (plan.Link is { Fate: LinkRegistrationFate.Kept } kept)
+        {
+            env.Out.WriteLine($@"  NOT touched: the jason: link registration at HKCU\{Jason.Contracts.Notifications.LinkRegistration.Key}, whose command names another installation: {kept.Command}");
+        }
+        else if (plan.Link is { Fate: LinkRegistrationFate.Untouched })
+        {
+            env.Out.WriteLine($@"  NOT touched: the jason: link registration at HKCU\{Jason.Contracts.Notifications.LinkRegistration.Key}, which is another program's");
         }
 
         foreach (var unknown in plan.Unknown)

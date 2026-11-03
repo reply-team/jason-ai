@@ -112,7 +112,9 @@ work item or attempt. A campaign's public id travels only in the sentence about 
 of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read,
 nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are
 and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign.
-The pointer is made from five counts, those ids, and nothing else. A campaign's name is the plainest example of why: it
+The pointer is made from five counts, those ids, and nothing else — and in the Windows toast alone, when exactly one
+approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on (§7). That id is never
+in the words, never in a plugin channel's input, and never in a toast on macOS or Linux. A campaign's name is the plainest example of why: it
 is often a customer's name or a deal, written by the person for themselves, and a notification is read by whoever can
 see the screen, the phone or, on a public ntfy server, the topic.
 
@@ -143,6 +145,16 @@ such a unit exists only while the person is signed in.
   records it silenced — not delivered and not failed. It is the person's own choice, and never reported as a fault.
 - **macOS** shows it with `osascript`, which macOS attributes to the program that showed it. That command is composed
   and checked by tests here; it has not been watched on a Mac.
+- **A click** on the banner, or on its entry in the notification center, opens your UI on Windows: on the one approval
+  or question when exactly one waits, on the list of what waits otherwise, paired as `jason ui open` pairs (§7). On
+  macOS and Linux a click opens nothing of Jason's; `jason ui open` reaches the same page.
+- **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows nothing: it puts on the clipboard
+  the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt` prints, for you to
+  paste into your agent host. The list's toast has no button, and neither has a toast whose link is not Jason's (§7).
+- **A page you visit can open a `jason:` link too**, after your browser's own confirmation, and it can do nothing a
+  click cannot: your own UI opens on the list, or on an item whose id the page could have typed, or Jason's own prompt
+  for such an item replaces what was on your clipboard, for an id the runtime answers. Nothing is decided by it, and the
+  link's text is never logged, never repeated in an error and never handed on to another program.
 
 A notification plugin reaches wherever its service does — a phone following an ntfy topic, say — whatever session the
 runtime runs in.
@@ -240,14 +252,31 @@ jason journal list --kind notification_sent
 
 - **A per-user key, nothing elevated.** At every toast the toast host ensures the key
   `HKCU\Software\Classes\AppUserModelId\ai.jason.runtime` with `DisplayName` `Jason` — written the first time, only
-  read after that — from an ordinary prompt. That is the whole registration: no shortcut, no icon, no activator. It
-  appears as "Jason" in Settings → System → Notifications.
+  read after that — from an ordinary prompt. No shortcut, no icon, no activator: a click reaches Jason through the
+  `jason:` link below. It appears as "Jason" in Settings → System → Notifications.
+- **The `jason:` link, beside it.** At the same moment the host ensures `HKCU\Software\Classes\jason`, Windows' own form
+  for a URI scheme: `URL Protocol`, the value `AppUserModelID` `ai.jason.runtime` that says the key is Jason's, and a
+  command that starts the executable with the link and nothing else — no data directory, so a click finds the runtime
+  the way a `jason` typed in a terminal does. A `jason` class without that marker, this account's or the machine's, is
+  another program's: it is never written over or shadowed, and the toast is shown without a click target, as it is when
+  the key cannot be written; delivery never fails for it. The check reads the class key, the merged view Windows
+  resolves a class through, and the program this account chose for `jason:` links
+  (`HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\jason\UserChoice`, `ProgId`), which Windows sends
+  a link to whatever the class key says: a choice other than Jason's own class is another program's too, even where the
+  key is Jason's. A machine-wide `jason` another program installs after Jason's per-user key is shadowed by it, which is
+  Windows' own rule for a class both hold. The link follows the executable that last showed a toast: a
+  development runtime that shows one re-points it to its own executable until the installed one shows the next, as the
+  AppUserModelID's display name already follows whichever showed the last. The executable is a console program: on
+  Windows 11 24H2 and later a click opens no window, and on earlier Windows a console window shows while the link is
+  handled.
 - **Shown by a child of the same executable**, `jason toast-host`, which ends once it has shown the toast and read the
   Setting, and is the only place the WinRT interop runs: a fault in it ends that child, recorded as a failed toast,
   never the runtime. What a walk saw of it is in §10.
 - **What Windows adds**: at the first toast, Windows writes two entries of its own for that AppUserModelID, under
   `…\Notifications\Settings\` and `…\PushNotifications\Backup\` in the same account.
-- **What `jason uninstall` removes**: all three keys, after the runtime has stopped. **What stays**: the notifications
+- **What `jason uninstall` removes**: all three keys, after the runtime has stopped, and the `jason:` link where its
+  command names that installation's executable; another installation's is named and kept for its own uninstall, and
+  another program's is never touched. **What stays**: the notifications
   already in the notification center, which are the person's to dismiss, and Windows' own database of them.
 
 ## 8. ntfy and other plugins
