@@ -71,6 +71,7 @@ public static class UninstallReader
         var directory = executable is null ? null : Path.GetDirectoryName(executable);
         var descriptor = new DescriptorReader(env.Paths).Read();
         var (notificationKeys, registryUnreadable) = NotificationKeys(env);
+        var (link, linkUnreadable) = Link(env);
         var extracted = Extracted(env, executable, directory);
         var (others, othersLeft) = Others(env, extracted, directory, OperatingSystem.IsWindows(), ExtractBase(env));
 
@@ -93,7 +94,32 @@ public static class UninstallReader
             Notices(executable),
             owner,
             others,
-            othersLeft);
+            othersLeft,
+            link,
+            linkUnreadable);
+    }
+
+    /// <summary>
+    /// The command this installation's toast host writes for a <c>jason:</c> link: the installed file where one is named,
+    /// otherwise what starts this very process, which is what the host is started as.
+    /// </summary>
+    internal static string LinkCommand(CliEnvironment env) =>
+        Jason.Contracts.Notifications.LinkRegistration.Command(env.InstallPath is { } path ? [path] : SelfExecutable.Command);
+
+    /// <summary>
+    /// The <c>jason:</c> link registration and what becomes of it; where the classes cannot be read, none and why,
+    /// never taken for an account without one.
+    /// </summary>
+    private static (LinkRegistrationPlan? Link, string? Unreadable) Link(CliEnvironment env)
+    {
+        try
+        {
+            return (LinkRegistrationPlan.Of(env.Removes?.ReadLinkRegistration(), LinkCommand(env)), null);
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return (null, exception.Message);
+        }
     }
 
     /// <summary>

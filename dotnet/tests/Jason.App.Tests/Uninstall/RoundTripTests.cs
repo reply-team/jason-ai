@@ -382,6 +382,11 @@ public class RoundTripTests
         public void RemoveNotificationKey(string key) =>
             throw new InvalidOperationException("this round trip removes nothing from the registry of whoever ran it.");
 
+        public LinkRegistrationRead? ReadLinkRegistration() => null;
+
+        public void RemoveLinkRegistration(string command) =>
+            throw new InvalidOperationException("this round trip removes nothing from the registry of whoever ran it.");
+
         // The test host is no single-file build, so the machine's answer is null; asked anyway, so that a
         // change which made it name something outside the scratch tree fails here rather than deleting it.
         public string? ReadExtractedLibraries(string executable) =>
