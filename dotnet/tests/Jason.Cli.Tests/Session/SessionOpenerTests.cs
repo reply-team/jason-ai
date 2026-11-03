@@ -119,6 +119,49 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("\"program\":" + Quoted(node), _run.Output.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>A host npm installed under a scope is read as an unscoped one is, through the same lookup.</summary>
+    [Fact]
+    public async Task A_host_npm_installed_under_a_scope_starts_through_the_interpreter_its_shim_names()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows has npm's cmd shim.");
+        _run.Preference = "{\"host\":\"codex\"}";
+        var node = _run.Programs.Add("node.exe", executable: true);
+        var entry = _run.Programs.AddNested(@"node_modules\@openai\codex\bin\codex.js", "// the entry point");
+        _run.Programs.AddNested(@"node_modules\@openai\codex\package.json", "{\"name\":\"@openai/codex\",\"bin\":{\"codex\":\"bin/codex.js\"}}");
+        _run.Programs.Add("codex.cmd", TestPrograms.NpmShim(@"@openai\codex", @"bin\codex.js"));
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var argv = Assert.Single(_run.Terminals.Launches).Argv;
+        Assert.Equal(node, Path.GetFullPath(argv[2]));
+        Assert.Equal(entry, Path.GetFullPath(argv[3]));
+        Assert.StartsWith("Jason is waiting", argv[^1], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Claude Code's package ships an executable, and npm's shim for it starts that executable with no interpreter: the
+    /// executable is what starts, never the shim.
+    /// </summary>
+    [Fact]
+    public async Task Claude_code_installed_by_npm_starts_the_executable_its_package_ships()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows has npm's cmd shim.");
+        var executable = _run.Programs.AddNested(@"node_modules\@anthropic-ai\claude-code\bin\claude.exe", "not a real program");
+        _run.Programs.AddNested(
+            @"node_modules\@anthropic-ai\claude-code\package.json", "{\"name\":\"@anthropic-ai/claude-code\",\"bin\":{\"claude\":\"bin/claude.exe\"}}");
+        _run.Programs.Add("claude.cmd", TestPrograms.NpmNativeShim(@"@anthropic-ai\claude-code", @"bin\claude.exe"));
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var argv = Assert.Single(_run.Terminals.Launches).Argv;
+        Assert.Equal(executable, Path.GetFullPath(argv[2]));
+        Assert.Equal(4, argv.Count);
+        Assert.StartsWith("Jason is waiting", argv[^1], StringComparison.Ordinal);
+        Assert.Contains("\"program\":" + Quoted(executable), _run.Output.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>Cursor CLI's launcher script is read for the program it starts, by the reading the runtime uses.</summary>
     [Fact]
     public async Task Cursor_clis_launcher_is_read_for_the_program_it_starts()
