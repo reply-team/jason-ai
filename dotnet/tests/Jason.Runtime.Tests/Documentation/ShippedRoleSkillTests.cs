@@ -96,7 +96,10 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("no file-writing tool", skill, StringComparison.Ordinal);
         Assert.Contains("--note '", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--note-file", skill, StringComparison.Ordinal);
-        Assert.DoesNotContain("--result-file", skill, StringComparison.Ordinal);
+        // The one place the result file is named is the sentence for a host that cannot pass the JSON on a command line,
+        // which says where the file is written; the inline form above stays the one every other host is taught.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Count(skill, "--result-file", System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Contains("Where your host cannot pass the JSON on a command line, write it to `result.json` in the work directory and pass `--result-file result.json` instead.", skill, StringComparison.Ordinal);
 
         // INV-MEM-001, in the skill the role actually reads rather than only in a document nobody hands it.
         Assert.Contains("not authoritative", skill, StringComparison.OrdinalIgnoreCase);
@@ -211,7 +214,10 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("--note '", skill, StringComparison.Ordinal);
         Assert.Contains("--result '", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--note-file", skill, StringComparison.Ordinal);
-        Assert.DoesNotContain("--result-file", skill, StringComparison.Ordinal);
+        // The one place the result file is named is the sentence for a host that cannot pass the JSON on a command line,
+        // which says where the file is written; the inline form above stays the one every other host is taught.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Count(skill, "--result-file", System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Contains("Where your host cannot pass the JSON on a command line, write it to `result.json` in the work directory and pass `--result-file result.json` instead.", skill, StringComparison.Ordinal);
 
         // 10. The outcome a review is allowed to have. A manager that believes it must act to have reviewed
         // will act, and the campaign will be managed by a role looking for something to report.
