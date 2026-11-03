@@ -536,7 +536,7 @@ Jason holds no key for it and passes none: a `GEMINI_API_KEY` or any other crede
 theirs, and is neither read nor set. Then:
 
 ```
-jason profile create antigravity --host antigravity_cli --program agy --host-version-verified 1.4.10
+jason profile create antigravity --host antigravity_cli --program agy
 ```
 
 `jason skills install --host antigravity_cli` deploys into `~/.gemini/antigravity-cli/skills`, one of the three folders
@@ -604,9 +604,9 @@ is already there:
   no rule for it and cannot see the person's; with the person's rule the role reads them anyway, and without it the role
   reports the refusal.
 
-**The three forms.** The CLI form is `jason skills install --host antigravity_cli`; the profile form is the line above; the
-runtime form is the command the launch composes and the one stream-json line. The person's two rules are the fourth thing
-and are not a form Jason writes.
+**The three forms.** What a role may read is the person's `read_file(<harness folder>)` rule. How a role calls back is the
+person's `command(<cli word>)` rule. What a deny means here is nothing, because every deny word is refused where the
+profile is written.
 
 **Not measured, because the pages do not say.** Whether an allowed `command(<cli word>)` runs unattended in a headless run;
 whether the plain `command(jason)` covers the report call on Windows, where the pages ask for the `regex:` form; whether a
