@@ -583,6 +583,11 @@ list is the confinement and the rules below are what the role may then do.
   MCP server's name, which denies nothing the role is offered; so a deny with another head is refused when the profile is
   written, naming the host, and so is a deny by the name of the fetch tool (`web_fetch`), whose word is `url`. A deny of
   `web_search` is kept as the person's word and holds anyway, since the host has no such tool.
+
+**When no rule allows a call.** In a run, a call no rule allows is denied, and the reason goes back to the role; the
+reference says so, no run has shown it. A run has no terminal to ask, and `--no-ask-user` takes the question tool away as
+well.
+
 **What is not confined.** Jason composes what a flag can close, and a flag cannot close the person's own setup. The
 history of the run stays under the person's `~/.copilot` only because the launch turns the host's session sync off; the
 host keeps it there whatever the work directory says. Beyond that, the host's own documentation puts these outside any
@@ -612,7 +617,6 @@ documents that such a run loads no hooks, workspace servers, repository plugin s
 - whether a rule naming one file lets the role read it outside the work directory;
 - whether a run in a folder the host does not trust stops to ask;
 - whether the work directory's skills load there;
-- whether a tool call that no rule allows is refused, or waits, in a run with no terminal;
 - whether shell redirection by the callback can write a file the deny list names;
 - whether `taskbarPresence`, a Windows setting, does anything in a run with no desktop;
 - whether version 1.0.105 accepts every flag above: the host's changelog does not say when `--disallow-temp-dir` and
