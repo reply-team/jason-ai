@@ -128,7 +128,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
 | `entry.function` | `^[A-Za-z_$][A-Za-z0-9_$]*$` | `entry_function_invalid` |
 | `capabilities.exec.executables` | required inside `exec`; 1..16 entries | `field_required`, `field_invalid` |
-| `…executables[i].name` | required; `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, no separators, no duplicates. Resolved on the search path at every reload: an executable file, or on Windows the cmd shim npm writes, which resolves to `node.exe` plus the entry script the shim names (§13) | `field_required`, `field_invalid`, `executable_missing`, `executable_not_runnable` |
+| `…executables[i].name` | required; `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, no separators, no duplicates. Resolved on the search path at every reload: an executable file, or on Windows the cmd shim npm writes, which resolves to `node.exe` plus the entry script the shim names, or to the executable it starts (§13) | `field_required`, `field_invalid`, `executable_missing`, `executable_not_runnable` |
 | `…executables[i].min_version` | `major.minor.patch`; needs a `version_command` | `field_invalid` |
 | `…executables[i].version_command` | exactly one of `["--version"]`, `["-v"]`, `["-V"]`, `["version"]` | `field_invalid` |
 | `capabilities.http.hosts` | required inside `http`; 1..32 lowercase `host` or `host:port` (port 1–65535), exact, unique, no scheme, no path, no wildcards | `field_required`, `field_invalid`, `host_invalid` |
@@ -1346,12 +1346,18 @@ are the operations' own examples; §7 says how to drive one through the host by 
   the argument-array rule exists to exclude. The one exception is that shim, which every Node-based
   vendor CLI installed by npm resolves to: the runtime reads it, takes the entry script it names, and
   starts `node.exe <entry script> <your arguments>` through the argument array, so no shell is
-  involved at any point. It is the **last** resort, never the first: the search path is walked to its
-  end, any `.exe` or `.com` in any directory wins outright, and only then is the first `.cmd` that was
-  found read. Every one of these has to hold, and a file that breaks one is refused with that rule
-  named:
-  - the file is at most 8 KiB and matches npm's current `:find_dp0` template exactly, so an older
-    template is refused;
+  involved at any point. For a target with no shebang — an executable the package ships, such as
+  `bin/claude.exe` in `@anthropic-ai/claude-code` — npm writes a shorter shim that starts the target
+  itself, and the runtime reads that form too: it starts the executable with `<your arguments>` and
+  nothing in front of them, never the shim, and only where the target's name ends in `.exe` or `.com`;
+  a `.cmd`, `.bat`, `.ps1` or any other target is refused, because Jason starts programs, never shells,
+  and a target the disk does not hold is `executable_missing`. It is the **last** resort, never the
+  first: the search path is walked to its end, any `.exe` or `.com` in any directory wins outright, and
+  only then is the first `.cmd` that was found read. Every one of these has to hold, and a file that
+  breaks one is refused with that rule named:
+  - the file is at most 8 KiB and matches one of npm's two current `:find_dp0` templates exactly —
+    the one that hands an entry script to node, or the one whose call is the target alone — so an older
+    template, or a line either never holds, is refused;
   - the package is one directory under `node_modules`, or two for a **scoped package**
     (`node_modules\@scope\name\…`), and each of them reads as a name before any path is built from it —
     the scope as `@` and a package name, the package as a package name — so a segment that is not a
@@ -1364,7 +1370,8 @@ are the operations' own examples; §7 says how to drive one through the host by 
     from that directory down — so a `..` in the entry path is refused, and so is a junction or a
     symbolic link that leaves the package, at `node_modules`, at the scope, at the package itself, at
     any directory inside it, or at the entry file;
-  - `node.exe` is found beside the shim or on the same search path, and recorded as an absolute path.
+  - for a shim that hands an entry script to node, `node.exe` is found beside the shim or on the same
+    search path, and recorded as an absolute path.
 
   What the name resolved to is visible in `plugin list` and in the envelope as `launch`, and every
   `host.exec` line records it.
@@ -1373,9 +1380,9 @@ are the operations' own examples; §7 says how to drive one through the host by 
   before. It does not widen who can substitute the program — anyone who can write npm's directory can
   already replace an `.exe` on the search path — but it is a new kind of trust, so it is narrow on
   purpose: npm's exact template, the package's own `bin` entry as a cross-check, the entry script held
-  inside the package directory, an absolute interpreter, and the whole thing re-read at every reload,
-  never remembered from the last one. A file that deviates in any of those is refused with the rule it
-  broke, exactly as a `.cmd` is refused today.
+  inside the package directory, an absolute interpreter or a program image by its name, and the whole
+  thing re-read at every reload, never remembered from the last one. A file that deviates in any of
+  those is refused with the rule it broke, exactly as a `.cmd` is refused today.
 - **Proxies come from the base environment.** `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their
   lowercase forms are passed through and honoured; there is no proxy configuration of Jason's own and
   no custom TLS.
