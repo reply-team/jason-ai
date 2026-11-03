@@ -208,16 +208,64 @@ public class CodexProfileRulesTests
     }
 
     /// <summary>
-    /// A deny of a tool Codex does not have holds already and is the person's word, so a profile that carries one moves
-    /// to Codex with it kept, as written.
+    /// Codex reads no rule by a word outside the few its sandbox holds, so a deny of a tool it does not have, of an MCP
+    /// tool or of a fetch of one domain is refused where it is written, when a patch names it, and when a profile that
+    /// carries it moves to Codex, naming the host and the word; a profile that is refused keeps the revision it had.
     /// </summary>
+    [Theory]
+    [InlineData("Glob")]
+    [InlineData("Grep")]
+    [InlineData("Task")]
+    [InlineData("mcp__made_up__send")]
+    [InlineData("WebFetch(domain:x)")]
+    public async Task A_deny_codex_reads_no_rule_by_is_refused_at_a_create_an_update_and_a_move(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "denying", host = "codex", program = "codex", deny = new[] { "Write", word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        AssertRefused(created, "deny[1]", word);
+
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "updating", host = "codex", program = "codex" }, Ct);
+        var updated = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "updating", deny = new[] { word } }, HttpStatusCode.BadRequest, Ct);
+        AssertRefused(updated, "deny[0]", word);
+
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "moving", host = "claude_code", program = "claude", deny = new[] { word } }, Ct);
+        var moved = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "moving", host = "codex", program = "codex" }, HttpStatusCode.BadRequest, Ct);
+        AssertRefused(moved, "deny[0]", word);
+
+        foreach (var (name, host) in new[] { ("updating", AgentHostKind.Codex), ("moving", AgentHostKind.ClaudeCode) })
+        {
+            var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name }, Ct);
+            Assert.Equal(1, read.Revision.Number);
+            Assert.Equal(host, read.Revision.Host);
+        }
+
+        static void AssertRefused(ErrorBody error, string field, string word)
+        {
+            var detail = Assert.Single(error.Details!);
+            Assert.Equal((field, "invalid"), (detail.Field, detail.Code));
+            Assert.Contains("codex", detail.Message, StringComparison.Ordinal);
+            Assert.Contains($"'{word}'", detail.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("whatever", detail.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>A deny of a fetch, which Codex does not have, holds already and is kept, here as on the move.</summary>
     [Fact]
-    public async Task A_profile_denying_a_tool_codex_does_not_have_moves_to_codex_with_the_deny_kept()
+    public async Task A_profile_denying_a_fetch_moves_to_codex_with_the_deny_kept()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         await api.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileCreate,
-            new { name = "moving", host = "claude_code", program = "claude", deny = new[] { "Glob", "mcp__made_up__send" } },
+            new { name = "moving", host = "claude_code", program = "claude", deny = new[] { "WebFetch" } },
             Ct);
 
         var moved = await api.PostOkAsync<ExecutionProfileDto>(
@@ -225,7 +273,7 @@ public class CodexProfileRulesTests
 
         Assert.Equal(2, moved.Revision.Number);
         Assert.Equal(AgentHostKind.Codex, moved.Revision.Host);
-        Assert.Equal(["Glob", "mcp__made_up__send"], moved.Revision.Deny);
+        Assert.Equal(["WebFetch"], moved.Revision.Deny);
     }
 
     /// <summary>

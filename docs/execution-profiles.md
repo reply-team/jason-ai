@@ -561,12 +561,13 @@ checked.
 
 **What a deny means.** Nothing is writable, so `Write`, `Edit`, `MultiEdit` and `NotebookEdit` hold already. `WebSearch`
 turns the search off, even where `tools` grants it. `Read(//…)`, `Read(//d/…)` on Windows and `Read(~/…)` deny that
-path in the sandbox; a `Read` of any other form names no path the sandbox can hold, and is refused. A deny of a tool
-Codex does not have — `WebFetch` or `WebFetch(…)`, `Glob`, `Grep`, `Task`, an MCP tool — holds already and is kept as
-written, the person's word, so a profile that carries one moves to Codex with it. Commands are not confined by name —
-any program the role can read runs, inside the same sandbox — so a deny naming a command (`Bash(…)`, `PowerShell(…)`,
-`Shell(…)`) is refused when the profile is written or moved to Codex, naming the host, rather than dropped at a launch.
-A grant of `web_fetch` is refused because Codex has no tool that fetches a page; the network reaches loopback alone.
+path in the sandbox; a `Read` of any other form names no path the sandbox can hold, and is refused. `WebFetch` holds
+already, since Codex has no tool that fetches a page and the network reaches loopback alone, and is kept as written.
+Codex reads no rule by any other word: it confines a run by its sandbox, not by a list of tools. So a deny of a command
+by its name (`Bash(…)`, `PowerShell(…)`, `Shell(…)`), of a tool Codex does not have (`Glob`, `Grep`, `Task`), of an MCP
+tool or of a fetch of one domain (`WebFetch(domain:…)`) is refused when the profile is written or moved to Codex, naming
+the host and the word, rather than dropped at a launch. Commands are not confined by name either: any program the role
+can read runs, inside the same sandbox. A grant of `web_fetch` is refused because Codex has no tool that fetches a page.
 
 **Arguments.** A profile's `args` are flags, each value joined to its flag by `=` (`--model=<name>`): Codex reads a bare
 word as the prompt, which would replace the brief, or as a subcommand, and takes a short flag one letter at a time, so
