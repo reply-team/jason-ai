@@ -5,14 +5,17 @@ namespace Jason.App.Tests;
 
 /// <summary>
 /// No test clicks a <c>jason:</c> link for real: none writes this account's registry, none writes the clipboard, none
-/// opens a browser through the environment a click is given. Held over the source of every test project.
+/// opens a browser through the environment a click is given, none hands a link to a process it starts. Held over the
+/// source of every test project.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Three rules. No test names the real registry or the real clipboard: either would act on the machine running the
+/// Four rules. No test names the real registry or the real clipboard: either would act on the machine running the
 /// suite, whatever the data directory says. No file reaches the link handler and the real CLI environment together,
-/// which carries the real opener and the real clipboard. And no file runs the router beside a <c>jason:</c> link,
-/// since the router hands a link the real environment: choosing the mode is held by <c>ModeRouter.Select</c> alone.
+/// which carries the real opener and the real clipboard. No file runs the router beside a <c>jason:</c> link, since the
+/// router hands a link the real environment: choosing the mode is held by <c>ModeRouter.Select</c> alone. And no file
+/// that starts a process — by a start info of its own, through <c>ChildProcess</c>, or through the executable runner the
+/// end-to-end tests share — holds a <c>jason:</c> literal, since the executable it starts runs a link as a click does.
 /// </para>
 /// <para>
 /// Its reach is the source text with whole-line comments removed and adjacent string literals joined, as
@@ -46,6 +49,10 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("router with a link", "await ModeRouter.RunAsync([\"jason://attention\"], ct);")]
     [InlineData("router with a link in pieces", "await ModeRouter.RunAsync([\"JASON\" + \"://attention\"], ct);")]
     [InlineData("router with the table's link", "await ModeRouter.RunAsync([AttentionLinks.List], ct);")]
+    [InlineData("process start with a link", "var start = new ProcessStartInfo(exe) { ArgumentList = { \"jason://attention\" } };")]
+    [InlineData("child process with a link", "using var child = ChildProcess.Start(ChildProcess.StartInfo(exe, [\"jason://attention\"]));")]
+    [InlineData("executable runner with a link", "await GoldenPath.JasonAsync(it, \"jason://attention/approvals\");")]
+    [InlineData("launcher runner with a link in pieces", "await GoldenPath.LauncherAsync(it, \"JASON\" + \":attention\");")]
     public void The_rule_finds_each_form(string form, string text) =>
         Assert.True(Offence("Mutant.cs", text) is not null, $"{form} passes the rule: {text}");
 
@@ -54,6 +61,7 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("await ModeRouter.RunAsync([\"--version\"], ct);")]
     [InlineData("Assert.Equal(Mode.Link, ModeRouter.Select([\"jason://attention\"]));")]
     [InlineData("await Link" + "Handler.RunAsync([link], cli.Environment, ct);")]
+    [InlineData("await GoldenPath.JasonAsync(it, \"--version\");")]
     public void What_acts_on_nothing_is_no_offence(string text) => Assert.Null(Offence("Fine.cs", text));
 
     private static string? Offence(string file, string source)
@@ -82,8 +90,16 @@ public sealed partial class NoTestClicksALinkTests
             return $"{file} runs the router beside a jason: link";
         }
 
+        if (LinkLiteral().IsMatch(text) && ProcessStarts.FirstOrDefault(start => text.Contains(start, StringComparison.Ordinal)) is { } how)
+        {
+            return $"{file} starts a process through {how} beside a jason: link";
+        }
+
         return null;
     }
+
+    /// <summary>What a test file starts a process through: a start info, the shared helper, the end-to-end runner.</summary>
+    private static readonly string[] ProcessStarts = ["ProcessStartInfo", "ChildProcess", "JasonAsync(", "LauncherAsync("];
 
     private static string Joined(string text) => Concatenation().Replace(Uncommented(text), string.Empty);
 
