@@ -16,7 +16,7 @@ namespace Jason.Runtime.Execution.Hosts;
 /// The one way the host reads a prompt from standard input is its stream format: one JSON line per prompt, the run ending
 /// when the stream does. So the brief travels as one such line (<see cref="FrameStdin"/>) and the command carries no print
 /// flag and no word of the brief. The host has no limit of the attempt's kind that ends a run as a failure — its own print
-/// timeout ends it with a success and partial output — so the command turns it off and the attempt's limit is the only one.
+/// timeout ends it with a success and partial output (the host's changelog says so) — so the command turns it off and the attempt's limit is the only one.
 /// </para>
 /// <para>
 /// What the host may do is decided by permission rules, and the host reads those from the person's own files under their
@@ -29,7 +29,7 @@ namespace Jason.Runtime.Execution.Hosts;
 /// <para>
 /// Not measured, because the host's pages do not say: whether a run in a folder the host does not know stops to ask,
 /// whether an allowed command runs unattended, whether the work directory's skills load there, and the exit code and text
-/// of a run that is not signed in beyond the two phrases the pages quote.
+/// of a run that is not signed in beyond the two phrases read below.
 /// </para>
 /// </summary>
 public sealed class AntigravityCliHost : IAgentHost
@@ -41,7 +41,8 @@ public sealed class AntigravityCliHost : IAgentHost
     public const string NotSignedIn = "Antigravity CLI is not signed in on this account: run `agy` and sign in as yourself.";
 
     /// <summary>
-    /// The words the host's pages quote for a run with no sign-in, and for one whose sign-in expired in the middle of it.
+    /// The words read for a run with no sign-in, from the host's headless page ("authentication required"), and for one whose
+    /// sign-in expired in the middle of it, from the host's changelog ("Authentication expired").
     /// Only these are looked for; an exit the pages give another meaning, a failure of the model service say, is not one.
     /// </summary>
     private static readonly string[] SignInWords = ["authentication required", "authentication expired"];
@@ -61,6 +62,7 @@ public sealed class AntigravityCliHost : IAgentHost
         "--input-format", "--output-format",
         "--print-timeout",
         "--json-schema",
+        // The modes page lists passing --permission-mode as a common mistake and says the host uses --mode; reserved as a guard.
         "--mode", "--permission-mode",
         "--sandbox",
         "--dangerously-skip-permissions",
@@ -124,7 +126,7 @@ public sealed class AntigravityCliHost : IAgentHost
     }
 
     /// <summary>
-    /// The host saying it has no usable sign-in: a non-zero end whose stderr tail holds one of the phrases the pages quote.
+    /// The host saying it has no usable sign-in: a non-zero end whose stderr tail holds one of the two phrases above.
     /// Nothing else of the tail is read as a signal and none of it is carried.
     /// </summary>
     public string? Unavailable(int exitCode, string? stderrTail) =>

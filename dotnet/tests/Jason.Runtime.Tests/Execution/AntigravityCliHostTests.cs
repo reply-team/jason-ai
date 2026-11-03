@@ -210,12 +210,12 @@ public class AntigravityCliHostTests
     }
 
     /// <summary>
-    /// The host's parser could not be read: no copy of it was available to inspect, so the reserved list is the flags its
-    /// reference table names plus the one its mode page says it accepts for another host's sake, which the host reads as
-    /// its own mode flag.
+    /// The reserved list is the reference table's flags that the runtime composes or that change the session. The permission
+    /// mode flag of another host is on it as a guard: the host's modes page lists passing it as a common mistake and says the
+    /// host uses its own mode flag, so it is reserved beside it, and what the host does with it is not stated.
     /// </summary>
     [Fact]
-    public void The_permission_mode_flag_the_host_accepts_for_compatibility_is_reserved_beside_its_own()
+    public void The_permission_mode_flag_is_reserved_as_a_guard_beside_the_hosts_own_mode_flag()
     {
         Assert.Contains("--permission-mode", Host.ReservedFlags);
         Assert.Contains("--mode", Host.ReservedFlags);
