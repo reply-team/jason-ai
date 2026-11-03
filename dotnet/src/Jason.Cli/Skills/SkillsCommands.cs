@@ -101,7 +101,7 @@ public static class SkillsCommands
         // The role root is Jason's own and is never detected, but it is a root a deployment wrote into and so
         // is one an update has to carry.
         var roleRoot = env.Paths.RoleSkillsDirectory;
-        var roots = harnesses.Select(harness => harness.Directory).Append(roleRoot).Distinct(StringComparer.OrdinalIgnoreCase);
+        var roots = harnesses.Select(harness => harness.Directory).Append(roleRoot).Distinct(HarnessLocators.SamePath);
 
         // Each pack in each root, from that pack's own record in that root. This took the newest deployment
         // anywhere and re-ran it everywhere: after a full install from one source and --roles-only from another,
