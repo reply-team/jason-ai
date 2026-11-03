@@ -82,6 +82,14 @@ public sealed class TestPrograms : IDisposable
         + "  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "
         + "\"%_prog%\"  \"%dp0%\\node_modules\\" + package + "\\" + entry + "\" %*\r\n";
 
+    /// <summary>
+    /// npm's own shim for a target with no shebang, an executable the package ships: byte for byte what cmd-shim 7.0.0,
+    /// the one npm bundles, writes for it, with no interpreter in it and nothing after the call.
+    /// </summary>
+    public static string NpmNativeShim(string package, string target) =>
+        "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n"
+        + "\"%dp0%\\node_modules\\" + package + "\\" + target + "\"   %*\r\n";
+
     public void Dispose()
     {
         try

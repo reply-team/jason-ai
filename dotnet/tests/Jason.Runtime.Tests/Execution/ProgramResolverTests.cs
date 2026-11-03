@@ -210,6 +210,28 @@ public class ProgramResolverTests : IDisposable
     }
 
     /// <summary>
+    /// Claude Code as npm installs it: its <c>bin</c> is <c>bin/claude.exe</c>, an executable the package ships (read
+    /// from the npm registry at 2.1.317), so cmd-shim writes the form with no interpreter, and what starts is that
+    /// executable itself — never the shim, and no node at all. The package's postinstall puts the real binary at that
+    /// path; this row is about where the shim leads, which is the same before and after.
+    /// </summary>
+    [Fact]
+    public void Claude_Code_installed_by_npm_resolves_to_the_executable_its_package_ships()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "npm writes a .cmd shim only on Windows.");
+        using var programs = new Plugins.TestPrograms();
+        var executable = programs.AddNested(@"node_modules\@anthropic-ai\claude-code\bin\claude.exe", "the binary");
+        programs.AddNested(
+            @"node_modules\@anthropic-ai\claude-code\package.json",
+            """{"name":"@anthropic-ai/claude-code","bin":{"claude":"bin/claude.exe"}}""");
+        programs.Add("claude.cmd", Plugins.TestPrograms.NpmNativeShim(@"@anthropic-ai\claude-code", @"bin\claude.exe"));
+
+        var launch = new ProgramResolver(Search(programs.Root)).Resolve("claude");
+
+        Assert.Equal([executable], launch);
+    }
+
+    /// <summary>
     /// A host installed as a launcher script that starts an interpreter, as Cursor's is on Windows: the script itself is
     /// never started, since that would hand a command line to a shell, but its host knows what the script starts, so the
     /// answer for the script is the interpreter and the entry script. A path to the script names the file the way a

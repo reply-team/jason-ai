@@ -1081,9 +1081,14 @@ internal static class StatusChecks
 
         // What the name came to is said first: a person reading "did not answer" has to know which file did not, and
         // on Windows that is often not the file the name suggests.
-        var resolved = found.Outcome == ProgramLookupOutcome.NpmShim
-            ? $"'{providerCli}' resolves to {Listed(found.File!)}, npm's shim, which runs {found.Launch[0]} with {program}."
-            : $"'{providerCli}' resolves to {Listed(found.File!)}.";
+        var resolved = found.Outcome switch
+        {
+            ProgramLookupOutcome.NpmShim =>
+                $"'{providerCli}' resolves to {Listed(found.File!)}, npm's shim, which runs {found.Launch[0]} with {program}.",
+            _ when !string.Equals(found.File, program, StringComparison.OrdinalIgnoreCase) =>
+                $"'{providerCli}' resolves to {Listed(found.File!)}, npm's shim, which starts {program}.",
+            _ => $"'{providerCli}' resolves to {Listed(found.File!)}.",
+        };
 
         var result = await runner.RunAsync(program, [.. found.Launch, .. ProviderArguments], null, ProviderTimeout, cancellationToken).ConfigureAwait(false);
         if (result.NotStarted)

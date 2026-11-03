@@ -45,6 +45,29 @@ public class ProviderCliCheckTests
         Assert.Contains("'acme-sdr --version' answered.", check.Fact, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// npm's shim for an executable the package ships names no interpreter: the executable runs by itself, and the fact
+    /// says both the shim the name came to and the file that ran, since the two are not the same file.
+    /// </summary>
+    [Fact]
+    public async Task An_npm_shim_with_no_interpreter_runs_the_executable_it_names_and_says_which()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var dir = new TempPaths();
+        using var programs = new TestPrograms();
+        var executable = programs.AddNested(@"node_modules\@acme\sdr\bin\acme-sdr.exe", "the binary");
+        programs.AddNested(@"node_modules\@acme\sdr\package.json", "{\"name\":\"@acme/sdr\",\"bin\":{\"acme-sdr\":\"bin/acme-sdr.exe\"}}");
+        programs.Add("acme-sdr.cmd", TestPrograms.NpmNativeShim(@"@acme\sdr", @"bin\acme-sdr.exe"));
+
+        var (check, runner) = await CheckAsync(dir, "acme-sdr", programs.Root);
+
+        var asked = Assert.Single(runner.Requested);
+        Assert.Equal(executable, asked.Program);
+        Assert.Equal(["--version"], asked.Arguments);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains($"'acme-sdr' resolves to {Path.Combine(programs.Root, "acme-sdr.cmd")}, npm's shim, which starts {executable}.", check.Fact, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_program_on_the_search_path_is_run_as_the_file_it_resolves_to()
     {
