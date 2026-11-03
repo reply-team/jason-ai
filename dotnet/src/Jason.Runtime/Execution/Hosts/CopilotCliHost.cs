@@ -27,9 +27,9 @@ namespace Jason.Runtime.Execution.Hosts;
 /// <para>
 /// Not measured, because the host's pages do not say: whether a rule naming one file lets the role read it outside the
 /// work directory, whether a run in a folder the host does not trust stops to ask, whether the work directory's skills
-/// load there, whether a tool call no rule allows is refused or waits in a run with no terminal, what shell redirection by
-/// the callback can write, whether version 1.0.105 accepts every flag composed here, and which exit code and text a run
-/// that is not signed in ends with.
+/// load there, what shell redirection by the callback can write, whether version 1.0.105 accepts every flag composed
+/// here, and which exit code and text a run that is not signed in ends with. A call no rule allows is denied and the
+/// reason goes back to the role, which the host's reference says and no run has shown.
 /// </para>
 /// </summary>
 /// <param name="windows">

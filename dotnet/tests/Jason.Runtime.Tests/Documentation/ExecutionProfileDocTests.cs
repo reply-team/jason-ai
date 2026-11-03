@@ -502,6 +502,7 @@ public partial class ExecutionProfileDocTests
             "built from the host's documentation for version 1.0.105, the version the allowlist was read at",
             "parser not read, so a profile's arguments are only the documented options the person owns",
             "No undocumented flag, however harmless, is taken this release.",
+            "Not signed in is a non-zero exit whose stderr names `copilot login`.",
             "Not yet run on an account",
         })
         {
