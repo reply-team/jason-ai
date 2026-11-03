@@ -19,9 +19,8 @@ You also need a directory you can write to, and — if you want an agent harness
 harness installed, so §4 has somewhere to deploy.
 
 To have a host other than Claude Code run the background roles, install it from its own documentation and sign in
-as yourself; Jason holds no key. For Cursor CLI that is `irm 'https://cursor.com/install?win32=true' | iex` on
-Windows or `curl https://cursor.com/install -fsS | bash` elsewhere, as
-[its installation page](https://cursor.com/docs/cli/installation.md) gives them, then `agent login` and
+as yourself; Jason holds no key. For Cursor CLI, install it from
+[its installation page](https://cursor.com/docs/cli/installation.md), run `agent login` and
 `jason profile create <name> --host cursor_cli --program agent`. On Windows, where `agent` is not found by the runtime's
 search path, name the launcher by its full path: `--program <full path of agent.cmd>`.
 

@@ -511,6 +511,23 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// A host's install is told one way in the README and the install page: a link to the host's own installation page,
+    /// where its commands are kept current, and never a command copied here. The only line either page pipes to a shell is
+    /// Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("docs/INSTALL.md")]
+    public void A_host_s_install_is_a_link_to_its_own_page_and_no_command_copied_from_it(string file)
+    {
+        var text = File.ReadAllText(Path.Combine(RepositoryTree.Root(), file.Replace('/', Path.DirectorySeparatorChar))).ReplaceLineEndings("\n");
+
+        var piped = text.Split('\n').Where(line => System.Text.RegularExpressions.Regex.IsMatch(line, @"\|\s*(?:sh|bash|iex)\b"));
+        Assert.All(piped, line => Assert.Contains("get.jasonharness.ai", line, StringComparison.Ordinal));
+        Assert.Contains("](https://cursor.com/docs/cli/installation.md)", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The GitHub Copilot CLI page holds what the host's host-row and section promise, held by words so that a rewrite
     /// that drops one is red: the matrix row's standing sentences (the version it was read at, the parser not read, the
     /// cost of that), the flags a launch composes to close what the person's settings would leave open, each thing the

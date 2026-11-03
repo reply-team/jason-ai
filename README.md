@@ -410,18 +410,17 @@ jason workitem create <campaign-id> --kind ai_role --role researcher --execution
 jason rolenote get --role researcher --campaign <campaign-id>
 ```
 
-Cursor CLI can run the background roles too. Install it with the commands Cursor itself documents
-([cursor.com/docs/cli/installation](https://cursor.com/docs/cli/installation.md)), then sign in as yourself and name it:
+Cursor CLI can run the background roles too. Install it from
+[Cursor's installation page](https://cursor.com/docs/cli/installation.md), where its commands are kept current, sign in as
+yourself, then name it:
 
 ```sh
-irm 'https://cursor.com/install?win32=true' | iex     # Windows, PowerShell
-curl https://cursor.com/install -fsS | bash           # macOS and Linux
 agent login
 jason profile create local-cursor --host cursor_cli --program agent
 ```
 
-Cursor's own pages are where the install lines are kept current. The [host matrix](docs/execution-profiles.md#12-the-hosts)
-says what was built from documentation and what has not yet been run on an account.
+The [host matrix](docs/execution-profiles.md#12-the-hosts) says what was built from documentation and what has not yet
+been run on an account.
 
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
