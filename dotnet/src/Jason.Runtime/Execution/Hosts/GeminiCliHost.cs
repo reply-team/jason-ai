@@ -170,6 +170,15 @@ public sealed class GeminiCliHost(string? systemPoliciesDirectory = null) : IAge
     private static HashSet<string> Spellings(string[] shorts, string[] longs)
     {
         var all = new HashSet<string>(shorts, StringComparer.OrdinalIgnoreCase);
+
+        // The parser takes the key of a long word from after its dashes, and an option's short letter is an alias of its
+        // key, so --y is -y and --no-y negates it: each short option's letter is also a long spelling, and a negation.
+        foreach (var letter in shorts.Select(@short => @short[1..]))
+        {
+            all.Add("--" + letter);
+            all.Add("--no-" + letter);
+        }
+
         foreach (var kebab in longs)
         {
             var parts = kebab.Split('-');

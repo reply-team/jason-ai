@@ -258,6 +258,39 @@ public class GeminiCliHostTests
         }
     }
 
+    /// <summary>
+    /// The parser takes the key of a long word from after its dashes and sets the option that key is an alias of, so
+    /// <c>--y</c> is <c>-y</c> exactly, and <c>--no-y</c> negates it: a short option has the long spelling of its letter.
+    /// </summary>
+    [Theory]
+    [InlineData("p")]
+    [InlineData("i")]
+    [InlineData("o")]
+    [InlineData("y")]
+    [InlineData("r")]
+    [InlineData("e")]
+    [InlineData("l")]
+    [InlineData("s")]
+    [InlineData("w")]
+    public void A_reserved_short_option_has_its_letter_reserved_as_a_long_spelling_and_as_its_negation(string letter)
+    {
+        Assert.Contains("-" + letter, _host.ReservedFlags);
+        Assert.Contains("--" + letter, _host.ReservedFlags);
+        Assert.Contains("--no-" + letter, _host.ReservedFlags);
+    }
+
+    [Fact]
+    public void Each_reserved_short_option_has_a_long_spelling_reserved()
+    {
+        var shorts = _host.ReservedFlags.Where(flag => flag.Length == 2 && flag[0] == '-' && flag[1] != '-').ToList();
+        Assert.Equal(9, shorts.Count);
+        Assert.All(shorts, flag =>
+        {
+            Assert.Contains("-" + flag, _host.ReservedFlags);
+            Assert.Contains("--no-" + flag[1], _host.ReservedFlags);
+        });
+    }
+
     [Fact]
     public void Each_tool_is_the_hosts_own_name_for_it_and_every_one_is_there()
     {

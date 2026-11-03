@@ -132,6 +132,46 @@ public class GeminiCliProfileTests
     }
 
     /// <summary>
+    /// The parser reads <c>--y</c> as <c>-y</c>, and <c>--no-y</c> as its negation, with a value or without one, so the
+    /// long spelling of each reserved short option is refused as reserved, naming the flag, at create and at update.
+    /// </summary>
+    [Theory]
+    [InlineData("p")]
+    [InlineData("i")]
+    [InlineData("o")]
+    [InlineData("y")]
+    [InlineData("r")]
+    [InlineData("e")]
+    [InlineData("l")]
+    [InlineData("s")]
+    [InlineData("w")]
+    public async Task The_long_spelling_of_a_reserved_short_option_is_reserved_at_create_and_at_update(string letter)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "gemini-letter", host = "gemini_cli", program = "gemini", args = new[] { "--model=made-up" } },
+            Ct);
+
+        foreach (var flag in new[] { $"--{letter}", $"--{letter}=x", $"--no-{letter}" })
+        {
+            var created = await api.PostErrorAsync(
+                Operations.ProfileCreate,
+                new { name = $"gemini-letter-{letter}", host = "gemini_cli", program = "gemini", args = new[] { flag } },
+                HttpStatusCode.BadRequest,
+                Ct);
+            Assert.Contains(created.Details!, detail => detail is { Code: "reserved" } && detail.Message.Contains(flag.Split('=')[0], StringComparison.Ordinal));
+
+            var updated = await api.PostErrorAsync(
+                Operations.ProfileUpdate,
+                new { name = "gemini-letter", args = new[] { flag } },
+                HttpStatusCode.BadRequest,
+                Ct);
+            Assert.Contains(updated.Details!, detail => detail is { Code: "reserved" } && detail.Message.Contains(flag.Split('=')[0], StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
     /// The parser reads each of these as a reserved option, by stripping a dash or an underscore from its name, so a name of
     /// anything but letters, digits and single dashes is refused before the reserved list is asked, at create and at update.
     /// </summary>

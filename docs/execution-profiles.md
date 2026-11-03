@@ -593,7 +593,8 @@ build does, and what it has not measured.
   (`--admin-policy=.jason-policy`), a list of MCP servers that names none, no extensions, and one
   `--include-directories` for each folder holding a memory file the launch names. A profile's own `args` come last and
   may not name any of these, nor the prompt, the sandbox, the worktree or the resume flags, in any spelling the host's
-  parser reads as the same option (the camel-case twin of a kebab-case name, and the `--no-` form of either). They are
+  parser reads as the same option (the camel-case twin of a kebab-case name, the `--no-` form of either, and a short
+  option's letter written with two dashes, `--y` being `-y`). They are
   long flags with their value joined by `=`, since a bare word is read as the prompt; a short option may stand only
   alone, since the parser reads `-yo` as two options and `-pfoo` as an option and its value; and a long flag's name is
   letters and digits with single dashes between them, since the parser reads a dot as a path into the flag's own value

@@ -596,6 +596,7 @@ public partial class ExecutionProfileDocTests
             "the client level is the harness root, so a role reads every project's and campaign's memory file under it",
             "the person's own skills in `~/.gemini/skills` and `~/.agents/skills`",
             "`GEMINI_CLI_HOME`",
+            "a short option's letter written with two dashes, `--y` being `-y`",
             "holds any entry whose name ends in `.toml`",
             "the attempt is refused before a child exists, as `host_not_available`, with a sentence that names the folder",
             "`/Library/Application Support/GeminiCli/policies`",
