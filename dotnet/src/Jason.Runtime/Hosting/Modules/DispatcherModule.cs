@@ -54,6 +54,7 @@ public static class DispatcherModule
 
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
+        services.AddSingleton<IAgentHost, CursorCliHost>();
 
         // Codex's sandbox lists what a run may read, and calling home reads the descriptor in the data directory, the
         // executable and what it unpacks when it starts. A composition with no data directory of its own names none.

@@ -61,7 +61,8 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
-        ProfileValidation.ValidateCreate(request, ReservedFor(ProfileValidation.ParseHost(request.Host)), errors);
+        var createHost = HostOf(ProfileValidation.ParseHost(request.Host));
+        ProfileValidation.ValidateCreate(request, createHost?.ReservedFlags, errors, createHost);
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
@@ -136,7 +137,8 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
-        ProfileValidation.ValidateUpdate(request, ReservedFor(HostOfPatch(request)), errors);
+        var updateHost = HostOf(HostOfPatch(request));
+        ProfileValidation.ValidateUpdate(request, updateHost?.ReservedFlags, errors, updateHost);
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
@@ -202,7 +204,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             CreatedAt = now,
         };
 
-        RefuseWhatTheHostRefuses(next, request.Tools.IsSet, request.Deny.IsSet, request.Args.IsSet);
+        RefuseWhatTheHostRefuses(next, request.Tools.IsSet, request.Deny.IsSet, request.Args.IsSet, request.Program.IsSet, next.Host != current.Host);
 
         db.ExecutionProfileRevisions.Add(next);
         profile.CurrentRevision = next.Number;
@@ -249,7 +251,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
     /// words count — a patch that moves a profile to another host is held to that host's, the flags it composes included,
     /// which the stored arguments may not carry.
     /// </summary>
-    private void RefuseWhatTheHostRefuses(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true, bool argsNamed = true)
+    private void RefuseWhatTheHostRefuses(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true, bool argsNamed = true, bool programNamed = true, bool hostMoved = false)
     {
         if (hosts.LastOrDefault(candidate => candidate.Kind == revision.Host) is not { } host)
         {
@@ -257,7 +259,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         }
 
         var errors = new ValidationErrors();
-        ProfileValidation.ValidateForHost(revision, host, errors, toolsNamed, denyNamed, argsNamed);
+        ProfileValidation.ValidateForHost(revision, host, errors, toolsNamed, denyNamed, argsNamed, programNamed, hostMoved);
         errors.ThrowIfAny();
     }
 
@@ -266,8 +268,8 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
     /// unknown host answers none: the host itself is refused by the same validation, and reporting a second
     /// problem about arguments nobody can act on would only bury the first.
     /// </summary>
-    private IReadOnlySet<string>? ReservedFor(AgentHostKind? host) =>
-        host is { } kind ? hosts.LastOrDefault(candidate => candidate.Kind == kind)?.ReservedFlags : null;
+    private IAgentHost? HostOf(AgentHostKind? host) =>
+        host is { } kind ? hosts.LastOrDefault(candidate => candidate.Kind == kind) : null;
 
     /// <summary>
     /// Which host a patch's arguments would run under: the one it names, or the one the profile already has.

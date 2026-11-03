@@ -481,6 +481,52 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
     }
 
+    /// <summary>The profile's fields say what an argument may not be, for the host that ships as for the others: a short flag stands alone.</summary>
+    [Fact]
+    public void The_args_field_says_a_short_flag_stands_alone_and_a_lone_or_double_dash_is_refused()
+    {
+        var page = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var row = page[page.IndexOf("| `args` |", StringComparison.Ordinal)..];
+        row = row[..row.IndexOf(" | `deny` |", StringComparison.Ordinal)];
+
+        Assert.Contains("a short flag stands alone", row, StringComparison.Ordinal);
+        Assert.Contains("a short flag with more letters or a value after it, a lone dash and a double dash are refused", row, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What a person relying on the Cursor CLI host is told, as the page's notes say it: that the person's own
+    /// configuration can allow more than Jason does and Jason cannot narrow it, that the union of the layers holds for
+    /// every kind of rule and the person's approval mode is theirs, which shell command Jason allows, what the settings
+    /// file carries and nothing else, how the Windows launcher chooses a version and what a person's own run does to a
+    /// staged update, and that all three spellings of the sign-in word are read. It names no count of hosts, which is a
+    /// sentence that goes stale when the matrix grows.
+    /// </summary>
+    [Fact]
+    public void The_Cursor_CLI_notes_say_what_the_persons_own_configuration_can_do_and_count_no_hosts()
+    {
+        var page = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var start = page.IndexOf("### Cursor CLI", StringComparison.Ordinal);
+        Assert.True(start > 0, "execution-profiles.md has no 'Cursor CLI' section.");
+        var section = page[start..];
+        var end = section.IndexOf(" ## ", StringComparison.Ordinal);
+        section = end > 0 ? section[..end] : section;
+
+        Assert.DoesNotMatch(@"\b(?:two|three|four|five|six|seven|eight|nine|ten) hosts\b", section);
+        Assert.Contains("the widest of the hosts of the matrix", section, StringComparison.Ordinal);
+        Assert.Contains("this is the widest read form of the matrix", section, StringComparison.Ordinal);
+        Assert.Contains("the union holds for every kind of allow rule, not for reads only", section, StringComparison.Ordinal);
+        Assert.Contains("`approvalMode`", section, StringComparison.Ordinal);
+        Assert.Contains("Run Everything", section, StringComparison.Ordinal);
+        Assert.Contains("the one shell command Jason allows", section, StringComparison.Ordinal);
+        Assert.Contains("the person's own user-level configuration may allow more, and Jason cannot narrow it, so `Write(**)` does not stop a shell command that writes", section, StringComparison.Ordinal);
+        Assert.Contains("permissions, the file's version key and the editor mode off, nothing else", section, StringComparison.Ordinal);
+        Assert.Contains("a flat installation root is read first", section, StringComparison.Ordinal);
+        Assert.Contains("within one day Jason breaks a tie by name", section, StringComparison.Ordinal);
+        Assert.Contains("the person's own run of the launcher promotes a staged update", section, StringComparison.Ordinal);
+        Assert.Contains("`agent login`, `cursor agent login` or `agent-local login`", section, StringComparison.Ordinal);
+        Assert.Contains("a short flag with more letters or a value after it", section, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Codex's row carries, one sentence each, what a person must know before naming it, and its section holds the
     /// detail: commands are not confined by name, the loopback-only network rests on an experimental feature, Windows may

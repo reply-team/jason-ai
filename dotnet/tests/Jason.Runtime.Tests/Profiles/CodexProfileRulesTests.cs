@@ -141,7 +141,7 @@ public class CodexProfileRulesTests
             Operations.ProfileCreate, new { name = "moving", host = "claude_code", program = "claude", args = new[] { flag } }, Ct);
 
         var error = await api.PostErrorAsync(
-            Operations.ProfileUpdate, new { name = "moving", host = "codex" }, HttpStatusCode.BadRequest, Ct);
+            Operations.ProfileUpdate, new { name = "moving", host = "codex", program = "codex" }, HttpStatusCode.BadRequest, Ct);
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("args[0]", "reserved"), (detail.Field, detail.Code));
@@ -196,7 +196,7 @@ public class CodexProfileRulesTests
             Ct);
 
         var error = await api.PostErrorAsync(
-            Operations.ProfileUpdate, new { name = "moving", host = "codex" }, HttpStatusCode.BadRequest, Ct);
+            Operations.ProfileUpdate, new { name = "moving", host = "codex", program = "codex" }, HttpStatusCode.BadRequest, Ct);
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("args[0]", "reserved"), (detail.Field, detail.Code));

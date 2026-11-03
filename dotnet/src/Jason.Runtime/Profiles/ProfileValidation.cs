@@ -20,7 +20,7 @@ internal static partial class ProfileValidation
     /// <summary>The same shape as a role's name: work, campaigns, roles and settings all spell it from memory.</summary>
     public static Regex ProfileName { get; } = Name();
 
-    public static void ValidateCreate(ProfileCreateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
+    public static void ValidateCreate(ProfileCreateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors, IAgentHost? host = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -28,7 +28,7 @@ internal static partial class ProfileValidation
         ValidateName(request.Name, errors);
         ValidateDescription(request.Description, errors);
         ValidateHost(request.Host, errors);
-        ValidateProgram(request.Program, errors);
+        ValidateProgram(request.Program, host, errors);
         ValidateArgs(request.Args, reserved, errors);
         ValidateDeny(request.Deny, errors);
         ValidateTools(request.Tools, errors);
@@ -41,7 +41,7 @@ internal static partial class ProfileValidation
     /// A patch is checked for what it names. An absent field is not a value the caller offered, so there is
     /// nothing to hold it to; a present one is held to exactly the rule it would have been held to at creation.
     /// </summary>
-    public static void ValidateUpdate(ProfileUpdateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
+    public static void ValidateUpdate(ProfileUpdateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors, IAgentHost? host = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -61,7 +61,7 @@ internal static partial class ProfileValidation
 
         if (request.Program.IsSet)
         {
-            ValidateProgram(request.Program.Value, errors);
+            ValidateProgram(request.Program.Value, host, errors);
         }
 
         if (request.Args.IsSet)
@@ -176,7 +176,7 @@ internal static partial class ProfileValidation
         }
     }
 
-    private static void ValidateProgram(string? program, ValidationErrors errors)
+    private static void ValidateProgram(string? program, IAgentHost? host, ValidationErrors errors)
     {
         if (string.IsNullOrWhiteSpace(program))
         {
@@ -201,14 +201,39 @@ internal static partial class ProfileValidation
         // profile could only ever fail at the claim. Refused here in the lookup's words; a bare name without the
         // extension is looked up on the search path (on Windows as an .exe, a .com or npm's own shim). Read as the operating system reads the path too, so
         // a script whose name Windows trims back to one is refused here and not started at the claim.
-        if (ProgramResolver.NamesShellScript(program))
+        if (ProgramResolver.NamesShellScript(program) && !NamesTheHostsLauncher(program, host))
         {
-            errors.Add(
-                "program",
-                "shell_script",
-                "program must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
-                + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).");
+            errors.Add("program", "shell_script", ShellScriptMessage("program"));
         }
+    }
+
+    private static string ShellScriptMessage(string subject) =>
+        subject + " must not be " + ProgramLookup.ShellScript + " (.cmd, .bat or .ps1): " + ProgramLookup.ProgramsNotShells + ". "
+        + "Name the program itself, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim).";
+
+    /// <summary>
+    /// Whether a script is the launcher the profile's own host is installed as, named by its full path: only the host
+    /// knows which file names those are, and neither a bare name, which is looked up on the search path, nor a relative
+    /// path, which would be read against the runtime's own working directory, is one.
+    /// </summary>
+    private static bool NamesTheHostsLauncher(string program, IAgentHost? host)
+    {
+        var path = program.Trim();
+        return host is not null
+            && Path.IsPathFullyQualified(path)
+            && host.NamesItsLauncher(Path.GetFileName(path));
+    }
+
+    /// <summary>
+    /// Whether a stored program is one this host starts: its file name, without the extension, is the host's command word,
+    /// or the host itself takes it, as it takes its own launcher named by its full path.
+    /// </summary>
+    private static bool IsTheHostsProgram(string program, IAgentHost host)
+    {
+        var path = program.Trim();
+        var name = path[(path.LastIndexOfAny(['/', '\\']) + 1)..];
+        return string.Equals(Path.GetFileNameWithoutExtension(name), host.Facts.CommandWord, StringComparison.OrdinalIgnoreCase)
+            || NamesTheHostsLauncher(path, host);
     }
 
     /// <summary>The list as it will be stored, once it is known to be one. Blank entries never reach here.</summary>
@@ -265,7 +290,7 @@ internal static partial class ProfileValidation
     /// of such a tool is kept as the person's word, since it holds anyway; a deny of a tool the host has and cannot take
     /// away, or of a word it does not read as a rule, is refused naming the host; and so is a grant of a tool the host
     /// has but Jason cannot make true, and arguments the host's own reading refuses. Each is <c>invalid</c>; stored
-    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>. Every message
+    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>, and a stored program it leaves alone to the host's rule for a script, <c>shell_script</c>, and, where the patch moves the host, to the new host's own word or launcher, <c>invalid</c>. Every message
     /// names the host and the word; then the grant is held beside the deny. Where a patch did not name a list,
     /// the message says it is the profile's.
     /// </summary>
@@ -275,13 +300,31 @@ internal static partial class ProfileValidation
         ValidationErrors errors,
         bool toolsNamed = true,
         bool denyNamed = true,
-        bool argsNamed = true)
+        bool argsNamed = true,
+        bool programNamed = true,
+        bool hostMoved = false)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(errors);
 
         var word = AgentHosts.Word(host.Kind);
+
+        // The program a request names was held to this host where it was read. One it leaves alone is the stored one, and
+        // a patch that moves the profile to another host would otherwise start a script that is this host's launcher
+        // under a host that is not installed as one, or a script that is no launcher under this one.
+        if (!programNamed && ProgramResolver.NamesShellScript(revision.Program) && !NamesTheHostsLauncher(revision.Program, host))
+        {
+            errors.Add("program", "shell_script", ShellScriptMessage("the profile's program"));
+        }
+        else if (!programNamed && hostMoved && !IsTheHostsProgram(revision.Program, host))
+        {
+            // A program written for one host is not started under another with that host's arguments: the person says which.
+            errors.Add(
+                "program",
+                "invalid",
+                $"the profile's program is not {word}'s: a patch that moves the profile to {word} without naming the program must keep one that is {host.Facts.CommandWord} (or, where the host is installed as one, its launcher); name the program.");
+        }
 
         // Arguments a request names were held to this host's flags where they were read. Arguments it leaves alone are
         // the stored ones, and a patch that moves the profile to another host would otherwise launch them after the

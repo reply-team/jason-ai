@@ -12,6 +12,30 @@ namespace Jason.Runtime.Tests.Execution;
 /// </summary>
 public class ClaudeCodeHostTests
 {
+    /// <summary>
+    /// A word the host's parser would read as the prompt, or as the end of the options after which every word is a prompt
+    /// word, is never a flag's value, so it is refused; a bare word beside a flag is not, since a profile written before the
+    /// rule has a flag and its value as two tokens.
+    /// </summary>
+    [Theory]
+    [InlineData("-")]
+    [InlineData("--")]
+    [InlineData("-pf")]
+    [InlineData("-rhttp://x")]
+    public void A_lone_dash_a_double_dash_and_a_short_flag_with_more_after_it_are_refused(string word)
+    {
+        Assert.NotNull(new ClaudeCodeHost().ArgsProblem(["--model=opus", word]));
+    }
+
+    [Fact]
+    public void A_flag_and_its_value_as_two_tokens_and_a_lone_short_flag_are_taken()
+    {
+        var host = new ClaudeCodeHost();
+
+        Assert.Null(host.ArgsProblem(["--model", "opus"]));
+        Assert.Null(host.ArgsProblem(["-d", "--name", "word", "--model=opus"]));
+    }
+
     [Fact]
     public void The_command_carries_neither_restricted_nor_tools()
     {
