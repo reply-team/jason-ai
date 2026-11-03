@@ -28,6 +28,7 @@ public class CodexHostTests
     private static CodexHost Host(bool windows = false) => new(Run, Executable, Extraction, windows);
 
     [Fact]
+    [Critical(Family.S6, "the composed command: no configuration, rule, hook or server of the person's reaches a role")]
     public void The_run_is_headless_reports_as_it_goes_and_reads_none_of_the_persons_own_configuration()
     {
         var command = Host().Compose(Revision(), ["codex"], NoFiles).Command;
@@ -63,6 +64,7 @@ public class CodexHostTests
     /// stdin, and a word the host would read as a prompt or a subcommand is never composed.
     /// </summary>
     [Fact]
+    [Critical(Family.W7, "the brief goes on stdin and no word of it on the command line")]
     public void No_prompt_is_composed_so_the_host_reads_the_brief_from_stdin()
     {
         var command = Host().Compose(Revision(), ["codex"], NoFiles).Command;
@@ -85,6 +87,7 @@ public class CodexHostTests
     /// Until an administrator has set that sandbox up, every command a role runs is refused, and the run fails closed.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "a run with no sandbox named runs a command with none at all")]
     public void On_windows_every_run_names_the_elevated_sandbox_and_elsewhere_none()
     {
         var windows = new CodexHost(@"C:\j", @"C:\x", @"C:\t", windows: true).Compose(Revision(args: ["--model=made-up-model"]), ["codex"], NoFiles).Command;
@@ -98,6 +101,7 @@ public class CodexHostTests
     }
 
     [Fact]
+    [Critical(Family.S6, "a search is off unless the revision grants it")]
     public void A_web_search_the_person_granted_is_live_and_otherwise_off()
     {
         var granted = Host().Compose(Revision(tools: [AgentTool.WebSearch]), ["codex"], NoFiles).Command;
@@ -109,6 +113,7 @@ public class CodexHostTests
     }
 
     [Fact]
+    [Critical(Family.S6, "the read entries, exactly: a folder or a pattern beside the files' own turns this red")]
     public void Each_memory_file_the_launch_names_is_readable_once_and_nothing_else_of_its_folder()
     {
         var files = new MemoryFileLocations("/home/someone/Jason/AGENTS.md", "/home/someone/Jason/acme/AGENTS.md", "/home/someone/Jason/AGENTS.md");
@@ -143,6 +148,7 @@ public class CodexHostTests
     /// unreadable and no wider rule is guessed at, as on every host.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "a path that reads as a pattern composes no entry")]
     public void A_memory_file_whose_path_reads_as_a_pattern_is_left_unreadable()
     {
         var files = new MemoryFileLocations("/home/someone/Jason/AGENTS.md", "/home/someone/Jason/[draft]/AGENTS.md", null);
@@ -154,6 +160,7 @@ public class CodexHostTests
     }
 
     [Fact]
+    [Critical(Family.S6, "a deny of reading holds in the sandbox, and takes a read's place")]
     public void A_path_the_profile_denies_reading_is_denied_in_the_sandbox()
     {
         var revision = Revision(deny: ["Read(//srv/secrets/**)", "Read(~/private/notes.md)", "Write", "WebFetch"]);
@@ -317,7 +324,8 @@ public class CodexHostTests
     [InlineData("--ask-for-approval")]
     [InlineData("--approve-for-me")]
     [InlineData("--not-so-yolo")]
-    [InlineData("--dangerously-bypass-approvals-and-sandbox")]
+    // Critical: a profile cannot lift the sandbox.
+    [InlineData("--dangerously-bypass-approvals-and-sandbox", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S6)])]
     [InlineData("--yolo")]
     [InlineData("--dangerously-bypass-hook-trust")]
     [InlineData("-C")]

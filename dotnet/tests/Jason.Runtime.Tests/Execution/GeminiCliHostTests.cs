@@ -51,6 +51,7 @@ public class GeminiCliHostTests
     /// standard input alone.
     /// </summary>
     [Fact]
+    [Critical(Family.W7, "the brief goes on stdin and no word of it on the command line")]
     public void The_command_carries_no_prompt_and_asks_for_a_stream_without_asking_anyone()
     {
         var composed = Compose().Command;
@@ -82,6 +83,7 @@ public class GeminiCliHostTests
     /// relative directory, since the command is composed knowing no work directory and the host runs in it.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "no server, no extension, and the work directory's policy at the highest tier")]
     public void The_run_has_no_server_no_extension_and_the_policy_of_the_work_directory_at_the_highest_tier()
     {
         var composed = Compose().Command;
@@ -101,6 +103,7 @@ public class GeminiCliHostTests
     }
 
     [Fact]
+    [Critical(Family.S6, "every composed flag is reserved, so a profile cannot set it after")]
     public void Every_flag_that_reaches_the_command_is_one_a_profile_cannot_carry()
     {
         var composed = Compose(files: new MemoryFileLocations(Client, Project, Campaign)).Command;
@@ -358,6 +361,7 @@ public class GeminiCliHostTests
     }
 
     [Fact]
+    [Critical(Family.S6, "what is not granted is denied by the host's name")]
     public void What_the_revision_does_not_grant_is_denied_by_the_hosts_name_and_what_it_grants_is_allowed()
     {
         var none = Compose(Revision(cli: "jason"));
@@ -382,6 +386,7 @@ public class GeminiCliHostTests
     // are the workspace's too, and nothing beyond them.
 
     [Fact]
+    [Critical(Family.S6, "the folders a role reads, exactly")]
     public void The_folders_included_are_exactly_those_of_the_files_the_launch_names()
     {
         var composed = Compose(files: new MemoryFileLocations(Client, Project, Campaign));
@@ -479,6 +484,7 @@ public class GeminiCliHostTests
     // not one this runtime can hold to what it composes, and the attempt is refused before a child exists.
 
     [Fact]
+    [Critical(Family.S6, "a system policy folder the runtime cannot out-rank refuses the run")]
     public void A_system_policy_folder_holding_a_toml_file_refuses_the_run_naming_the_folder()
     {
         using var directory = new TempDirectory();
@@ -547,6 +553,7 @@ public class GeminiCliHostTests
     // What a stand-in would learn of its end: the documented exit for a failed sign-in, and nothing of the host's words.
 
     [Fact]
+    [Critical(Family.S3, "the not-signed-in sentence is fixed and carries none of the host's words")]
     public void The_documented_exit_for_a_failed_authentication_is_one_fixed_sentence_whatever_the_tail_says()
     {
         var sentence = _host.Unavailable(41, "Please set an Auth method; signed in as someone@example.test");
@@ -576,6 +583,7 @@ public class GeminiCliHostTests
     // The work directory: one policy file at the highest tier and a settings file that keeps the person's own out.
 
     [Fact]
+    [Critical(Family.S6, "the policy: deny all, then the role's allows, then its denies")]
     public void The_policy_denies_everything_first_then_allows_what_the_role_needs_and_denies_what_it_may_not()
     {
         using var directory = new TempDirectory();
@@ -688,6 +696,7 @@ public class GeminiCliHostTests
     }
 
     [Fact]
+    [Critical(Family.S3, "no token in a file the run reads")]
     public void The_policy_holds_neither_the_capability_token_nor_any_envelope_field()
     {
         using var directory = new TempDirectory();

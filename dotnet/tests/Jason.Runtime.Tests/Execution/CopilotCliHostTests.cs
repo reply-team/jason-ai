@@ -30,6 +30,7 @@ public class CopilotCliHostTests
     /// neither the print flag nor any word of the brief, and the launch comes first and whole.
     /// </summary>
     [Fact]
+    [Critical(Family.W7, "the brief goes on stdin and no word of it on the command line")]
     public void The_command_opens_with_the_launch_and_carries_no_prompt_flag()
     {
         string[] launch = ["/opt/copilot/node", "/opt/copilot/index.js"];
@@ -59,6 +60,7 @@ public class CopilotCliHostTests
     /// everything is composed: not trust of the folder, not the flag that allows every tool, path or address.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "no flag that allows every tool, path or address is composed")]
     public void The_session_is_the_one_minted_here_and_no_flag_allows_everything()
     {
         var host = new CopilotCliHost();
@@ -83,6 +85,7 @@ public class CopilotCliHostTests
     /// one, asks a person, or starts another agent.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "the tool set is the confinement: a tool not offered is unavailable")]
     public void The_tool_set_has_no_tool_that_writes_asks_or_starts_another_agent()
     {
         var tools = Tools(new CopilotCliHost(windows: false).Compose(Revision(), ["copilot"], NoFiles));
@@ -137,6 +140,7 @@ public class CopilotCliHostTests
     /// subcommand of it; one rule of the <c>shell</c> kind covers both shell tools, so there is no second one.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "the launched session's allow list")]
     public void The_allow_list_is_the_callback_by_its_word_and_nothing_else()
     {
         var launch = new CopilotCliHost().Compose(Revision(), ["copilot"], NoFiles);
@@ -161,6 +165,7 @@ public class CopilotCliHostTests
     /// reaches outside the work directory is not stated by the host's pages.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "the read rules, exactly: a rule for a folder or a pattern beside the files' own turns this red")]
     public void Each_memory_file_the_launch_names_is_readable_by_a_rule_of_its_own()
     {
         var files = new MemoryFileLocations(
@@ -236,6 +241,7 @@ public class CopilotCliHostTests
     /// arguments carried. Each word once. What the host composes is reported on the launch; the profile's own is not.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "what the revision does not grant is denied by the host's word, and write always")]
     public void The_deny_is_the_profiles_words_then_what_is_not_granted_then_write()
     {
         var revision = Revision();
@@ -293,7 +299,8 @@ public class CopilotCliHostTests
     [InlineData("--resume")]
     [InlineData("--continue")]
     [InlineData("--trust-folder")]
-    [InlineData("--allow-all")]
+    // Critical: a profile cannot allow every tool.
+    [InlineData("--allow-all", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S6)])]
     [InlineData("--yolo")]
     [InlineData("--allow-all-tools")]
     [InlineData("--allow-all-paths")]
@@ -391,6 +398,7 @@ public class CopilotCliHostTests
     }
 
     [Fact]
+    [Critical(Family.S3, "no file in the work directory, so no token in one")]
     public void Nothing_is_written_into_the_work_directory_because_everything_travels_on_the_command_line()
     {
         var workDir = Path.Combine(Path.GetTempPath(), "jason-tests", "copilot-work", Guid.NewGuid().ToString("N"));
@@ -414,6 +422,7 @@ public class CopilotCliHostTests
     /// never carried. Not measured: the host's pages state no exit code and no text for a signed-out run.
     /// </summary>
     [Fact]
+    [Critical(Family.S3, "the not-signed-in sentence is fixed and carries none of the host's words")]
     public void A_non_zero_end_naming_the_login_command_is_a_fixed_sentence_and_carries_none_of_the_tail()
     {
         const string Tail = "Error: no authentication found for person@example.test (account 7f3a9c-made-up). Run `copilot login` to sign in.";
