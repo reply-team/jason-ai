@@ -650,7 +650,7 @@ are kept) — and never their words, for the reason `role_memory` is an address.
 path; the runtime never reads one. **What Jason composes is a read of the files `memory_files` names and nothing wider outside its work directory, where
 the host's form can hold it**: each host holds this rule in its own form
 ([execution-profiles.md](execution-profiles.md) §12 and the host's own section), and on some the session's read is wider
-than the list, as the sections of those hosts say: Cursor CLI confines nothing it reads, Codex on Windows runs in a
+than the list, as the sections of those hosts say: Jason confines nothing Cursor CLI reads, Codex on Windows runs in a
 sandbox that may let a role read more, and the two hosts below compose no file rule. A profile is composed with a read
 for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI and Antigravity CLI.
 Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given none, because its permissions
