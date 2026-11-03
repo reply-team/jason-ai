@@ -131,7 +131,7 @@ public class AntigravityCliProfileTests
         Assert.Equal(1, read.Revision.Number);
     }
 
-    /// <summary>A value with a control character is refused where the profile is written, for the same reason as any other word.</summary>
+    /// <summary>A value with a control character is refused where the profile is written, by the rule every host shares.</summary>
     [Fact]
     public async Task An_option_value_with_a_control_character_is_refused_on_create()
     {
@@ -144,8 +144,8 @@ public class AntigravityCliProfileTests
             Ct);
 
         var detail = Assert.Single(error.Details!);
-        Assert.Equal(("args", "invalid"), (detail.Field, detail.Code));
-        Assert.Contains(ParserNotRead, detail.Message, StringComparison.Ordinal);
+        Assert.Equal(("args[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("control character", detail.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

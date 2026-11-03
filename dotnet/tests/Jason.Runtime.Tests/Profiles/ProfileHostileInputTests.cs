@@ -182,6 +182,40 @@ public class ProfileHostileInputTests
         Assert.Equal(kind, created.Revision.Host);
     }
 
+    /// <summary>
+    /// A control character ends a command line (a NUL) or splits one, on every host, so an argument carrying one is
+    /// refused once where the profile is written, whichever host the profile is for and whether it is created or patched.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public async Task An_argument_with_a_control_character_is_refused_for_every_host(AgentHostKind kind)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var word = AgentHosts.Word(kind);
+        var program = AgentHosts.Of(kind).CommandWord;
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "control", host = word, program, args = new[] { "--model=a\u0000b" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(created.Details!);
+        Assert.Equal(("args[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("control character", detail.Message, StringComparison.Ordinal);
+
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "patched-control", host = word, program }, Ct);
+        var patched = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "patched-control", args = new[] { "--model", "a\tb" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var patchedDetail = Assert.Single(patched.Details!);
+        Assert.Equal(("args[1]", "invalid"), (patchedDetail.Field, patchedDetail.Code));
+    }
+
     /// <summary>An edit is held to the same rules as a creation; a patch is not a way around them.</summary>
     [Fact]
     public async Task A_patch_is_held_to_the_same_rules_as_a_creation()

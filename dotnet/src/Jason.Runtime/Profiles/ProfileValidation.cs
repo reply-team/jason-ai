@@ -243,7 +243,29 @@ internal static partial class ProfileValidation
     private static void ValidateArgs(IReadOnlyList<JsonNode?>? args, IReadOnlySet<string>? reserved, ValidationErrors errors)
     {
         ValidateStrings(args, "args", ProfileService.MaxArgs, ProfileService.MaxArgLength, errors);
-        if (args is null || reserved is null)
+        if (args is null)
+        {
+            return;
+        }
+
+        // A NUL ends a command line and another control character splits one, on every host, so an argument carrying
+        // one is never a word anybody meant. Refused once here for every host, as `program` is, rather than by each
+        // host's own reading. A list over the cap was answered above and is not read entry by entry.
+        if (args.Count <= ProfileService.MaxArgs)
+        {
+            for (var index = 0; index < args.Count; index++)
+            {
+                if (Text(args[index]) is { } entry && !string.IsNullOrWhiteSpace(entry) && entry.Any(char.IsControl))
+                {
+                    errors.Add(
+                        string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
+                        "invalid",
+                        "an args entry must not contain control characters.");
+                }
+            }
+        }
+
+        if (reserved is null)
         {
             return;
         }
