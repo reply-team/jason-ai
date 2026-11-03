@@ -171,16 +171,16 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Eight names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
-    /// the <c>skills</c> and <c>update</c> nouns, and <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
-    /// other verbs are operations — and no page says two, the four it said before the two verbs that read the
-    /// installation's files arrived, the six it said before the UI was placed by a command, or the seven it said before a
-    /// plugin package was.
+    /// Nine names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
+    /// the <c>skills</c> and <c>update</c> nouns, <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
+    /// other verbs are operations, and <c>session open</c> — and no page says two, the four it said before the two verbs
+    /// that read the installation's files arrived, the six it said before the UI was placed by a command, the seven it said
+    /// before a plugin package was, or the eight it said before a person's own agent host was started by one.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "It is one of eight names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and `plugin install`")]
-    [InlineData("docs/INSTALL.md", "It is one of eight names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and `plugin install`")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **eight declared exceptions**")]
+    [InlineData("README.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("docs/INSTALL.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **nine declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -194,6 +194,8 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("six declared exceptions", text, StringComparison.Ordinal);
         Assert.DoesNotContain("one of seven names", text, StringComparison.Ordinal);
         Assert.DoesNotContain("seven declared exceptions", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of eight names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("eight declared exceptions", text, StringComparison.Ordinal);
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
