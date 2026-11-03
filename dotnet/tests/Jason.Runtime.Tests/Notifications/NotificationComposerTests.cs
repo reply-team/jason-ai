@@ -156,4 +156,44 @@ public sealed class NotificationComposerTests
     [InlineData(1, -1)]
     public void A_negative_count_is_not_a_pointer(int approvals, int decisions) =>
         Assert.Throws<ArgumentOutOfRangeException>(() => NotificationComposer.Compose(approvals, decisions));
+
+    private const string Approval = "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6";
+
+    private const string Question = "dec_01JBZ3X7Q9K2M4N6P8R0S2T4V6";
+
+    /// <summary>
+    /// The one item that waits is carried by its opaque id, beside whatever else is said, and only then; what the
+    /// pointer says is the same text with or without it.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 0, Approval, Approval)]
+    [InlineData(0, 1, Question, Question)]
+    [InlineData(1, 0, Question, null)]
+    [InlineData(0, 1, Approval, null)]
+    [InlineData(2, 0, Approval, null)]
+    [InlineData(1, 1, Approval, null)]
+    [InlineData(1, 0, "apr_01jbz3x7q9k2m4n6p8r0s2t4v6", null)]
+    [InlineData(1, 0, "cmp_01JBZ3X7Q9K2M4N6P8R0S2T4V6", null)]
+    [InlineData(1, 0, null, null)]
+    public void Only_the_one_item_that_waits_is_carried_and_only_by_its_own_prefix(int approvals, int decisions, string? item, string? carried)
+    {
+        var message = NotificationComposer.Compose(approvals, decisions, item: item);
+
+        Assert.Equal(carried, message.Item);
+        Assert.Equal(NotificationComposer.Compose(approvals, decisions).Text, message.Text);
+    }
+
+    /// <summary>One approval beside failed protective work still carries the approval: it is the one thing a person can act on.</summary>
+    [Fact]
+    public void One_item_beside_other_sentences_is_still_carried()
+    {
+        var message = NotificationComposer.Compose(1, 0, new FailedProtectiveWork(1, ["cmp_01JBZ3X7Q9K2M4N6P8R0S2T4V6"], 0), item: Approval);
+
+        Assert.Equal(Approval, message.Item);
+    }
+
+    /// <summary>Nothing that waits for a person means no item, whatever is passed.</summary>
+    [Fact]
+    public void Failed_work_alone_carries_no_item() =>
+        Assert.Null(NotificationComposer.Compose(0, 0, new FailedProtectiveWork(1, [], 0), item: Approval).Item);
 }

@@ -119,7 +119,7 @@ public static class UiCommands
     /// The one verb that does something after the answer: it hands the link to the browser. Stdout stays the exact
     /// response; whether a browser opened is said on stderr, where diagnostics go.
     /// </summary>
-    private static async Task<int> RunOpenAsync(CliEnvironment env, JsonObject body, bool noOpen, bool human, CancellationToken cancellationToken)
+    internal static async Task<int> RunOpenAsync(CliEnvironment env, JsonObject body, bool noOpen, bool human, CancellationToken cancellationToken)
     {
         var (exit, response) = await OperationRunner.SendAsync(env, Operations.UiOpen, body, cancellationToken).ConfigureAwait(false);
         if (response is null)

@@ -1,0 +1,22 @@
+{
+  "operation": "campaign.get",
+  "case": "in-project-with-folder",
+  "request": {
+    "campaign_id": "cmp_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "cmp_1",
+    "name": "Q3 leads",
+    "status": "draft",
+    "project_id": "prj_1",
+    "project_slug": "acme-corp",
+    "context": {},
+    "external_ids": [],
+    "execution_profile": null,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "archived_at": null,
+    "folder_path": "~/Jason/projects/acme-corp/campaigns/q3-leads"
+  }
+}

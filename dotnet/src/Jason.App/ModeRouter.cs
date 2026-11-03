@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
 using Jason.Cli;
+using Jason.Cli.Link;
 using Jason.Contracts;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Notifications;
 using Jason.Contracts.Update;
 using Jason.PluginHost;
 using Jason.Runtime.Hosting;
@@ -15,6 +17,7 @@ public enum Mode
     RuntimeService,
     PluginHost,
     ToastHost,
+    Link,
     Cli,
 }
 
@@ -24,6 +27,9 @@ public enum Mode
 /// </summary>
 public static class ModeRouter
 {
+    /// <summary>What a link the shell hands this executable starts with: no verb does, so a click is never read as one.</summary>
+    private const string LinkPrefix = AttentionLinks.Scheme + ":";
+
     public static Mode Select(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -33,6 +39,7 @@ public static class ModeRouter
             ["runtime", "run", ..] => Mode.RuntimeService,
             ["plugin-host", ..] => Mode.PluginHost,
             ["toast-host", ..] => Mode.ToastHost,
+            [var first, ..] when first.StartsWith(LinkPrefix, StringComparison.OrdinalIgnoreCase) => Mode.Link,
             _ => Mode.Cli,
         };
     }
@@ -43,6 +50,7 @@ public static class ModeRouter
         Mode.RuntimeService => RunRuntimeService(args, cancellationToken),
         Mode.PluginHost => RunPluginHost(args, cancellationToken),
         Mode.ToastHost => RunToastHost(args, cancellationToken),
+        Mode.Link => RunLink(args, cancellationToken),
         _ => RunCli(args, cancellationToken),
     };
 
@@ -133,6 +141,14 @@ public static class ModeRouter
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunToastHost(string[] args, CancellationToken cancellationToken) =>
         ToastHost.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
+
+    /// <summary>
+    /// A click on a <c>jason:</c> link: the shell starts this executable with the link as its one argument, and the CLI
+    /// reads it against the link table. Its own mode, so the link is never parsed as a verb.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Task<int> RunLink(string[] args, CancellationToken cancellationToken) =>
+        LinkHandler.RunAsync(args, CliEnvironment.Default(), cancellationToken);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunCli(string[] args, CancellationToken cancellationToken) =>

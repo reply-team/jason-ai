@@ -40,7 +40,14 @@ public sealed class ToastChannel(
         new EventId(1, nameof(NoDesktop)),
         "No desktop: toasts are not shown by this runtime ({Detail})");
 
+    private static readonly Action<ILogger, string, string, Exception?> Unlinked = LoggerMessage.Define<string, string>(
+        LogLevel.Warning,
+        new EventId(2, nameof(Unlinked)),
+        "The jason: link of this account's toasts is {Scheme} ({Hr}): a click on a toast opens nothing of Jason's");
+
     private int _said;
+
+    private int _saidUnlinked;
 
     public string Name => "toast";
 
@@ -67,10 +74,25 @@ public sealed class ToastChannel(
 
         return facts.Platform switch
         {
-            DesktopPlatform.Windows => ToastOutcomes.Read(await LaunchAsync(ToastCommands.Windows(self.Command, message), cancellationToken).ConfigureAwait(false)),
+            DesktopPlatform.Windows => await WindowsAsync(message, cancellationToken).ConfigureAwait(false),
             DesktopPlatform.MacOs => await MacOsAsync(message, cancellationToken).ConfigureAwait(false),
             _ => await LinuxAsync(message, cancellationToken).ConfigureAwait(false),
         };
+    }
+
+    /// <summary>
+    /// The toast host's answer, and once per run a line saying the toasts' <c>jason:</c> link is not Jason's: the toast
+    /// is delivered all the same, and the line is the one place a click that opens nothing is explained.
+    /// </summary>
+    private async Task<ChannelOutcome> WindowsAsync(NotificationMessage message, CancellationToken cancellationToken)
+    {
+        var result = await LaunchAsync(ToastCommands.Windows(self.Command, message), cancellationToken).ConfigureAwait(false);
+        if (ToastOutcomes.Unlinked(result) is { } link && Interlocked.Exchange(ref _saidUnlinked, 1) == 0)
+        {
+            Unlinked(logger, link.Scheme, link.Hr, null);
+        }
+
+        return ToastOutcomes.Read(result);
     }
 
     private async Task<ChannelOutcome> MacOsAsync(NotificationMessage message, CancellationToken cancellationToken)

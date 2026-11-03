@@ -234,6 +234,8 @@ export type JournalListRequest = {
 export type CampaignSummary = { id: string; name: string; status: string };
 export type CampaignListRequest = { query?: string; include_archived?: boolean; limit?: number; cursor?: string };
 export type Campaign = CampaignSummary & {
+    project_id: string;
+    folder_path: string | null;
     context: Record<string, unknown>;
     external_ids: ExternalId[];
     execution_profile: string | null;
@@ -242,6 +244,7 @@ export type Campaign = CampaignSummary & {
     updated_at: string;
     archived_at: string | null;
 };
+export type Project = { id: string; name: string; slug: string; default: boolean; folder_path: string | null };
 export type CampaignTransitionRequest = { campaign_id: string; reason?: string; actor?: ActorRef };
 /** The most campaigns one read names in `campaign_ids`: the runtime refuses more. */
 export const campaignIdsLimit = 100;

@@ -82,6 +82,29 @@ public static class ToastOutcomes
         };
     }
 
+    /// <summary>
+    /// The toast host's <c>jason:</c> link where it is not Jason's — <c>foreign</c> or <c>failed</c>, with the HRESULT
+    /// where it is one and <c>none</c> otherwise — and null for any other answer. Only the host's own words come back,
+    /// so the line the channel writes from them carries nothing the child could have put there.
+    /// </summary>
+    public static (string Scheme, string Hr)? Unlinked(LaunchResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (result is not { Started: true, TimedOut: false, ExitCode: ToastHost.Outcome } || Parse(result.Stdout) is not { } outcome)
+        {
+            return null;
+        }
+
+        var scheme = outcome.Scheme switch
+        {
+            SchemeRegistration.Foreign => SchemeRegistration.Foreign,
+            SchemeRegistration.Failed => SchemeRegistration.Failed,
+            _ => null,
+        };
+        var hr = outcome.SchemeHr is { Length: 10 } text && Hr(text) is not null ? text : "none";
+        return scheme is null ? null : (scheme, hr);
+    }
+
     private static ChannelOutcome Failed(string code, FailureClass @class, string? detail = null) =>
         ChannelOutcome.Failed(Channel, ChannelKinds.Toast, code, @class, detail);
 

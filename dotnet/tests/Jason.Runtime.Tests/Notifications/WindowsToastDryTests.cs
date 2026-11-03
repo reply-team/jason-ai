@@ -24,7 +24,7 @@ public sealed class WindowsToastDryTests
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "the toast interop is Windows-only");
 #pragma warning disable CA1416 // The skip above is the platform check.
-        using var prepared = WindowsToast.Prepare(DryAumid, WindowsToast.Xml("Jason", ["dry", "run"]));
+        using var prepared = WindowsToast.Prepare(DryAumid, ToastXml.Compose("Jason", ["dry", "run"], launch: null));
 
         if (prepared.FailedStep is { } step && prepared.Calls.Single(call => call.Step == step).Hr is var hr && NotActivatable.Contains(hr))
         {

@@ -15,6 +15,12 @@ instead, for an agent to hand to you). The link carries a ticket that pairs one 
 after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
 `jason ui open --approval <id>` and `--question <id>` open on one item.
 
+On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
+waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
+`jason ui open` does, and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7).
+`jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
+put that item's prompt on the clipboard and open nothing: the text of [Copy prompt](#copy-prompt) below.
+
 If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
 ## Where the page comes from
@@ -113,6 +119,20 @@ operation, and the route's binding passes its checks, and skips the rest of it, 
 journal, pins, approval and retry; it has no bound of its own, running outside the handler pool `Dispatcher:MaxParallel`
 sizes, one child each. The runtime passes a message's body through as the provider holds it; the page parses it where
 nothing can run or load, and shows only its structure, emphasis and web or mail links.
+
+## Copy prompt
+
+The panel of an open approval or question on Attention has a **Copy prompt** button. It puts on the clipboard the text
+that briefs an agent session on that one item, so a person can paste it into whichever agent host they use: what waits
+and its id, the campaign's id and the folder recorded for it (the project's folder when the campaign has none, the
+harness root when neither does), the skill `approvals-and-questions` and the line that installs it for the host, what to
+read through the command line and what to bring back, and that the session decides nothing — approving, rejecting and
+answering stay with the person, and so does a standing approval. The text holds nothing of the item itself, not what it
+is about, a preview, the question's words or its options: the session reads the item live. The command line prints the
+same words with `jason approval get <approval-id> --prompt` and `jason decision get <decision-id> --prompt`. The text
+for an approval is [prompts/approval.txt](prompts/approval.txt) and for a question [prompts/question.txt](prompts/question.txt),
+as the command line prints them for the recorded exchanges under `docs/api/fixtures/`; the page's test holds the button to
+those two files, and the command line's test holds them to the command line.
 
 ## What the page may do
 
