@@ -240,6 +240,11 @@ jason journal list --kind notification_sent
   {"@t":"2026-10-01T09:06:00.0000000Z","@mt":"Notification channel {Channel} failed ({Code}, {Class})","@l":"Warning","Channel":"ntfy","Code":"notification_unreachable","Class":"transient","EventId":{"Id":2,"Name":"ChannelFailed"},"SourceContext":"Jason.Runtime.Notifications.NotificationSender"}
   ```
 
+- To hand an item that waits to an agent session, `jason approval get <approval-id> --prompt` and `jason decision get
+  <decision-id> --prompt` print the text that briefs it, and the UI's Copy prompt button copies the same words
+  (`ui.md`, "Copy prompt"). A notification carries counts and where to look; the text carries the item's identifier and
+  none of its content.
+
 ## 7. The toast on Windows
 
 - **A per-user key, nothing elevated.** At every toast the toast host ensures the key

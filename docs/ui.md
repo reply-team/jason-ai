@@ -118,6 +118,20 @@ journal, pins, approval and retry; it has no bound of its own, running outside t
 sizes, one child each. The runtime passes a message's body through as the provider holds it; the page parses it where
 nothing can run or load, and shows only its structure, emphasis and web or mail links.
 
+## Copy prompt
+
+The panel of an open approval or question on Attention has a **Copy prompt** button. It puts on the clipboard the text
+that briefs an agent session on that one item, so a person can paste it into whichever agent host they use: what waits
+and its id, the campaign's id and the folder recorded for it (the project's folder when the campaign has none, the
+harness root when neither does), the skill `approvals-and-questions` and the line that installs it for the host, what to
+read through the command line and what to bring back, and that the session decides nothing — approving, rejecting and
+answering stay with the person, and so does a standing approval. The text holds nothing of the item itself, not what it
+is about, a preview, the question's words or its options: the session reads the item live. The command line prints the
+same words with `jason approval get <approval-id> --prompt` and `jason decision get <decision-id> --prompt`. The text
+for an approval is [prompts/approval.txt](prompts/approval.txt) and for a question [prompts/question.txt](prompts/question.txt),
+as the command line prints them for the recorded exchanges under `docs/api/fixtures/`; the page's test holds the button to
+those two files, and the command line's test holds them to the command line.
+
 ## What the page may do
 
 The page holds its token in the browser's storage for the runtime's origin and sends it on every call, as the command

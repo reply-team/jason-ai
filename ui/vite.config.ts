@@ -11,6 +11,9 @@ export default defineConfig({
         preact(),
         buildManifest({ version: process.env.JASON_VERSION ?? '0.0.0-local', apiVersion: API_VERSION }),
     ],
+    // The screen tests read the two published prompt texts under docs/prompts as raw text (`?raw`); the dev server may
+    // serve nothing else outside this folder.
+    server: { fs: { allow: ['.', '../docs/prompts'] } },
     build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0, sourcemap: false },
     test: {
         projects: [
