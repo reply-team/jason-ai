@@ -482,6 +482,35 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// The launch envelope's page states what holds of every host where it says how a role reads the memory files and how
+    /// it is given the brief, and keeps one host's form for that host's section: the rule is a read for each path that is
+    /// not null, a rule for the file on every host of the matrix but Gemini CLI, which is given the folder of each level;
+    /// and the brief is on standard input on every host. Both halves are held to the matrix's own cells, so a host added
+    /// that takes either differently is red until the page says so.
+    /// </summary>
+    [Fact]
+    public void The_launch_envelope_states_the_memory_read_and_the_stdin_brief_for_every_host()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var rows = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is not null)
+            .ToList();
+        Assert.All(rows, row => Assert.Contains("standard input", row[9], StringComparison.Ordinal));
+        Assert.Equal(["gemini_cli"], rows.Where(row => row[8].Contains("--include-directories", StringComparison.Ordinal)).Select(row => row[1].Trim('`')));
+
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
+        Assert.Contains("A profile is composed with a read for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI, which is given the folder of each level and reads it whole", contract, StringComparison.Ordinal);
+        Assert.Contains("On a host that reads its prompt from standard input — every host of that matrix does, and its `Takes the brief` column says how — that standard input is the prompt", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("On the `claude_code` host a profile is composed with one read rule per path", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("`claude_code`, which runs in print mode, and each host", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The GitHub Copilot CLI page holds what the host's host-row and section promise, held by words so that a rewrite
     /// that drops one is red: the matrix row's standing sentences (the version it was read at, the parser not read, the
     /// cost of that), the flags a launch composes to close what the person's settings would leave open, each thing the
