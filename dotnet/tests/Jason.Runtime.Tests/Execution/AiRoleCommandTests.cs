@@ -479,6 +479,31 @@ public class AiRoleCommandTests
         Assert.Contains("\"envelope_version\":5", content, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The host whose permissions are carried by a workspace hook finds that hook in the work directory before it reads a
+    /// byte of the brief: the file is written by the launch, ahead of the child, and it holds the hook command and no
+    /// token.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W7, "the workspace hook is in the work directory before the host starts")]
+    public async Task A_host_finds_the_workspace_hook_in_its_work_directory_before_it_reads_standard_input()
+    {
+        using var directory = new TempDataDir();
+        WriteDescriptor(directory.Paths);
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        using var kill = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-hooks"), kill: kill, host: new AntigravityCliHost());
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(0, exited.ExitCode);
+        var stdout = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
+        Assert.DoesNotContain("no hooks file", stdout, StringComparison.Ordinal);
+        Assert.Contains("host-hook antigravity-cli ", stdout, StringComparison.Ordinal);
+        Assert.Contains("PreToolUse", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain(Token, stdout, StringComparison.Ordinal);
+    }
+
     /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
     internal static Task<CommandOutcome> RunAsync(
         JasonPaths paths,

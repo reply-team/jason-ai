@@ -36,6 +36,17 @@ if (args is ["echo-stdin", ..])
     return 0;
 }
 
+// Not a behaviour either: a host that looks for the workspace hook before it reads a byte, as the host whose permissions
+// the hook carries does. It says what the file held at that moment, or that there was none, and then drains standard
+// input, so that a test can tell a hook written before the launch from one written after it.
+if (args is ["echo-hooks", ..])
+{
+    var hooks = Path.Combine(Directory.GetCurrentDirectory(), ".agents", "hooks.json");
+    await Console.Out.WriteLineAsync(File.Exists(hooks) ? File.ReadAllText(hooks) : "no hooks file");
+    await Console.In.ReadToEndAsync();
+    return 0;
+}
+
 string raw;
 LaunchEnvelope envelope;
 try

@@ -1,6 +1,7 @@
 using Jason.App;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
@@ -19,6 +20,10 @@ public class ModeRouterTests
     // The mode follows the first argument whatever comes after it; no test names the protocol the host answers.
     [InlineData(new[] { "toast-host", "--protocol", "2" }, Mode.ToastHost)]
     [InlineData(new[] { "toast-host" }, Mode.ToastHost)]
+    // The agent host's hook is a mode of its own, chosen by its first word alone.
+    [InlineData(new[] { "host-hook", "antigravity-cli", "e30" }, Mode.HostHook)]
+    [InlineData(new[] { "host-hook" }, Mode.HostHook)]
+    [InlineData(new[] { "runtime", "host-hook" }, Mode.Cli)]
     [InlineData(new[] { "runtime", "toast-host" }, Mode.Cli)]
     [InlineData(new[] { "runtime", "status" }, Mode.Cli)]
     [InlineData(new[] { "--help" }, Mode.Cli)]
@@ -150,6 +155,86 @@ public class ModeRouterTests
         finally
         {
             Console.SetError(original);
+        }
+    }
+
+    /// <summary>
+    /// The hook mode answers one tool call and nothing else: it does not enter the CLI, it reads no environment variable,
+    /// and no byte of what it was asked or of the environment reaches its output. A variable that names a data directory
+    /// is poisoned with a marker, and the answer must not hold it.
+    /// </summary>
+    [Fact]
+    public async Task The_hook_mode_answers_one_line_enters_no_cli_and_reads_no_environment()
+    {
+        const string Marker = "marker-5d21c8-made-up";
+        var originalInput = ModeRouter.HostHookInput;
+        var originalOut = Console.Out;
+        var output = new StringWriter();
+        var previous = Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable);
+        var rules = AntigravityHookRules.Encode(new AntigravityHookRules("jason", [], [], [], Path.Combine(Path.GetTempPath(), "jason-app-tests", "result.json")));
+        var call = new System.Text.Json.Nodes.JsonObject
+        {
+            ["toolCall"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = "run_command",
+                ["args"] = new System.Text.Json.Nodes.JsonObject { ["CommandLine"] = "jason workitem get " + Marker },
+            },
+        }.ToJsonString();
+
+        Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, Path.Combine(Path.GetTempPath(), Marker));
+        ModeRouter.HostHookInput = () => new MemoryStream(System.Text.Encoding.UTF8.GetBytes(call));
+        Console.SetOut(output);
+        try
+        {
+            var exit = await ModeRouter.RunAsync(["host-hook", "antigravity-cli", rules], TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, exit);
+            var line = output.ToString();
+            Assert.DoesNotContain(Marker, line, StringComparison.Ordinal);
+            using var document = System.Text.Json.JsonDocument.Parse(line);
+            Assert.Equal("auto_approve", document.RootElement.GetProperty("decision").GetString());
+            Assert.Single(line.Trim().Split('\n'));
+        }
+        finally
+        {
+            ModeRouter.HostHookInput = originalInput;
+            Console.SetOut(originalOut);
+            Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, previous);
+        }
+    }
+
+    /// <summary>The hook mode reads its call as UTF-8 bytes, so a work directory with letters outside ASCII is matched as the host wrote it.</summary>
+    [Fact]
+    public async Task The_hook_mode_matches_a_path_with_letters_outside_ascii()
+    {
+        var originalInput = ModeRouter.HostHookInput;
+        var originalOut = Console.Out;
+        var output = new StringWriter();
+        var path = Path.Combine(Path.GetTempPath(), "jason-app-tests", "Прівіт-ü", "result.json");
+        var rules = AntigravityHookRules.Encode(new AntigravityHookRules("jason", [], [], [], path));
+        var call = new System.Text.Json.Nodes.JsonObject
+        {
+            ["toolCall"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = "write_to_file",
+                ["args"] = new System.Text.Json.Nodes.JsonObject { ["TargetFile"] = path },
+            },
+        }.ToJsonString(new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+
+        ModeRouter.HostHookInput = () => new MemoryStream(System.Text.Encoding.UTF8.GetBytes(call));
+        Console.SetOut(output);
+        try
+        {
+            var exit = await ModeRouter.RunAsync(["host-hook", "antigravity-cli", rules], TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, exit);
+            using var document = System.Text.Json.JsonDocument.Parse(output.ToString());
+            Assert.Equal("auto_approve", document.RootElement.GetProperty("decision").GetString());
+        }
+        finally
+        {
+            ModeRouter.HostHookInput = originalInput;
+            Console.SetOut(originalOut);
         }
     }
 }
