@@ -197,7 +197,7 @@ public class ProfileCursorCliTests
     [Fact]
     public async Task A_dot_ending_a_launcher_name_is_part_of_the_name_elsewhere()
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "Elsewhere the dot that ends a file name is part of the name, so the name has no extension.");
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "On Windows the dot that ends a file name is trimmed, so the name is the launcher's.");
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var program = Launcher + ".";
 
