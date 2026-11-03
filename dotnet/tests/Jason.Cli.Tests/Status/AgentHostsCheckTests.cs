@@ -69,7 +69,7 @@ public sealed class AgentHostsCheckTests
 
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal($"Detected: claude_code ({ClaudeSkills}). Profiles: local-claude names claude_code; later names future_host, a host this build of the CLI does not know.", check.Fact);
-        Assert.Equal("jason profile update later --host claude_code", check.Fix);
+        Assert.Equal("jason profile update later --host claude_code --program claude", check.Fix);
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class AgentHostsCheckTests
 
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal($"Detected: claude_code ({ClaudeSkills}). Profiles by host: claude_code 2; future_host 1, a host this build of the CLI does not know.", check.Fact);
-        Assert.Equal("jason profile update <name> --host claude_code", check.Fix);
+        Assert.Equal("jason profile update <name> --host claude_code --program claude", check.Fix);
         Assert.DoesNotContain("sentinel", check.Fact + check.Fix, StringComparison.Ordinal);
     }
 

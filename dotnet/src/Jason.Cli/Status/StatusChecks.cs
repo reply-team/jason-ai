@@ -141,10 +141,13 @@ internal static class StatusChecks
         public const string UpdateSkills = "jason skills update";
 
         /// <summary>
-        /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has. A
-        /// bundle's report names no profile, so there it is <c>&lt;name&gt;</c>.
+        /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has, with
+        /// that host's own program. The runtime refuses a move that keeps the program written for another host, and a
+        /// profile made as the README says carries one. A bundle's report names no profile, so there it is
+        /// <c>&lt;name&gt;</c>.
         /// </summary>
-        public static string MoveProfile(string profile, string host) => $"jason profile update {profile} --host {host}";
+        public static string MoveProfile(string profile, AgentHostKind host) =>
+            $"jason profile update {profile} --host {AgentHosts.Word(host)} --program {AgentHosts.Of(host).CommandWord}";
 
         /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
@@ -1305,7 +1308,7 @@ internal static class StatusChecks
         var detected = AgentHosts.All
             .Select(host => (host.Kind, Root: roots.FirstOrDefault(root => root.Hosts.Contains(host.Kind))))
             .Where(found => found.Root is not null)
-            .Select(found => (Word: AgentHosts.Word(found.Kind), found.Root!.Directory))
+            .Select(found => (found.Kind, Word: AgentHosts.Word(found.Kind), found.Root!.Directory))
             .ToList();
         var hosts = detected.Count == 0
             ? "No agent host was detected on this machine."
@@ -1358,7 +1361,7 @@ internal static class StatusChecks
         }
 
         var profile = names ? astray.Name : "<name>";
-        var host = detected[0].Word;
+        var host = detected[0].Kind;
         return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, Repair.MoveProfile(profile, host));
     }
 
