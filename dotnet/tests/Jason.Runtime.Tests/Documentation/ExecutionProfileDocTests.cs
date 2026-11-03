@@ -460,7 +460,7 @@ public partial class ExecutionProfileDocTests
             .TakeWhile(line => line.StartsWith('|'))
             .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
             .ToList();
-        Assert.All(rows, row => Assert.All(row[8..], cell => Assert.NotEqual("—", cell)));
+        Assert.All(rows, row => Assert.All(row[8..], column => Assert.NotEqual("—", column)));
 
         // A host that frames the envelope says so in its own row, where it takes the brief.
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
