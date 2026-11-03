@@ -14,7 +14,7 @@ namespace Jason.Runtime.Tests.Execution;
 /// </summary>
 public class CopilotCliHostTests
 {
-    private const string Fixed = "GitHub Copilot CLI is installed but not signed in; run copilot login, then retry.";
+    private const string Fixed = "GitHub Copilot CLI is not signed in on this account: run `copilot login` as yourself.";
 
     private static MemoryFileLocations NoFiles { get; } = new(null, null, null);
 
