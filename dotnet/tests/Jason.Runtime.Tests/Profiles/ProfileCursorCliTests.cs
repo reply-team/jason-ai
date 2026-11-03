@@ -154,7 +154,6 @@ public class ProfileCursorCliTests
     [InlineData(".\\agent.cmd")]
     [InlineData("./agent.cmd")]
     [InlineData("sub/agent.cmd")]
-    [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\agent.cmd.")]
     [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\claude.cmd")]
     [InlineData("C:\\Users\\someone\\AppData\\Local\\cursor-agent\\agent.ps1")]
     public async Task Any_other_script_and_a_bare_launcher_name_stay_refused(string program)
@@ -169,6 +168,43 @@ public class ProfileCursorCliTests
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
+    /// Windows trims the dot that ends a file name, so <c>agent.cmd.</c> starts the launcher script itself, and the
+    /// exception for the launcher's full path does not stretch to a name the operating system reads as that script.
+    /// </summary>
+    [Fact]
+    public async Task A_launcher_path_that_Windows_trims_back_to_the_launcher_stays_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Trimming the dots and spaces that end a path is Windows' own.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "trimmed-launcher", host = "cursor_cli", program = Launcher + "." },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "shell_script"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
+    /// Where the operating system does not trim a name, the dot that ends it is part of the name, which then has no
+    /// extension and is no script, so the profile is taken with the program stored as written.
+    /// </summary>
+    [Fact]
+    public async Task A_dot_ending_a_launcher_name_is_part_of_the_name_elsewhere()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "On Windows the dot that ends a file name is trimmed, so the name is the launcher's.");
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var program = Launcher + ".";
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "dotted-launcher", host = "cursor_cli", program }, Ct);
+
+        Assert.Equal(program, created.Revision.Program);
     }
 
     /// <summary>
