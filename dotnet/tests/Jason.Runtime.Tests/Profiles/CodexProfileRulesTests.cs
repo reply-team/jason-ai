@@ -228,6 +228,38 @@ public class CodexProfileRulesTests
         Assert.Equal(["Glob", "mcp__made_up__send"], moved.Revision.Deny);
     }
 
+    /// <summary>
+    /// What Codex refuses where a profile is written, it refuses where a profile moves to it: a stored bare word that
+    /// would become the prompt, a stored grant of a fetch it has no tool for, and a stored deny of a command by its name,
+    /// which its sandbox cannot hold. The profile keeps the revision it had.
+    /// </summary>
+    [Theory]
+    [InlineData("args", "args", "invalid")]
+    [InlineData("tools", "tools[0]", "invalid")]
+    [InlineData("deny", "deny[0]", "invalid")]
+    public async Task A_move_to_codex_of_a_stored_word_codex_refuses_is_refused_and_writes_nothing(
+        string stored, string field, string code)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        object profile = stored switch
+        {
+            "args" => new { name = "moving", host = "claude_code", program = "claude", args = new[] { "--model", "made-up-model" } },
+            "tools" => new { name = "moving", host = "claude_code", program = "claude", tools = new[] { "web_fetch" } },
+            _ => new { name = "moving", host = "claude_code", program = "claude", deny = new[] { "Bash(curl *)" } },
+        };
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, profile, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "moving", host = "codex", program = "codex" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal((field, code), (detail.Field, detail.Code));
+        Assert.Contains("codex", detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "moving" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+        Assert.Equal(AgentHostKind.ClaudeCode, read.Revision.Host);
+    }
+
     [Fact]
     public async Task A_search_granted_and_denied_at_once_is_refused()
     {
