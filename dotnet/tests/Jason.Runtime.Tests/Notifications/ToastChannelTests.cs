@@ -139,6 +139,52 @@ public sealed class ToastChannelTests
         Assert.DoesNotContain(launch.Environment.Keys, name => name.StartsWith("JASON_", StringComparison.OrdinalIgnoreCase));
     }
 
+    private static string Linked(string scheme, string? hr) =>
+        """{"protocol_version":1,"registration":"present","registration_hr":null,"calls":[],"failed_step":null,"show_hr":"0x00000000","setting_after_hr":"0x00000000","setting_after":0,"scheme":"""
+        + $"\"{scheme}\",\"scheme_hr\":" + (hr is null ? "null" : $"\"{hr}\"") + "}";
+
+    /// <summary>
+    /// A toast whose <c>jason:</c> link is another program's, or could not be written, is still delivered; the runtime's
+    /// log says so once per run, by the state and the HRESULT alone, so a click that opens nothing has a reason to read.
+    /// </summary>
+    [Theory]
+    [InlineData("foreign", null, "The jason: link of this account's toasts is foreign (none): a click on a toast opens nothing of Jason's")]
+    [InlineData("failed", "0x80070005", "The jason: link of this account's toasts is failed (0x80070005): a click on a toast opens nothing of Jason's")]
+    public async Task A_link_that_is_not_jason_s_is_said_once_per_run(string scheme, string? hr, string line)
+    {
+        var (toast, _, logs) = Channel(Facts(DesktopPlatform.Windows), new() { ["toast-host"] = _ => Exit(0, Linked(scheme, hr)) });
+
+        Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Delivered);
+        Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Delivered);
+
+        Assert.Equal(1, logs.Count(line));
+        Assert.Single(logs.Lines);
+    }
+
+    /// <summary>A link that is Jason's says nothing, and a state or an HRESULT not of the host's own words is never repeated.</summary>
+    [Theory]
+    [InlineData("present", null)]
+    [InlineData("written", null)]
+    [InlineData("SENTINEL", null)]
+    public async Task A_link_that_is_jason_s_or_unknown_says_nothing(string scheme, string? hr)
+    {
+        var (toast, _, logs) = Channel(Facts(DesktopPlatform.Windows), new() { ["toast-host"] = _ => Exit(0, Linked(scheme, hr)) });
+
+        Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Delivered);
+
+        Assert.Empty(logs.Lines);
+    }
+
+    [Fact]
+    public async Task An_hresult_that_is_not_one_is_said_as_none()
+    {
+        var (toast, _, logs) = Channel(Facts(DesktopPlatform.Windows), new() { ["toast-host"] = _ => Exit(0, Linked("failed", "SENTINEL")) });
+
+        await toast.DeliverAsync(Message, "ntf_test", Ct);
+
+        Assert.Equal(1, logs.Count("The jason: link of this account's toasts is failed (none): a click on a toast opens nothing of Jason's"));
+    }
+
     /// <summary>
     /// An answer the runtime cannot read back is no outcome, said by the exit code alone: the child's own text is not
     /// repeated, in the outcome or in the log. The parser's message can quote what it read, and the line is a child's.
