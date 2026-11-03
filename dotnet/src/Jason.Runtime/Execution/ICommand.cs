@@ -32,6 +32,10 @@ namespace Jason.Runtime.Execution;
 /// The person's memory files as the claim decided them, which the envelope names as they are; null for provider work.
 /// </param>
 /// <param name="Resumption">What the wait before this run ended with, as the claim composed it; null for a run that follows no wait.</param>
+/// <param name="Host">
+/// The host the claim's profile names, which lays out the work directory and reads the end; null where no profile ran
+/// the work, and the directory keeps the layout it always had.
+/// </param>
 public sealed record CommandContext(
     string WorkItemId,
     string AttemptId,
@@ -54,7 +58,9 @@ public sealed record CommandContext(
     string? CliCommand = null,
     string? ProjectId = null,
     MemoryFileLocations? MemoryFiles = null,
-    Resumption? Resumption = null);
+    Resumption? Resumption = null,
+    AgentHostKind? Host = null,
+    IReadOnlyList<string>? Allow = null);
 
 /// <summary>How the run ended, as the command saw it. What it means for the work item is decided elsewhere.</summary>
 public abstract record CommandOutcome
@@ -63,7 +69,11 @@ public abstract record CommandOutcome
     public sealed record Completed(AttemptLaunchDto? Launch) : CommandOutcome;
 
     /// <summary>The process ended while the attempt was still running — nobody told the runtime how it went.</summary>
-    public sealed record Exited(int ExitCode, string? StderrTail, AttemptLaunchDto Launch) : CommandOutcome;
+    /// <param name="Unavailable">
+    /// The host's own sentence where it read this end as "cannot run on this machine", and null otherwise; never any of
+    /// the words the child wrote.
+    /// </param>
+    public sealed record Exited(int ExitCode, string? StderrTail, AttemptLaunchDto Launch, string? Unavailable = null) : CommandOutcome;
 
     /// <summary>
     /// The command could not be started at all. <paramref name="Code"/> is the attempt error it ends with: a

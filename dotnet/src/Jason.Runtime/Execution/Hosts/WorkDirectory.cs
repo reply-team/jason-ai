@@ -1,7 +1,6 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Skills;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Jason.Runtime.Execution.Hosts;
 
@@ -26,81 +25,57 @@ public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, R
 }
 
 /// <summary>
-/// What the agent finds in the directory it is started in: what it may not do, and how to do the job.
-/// <para>
-/// Only one half of a policy can travel here. A directory the runtime creates is not a workspace the host
-/// trusts, and an allow rule in an untrusted directory is ignored without being reported — so what the agent
-/// may do goes on the command line, where it is read, and what it may not do goes here, where a deny rule is
-/// honoured whether or not the directory is trusted. Verified against Claude Code 2.1.275.
-/// </para>
+/// What the agent finds in the directory it is started in: what it may not do, and how to do the job. What it may not
+/// do is the host's to write, in its own form (<see cref="IAgentHost.WriteWorkDirectory"/>); how to do the job is the
+/// role's skill, copied in under the folder that host reads skills from.
 /// </summary>
 public static class WorkDirectory
 {
-    /// <summary>The directory a host reads its project settings and project skills from.</summary>
-    public const string HostDirectory = ".claude";
-
-    /// <summary>Where a host looks a skill up: one directory per skill, named as the skill names itself.</summary>
-    public const string SkillsDirectory = "skills";
-
     /// <summary>The file a skill introduces itself in; a directory without one teaches a host nothing.</summary>
     public const string SkillFile = RoleSkillRules.SkillFile;
 
-    /// <summary>The host's pattern for every <c>CLAUDE.md</c>, wherever it is.</summary>
-    private const string EveryClaudeMd = "**/CLAUDE.md";
-
-    /// <summary>The host's pattern for every file under a <c>.claude/rules</c> folder, wherever it is.</summary>
-    private const string EveryRulesFile = "**/.claude/rules/**";
-
-    /// <summary>The host's pattern for every <c>AGENTS.md</c>, wherever it is.</summary>
-    private const string EveryAgentsMd = "**/AGENTS.md";
-
-    private static readonly JsonSerializerOptions Settings = new() { WriteIndented = true };
-
     /// <summary>
-    /// Writes the settings file, then copies the role's skill in under the name the host will look it up by.
+    /// Writes what the host reads in the directory, then copies the role's skill in under the name the host will look it
+    /// up by.
     /// </summary>
     /// <param name="workDir">The attempt's own directory; the child's working directory.</param>
     /// <param name="deny">What the launched agent may not do, in the host's own vocabulary.</param>
     /// <param name="role">The role being run, which is also the name its skill must carry.</param>
     /// <param name="roleSkillsRoot">Where role skills are kept: one directory per role.</param>
     /// <param name="maxSkillBytes">How large a role's skill may be before it is left where it is.</param>
+    /// <param name="host">
+    /// The host the launch starts, as the claim named it. Null where no profile ran the work and the role's own entry
+    /// command starts whatever it starts: the directory is then laid out as it always was, the layout of the one host
+    /// Jason had before there were several.
+    /// </param>
+    /// <param name="allow">What the host allows through the work directory; none where it is null.</param>
     public static WorkDirectoryReport Prepare(
         string workDir,
         IReadOnlyList<string> deny,
         string? role,
         string roleSkillsRoot,
-        int maxSkillBytes)
+        int maxSkillBytes,
+        IAgentHost? host = null,
+        IReadOnlyList<string>? allow = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
         ArgumentNullException.ThrowIfNull(deny);
         ArgumentException.ThrowIfNullOrWhiteSpace(roleSkillsRoot);
 
-        var host = Path.Combine(workDir, HostDirectory);
-        Directory.CreateDirectory(host);
-
-        var settings = new JsonObject
+        Directory.CreateDirectory(workDir);
+        AgentHostFacts facts;
+        if (host is null)
         {
-            ["permissions"] = new JsonObject
-            {
-                ["deny"] = new JsonArray([.. deny.Select(rule => JsonValue.Create(rule))]),
-            },
+            ClaudeCodeHost.WriteSettings(workDir, deny);
+            facts = AgentHosts.Of(AgentHostKind.ClaudeCode);
+        }
+        else
+        {
+            host.WriteWorkDirectory(workDir, allow ?? [], deny);
+            facts = host.Facts;
+        }
 
-            // No CLAUDE.md reaches a launched role. The operator's own user-level file is written for their own
-            // sessions, and it arrived in every launched one even with the settings confined to this directory; a
-            // pattern matched against each file's absolute path stops it, and every other CLAUDE.md with it. Honoured
-            // here although the directory is untrusted, as measured against Claude Code 2.1.309 on Windows. The files
-            // of a .claude/rules folder — the operator's own and each one above this directory — load beside it through
-            // the same list, so they are named too. And where it finds no CLAUDE.md the host loads every AGENTS.md above
-            // this directory in its place, as one in the operator's home would be: the role reads the memory files its
-            // envelope names through its read rules, never through this list, so it loses nothing by naming them.
-            ["claudeMdExcludes"] = new JsonArray(
-                JsonValue.Create(EveryClaudeMd),
-                JsonValue.Create(EveryRulesFile),
-                JsonValue.Create(EveryAgentsMd)),
-        };
-        File.WriteAllText(Path.Combine(host, "settings.json"), settings.ToJsonString(Settings));
-
-        return Teach(host, role, roleSkillsRoot, maxSkillBytes);
+        return Teach(AgentHosts.Under(workDir, facts.WorkSkills), role, roleSkillsRoot, maxSkillBytes);
     }
 
     /// <summary>
@@ -112,14 +87,14 @@ public static class WorkDirectory
     /// writing into this root has to apply the same two rules before it writes: a deployment that fails them
     /// turns a role with no skill — which runs — into a role whose every launch is refused.
     /// </remarks>
-    private static WorkDirectoryReport Teach(string host, string? role, string roleSkillsRoot, int maxSkillBytes)
+    private static WorkDirectoryReport Teach(string skills, string? role, string roleSkillsRoot, int maxSkillBytes)
     {
         if (string.IsNullOrWhiteSpace(role) || role != Path.GetFileName(role) || role is "." or "..")
         {
             return WorkDirectoryReport.Ready;
         }
 
-        var lost = Path.Combine(host, SkillsDirectory, role);
+        var lost = Path.Combine(skills, role);
         long? waiting = null;
         RoleSkillTreeChanged? last = null;
 
@@ -134,7 +109,7 @@ public static class WorkDirectory
 
             try
             {
-                return Deliver(host, role, roleSkillsRoot, maxSkillBytes, rescued: read > 0);
+                return Deliver(skills, role, roleSkillsRoot, maxSkillBytes, rescued: read > 0);
             }
             catch (RoleSkillTreeChanged changed)
             {
@@ -177,7 +152,7 @@ public static class WorkDirectory
     private const int ReadPauseMs = 15;
 
     /// <summary>One read of the role's tree, and the copy of exactly what that read found.</summary>
-    private static WorkDirectoryReport Deliver(string host, string role, string roleSkillsRoot, int maxSkillBytes, bool rescued)
+    private static WorkDirectoryReport Deliver(string skills, string role, string roleSkillsRoot, int maxSkillBytes, bool rescued)
     {
         var source = Path.Combine(roleSkillsRoot, role);
         var reading = RoleSkillRules.Read(source, role, maxSkillBytes);
@@ -208,7 +183,7 @@ public static class WorkDirectory
 
         BetweenReadAndCopy.Value?.Invoke();
 
-        var target = Path.Combine(host, SkillsDirectory, role);
+        var target = Path.Combine(skills, role);
         foreach (var file in reading.Files)
         {
             var copy = Path.Combine(target, Path.GetRelativePath(source, file));

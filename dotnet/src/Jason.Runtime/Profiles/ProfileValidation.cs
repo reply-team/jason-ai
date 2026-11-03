@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Programs;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution.Hosts;
@@ -118,16 +119,7 @@ internal static partial class ProfileValidation
     /// The host as the closed vocabulary spells it. A value outside it is a name this build has no launcher for,
     /// and the message says what it does have rather than leaving the caller to guess.
     /// </summary>
-    public static AgentHostKind? ParseHost(string? host)
-    {
-        var text = host?.Trim();
-        return text is null
-            ? null
-            : Enum.GetValues<AgentHostKind>()
-                .Where(kind => string.Equals(SnakeCaseEnumConverter<AgentHostKind>.Format(kind), text, StringComparison.Ordinal))
-                .Select(kind => (AgentHostKind?)kind)
-                .FirstOrDefault();
-    }
+    public static AgentHostKind? ParseHost(string? host) => AgentHosts.Parse(host);
 
     /// <summary>A granted tool as the closed vocabulary spells it, or nothing for a word outside it.</summary>
     public static AgentTool? ParseTool(string? tool)
@@ -180,7 +172,7 @@ internal static partial class ProfileValidation
 
         if (ParseHost(host) is null)
         {
-            errors.Add("host", "invalid", "host must be one of: " + string.Join(", ", Hosts()) + ".");
+            errors.Add("host", "invalid", "host must be one of: " + AgentHosts.Vocabulary + ".");
         }
     }
 
@@ -244,14 +236,7 @@ internal static partial class ProfileValidation
                 continue;
             }
 
-            var flag = value.Trim();
-            var separator = flag.IndexOf('=', StringComparison.Ordinal);
-            if (separator > 0)
-            {
-                flag = flag[..separator];
-            }
-
-            if (reserved.Contains(flag))
+            if (ReservedFlag(value, reserved) is { } flag)
             {
                 errors.Add(
                     string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
@@ -261,18 +246,114 @@ internal static partial class ProfileValidation
         }
     }
 
+    /// <summary>The flag an argument names, the text before any <c>=</c>, when the host composes it; otherwise null.</summary>
+    private static string? ReservedFlag(string value, IReadOnlySet<string> reserved)
+    {
+        var flag = value.Trim();
+        var separator = flag.IndexOf('=', StringComparison.Ordinal);
+        if (separator > 0)
+        {
+            flag = flag[..separator];
+        }
+
+        return reserved.Contains(flag) ? flag : null;
+    }
+
+    /// <summary>
+    /// What the revision's host says of its words, once the host is parsed, held to the revision as it would be launched.
+    /// One rule for every host: a grant of a tool the host does not have is refused, naming the host and the tool; a deny
+    /// of such a tool is kept as the person's word, since it holds anyway; a deny of a tool the host has and cannot take
+    /// away, or of a word it does not read as a rule, is refused naming the host; and so is a grant of a tool the host
+    /// has but Jason cannot make true, and arguments the host's own reading refuses. Each is <c>invalid</c>; stored
+    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>. Every message
+    /// names the host and the word; then the grant is held beside the deny. Where a patch did not name a list,
+    /// the message says it is the profile's.
+    /// </summary>
+    public static void ValidateForHost(
+        ExecutionProfileRevision revision,
+        IAgentHost host,
+        ValidationErrors errors,
+        bool toolsNamed = true,
+        bool denyNamed = true,
+        bool argsNamed = true)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        var word = AgentHosts.Word(host.Kind);
+
+        // Arguments a request names were held to this host's flags where they were read. Arguments it leaves alone are
+        // the stored ones, and a patch that moves the profile to another host would otherwise launch them after the
+        // flags that host composes, where the last value wins.
+        if (!argsNamed)
+        {
+            for (var index = 0; index < revision.Args.Count; index++)
+            {
+                if (ReservedFlag(revision.Args[index], host.ReservedFlags) is { } flag)
+                {
+                    errors.Add(
+                        string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
+                        "reserved",
+                        $"the profile's args[{index}] '{flag}' is composed by the runtime on {word} for every attempt and cannot be set by a profile.");
+                }
+            }
+        }
+
+        if (host.ArgsProblem(revision.Args) is { } refused)
+        {
+            errors.Add("args", "invalid", $"{(argsNamed ? "" : "the profile's ")}args are refused on {word}: {refused}");
+        }
+
+        var toolsOwner = toolsNamed ? "" : "the profile's ";
+        for (var index = 0; index < revision.Tools.Count; index++)
+        {
+            var tool = revision.Tools[index];
+            var field = string.Create(CultureInfo.InvariantCulture, $"tools[{index}]");
+            var name = SnakeCaseEnumConverter<AgentTool>.Format(tool);
+            if (host.GrantProblem(tool) is { } untrue)
+            {
+                errors.Add(field, "invalid", $"{toolsOwner}{field} grants {name}, which {word} has and Jason cannot make true on it: {untrue}");
+            }
+            else if (host.ToolRule(tool) is null)
+            {
+                errors.Add(field, "invalid", $"{toolsOwner}{field} grants {name}, which {word} does not have; a deny of it is kept, since it holds anyway.");
+            }
+        }
+
+        var denyOwner = denyNamed ? "" : "the profile's ";
+        for (var index = 0; index < revision.Deny.Count; index++)
+        {
+            if (host.DenyProblem(revision.Deny[index]) is { } undeniable)
+            {
+                var field = string.Create(CultureInfo.InvariantCulture, $"deny[{index}]");
+                errors.Add(field, "invalid", $"{denyOwner}{field} '{revision.Deny[index]}' cannot be denied on {word}: {undeniable}");
+            }
+        }
+
+        // A grant refused above is not held beside the deny as well: one problem per grant.
+        ValidateGrantBesideDeny(
+            revision.Tools,
+            revision.Deny,
+            tool => host.GrantProblem(tool) is null ? host.ToolRule(tool) : null,
+            errors,
+            toolsNamed,
+            denyNamed);
+    }
+
     /// <summary>
     /// A grant the revision's own deny takes away. The host's deny wins over an allow rule, so a tool granted and
     /// denied by the host's own name for it would be a grant no launch can use; the pair is refused on the grant,
     /// naming the deny. Only the bare name, spelled as the host spells it, collides: a deny that is a pattern, such as
     /// <c>WebFetch(domain:example.com)</c>, is not refused and is written beside the grant, and how much of the grant
     /// it leaves is the host's to decide. Where a patch did not name one of the two lists, the message says that
-    /// index is the profile's, since the request carried no such list.
+    /// index is the profile's, since the request carried no such list. A tool the host has no rule for collides with
+    /// nothing.
     /// </summary>
     public static void ValidateGrantBesideDeny(
         IReadOnlyList<AgentTool> tools,
         IReadOnlyList<string> deny,
-        Func<AgentTool, string> rule,
+        Func<AgentTool, string?> rule,
         ValidationErrors errors,
         bool toolsNamed = true,
         bool denyNamed = true)
@@ -286,7 +367,11 @@ internal static partial class ProfileValidation
         var denyOwner = denyNamed ? "" : "the profile's ";
         for (var index = 0; index < tools.Count; index++)
         {
-            var name = rule(tools[index]);
+            if (rule(tools[index]) is not { } name)
+            {
+                continue;
+            }
+
             var denied = -1;
             for (var entry = 0; entry < deny.Count; entry++)
             {
@@ -451,10 +536,6 @@ internal static partial class ProfileValidation
             errors.Add("reason", "too_long", string.Create(CultureInfo.InvariantCulture, $"reason must be at most {ProfileService.MaxReasonLength} characters."));
         }
     }
-
-    /// <summary>The vocabulary as the API spells it, so the message names values a caller can send back.</summary>
-    private static IEnumerable<string> Hosts() =>
-        Enum.GetValues<AgentHostKind>().Select(SnakeCaseEnumConverter<AgentHostKind>.Format);
 
     [GeneratedRegex(@"^[a-z][a-z0-9-]{0,63}\z")]
     private static partial Regex Name();

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Runtime.Persistence;
@@ -175,8 +177,79 @@ public sealed class ClaudeCodeHost(bool windows) : IAgentHost
             ],
             session,
             unreadable,
-            deny);
+            deny,
+
+            // Nothing is allowed through the work directory: an allow rule there is ignored in a directory the host
+            // does not trust, so every allow rule above is on the command line.
+            []);
     }
+
+    /// <summary>The folder of a directory the host reads project settings from; its skills folder is inside it.</summary>
+    private const string ProjectDirectory = ".claude";
+
+    /// <summary>The host's pattern for every <c>CLAUDE.md</c>, wherever it is.</summary>
+    private const string EveryClaudeMd = "**/CLAUDE.md";
+
+    /// <summary>The host's pattern for every file under a <c>.claude/rules</c> folder, wherever it is.</summary>
+    private const string EveryRulesFile = "**/.claude/rules/**";
+
+    /// <summary>The host's pattern for every <c>AGENTS.md</c>, wherever it is.</summary>
+    private const string EveryAgentsMd = "**/AGENTS.md";
+
+    private static readonly JsonSerializerOptions Settings = new() { WriteIndented = true };
+
+    /// <summary>The deny rules and the exclusions; <paramref name="allow"/> is always empty for this host.</summary>
+    public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) => WriteSettings(workDir, deny);
+
+    /// <summary>
+    /// Writes the work directory's project settings: the deny rules, and the exclusions that keep every instruction file
+    /// out of a launched role.
+    /// <para>
+    /// Only one half of a policy can travel here. A directory the runtime creates is not a workspace the host trusts, and
+    /// an allow rule in an untrusted directory is ignored without being reported — so what the agent may do goes on the
+    /// command line, where it is read, and what it may not do goes here, where a deny rule is honoured whether or not
+    /// the directory is trusted. Verified against Claude Code 2.1.275.
+    /// </para>
+    /// <para>
+    /// It is also the layout of a launch that names no host, the role's own entry command, which is laid out as it
+    /// always was.
+    /// </para>
+    /// </summary>
+    internal static void WriteSettings(string workDir, IReadOnlyList<string> deny)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
+        ArgumentNullException.ThrowIfNull(deny);
+
+        var directory = Path.Combine(workDir, ProjectDirectory);
+        Directory.CreateDirectory(directory);
+
+        var settings = new JsonObject
+        {
+            ["permissions"] = new JsonObject
+            {
+                ["deny"] = new JsonArray([.. deny.Select(rule => JsonValue.Create(rule))]),
+            },
+
+            // No CLAUDE.md reaches a launched role. The operator's own user-level file is written for their own
+            // sessions, and it arrived in every launched one even with the settings confined to this directory; a
+            // pattern matched against each file's absolute path stops it, and every other CLAUDE.md with it. Honoured
+            // here although the directory is untrusted, as measured against Claude Code 2.1.309 on Windows. The files
+            // of a .claude/rules folder — the operator's own and each one above this directory — load beside it through
+            // the same list, so they are named too. And where it finds no CLAUDE.md the host loads every AGENTS.md above
+            // this directory in its place, as one in the operator's home would be: the role reads the memory files its
+            // envelope names through its read rules, never through this list, so it loses nothing by naming them.
+            ["claudeMdExcludes"] = new JsonArray(
+                JsonValue.Create(EveryClaudeMd),
+                JsonValue.Create(EveryRulesFile),
+                JsonValue.Create(EveryAgentsMd)),
+        };
+        File.WriteAllText(Path.Combine(directory, "settings.json"), settings.ToJsonString(Settings));
+    }
+
+    /// <summary>
+    /// Nothing: this host's ends are read as they always were, an exit without a report, which a repeat may get past.
+    /// </summary>
+    public string? Unavailable(int exitCode, string? stderrTail) => null;
 
     /// <summary>
     /// The host's own name for a tool, which is the whole rule and carries no pattern: the allow of a granted tool and

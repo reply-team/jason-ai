@@ -76,8 +76,9 @@ is refreshed on its own cadence, so it is the verb this pack is meant to be kept
 
 A person without this build installs a skill by copying its directory into wherever their own agent host looks
 for skills: for Claude Code that is `~/.claude/skills/<name>/` for themselves, or `.claude/skills/<name>/`
-inside a project. The directory name is the skill's name and the two must match — a skill whose front matter
-names anything else is loaded by nobody and reported by nobody.
+inside a project; the [host matrix](../../docs/execution-profiles.md#12-the-hosts) lists the others. The directory
+name is the skill's name and the two must match — a skill whose front matter names anything else is loaded by
+nobody and reported by nobody.
 
 This repository also offers both packs to a harness through the **skills marketplace** at
 [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json), which is a different thing from

@@ -138,8 +138,8 @@ These are the rules both verbs keep:
 
 Copying still works, and is what somebody without this build does: put a skill's directory wherever
 your agent host looks for skills — for Claude Code, `~/.claude/skills/<name>/` for yourself or
-`.claude/skills/<name>/` inside a project. Nothing records that you did, so `jason status` will not
-report it and no uninstall will remove it.
+`.claude/skills/<name>/` inside a project; the [host matrix](../docs/execution-profiles.md#12-the-hosts) lists the
+others. Nothing records that you did, so `jason status` will not report it and no uninstall will remove it.
 
 This repository also offers both packs through the **skills marketplace** at
 [`.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json), by relative path, so a clone

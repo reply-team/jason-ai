@@ -485,15 +485,17 @@ happened, so an absent profile name is a fact rather than an inference.
 
 An agent attempt's `provenance.agent` is written at the claim and never rewritten: the level that chose the
 profile, its id, name and revision, the revision it inherited where lineage chose, the host, the program, the
-whole argument list as launched, the host version the profile was verified against, the session id, and
-`tools` — the tools that revision granted, in the API's words and empty where it granted none, beside the
-revision they came from. A launch the machine refused keeps as much of it as the claim had decided, the grant
+whole argument list as launched, the host version the profile was verified against, the session id where the host
+takes one from the runtime, and `tools` — the tools that revision granted, in the API's words and empty where it
+granted none, beside the revision they came from. A launch the machine refused keeps as much of it as the claim had decided, the grant
 included. An attempt run by a role's own entry command names no profile and no grant.
 
 ### The agent pre-flight, in the order it is checked
 
-Every one of these is decided **before a child process exists**, and the first that fails is the one
-the attempt records. The attempt is kept either way, with the context it was claimed with and the
+Every one of these is decided **before a child process exists**, except `host_not_available` where a host that ran
+answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no
+byte of what the host wrote, where the host's row in [execution-profiles.md §12](execution-profiles.md#12-the-hosts)
+names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
 existed. It is the same rule the twenty provider checks follow.
@@ -503,7 +505,7 @@ existed. It is the same rule the twenty provider checks follow.
 | 1 | `lineage_resolution_unsupported` | a run created this work and no profile can be inherited from it. Name one on the item, its campaign or its role |
 | 2 | `profile_not_found` | the profile a level named does not exist. The message says which level named it |
 | 3 | `profile_disabled` | it exists and is out of service. Enable it, or name another |
-| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret. Install it, or point the profile at the program itself |
+| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret. Install it, or point the profile at the program itself. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
 | 5 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
 | 5 | `role_skill_unreadable` | the role's skill was being replaced by a deployment and could not be read consistently while this launch waited |
 | 6 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |
@@ -637,14 +639,14 @@ lives in the runtime's store at all — is in the role-notes section of
 harness root, of the campaign's project and of the campaign ([projects.md](projects.md) says where they
 are kept) — and never their words, for the reason `role_memory` is an address. The host reads them by
 path; the runtime never reads one. **The rules let a launched role read exactly the files `memory_files`
-names, and nothing else outside its work directory**: a profile on the `claude_code` host is composed with
-one read rule per path that is not null, naming that file and never its folder
-([execution-profiles.md](execution-profiles.md) §7 gives the form, and the paths that get no rule because the
-host would read them as a pattern or split them at a parenthesis; the envelope still names such a path, and the
-role's read of it is refused). Which paths are given follows one rule: a path is given when Jason
-knows the folder is its own — the recorded `folder_path` for a project and a campaign, the root marker
-for the root, which no record holds; no existence check on a recorded path, a stale one is the host's to
-find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
+names, and nothing else outside its work directory**: each host holds this rule in its own form
+([execution-profiles.md](execution-profiles.md) §12 and the host's own section). On the `claude_code` host a
+profile is composed with one read rule per path that is not null, naming that file and never its folder (§7 there
+gives the form, and the paths that get no rule because the host would read them as a pattern or split them at a
+parenthesis; the envelope still names such a path, and the role's read of it is refused). Which paths are given
+follows one rule: a path is given when Jason knows the folder is its own — the recorded `folder_path` for a
+project and a campaign, the root marker for the root, which no record holds; no existence check on a recorded
+path, a stale one is the host's to find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
 reading order is the skill's, never the runtime's. A level whose folder Jason does not know is null: a
 project or a campaign with no folder recorded, a root that is not there or carries no root marker at
 the claim. Each path is absolute, as the platform writes it. The paths are decided **once, at the claim**,
@@ -675,9 +677,10 @@ it is told the same, because the wait it follows is still the last one.
 
 A role reads `resumption` the way it reads the rest of the envelope, because it is part of it: no new
 channel, no second message. The command that runs `ai_role` work writes the whole envelope to the
-child's standard input and composes no prompt from its parts; on the `claude_code` host, which runs in
-print mode, that standard input is the prompt, so the role's first input says whether it was woken and
-why. A host that composes a prompt from the envelope's parts composes `resumption` with them.
+child's standard input and composes no prompt from its parts, on every host. On a host that reads its
+prompt from standard input — `claude_code`, which runs in print mode, and each host §12 marks so — that
+standard input is the prompt, so the role's first input says whether it was woken and why. On every host
+`resumption` reaches the role inside that envelope, beside every other field, never in a prompt Jason composed.
 
 Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
 version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, and `resumption` to
@@ -1118,8 +1121,8 @@ item is. [docs/campaign-manager.md](campaign-manager.md) §7 has the three cases
   as a pointer ([notifications.md](notifications.md)); pull is still the floor: a person finds out what is
   waiting, and decides, by asking (`jason approval list`). What exists is the gate itself, below.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.
-  The session id is minted per attempt and recorded, which is what a nudge would need, but nothing
-  uses it yet.
+  The session id is minted per attempt and recorded where the host takes one, which is what a nudge would
+  need, but nothing uses it yet.
 - **Anything above one hop.** Lineage is materialized once, from the run that created the item. There
   is no resolver walking a graph, and no branch selection.
 - **Backoff.** The retry delay is linear in the failure count; the tick and the one-item-per-campaign

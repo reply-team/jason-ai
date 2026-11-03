@@ -382,6 +382,9 @@ public class AgentPreflightTests
             Path.Combine(campaignFolder, "AGENTS.md"));
         Assert.Equal(expected, claimed.MemoryFiles);
 
+        // The host the profile names travels with the launch, so the work directory is laid out where that host reads.
+        Assert.Equal(AgentHostKind.ClaudeCode, claimed.Agent!.Host);
+
         var recorded = Reads((await AgentOf(database, item)).Args!);
         var composed = Reads(new ClaudeCodeHost().Compose(new ExecutionProfileRevision { Program = "claude" }, ["claude"], expected).Command);
         Assert.True(recorded.Count == 3, $"The recorded command reads [{string.Join(", ", recorded)}].");

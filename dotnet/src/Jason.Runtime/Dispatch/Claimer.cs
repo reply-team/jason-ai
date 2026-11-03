@@ -199,7 +199,7 @@ public sealed class Claimer(
                     attempt.PublicId,
                     item.Campaign!.PublicId,
                     plan,
-                    agent is AgentLaunchDecision.Ready ready ? new AgentLaunch(ready.Plan.Deny, ready.Plan.CliCommand) : null,
+                    agent is AgentLaunchDecision.Ready ready ? new AgentLaunch(ready.Plan.Deny, ready.Plan.Allow, ready.Plan.CliCommand, ready.Plan.Host) : null,
                     agent switch
                     {
                         AgentLaunchDecision.Ready launched => launched.Plan.MemoryFiles,
