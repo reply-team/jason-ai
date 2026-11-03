@@ -508,8 +508,8 @@ signal Jason reads for it; a host whose row names none ends such an attempt as a
 
 One rule holds every host's tools, where a profile is written: a grant of a tool the host does not have is refused,
 naming the host and the tool; a deny of a tool the host does not have is kept as the person's word, since it holds
-anyway; a deny of a tool the host has and cannot take away is refused, naming the host; and a grant of a tool the host
-has but Jason cannot make true on it is refused, naming the host. The `Tools` column is each host's table of the
+anyway; a deny of a tool the host has and cannot take away is refused, naming the host; and a grant of a tool
+Jason cannot make true on the host, one the host has but documents no rule for included, is refused, naming the host. The `Tools` column is each host's table of the
 `tools` vocabulary, so the reason for a refusal can be read there. A host may also refuse arguments its own parser reads
 otherwise than the runtime composed them, naming the host, beside the flags it reserves.
 

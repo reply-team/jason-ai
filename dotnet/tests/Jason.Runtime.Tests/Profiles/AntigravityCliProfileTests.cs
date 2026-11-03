@@ -31,6 +31,10 @@ public class AntigravityCliProfileTests
         Assert.Equal(("tools[0]", "invalid"), (detail.Field, detail.Code));
         Assert.Contains("antigravity_cli", detail.Message, StringComparison.Ordinal);
         Assert.Contains(tool, detail.Message, StringComparison.Ordinal);
+
+        // A search has no rule in the host's table, so the refusal says what Jason cannot do on the host and claims nothing
+        // about whether the host has the tool.
+        Assert.Contains($"grants {tool}, which Jason cannot make true on antigravity_cli: ", detail.Message, StringComparison.Ordinal);
     }
 
     [Fact]

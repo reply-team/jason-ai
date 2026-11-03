@@ -378,7 +378,7 @@ internal static partial class ProfileValidation
             var name = SnakeCaseEnumConverter<AgentTool>.Format(tool);
             if (host.GrantProblem(tool) is { } untrue)
             {
-                errors.Add(field, "invalid", $"{toolsOwner}{field} grants {name}, which {word} has and Jason cannot make true on it: {untrue}");
+                errors.Add(field, "invalid", $"{toolsOwner}{field} grants {name}, which Jason cannot make true on {word}: {untrue}");
             }
             else if (host.ToolRule(tool) is null)
             {
