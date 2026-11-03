@@ -17,7 +17,8 @@ public class ProfileClaudeCodeArgsTests
     [InlineData("-fp")]
     [InlineData("-rhttp://x")]
     [InlineData("-")]
-    public async Task A_short_flag_cluster_a_short_flag_with_a_joined_value_and_a_lone_dash_are_refused_at_create_and_at_update(string word)
+    [InlineData("--")]
+    public async Task A_short_flag_cluster_a_short_flag_with_a_joined_value_a_lone_dash_and_a_double_dash_are_refused_at_create_and_at_update(string word)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
 
@@ -39,6 +40,25 @@ public class ProfileClaudeCodeArgsTests
             Ct);
         var updatedDetail = Assert.Single(updated.Details!);
         Assert.Equal(("args", "invalid"), (updatedDetail.Field, updatedDetail.Code));
+    }
+
+    /// <summary>A profile written before the rule has a flag and its value as two tokens: it still validates, at create and at an update.</summary>
+    [Fact]
+    public async Task A_flag_and_its_value_as_two_tokens_still_validate_at_create_and_at_update()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "two-tokens", host = "claude_code", program = "claude", args = new[] { "--model", "opus" } },
+            Ct);
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate,
+            new { name = "two-tokens", args = new[] { "--model", "sonnet" } },
+            Ct);
+
+        Assert.Equal(["--model", "opus"], created.Revision.Args);
+        Assert.Equal(["--model", "sonnet"], updated.Revision.Args);
     }
 
     /// <summary>A short flag that is not reserved, a long flag with its value joined, and a long flag beside its value are as they were.</summary>

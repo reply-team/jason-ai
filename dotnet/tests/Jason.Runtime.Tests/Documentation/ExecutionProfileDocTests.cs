@@ -483,14 +483,14 @@ public partial class ExecutionProfileDocTests
 
     /// <summary>The profile's fields say what an argument may not be, for the host that ships as for the others: a short flag stands alone.</summary>
     [Fact]
-    public void The_args_field_says_a_short_flag_stands_alone_and_a_lone_dash_is_refused()
+    public void The_args_field_says_a_short_flag_stands_alone_and_a_lone_or_double_dash_is_refused()
     {
         var page = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
         var row = page[page.IndexOf("| `args` |", StringComparison.Ordinal)..];
         row = row[..row.IndexOf(" | `deny` |", StringComparison.Ordinal)];
 
         Assert.Contains("a short flag stands alone", row, StringComparison.Ordinal);
-        Assert.Contains("a short flag with more letters or a value after it, and a lone dash, are refused", row, StringComparison.Ordinal);
+        Assert.Contains("a short flag with more letters or a value after it, a lone dash and a double dash are refused", row, StringComparison.Ordinal);
     }
 
     /// <summary>
