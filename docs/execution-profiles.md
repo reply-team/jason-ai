@@ -492,7 +492,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against | Tools | Reads a memory file by | Takes the brief |
 |---|---|---|---|---|---|---|---|---|---|
 | Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) | one `Read(//…/AGENTS.md)` rule per file, on its command line (§7) | as its prompt, on standard input, in print mode (`-p`) |
-| Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| Codex CLI | `codex` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | On Windows, first: Codex's elevated sandbox must be set up once by an administrator ([setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a role runs is refused and the attempt fails by the role's report. Commands are not confined by name: any program a role can read runs, inside the sandbox. Holding the network to loopback rests on Codex's network proxy, an experimental feature in 0.166.0. On Windows, the elevated sandbox may let a role read more than the list. The person's global `AGENTS.md` and their skills reach every Codex role. Whether `jason` reaches the runtime from inside the sandbox is not yet checked on Linux, macOS or Windows. Built from the host's documentation and source for 0.166.0, npm's current release; measured on Windows with the CLI the Codex app bundles, 0.166.0-alpha.5.1; not yet run on an account ([Codex CLI](#codex-cli)) | `web_search` as `WebSearch`: granted as a live search, denied by that word; `web_fetch`: not on this host, so a grant is refused and a deny holds anyway | one `"<path>"="read"` entry per file in the permissions profile on its command line (`-c permissions.jason.filesystem=…`), 0.166.0 | as its prompt, on standard input, with no prompt word on the command line (`codex exec`: instructions are read from stdin when none is given, 0.166.0) |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | `GEMINI.md` (`@AGENTS.md`) | yes | built from the host's documentation and source for version 0.66.0; not yet run on an account (notes below) | `web_search` as `google_web_search`, `web_fetch` as `web_fetch`: each granted by an allow rule of the policy file and denied by a deny rule of it (notes below) | one `--include-directories` folder for each level the launch names, the host reads that folder whole, and the client level's folder is the harness root (notes below) | as its prompt, on standard input, with no prompt flag, in a non-interactive run |
 | Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
@@ -517,6 +517,68 @@ A host that reads its allow rules from the work directory rather than its comman
 deny rules — the command word that calls the runtime back and the memory files' paths, never the capability token or
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
+
+### Codex CLI
+
+Install the CLI (`npm install -g @openai/codex`), sign in to it yourself with `codex login`, then name it in a profile:
+`jason profile create local-codex --host codex --program codex`. Jason never signs in for you, and never looks for the
+copy of the CLI the Codex app carries.
+
+A launched role runs `codex exec` and reads its brief on stdin. None of the person's own configuration reaches it
+(`--ignore-user-config`), nor their command rules (`--ignore-rules`), hooks, plugins, apps, memories or MCP servers, and
+a setting the host does not know fails the start (`--strict-config`). Codex confines a role by a sandbox rather than by
+a list of commands: the runtime names a permissions profile of its own on the command line, and every command the role
+runs is held by it, whatever its name.
+
+**On Windows, first:** Codex's elevated sandbox must be set up once by an administrator
+([Codex's Windows sandbox setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a
+role runs is refused and the attempt fails by the role's report. Every Windows run names that sandbox
+(`windows.sandbox="elevated"`) rather than leaving it to the person's configuration: `--ignore-user-config` drops the
+person's own choice, and with none named Codex runs a command with no sandbox at all. Measured with 0.166.0-alpha.5.1,
+the sandbox that needs no administrator refused every command of this profile, since it reads the whole disk or nothing
+and cannot hold the network to loopback.
+
+**What a role may read.** The platform's libraries, the work directory, the `jason` executable — the one file a
+single-file build is, as a release is, or the folder of any other build — the folder that build unpacked its libraries
+into (where it names none, the base a build unpacks under: `.net` in the home, and on Windows in the temporary folder),
+`<data>/run`, where the CLI finds the runtime, and each memory file the launch names. A memory file whose path holds a
+character the sandbox reads as a pattern (`* ? [ ] { }`) is left unreadable. Where `<data>/run`, the executable or its
+unpack folder holds one, a role could not call the runtime back, so the claim refuses the work with
+`host_not_available`, naming the path, before a child exists. A path the profile denies reading is denied, even one
+this list names: a deny wins over a read. On Windows, whether the elevated
+sandbox reads only this list is not yet checked; Codex documents the paths it denies there rather than a list of the
+paths it reads, so a role may read more than this list. What no flag reaches: Codex reads its own global `AGENTS.md`
+(in `~/.codex`, or `$CODEX_HOME`) for every run, so that file reaches every Codex role and should carry nothing a role
+must not read. Codex offers every role the skills in `~/.agents/skills`, in `$CODEX_HOME/skills` and in its own system
+cache too, beside the role's own, even with `--ignore-user-config`: `jason skills install` deploys the runtime and
+business skills to `~/.agents/skills`, so every Codex role is offered those and any skill the person keeps there.
+
+**Calling home.** The role runs `jason` in its shell, and the CLI reaches the runtime on loopback. The sandbox's network
+is on with loopback allowed, and every other address is kept out by Codex's network proxy, an experimental feature in
+0.166.0. On Linux, whether `jason` reaches the runtime from inside the sandbox is not yet checked; the sandbox may route
+loopback through its proxy, which the CLI does not use. On macOS, whether `jason` reaches the runtime from inside the
+sandbox is not yet checked. On Windows, whether `jason` reaches the runtime from inside the elevated sandbox is not yet
+checked.
+
+**What a deny means.** Nothing is writable, so `Write`, `Edit`, `MultiEdit` and `NotebookEdit` hold already. `WebSearch`
+turns the search off, even where `tools` grants it. `Read(//…)`, `Read(//d/…)` on Windows and `Read(~/…)` deny that
+path in the sandbox; a `Read` of any other form names no path the sandbox can hold, and is refused. `WebFetch` holds
+already, since Codex has no tool that fetches a page and the network reaches loopback alone, and is kept as written.
+Codex reads no rule by any other word: it confines a run by its sandbox, not by a list of tools. So a deny of a command
+by its name (`Bash(…)`, `PowerShell(…)`, `Shell(…)`), of a tool Codex does not have (`Glob`, `Grep`, `Task`), of an MCP
+tool or of a fetch of one domain (`WebFetch(domain:…)`) is refused when the profile is written or moved to Codex, naming
+the host and the word, rather than dropped at a launch. Commands are not confined by name either: any program the role
+can read runs, inside the same sandbox. A grant of `web_fetch` is refused because Codex has no tool that fetches a page.
+
+**Arguments.** A profile's `args` are flags, each value joined to its flag by `=` (`--model=<name>`): Codex reads a bare
+word as the prompt, which would replace the brief, or as a subcommand, and takes a short flag one letter at a time, so
+letters run together or a value glued on without `=` (`-ms`, `-mo3`) are refused. `-c` is the runtime's alone, since one
+setting after the runtime's could replace any of them; the model is the person's. A flag the runtime composes is
+refused by every name Codex's parser gives it, including the ones its help never prints, such as `--yolo`.
+
+**What an attempt records.** Codex mints the id of its own run and takes none, so the attempt records none; the id Codex
+printed is in the attempt's `stdout.log`. An end without a report is read as any other end: Codex says nothing stable
+about a missing sign-in.
 
 ### Gemini CLI
 

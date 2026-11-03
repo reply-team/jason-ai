@@ -56,6 +56,10 @@ public static class AgentHosts
     [
         new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile), HomeMarkerKind.Directory),
 
+        // Codex keeps its sign-in and settings in ~/.codex and reads skills from ~/.agents/skills and from the
+        // .agents/skills folder of the directory it runs in; it reads AGENTS.md itself, so it needs no import file.
+        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory),
+
         // Gemini CLI, from its documentation and source at 0.66.0. The marker is the settings file the host keeps in its own
         // folder: that folder is also where Antigravity keeps files of its own, so the folder alone would detect Gemini CLI
         // on every Antigravity install, where this file is written by Gemini CLI only.

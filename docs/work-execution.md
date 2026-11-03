@@ -526,9 +526,11 @@ of file regardless — a pipe nobody empties blocks the child writing into it. A
 changes an outcome: the runtime reads no result from standard output, only from `workitem.set_result`
 and `workitem.complete`.
 
-The launcher puts two things in that directory before the child starts:
+The launcher puts in that directory, before the child starts, the files the host's row of section 12 names
+([execution-profiles.md](execution-profiles.md#12-the-hosts)), and nothing else: the host's settings for the attempt,
+where the host reads them from its work directory rather than its command line, and the role's skill.
 
-- `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt,
+- The settings, on the `claude_code` host `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt,
   a deny of each web tool its revision does not grant ([execution-profiles.md](execution-profiles.md) §7),
   and three exclusions, `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]`,
   and nothing else: **a launched role loads no `CLAUDE.md`, no rules file and no `AGENTS.md` of the
@@ -544,7 +546,8 @@ The launcher puts two things in that directory before the child starts:
   role reached for the mode refused everything but reading in the work directory, the files the rules
   name and what the host counts as read-only, so what the allow rules grant is a floor and not a ceiling;
   and the role has no file-writing tool at all).
-- `.claude/skills/<role>/`, a copy of `~/.jason/skills/roles/<role>/` when the role has one. Files
+- The role's skill, a copy of `~/.jason/skills/roles/<role>/` when the role has one, in the folder that row names
+  (`.claude/skills/<role>/` on `claude_code`). Files
   only; a link is neither copied nor followed. A skill that cannot be given to the role fails the
   attempt with `role_skill_invalid` before the child starts — because its `SKILL.md` is a link, cannot
   be read, gives itself no name or names something other than the role, which a host answers by

@@ -78,6 +78,13 @@ public interface IAgentHost
     IReadOnlyDictionary<string, string> Environment => EmptyEnvironment.Value;
 
     /// <summary>
+    /// Why this host cannot start a run from where this installation stands, or null where it can: a fact about the
+    /// machine, not the profile, which the claim decides before a child exists and records as the attempt's error. A
+    /// sentence of the host's own that names the path it cannot use, never the host's own message about it.
+    /// </summary>
+    string? LaunchProblem() => null;
+
+    /// <summary>
     /// The command one attempt of <paramref name="revision"/> is started with. Called once per attempt: the
     /// session it names is minted here and belongs to that attempt alone.
     /// </summary>
