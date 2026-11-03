@@ -242,7 +242,7 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         if (isTheLauncher)
         {
             return $"{named}, which this machine cannot start: it is not installed, or nothing was found to start. "
-                + "This host is installed as a launcher script, and Jason starts what that script starts, a node.exe and an index.js in its newest version directory, never the script itself. "
+                + "This host is installed as a launcher script, and Jason starts what that script starts, a node.exe and an index.js beside it, or in its newest version directory, never the script itself. "
                 + $"If it is installed, name the launcher by its full path in the profile: --program <full path of {launcher}>, "
                 + "which also starts an installation the search path of this runtime does not reach.";
         }

@@ -420,6 +420,9 @@ public class AgentPreflightTests
         Assert.Contains(System.IO.Path.Combine(root, "agent.cmd"), stored.LastError.Message, StringComparison.Ordinal);
         Assert.Contains("--program", stored.LastError.Message, StringComparison.Ordinal);
         Assert.Contains("agent.cmd", stored.LastError.Message, StringComparison.Ordinal);
+
+        // The pair is read beside the launcher first and then in its newest version directory, and the sentence says both.
+        Assert.Contains("a node.exe and an index.js beside it, or in its newest version directory", stored.LastError.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
