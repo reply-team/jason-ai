@@ -605,6 +605,9 @@ public partial class ExecutionProfileDocTests
             Assert.Contains(Sentence, contract, StringComparison.Ordinal);
             Assert.Contains("never a secret and never a value taken from a person", contract, StringComparison.Ordinal);
             Assert.DoesNotContain("four values and not one more", contract, StringComparison.Ordinal);
+
+            // A count of the hosts that declare one goes stale with the next host; the page points at each host's row instead.
+            Assert.DoesNotContain("Today one host declares", contract, StringComparison.Ordinal);
         }
 
         var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");

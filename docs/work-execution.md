@@ -567,8 +567,10 @@ Its environment is the runtime's own plus the runtime's four and the constants a
   `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
 
 A host's constants are added after the four and are the same for every attempt of that host. None is named as one of
-the four or starts with `JASON_`, and a host that declares such a name is refused when the child is made. Today one
-host declares any: Gemini CLI, `NO_BROWSER=true`, so a signed-out run fails at once instead of waiting for a person.
+the four or starts with `JASON_`, and a host that declares such a name is refused when the child is made. A host
+that declares constants names each one in its row of the host table in
+[execution-profiles.md](execution-profiles.md#12-the-hosts); Gemini CLI's, for one, keep a signed-out run from waiting
+for a person.
 
 One value is taken away: `JASON_UPDATE_LAUNCH`, the mark an update puts on its own start of the runtime
 ([release-and-update.md](release-and-update.md#when-it-stops-halfway)). The runtime drops it from its own
