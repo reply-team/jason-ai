@@ -374,12 +374,11 @@ public partial class ExecutionProfileDocTests
     /// <summary>
     /// The host matrix has one home, §12, and it is held to the table the CLI and the runtime both read: every host this
     /// build knows has a row that says yes, with the skills root, the work directory's folder and the import file the
-    /// table names; and a row for a host this build does not know yet says so, in the words a profile naming it meets.
+    /// table names.
     /// </summary>
     [Fact]
     public void The_host_matrix_has_a_row_for_every_host_this_build_knows_with_the_tables_folders()
     {
-        const string NotYet = "not in this build yet: a profile naming it is refused";
         var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
         var at = page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal);
         Assert.True(at > 0, "execution-profiles.md has no section '12. The hosts'.");
@@ -404,16 +403,11 @@ public partial class ExecutionProfileDocTests
             Assert.Equal(facts.Instructions is { } file ? $"`{file.FileName}` (`{file.ImportLine}`)" : "—", row[4]);
             Assert.Equal("yes", row[5]);
         }
-
-        Assert.All(
-            rows.Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is null),
-            row => Assert.Equal(NotYet, row[5]));
     }
 
     /// <summary>
     /// The matrix carries each host's tool table, so a person can read why a grant or a deny was refused: for every host
-    /// this build registers, each tool the host has a rule for is named with that rule, in the host's own word; a row for
-    /// a host this build does not know yet has none.
+    /// this build registers, each tool the host has a rule for is named with that rule, in the host's own word.
     /// </summary>
     [Fact]
     public void The_host_matrix_names_each_registered_hosts_rule_for_every_tool_it_has()
@@ -441,16 +435,12 @@ public partial class ExecutionProfileDocTests
                 }
             }
         }
-
-        Assert.All(
-            rows.Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is null),
-            row => Assert.Equal("—", row[7]));
     }
 
     /// <summary>
     /// What holds for every host is said once, in the work-execution contract, and each host's own form of it in its
     /// row of the matrix: how a launched role is let read a memory file, and how the brief on standard input reaches the
-    /// host. A row of a host this build registers names both; a row of a host it does not know yet names neither; and
+    /// host. A row of a host this build registers names both; and
     /// the contract states each rule for every host, with Claude Code's form as its example.
     /// </summary>
     [Fact]
@@ -470,11 +460,7 @@ public partial class ExecutionProfileDocTests
             .TakeWhile(line => line.StartsWith('|'))
             .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
             .ToList();
-        Assert.All(rows, row =>
-        {
-            var known = Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is not null;
-            Assert.All(row[8..], cell => Assert.Equal(!known, cell == "—"));
-        });
+        Assert.All(rows, row => Assert.All(row[8..], cell => Assert.NotEqual("—", cell)));
 
         // A host that frames the envelope says so in its own row, where it takes the brief.
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
