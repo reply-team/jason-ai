@@ -150,6 +150,16 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
                 Chosen(launch));
         }
 
+        // Where this installation stands is a machine fact too: a host that could not name its own folders to its
+        // sandbox refuses here, saying which folder, rather than through a child that cannot call the runtime back.
+        if (host.LaunchProblem() is { } problem)
+        {
+            return new AgentLaunchDecision.Refused(
+                AttemptErrors.HostNotAvailable,
+                $"The execution profile '{launch.Profile.Name}' cannot start here: {problem}",
+                Chosen(launch));
+        }
+
         var composed = host.Compose(revision, startedAs, memoryFiles);
         var provenance = new AgentProvenanceDto(
             launch.Source,
