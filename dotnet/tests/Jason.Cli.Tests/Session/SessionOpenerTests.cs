@@ -339,7 +339,7 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows has npm's cmd shim.");
         _run.Preference = "{\"host\":\"gemini_cli\"}";
         _run.Programs.Add("node.exe", executable: true);
-        var shim = _run.Programs.Add("gemini.cmd", TestPrograms.NpmShim(@"@vendor\gemini-cli", @"dist\index.js"));
+        var shim = _run.Programs.Add("gemini.cmd", TestPrograms.NpmShim("..", @"dist\index.js"));
 
         var exit = await _run.Cli("session", "open", "--approval", "apr_1");
 
@@ -349,7 +349,9 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.DoesNotContain("is not on this machine's search path", said, StringComparison.Ordinal);
         Assert.Contains("gemini_cli's program 'gemini' resolves only to ", said, StringComparison.Ordinal);
         Assert.Contains(Path.GetFileName(shim), said, StringComparison.Ordinal);
-        Assert.Contains("which names a scoped package, and only a package one directory under node_modules is read, so nothing was started", said, StringComparison.Ordinal);
+
+        // A shim whose package climbs out of node_modules is refused by a rule that stays, whatever else becomes readable.
+        Assert.Contains("which names a package whose name is not one npm could have written, so nothing was started", said, StringComparison.Ordinal);
         Assert.Contains("jason approval get apr_1 --prompt", said, StringComparison.Ordinal);
     }
 
