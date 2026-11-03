@@ -7,9 +7,10 @@ namespace Jason.Cli.Commands;
 
 /// <summary>
 /// The <c>preference</c> verb group: one verb per preference operation. A preference is a person's word about their
-/// business — who messages are written as, how the company sounds — so <c>set</c> and <c>unset</c> name the person with
-/// <c>--actor human:&lt;name&gt;</c>, and the runtime refuses anyone else. What a value must hold is the key's document's
-/// to say: this verb sends the value as it was written and checks only that it is one JSON object.
+/// business — who messages are written as, how the company sounds, which agent host <c>jason session open</c> starts —
+/// so <c>set</c> and <c>unset</c> name the person with <c>--actor human:&lt;name&gt;</c>, and the runtime refuses anyone
+/// else. What a value must hold is the key's document's to say: this verb sends the value as it was written and checks
+/// only that it is one JSON object.
 /// </summary>
 public static class PreferenceCommands
 {
@@ -18,7 +19,7 @@ public static class PreferenceCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var preference = new Command("preference", "The client's named preferences — who messages are written as, how the company sounds: set, unset and list them.");
+        var preference = new Command("preference", "The client's named preferences — who messages are written as, how the company sounds, which agent host jason session open starts: set, unset and list them.");
         preference.Subcommands.Add(Set(env, actor));
         preference.Subcommands.Add(Unset(env, actor));
         preference.Subcommands.Add(List(env, actor));
