@@ -481,6 +481,18 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
     }
 
+    /// <summary>The profile's fields say what an argument may not be, for the host that ships as for the others: a short flag stands alone.</summary>
+    [Fact]
+    public void The_args_field_says_a_short_flag_stands_alone_and_a_lone_dash_is_refused()
+    {
+        var page = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var row = page[page.IndexOf("| `args` |", StringComparison.Ordinal)..];
+        row = row[..row.IndexOf(" | `deny` |", StringComparison.Ordinal)];
+
+        Assert.Contains("a short flag stands alone", row, StringComparison.Ordinal);
+        Assert.Contains("a short flag with more letters or a value after it, and a lone dash, are refused", row, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// What a person relying on the Cursor CLI host is told, as the page's notes say it: that the person's own
     /// configuration can allow more than Jason does and Jason cannot narrow it, that the union of the layers holds for
