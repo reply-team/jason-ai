@@ -321,7 +321,8 @@ public sealed class CodexHost(
     /// The sandbox's filesystem entries, in order and each path once: what the host itself needs to start, the work
     /// directory, what calling home reads, each memory file the launch names, and last each path the profile denies
     /// reading. A deny wins over a read: a denied path the run would otherwise read is denied in the read's place, never
-    /// dropped beside it.
+    /// dropped beside it. On Windows every path is written in the form a deny's is, an upper-case drive and forward
+    /// slashes, whichever way the platform spelled it, so a read and a deny of one file are one key.
     /// </summary>
     private (List<(string Path, string Access)> Entries, List<string> Unreadable) FileSystem(
         ExecutionProfileRevision revision, MemoryFileLocations memoryFiles)
@@ -334,6 +335,7 @@ public sealed class CodexHost(
                 return;
             }
 
+            path = Form(path);
             var at = entries.FindIndex(entry => string.Equals(entry.Path, path, StringComparison.Ordinal));
             if (at < 0)
             {
@@ -375,6 +377,23 @@ public sealed class CodexHost(
         }
 
         return (entries, unreadable);
+    }
+
+    /// <summary>
+    /// A path in the one form a Windows deny is written in: forward slashes, and a drive letter in upper case. A path of
+    /// the host's own special roots (<c>:minimal</c>) and every path off Windows is as it was given.
+    /// </summary>
+    private string Form(string path)
+    {
+        if (!windows || path.StartsWith(':'))
+        {
+            return path;
+        }
+
+        var slashes = path.Replace('\\', '/');
+        return slashes.Length >= 2 && char.IsAsciiLetter(slashes[0]) && slashes[1] == ':'
+            ? char.ToUpperInvariant(slashes[0]) + slashes[1..]
+            : slashes;
     }
 
     /// <summary>

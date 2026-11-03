@@ -505,7 +505,7 @@ existed. It is the same rule the twenty provider checks follow.
 | 1 | `lineage_resolution_unsupported` | a run created this work and no profile can be inherited from it. Name one on the item, its campaign or its role |
 | 2 | `profile_not_found` | the profile a level named does not exist. The message says which level named it |
 | 3 | `profile_disabled` | it exists and is out of service. Enable it, or name another |
-| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret. Install it, or point the profile at the program itself. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
+| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret; or the host refuses to start here by its own check of the machine (a folder its sandbox needs, a policy folder it would read), or names a host this build does not register, or has an installation that could not be read. Install it, or point the profile at the program itself, or follow what the sentence names. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
 | 5 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
 | 5 | `role_skill_unreadable` | the role's skill was being replaced by a deployment and could not be read consistently while this launch waited |
 | 6 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |

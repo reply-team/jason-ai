@@ -420,6 +420,9 @@ public class AgentPreflightTests
         Assert.Contains(System.IO.Path.Combine(root, "agent.cmd"), stored.LastError.Message, StringComparison.Ordinal);
         Assert.Contains("--program", stored.LastError.Message, StringComparison.Ordinal);
         Assert.Contains("agent.cmd", stored.LastError.Message, StringComparison.Ordinal);
+
+        // The pair is read beside the launcher first and then in its newest version directory, and the sentence says both.
+        Assert.Contains("a node.exe and an index.js beside it, or in its newest version directory", stored.LastError.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -490,6 +493,55 @@ public class AgentPreflightTests
         Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
         Assert.Contains("launcher script", stored.LastError.Message, StringComparison.Ordinal);
         Assert.Contains("--program", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A host's reading of the machine for its own launch (a folder of policies, say) is the host's code too, and an
+    /// exception out of it never leaves the claim either: the item ends as it does when the install cannot be read, in the
+    /// same fixed sentence with no word of the exception.
+    /// </summary>
+    [Fact]
+    public async Task A_host_whose_launch_check_throws_fails_its_own_item_with_the_fixed_sentence()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new ThrowingLaunchProblemHost()]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "house", "claude");
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "house");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.False(stored.LastError.Retriable);
+        Assert.DoesNotContain(ThrowingLaunchProblemHost.Secret, stored.LastError.Message, StringComparison.Ordinal);
+        Assert.Contains("could not be read", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A host whose check of the machine throws, with a word in the exception that must never reach an attempt.</summary>
+    private sealed class ThrowingLaunchProblemHost : IAgentHost
+    {
+        public const string Secret = "the-launch-exception-text-that-names-a-folder";
+
+        private readonly ClaudeCodeHost _inner = new();
+
+        public AgentHostKind Kind => _inner.Kind;
+
+        public IReadOnlySet<string> ReservedFlags => _inner.ReservedFlags;
+
+        public string? ToolRule(AgentTool tool) => _inner.ToolRule(tool);
+
+        public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles) =>
+            _inner.Compose(revision, launch, memoryFiles);
+
+        public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny) =>
+            _inner.WriteWorkDirectory(workDir, allow, deny);
+
+        public string? Unavailable(int exitCode, string? stderrTail) => null;
+
+        public string? LaunchProblem() => throw new IOException(Secret);
     }
 
     /// <summary>A host whose reading of its own install throws, with a word in the exception that must never reach an attempt.</summary>

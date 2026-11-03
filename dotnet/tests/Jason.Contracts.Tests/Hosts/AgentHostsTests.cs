@@ -102,6 +102,42 @@ public class AgentHostsTests
     }
 
     /// <summary>
+    /// GitHub Copilot CLI is detected by the config file it keeps in its own folder, reads the shared skills folder and
+    /// reads <c>AGENTS.md</c> itself, so it needs no import file.
+    /// </summary>
+    [Fact]
+    public void Copilot_cli_is_detected_by_its_config_file_and_reads_the_memory_file_itself()
+    {
+        var facts = AgentHosts.Of(AgentHostKind.CopilotCli);
+
+        Assert.Equal("copilot_cli", AgentHosts.Word(AgentHostKind.CopilotCli));
+        Assert.Equal("copilot", facts.CommandWord);
+        Assert.Equal(".copilot/config.json", facts.HomeMarker);
+        Assert.Equal(HomeMarkerKind.File, facts.MarkerKind);
+        Assert.Equal(".agents/skills", facts.HomeSkills);
+        Assert.Equal(".agents/skills", facts.WorkSkills);
+        Assert.Null(facts.Instructions);
+    }
+
+    /// <summary>
+    /// Cursor CLI is detected by the config file it keeps in its own folder, reads the shared skills folder and reads
+    /// <c>AGENTS.md</c> itself, so it needs no import file; its command word is the host's own <c>agent</c>.
+    /// </summary>
+    [Fact]
+    public void Cursor_cli_is_detected_by_its_config_file_and_reads_the_memory_file_itself()
+    {
+        var facts = AgentHosts.Of(AgentHostKind.CursorCli);
+
+        Assert.Equal("cursor_cli", AgentHosts.Word(AgentHostKind.CursorCli));
+        Assert.Equal("agent", facts.CommandWord);
+        Assert.Equal(".cursor/cli-config.json", facts.HomeMarker);
+        Assert.Equal(HomeMarkerKind.File, facts.MarkerKind);
+        Assert.Equal(".agents/skills", facts.HomeSkills);
+        Assert.Equal(".agents/skills", facts.WorkSkills);
+        Assert.Null(facts.Instructions);
+    }
+
+    /// <summary>
     /// Gemini CLI keeps a settings file of its own under its folder, which Antigravity does not write, so the marker is
     /// that file and never the folder both keep; the skills are the shared <c>.agents/skills</c>; and the instruction file
     /// it reads is <c>GEMINI.md</c>, which imports the memory file by the host's documented <c>@file</c> form.

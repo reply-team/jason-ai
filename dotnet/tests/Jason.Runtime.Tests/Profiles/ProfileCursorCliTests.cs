@@ -33,6 +33,7 @@ public class ProfileCursorCliTests
         Assert.Equal(("tools[0]", "invalid"), (detail.Field, detail.Code));
         Assert.Contains("cursor_cli", detail.Message, StringComparison.Ordinal);
         Assert.Contains("autoAcceptWebSearch", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("grants web_search, which Jason cannot make true on cursor_cli: ", detail.Message, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -42,7 +42,7 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
     /// The sentence an end of this host becomes when it says it is not signed in. Fixed: the tail it was read from can
     /// carry the person's login or address, and this becomes the attempt's error, which the journal carries.
     /// </summary>
-    private const string NotSignedIn = "GitHub Copilot CLI is installed but not signed in; run copilot login, then retry.";
+    private const string NotSignedIn = "GitHub Copilot CLI is not signed in on this account: run `copilot login` as yourself.";
 
     /// <summary>
     /// The command the host's own startup errors recommend to a person who is not signed in. The recommendation is

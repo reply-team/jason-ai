@@ -141,8 +141,9 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         // A script is the other way to have no program: a profile stored before the rule keeps its program, and the
         // refusal names what it is rather than calling it missing.
         // A host answers what its own install starts, and its code is not the claim's: nothing it throws leaves the
-        // claim. It ends this item as a program that cannot be started does, in a sentence that carries no word of the
-        // exception, and the scan goes on to the next candidate.
+        // claim, whether it is asked to lay out a program or to check the machine for its launch. It ends this item as a
+        // program that cannot be started does, in a sentence that carries no word of the exception, and the scan goes on
+        // to the next candidate.
         IReadOnlyList<string>? resolved;
         try
         {
@@ -150,10 +151,7 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            return new AgentLaunchDecision.Refused(
-                AttemptErrors.HostNotAvailable,
-                $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', whose installation could not be read on this machine.",
-                Chosen(launch));
+            return InstallationUnreadable(launch, revision);
         }
 
         if (resolved is not { Count: > 0 } startedAs)
@@ -166,7 +164,17 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
 
         // Where this installation stands is a machine fact too: a host that could not name its own folders to its
         // sandbox refuses here, saying which folder, rather than through a child that cannot call the runtime back.
-        if (host.LaunchProblem() is { } problem)
+        string? problem;
+        try
+        {
+            problem = host.LaunchProblem();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return InstallationUnreadable(launch, revision);
+        }
+
+        if (problem is not null)
         {
             return new AgentLaunchDecision.Refused(
                 AttemptErrors.HostNotAvailable,
@@ -209,6 +217,13 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             revision.Host));
     }
 
+    /// <summary>What a host's own code throwing ends an item with: one fixed sentence, none of the exception's words.</summary>
+    private static AgentLaunchDecision.Refused InstallationUnreadable(AgentVerdict.Launch launch, ExecutionProfileRevision revision) =>
+        new(
+            AttemptErrors.HostNotAvailable,
+            $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', whose installation could not be read on this machine.",
+            Chosen(launch));
+
     /// <summary>
     /// Why a profile's program cannot be started: the script it names, the launcher script whose interpreter was not
     /// found, or nothing at all by that name. A host installed as a launcher script is told how to point at it.
@@ -227,7 +242,7 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         if (isTheLauncher)
         {
             return $"{named}, which this machine cannot start: it is not installed, or nothing was found to start. "
-                + "This host is installed as a launcher script, and Jason starts what that script starts, a node.exe and an index.js in its newest version directory, never the script itself. "
+                + "This host is installed as a launcher script, and Jason starts what that script starts, a node.exe and an index.js beside it, or in its newest version directory, never the script itself. "
                 + $"If it is installed, name the launcher by its full path in the profile: --program <full path of {launcher}>, "
                 + "which also starts an installation the search path of this runtime does not reach.";
         }

@@ -40,15 +40,18 @@ public interface IAgentHost
 
     /// <summary>
     /// The host's own name for a tool: the allow rule a launch adds for a tool the person granted, and the deny it
-    /// writes for one the revision does not grant. Null where the host does not have the tool: a grant of it is refused
-    /// where a profile is written, naming the host and the tool, and a deny of it is kept as the person's word, since it
-    /// holds anyway. A profile that grants a tool and denies it by this name is refused where it is written.
+    /// writes for one the revision does not grant. Null where Jason can write no rule for the tool, whether because the host
+    /// does not have it or because the host has it and documents no rule for it (<see cref="GrantProblem"/> and
+    /// <see cref="DenyProblem"/> say which and why): a grant of it is refused where a profile is written, naming the host
+    /// and the tool, and a deny of it is kept as the person's word unless the host has it and cannot take it away. A
+    /// profile that grants a tool and denies it by this name is refused where it is written.
     /// </summary>
     string? ToolRule(AgentTool tool);
 
     /// <summary>
-    /// Why a grant of a tool this host has is one Jason cannot make true on it — the host decides it from a setting of
-    /// the person's own, say — or null where a grant is what it says. A grant this answers for is refused where a profile
+    /// Why a grant of a tool is one Jason cannot make true on this host — the host decides it from a setting of the
+    /// person's own, or documents no rule Jason could write for it, say — or null where a grant is what it says. It is
+    /// asked of a tool whether the host has it or not, so it is where a host that has a tool and no rule for it says so. A grant this answers for is refused where a profile
     /// is written, naming the host and the tool.
     /// </summary>
     string? GrantProblem(AgentTool tool) => null;

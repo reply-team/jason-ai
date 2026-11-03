@@ -182,7 +182,7 @@ public class ProfileHostRulesTests
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("tools[0]", "invalid"), (detail.Field, detail.Code));
-        Assert.StartsWith("the profile's tools[0] grants web_search, which claude_code has and Jason cannot make true on it", detail.Message, StringComparison.Ordinal);
+        Assert.StartsWith("the profile's tools[0] grants web_search, which Jason cannot make true on claude_code", detail.Message, StringComparison.Ordinal);
         Assert.Contains(RuleHost.Why, detail.Message, StringComparison.Ordinal);
     }
 

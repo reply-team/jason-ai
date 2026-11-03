@@ -32,7 +32,7 @@ A revision holds:
 |---|---|
 | `host` | which host this describes. A closed vocabulary — the `host` column of [§12](#12-the-hosts). An unknown value is refused when the profile is written, never discovered at launch |
 | `program` | what to start: an absolute path, or a name resolved on `PATH`. A `.cmd`, `.bat` or `.ps1`, in any case, is a script a shell would have to interpret and is refused when the profile is written with `shell_script`: Jason starts programs, never shells. The path is read as the operating system reads it, so a name Windows trims back to a script, such as `claude.cmd.`, is refused too. A profile stored before the rule keeps its program, and the claim refuses such a program with `host_not_available` before a child exists. A bare name without the extension is looked up on the search path (on Windows as an `.exe`, a `.com` or npm's own shim) |
-| `args` | what this profile adds after the arguments the runtime composes. A host's parser reads a short flag with more letters or a value after it as several flags, or as a flag and its value, and a lone dash as the prompt, so a short flag stands alone: a short flag with more letters or a value after it, a lone dash and a double dash are refused when the profile is written, naming the host, on every host |
+| `args` | what this profile adds after the arguments the runtime composes. A host's parser reads a short flag with more letters or a value after it as several flags, or as a flag and its value, and a lone dash as the prompt, so a short flag stands alone: a short flag with more letters or a value after it, a lone dash and a double dash are refused when the profile is written, naming the host, on every host; so is an entry holding a control character, since a NUL ends a command line and another splits it |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
 | `tools` | the tools the person grants the launched agent, by name: `web_search`, `web_fetch`, each at most once. A closed vocabulary — any other word is refused when the profile is written, and so is a word named twice, or one the revision's `deny` takes away by the host's name for it. Empty unless somebody names one (§7) |
 | `cli_command` | the bare command word the agent calls home with, of letters, digits, dots, dashes and underscores and starting with a letter or a digit; defaults to the runtime's own executable name |
@@ -508,8 +508,8 @@ signal Jason reads for it; a host whose row names none ends such an attempt as a
 
 One rule holds every host's tools, where a profile is written: a grant of a tool the host does not have is refused,
 naming the host and the tool; a deny of a tool the host does not have is kept as the person's word, since it holds
-anyway; a deny of a tool the host has and cannot take away is refused, naming the host; and a grant of a tool the host
-has but Jason cannot make true on it is refused, naming the host. The `Tools` column is each host's table of the
+anyway; a deny of a tool the host has and cannot take away is refused, naming the host; and a grant of a tool
+Jason cannot make true on the host, one the host has but documents no rule for included, is refused, naming the host. The `Tools` column is each host's table of the
 `tools` vocabulary, so the reason for a refusal can be read there. A host may also refuse arguments its own parser reads
 otherwise than the runtime composed them, naming the host, beside the flags it reserves.
 
@@ -551,7 +551,8 @@ into (where it names none, the base a build unpacks under: `.net` in the home, a
 character the sandbox reads as a pattern (`* ? [ ] { }`) is left unreadable. Where `<data>/run`, the executable or its
 unpack folder holds one, a role could not call the runtime back, so the claim refuses the work with
 `host_not_available`, naming the path, before a child exists. A path the profile denies reading is denied, even one
-this list names: a deny wins over a read. On Windows, whether the elevated
+this list names: a deny wins over a read. On Windows every path of the list is written as a drive and forward slashes, as a
+deny's is, so a deny of a file the list names is the same key and replaces the read. Whether the elevated
 sandbox reads only this list is not yet checked; Codex documents the paths it denies there rather than a list of the
 paths it reads, so a role may read more than this list. What no flag reaches: Codex reads its own global `AGENTS.md`
 (in `~/.codex`, or `$CODEX_HOME`) for every run, so that file reaches every Codex role and should carry nothing a role
