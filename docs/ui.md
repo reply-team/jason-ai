@@ -156,8 +156,12 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
   folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked
   by tests here; it has not been watched on a Mac.
-- **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, with the host after `-e`, the
-  form Debian Policy 11.8.3 gives every terminal emulator.
+- **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, with the host after `-e` as
+  several arguments. That form is the one Debian Policy 11.8.3 requires of `x-terminal-emulator`, and it is assumed for
+  `TERMINAL` too. Some emulators' own `-e` takes the command as one string instead: `gnome-terminal`, `xfce4-terminal`,
+  `mate-terminal` and `tilix` among them. If yours is one of those, leave `TERMINAL` unset so `x-terminal-emulator` is
+  used. A `TERMINAL` that holds whitespace, is a relative path, or names a program that is not found falls back to
+  `x-terminal-emulator`, and the answer names the terminal that was used.
 
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
 and prints the whole command, the brief included, and on macOS the script. Each host's own form for a first message is in
