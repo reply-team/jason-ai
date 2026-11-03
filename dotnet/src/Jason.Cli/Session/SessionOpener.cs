@@ -118,7 +118,8 @@ public static class SessionOpener
     }
 
     private const string ChooseAnother =
-        "Choose another host with jason preference set agent.interactive_host --value '{\"host\":\"<host>\"}', or unset it for claude_code.";
+        "Choose another host with jason preference set agent.interactive_host --value '{\"host\":\"<host>\"}' --actor human:<your-name>, "
+        + "or go back to claude_code with jason preference unset agent.interactive_host --actor human:<your-name>.";
 
     private sealed record Item(string Id, string CampaignId, string WorkItemId, string? DecidedState);
 

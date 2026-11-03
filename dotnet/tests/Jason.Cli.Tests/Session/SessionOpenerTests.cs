@@ -320,8 +320,11 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
         var said = _run.Error.ToString();
         Assert.Contains("codex's program 'codex' is not on this machine's search path", said, StringComparison.Ordinal);
-        Assert.Contains("jason preference set agent.interactive_host", said, StringComparison.Ordinal);
         Assert.Contains("jason approval get apr_1 --prompt", said, StringComparison.Ordinal);
+
+        // A preference is a person's own word, so the line names the person, as the verb requires.
+        Assert.Contains("jason preference set agent.interactive_host --value '{\"host\":\"<host>\"}' --actor human:<your-name>", said, StringComparison.Ordinal);
+        Assert.Contains("jason preference unset agent.interactive_host --actor human:<your-name>", said, StringComparison.Ordinal);
     }
 
     [Fact]
