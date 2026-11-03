@@ -41,10 +41,10 @@ against a stand-in program.
   and what it cannot hold.
 - **Cursor CLI.** Install it from [Cursor's installation page](https://cursor.com/docs/cli/installation.md), sign in with
   `agent login`, then `jason profile create local-cursor --host cursor_cli --program agent`. A role is confined by
-  permission rules Jason writes to `.cursor/cli.json` in the attempt's work directory: the runtime's own command is the
-  one shell command allowed, the memory files are the reads, and every write is denied. On Windows, Jason starts the
-  host's `agent.cmd` launcher itself, and a profile names it by its full path where the runtime's search path does not
-  find `agent`. [The Cursor section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#cursor-cli)
+  permission rules Jason writes to `.cursor/cli.json` in the attempt's work directory: the one shell command Jason allows
+  is the runtime's own, the memory files are the reads, and every write is denied. On Windows, Jason starts what the
+  host's `agent.cmd` launcher would start, without a shell, and a profile names the launcher by its full path where the
+  runtime's search path does not find `agent`. [The Cursor section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#cursor-cli)
   says what it reads and what was not measured.
 - **GitHub Copilot CLI.** Install it from [GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), sign in with
   `copilot login`, then `jason profile create copilot --host copilot_cli --program copilot`. A role is confined by the
@@ -102,7 +102,7 @@ against a stand-in program.
 - **The Reply plugin** is unchanged.
 - **From 0.24.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
-  older than 0.18.0, the first of the two can stop at `started`, as the first known issue below says.
+  older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
 ## Known issues
 
@@ -117,8 +117,9 @@ Codex role.
 
 Whether Cursor CLI runs the allow-listed `jason` command without asking, in print mode, has not been seen on a signed-in
 run. If it does not, a role cannot call the runtime back, so it cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal. Cursor CLI also reads more than the
-memory files Jason names, since it takes the union of every configuration layer it finds, yours included, and each attempt
-leaves one trust marker under `~/.cursor` that Jason does not remove.
+memory files Jason names, since it takes the union of every configuration layer it finds, yours included: your own allow
+rules of any kind, a shell command or a write among them, stand beside Jason's. Each attempt leaves one trust marker under
+`~/.cursor` that Jason does not remove.
 
 Gemini CLI reads the whole folder of each level a role's memory files are in, and the client level's folder is the harness
 root, so a role reads every memory file under it. A role on Gemini CLI is also refused when the host's system policy folder
