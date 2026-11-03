@@ -94,8 +94,9 @@ public static partial class ProgramLookup
     /// Walks the search path in order. On Windows a name resolves to an <c>.exe</c> or a <c>.com</c>, or — only
     /// when the whole path yielded neither — to the cmd shim npm writes, which is read rather than started:
     /// starting a <c>.cmd</c> or a <c>.bat</c> means <c>cmd.exe</c> interprets the arguments, which is the shell
-    /// the argument-array invariant exists to exclude, so what runs is the interpreter and entry script the shim
-    /// named. Every other <c>.cmd</c>, and every <c>.bat</c> and <c>.ps1</c>, is refused as it always was.
+    /// the argument-array invariant exists to exclude, so what runs is what the shim starts: the interpreter and entry
+    /// script it names, or, in the form npm writes for a target with no shebang, the executable the package ships, by
+    /// itself. Every other <c>.cmd</c>, and every <c>.bat</c> and <c>.ps1</c>, is refused as it always was.
     /// </summary>
     /// <param name="interpreterSearchPath">
     /// Where a shim's interpreter is looked for when npm placed none beside it. A caller looking a bare name up passes
@@ -204,7 +205,9 @@ public static partial class ProgramLookup
 
     /// <summary>
     /// Every line cmd-shim writes above the call when the target has no shebang: an executable the package ships, which
-    /// the shim starts with no interpreter. Nothing else stands in that file, so it is read only as exactly these.
+    /// the shim starts with no interpreter. Nothing else stands in that file, so it is read only as exactly these, each
+    /// compared once its trailing blanks are dropped and with the empty lines between them dropped too. That is loose
+    /// enough for a file an editor touched and costs nothing, since the shim itself is never started.
     /// </summary>
     private static readonly string[] NativeShimHead =
     [
@@ -269,13 +272,6 @@ public static partial class ProgramLookup
 
         if (!call.Success)
         {
-            return null;
-        }
-
-        if (native && !IsProgramImage(call.Groups["entry"].Value))
-        {
-            // What the shim would start is a file only a shell, or nothing, could run; it never counts by its content.
-            rule = "names a target that is not an .exe or a .com, and " + ProgramsNotShells;
             return null;
         }
 
@@ -347,6 +343,15 @@ public static partial class ProgramLookup
             return null;
         }
 
+        if (native && !IsProgramImage(relative))
+        {
+            // Asked only once the target is held inside the package, so a target that climbs or names a drive is refused
+            // by the rule the other form's entry is. What the shim would start is then a file only a shell, or nothing,
+            // could run; it never counts by its content.
+            rule = "names a target that is not an .exe or a .com, and " + ProgramsNotShells;
+            return null;
+        }
+
         if (!File.Exists(entry))
         {
             // An executable that is not there is a program that is not there; an entry script that is not there is a
@@ -383,16 +388,18 @@ public static partial class ProgramLookup
 
     /// <summary>
     /// The shim's last line, exactly as cmd-shim writes it. The package is one segment — a scoped install
-    /// therefore captures its scope here, and the name under the scope is taken from the entry above.
+    /// therefore captures its scope here, and the name under the scope is taken from the entry above. No <c>%</c>
+    /// stands in the entry, in this form or the other: cmd.exe would expand a variable there before it started
+    /// anything, so the line would name a file other than the one it spells, and npm never writes one.
     /// </summary>
-    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"]+)" %\*\z""")]
+    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%]+)" %\*\z""")]
     private static partial Regex NpmShimCall();
 
     /// <summary>
     /// The call of the form with no interpreter, exactly as cmd-shim writes it: the target, quoted, then <c>%*</c>, and
     /// nothing in front of the target.
     /// </summary>
-    [GeneratedRegex("""^"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"]+)" +%\*\z""")]
+    [GeneratedRegex("""^"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%]+)" +%\*\z""")]
     private static partial Regex NpmNativeShimCall();
 
     /// <summary>Whether a target is a file the search path itself counts as a program image, read by its name alone.</summary>

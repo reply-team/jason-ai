@@ -35,12 +35,13 @@ public sealed class ProgramResolver(ISearchPath searchPath)
     /// How this machine starts the program a profile names, or null where it has no way to. A value with a
     /// directory in it is a path and is answered for by the file system alone. A bare name is looked up the way
     /// the plugin registry looks one up — the machine's own <c>PATHEXT</c> in order, and, where the search path
-    /// yields only the shim npm writes, the interpreter and entry script that shim names. Nothing is ever
-    /// resolved against the runtime's own working directory, which is not a place a profile can mean.
+    /// yields only the shim npm writes, what that shim starts: the interpreter and entry script it names, or the
+    /// executable its package ships. Nothing is ever resolved against the runtime's own working directory, which is
+    /// not a place a profile can mean.
     /// <para>
-    /// A list rather than a path, because starting an npm-installed host means starting its interpreter with
-    /// its entry script: reading the shim is how a command stays an argument array instead of becoming a line
-    /// for <c>cmd.exe</c> to interpret.
+    /// A list rather than a path, because starting an npm-installed host can mean starting its interpreter with
+    /// its entry script; where the package ships an executable the list is that executable alone. Reading the shim
+    /// is how a command stays an argument array instead of becoming a line for <c>cmd.exe</c> to interpret.
     /// </para>
     /// <para>
     /// A path to a script is answered with null even where the file exists: CreateProcess would start it through
