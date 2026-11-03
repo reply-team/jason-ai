@@ -1,8 +1,9 @@
 # Every pull request is read for what a public repository never carries: a tracker key, an Atlassian address, an
-# attribution trailer, a session link, or the name of another repository of ours. The lines the change adds are read,
-# a text saved as UTF-16 whole, the names it gives files, and the pull request's title and body, again whenever they are
-# edited. The patterns are the ones the tests hold every file of the tree and its name to, and a file is text where the
-# tests read it as text, so a change that passes here leaves a tree that passes there.
+# attribution trailer, a session link, the name of another repository of ours, or a review's label for a point it
+# raises. The lines the change adds are read, a text saved as UTF-16 whole, the names it gives files, and the pull
+# request's title and body, again whenever they are edited. The patterns are the ones the tests hold every file of the
+# tree and its name to, and a file is text where the tests read it as text, so a change that passes here leaves a tree
+# that passes there.
 #
 # A pull request from a fork runs this too, with the fork's own copy of this file: what it reads is untrusted, so the
 # job holds a token that can only read, is handed no secret, and keeps no credential in the checkout; the title and the
@@ -52,6 +53,7 @@ jobs:
             'a session link'                 = '(?i)claude\.a[i]/code'
             'another repository of ours'     = 'reply-team/jaso[n]-(?!ai(?![\w-]))[\w-]+'
             'the private repository by name' = '(?<![\w/-])jason-interna[l](?![\w-])'
+            'a review label'                 = '(?i)critic\s+findin[g]'
           }
           $found = [Collections.Generic.List[string]]::new()
           function Read-Text([string] $where, [string] $text) {
