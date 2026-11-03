@@ -327,6 +327,52 @@ public class AgentPreflightTests
     }
 
     /// <summary>
+    /// Codex reads a path holding <c>*</c>, <c>?</c>, <c>[</c>, <c>]</c>, <c>{</c> or <c>}</c> as a pattern, and a pattern
+    /// may only deny, so a run whose own folders hold one could not call the runtime back. The claim refuses it before a
+    /// child exists, with a sentence naming the folder, rather than leaving the person a pattern message from codex.
+    /// </summary>
+    [Theory]
+    [InlineData("/home/some[1]one/.jason/run", "/home/someone/.local/bin/jason", "/home/someone/.net/jason/a1b2c3", "/home/some[1]one/.jason/run")]
+    [InlineData("/home/someone/.jason/run", "/home/someone/{tools}/jason", "/home/someone/.net/jason/a1b2c3", "/home/someone/{tools}/jason")]
+    [InlineData("/home/someone/.jason/run", "/home/someone/.local/bin/jason", "/home/someone/.net*/jason/a1b2c3", "/home/someone/.net*/jason/a1b2c3")]
+    public async Task A_codex_run_whose_own_folders_hold_a_pattern_character_is_refused_naming_the_folder(
+        string run, string executable, string extraction, string named)
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CodexHost(run, executable, extraction, windows: false, home: "/home/someone")]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "codex", "codex", host: AgentHostKind.Codex);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "codex");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.HostNotAvailable, stored.LastError!.Code);
+        Assert.Contains($"'{named}'", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("glob", stored.LastError.Message, StringComparison.OrdinalIgnoreCase);
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(Ct);
+        Assert.Null(attempt.Launch);
+    }
+
+    /// <summary>The same run from folders that hold none of those characters is claimed and started.</summary>
+    [Fact]
+    public async Task A_codex_run_from_plain_folders_is_claimed()
+    {
+        using var harness = new Harness(hosts: [new ClaudeCodeHost(), new CodexHost(
+            "/home/someone/.jason/run", "/home/someone/.local/bin/jason", "/home/someone/.net/jason/a1b2c3", windows: false, home: "/home/someone")]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "codex", "codex", host: AgentHostKind.Codex);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "codex");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        var agent = await AgentOf(database, item);
+        Assert.Equal(AgentHostKind.Codex, agent.Host);
+    }
+
+    /// <summary>
     /// A host installed as a launcher script starts what that script starts. The claim asks the profile's own host
     /// about the script rather than refusing it, so a profile naming Cursor's launcher by its full path starts the
     /// interpreter and entry script the launcher would, with nothing started through a shell.
@@ -755,7 +801,7 @@ public class AgentPreflightTests
                 new EntryCommandResolver(roles),
                 new AgentLaunchPlanner(
                     new AgentPreflight(),
-                    new ProgramResolver(new OneProgramOnly(_dir.Paths.Root)),
+                    new ProgramResolver(new TheseProgramsOnly(_dir.Paths.Root, hosts is null || !hosts.Any(h => h is CodexHost) ? ["claude"] : ["claude", "codex"])),
                     hosts ?? [new ClaudeCodeHost()],
                     Folders),
                 roles,
@@ -821,18 +867,23 @@ public class AgentPreflightTests
             _dir.Dispose();
         }
 
-        /// <summary>A search path holding one directory, in which only <c>claude</c> can be found.</summary>
-        private sealed class OneProgramOnly : ISearchPath
+        /// <summary>
+        /// A search path holding one directory, in which only the programs named can be found: <c>claude</c>, and
+        /// <c>codex</c> where a test registers that host.
+        /// </summary>
+        private sealed class TheseProgramsOnly : ISearchPath
         {
-            public OneProgramOnly(string root)
+            public TheseProgramsOnly(string root, IReadOnlyList<string> names)
             {
                 Directory.CreateDirectory(root);
-                var name = OperatingSystem.IsWindows() ? "claude.exe" : "claude";
-                var program = System.IO.Path.Combine(root, name);
-                File.WriteAllText(program, "#!/bin/sh\nexit 0\n");
-                if (!OperatingSystem.IsWindows())
+                foreach (var name in names)
                 {
-                    File.SetUnixFileMode(program, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+                    var program = System.IO.Path.Combine(root, OperatingSystem.IsWindows() ? name + ".exe" : name);
+                    File.WriteAllText(program, "#!/bin/sh\nexit 0\n");
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        File.SetUnixFileMode(program, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+                    }
                 }
 
                 Path = root;

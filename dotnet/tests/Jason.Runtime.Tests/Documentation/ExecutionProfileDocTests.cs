@@ -527,6 +527,69 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("a short flag with more letters or a value after it", section, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Codex's row carries, one sentence each, what a person must know before naming it, and its section holds the
+    /// detail: commands are not confined by name, the loopback-only network rests on an experimental feature, Windows may
+    /// let a role read more than the list, the person's global <c>AGENTS.md</c> and skills reach every role, and calling
+    /// home is not yet checked on any system. The section gives a refused fetch grant its own reason, names macOS beside
+    /// Linux and Windows, and says what a folder holding a pattern character costs.
+    /// </summary>
+    [Fact]
+    public void Codex_s_row_carries_one_sentence_for_each_thing_its_section_holds()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var hosts = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
+        var row = hosts
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .Single(cells => cells[1] == "`codex`");
+        Assert.StartsWith("On Windows, first:", row[6], StringComparison.Ordinal);
+        foreach (var sentence in new[]
+                 {
+                     "Commands are not confined by name: any program a role can read runs, inside the sandbox.",
+                     "Holding the network to loopback rests on Codex's network proxy, an experimental feature in 0.166.0.",
+                     "On Windows, the elevated sandbox may let a role read more than the list.",
+                     "The person's global `AGENTS.md` and their skills reach every Codex role.",
+                     "Whether `jason` reaches the runtime from inside the sandbox is not yet checked on Linux, macOS or Windows.",
+                 })
+        {
+            Assert.Contains(sentence, row[6], StringComparison.Ordinal);
+        }
+
+        var start = hosts.IndexOf("\n### Codex CLI\n", StringComparison.Ordinal);
+        Assert.True(start > 0, "execution-profiles.md has no section 'Codex CLI'.");
+        var end = hosts.IndexOf("\n## ", start, StringComparison.Ordinal) is var next and > 0 ? next : hosts.Length;
+        var section = Flattened(hosts[start..end]);
+        foreach (var fragment in new[]
+                 {
+                     "Codex offers every role the skills in `~/.agents/skills`, in `$CODEX_HOME/skills` and in its own system cache",
+                     "A grant of `web_fetch` is refused because Codex has no tool that fetches a page",
+                     "On macOS, whether `jason` reaches the runtime from inside the sandbox is not yet checked.",
+                     "the claim refuses the work with `host_not_available`, naming the path",
+                 })
+        {
+            Assert.Contains(fragment, section, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("for the same reason", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the launcher writes into a work directory is said once for every host, by the host's row of section 12, and
+    /// Claude Code's files are its example rather than the rule.
+    /// </summary>
+    [Fact]
+    public void The_work_directory_holds_the_files_the_host_s_row_names()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
+
+        Assert.Contains("the files the host's row of section 12 names", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("The launcher puts two things in that directory", contract, StringComparison.Ordinal);
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 
