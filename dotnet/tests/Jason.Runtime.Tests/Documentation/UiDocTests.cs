@@ -21,6 +21,8 @@ public class UiDocTests
     [InlineData("ui/custom")]
     [InlineData("ui/default")]
     [InlineData("Runtime:Port")]
+    [InlineData("`" + Jason.Contracts.Notifications.AttentionLinks.List + "` for the list of what waits")]
+    [InlineData("`" + Jason.Contracts.Notifications.AttentionLinks.List + "/approvals/<id>` and `" + Jason.Contracts.Notifications.AttentionLinks.List + "/questions/<id>` for one item")]
     [InlineData("the runtime takes only the route's half of the claim, the plugin is loaded and available, it performs the operation, and the route's binding passes its checks, and skips the rest of it, and with it the attempt, provenance, the journal, pins, approval and retry; it has no bound of its own, running outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.")]
     public void The_page_names_it(string text) => Assert.Contains(text, Page(), StringComparison.Ordinal);
 

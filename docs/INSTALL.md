@@ -515,8 +515,9 @@ receipt, so it is removed by nobody — including this. The rest of the installa
 order: this account's logon registration first — on Windows including the task `\Jason` an earlier version
 registered for it — so a logon part-way through cannot start what is going; then the runtime, and if it will not
 stop — or is running and does not answer — nothing after that is removed; then, on Windows, the notification
-registration — the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the
-first toast — after the runtime, so its next toast cannot write them back; then the recorded skills; then the
+registration — the AppUserModelID key the toast was shown under, the two entries Windows made for it at the
+first toast, and the `jason:` link where its command names this executable — after the runtime, so its next toast
+cannot write them back; then the recorded skills; then the
 PATH entry, only where the installer wrote it; then the executable, its two notice files, its install directory,
 and the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
 `~/.net` on macOS and Linux. On Windows what every other build of Jason unpacked beside them goes too: the versions
@@ -550,7 +551,7 @@ package manager's: the dry run and the report list them as left to it, with the 
 runtime stopped first.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
-registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
+registration and the `jason:` link on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
 source beside a release, a copy — takes the registrations and the harness skills the first one made as well. Look
 at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
 

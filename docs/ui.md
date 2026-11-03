@@ -15,6 +15,10 @@ instead, for an agent to hand to you). The link carries a ticket that pairs one 
 after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
 `jason ui open --approval <id>` and `--question <id>` open on one item.
 
+On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
+waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
+`jason ui open` does, and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7).
+
 If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
 ## Where the page comes from
