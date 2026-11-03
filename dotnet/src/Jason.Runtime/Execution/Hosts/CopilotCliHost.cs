@@ -223,13 +223,14 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
             : word.Contains(',', StringComparison.Ordinal) ? "the host's list is comma-separated, so a word holding a comma is not one rule; give each rule as its own entry." : null;
 
     /// <summary>
-    /// The reserved flags are matched as a whole argument up to an equals sign, which a short option glued to its value
-    /// slips past: the host reads <c>-pfoo</c> as the print option with a prompt. An argument of one dash and more than one
-    /// letter is therefore refused, and a long option, a value, or a short option alone is not.
+    /// The reserved flags are matched as a whole argument up to an equals sign, which a short option clustered with another
+    /// or glued to its value slips past: the host reads <c>-pfoo</c> as the print option with a prompt. An argument of one
+    /// dash and more than two characters is therefore refused, whatever follows the dash, and so is the dash alone; a long
+    /// option, a value, or a short option alone is not.
     /// </summary>
     public string? ArgsProblem(IReadOnlyList<string> args) =>
-        args.FirstOrDefault(arg => arg.Length > 2 && arg[0] == '-' && char.IsAsciiLetter(arg[1])) is { } glued
-            ? $"'{glued}' glues a short option to its value, which the host reads as the option it starts with; write it as two arguments or as a long option."
+        args.FirstOrDefault(arg => arg == "-" || (arg.Length > 2 && arg[0] == '-' && arg[1] != '-')) is { } refused
+            ? $"'{refused}' is a single-dash word the host's parser may read as a cluster of short options or as one with a value glued to it; write each option as its own argument or as a long option."
             : null;
 
     /// <summary>

@@ -430,18 +430,26 @@ public class CopilotCliHostTests
     /// <summary>
     /// The reserved flags are matched by the whole of an argument up to an equals sign, which a short option glued to its
     /// value slips past: <c>-pfoo</c> is the print option with a prompt, and the host's parser reads it so. An argument of
-    /// one dash and more than one letter is refused as a whole; a long option and a value are not.
+    /// one dash and more than two characters is refused as a whole, whatever follows the dash, and so is the dash alone: a
+    /// cluster of short options, a value glued to one and a number are all that shape. A long option, a short option alone
+    /// and a value are not.
     /// </summary>
     [Theory]
     [InlineData("-pfoo", true)]
     [InlineData("-ihello", true)]
     [InlineData("-Cfolder", true)]
+    [InlineData("-pi", true)]
+    [InlineData("-ip", true)]
+    [InlineData("-p=foo", true)]
+    [InlineData("-1x", true)]
+    [InlineData("-10", true)]
+    [InlineData("-", true)]
     [InlineData("-p", false)]
     [InlineData("--model", false)]
     [InlineData("--effort=high", false)]
     [InlineData("high", false)]
     [InlineData("-1", false)]
-    public void A_short_option_glued_to_its_value_is_refused_as_an_argument(string arg, bool refused)
+    public void A_single_dash_word_longer_than_two_characters_and_the_bare_dash_are_refused_as_arguments(string arg, bool refused)
     {
         Assert.Equal(refused, new CopilotCliHost().ArgsProblem(["--model", "made-up-model", arg]) is not null);
     }

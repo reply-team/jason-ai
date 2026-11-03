@@ -545,8 +545,9 @@ keeps and never parses: the outcome comes back through the CLI), `--no-ask-user`
 `--no-custom-instructions`, `--disable-builtin-mcps`, a fresh `--session-id` minted for the attempt, and then three lists
 — `--available-tools`, `--allow-tool` and `--deny-tool` — and last the profile's own arguments. Nothing is written into
 the work directory and nothing of the person's own configuration is touched. No flag that trusts the folder or allows
-every tool, path or address is composed, and a profile may not carry one; neither may it carry an option glued to its
-value (`-pfoo`), which the reserved list cannot see.
+every tool, path or address is composed, and a profile may not carry one; neither may it carry a word of one dash and more
+than two characters (`-pfoo`, `-pi`, `-1x`) or a dash alone, which the host's parser may read as a cluster or a glued value
+and the reserved list cannot see.
 
 | Tool the host offers a role | Why |
 |---|---|
