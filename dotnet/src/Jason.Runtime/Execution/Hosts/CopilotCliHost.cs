@@ -45,7 +45,7 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
     /// The command the host's own startup errors recommend to a person who is not signed in. The recommendation is
     /// documented; the exact text of the error around it is not, so only the command is looked for.
     /// </summary>
-    private static readonly Regex LoginCommand = new(@"copilot\s+login", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex LoginCommand = new(@"\bcopilot\s+login\b",RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// The characters that end or change a rule's argument in a list: the list is comma-separated, the argument is
@@ -66,7 +66,7 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
     /// confinement it rests on. A profile says which program and what to add; it does not say that the run is interactive,
     /// reports in another format, trusts its folder, allows every tool, path or address, adds a directory, a server or an
     /// agent, or carries a rule of its own in the arguments, where the check made when a profile is written never sees it.
-    /// What stays open is the choice of model and effort, the log level, and colour.
+    /// Which options stay open is said by the allowlist in ArgsProblem, not by what this set leaves out: the model, the effort, the credit limit, colour and the client telemetry.
     /// </summary>
     public IReadOnlySet<string> ReservedFlags { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -107,6 +107,20 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
         "--fleet",
         "--enable-memory",
         "--bash-env",
+
+        // What the launch composes to close a thing the person's settings would leave open, and the documented flags that
+        // widen what a run loads, reaches or says: a server, a tool set, a context, a secret, an extension, the screen.
+        "--disallow-temp-dir",
+        "--sync-session",
+        "--no-bash-env",
+        "--secret-env-vars",
+        "--context",
+        "--extension-sdk-path",
+        "--disable-mcp-server",
+        "--add-github-mcp-tool",
+        "--mouse",
+        "--banner", "--no-banner",
+        "--experimental", "--no-experimental",
 
         // Where the run happens and where it is written down.
         "--share", "--share-gist",
@@ -166,6 +180,15 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
                 "--no-auto-update",
                 "--no-custom-instructions",
                 "--disable-builtin-mcps",
+
+                // What the person's own settings would otherwise decide for a run: the system temporary folder is not
+                // opened to the role, the host's history of the run is not synced anywhere, the agent mode is the plain
+                // one a setting cannot turn into autopilot, and no startup file named by BASH_ENV is read by the shell.
+                "--disallow-temp-dir",
+                "--sync-session=off",
+                "--mode=interactive",
+                "--no-bash-env",
+
                 "--session-id",
                 session,
                 $"--available-tools={string.Join(',', tools)}",

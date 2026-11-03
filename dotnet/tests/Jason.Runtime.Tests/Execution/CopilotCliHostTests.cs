@@ -265,9 +265,9 @@ public class CopilotCliHostTests
     [Fact]
     public void The_profiles_own_arguments_come_last_and_nothing_follows_them()
     {
-        var launch = new CopilotCliHost().Compose(Revision("--model", "made-up-model"), ["copilot"], NoFiles);
+        var launch = new CopilotCliHost().Compose(Revision("--model=made-up-model", "--no-color"), ["copilot"], NoFiles);
 
-        Assert.Equal(["--model", "made-up-model"], launch.Command.TakeLast(2));
+        Assert.Equal(["--model=made-up-model", "--no-color"], launch.Command.TakeLast(2));
         Assert.Equal("copilot", launch.Command[0]);
     }
 
@@ -316,16 +316,65 @@ public class CopilotCliHostTests
         Assert.Contains(flag, new CopilotCliHost().ReservedFlags);
     }
 
-    /// <summary>A profile may still choose the model and the amount of thought: nothing about reach rides on them.</summary>
+    /// <summary>
+    /// A profile may still choose the model and the amount of thought, and nothing about reach rides on them: they are on
+    /// the allowlist the host takes arguments from, not outside a list of reserved words, so what they are is stated by
+    /// the allowlist and checked there.
+    /// </summary>
     [Theory]
-    [InlineData("--model")]
-    [InlineData("--effort")]
+    [InlineData("--model=made-up-model")]
+    [InlineData("--effort=low")]
     [InlineData("--no-color")]
-    public void A_profile_may_still_carry_the_flags_that_do_not_change_the_reach(string flag)
+    public void A_profile_may_still_carry_the_options_that_do_not_change_the_reach(string argument)
     {
-        Assert.DoesNotContain(flag, new CopilotCliHost().ReservedFlags);
+        Assert.Null(new CopilotCliHost().ArgsProblem([argument]));
     }
 
+    /// <summary>
+    /// What a launch closes that the person's own settings would otherwise leave to the host: the system temporary
+    /// folder, which the host opens to a role unless told not to; the history the host syncs for a run, which its
+    /// settings decide when the run says nothing; the agent mode, which a setting can make autopilot; and the shell's
+    /// startup file named by BASH_ENV. Each is composed whatever the profile says, once, before the profile's own words.
+    /// </summary>
+    [Theory]
+    [InlineData("--disallow-temp-dir")]
+    [InlineData("--sync-session=off")]
+    [InlineData("--mode=interactive")]
+    [InlineData("--no-bash-env")]
+    public void The_launch_closes_what_the_persons_own_settings_would_leave_open(string flag)
+    {
+        var host = new CopilotCliHost();
+
+        var composed = host.Compose(Revision("--no-color"), ["copilot"], NoFiles).Command;
+
+        Assert.Single(composed, flag);
+        Assert.True(composed.ToList().IndexOf(flag) < composed.ToList().IndexOf("--no-color"), $"{flag} comes after the profile's words");
+        Assert.Contains(flag.Split('=')[0], host.ReservedFlags);
+    }
+
+    /// <summary>
+    /// Every flag the host documents that changes what a run reaches, loads or writes is reserved, those composed above
+    /// and those the launch has no use for alike, so that no profile argument sets one in a spelling the check made when
+    /// a profile is written would take for the person's own.
+    /// </summary>
+    [Theory]
+    [InlineData("--disallow-temp-dir")]
+    [InlineData("--sync-session")]
+    [InlineData("--secret-env-vars")]
+    [InlineData("--context")]
+    [InlineData("--no-bash-env")]
+    [InlineData("--extension-sdk-path")]
+    [InlineData("--disable-mcp-server")]
+    [InlineData("--add-github-mcp-tool")]
+    [InlineData("--mouse")]
+    [InlineData("--banner")]
+    [InlineData("--no-banner")]
+    [InlineData("--experimental")]
+    [InlineData("--no-experimental")]
+    public void A_flag_the_host_documents_for_reach_or_loading_is_reserved(string flag)
+    {
+        Assert.Contains(flag, new CopilotCliHost().ReservedFlags);
+    }
     /// <summary>
     /// The web fetch has a rule under the host's permission kind, the word that allows and denies it alike, and the search
     /// tool has the word the host's own examples use. Neither is a tool name of the tool table, which is a different
@@ -381,6 +430,8 @@ public class CopilotCliHostTests
     [InlineData(1, null)]
     [InlineData(1, "")]
     [InlineData(2, "usage: unknown option")]
+    [InlineData(1, "run mycopilot login again")]
+    [InlineData(1, "see copilot logins in the docs")]
     public void Any_other_end_is_not_this_hosts_to_say(int exitCode, string? tail)
     {
         Assert.Null(new CopilotCliHost().Unavailable(exitCode, tail));
