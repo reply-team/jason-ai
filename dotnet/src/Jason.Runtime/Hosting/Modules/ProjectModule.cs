@@ -22,6 +22,7 @@ public static class ProjectModule
         // the last root that validated.
         services.AddSingleton(DispatcherModule.Seam<HarnessOptions>(HarnessOptions.Section));
         services.AddSingleton<HarnessFolders>();
+        services.AddHostedService<ImportFilesSweep>();
         services.AddScoped<ProjectLinker>();
         return services.AddScoped<ProjectService>();
     }

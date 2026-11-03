@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
@@ -205,8 +203,8 @@ public sealed class CodexHost(
                 "-c", "approval_policy=\"never\"",
 
                 // The sandbox, as one named profile: what may be read, nothing written, and loopback only.
-                "-c", $"default_permissions={Toml(Profile)}",
-                "-c", $"permissions.{Profile}.filesystem={{{string.Join(", ", entries.Select(entry => $"{Toml(entry.Path)}={Toml(entry.Access)}"))}}}",
+                "-c", $"default_permissions={TomlText.BasicString(Profile)}",
+                "-c", $"permissions.{Profile}.filesystem={{{string.Join(", ", entries.Select(entry => $"{TomlText.BasicString(entry.Path)}={TomlText.BasicString(entry.Access)}"))}}}",
                 "-c", $"permissions.{Profile}.network={{enabled=true, allow_local_binding=true}}",
                 "-c", "features.network_proxy=true",
 
@@ -214,7 +212,7 @@ public sealed class CodexHost(
                 // run does not read, and with none named the host runs a command with no sandbox at all. Until an
                 // administrator has set that sandbox up, every command is refused, so the run fails closed.
                 .. WindowsSandbox,
-                "-c", $"web_search={Toml(search)}",
+                "-c", $"web_search={TomlText.BasicString(search)}",
 
                 // No instruction file of a folder above the work directory, and no hook, plugin, app, memory or MCP
                 // server the person installed into the host. Their skills still reach the role, and their global
@@ -354,13 +352,8 @@ public sealed class CodexHost(
         Add(runDirectory, "read");
 
         var unreadable = new List<string>();
-        foreach (var (level, path) in new[] { ("client", memoryFiles.Client), ("project", memoryFiles.Project), ("campaign", memoryFiles.Campaign) })
+        foreach (var (level, path) in memoryFiles.NamedLevels())
         {
-            if (path is null)
-            {
-                continue;
-            }
-
             if (path.IndexOfAny(PatternCharacters) >= 0)
             {
                 unreadable.Add(level);
@@ -430,23 +423,5 @@ public sealed class CodexHost(
         return path.Length > 3 && char.IsAsciiLetter(path[2]) && path[3] == '/'
             ? $"{char.ToUpperInvariant(path[2])}:{path[3..]}"
             : null;
-    }
-
-    /// <summary>A TOML basic string: a backslash, a quote and a control character escaped, and nothing else changed.</summary>
-    private static string Toml(string value)
-    {
-        var text = new StringBuilder("\"");
-        foreach (var character in value)
-        {
-            text.Append(character switch
-            {
-                '\\' => "\\\\",
-                '"' => "\\\"",
-                _ when char.IsControl(character) => "\\u" + ((int)character).ToString("X4", CultureInfo.InvariantCulture),
-                _ => character.ToString(),
-            });
-        }
-
-        return text.Append('"').ToString();
     }
 }

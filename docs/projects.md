@@ -254,7 +254,7 @@ What a person tells Jason about their business in their own words is kept in pla
 memory file, `AGENTS.md`, for the client, for each project and for each campaign, each in a folder of its own, nested in
 that order under the harness root. Each level carries, beside its `AGENTS.md`, a one-line import file for every host
 that reads a file of another name — `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI (the [host matrix](execution-profiles.md#12-the-hosts)
-lists them). A folder made before a host's import file existed has the files it had: the root gains a missing import file at the next project or campaign create, and a project's or a campaign's folder keeps what it has until the person adds the file. Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
+lists them). A folder made before a host's import file existed has the files it had until the runtime next starts: at every start it writes each missing import file into the root and into every folder recorded for a project or a campaign, over nothing, and skips (saying only the level and the identifier in its log) a folder that is not there or no longer carries its marker; the root also gains a missing import file at the next project or campaign create. Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
 print mode it drops, without asking, an import of a file outside the folder it started in, so a session started in a
 campaign's folder is given the
 campaign's file and neither the project's nor the client's (measured with Claude Code 2.1.309; its documentation says
@@ -382,7 +382,7 @@ It writes structure only: a directory, its marker, and, where none is there, an 
 and an empty `AGENTS.md`. Then it leaves them to the person. The import files are `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI.
 
 - It never reads, writes or deletes a word of any `AGENTS.md`, and never writes over an import file that is there, the
-  person's own included: whether one is there is asked of its name, and it is never opened.
+  person's own included: whether one is there is asked of its name, and it is never opened. The same holds for the sweep at start.
 - It never deletes a folder or a file. Archiving a campaign leaves its folder where it is.
 - It never runs `git` and never writes a `.gitignore`: the root is a repository only if the person makes it one.
 - A rename changes the name and nothing else; the folder keeps its name, since a session may have it open and a person's

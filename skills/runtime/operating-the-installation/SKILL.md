@@ -288,7 +288,7 @@ starts it, what it may not do, and the command word it calls home with. `profile
 can launch work; disabled ones are left out unless you ask for them.
 
 This is what to read when role work is failing for reasons no model produced — `profile_not_found`,
-`profile_disabled` and `host_not_available` are all answered here rather than by asking for the work again.
+`profile_disabled`, `profile_revision_refused` and `host_not_available` are all answered here rather than by asking for the work again.
 Registering or editing a profile is an operator's act, and it names a program on this machine: do not invent one.
 
 ## Keeping it current

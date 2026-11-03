@@ -8,10 +8,11 @@ namespace Jason.Runtime.Profiles;
 public static class ProfileMapper
 {
     /// <summary><paramref name="revision"/> is the one asked for, which is the current one unless a caller named another.</summary>
-    public static ExecutionProfileDto ToDto(ExecutionProfile profile, ExecutionProfileRevision revision)
+    public static ExecutionProfileDto ToDto(ExecutionProfile profile, ExecutionProfileRevision revision, IReadOnlyList<ProfileProblemDto> problems)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(revision);
+        ArgumentNullException.ThrowIfNull(problems);
 
         return new ExecutionProfileDto(
             profile.PublicId,
@@ -21,7 +22,8 @@ public static class ProfileMapper
             profile.CurrentRevision,
             ToDto(revision),
             WorkItemMapper.Utc(profile.CreatedAt),
-            WorkItemMapper.Utc(profile.UpdatedAt));
+            WorkItemMapper.Utc(profile.UpdatedAt),
+            problems);
     }
 
     /// <summary>

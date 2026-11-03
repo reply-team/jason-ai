@@ -14,7 +14,8 @@ public static class ProfileRenderers
     /// <summary>
     /// One profile, at the revision that was asked for. The revision line says which one this is, and says so
     /// against the one in force — reading an old revision and thinking it is the live one is the one mistake
-    /// this page can cause.
+    /// this page can cause. A <c>Refused:</c> line names what this build's rules for the host refuse in the revision the
+    /// answer carries.
     /// </summary>
     public static string? Profile(string json)
     {
@@ -40,8 +41,18 @@ public static class ProfileRenderers
             Line("Disabled:", profile.Disabled ? "yes" : "no"),
             Line("Created:", RenderText.Moment(profile.CreatedAt)),
             Line("Updated:", RenderText.Moment(profile.UpdatedAt)),
+            .. Problems(profile),
         ]);
     }
+
+    /// <summary>
+    /// A line naming what this build's rules for the host refuse in the current revision, only where something is: a
+    /// clean profile prints the page it always did, and an answer without the field is a clean one.
+    /// </summary>
+    private static IEnumerable<string> Problems(ExecutionProfileDto profile) =>
+        profile.Problems is { Count: > 0 } problems
+            ? [Line("Refused:", string.Join(", ", problems.Select(problem => $"{problem.Field} ({problem.Code})")))]
+            : [];
 
     /// <summary>The registry as a table: what can launch work, what it starts, and which revision is in force.</summary>
     public static string? ProfileList(string json)

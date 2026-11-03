@@ -277,13 +277,8 @@ public sealed partial class CursorCliHost(bool windows) : IAgentHost
     {
         var rules = new List<string>();
         var unreadable = new List<string>();
-        foreach (var (level, path) in new[] { ("client", memoryFiles.Client), ("project", memoryFiles.Project), ("campaign", memoryFiles.Campaign) })
+        foreach (var (level, path) in memoryFiles.NamedLevels())
         {
-            if (path is null)
-            {
-                continue;
-            }
-
             if (ReadRule(path) is not { } rule)
             {
                 unreadable.Add(level);

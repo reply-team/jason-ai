@@ -16,6 +16,7 @@ public static class ProfileModule
     public static IServiceCollection AddProfileModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+        services.AddHostedService<ProfileRevisionCheck>();
         return services.AddScoped<ProfileService>();
     }
 

@@ -315,7 +315,8 @@ thread the reply answers in — or, for a message, about the same person. Anythi
 approval row of its own is covered when, in this order: its operation is one a standing approval can cover; the
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
-(its `inbound_reply`), or by a person who gave their name, or carries a person's answer — a verdict whose
+(its `inbound_reply`; a responder a manager queued by hand carries none, so its verdicts fail `verdict_not_authentic`
+and its drafts are asked), or by a person who gave their name, or carries a person's answer — a verdict whose
 `reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
 covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
 whoever drafted it; the draft's context was not changed after it was created; the
@@ -505,10 +506,11 @@ existed. It is the same rule the twenty provider checks follow.
 | 1 | `lineage_resolution_unsupported` | a run created this work and no profile can be inherited from it. Name one on the item, its campaign or its role |
 | 2 | `profile_not_found` | the profile a level named does not exist. The message says which level named it |
 | 3 | `profile_disabled` | it exists and is out of service. Enable it, or name another |
-| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret; or the host refuses to start here by its own check of the machine (a folder its sandbox needs, a policy folder it would read), or names a host this build does not register, or has an installation that could not be read. Install it, or point the profile at the program itself, or follow what the sentence names. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
-| 5 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
-| 5 | `role_skill_unreadable` | the role's skill was being replaced by a deployment and could not be read consistently while this launch waited |
-| 6 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |
+| 4 | `profile_revision_refused` | the profile's current revision holds a word this build's rules for its host refuse: an argument the host now reserves, say, in a revision written under an older build. The message names the first refused field and its code, never the value. Read the profile (`jason profile get`; its `problems` say what to change) and update it |
+| 5 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret; or the host refuses to start here by its own check of the machine (a folder its sandbox needs, a policy folder it would read), or names a host this build does not register, or has an installation that could not be read. Install it, or point the profile at the program itself, or follow what the sentence names. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
+| 6 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
+| 6 | `role_skill_unreadable` | the role's skill was being replaced by a deployment and could not be read consistently while this launch waited |
+| 7 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |
 
 The child is started in a per-attempt **work directory**, `~/.jason/work/<wi_…>/<att_…>/`, which the
 launcher creates. Its standard output and standard error are written there as `stdout.log` and
@@ -820,6 +822,7 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
+| `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
 | the twenty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations

@@ -118,4 +118,24 @@ public sealed record RoleMemoryLocation(string CampaignId, string Role, string? 
 /// <param name="Client">The root's <c>AGENTS.md</c>, where the root carries its marker at the claim; null otherwise.</param>
 /// <param name="Project">The <c>AGENTS.md</c> in the folder recorded for the campaign's project; null where none is recorded.</param>
 /// <param name="Campaign">The <c>AGENTS.md</c> in the folder recorded for the campaign; null where none is recorded.</param>
-public sealed record MemoryFileLocations(string? Client, string? Project, string? Campaign);
+public sealed record MemoryFileLocations(string? Client, string? Project, string? Campaign)
+{
+    /// <summary>The levels whose file the launch names, as a level word and a path, in the order client, project, campaign.</summary>
+    public IEnumerable<(string Level, string Path)> NamedLevels()
+    {
+        if (Client is not null)
+        {
+            yield return ("client", Client);
+        }
+
+        if (Project is not null)
+        {
+            yield return ("project", Project);
+        }
+
+        if (Campaign is not null)
+        {
+            yield return ("campaign", Campaign);
+        }
+    }
+}
