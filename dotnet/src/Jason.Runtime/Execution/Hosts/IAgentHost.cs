@@ -115,7 +115,9 @@ public interface IAgentHost
     /// What is written on the child's standard input for the launch envelope <paramref name="envelopeJson"/>, which is the
     /// envelope as one JSON document. A host that reads plain text on standard input gets it back unchanged; a host that
     /// reads a stream of lines gets it as the content of one line. It is given the envelope and nothing else, called once
-    /// per attempt, and what it returns is written as it is before the stream is closed.
+    /// per attempt, and what it returns is written as it is before the stream is closed. The envelope reaches it as the
+    /// runtime's own serializer wrote it, whose encoder escapes every character outside ASCII, so a host that frames it
+    /// relies on that: an envelope written another way is not promised to arrive whole.
     /// </summary>
     string FrameStdin(string envelopeJson) => envelopeJson;
 }

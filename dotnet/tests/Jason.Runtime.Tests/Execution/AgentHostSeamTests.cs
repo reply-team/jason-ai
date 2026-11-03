@@ -225,6 +225,24 @@ public class AgentHostSeamTests
     }
 
     /// <summary>
+    /// The envelope reaches the frame already written by the runtime's own serializer, whose encoder escapes every
+    /// character outside ASCII and writes a lone surrogate as an escape, so no production envelope holds one. Given one
+    /// anyway, the frame does not carry it whole: the line's serializer replaces it with U+FFFD. That is stated here so a
+    /// change to an encoder that leaves such a character unescaped, which would change the brief, shows as a red row.
+    /// </summary>
+    [Fact]
+    public void A_lone_surrogate_in_the_envelope_is_framed_as_the_replacement_character()
+    {
+        var host = Registered().Single(candidate => candidate.Kind == AgentHostKind.AntigravityCli);
+
+        var framed = host.FrameStdin("lone\ud800x");
+
+        Assert.DoesNotContain('\n', framed[..^1]);
+        using var line = System.Text.Json.JsonDocument.Parse(framed);
+        Assert.Equal("lone�x", line.RootElement.GetProperty("message").GetProperty("content").GetString());
+    }
+
+    /// <summary>
     /// A host's stderr can carry the person's login or address, and an attempt's error reaches the journal and a
     /// diagnostic bundle that includes it. So whatever a host makes of its end is a fixed sentence of its own, and no
     /// part of the host's words travels in it: two tails that carry the same signal and differ only in whose they are
