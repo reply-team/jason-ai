@@ -110,6 +110,33 @@ public class GeminiCliProfileTests
         Assert.Equal(1, read.Revision.Number);
     }
 
+    /// <summary>
+    /// The same move with the long spelling of a short option: the parser reads <c>--y</c> as <c>-y</c>, so a profile stored
+    /// on another host with it is refused when moved, naming the argument, and keeps its revision.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_moving_a_profile_to_the_host_is_held_to_the_long_spelling_of_a_short_option()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "moving-letter", host = "claude_code", program = "claude", args = new[] { "--y" } },
+            Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "moving-letter", host = "gemini_cli", program = "gemini" },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args[0]", "reserved"), (detail.Field, detail.Code));
+        Assert.Contains("gemini_cli", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("--y", detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "moving-letter" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+    }
+
     /// <summary>The same move with arguments the host reads as the prompt: refused on the stored arguments, saying they are the profile's.</summary>
     [Fact]
     public async Task A_patch_moving_a_profile_to_the_host_is_held_to_what_the_host_reads_as_a_prompt()
