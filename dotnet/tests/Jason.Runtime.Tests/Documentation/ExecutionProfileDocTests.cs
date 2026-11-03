@@ -641,6 +641,8 @@ public partial class ExecutionProfileDocTests
             "a long flag's name is letters and digits with single dashes between them",
             "`GEMINI_CLI_IDE_WORKSPACE_PATH=`",
             "A value may hold a space and no control character",
+            "declares no telemetry flag",
+            "`GEMINI_TELEMETRY_ENABLED`",
             "also an enforced sign-in type that does not match",
             "\"could not authenticate\"",
             "the client level is the harness root, so a role reads every project's and campaign's memory file under it",
