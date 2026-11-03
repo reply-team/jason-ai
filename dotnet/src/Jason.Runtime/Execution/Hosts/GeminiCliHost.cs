@@ -18,8 +18,17 @@ namespace Jason.Runtime.Execution.Hosts;
 /// denied above the allows. A call the policy does not allow is refused in the default approval mode, where nobody can
 /// be asked. The person's own servers, extensions and hooks are not part of the run.
 /// </para>
+/// <para>
+/// One thing outranks that policy: the host ignores a policy given to a run when its system policy folder holds any file
+/// whose name ends in <c>.toml</c>, and says so in a warning only. The run would then be held by the host's default rules
+/// and the person's own, so <see cref="LaunchProblem"/> refuses the attempt before a child exists where such a file is.
+/// </para>
 /// </summary>
-public sealed class GeminiCliHost : IAgentHost
+/// <param name="systemPoliciesDirectory">
+/// The folder the host reads system policies from, as <see cref="SystemPoliciesDirectoryOf"/> gives it for this platform;
+/// null where none is to be checked.
+/// </param>
+public sealed class GeminiCliHost(string? systemPoliciesDirectory = null) : IAgentHost
 {
     /// <summary>The documented exit of a failed authentication; every other end is the role's own.</summary>
     private const int AuthenticationFailed = 41;
@@ -74,6 +83,51 @@ public sealed class GeminiCliHost : IAgentHost
     };
 
     public AgentHostKind Kind => AgentHostKind.GeminiCli;
+
+    /// <summary>The folder checked by <see cref="LaunchProblem"/>; null where none is.</summary>
+    internal string? SystemPoliciesDirectory => systemPoliciesDirectory;
+
+    /// <summary>
+    /// The system policy folder of a platform, where the host reads policies an organisation sets for every user: a folder
+    /// of the host's own under the machine's shared application data on Windows and macOS, and under <c>/etc</c> elsewhere.
+    /// </summary>
+    internal static string SystemPoliciesDirectoryOf(bool windows, bool macOs) =>
+        windows ? @"C:\ProgramData\gemini-cli\policies"
+        : macOs ? "/Library/Application Support/GeminiCli/policies"
+        : "/etc/gemini-cli/policies";
+
+    /// <summary>The folder this process's platform keeps system policies in.</summary>
+    public static string PlatformSystemPoliciesDirectory() => SystemPoliciesDirectoryOf(OperatingSystem.IsWindows(), OperatingSystem.IsMacOS());
+
+    /// <summary>
+    /// A system policy folder that holds an entry whose name ends in <c>.toml</c>: the host then drops the policy this
+    /// runtime gives the run, and holds it to the default rules and the person's own instead, which is not what a profile
+    /// asked for. The host reads the folder once, and goes on without the check where it cannot (no folder, no access), as
+    /// this does.
+    /// </summary>
+    public string? LaunchProblem()
+    {
+        if (systemPoliciesDirectory is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(systemPoliciesDirectory).Any(entry => entry.EndsWith(".toml", StringComparison.Ordinal)))
+            {
+                return null;
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        return $"gemini cannot be held to the policy this runtime composes: '{systemPoliciesDirectory}', the host's system policy folder, holds a .toml file, "
+            + "and then the host ignores the policy it is given and applies its own default rules and the person's. "
+            + "Move or remove the file there, or run this role on another host.";
+    }
 
     /// <summary>
     /// A signed-out run reads a line of standard input, which would be the first line of the brief, and may wait on a

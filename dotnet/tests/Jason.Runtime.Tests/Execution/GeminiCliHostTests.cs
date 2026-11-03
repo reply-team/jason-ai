@@ -425,6 +425,75 @@ public class GeminiCliHostTests
     private static string[] Included(IReadOnlyList<string> command) =>
         [.. command.Where(word => word.StartsWith("--include-directories=", StringComparison.Ordinal)).Select(word => word["--include-directories=".Length..])];
 
+    // The host's system policy folder: with any .toml in it the host drops the policy given to a run, so a run there is
+    // not one this runtime can hold to what it composes, and the attempt is refused before a child exists.
+
+    [Fact]
+    public void A_system_policy_folder_holding_a_toml_file_refuses_the_run_naming_the_folder()
+    {
+        using var directory = new TempDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "corporate.toml"), "# the organisation's own\n");
+
+        var problem = new GeminiCliHost(directory.Path).LaunchProblem();
+
+        Assert.NotNull(problem);
+        Assert.Contains(directory.Path, problem, StringComparison.Ordinal);
+        Assert.Contains(".toml", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain("corporate", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_directory_whose_name_ends_in_toml_is_an_entry_the_host_counts()
+    {
+        using var directory = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(directory.Path, "nested.toml"));
+
+        Assert.NotNull(new GeminiCliHost(directory.Path).LaunchProblem());
+    }
+
+    [Fact]
+    public void A_system_policy_folder_with_no_toml_file_leaves_the_run_alone()
+    {
+        using var directory = new TempDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "notes.txt"), "not a policy");
+        File.WriteAllText(Path.Combine(directory.Path, "policy.toml.bak"), "not a policy");
+        File.WriteAllText(Path.Combine(directory.Path, "UPPER.TOML"), "the host reads a name that ends in .toml exactly");
+
+        Assert.Null(new GeminiCliHost(directory.Path).LaunchProblem());
+    }
+
+    [Fact]
+    public void A_system_policy_folder_that_is_not_there_or_is_not_named_leaves_the_run_alone()
+    {
+        using var directory = new TempDirectory();
+
+        Assert.Null(new GeminiCliHost(Path.Combine(directory.Path, "not-there")).LaunchProblem());
+        Assert.Null(new GeminiCliHost(null).LaunchProblem());
+    }
+
+    [Theory]
+    [InlineData(true, false, "C:\\ProgramData\\gemini-cli\\policies")]
+    [InlineData(false, true, "/Library/Application Support/GeminiCli/policies")]
+    [InlineData(false, false, "/etc/gemini-cli/policies")]
+    public void The_system_policy_folder_is_the_one_the_host_reads_on_each_platform(bool windows, bool macOs, string expected)
+    {
+        Assert.Equal(expected, GeminiCliHost.SystemPoliciesDirectoryOf(windows, macOs));
+    }
+
+    [Fact]
+    public void The_registered_host_checks_the_folder_of_this_platform()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+
+        var host = Assert.Single(
+            Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<IAgentHost>(provider)
+                .OfType<GeminiCliHost>());
+
+        Assert.Equal(GeminiCliHost.SystemPoliciesDirectoryOf(OperatingSystem.IsWindows(), OperatingSystem.IsMacOS()), host.SystemPoliciesDirectory);
+    }
+
     // What a stand-in would learn of its end: the documented exit for a failed sign-in, and nothing of the host's words.
 
     [Fact]

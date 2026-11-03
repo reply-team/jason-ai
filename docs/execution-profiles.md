@@ -614,6 +614,12 @@ build does, and what it has not measured.
   `replace` and `ask_user` always, and the revision's `deny` words, where `run_shell_command(<prefix>)` is a prefix
   deny. A role writes through `jason`, never to disk. The policy holds the command word and the tool names only, never
   the capability token or the envelope.
+- **System policies.** The host ignores the policy given to a run when its system policy folder holds any entry whose
+  name ends in `.toml`, and says so in a warning only: `C:\ProgramData\gemini-cli\policies` on Windows,
+  `/Library/Application Support/GeminiCli/policies` on macOS and `/etc/gemini-cli/policies` elsewhere. The run would then
+  be held by the host's default rules and the person's own, which is not what the profile asked for. So where such an
+  entry is, the attempt is refused before a child exists, as `host_not_available`, with a sentence that names the
+  folder. A folder that is missing or cannot be read does not refuse a run, since the host goes on without it too.
 - **Memory files.** The host's file tools are confined to the workspace, so a memory file outside it is readable only
   where its folder is included. The included folders are exactly the folders of the levels the launch names, and none
   when it names none. The host reads an included folder whole, which is wider than the one file; and the client level
@@ -623,9 +629,9 @@ build does, and what it has not measured.
   `GEMINI.md` imports `AGENTS.md`, and the work directory's `.gemini/settings.json` pins that file name and turns
   the person's hooks off.
 - **Not measured.** The shell on Windows for the command prefix; whether `activate_skill` asks a person even where it is
-  allowed; `--session-id` and `--admin-policy`, which are in the 0.66.0 source but not in its options table; a system
-  policy directory that holds any `.toml` file, which makes the host ignore the supplemental admin policy, so the role
-  then fails closed; the person's own `~/.gemini/GEMINI.md` and `includeDirectories`, and the person's own skills in `~/.gemini/skills`
+  allowed; `--session-id` and `--admin-policy`, which are in the 0.66.0 source but not in its options table; the check
+  of the system policy folder, which was written from the source and not run on a machine that has such a folder; the
+  person's own `~/.gemini/GEMINI.md` and `includeDirectories`, and the person's own skills in `~/.gemini/skills`
   and `~/.agents/skills`, which a role may load through `activate_skill`, all of which reach every role; a leftover
   `~/.gemini/settings.json` from a person who has moved to Antigravity CLI, which still detects this host; and
   `GEMINI_CLI_HOME`, which moves `~/.gemini` with its settings and sign-in and which detection does not read, so a

@@ -54,7 +54,11 @@ public static class DispatcherModule
 
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
-        services.AddSingleton<IAgentHost, GeminiCliHost>();
+
+        // Gemini CLI reads policies an organisation sets for every user from a folder of its own, and a file there makes it
+        // ignore the one a run is given, so the host is told which folder this platform keeps them in.
+        services.AddSingleton<IAgentHost>(_ => new GeminiCliHost(GeminiCliHost.PlatformSystemPoliciesDirectory()));
+
 
         // Codex's sandbox lists what a run may read, and calling home reads the descriptor in the data directory, the
         // executable and what it unpacks when it starts. A composition with no data directory of its own names none.
