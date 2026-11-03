@@ -144,6 +144,46 @@ public sealed partial class CopyPromptTests
         Assert.DoesNotContain("campaign.enroll", approvalRun.Output, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("approved")]
+    [InlineData("rejected")]
+    [InlineData("superseded")]
+    [InlineData("cancelled")]
+    public async Task An_approval_that_no_longer_waits_says_it_was_decided_and_nothing_waits(string state)
+    {
+        var item = JsonNode.Parse(Fixture("approval.get", "pending-with-preview"))!.AsObject();
+        item["status"] = state;
+
+        var run = await Run(["approval", "get", "apr_1", "--prompt"], item.ToJsonString());
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        Assert.Equal($"This approval was already decided ({state}): apr_1, in campaign cmp_1. Nothing waits on it.", run.Output.Split('\n')[0]);
+        Assert.DoesNotContain("is waiting", run.Output, StringComparison.Ordinal);
+        Assert.Contains("\n5. If the person asks, give a short summary of what was decided.\n", run.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("proposed decision", run.Output, StringComparison.Ordinal);
+        Assert.EndsWith(YouDecideNothing, run.Output.TrimEnd(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("answered")]
+    [InlineData("cancelled")]
+    public async Task A_question_that_no_longer_waits_says_it_was_decided_and_nothing_waits(string state)
+    {
+        var item = JsonNode.Parse(Fixture("decision.get", "pending-with-options"))!.AsObject();
+        item["status"] = state;
+
+        var run = await Run(["decision", "get", "dec_1", "--prompt"], item.ToJsonString());
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        Assert.Equal($"This question was already decided ({state}): dec_1, in campaign cmp_1. Nothing waits on it.", run.Output.Split('\n')[0]);
+        Assert.DoesNotContain("is waiting", run.Output, StringComparison.Ordinal);
+        Assert.Contains("\n5. If the person asks, give a short summary of what was decided.\n", run.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("proposed answer", run.Output, StringComparison.Ordinal);
+        Assert.EndsWith(YouDecideNothing, run.Output.TrimEnd(), StringComparison.Ordinal);
+    }
+
+    private const string YouDecideNothing = "You decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. Do not run jason approval approve, jason approval reject, jason approval set-standing or jason decision answer.";
+
     [Fact]
     public async Task The_two_renderings_are_not_asked_for_together()
     {

@@ -18,7 +18,7 @@ public static class PromptRenderers
         }
 
         var folder = await PromptFolderResolver.ResolveAsync(env, campaign, cancellationToken).ConfigureAwait(false);
-        return CopyPrompt.Compose(PromptKind.Approval, id, campaign, workItem, folder);
+        return CopyPrompt.Compose(PromptKind.Approval, id, campaign, workItem, folder, Decided(approval.Status, ApprovalStatus.Pending));
     };
 
     public static Func<string, CancellationToken, Task<string?>> Question(CliEnvironment env) => async (json, cancellationToken) =>
@@ -30,6 +30,9 @@ public static class PromptRenderers
         }
 
         var folder = await PromptFolderResolver.ResolveAsync(env, campaign, cancellationToken).ConfigureAwait(false);
-        return CopyPrompt.Compose(PromptKind.Question, id, campaign, workItem, folder);
+        return CopyPrompt.Compose(PromptKind.Question, id, campaign, workItem, folder, Decided(decision.Status, DecisionStatus.Pending));
     };
+
+    private static string? Decided<T>(T status, T pending)
+        where T : struct, Enum => EqualityComparer<T>.Default.Equals(status, pending) ? null : status.ToString().ToLowerInvariant();
 }

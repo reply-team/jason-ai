@@ -31,7 +31,13 @@ public sealed record PromptFolder(PromptFolderLevel Level, string Path);
 /// </summary>
 public static class CopyPrompt
 {
-    public static string Compose(PromptKind kind, string itemId, string campaignId, string workItemId, PromptFolder? folder)
+    /// <summary>
+    /// <paramref name="decidedState"/> is null for an item that waits. For one that no longer does it is the item's own
+    /// status word (approved, rejected, superseded, cancelled, answered): the first line says it was decided and that
+    /// nothing waits, and step 5 is only a summary if the person asks. The rest stays, the paragraph that the session
+    /// decides nothing included.
+    /// </summary>
+    public static string Compose(PromptKind kind, string itemId, string campaignId, string workItemId, PromptFolder? folder, string? decidedState = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(itemId);
         ArgumentException.ThrowIfNullOrEmpty(campaignId);
@@ -39,9 +45,17 @@ public static class CopyPrompt
 
         var approval = kind == PromptKind.Approval;
         var text = new StringBuilder();
-        text.Append(approval
-            ? $"Jason is waiting for a person's decision on an approval: {itemId}, in campaign {campaignId}.\n"
-            : $"Jason is waiting for a person's answer to a question: {itemId}, in campaign {campaignId}.\n");
+        var noun = approval ? "approval" : "question";
+        if (decidedState is null)
+        {
+            text.Append(approval
+                ? $"Jason is waiting for a person's decision on an approval: {itemId}, in campaign {campaignId}.\n"
+                : $"Jason is waiting for a person's answer to a question: {itemId}, in campaign {campaignId}.\n");
+        }
+        else
+        {
+            text.Append(CultureInfo.InvariantCulture, $"This {noun} was already decided ({decidedState}): {itemId}, in campaign {campaignId}. Nothing waits on it.\n");
+        }
 
         if (folder is not null)
         {
@@ -62,7 +76,9 @@ public static class CopyPrompt
         text.Append(CultureInfo.InvariantCulture, $"2. Read the campaign and its timeline: jason campaign get {campaignId} and jason journal list --campaign {campaignId}\n");
         text.Append(CultureInfo.InvariantCulture, $"3. Read the work item that raised it: jason workitem get {workItemId}; it names its role. Then that role's note, jason rolenote get --role <role> --campaign {campaignId}, and the other roles' as you need them (jason rolenote list --campaign {campaignId}).\n");
         text.Append("4. Research whatever else you need to understand the request.\n");
-        text.Append(CultureInfo.InvariantCulture, $"5. Come back to the person with a short summary and a proposed {(approval ? "decision" : "answer")}, with your reasons.\n");
+        text.Append(decidedState is null
+            ? string.Create(CultureInfo.InvariantCulture, $"5. Come back to the person with a short summary and a proposed {(approval ? "decision" : "answer")}, with your reasons.\n")
+            : $"5. If the person asks, give a short summary of what was decided.\n");
         text.Append("\nYou decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. Do not run jason approval approve, jason approval reject, jason approval set-standing or jason decision answer.");
         return text.ToString();
     }
