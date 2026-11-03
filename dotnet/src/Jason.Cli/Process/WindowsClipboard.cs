@@ -4,8 +4,9 @@ using System.Runtime.Versioning;
 namespace Jason.Cli.Process;
 
 /// <summary>
-/// Windows' clipboard, as Unicode text: opened for a message-only window of this process, emptied, given one block of
-/// memory, closed. Another program holding the clipboard is waited for briefly, then said as <c>clipboard_busy</c>.
+/// Windows' clipboard, as Unicode text: one block of memory filled first, then the clipboard opened for a message-only
+/// window of this process, emptied, given the block, closed. Another program holding the clipboard is waited for briefly,
+/// then said as <c>clipboard_busy</c>. The block is freed on every way out short of Windows taking it.
 /// </summary>
 /// <remarks>
 /// No test runs it: a run would replace what the person running the suite had copied. What it does is proved by a
@@ -43,82 +44,100 @@ public sealed class WindowsClipboard : IClipboard
             return false;
         }
 
-        // A clipboard opened with no window has no owner, and Windows then refuses the data: the window owns it.
-        var window = CreateWindowExW(0, "STATIC", null, 0, 0, 0, 0, 0, MessageOnly, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-        if (window == IntPtr.Zero)
+        // The block is filled before the clipboard is opened, so the clipboard is held no longer than handing it over takes.
+        var memory = Filled(text);
+        if (memory == IntPtr.Zero)
         {
             problem = Unavailable;
             return false;
         }
 
+        var taken = false;
         try
         {
-            for (var attempt = 0; attempt < Attempts; attempt++)
+            // A clipboard opened with no window has no owner, and Windows then refuses the data: the window owns it.
+            var window = CreateWindowExW(0, "STATIC", null, 0, 0, 0, 0, 0, MessageOnly, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+            if (window == IntPtr.Zero)
             {
-                if (OpenClipboard(window))
-                {
-                    try
-                    {
-                        return Put(text, out problem);
-                    }
-                    finally
-                    {
-                        _ = CloseClipboard();
-                    }
-                }
-
-                Thread.Sleep(PauseMilliseconds);
+                problem = Unavailable;
+                return false;
             }
 
-            problem = Busy;
-            return false;
+            try
+            {
+                for (var attempt = 1; ; attempt++)
+                {
+                    if (OpenClipboard(window))
+                    {
+                        try
+                        {
+                            taken = EmptyClipboard() && SetClipboardData(UnicodeText, memory) != IntPtr.Zero;
+                            problem = taken ? null : Unavailable;
+                            return taken;
+                        }
+                        finally
+                        {
+                            _ = CloseClipboard();
+                        }
+                    }
+
+                    if (attempt == Attempts)
+                    {
+                        problem = Busy;
+                        return false;
+                    }
+
+                    Thread.Sleep(PauseMilliseconds);
+                }
+            }
+            finally
+            {
+                _ = DestroyWindow(window);
+            }
         }
         finally
         {
-            _ = DestroyWindow(window);
+            // Once Windows has taken the block it is Windows' to free; on every other way out it is still ours.
+            if (!taken)
+            {
+                _ = GlobalFree(memory);
+            }
         }
     }
 
-    private static bool Put(string text, out string? problem)
+    /// <summary>A movable block holding <paramref name="text"/> and its terminating NUL, unlocked; zero where none could be had.</summary>
+    private static IntPtr Filled(string text)
     {
-        problem = Unavailable;
-        if (!EmptyClipboard())
-        {
-            return false;
-        }
-
         var memory = GlobalAlloc(Moveable, (UIntPtr)((text.Length + 1) * sizeof(char)));
         if (memory == IntPtr.Zero)
         {
-            return false;
+            return IntPtr.Zero;
         }
 
         var locked = GlobalLock(memory);
         if (locked == IntPtr.Zero)
         {
             _ = GlobalFree(memory);
-            return false;
+            return IntPtr.Zero;
         }
 
+        var filled = false;
         try
         {
             Marshal.Copy(text.ToCharArray(), 0, locked, text.Length);
             Marshal.WriteInt16(locked, text.Length * sizeof(char), 0);
+            filled = true;
         }
         finally
         {
             _ = GlobalUnlock(memory);
+            if (!filled)
+            {
+                _ = GlobalFree(memory);
+            }
         }
 
-        // Once Windows has taken the block it is Windows' to free; refused, it is still ours.
-        if (SetClipboardData(UnicodeText, memory) == IntPtr.Zero)
-        {
-            _ = GlobalFree(memory);
-            return false;
-        }
-
-        problem = null;
-        return true;
+        return memory;
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
