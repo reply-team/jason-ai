@@ -550,6 +550,27 @@ public class GeminiCliHostTests
         Assert.Equal(GeminiCliHost.SystemPoliciesDirectoryOf(OperatingSystem.IsWindows(), OperatingSystem.IsMacOS()), host.SystemPoliciesDirectory);
     }
 
+    /// <summary>
+    /// A test runtime is isolated from the machine it runs on, as every test is: whatever the machine's own policy folder
+    /// holds is not the test's to meet, so the host a test runtime resolves checks no folder. Otherwise a row that runs a
+    /// role under this host is refused on a machine whose folder holds a policy file.
+    /// </summary>
+    [Fact]
+    public void The_host_a_test_runtime_resolves_checks_no_folder_of_the_machine()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        TestRuntimeOptions.TurnTheOutsideOff(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+
+        var host = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<IAgentHost>(provider)
+            .OfType<GeminiCliHost>()
+            .Last();
+
+        Assert.Null(host.SystemPoliciesDirectory);
+        Assert.Null(host.LaunchProblem());
+    }
+
     // What a stand-in would learn of its end: the documented exit for a failed sign-in, and nothing of the host's words.
 
     [Fact]
