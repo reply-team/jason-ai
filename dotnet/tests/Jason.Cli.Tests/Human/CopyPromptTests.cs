@@ -64,15 +64,17 @@ public sealed partial class CopyPromptTests
         Assert.Contains("Use the skill approvals-and-questions.", text, StringComparison.Ordinal);
     }
 
+    // The same three label lines and three words as ui/src/screens/attention/copy-prompt.test.ts holds.
     [Theory]
-    [InlineData(PromptFolderLevel.Project, "Project folder (the campaign has none recorded): /p\n", "about this project")]
-    [InlineData(PromptFolderLevel.HarnessRoot, "Harness root (no folder is recorded for the campaign or its project): /p\n", "about this client")]
-    public void A_folder_above_the_campaign_says_which_level_it_is(PromptFolderLevel level, string line, string whose)
+    [InlineData(PromptFolderLevel.Campaign, "Campaign folder: /p", "campaign")]
+    [InlineData(PromptFolderLevel.Project, "Project folder (the campaign has none recorded): /p", "project")]
+    [InlineData(PromptFolderLevel.HarnessRoot, "Harness root (no folder is recorded for the campaign or its project): /p", "client")]
+    public void A_folder_says_which_level_it_is(PromptFolderLevel level, string line, string whose)
     {
         var text = CopyPrompt.Compose(PromptKind.Approval, "apr_9", "cmp_8", "wi_7", new PromptFolder(level, "/p"));
 
-        Assert.Contains(line, text, StringComparison.Ordinal);
-        Assert.Contains(whose, text, StringComparison.Ordinal);
+        Assert.Contains("\n" + line + "\n", text, StringComparison.Ordinal);
+        Assert.Contains($"Read its memory file, AGENTS.md: it holds what the person keeps about this {whose}. If you can, work from that folder.\n", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -98,11 +100,56 @@ public sealed partial class CopyPromptTests
     [Fact]
     public async Task A_project_with_no_folder_falls_back_to_the_harness_root()
     {
-        var run = await Run(["decision", "get", "dec_1", "--prompt"], Fixture("decision.get", "pending-with-options"), campaign: Fixture("campaign.get", "one"), project: Fixture("project.get", "by-slug"), info: Fixture("system.info", "with-ui"));
+        var run = await Run(["decision", "get", "dec_1", "--prompt"], Fixture("decision.get", "pending-with-options"), campaign: Fixture("campaign.get", "one"), project: Fixture("project.get", "by-slug"), info: Marked(Fixture("system.info", "with-ui")));
 
         Assert.Equal(ExitCodes.Success, run.Exit);
         Assert.Contains("Harness root (no folder is recorded for the campaign or its project): ~/Jason", run.Output, StringComparison.Ordinal);
         Assert.Equal(["decision.get", "campaign.get", "project.get", "system.info"], run.Asked);
+    }
+
+    [Fact]
+    public async Task A_campaign_read_that_failed_ends_the_resolution_even_though_the_runtime_would_name_a_root()
+    {
+        var run = await Run(["approval", "get", "apr_1", "--prompt"], Fixture("approval.get", "pending-with-preview"), info: Marked(Fixture("system.info", "with-ui")));
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        Assert.DoesNotContain("folder", run.Output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Harness root", run.Output, StringComparison.Ordinal);
+        Assert.Equal(["approval.get", "campaign.get"], run.Asked);
+    }
+
+    [Fact]
+    public async Task A_project_read_that_failed_ends_the_resolution_even_though_the_runtime_would_name_a_root()
+    {
+        var run = await Run(["approval", "get", "apr_1", "--prompt"], Fixture("approval.get", "pending-with-preview"), campaign: Fixture("campaign.get", "one"), info: Marked(Fixture("system.info", "with-ui")));
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        Assert.DoesNotContain("Harness root", run.Output, StringComparison.Ordinal);
+        Assert.Equal(["approval.get", "campaign.get", "project.get"], run.Asked);
+    }
+
+    [Theory]
+    [InlineData("absent")]
+    [InlineData("unmarked")]
+    [InlineData("taken")]
+    [InlineData("not_a_folder")]
+    [InlineData("unreadable")]
+    public async Task A_harness_root_that_is_not_marked_is_not_named(string rootState)
+    {
+        var info = JsonNode.Parse(Fixture("system.info", "with-ui"))!.AsObject();
+        info["harness"]!["root_state"] = rootState;
+        var run = await Run(["decision", "get", "dec_1", "--prompt"], Fixture("decision.get", "pending-with-options"), campaign: Fixture("campaign.get", "one"), project: Fixture("project.get", "by-slug"), info: info.ToJsonString());
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        Assert.DoesNotContain("folder", run.Output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Harness root", run.Output, StringComparison.Ordinal);
+    }
+
+    private static string Marked(string info)
+    {
+        var node = JsonNode.Parse(info)!.AsObject();
+        node["harness"]!["root_state"] = "marked";
+        return node.ToJsonString();
     }
 
     [Fact]

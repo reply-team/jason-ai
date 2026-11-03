@@ -47,6 +47,29 @@ describe('resolveFolder', () => {
         });
         expect(await resolveFolder(older.api, 'cmp_1')).toBeNull();
     });
+
+    it('ends with no folder when a read did not answer, though a lower level would', async () => {
+        const root = { harness: { root: '/h', root_state: 'marked' } };
+        const campaignFailed = stub({ 'system.info': root });
+        expect(await resolveFolder(campaignFailed.api, 'cmp_1')).toBeNull();
+        expect(campaignFailed.asked).toEqual(['campaign.get']);
+
+        const projectFailed = stub({ 'campaign.get': { project_id: 'prj_1', folder_path: null }, 'system.info': root });
+        expect(await resolveFolder(projectFailed.api, 'cmp_1')).toBeNull();
+        expect(projectFailed.asked).toEqual(['campaign.get', 'project.get']);
+    });
+
+    it.each(['absent', 'unmarked', 'taken', 'not_a_folder', 'unreadable'])(
+        'does not name a harness root whose state is %s',
+        async (rootState) => {
+            const { api } = stub({
+                'campaign.get': { project_id: 'prj_1', folder_path: null },
+                'project.get': { folder_path: null },
+                'system.info': { harness: { root: '/h', root_state: rootState } },
+            });
+            expect(await resolveFolder(api, 'cmp_1')).toBeNull();
+        },
+    );
 });
 
 describe('composePrompt', () => {
@@ -56,12 +79,16 @@ describe('composePrompt', () => {
         expect(text).toContain('jason approval get apr_1');
     });
 
-    it('names the level of a folder above the campaign', () => {
-        expect(composePrompt('question', 'dec_1', 'cmp_1', 'wi_1', { level: 'project', path: '/p' })).toContain(
-            'Project folder (the campaign has none recorded): /p',
-        );
-        expect(composePrompt('question', 'dec_1', 'cmp_1', 'wi_1', { level: 'harness_root', path: '/h' })).toContain(
-            'about this client',
+    // The same three label lines and three words as CopyPromptTests.cs holds.
+    it.each([
+        ['campaign', 'Campaign folder: /p', 'campaign'],
+        ['project', 'Project folder (the campaign has none recorded): /p', 'project'],
+        ['harness_root', 'Harness root (no folder is recorded for the campaign or its project): /p', 'client'],
+    ] as const)('says which level a %s folder is', (level, line, whose) => {
+        const text = composePrompt('question', 'dec_1', 'cmp_1', 'wi_1', { level, path: '/p' });
+        expect(text).toContain(`\n${line}\n`);
+        expect(text).toContain(
+            `Read its memory file, AGENTS.md: it holds what the person keeps about this ${whose}. If you can, work from that folder.\n`,
         );
     });
 });

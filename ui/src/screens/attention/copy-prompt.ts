@@ -59,18 +59,23 @@ export function composePrompt(
 
 /**
  * Where the session should stand: the campaign's recorded folder, else its project's, else the harness root the runtime
- * reports. Each step is a read that exists, asked only as far as needed; a read that fails means no folder at that step,
- * and no folder at all is a prompt without the folder lines, never a failure.
+ * reports. Each step is a read that exists, asked only as far as needed. Only an answer that carries no folder falls
+ * through to the next level; a read that did not answer ends the resolution, because a lower level named after it
+ * would be labelled "no folder is recorded", which nobody has said. No folder at all is a prompt without the folder
+ * lines, never a failure. The root is named only when it is a folder with the root's marker.
  */
 export async function resolveFolder(api: Api, campaignId: string): Promise<PromptFolder | null> {
     const campaign = await tryRead<Campaign>(api, 'campaign.get', { campaign_id: campaignId });
-    if (campaign?.folder_path) return { level: 'campaign', path: campaign.folder_path };
-    if (campaign?.project_id) {
+    if (!campaign) return null;
+    if (campaign.folder_path) return { level: 'campaign', path: campaign.folder_path };
+    if (campaign.project_id) {
         const project = await tryRead<Project>(api, 'project.get', { project_id: campaign.project_id });
-        if (project?.folder_path) return { level: 'project', path: project.folder_path };
+        if (!project) return null;
+        if (project.folder_path) return { level: 'project', path: project.folder_path };
     }
     const info = await tryRead<SystemInfo>(api, 'system.info');
-    return info?.harness?.root ? { level: 'harness_root', path: info.harness.root } : null;
+    const harness = info?.harness;
+    return harness?.root && harness.root_state === 'marked' ? { level: 'harness_root', path: harness.root } : null;
 }
 
 async function tryRead<T>(api: Api, operation: string, body?: object): Promise<T | null> {
