@@ -5,14 +5,15 @@ namespace Jason.App.Tests;
 
 /// <summary>
 /// No test clicks a <c>jason:</c> link for real: none writes this account's registry, none writes the clipboard, none
-/// opens a browser through the environment a click is given, none hands a link to a process it starts. Held over the
-/// source of every test project.
+/// starts a terminal, none opens a browser through the environment a click is given, none hands a link to a process it
+/// starts. Held over the source of every test project.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Four rules. No test names the real registry or the real clipboard: either would act on the machine running the
-/// suite, whatever the data directory says. No file reaches the link handler and the real CLI environment together,
-/// which carries the real opener and the real clipboard. No file runs the router beside a <c>jason:</c> link, since the
+/// Six rules. No test names the real registry, the real clipboard or the real terminal starter: each would act on the
+/// machine running the suite, whatever the data directory says, the last by opening a window with an agent host in it.
+/// No file reaches the link handler and the real CLI environment together, which carries the real opener, the real
+/// clipboard and the real terminal starter; nor names the <c>session</c> verb or its opener beside that environment. No file runs the router beside a <c>jason:</c> link, since the
 /// router hands a link the real environment: choosing the mode is held by <c>ModeRouter.Select</c> alone. And no file
 /// that starts a process — by a start info of its own, through <c>ChildProcess</c>, or through the executable runner the
 /// end-to-end tests share — holds a <c>jason:</c> literal, since the executable it starts runs a link as a click does.
@@ -45,7 +46,10 @@ public sealed partial class NoTestClicksALinkTests
     [Theory]
     [InlineData("real registry", "var registry = new Registry" + "UserRegistry();")]
     [InlineData("real clipboard", "IClipboard clipboard = new Windows" + "Clipboard();")]
+    [InlineData("real terminal", "ITerminalStarter terminals = new PlatformTerminal" + "Starter();")]
     [InlineData("handler with the real environment", "await Link" + "Handler.RunAsync([link], CliEnvironment.Default(), ct);")]
+    [InlineData("session verb with the real environment", "await CliApp.RunAsync([\"session\", \"open\", \"--approval\", id], CliEnvironment.Default(), ct);")]
+    [InlineData("session opener with the real environment", "await Session" + "Opener.OpenAsync(CliEnvironment.Default(), kind, id, false, false, ct);")]
     [InlineData("router with a link", "await ModeRouter.RunAsync([\"jason://attention\"], ct);")]
     [InlineData("router with a link in pieces", "await ModeRouter.RunAsync([\"JASON\" + \"://attention\"], ct);")]
     [InlineData("router with the table's link", "await ModeRouter.RunAsync([AttentionLinks.List], ct);")]
@@ -61,6 +65,8 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("await ModeRouter.RunAsync([\"--version\"], ct);")]
     [InlineData("Assert.Equal(Mode.Link, ModeRouter.Select([\"jason://attention\"]));")]
     [InlineData("await Link" + "Handler.RunAsync([link], cli.Environment, ct);")]
+    [InlineData("await _run.Cli(\"session\", \"open\", \"--approval\", \"apr_1\");")]
+    [InlineData("var session = Read(body); var env = CliEnvironment.Default();")]
     [InlineData("await GoldenPath.JasonAsync(it, \"--version\");")]
     public void What_acts_on_nothing_is_no_offence(string text) => Assert.Null(Offence("Fine.cs", text));
 
@@ -69,6 +75,7 @@ public sealed partial class NoTestClicksALinkTests
         var text = Joined(source);
         var registry = string.Concat("Registry", "UserRegistry");
         var clipboard = string.Concat("Windows", "Clipboard");
+        var terminal = string.Concat("PlatformTerminal", "Starter");
         if (text.Contains(registry, StringComparison.Ordinal))
         {
             return $"{file} names {registry}, which writes this account's registry";
@@ -79,9 +86,20 @@ public sealed partial class NoTestClicksALinkTests
             return $"{file} names {clipboard}, which writes the person's clipboard";
         }
 
+        if (text.Contains(terminal, StringComparison.Ordinal))
+        {
+            return $"{file} names {terminal}, which starts a terminal window on this machine";
+        }
+
         if (text.Contains(string.Concat("Link", "Handler"), StringComparison.Ordinal) && text.Contains("CliEnvironment.Default", StringComparison.Ordinal))
         {
             return $"{file} reaches the link handler and the real CLI environment together";
+        }
+
+        if ((text.Contains("\"session\"", StringComparison.Ordinal) || text.Contains(string.Concat("Session", "Opener"), StringComparison.Ordinal))
+            && text.Contains("CliEnvironment.Default", StringComparison.Ordinal))
+        {
+            return $"{file} names the session verb beside the real CLI environment, which starts a terminal window on this machine";
         }
 
         if (text.Contains("ModeRouter.RunAsync", StringComparison.Ordinal)

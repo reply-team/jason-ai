@@ -22,7 +22,7 @@ public class PreferenceEndpointTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
 
         var none = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "none", new { }, Ct);
-        Assert.Equal(["sender.identity", "tone_of_voice"], none.Items.Select(item => item.Key));
+        Assert.Equal(["agent.interactive_host", "sender.identity", "tone_of_voice"], none.Items.Select(item => item.Key));
         Assert.All(none.Items, item => Assert.True(item.Value is null && item.UpdatedAt is null, $"{item.Key} is set on a new installation: {item}"));
 
         var sender = new
@@ -57,7 +57,7 @@ public class PreferenceEndpointTests
         Assert.Equal("actor_required", anonymous.Code);
 
         var both = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "set", new { }, Ct);
-        Assert.Equal([set.ValueHash, tone.ValueHash], both.Items.Select(item => item.ValueHash));
+        Assert.Equal([null, set.ValueHash, tone.ValueHash], both.Items.Select(item => item.ValueHash));
 
         var unset = await api.RecordAsync<PreferenceDto>(Operations.PreferenceUnset, "removed", new { key = "sender.identity", actor = Marta, reason = "taken back" }, Ct);
         Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), unset);

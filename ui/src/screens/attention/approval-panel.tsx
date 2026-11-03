@@ -5,6 +5,7 @@ import { DecideDialog } from './decide-dialog';
 import { reasonLabel, title } from './labels';
 import { ActionsRow } from '../../layout/actions-row';
 import { CopyPromptButton } from './copy-prompt-button';
+import { SessionLink } from './session-link';
 import { PanelHeader } from '../../layout/panel-header';
 
 type Props = {
@@ -66,6 +67,7 @@ export function ApprovalPanel({
                             campaignId={approval.campaign_id}
                             workItemId={approval.work_item_id}
                         />
+                        <SessionLink kind="approval" itemId={approval.id} />
                     </>
                 )}
             </ActionsRow>

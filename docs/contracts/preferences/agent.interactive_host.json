@@ -1,0 +1,14 @@
+{
+  "key": "agent.interactive_host",
+  "version": 1,
+  "summary": "The agent host jason session open starts for the person, in a terminal of their own: one of the host words. Unset means claude_code.",
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["host"],
+    "additionalProperties": false,
+    "properties": {
+      "host": { "enum": ["claude_code", "codex", "copilot_cli", "cursor_cli", "gemini_cli", "antigravity_cli"] }
+    }
+  }
+}

@@ -171,16 +171,16 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Eight names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
-    /// the <c>skills</c> and <c>update</c> nouns, and <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
-    /// other verbs are operations — and no page says two, the four it said before the two verbs that read the
-    /// installation's files arrived, the six it said before the UI was placed by a command, or the seven it said before a
-    /// plugin package was.
+    /// Nine names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
+    /// the <c>skills</c> and <c>update</c> nouns, <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
+    /// other verbs are operations, and <c>session open</c> — and no page says two, the four it said before the two verbs
+    /// that read the installation's files arrived, the six it said before the UI was placed by a command, the seven it said
+    /// before a plugin package was, or the eight it said before a person's own agent host was started by one.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "It is one of eight names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and `plugin install`")]
-    [InlineData("docs/INSTALL.md", "It is one of eight names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and `plugin install`")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **eight declared exceptions**")]
+    [InlineData("README.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("docs/INSTALL.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **nine declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -194,7 +194,42 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("six declared exceptions", text, StringComparison.Ordinal);
         Assert.DoesNotContain("one of seven names", text, StringComparison.Ordinal);
         Assert.DoesNotContain("seven declared exceptions", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of eight names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("eight declared exceptions", text, StringComparison.Ordinal);
         Assert.Contains(said, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The agent <c>jason session open</c> starts runs in the person's own host, where the CLI's approve and answer verbs
+    /// are as reachable as anywhere else. So no page or help states as a fact that it never approves, rejects or answers:
+    /// each says what Jason's brief asks and whose settings decide what the agent may run.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide")]
+    [InlineData("docs/ui.md", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.")]
+    [InlineData("dotnet/src/Jason.Cli/Session/SessionOpener.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
+    [InlineData("dotnet/src/Jason.Cli/Link/LinkHandler.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
+    [InlineData("ui/src/screens/attention/session-link.tsx", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.")]
+    public void No_page_says_the_agent_a_session_starts_cannot_decide(string page, string said)
+    {
+        var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
+
+        Assert.DoesNotContain("proposes and never decides", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("reads and proposes and decides nothing", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("the person still decides", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("approving, rejecting and answering stay with you", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("and the agent it starts proposes.", text, StringComparison.Ordinal);
+        Assert.Contains(said, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The help says what the brief asks of the agent, never what the agent cannot do.</summary>
+    [Fact]
+    public void The_session_help_says_what_the_brief_asks_and_who_decides_what_runs()
+    {
+        var help = Jason.Cli.Session.SessionCommands.OpenDescription;
+
+        Assert.DoesNotContain("it never approves, rejects or answers", help, StringComparison.Ordinal);
+        Assert.Contains("Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.", help, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -14,14 +14,32 @@ namespace Jason.Contracts.Tests.Preferences;
 public sealed class PreferenceContractTests
 {
     [Fact]
-    public void The_family_publishes_the_sender_s_identity_and_the_tone_of_voice_at_version_1()
+    public void The_family_publishes_the_interactive_host_the_sender_s_identity_and_the_tone_of_voice_at_version_1()
     {
-        Assert.Equal(["sender.identity", "tone_of_voice"], PreferenceCatalog.All.Select(contract => contract.Key));
+        Assert.Equal(["agent.interactive_host", "sender.identity", "tone_of_voice"], PreferenceCatalog.All.Select(contract => contract.Key));
         Assert.All(PreferenceCatalog.All, contract => Assert.True(contract.Version == 1, $"{contract.Key} is at version {contract.Version}."));
-        Assert.Same(PreferenceCatalog.All[0], PreferenceCatalog.Find("sender.identity"));
+        Assert.Same(PreferenceCatalog.All[1], PreferenceCatalog.Find("sender.identity"));
         Assert.True(PreferenceCatalog.Knows("tone_of_voice"));
+        Assert.True(PreferenceCatalog.Knows("agent.interactive_host"));
         Assert.False(PreferenceCatalog.Knows("tone"));
-        Assert.Equal(["sender.identity", "tone_of_voice"], PreferenceCatalog.Keys);
+        Assert.Equal(["agent.interactive_host", "sender.identity", "tone_of_voice"], PreferenceCatalog.Keys);
+    }
+
+    /// <summary>
+    /// The host a person's own agent session is started with is one of the host words, every one of them in the order
+    /// of the enum: a host added to the table is red here until the document gains its word, which raises the key's
+    /// version, since a widening never makes a stored value invalid.
+    /// </summary>
+    [Fact]
+    public void The_interactive_host_is_one_host_word_and_the_list_is_the_hosts_vocabulary()
+    {
+        var schema = PreferenceCatalog.Find("agent.interactive_host")!.ValueSchema;
+        Assert.Equal(["host"], Names(schema["required"]));
+        Assert.Equal(["host"], ((JsonObject)schema["properties"]!).Select(property => property.Key));
+        Assert.False((bool)schema["additionalProperties"]!);
+        Assert.Equal(
+            Enum.GetValues<Jason.Contracts.Api.AgentHostKind>().Select(Jason.Contracts.Hosts.AgentHosts.Word),
+            Names(schema["properties"]!["host"]!["enum"]));
     }
 
     [Fact]
