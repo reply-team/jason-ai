@@ -20,139 +20,104 @@ replaces the title and the body together.
 -->
 
 
-# Jason 0.25.0
+# Jason 0.26.0
 
-## What is new since 0.24.0
+## What is new since 0.25.0
 
-- **A reply wakes the campaign's responder at once.** Until now a reply only released the manager's next check-in, so an
-  answer waited for a review of the whole campaign. Now a reply on a thread the campaign's own operations pinned wakes the
-  campaign's `responder` role itself, with a read of its thread already queued and ahead of the campaign's queued sends.
-  A reply seen through a person another campaign shares, and a line the provider's events carry, wake the manager alone.
-  The manager still decides at its review
-  what the campaign as a whole calls for, and leaves a reply a responder has taken to the responder. [The responder's
-  skill](https://github.com/reply-team/jason-ai/blob/v0.25.0/skills/runtime/roles/responder/SKILL.md) is the loop it
-  follows: it reads the reply, classifies it, records its verdict, and reacts as the category says.
-  - **What it does by itself.** It records its verdict, a `reply_classified` line of the campaign's chronicle that
-    carries the reply's identifiers, a category, a confidence and a reaction and never a word of the reply
-    (`jason reply record`). An absence, a "not now" and a bounce become a note with the moment, and nothing is sent. A
-    person who asks not to be contacted again goes on Jason's do-not-contact register, and the provider's opt-out is
-    recorded without anyone approving it. And where it is unsure, or the category is one that escalates, it asks you.
-  - **What waits for you.** Every answer it drafts parks for your approval, like any send, unless a standing approval
-    (next item) covers its category. What to do about a `referral` is always yours to decide. Below the confidence that
-    the categories file names as `question_below`, the responder asks which category a reply is, offering the likeliest
-    ids and always `other`, and drafts nothing.
-  - **One answer per reply.** A reply gets one verdict and one draft: a verdict already standing on the message is the
-    verdict, and a draft already open or sent for it stops a second one, for a run launched again as well. A further
-    move on a thread whose responder has not finished is recorded on that responder, and wakes no other.
-  - **Settings.** A `Responder` section of `settings.json`, read live: `OnReply`, on by default, turns the wake-up off,
-    and `MaxAgeSeconds`, three days by default, leaves a reply older than that to the manager alone. Where nothing can
-    launch the role, a responder is not created, and the log says so once for the campaign. Replies said before the
-    upgrade owe no answer: the first reply that wakes a responder is one said after it. [The inbound sync
-    page](https://github.com/reply-team/jason-ai/blob/v0.25.0/docs/inbound-sync.md) says what the step reads and when it
-    passes a reply over.
-- **A person may let drafted answers to one kind of reply go without being asked each time.** A standing approval is
-  set for one campaign and one reply category, and only by a person who gives their name: a role never sets one, and an
-  agent only on a person's explicit word.
-  `jason approval set-standing <campaign> --category <id> --actor human:<id>` covers a drafted `conversation.reply`.
-  `--operation` names the operations covered, `conversation.reply` when none is named, and a message to the same person
-  outside the thread is covered only where `message.send` is named. `--expires-at` and `--max-releases` (from 1 to 10000) are the limits, and
-  none is set unless you give it. `jason approval list-standing <campaign>` says what stands, how many drafts each one
-  has let go and whether it is in force, and `jason approval unset-standing` takes one back. The skills advise one only
-  where the reaction is a reply to the same person, and never for `referral`, `opt_out` or `bounce`.
-  - **What it releases.** A draft nobody has been asked about, and only where every condition the claim checks holds: the
-    verdict it answers is the newest on its reply and says `draft`, and was recorded by the run the runtime woke for
-    that reply, by a person who gave their name, or with a person's answer to a question about that reply; the draft is
-    unchanged since it was created; and a standing approval for exactly that category is in force, names the operation,
-    has not expired and is under its ceiling. Otherwise the draft parks as before, and its preview says which condition
-    failed.
-  - **What it never releases.** A draft parked before the standing approval was set still waits for you, however long
-    ago, and so does one whose question expired and which was reopened.
-  - **Where to see what went out.** Each draft let go is an approved approval whose reason is `standing_approval`, under
-    the name of the person who set it, with an `approval_standing_applied` line in the campaign's chronicle. [The work
-    execution page](https://github.com/reply-team/jason-ai/blob/v0.25.0/docs/work-execution.md) has the contract, and
-    [the approvals skill](https://github.com/reply-team/jason-ai/blob/v0.25.0/skills/runtime/approvals-and-questions/SKILL.md)
-    shows an agent how to set, list and unset one.
-- **A campaign states what it is for.** `goals` is a reserved key of a campaign's context: the outcomes the campaign's
-  roles steer each conversation towards, each with an `id`, a `kind` (`meeting`, `demo`, `trial`, `interested_reply`,
-  `purchase` or `custom`), a title, what "reached when" means in your words, and an order. It is checked when the
-  campaign is created and whenever `jason campaign update-context` names it. The planning skills settle goals with you
-  when a campaign is made, and a campaign with none is valid: its roles take a demo as the goal. The responder drafts
-  toward the first goal the reply can move, and its verdict names that goal; a campaign with none names none. [The goals
-  contract](https://github.com/reply-team/jason-ai/blob/v0.25.0/docs/contracts/context/goals.md) is the document the
-  runtime enforces.
-- **The reply categories are data, and yours to extend.** The thirteen base categories, `interested`,
-  `meeting_requested`, `meeting_booked`, `question`, `objection`, `not_now`, `wrong_person`, `referral`, `out_of_office`,
-  `auto_reply`, `bounce`, `opt_out` and `other`, are listed with what each says and its default reaction in
-  [`categories.json`](https://github.com/reply-team/jason-ai/blob/v0.25.0/skills/runtime/roles/responder/categories.json),
-  beside the responder's skill, and every other skill this release changed names a category by those ids and copies none. To add or refine
-  one, write a section headed "Reply categories" in the `AGENTS.md` memory file of your client, of a project or of a
-  campaign. Each entry there refines one base category under an id of its own, with a rule for what to do, and where
-  two levels disagree the nearer wins: the campaign's over the project's, the project's over the client's. A reply that
-  fits a refinement is recorded under its id and takes its base category's reaction unless the rule says otherwise; the
-  responder's skill shows what such a section looks like. A category is what a standing approval is set on, so two
-  replies whose safe reaction differs should never share one.
-- **The other skills follow.** The manager reads the responder's verdicts, leaves a thread with an open responder alone,
-  and records a person's answer to a doubtful category as a second verdict, which wakes the reaction it names. The
-  analyst counts replies by category over a window and reports bounces as a deliverability figure, and inbox triage
-  starts from what the responder left and never drafts a second answer to a reply that has one.
-- **A person's answer to a question about a reply can back the verdict recorded from it.** `jason reply record
-  --decision dec_...` (`decision_id` in the API) names the question that was raised about the reply, and the
-  `reply_classified` line then carries the decision and the person who answered it. The runtime checks the answer when
-  the verdict is recorded: the decision belongs to the campaign, it is answered, a person who gave their name answered
-  it, the option they chose is the category being recorded, and the question was raised by a run that had recorded a
-  verdict on this same reply. A refusal says why in one of five codes, `decision_not_found`, `decision_not_answered`,
-  `decision_not_human`, `decision_option_differs` or `decision_not_about_reply`, and writes nothing. A standing approval
-  counts such a verdict as that person's word, so a draft under it can go without a second approval of the choice they
-  just made. An answer in words, with no chosen option, backs no verdict: the manager records the category it reads
-  there without `--decision`, and the draft waits for you. The responder records its guess from its own run before it
-  asks, which is what lets the answer count. [The API
-  reference](https://github.com/reply-team/jason-ai/blob/v0.25.0/docs/runtime-api.md) has the contract.
-- **The Reply package states what Reply does with a contact's later replies.** Its README no longer says that only a
-  contact's first reply is read. For a sequence email, Reply keeps at most one reply to each email it sent and drops a
-  finished contact's later replies on that thread before it stores them; after this side has answered on the thread
-  through `conversation.reply`, the contact's next replies on it are stored and read. A LinkedIn thread keeps later
-  messages. All of this is read from how Reply is built and has not yet been observed on an account. It is why
-  answering a reply at once matters: a later reply on the thread can be lost until an answer goes out
-  through `conversation.reply`, so a draft parked for approval leaves that window open, and a standing approval shortens
-  it.
+A launched role no longer has to run on Claude Code. Each host below is a program you install yourself and sign in to as
+yourself, under your own plan: Jason holds no key for any of them. `jason skills install --host <host>` deploys the
+skills into that host's folder, and Codex CLI, GitHub Copilot CLI, Cursor CLI and Gemini CLI all read `~/.agents/skills`, so
+they share one deployment. `jason status` says which hosts it found on the machine and whether every enabled profile names
+one. Every host added in this release is built from the host's own documentation, and from its source or installed files
+where there are any, for the version [the host matrix](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#12-the-hosts)
+names; none has yet been run on a signed-in account. The tests prove the command Jason composes and the launch around it
+against a stand-in program.
 
-## Fixed since 0.24.0
+- **Codex CLI.** Install it with `npm install -g @openai/codex`, sign in with `codex login`, then
+  `jason profile create local-codex --host codex --program codex`. A role is confined by a Codex sandbox rather than by a
+  list of commands: the runtime names a permissions profile of its own on the command line, and every command the role
+  runs is held by it. On Windows an administrator sets up Codex's elevated sandbox once first. [The Codex
+  section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#codex-cli) says what it reads
+  and what it cannot hold.
+- **Cursor CLI.** Install it from [Cursor's installation page](https://cursor.com/docs/cli/installation.md), sign in with
+  `agent login`, then `jason profile create local-cursor --host cursor_cli --program agent`. A role is confined by
+  permission rules Jason writes to `.cursor/cli.json` in the attempt's work directory: the runtime's own command is the
+  one shell command allowed, the memory files are the reads, and every write is denied. On Windows, Jason starts the
+  host's `agent.cmd` launcher itself, and a profile names it by its full path where the runtime's search path does not
+  find `agent`. [The Cursor section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#cursor-cli)
+  has the nine notes.
+- **GitHub Copilot CLI.** Install it (`npm install -g @github/copilot`, or another way the host's page gives), sign in with
+  `copilot login`, then `jason profile create copilot --host copilot_cli --program copilot`. A role is confined by the
+  tool set and the allow and deny rules Jason composes on the host's command line, with nothing written into the work
+  directory, and a profile's own arguments are limited to the few documented options a person owns, such as `--model=`.
+  [The Copilot section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#github-copilot-cli)
+  lists them.
+- **Gemini CLI.** Install it, sign in as yourself, then `jason profile create <name> --host gemini_cli --program gemini`.
+  It runs on a Code Assist Standard or Enterprise sign-in. A role is confined by a policy file,
+  `.jason-policy/jason.toml` in the work directory, which the host reads above the person's own rules: everything is
+  denied first, then the reads, the runtime's own command and the tools the profile grants are allowed, and writing is
+  denied above every allow. The host reads a memory file through a `GEMINI.md` that imports `AGENTS.md`. [The Gemini
+  section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#gemini-cli) says what was not
+  measured.
+- **Claude Code refuses more arguments in a profile.** A host's parser reads a short flag with more letters, or with a
+  value after it, as several flags or as a flag and its value, so a reserved flag could stand inside one: `-pf` is `-p`
+  and `-f`. A short flag with more letters or a value after it, a lone dash and a double dash are now refused when a
+  profile's `args` are written, naming the host. A flag and its value as two words are still taken. A profile stored
+  before this release is not read again.
+- **`cli_command` is a bare word of letters, digits, dots, dashes and underscores,** starting with a letter or a digit.
+  That is the word a role calls the runtime back with, and it is refused when it holds anything else.
+- **A profile moved to another host must name a program that host can run.** `jason profile update` with a new `--host` and
+  no `--program` keeps the stored program only if it is that host's own command word, or its launcher where the host is
+  installed as one; otherwise it is refused, and the arguments the profile carries are held to the new host's rules too.
+- **A host that is not signed in ends the attempt as `host_not_available`,** with one sentence of Jason's own and none of
+  the host's words, on every host whose row names the signal Jason reads. Only you can sign in to it, as yourself.
+- **A harness folder holds one import file for every host that reads a file of another name:** `CLAUDE.md` for Claude Code
+  and `GEMINI.md` for Gemini CLI, each a single line importing `AGENTS.md`, and neither written over where it is there.
 
-- **An update says who asks.** Every request an update makes, for the feed, a release's archive and the files beside it,
-  carries the same `jason/<version>` `User-Agent`, so a download can be told from a browser's in the feed's logs.
-- **`jason doctor` reads less of a route.** From a `route.list` answer it keeps only the plugin each route names, and
-  does not walk a binding. A plugin whose id is `toast` is aliased in the file like any other plugin Jason does not
-  ship: the runtime's own notification channel keeps that word only on the one log line about a channel.
-- **A pull request's hygiene check reads what the tree's own check reads:** a UTF-16 file whole, every file's name whole
-  and folder by folder, a name git quotes as the bytes it was, and the changed names separated by NUL. This matters to
-  whoever contributes; [the development guide](https://github.com/reply-team/jason-ai/blob/v0.25.0/DEVELOPMENT.md) says
-  so.
-
-## Upgrading from 0.24.0
+## Upgrading from 0.25.0
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
   and `jason plugin install reply --replace` follow.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. This release changes the text of several skills, among them the
-  responder, the manager, the analyst, the planning skills, inbox triage and the approval skills, and adds
-  `categories.json` beside the responder's.
-- **The responder is on after the upgrade.** Wherever an execution profile or an entry command resolves for the
-  `responder` role, a reply on a campaign's own thread starts waking it at once. To turn that off, set `OnReply` to
-  `false` in the `Responder` section of `settings.json`; the manager's check-ins are unchanged either way.
-- **The data directory:** this release adds one database migration, `ResponderWatermark`, a column that records how far
-  each campaign's replies have been read for its responder. The first start on 0.25.0 runs it after taking a backup, as
-  every migration does, and sets each campaign level with its chronicle as it stands, so no answer is owed to a reply
-  said before the upgrade. Your projects, campaigns, work items and chronicle stay as they were.
-- **The Reply plugin** is published as 0.14.4 and needs reply-cli 0.18.0 or newer. What this version carries is the
-  README's statement about a contact's later replies, as this release's list of what is new says; no call, code or
-  message changed.
-- **From 0.23.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+  `brew upgrade jason`, run `jason skills update`. Three skills changed in their wording: the manager, the campaign-work skill and the
+  troubleshooting skill say that `host_not_available` can come after a host started and said it is not signed in.
+- **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
+  as they were.
+- **The Reply plugin** is unchanged.
+- **From 0.24.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the first known issue below says.
 
 ## Known issues
+
+Codex CLI on Windows needs its elevated sandbox set up once by an administrator before a role can run a command; until
+then every command a role runs is refused and the attempt fails by the role's report, and Jason does not check for the
+setup when the attempt starts.
+
+Whether `jason` reaches the runtime from inside Codex's sandbox has not been checked on Linux, macOS or Windows, and on
+Windows it is not yet checked whether the elevated sandbox reads only the list Jason names. Codex also reads its own global
+`AGENTS.md` and offers every role the skills in `~/.agents/skills`, whatever the profile says, so those two reach every
+Codex role.
+
+Whether Cursor CLI runs the allow-listed `jason` command without asking, in print mode, has not been seen on a signed-in
+run. If it does not, a role cannot call the runtime back and ends by its own report. Cursor CLI also reads more than the
+memory files Jason names, since it takes the union of every configuration layer it finds, yours included, and each attempt
+leaves one trust marker under `~/.cursor` that Jason does not remove.
+
+Gemini CLI reads the whole folder of each level a role's memory files are in, and the client level's folder is the harness
+root, so a role reads every memory file under it. A role on Gemini CLI is also refused when the host's system policy folder
+holds a `.toml` file, since the host would then ignore the policy Jason gives it.
+
+GitHub Copilot CLI's reads outside the work directory, which a role needs for its memory files, are documented but have not
+been seen to reach there.
+
+Flags and variables that move a host's own traffic, a proxy among them, are yours to set: Jason sets none of them and
+reserves none of them.
+
+A profile is held to its host's rules when it is written, not when a run starts, so a profile stored under one release is
+not read again by a later release whose rules for its host are stricter.
 
 On a build older than 0.18.0, the update through 0.19.0 can stop at `started`, saying that a library failed to load.
 That update is still performed by the older build, and it happens when the two builds carry different .NET patches.
