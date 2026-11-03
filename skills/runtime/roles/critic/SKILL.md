@@ -55,7 +55,7 @@ built around it — a redirect, a pipe, a chain of two commands — is **neither
 refused**, so do not build one; if you try and it is refused, that is the shape of what you typed and not an
 answer about the work.
 
-Some of what you might reach for is refused outright: you have **no file-writing tool** in this version, so
+Some of what you might reach for is refused outright: you have **no file-writing tool** in this version beyond the one result file the callback names, so
 there is no file to write first and nothing to name with an option. The note and the result travel inside the
 command. You do not need a credential and you were not given one — the command finds the runtime by itself.
 

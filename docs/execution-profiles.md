@@ -505,7 +505,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) | one `Read(//…/AGENTS.md)` rule per file, on its command line (§7) | as its prompt, on standard input, in print mode (`-p`) | as its one positional argument, the session staying open after it ([CLI reference](https://code.claude.com/docs/en/cli-reference), which names no version; this build read 2.1.309) |
 | Codex CLI | `codex` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | On Windows, first: Codex's elevated sandbox must be set up once by an administrator ([setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a role runs is refused, so the role cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal. Commands are not confined by name: any program a role can read runs, inside the sandbox. Holding the network to loopback rests on Codex's network proxy, an experimental feature in 0.166.0. On Windows, the elevated sandbox may let a role read more than the list. The person's global `AGENTS.md` and their skills reach every Codex role. Whether `jason` reaches the runtime from inside the sandbox is not yet checked on Linux, macOS or Windows. Built from the host's documentation and source for 0.166.0, npm's current release; measured on Windows with the CLI the Codex app bundles, 0.166.0-alpha.5.1; not yet run on an account ([Codex CLI](#codex-cli)) | `web_search` as `WebSearch`: granted as a live search, denied by that word; `web_fetch`: not on this host, so a grant is refused and a deny holds anyway | one `"<path>"="read"` entry per file in the permissions profile on its command line (`-c permissions.jason.filesystem=…`), 0.166.0 | as its prompt, on standard input, with no prompt word on the command line (`codex exec`: instructions are read from stdin when none is given, 0.166.0) | as its one positional argument ([CLI reference](https://learn.chatgpt.com/docs/developer-commands?surface=cli), which names no version; this build read the source at rust-v0.166.0) |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | `GEMINI.md` (`@AGENTS.md`) | yes | built from the host's documentation and source for version 0.66.0; not yet run on an account; a signed-out run ends with exit 41, which the notes read as "could not authenticate" (notes below) | `web_search` as `google_web_search`, `web_fetch` as `web_fetch`: each granted by an allow rule of the policy file and denied by a deny rule of it (notes below) | one `--include-directories` folder for each level the launch names, the host reads that folder whole, and the client level's folder is the harness root (notes below) | as its prompt, on standard input, with no prompt flag, in a non-interactive run | after `-i` ([CLI reference](https://geminicli.com/docs/cli/cli-reference/), which names no version; this build read the source at v0.66.0) |
-| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | `~/.gemini/antigravity-cli/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.4.10 (2026-10-29); not yet run on an account, the hook route least of all; the host's parser is not read, so a profile's arguments are only `--model=<name>` and `--effort=<level>`, the options its pages name for the person, read at 1.4.10, and the effort's range is not checked because its two pages disagree on it. No undocumented flag is taken in this release, harmless or not. A run that is not signed in is a non-zero exit whose last words of standard error hold "authentication required" or "Authentication expired" (the section says where each is read) | `web_fetch` as `read_url_content` and `web_search` as `search_web`, each approved by the work directory's hook where the profile grants it, and a tool the profile does not grant is refused, a deny is the host's own tool name, and the person's own deny and ask rules still win (the section says how, and that the hook route is not yet run on an account) | a view of exactly the memory files the launch names, approved by the same hook; no rule is written for the person's settings | as one stream-json user line on standard input | after `-i` ([CLI reference](https://antigravity.google/docs/cli/reference/), which names no version; this build read 1.4.10) |
+| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | `~/.gemini/antigravity-cli/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.4.10 (2026-10-29); not yet run on an account, the hook route least of all; the host's parser is not read, so a profile's arguments are only `--model=<name>` and `--effort=<level>`, the options its pages name for the person, read at 1.4.10, and the effort's range is not checked because its two pages disagree on it. No undocumented flag is taken in this release, harmless or not. A run that is not signed in is a non-zero exit whose last words of standard error hold "authentication required" or "Authentication expired" (the section says where each is read) | `web_fetch` as `read_url_content` and `web_search` as `search_web`, each approved by the work directory's hook where the profile grants it, and a tool the profile does not grant is refused, a deny is the host's own tool name, and the host's hooks page says the person's own deny and ask rules still win (the section says what is not measured, and that the hook route is not yet run on an account) | a view of exactly the memory files the launch names, approved by the same hook; no rule is written for the person's settings | as one stream-json user line on standard input | after `-i` ([CLI reference](https://antigravity.google/docs/cli/reference/), which names no version; this build read 1.4.10) |
 | GitHub Copilot CLI | `copilot_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.0.105, the version the allowlist was read at; parser not read, so a profile's arguments are only the documented options the person owns: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, `--no-color` and `--disable-client-telemetry`. No undocumented flag, however harmless, is taken this release. Not signed in is a non-zero exit whose stderr names `copilot login`. Not yet run on an account | `web_fetch` as `url`; the host documents no search tool, so a grant of `web_search` is refused and a deny of it is kept | one `read(<absolute path>)` rule per file in its `--allow-tool` list, on its command line (documented for version 1.0.105; not yet measured to reach outside the work directory) | as its prompt, on standard input, with no `-p`; nothing of the envelope on its command line | after `-i` ([CLI reference](https://docs.github.com/en/copilot/reference/cli-command-reference), which names no version; this build read 1.0.105) |
 | Cursor CLI | `cursor_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation and the installed bundle for version 2026.10.22-27dcf5f; not yet run on an account | `web_fetch` as `WebFetch(*)`, granted and denied by that rule; `web_search` has no rule, and is neither granted nor denied (the person's own `autoAcceptWebSearch` setting decides it) | one `Read(<absolute path>)` rule per file, in `.cursor/cli.json` in the work directory and never on its command line (version 2026.10.22-27dcf5f, from the bundle; not yet run on an account) | as its prompt, on standard input, in print mode (`-p`), when no word for a prompt stands on its command line (version 2026.10.22-27dcf5f, from the bundle; not yet run on an account) | as its one positional argument ([parameters](https://cursor.com/docs/cli/reference/parameters), which names no version; this build read 2026.10.22-27dcf5f) |
 
@@ -914,28 +914,45 @@ exits 0 whatever it was given. The rules travel in the command line as one base6
 reaches a shell, and the capability token and the envelope are in none of it. The hook answers:
 
 - **a command** is approved only when it is exactly one call of the runtime's command word (`jason`, unless the
-  installation names another) in bare words or single-quoted spans; on Windows it also holds none of `& | < > ^ % !`
-  and no line break. Any other command is left to the person's own rules. So the command word must be a bare word for
-  the hook to approve the callback: a word with a space or a quote in it is left to the person.
+  installation names another) in bare words or single-quoted spans, on a foreground command that runs in the work
+  directory. The whole line is printable ASCII and the tab, on every system: a typographic single quote closes a quoted
+  string in PowerShell, and a line break ends a command, so no character outside that set is approved anywhere in the
+  line. A backslash before a quote is refused wherever it stands, since a shell may read it as an escape, and a double quote
+  is approved only inside a single-quoted span. On Windows the line also holds none of `& | < > ^ % !`. Text that is not
+  ASCII reaches the CLI as JSON `\u` escapes inside the span, or through a file. Any other command is left to the person's
+  own rules. So the command word must be a bare word for the hook to approve the callback: a word with a space or a
+  quote in it is left to the person.
 - **a view of a file** is approved for exactly the memory files the launch names and left to the person's rules for any
   other.
-- **a write** is approved for `result.json` in the work directory and nothing else; an edit of a file, and a question to
-  the person, are refused.
+- **a write** is approved for `result.json` in the work directory, a relative path being read against the work directory,
+  and only as a write that does not overwrite; nothing else is written. An edit of a file, a question to the person, a
+  sub-agent, a message, a schedule, a task, a permission request and an image are refused. One reach is left: under the
+  host's proceed-in-sandbox or auto mode a command the person's rules allow may plant a link in the work directory that the
+  host's later write follows, and the hook cannot see it, because it reads no file. "Never writable" holds for the host's
+  write tools.
 - **a fetch of a page or a search** is approved where the profile grants `web_fetch` or `web_search` and refused where it
   does not; the browser tools are refused unless the fetch is granted.
 - **a tool the profile denies by name** is refused. A deny is one of the host's own tool names, as its hooks page lists
-  them; `run_command` and `view_file` cannot be denied, since the callback and the memory files go through them, and a
+  them; `run_command`, `view_file` and `write_to_file` cannot be denied, since the callback, its result file and the memory files go through them, and a
   rule of the form `action(target)` is refused where the profile is written.
 - **a call whose input cannot be read**, or that lacks the argument it needs, is refused.
 
-The person's own Deny and Ask rules still win over an approval, and their Allow rules still add to it. A headless run
-that nothing approves is denied without stopping and ends with an exit of 0 and the denied actions listed, so what is left
-out shows up as a role that ends without reporting.
+The host's hooks page says the person's own Deny and Ask rules still win over an approval, and that their Allow rules
+still add to it; that is the host's statement, not measured here (M3). A headless run that nothing approves is denied
+without stopping, except for what the CLI allows on its own, such as workspace files, and ends with an exit of 0 and the
+denied actions listed, so what is left out shows up as a role that ends without reporting. Under proceed-in-sandbox and
+auto modes more is allowed without asking than that sentence says.
 
-**This host's callback is a file.** A role on this host cannot pass the result JSON on a command line through the hook's
-single-command form, so it writes the JSON to `result.json` in its work directory and reports with
+**This host's callback is a file.** The result JSON on a command line would need characters the hook refuses, a double
+quote outside a single-quoted span among them, so a role on this host writes the JSON to `result.json` in its work
+directory and reports with
 `jason workitem complete <work item> --attempt <attempt> --status <status> --result-file result.json`. The two acts
 are the two the hook approves, and the roles' skills say it in one sentence.
+
+**The approval is of the whole CLI, as on every host.** Approving a call of the command word approves whatever that
+command can do. Two reaches are that and nothing more: `--result-file` reads a file anywhere the account can, and a
+`doctor` file is written wherever it is told. The hook narrows what a role may run to one program; it does not narrow what
+the program may do.
 
 **The two rules of 0.26.0 stay as the fallback.** The hook is the first route; the person's own rules are what remains
 where it does not run. If a role is refused on `antigravity_cli`, add these two rules to the file's `permissions.allow`
@@ -956,7 +973,7 @@ array, beside what is already there:
 the person's `command(<cli word>)` rule. What a deny means is the hook's refusal of a tool of the host, by its name.
 
 **Not measured, because the pages do not say and no run on an account has been made.** The hook route is built from the
-host's hooks page, and nothing of it is measured. Six things stand open, each a thing a run on an account has to show:
+host's hooks page, and nothing of it is measured. Eight things stand open, each a thing a run on an account has to show:
 
 - **M1a**: whether the hook is honoured in a headless run in a folder the host has not been told to trust.
 - **M1b**: which shell runs the hook's command, and so whether the bare-word command line reaches the executable as written.
@@ -964,9 +981,17 @@ host's hooks page, and nothing of it is measured. Six things stand open, each a 
 - **M2b**: whether a write the hook approves is made, and one it refuses is not.
 - **M3**: whether the person's own Deny rule still wins over an approval.
 - **M4**: whether a view of a file outside the work directory is seen by the hook at all.
-- **M5**: an end to end run of a role on Windows, **M6** the same on macOS and Linux.
+- **M5**: an end to end run of a role on Windows.
+- **M6**: the same on macOS and Linux.
 
-Also not measured: whether the work directory's skills load in a run in a folder the host does not know; whether the host copies a tool's standard error into its own, so that
+Also not measured:
+
+- the host's behaviour when the hook gives no answer, exits non-zero or runs past its ten seconds;
+- whether the tool calls of a sub-agent reach the work directory's hook at all;
+- whether the approved callback runs inside the host's terminal sandbox without a network, in which case `jason` cannot
+  reach the runtime and the role cannot report;
+
+Also not measured, as before: whether the work directory's skills load in a run in a folder the host does not know; whether the host copies a tool's standard error into its own, so that
 a role's command printing "authentication required" before a non-zero end would be read as not signed in and end final;
 whether a person's persistent default mode of `plan` stops a headless role from running the report command; what the
 Windows install names the executable, and whether the program lookup takes it, which is why a full path with `--program`
