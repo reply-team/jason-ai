@@ -42,7 +42,12 @@ public static class AntigravityHook
     /// <summary>The tools a role is never allowed, whatever a profile says: an edit of any file, and a question to the person.</summary>
     private static readonly string[] FloorTools = ["replace_file_content", "multi_replace_file_content", "ask_question"];
 
-    public static async Task<int> RunAsync(string[] args, TextReader stdin, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Reads standard input as bytes, never through a console code page: a child started without a window of its own gets
+    /// a console on the OEM code page, and the writer here is the agent host, which does not escape what it writes. The
+    /// bytes are strict UTF-8, and a stream that is not, or is longer than <see cref="MaxInput"/>, is an unreadable call.
+    /// </summary>
+    public static async Task<int> RunAsync(string[] args, Stream stdin, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(stdin);
@@ -50,10 +55,20 @@ public static class AntigravityHook
         ArgumentNullException.ThrowIfNull(stderr);
 
         // The answer is always written and the exit is always 0: the host reads the decision, and what a non-zero exit
-        // means to it is not documented.
-        var rules = args is ["antigravity-cli", { } text] ? text : "";
-        var input = await ReadBoundedAsync(stdin, cancellationToken).ConfigureAwait(false);
-        await stdout.WriteLineAsync(Answer(rules, input, OperatingSystem.IsWindows())).ConfigureAwait(false);
+        // means to it is not documented. Whatever goes wrong on the way is an unreadable call, a cancellation aside.
+        string line;
+        try
+        {
+            var rules = args is ["antigravity-cli", { } text] ? text : "";
+            var input = await ReadBoundedAsync(stdin, cancellationToken).ConfigureAwait(false);
+            line = Answer(rules, input, OperatingSystem.IsWindows());
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            line = JsonSerializer.Serialize(new Dictionary<string, string> { ["decision"] = Unreadable.Decision, ["reason"] = Unreadable.Reason });
+        }
+
+        await stdout.WriteLineAsync(line).ConfigureAwait(false);
         return 0;
     }
 
@@ -66,27 +81,31 @@ public static class AntigravityHook
 
     public static HookDecision Decide(string? rulesArgument, string? input, bool windows)
     {
-        if (AntigravityHookRules.Decode(rulesArgument) is not { } rules || input is null)
-        {
-            return Unreadable;
-        }
-
         try
         {
-            using var document = JsonDocument.Parse(input);
-            if (document.RootElement.ValueKind != JsonValueKind.Object
-                || !document.RootElement.TryGetProperty("toolCall", out var call) || call.ValueKind != JsonValueKind.Object
-                || !call.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String
-                || string.IsNullOrEmpty(nameElement.GetString())
-                || !call.TryGetProperty("args", out var args) || args.ValueKind != JsonValueKind.Object)
+            if (AntigravityHookRules.Decode(rulesArgument) is not { } rules || input is null)
             {
                 return Unreadable;
             }
 
-            return Decide(rules, nameElement.GetString()!, args, windows);
+            using var document = JsonDocument.Parse(input);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || AntigravityHookRules.HoldsAKeyTwice(document.RootElement, "toolCall")
+                || !document.RootElement.TryGetProperty("toolCall", out var call) || call.ValueKind != JsonValueKind.Object
+                || AntigravityHookRules.HoldsAKeyTwice(call, "name", "args")
+                || !call.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String
+                || nameElement.GetString() is not { Length: > 0 } name
+                || !call.TryGetProperty("args", out var args) || args.ValueKind != JsonValueKind.Object
+                || AntigravityHookRules.HoldsAKeyTwice(args, "CommandLine", "AbsolutePath", "TargetFile"))
+            {
+                return Unreadable;
+            }
+
+            return Decide(rules, name, args, windows);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or FormatException)
         {
+            // A lone surrogate in a string is an argument exception at the first read of it, not a parse failure.
             return Unreadable;
         }
     }
@@ -222,20 +241,27 @@ public static class AntigravityHook
         return string.Equals(Path.GetFullPath(given), Path.GetFullPath(known), windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     }
 
-    private static async Task<string?> ReadBoundedAsync(TextReader reader, CancellationToken cancellationToken)
+    private static async Task<string?> ReadBoundedAsync(Stream stream, CancellationToken cancellationToken)
     {
-        var builder = new StringBuilder();
-        var buffer = new char[8192];
+        using var bytes = new MemoryStream();
+        var buffer = new byte[8192];
         int read;
-        while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) > 0)
+        while ((read = await stream.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) > 0)
         {
-            builder.Append(buffer, 0, read);
-            if (builder.Length > MaxInput)
+            bytes.Write(buffer, 0, read);
+            if (bytes.Length > MaxInput)
             {
                 return null;
             }
         }
 
-        return builder.ToString();
+        try
+        {
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes.GetBuffer(), 0, (int)bytes.Length);
+        }
+        catch (DecoderFallbackException)
+        {
+            return null;
+        }
     }
 }

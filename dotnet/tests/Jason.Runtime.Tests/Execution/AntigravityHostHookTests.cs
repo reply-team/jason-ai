@@ -43,6 +43,11 @@ public sealed class AntigravityHostHookTests
 
     private static string Command(string line) => Call("run_command", ("CommandLine", line), ("Cwd", WorkDir));
 
+    private static MemoryStream Bytes(string text) => new(System.Text.Encoding.UTF8.GetBytes(text));
+
+    private static string RulesOf(string json) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
     private static string Decide(string call, string? rules = null, bool windows = false) =>
         AntigravityHook.Decide(rules ?? Rules(), call, windows).Decision;
 
@@ -336,7 +341,7 @@ public sealed class AntigravityHostHookTests
 
         var exit = await AntigravityHook.RunAsync(
             ["antigravity-cli", Rules()],
-            new StringReader(Command("jason workitem get wi_01")),
+            Bytes(Command("jason workitem get wi_01")),
             stdout,
             stderr,
             TestContext.Current.CancellationToken);
@@ -357,7 +362,7 @@ public sealed class AntigravityHostHookTests
         var args = words.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var stdout = new StringWriter();
 
-        var exit = await AntigravityHook.RunAsync(args, new StringReader(Command("jason workitem get wi_01")), stdout, new StringWriter(), TestContext.Current.CancellationToken);
+        var exit = await AntigravityHook.RunAsync(args, Bytes(Command("jason workitem get wi_01")), stdout, new StringWriter(), TestContext.Current.CancellationToken);
 
         Assert.Equal(0, exit);
         using var document = JsonDocument.Parse(stdout.ToString());
@@ -366,4 +371,98 @@ public sealed class AntigravityHostHookTests
 
     private static string Base64Url(string text) =>
         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    // A lone surrogate escape is no text at all: reading the string throws, and the hook answers rather than dies.
+    [Theory]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\\uD800\",\"args\":{\"CommandLine\":\"jason\"}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason \\uD800\"}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"write_to_file\",\"args\":{\"TargetFile\":\"\\uD800\"}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"view_file\",\"args\":{\"AbsolutePath\":\"\\uDC00x\"}}}")]
+    [Critical(Family.S6, "a call the hook cannot read is refused, never a crash")]
+    public async Task A_lone_surrogate_in_the_call_is_refused_and_the_mode_still_answers(string call)
+    {
+        Assert.Equal("deny", Decide(call));
+
+        var stdout = new StringWriter();
+        var exit = await AntigravityHook.RunAsync(["antigravity-cli", Rules()], Bytes(call), stdout, new StringWriter(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, exit);
+        using var document = JsonDocument.Parse(stdout.ToString());
+        Assert.Equal("deny", document.RootElement.GetProperty("decision").GetString());
+    }
+
+    [Fact]
+    [Critical(Family.S6, "a call the hook cannot read is refused, never a crash")]
+    public async Task A_lone_surrogate_in_the_rules_is_refused_and_the_mode_still_answers()
+    {
+        var rules = RulesOf("{\"v\":1,\"cli\":\"jason\\uD800\",\"read\":[],\"approve\":[],\"deny\":[],\"write\":\"x\"}");
+        Assert.Equal("deny", Decide(Command("jason workitem get wi_01"), rules));
+
+        var stdout = new StringWriter();
+        var exit = await AntigravityHook.RunAsync(["antigravity-cli", rules], Bytes(Command("jason workitem get wi_01")), stdout, new StringWriter(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, exit);
+        using var document = JsonDocument.Parse(stdout.ToString());
+        Assert.Equal("deny", document.RootElement.GetProperty("decision").GetString());
+    }
+
+    // Two keys the hook reads, equal without regard to case: readers disagree on which wins, so neither is trusted.
+    [Theory]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"commandLine\":\"jason workitem get wi_01\",\"CommandLine\":\"rm -rf x\"}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\",\"CommandLine\":\"rm -rf x\"}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"name\":\"list_dir\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\"}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\"},\"Args\":{}}}")]
+    [InlineData("{\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"jason workitem get wi_01\"}},\"toolcall\":{}}")]
+    [Critical(Family.S6, "a key read two ways is not read")]
+    public void A_key_the_hook_reads_that_appears_twice_makes_the_call_unreadable(string call) =>
+        Assert.Equal("deny", Decide(call));
+
+    [Theory]
+    [InlineData("{\"v\":1,\"v\":1,\"cli\":\"jason\",\"read\":[],\"approve\":[],\"deny\":[],\"write\":\"x\"}")]
+    [InlineData("{\"v\":1,\"cli\":\"jason\",\"CLI\":\"rm\",\"read\":[],\"approve\":[],\"deny\":[],\"write\":\"x\"}")]
+    [InlineData("{\"v\":1,\"cli\":\"jason\",\"read\":[],\"approve\":[],\"approve\":[\"read_url_content\"],\"deny\":[],\"write\":\"x\"}")]
+    [Critical(Family.S6, "a key read two ways is not read")]
+    public void A_key_the_rules_read_that_appears_twice_makes_them_unreadable(string json) =>
+        Assert.Null(AntigravityHookRules.Decode(RulesOf(json)));
+
+    [Fact]
+    [Critical(Family.S6, "the call is read as UTF-8 bytes, whatever the console code page is")]
+    public async Task A_path_with_letters_outside_ascii_is_matched_as_the_host_wrote_it()
+    {
+        var path = Path.Combine(Root, "Прівіт-ü", "work", "result.json");
+        var rules = AntigravityHookRules.Encode(new AntigravityHookRules(Cli, [], [], [], path));
+        var stdout = new StringWriter();
+
+        await AntigravityHook.RunAsync(["antigravity-cli", rules], Bytes(Call("write_to_file", ("TargetFile", path))), stdout, new StringWriter(), TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(stdout.ToString());
+        Assert.Equal("auto_approve", document.RootElement.GetProperty("decision").GetString());
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0x7B, 0xFF, 0x7D })]
+    [InlineData(new byte[] { 0xC3 })]
+    [Critical(Family.S6, "the call is read as UTF-8 bytes, whatever the console code page is")]
+    public async Task Bytes_that_are_not_utf8_are_refused(byte[] bytes)
+    {
+        var stdout = new StringWriter();
+
+        var exit = await AntigravityHook.RunAsync(["antigravity-cli", Rules()], new MemoryStream(bytes), stdout, new StringWriter(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, exit);
+        using var document = JsonDocument.Parse(stdout.ToString());
+        Assert.Equal("deny", document.RootElement.GetProperty("decision").GetString());
+    }
+
+    [Fact]
+    public async Task A_stream_longer_than_the_bound_is_refused()
+    {
+        var stdout = new StringWriter();
+        var big = new MemoryStream(new byte[AntigravityHook.MaxInput + 1]);
+
+        await AntigravityHook.RunAsync(["antigravity-cli", Rules()], big, stdout, new StringWriter(), TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(stdout.ToString());
+        Assert.Equal("deny", document.RootElement.GetProperty("decision").GetString());
+    }
 }
