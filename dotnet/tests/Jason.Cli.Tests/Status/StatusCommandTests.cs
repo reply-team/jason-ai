@@ -1114,6 +1114,11 @@ public class StatusCommandTests
     /// </summary>
     internal static void Profiles(TempPaths dir, params (string Name, string Host)[] profiles) => ProfileAnswers[dir.Paths.Root] = profiles;
 
+    /// <summary>The names among the profiles <c>profile.list</c> answers with that carry a problem the runtime found in the current revision.</summary>
+    internal static void RefusedProfiles(TempPaths dir, params string[] names) => RefusedAnswers[dir.Paths.Root] = names;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string[]> RefusedAnswers = [];
+
     /// <summary>The bodies <c>profile.list</c> was asked with, in order.</summary>
     internal static IReadOnlyList<string> ProfileReads(TempPaths dir) => [.. ProfileRequests.GetValueOrDefault(dir.Paths.Root, [])];
 
@@ -1138,6 +1143,9 @@ public class StatusCommandTests
                 ["name"] = profile.Name,
                 ["disabled"] = false,
                 ["revision"] = new System.Text.Json.Nodes.JsonObject { ["number"] = 1, ["host"] = profile.Host, ["program"] = "host" },
+                ["problems"] = RefusedAnswers.GetValueOrDefault(dir.Paths.Root, []).Contains(profile.Name)
+                    ? new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["field"] = "args[2]", ["code"] = "reserved" })
+                    : new System.Text.Json.Nodes.JsonArray(),
             })]);
         var page = new System.Text.Json.Nodes.JsonObject
         {

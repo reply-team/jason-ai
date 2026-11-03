@@ -52,6 +52,9 @@ public sealed class ValidationErrors
     /// <summary>Whether anything is known to be wrong. A value that could not be measured is not.</summary>
     public bool Any => _details.Count > 0;
 
+    /// <summary>What is known to be wrong, in the order it was found.</summary>
+    public IReadOnlyList<ErrorDetail> Details => _details;
+
     public void Add(string field, string code, string message) => _details.Add(new ErrorDetail(field, code, message));
 
     /// <summary>
