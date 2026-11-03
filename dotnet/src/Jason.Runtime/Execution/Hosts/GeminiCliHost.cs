@@ -337,6 +337,12 @@ public sealed class GeminiCliHost(string? systemPoliciesDirectory = null) : IAge
             {
                 return $"'{arg}' is not a flag name the host reads as written: a long flag's name is letters and digits with single dashes between them, since the host's parser reads other spellings as an option it may not be given.";
             }
+
+            // A value is any text, a space included, but not a control character: one would not reach the host as written.
+            if (arg.Any(char.IsControl))
+            {
+                return $"A flag holds a control character, which would not reach the host as written; the value of {name} is plain text.";
+            }
         }
 
         return null;

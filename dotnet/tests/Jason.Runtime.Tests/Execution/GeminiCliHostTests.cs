@@ -188,6 +188,23 @@ public class GeminiCliHostTests
         Assert.NotNull(_host.ArgsProblem(["--model=made-up", word]));
     }
 
+    /// <summary>A value that holds a control character would not survive a command line as written, and a line break in one is a second line of whatever reads the arguments; a space is an ordinary character and stays.</summary>
+    [Theory]
+    [InlineData("--model=made\nup")]
+    [InlineData("--model=made\tup")]
+    [InlineData("--model=made\u007Fup")]
+    [InlineData("--model=\r")]
+    public void A_value_holding_a_control_character_is_refused(string word)
+    {
+        Assert.Contains("control character", _host.ArgsProblem(["--debug", word]), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_value_holding_a_space_is_accepted()
+    {
+        Assert.Null(_host.ArgsProblem(["--model=made up", "--debug"]));
+    }
+
     [Fact]
     public void Long_flags_with_values_joined_by_an_equals_sign_are_accepted_and_a_short_one_stands_alone()
     {

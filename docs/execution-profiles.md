@@ -655,7 +655,8 @@ build does, and what it has not measured.
   alone, since the parser reads `-yo` as two options and `-pfoo` as an option and its value; and a long flag's name is
   letters and digits with single dashes between them, since the parser reads a dot as a path into the flag's own value
   and drops or folds a leading, trailing or doubled dash and an underscore before it matches a name, so `---acp` or
-  `--prompt-=x` would be a reserved option in a spelling no list holds.
+  `--prompt-=x` would be a reserved option in a spelling no list holds. A value may hold a space and no control
+  character, which would not reach the host as written.
 - **Environment.** The constants this host declares are `NO_BROWSER=true` and `GEMINI_CLI_IDE_WORKSPACE_PATH=`. Without
   the first a signed-out run opens a browser or waits for a line on standard input, and with it the run fails at once
   with the host's authentication exit. That exit, 41, ends the attempt as `host_not_available` with Jason's own
