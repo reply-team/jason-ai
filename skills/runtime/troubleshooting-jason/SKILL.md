@@ -135,9 +135,10 @@ says the host ran and answered that it is not signed in: the child started and s
 is the person's own, signing in to that host on this machine under their own plan. Name what is missing and
 hand it over; setting it up is `operating-the-installation`.
 
-One host fails this way without an error code: on `antigravity_cli`, an attempt that ends without reporting, after the
-host ran and exited, usually means the person's own `command(<cli word>)` permission rule is missing from their Antigravity
-settings, so the role was denied the call that reports. Jason cannot write that rule; the person adds it, with
+Not this state, but a repair of the same kind, the person's own: on `antigravity_cli`, `executor_exited` after the host exited 0
+usually means the person's own `command(<cli word>)` permission rule is missing from `~/.gemini/antigravity-cli/settings.json`
+(on Windows shells the rule is `command(regex:<cli word> .*)`), so the role was denied the call that reports. The attempt
+is retried, and each retry meets the same denial. Jason cannot write that rule; the person adds it, with
 `read_file(<harness folder>)` beside it for the memory files.
 
 ### 5. The person is on the do-not-contact register

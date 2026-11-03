@@ -410,18 +410,20 @@ jason workitem create <campaign-id> --kind ai_role --role researcher --execution
 jason rolenote get --role researcher --campaign <campaign-id>
 ```
 
-Antigravity CLI (`agy`) can run the background roles on an individual Google plan. Install it from Google's own pages
-([antigravity.google/docs/install](https://antigravity.google/docs/install/)), run `agy` once and sign in as yourself,
+Antigravity CLI (`agy`) can run the background roles on an individual Google plan. Install it from the CLI tab of
+Google's quickstart ([antigravity.google/docs/getting-started?tab=cli](https://antigravity.google/docs/getting-started?tab=cli)),
+run `agy` once and sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)),
 then name it:
 
 ```sh
 jason profile create local-antigravity --host antigravity_cli --program agy
 ```
 
-The host takes its permission rules from your own settings and from nowhere a run can carry them, so you add two rules
-there once, `command(jason)` and `read_file(<your harness folder>)`; the
-[host matrix](docs/execution-profiles.md#12-the-hosts) says why, and what was built from documentation and has not yet
-been run on an account.
+The host takes its permission rules from your own settings file, `~/.gemini/antigravity-cli/settings.json`, in its
+`permissions.allow` array, and from nowhere a run can carry them, so you add two rules there once, `command(jason)` and
+`read_file(<your harness folder>)`; on Windows shells write the first as `command(regex:jason .*)`. The
+[host matrix](docs/execution-profiles.md#12-the-hosts) gives the two lines of JSON, says why, and says what was built from
+documentation and has not yet been run on an account.
 
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,

@@ -493,7 +493,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) | one `Read(//…/AGENTS.md)` rule per file, on its command line (§7) | as its prompt, on standard input, in print mode (`-p`) |
 | Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
-| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | `~/.gemini/antigravity-cli/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.4.10 (2026-10-29); not yet run on an account; the host's parser is not read, so a profile's arguments are only `--model=<name>` and `--effort=<level>`, the options its pages name for the person, read at 1.4.10, and the effort's range is not checked because its two pages disagree on it; no undocumented flag is taken in this release, harmless or not | `web_fetch` as `read_url(*)`, a rule Jason can neither grant nor deny: a grant of either tool and every deny word are refused, and the person's own settings decide what a session may do, and per-run permissions are not built yet; the host documents no rule for a search | the person's own `read_file(<harness folder>)` rule in their settings, which Jason cannot write; without it the role reports the refusal | as one stream-json user line on standard input |
+| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | `~/.gemini/antigravity-cli/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.4.10 (2026-10-29); not yet run on an account; the host's parser is not read, so a profile's arguments are only `--model=<name>` and `--effort=<level>`, the options its pages name for the person, read at 1.4.10, and the effort's range is not checked because its two pages disagree on it. No undocumented flag is taken in this release, harmless or not. A run that is not signed in is a non-zero exit whose last words of standard error hold "authentication required" or "Authentication expired" (the section says where each is read) | `web_fetch` as `read_url(*)`, a rule Jason can neither grant nor deny: a grant of either tool and every deny word are refused, and the person's own settings decide what a session may do (the section names the file, the key and the Windows form of the rule), and per-run permissions are not built yet; the host documents no rule for a search | the person's own `read_file(<harness folder>)` rule in their `~/.gemini/antigravity-cli/settings.json`, which Jason cannot write; the launch names each memory file unreadable at every claim, since it cannot see that rule | as one stream-json user line on standard input |
 | GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 
@@ -525,9 +525,13 @@ and the launch around it against a stand-in under the host's command word, and a
 one the documentation leaves open. Google splits its two command-line hosts by sign-in, as the matrix's first cell
 says: individual Google plans run this host, and `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in
 ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)).
-The host is installed from Google's own pages ([antigravity.google/docs/install](https://antigravity.google/docs/install/);
-the command line is described under [antigravity.google/docs/cli/overview](https://antigravity.google/docs/cli/overview/)),
-which are where the install lines are kept current, and signed in by the person: run `agy` once and sign in as yourself.
+**Read this before connecting it.** Google's FAQ ([antigravity.google/docs/faq](https://antigravity.google/docs/faq/)) says: “Antigravity CLI headless mode (`agy -p`) is intended for direct scripting and CI workflows. Wrapping `agy` inside third-party coding agents or applications, or automating account rotation, is not supported under consumer plans.” Jason runs `agy` headless for each
+background role; whether that use is covered on your plan is for you to judge, and the sentence is quoted here so that
+you judge it before the host is connected.
+The host is installed from the CLI tab of Google's quickstart ([antigravity.google/docs/getting-started?tab=cli](https://antigravity.google/docs/getting-started?tab=cli)),
+which holds the install commands for macOS, Linux and Windows and is where they are kept current; the command line is
+described under [antigravity.google/docs/cli/overview](https://antigravity.google/docs/cli/overview/). It is signed in
+by the person, as [Google's page on signing in](https://antigravity.google/docs/install/) says: run `agy` once and sign in as yourself.
 Jason holds no key for it and passes none: a `GEMINI_API_KEY` or any other credential in the person's own environment is
 theirs, and is neither read nor set. Then:
 
@@ -552,8 +556,8 @@ whole launch envelope as one string and nothing else being written. The host's o
 command line, which the launch never does. The command is `--input-format stream-json --output-format stream-json
 --print-timeout=0s` and then the profile's own arguments, last. The transcript is the host's stream of `init`,
 `step_update` and `result` events, which the runtime keeps and never parses: the outcome comes back through the CLI. The
-host's own print timeout would end a run with a success and partial output, and its pages disagree on the default, so
-Jason turns it off and the attempt's limit is the only limit. The host mints its own conversation id and takes none, so
+host's own print timeout would end a run with a success and partial output (so [the host's changelog](https://antigravity.google/docs/changelog/) says of its
+expiry), and its pages disagree on the default, so Jason turns it off and the attempt's limit is the only limit. The host mints its own conversation id and takes none, so
 the attempt records no session. Nothing is written into the work directory, nothing of the person's own configuration is
 touched, and no flag that acts without asking, widens the workspace, takes another project or resumes a conversation is
 composed or allowed in a profile. **The host's parser is not read**, because it is closed source and no copy of it was
@@ -564,35 +568,58 @@ not checked, since the two pages disagree on it (low through max, and low, mediu
 other word is refused where the profile is written, naming the host and the reason: an option the host documents that is
 not the person's (such as `--disable-slash-commands`), one it does not document, a word shaped like a switch that skips
 permissions (`--yolo`), a bare word, a double dash, a short flag, a cluster (`-pf`), a glued value (`-phello`) and the bare
-dash. The cost is that no harmless undocumented flag is taken in this release. A flag the runtime composes, or one the
-host's tables call dangerous, is also on the reserved list, which keeps its own refusal under the allowlist: the list is the
-flags the reference table names, with the one its mode page says the host accepts for another host's sake
-(`--permission-mode`, read as its own `--mode`).
+dash, and a value that holds a control character. No undocumented flag is taken in this release, harmless or not.
+
+A flag the runtime composes, or one that changes the session, is also on the reserved list, which keeps its own
+refusal under the allowlist and stays as the record of what the documentation calls dangerous: the list is the reference
+table's flags that the runtime composes or that change the session. `--permission-mode` is on it as a guard: the host's
+modes page lists passing it as a common mistake and says the host uses `--mode`, so it is reserved beside `--mode`, and
+what the host does with it is not stated.
 
 **What a session may do is the person's to say.** The host takes its permission rules, of the form `action(target)`
-(`command`, `read_file`, `write_file`, `read_url` and others), from the person's own settings files under `~/.gemini` and
-from nowhere a run can carry them: there is no flag for them and no file of a work directory. The runtime never writes
-that folder. So on this host a grant of `web_fetch` or `web_search` and every word of a profile's `deny` are refused where
-the profile is written, naming the host, and Jason composes no allow and no deny. A headless run that no rule allows is
-denied without stopping and ends with an exit of 0 and the denied actions listed, so what the person's rules leave out
-shows up as a role that ends without reporting. This is how the host is supported in this release: Jason does not give a
-launched session its permissions run by run on this host, which is not built yet, and the person's own two rules stand in
-for it. The person adds them, in the host's own settings, once:
+(`command`, `read_file`, `write_file`, `read_url` and others), from the person's own settings file,
+`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array, and from nowhere a run can carry them: there
+is no flag for them and no file of a work directory. (Not `~/.gemini/settings.json`, which Gemini CLI reads. The host's
+pages give the order "Deny > Ask > Allow", so a rule of the person's in either of the other two lists wins over the allow.)
+The runtime never writes that folder. So on this host a grant of `web_fetch` or `web_search` and every word of a
+profile's `deny` are refused where the profile is written, naming the host, and Jason composes no allow and no deny. A
+headless run that no rule allows is denied without stopping and ends with an exit of 0 and the denied actions listed, so
+what the person's rules leave out shows up as a role that ends without reporting. This is how the host is supported in
+this release: Jason does not give a launched session its permissions run by run on this host, which is not built yet, and
+the person's own two rules stand in for it. The person adds them once, to the file's `permissions.allow` array, beside what
+is already there:
+
+```json
+{ "permissions": { "allow": [
+  "command(jason)", "read_file(<harness folder>)" ] } }
+```
 
 - **`command(<cli word>)`**, with the word the runtime calls back with (`jason`, unless the installation names another),
-  so the role can report what it did. Without it the role cannot call the runtime back.
+  so the role can report what it did. Without it the role cannot call the runtime back. **On Windows shells** (PowerShell
+  or Command Prompt) the host's permissions page says a command it cannot split cleanly into words needs an exact match,
+  and that a command and its subcommands are matched with the `regex:` prefix, so write `command(regex:jason .*)`; the
+  plain form is the one for other systems. Whether the plain form covers the report call on Windows is not measured.
 - **`read_file(<harness folder>)`**, the harness root and so every memory file under it, so the role can read the
-  person's `AGENTS.md` at each level. Without it the launch names each memory file as unreadable and the role reports the
-  refusal.
+  person's `AGENTS.md` at each level. The launch names each memory file as unreadable at every claim, because Jason writes
+  no rule for it and cannot see the person's; with the person's rule the role reads them anyway, and without it the role
+  reports the refusal.
 
 **The three forms.** The CLI form is `jason skills install --host antigravity_cli`; the profile form is the line above; the
 runtime form is the command the launch composes and the one stream-json line. The person's two rules are the fourth thing
 and are not a form Jason writes.
 
 **Not measured, because the pages do not say.** Whether an allowed `command(<cli word>)` runs unattended in a headless run;
-whether a run in a folder the host does not know stops to ask; whether the work directory's skills load there; whether the
+whether the plain `command(jason)` covers the report call on Windows, where the pages ask for the `regex:` form; whether a
+run in a folder the host does not know stops to ask; whether the work directory's skills load there; whether the
 workspace hook file `.agents/hooks.json` could carry a rule (the pages describe hooks that run before a tool and say
-nothing of a launched session, so it is not used); and which exit code and words a run that is not signed in ends with,
-beyond the two phrases the pages quote, "authentication required" and "Authentication expired". An end whose error text
-holds one of those two is read as not signed in and becomes the one sentence Jason keeps for it, `host_not_available`;
-an exit of 3 with `AGY_ERROR` on stderr is the model service failing and is an ordinary end.
+nothing of a launched session, so it is not used); whether the host copies a tool's standard error into its own, so that
+a role's command printing "authentication required" before a non-zero end would be read as not signed in and end final;
+whether a person's persistent default mode of `plan` stops a headless role from running the report command; what the
+Windows install names the executable, and whether the program lookup takes it, which is why a full path with `--program`
+is the way where the name is not found; and which exit code and words every run that is not signed in ends with. The two
+phrases Jason reads are "authentication required", which [the headless page](https://antigravity.google/docs/cli/headless/)
+quotes for a run with no credentials, and "Authentication expired", which [the host's changelog](https://antigravity.google/docs/changelog/) gives for an expired or revoked
+sign-in. An end that is not zero whose last words of standard error hold one of those two is read as not signed in and
+becomes the one sentence Jason keeps for it, `host_not_available`. A headless run that ends on a model or agent error
+exits with code 3 and prints a line beginning `AGY_ERROR` on standard error, which [the host's changelog](https://antigravity.google/docs/changelog/) also gives; that is an
+ordinary end, not a sign-in one.
