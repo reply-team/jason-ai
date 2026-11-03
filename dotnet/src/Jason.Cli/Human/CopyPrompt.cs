@@ -32,7 +32,7 @@ public sealed record PromptFolder(PromptFolderLevel Level, string Path);
 public static class CopyPrompt
 {
     /// <summary>
-    /// <paramref name="decidedState"/> is null for an item that waits. For one that no longer does it is the item's own
+    /// <paramref name="decidedState"/> is null for an item that waits (pending). For one that no longer does it is the item's own
     /// status word (approved, rejected, superseded, cancelled, answered): the first line says it was decided and that
     /// nothing waits, and step 5 is only a summary if the person asks. The rest stays, the paragraph that the session
     /// decides nothing included.
@@ -54,7 +54,7 @@ public static class CopyPrompt
         }
         else
         {
-            text.Append(CultureInfo.InvariantCulture, $"This {noun} was already decided ({decidedState}): {itemId}, in campaign {campaignId}. Nothing waits on it.\n");
+            text.Append(CultureInfo.InvariantCulture, $"Nothing waits on this {noun}: {itemId}, in campaign {campaignId}; it was already {decidedState}.\n");
         }
 
         if (folder is not null)
@@ -78,7 +78,7 @@ public static class CopyPrompt
         text.Append("4. Research whatever else you need to understand the request.\n");
         text.Append(decidedState is null
             ? string.Create(CultureInfo.InvariantCulture, $"5. Come back to the person with a short summary and a proposed {(approval ? "decision" : "answer")}, with your reasons.\n")
-            : $"5. If the person asks, give a short summary of what was decided.\n");
+            : $"5. If the person asks, come back with a short summary of what was decided and why.\n");
         text.Append("\nYou decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. Do not run jason approval approve, jason approval reject, jason approval set-standing or jason decision answer.");
         return text.ToString();
     }

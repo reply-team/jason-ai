@@ -157,9 +157,9 @@ public sealed partial class CopyPromptTests
         var run = await Run(["approval", "get", "apr_1", "--prompt"], item.ToJsonString());
 
         Assert.Equal(ExitCodes.Success, run.Exit);
-        Assert.Equal($"This approval was already decided ({state}): apr_1, in campaign cmp_1. Nothing waits on it.", run.Output.Split('\n')[0]);
+        Assert.Equal($"Nothing waits on this approval: apr_1, in campaign cmp_1; it was already {state}.", run.Output.Split('\n')[0]);
         Assert.DoesNotContain("is waiting", run.Output, StringComparison.Ordinal);
-        Assert.Contains("\n5. If the person asks, give a short summary of what was decided.\n", run.Output, StringComparison.Ordinal);
+        Assert.Contains("\n5. If the person asks, come back with a short summary of what was decided and why.\n", run.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("proposed decision", run.Output, StringComparison.Ordinal);
         Assert.EndsWith(YouDecideNothing, run.Output.TrimEnd(), StringComparison.Ordinal);
     }
@@ -175,9 +175,9 @@ public sealed partial class CopyPromptTests
         var run = await Run(["decision", "get", "dec_1", "--prompt"], item.ToJsonString());
 
         Assert.Equal(ExitCodes.Success, run.Exit);
-        Assert.Equal($"This question was already decided ({state}): dec_1, in campaign cmp_1. Nothing waits on it.", run.Output.Split('\n')[0]);
+        Assert.Equal($"Nothing waits on this question: dec_1, in campaign cmp_1; it was already {state}.", run.Output.Split('\n')[0]);
         Assert.DoesNotContain("is waiting", run.Output, StringComparison.Ordinal);
-        Assert.Contains("\n5. If the person asks, give a short summary of what was decided.\n", run.Output, StringComparison.Ordinal);
+        Assert.Contains("\n5. If the person asks, come back with a short summary of what was decided and why.\n", run.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("proposed answer", run.Output, StringComparison.Ordinal);
         Assert.EndsWith(YouDecideNothing, run.Output.TrimEnd(), StringComparison.Ordinal);
     }
