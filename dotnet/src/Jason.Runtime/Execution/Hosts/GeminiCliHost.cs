@@ -24,8 +24,12 @@ public sealed class GeminiCliHost : IAgentHost
     /// <summary>The documented exit of a failed authentication; every other end is the role's own.</summary>
     private const int AuthenticationFailed = 41;
 
-    private const string NotSignedIn =
-        "Gemini CLI is not signed in to a Code Assist account; sign in as yourself, or use antigravity_cli where your plan is an individual one.";
+    /// <summary>
+    /// That exit is also an enforced sign-in type that does not match, a sign-in missing a setting of its own, and a
+    /// refresh that failed, so the sentence says the host could not authenticate and names what a person tries.
+    /// </summary>
+    private const string NotAuthenticated =
+        "Gemini CLI could not authenticate; sign in as yourself, or use antigravity_cli where your plan is an individual one.";
 
     /// <summary>Where the policy is, relative to the work directory the host runs in: a directory, so the host reads it as the admin tier's.</summary>
     internal const string PolicyDirectory = ".jason-policy";
@@ -56,12 +60,17 @@ public sealed class GeminiCliHost : IAgentHost
     /// </summary>
     private static readonly string[] AlwaysDenied = ["write_file", "replace", "ask_user"];
 
-    /// <summary>The host's built-in tools, by the names its tools reference gives them, and the one alias of an older name.</summary>
+    /// <summary>
+    /// The host's built-in tools, by the names its tool list gives them at 0.66.0 (the tracker's six, the topic and task
+    /// tools, the agent tool, and the two built-in agents the policy also names), and the one alias of an older name.
+    /// </summary>
     private static readonly HashSet<string> Tools = new(StringComparer.Ordinal)
     {
         "run_shell_command", "glob", "grep_search", "search_file_content", "list_directory", "read_file", "read_many_files",
         "replace", "write_file", "ask_user", "write_todos", "list_mcp_resources", "read_mcp_resource", "activate_skill",
         "get_internal_docs", "enter_plan_mode", "exit_plan_mode", "google_web_search", "web_fetch",
+        "tracker_create_task", "tracker_update_task", "tracker_get_task", "tracker_list_tasks", "tracker_add_dependency",
+        "tracker_visualize", "update_topic", "complete_task", "invoke_agent", "codebase_investigator", "cli_help",
     };
 
     public AgentHostKind Kind => AgentHostKind.GeminiCli;
@@ -69,9 +78,15 @@ public sealed class GeminiCliHost : IAgentHost
     /// <summary>
     /// A signed-out run reads a line of standard input, which would be the first line of the brief, and may wait on a
     /// browser; this variable, which the host reads and has no flag for, makes it fail with its authentication exit at
-    /// once instead.
+    /// once instead. The other is the variable an editor's companion sets to name the folders of its workspace, which the
+    /// host adds to the run's own; an empty value is read as none, so a value in the person's environment adds no folder
+    /// the launch never named.
     /// </summary>
-    public IReadOnlyDictionary<string, string> Environment { get; } = new Dictionary<string, string> { ["NO_BROWSER"] = "true" };
+    public IReadOnlyDictionary<string, string> Environment { get; } = new Dictionary<string, string>
+    {
+        ["NO_BROWSER"] = "true",
+        ["GEMINI_CLI_IDE_WORKSPACE_PATH"] = string.Empty,
+    };
 
     /// <summary>
     /// Every spelling the host's parser knows for an option that would widen or replace what is composed. Read from the
@@ -188,7 +203,7 @@ public sealed class GeminiCliHost : IAgentHost
             new UTF8Encoding(false));
     }
 
-    public string? Unavailable(int exitCode, string? stderrTail) => exitCode == AuthenticationFailed ? NotSignedIn : null;
+    public string? Unavailable(int exitCode, string? stderrTail) => exitCode == AuthenticationFailed ? NotAuthenticated : null;
 
     public string? ToolRule(AgentTool tool) => tool switch
     {
@@ -250,15 +265,40 @@ public sealed class GeminiCliHost : IAgentHost
                 return $"'{arg}' is a short option with more after it, which the host reads as several options or as the option and its value; write a long option as --flag=value.";
             }
 
-            // The parser reads a dot in a name as a path into an object, assigned to the option of the part before it.
+            // The parser normalises a name before it matches one: a dot is a path into an object assigned to the option of the
+            // part before it, and a leading or trailing dash, a doubled one and an underscore are dropped or folded, so each
+            // would be a reserved option under a spelling the reserved list does not hold. A long flag's name is therefore
+            // letters, digits and single dashes between them, and nothing else is a flag a profile may carry.
             var name = arg.Split('=', 2)[0];
-            if (name.Contains('.', StringComparison.Ordinal))
+            if (arg[1] == '-' && !LongName(name))
             {
-                return $"'{arg}' names a flag with a dot, which the host reads as a path into the flag's own value; a flag's name has none.";
+                return $"'{arg}' is not a flag name the host reads as written: a long flag's name is letters and digits with single dashes between them, since the host's parser reads other spellings as an option it may not be given.";
             }
         }
 
         return null;
+    }
+
+    /// <summary>Two dashes and then letters and digits, with a dash only between two of them.</summary>
+    private static bool LongName(string name)
+    {
+        var body = name.AsSpan(2);
+        if (body.IsEmpty || body[0] == '-' || body[^1] == '-')
+        {
+            return false;
+        }
+
+        for (var index = 0; index < body.Length; index++)
+        {
+            var character = body[index];
+            var plain = char.IsAsciiLetterOrDigit(character);
+            if (!plain && !(character == '-' && body[index - 1] != '-'))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>The folder of each memory file the launch names, once each, and the levels whose folder cannot be named to the host exactly.</summary>
@@ -274,9 +314,12 @@ public sealed class GeminiCliHost : IAgentHost
             }
 
             // The host takes a list as one flag split on commas, or as one flag each; one flag each, so only a comma in
-            // the name itself is a problem, and a control character would not survive a command line.
-            var folder = Path.IsPathRooted(path) ? Path.GetDirectoryName(path) : null;
-            if (string.IsNullOrEmpty(folder) || folder.Contains(',', StringComparison.Ordinal) || folder.Any(char.IsControl))
+            // the name itself is a problem, and a control character would not survive a command line. The host also trims
+            // each entry, so a name with a space at either end would name another folder; and a path that is not fully
+            // qualified, such as a drive-relative one, names a folder by where the host happens to be.
+            var folder = Path.IsPathFullyQualified(path) ? Path.GetDirectoryName(path) : null;
+            if (string.IsNullOrEmpty(folder) || folder.Contains(',', StringComparison.Ordinal) || folder.Any(char.IsControl)
+                || char.IsWhiteSpace(folder[0]) || char.IsWhiteSpace(folder[^1]))
             {
                 unreadable.Add(level);
             }
@@ -345,7 +388,10 @@ public sealed class GeminiCliHost : IAgentHost
         text.Append("priority = ").Append(priority.ToString(CultureInfo.InvariantCulture)).Append('\n');
     }
 
-    /// <summary>A TOML basic string: the quote and the backslash escaped, so a word cannot end the string it is in.</summary>
+    /// <summary>
+    /// A TOML basic string: the quote and the backslash escaped, so a word cannot end the string it is in, and every
+    /// control character written as its escape, since a basic string may not hold one raw.
+    /// </summary>
     private static string Quoted(string value)
     {
         var text = new StringBuilder("\"");
@@ -358,6 +404,9 @@ public sealed class GeminiCliHost : IAgentHost
                     break;
                 case '\\':
                     text.Append("\\\\");
+                    break;
+                case < ' ' or '\u007F':
+                    text.Append("\\u").Append(((int)character).ToString("X4", CultureInfo.InvariantCulture));
                     break;
                 default:
                     text.Append(character);

@@ -170,6 +170,19 @@ public class GeminiCliHostTests
     [InlineData("--include-directories.0=/etc")]
     [InlineData("--approval-mode.x=1")]
     [InlineData("--model.x=1")]
+    // The parser strips a leading dash, a trailing dash and an underscore before it matches a name, so each of these is a
+    // reserved option under a spelling the reserved list does not hold; a flag's name is letters, digits and single dashes.
+    [InlineData("---acp")]
+    [InlineData("--acp-")]
+    [InlineData("--fake-responses_=x")]
+    [InlineData("--record-responses-=p")]
+    [InlineData("--delete-session-=id")]
+    [InlineData("--prompt-=t")]
+    [InlineData("--approval-_mode=x")]
+    [InlineData("--approval--mode=x")]
+    [InlineData("--approval_mode=x")]
+    [InlineData("--=x")]
+    [InlineData("--model-")]
     public void Arguments_the_host_would_read_as_a_prompt_a_group_or_a_glued_option_are_refused(string word)
     {
         Assert.NotNull(_host.ArgsProblem(["--model=made-up", word]));
@@ -180,6 +193,7 @@ public class GeminiCliHostTests
     {
         Assert.Null(_host.ArgsProblem(["--model=made-up", "--debug", "-d"]));
         Assert.Null(_host.ArgsProblem(["--model=gemini-2.5-pro"]));
+        Assert.Null(_host.ArgsProblem(["--no-color", "--model=a_b-c=d"]));
         Assert.Null(_host.ArgsProblem([]));
     }
 
@@ -190,6 +204,8 @@ public class GeminiCliHostTests
     /// </summary>
     [Theory]
     [InlineData("--approvalMode")]
+    [InlineData("--APPROVAL-MODE")]
+    [InlineData("--Approval-Mode")]
     [InlineData("--promptInteractive")]
     [InlineData("--outputFormat")]
     [InlineData("--rawOutput")]
@@ -258,6 +274,18 @@ public class GeminiCliHostTests
     [InlineData("read_file")]
     [InlineData("run_shell_command(rm)")]
     [InlineData("run_shell_command(git push)")]
+    // The rest of the host's built-in list at 0.66.0, and the agents that are tools of it.
+    [InlineData("tracker_create_task")]
+    [InlineData("tracker_update_task")]
+    [InlineData("tracker_get_task")]
+    [InlineData("tracker_list_tasks")]
+    [InlineData("tracker_add_dependency")]
+    [InlineData("tracker_visualize")]
+    [InlineData("update_topic")]
+    [InlineData("complete_task")]
+    [InlineData("invoke_agent")]
+    [InlineData("codebase_investigator")]
+    [InlineData("cli_help")]
     public void A_deny_is_a_tool_of_the_host_by_its_name_or_a_shell_command_by_its_prefix(string word)
     {
         Assert.Null(_host.DenyProblem(word));
@@ -356,6 +384,44 @@ public class GeminiCliHostTests
         Assert.Equal([Path.GetDirectoryName(Campaign)!], Included(composed.Command));
     }
 
+    /// <summary>
+    /// The host trims every folder of a list, so a folder whose path ends in a space would name another folder; and a path
+    /// that is rooted but not fully qualified, such as a drive-relative one, has no folder to name.
+    /// </summary>
+    [Theory]
+    [InlineData("trail ")]
+    [InlineData("trail  ")]
+    public void A_folder_with_whitespace_at_its_end_is_reported_unreadable_and_includes_nothing(string folderName)
+    {
+        var file = Path.Combine(Root, folderName, "AGENTS.md");
+
+        var composed = Compose(files: new MemoryFileLocations(file, null, Campaign));
+
+        Assert.Equal(["client"], composed.Unreadable);
+        Assert.Equal([Path.GetDirectoryName(Campaign)!], Included(composed.Command));
+    }
+
+    [Fact]
+    public void A_folder_with_whitespace_inside_its_name_is_included_as_it_is()
+    {
+        var file = Path.Combine(Root, " two words ", "inner", "AGENTS.md");
+
+        var composed = Compose(files: new MemoryFileLocations(file, null, null));
+
+        Assert.Empty(composed.Unreadable);
+        Assert.Equal([Path.GetDirectoryName(file)!], Included(composed.Command));
+    }
+
+    [Fact]
+    public void A_path_rooted_but_not_fully_qualified_is_reported_unreadable()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows has a rooted path that is not fully qualified.");
+
+        var composed = Compose(files: new MemoryFileLocations("\\foo\\AGENTS.md", "C:foo\\AGENTS.md", Campaign));
+
+        Assert.Equal(["client", "project"], composed.Unreadable);
+    }
+
     private static string[] Included(IReadOnlyList<string> command) =>
         [.. command.Where(word => word.StartsWith("--include-directories=", StringComparison.Ordinal)).Select(word => word["--include-directories=".Length..])];
 
@@ -367,6 +433,9 @@ public class GeminiCliHostTests
         var sentence = _host.Unavailable(41, "Please set an Auth method; signed in as someone@example.test");
 
         Assert.False(string.IsNullOrWhiteSpace(sentence));
+        Assert.StartsWith("Gemini CLI could not authenticate", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("not signed in", sentence, StringComparison.Ordinal);
+        Assert.Contains("sign in as yourself", sentence, StringComparison.Ordinal);
         Assert.Contains("antigravity_cli", sentence, StringComparison.Ordinal);
         Assert.DoesNotContain("someone", sentence, StringComparison.Ordinal);
         Assert.Equal(sentence, _host.Unavailable(41, null));
@@ -541,6 +610,21 @@ public class GeminiCliHostTests
         Assert.Equal(first, File.ReadAllText(Path.Combine(directory.Path, ".jason-policy", "jason.toml")));
     }
 
+    /// <summary>A control character in a word would end the line a TOML basic string is on, so each is written as its escape.</summary>
+    [Fact]
+    public void A_control_character_in_a_word_is_written_as_an_escape_and_never_as_itself()
+    {
+        using var directory = new TempDirectory();
+
+        _host.WriteWorkDirectory(directory.Path, ["run_shell_command:jason"], ["run_shell_command(a\nb\tc\u007Fd)"]);
+
+        var policy = File.ReadAllText(Path.Combine(directory.Path, ".jason-policy", "jason.toml"));
+        Assert.Contains("commandPrefix = \"a\\u000Ab\\u0009c\\u007Fd\"\n", policy, StringComparison.Ordinal);
+        Assert.DoesNotContain('\t', policy);
+        Assert.DoesNotContain('\u007F', policy);
+        Assert.DoesNotContain("\nb", policy, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_work_directory_written_for_the_host_holds_the_files_where_the_host_reads_them_and_nothing_else()
     {
@@ -558,7 +642,18 @@ public class GeminiCliHostTests
     [Fact]
     public void The_host_keeps_a_signed_out_run_from_opening_a_browser_by_a_constant_of_its_own()
     {
-        Assert.Equal(new Dictionary<string, string> { ["NO_BROWSER"] = "true" }, _host.Environment.ToDictionary(pair => pair.Key, pair => pair.Value));
+        Assert.Equal("true", _host.Environment["NO_BROWSER"]);
+    }
+
+    /// <summary>
+    /// The host adds the folders of an IDE's workspace to the run's own when this variable is set, and an empty value is
+    /// read as none; a launch that inherited the person's value would read folders it never named.
+    /// </summary>
+    [Fact]
+    public void The_host_is_given_no_editor_workspace_by_an_empty_constant_so_an_inherited_one_adds_no_folder()
+    {
+        Assert.Equal(string.Empty, _host.Environment["GEMINI_CLI_IDE_WORKSPACE_PATH"]);
+        Assert.Equal(["GEMINI_CLI_IDE_WORKSPACE_PATH", "NO_BROWSER"], _host.Environment.Keys.Order(StringComparer.Ordinal));
     }
 
     private sealed class TempDirectory : IDisposable

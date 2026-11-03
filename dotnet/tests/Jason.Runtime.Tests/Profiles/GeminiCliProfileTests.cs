@@ -83,8 +83,7 @@ public class GeminiCliProfileTests
     }
 
     /// <summary>
-    /// Critic finding S1, held on the host that gives it a place to happen: a profile stored on Claude Code with an argument
-    /// that is a flag only Gemini CLI composes is moved onto Gemini CLI by a patch naming nothing but the host. The stored
+    /// A profile stored on Claude Code with an argument that is a flag only Gemini CLI composes is moved onto Gemini CLI by a patch naming nothing but the host. The stored
     /// argument would be launched after the composed approval mode and win, so the move is refused naming the host. The patch
     /// names the program too, since a move that leaves the stored program of another host is refused for that alone.
     /// </summary>
@@ -130,5 +129,43 @@ public class GeminiCliProfileTests
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("args", "invalid"), (detail.Field, detail.Code));
         Assert.StartsWith("the profile's args are refused on gemini_cli: ", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The parser reads each of these as a reserved option, by stripping a dash or an underscore from its name, so a name of
+    /// anything but letters, digits and single dashes is refused before the reserved list is asked, at create and at update.
+    /// </summary>
+    [Theory]
+    [InlineData("---acp")]
+    [InlineData("--acp-")]
+    [InlineData("--fake-responses_=x")]
+    [InlineData("--record-responses-=p")]
+    [InlineData("--delete-session-=id")]
+    [InlineData("--prompt-=t")]
+    [InlineData("--approval-_mode=x")]
+    [InlineData("--approval--mode=x")]
+    public async Task A_name_the_parser_would_read_as_a_reserved_option_is_refused_at_create_and_at_update(string flag)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "gemini-spelled", host = "gemini_cli", program = "gemini", args = new[] { flag } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        Assert.Contains(created.Details!, detail => detail.Field.StartsWith("args", StringComparison.Ordinal));
+
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "gemini-plain", host = "gemini_cli", program = "gemini", args = new[] { "--model=made-up" } },
+            Ct);
+        var updated = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "gemini-plain", args = new[] { flag } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        Assert.Contains(updated.Details!, detail => detail.Field.StartsWith("args", StringComparison.Ordinal));
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "gemini-plain" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
     }
 }

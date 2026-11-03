@@ -512,6 +512,34 @@ public partial class ExecutionProfileDocTests
         }
     }
 
+    /// <summary>
+    /// What the Gemini CLI notes say a person cannot see in the host's row: which names a profile's arguments may not use,
+    /// what the exit of a failed authentication also means, that the client level is the harness root and so every
+    /// project's and campaign's memory file under it is readable, what the person's own setup adds to every role, and what
+    /// detection does not read.
+    /// </summary>
+    [Fact]
+    public void The_gemini_cli_notes_state_the_facts_a_person_cannot_see_in_the_row()
+    {
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var notes = Flattened(text[text.IndexOf("\n### Gemini CLI\n", StringComparison.Ordinal)..]);
+
+        string[] fragments =
+        [
+            "a long flag's name is letters and digits with single dashes between them",
+            "`GEMINI_CLI_IDE_WORKSPACE_PATH=`",
+            "also an enforced sign-in type that does not match",
+            "\"could not authenticate\"",
+            "the client level is the harness root, so a role reads every project's and campaign's memory file under it",
+            "the person's own skills in `~/.gemini/skills` and `~/.agents/skills`",
+            "`GEMINI_CLI_HOME`",
+        ];
+        foreach (var fragment in fragments)
+        {
+            Assert.Contains(fragment, notes, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 
