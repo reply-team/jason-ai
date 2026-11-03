@@ -858,20 +858,25 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
-    /// What moves a host's own traffic is the person's environment's, for every host, and the general part of section 12
-    /// says it once, ahead of every host's section, so no host's section has to say it again or is read as the only one.
+    /// A proxy is the person's environment's, for every host, and the general part of section 12 says it once, ahead of
+    /// every host's section, with the narrower claim beside it: a flag that names a host's own server, its credentials or its
+    /// certificate check is reserved where the host has one, and an allowlist host takes no flag outside it.
     /// </summary>
     [Fact]
-    public void The_general_part_of_the_hosts_section_says_the_flags_that_move_a_hosts_traffic_are_the_persons()
+    public void The_general_part_of_the_hosts_section_says_a_proxy_is_the_persons_and_what_is_reserved()
     {
         var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
         var hosts = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
         var general = Flattened(hosts[..hosts.IndexOf("\n### ", StringComparison.Ordinal)]);
 
         Assert.Contains(
-            "Flags and variables that move a host's own traffic, such as Gemini CLI's `--proxy` or a proxy variable, are the person's environment's to set: Jason sets none of them and reserves none of them",
+            "A proxy flag or a proxy variable, such as Gemini CLI's `--proxy`, is the person's environment's to set: Jason sets none of them and reserves none of them. A flag that names the host's own server, its credentials or its certificate check is reserved where the host has one, as Cursor CLI's section says, and a host whose arguments are an allowlist takes no flag outside it",
             general,
             StringComparison.Ordinal);
+
+        var cursor = Flattened(hosts[hosts.IndexOf("\n### Cursor CLI\n", StringComparison.Ordinal)..hosts.IndexOf("\n### Gemini CLI\n", StringComparison.Ordinal)]);
+        Assert.Contains("A flag that names the host's own server, its credentials or its certificate check (`--endpoint`, `--base-url`, `--header`, `--api-key` and `--insecure` among them) is reserved", cursor, StringComparison.Ordinal);
+        Assert.DoesNotContain("a short flag stands alone, as `-f`", cursor, StringComparison.Ordinal);
     }
 
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>

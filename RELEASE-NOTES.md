@@ -138,8 +138,9 @@ attempt is retried against the same denial. Whether the host runs an allowed com
 `command(jason)` covers the report on Windows, has not been seen on a signed-in run. The host also reads your own global
 `AGENTS.md` and `GEMINI.md` under `~/.gemini` for every role.
 
-Flags and variables that move a host's own traffic, a proxy among them, are yours to set: Jason sets none of them and
-reserves none of them.
+A proxy flag or a proxy variable is yours to set: Jason sets none of them and reserves none of them. A flag that names a
+host's own server, its credentials or its certificate check is reserved where the host has one, as the Cursor CLI section
+says, and a host whose arguments are an allowlist takes no flag outside it.
 
 A profile is held to its host's rules when it is written, not when a run starts, so a profile stored under one release is
 not read again by a later release whose rules for its host are stricter.

@@ -518,10 +518,10 @@ deny rules — the command word that calls the runtime back and the memory files
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
 
-Flags and variables that move a host's own traffic, such as Gemini CLI's `--proxy` or a proxy variable, are the person's
-environment's to set: Jason sets none of them and reserves none of them. A variable the runtime's own environment holds
-reaches a launched child like any other, and a host whose arguments are an allowlist takes no flag outside it, as its
-section says.
+A proxy flag or a proxy variable, such as Gemini CLI's `--proxy`, is the person's environment's to set: Jason sets none of
+them and reserves none of them. A flag that names the host's own server, its credentials or its certificate check is
+reserved where the host has one, as Cursor CLI's section says, and a host whose arguments are an allowlist takes no flag
+outside it, as its section says. A variable the runtime's own environment holds reaches a launched child like any other.
 
 ### Codex CLI
 
@@ -753,7 +753,10 @@ thing that decides whether the host works at all.
    on its command line, and ignores stdin when one is, so no composed argument is a bare word and a profile's arguments
    take a value joined to its flag by an equals sign (`--model=name`), never a bare word and never a double dash. The
    host reads a short flag with more letters or a value after it as other flags or as a flag with a value, and a lone
-   dash as the prompt, so a profile's arguments carry no such word either; a short flag stands alone, as `-f`.
+   dash as the prompt, so a profile's arguments carry no such word either; a short flag stands alone. A flag that names the
+   host's own server, its credentials or its certificate check (`--endpoint`, `--base-url`, `--header`, `--api-key` and
+   `--insecure` among them) is reserved, as is one that makes a session act without asking or changes the tool set Jason
+   composed.
 
 ### Gemini CLI
 
