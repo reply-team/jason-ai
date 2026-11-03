@@ -615,7 +615,8 @@ other documented flags that load, reach or say more. The host's parser is closed
 (the reserved list is from its documentation), so a hidden alias of a composed flag, a cluster of short options or a value
 glued to one cannot be ruled out; a profile's arguments are therefore an allowlist of the documented options a person
 owns, each as one argument: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, and the
-bare `--no-color` and `--disable-client-telemetry`. Anything else is refused, harmless or not: the cost of a closed parser.
+bare `--no-color` and `--disable-client-telemetry`. Anything else is refused, harmless or not: the cost of a closed parser;
+so is a value holding a control character, which a space does not.
 The log level and the log directory are not among them: they change what the host writes outside the work directory.
 
 | Tool the host offers a role | Why |

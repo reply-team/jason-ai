@@ -524,6 +524,13 @@ public class CopilotCliHostTests
     /// </summary>
     [Theory]
     [InlineData("--model=made-up-model", false)]
+    [InlineData("--model=made up", false)]
+    [InlineData("--model=a\nb", true)]
+    [InlineData("--model=a\rb", true)]
+    [InlineData("--model=a\tb", true)]
+    [InlineData("--model=a\0b", true)]
+    [InlineData("--model=a\u007fb", true)]
+    [InlineData("--effort=high\n", true)]
     [InlineData("--effort=high", false)]
     [InlineData("--reasoning-effort=low", false)]
     [InlineData("--log-level=debug", true)]

@@ -301,6 +301,11 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
             ? $"'{refused}' is refused: the host's parser is not read, so only the documented options the person owns are taken: {string.Join(", ", ValueOptions.Select(option => option + "=<value>"))}, {string.Join(", ", FlagOptions)}, each as one argument."
             : null;
 
+    /// <summary>
+    /// An option the person owns: the bare flag, or a documented name joined by an equals sign to a value that is neither
+    /// empty nor holds a control character. A value may hold a space, which travels as one argument; a control character
+    /// ends a line or, as a NUL on Windows, a command line, so none is taken.
+    /// </summary>
     private static bool IsOwnedOption(string arg)
     {
         if (Array.IndexOf(FlagOptions, arg) >= 0)
@@ -309,7 +314,10 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
         }
 
         var equals = arg.IndexOf('=', StringComparison.Ordinal);
-        return equals > 0 && equals < arg.Length - 1 && Array.IndexOf(ValueOptions, arg[..equals]) >= 0;
+        return equals > 0
+            && equals < arg.Length - 1
+            && Array.IndexOf(ValueOptions, arg[..equals]) >= 0
+            && !arg.Any(char.IsControl);
     }
 
     /// <summary>
