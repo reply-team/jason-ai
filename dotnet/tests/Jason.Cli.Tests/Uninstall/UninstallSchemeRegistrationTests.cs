@@ -3,6 +3,7 @@ using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
 using Jason.Cli.Uninstall;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 
@@ -214,7 +215,7 @@ public sealed class UninstallSchemeRegistrationTests
     [InlineData(LinkRegistration.Marker, Ours_, LinkRegistrationFate.Removed)]
     [InlineData(LinkRegistration.Marker, null, LinkRegistrationFate.Removed)]
     [InlineData(LinkRegistration.Marker, Elsewhere, LinkRegistrationFate.Kept)]
-    [InlineData(LinkRegistration.Marker, "\"C:\\INSTALL\\JASON.EXE\" \"%1\"", LinkRegistrationFate.Kept)]
+    [InlineData(LinkRegistration.Marker, "\"C:\\INSTALL\\JASON.EXE\" \"%1\"", LinkRegistrationFate.Removed)]
     [InlineData(null, Ours_, LinkRegistrationFate.Untouched)]
     [InlineData("AI.JASON.RUNTIME", Ours_, LinkRegistrationFate.Untouched)]
     [InlineData("another.program", null, LinkRegistrationFate.Untouched)]
@@ -225,6 +226,20 @@ public sealed class UninstallSchemeRegistrationTests
 
     [Fact]
     public void No_key_is_no_plan() => Assert.Null(LinkRegistrationPlan.Of(null, Ours_));
+
+    /// <summary>
+    /// An installation whose path holds a <c>%</c> writes no link, so a key of ours naming any command is another
+    /// installation's, and one naming none is a half-written key of ours.
+    /// </summary>
+    [Theory]
+    [InlineData(Ours_, LinkRegistrationFate.Kept)]
+    [InlineData(null, LinkRegistrationFate.Removed)]
+    public void An_installation_that_writes_no_link_keeps_a_command_and_removes_none(string? command, LinkRegistrationFate fate) =>
+        Assert.Equal(fate, LinkRegistrationPlan.Of(new LinkRegistrationRead(LinkRegistration.Marker, command), null)?.Fate);
+
+    [Fact]
+    public void This_installation_s_command_is_none_where_its_path_holds_a_percent() =>
+        Assert.Null(UninstallReader.LinkCommand(new CliEnvironment(new StringWriter(), new StringWriter(), new JasonPaths(Path.GetTempPath()), InstallPath: @"C:\Users\Ann%1x\Jason\jason.exe")));
 
     [Theory]
     [InlineData("on Windows, the notification registration: the AppUserModelID key the toast was shown under, the two entries Windows made for it, and the jason: link registration where its command names this executable")]

@@ -103,8 +103,18 @@ public static class UninstallReader
     /// The command this installation's toast host writes for a <c>jason:</c> link: the installed file where one is named,
     /// otherwise what starts this very process, which is what the host is started as.
     /// </summary>
-    internal static string LinkCommand(CliEnvironment env) =>
-        Jason.Contracts.Notifications.LinkRegistration.Command(env.InstallPath is { } path ? [path] : SelfExecutable.Command);
+    internal static string? LinkCommand(CliEnvironment env)
+    {
+        try
+        {
+            return Jason.Contracts.Notifications.LinkRegistration.Command(env.InstallPath is { } path ? [path] : SelfExecutable.Command);
+        }
+        catch (ArgumentException)
+        {
+            // A path no command can hold, a percent sign in it say: this installation's toast host writes no link.
+            return null;
+        }
+    }
 
     /// <summary>
     /// The <c>jason:</c> link registration and what becomes of it; where the classes cannot be read, none and why,

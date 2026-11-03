@@ -30,10 +30,12 @@ public sealed record LinkRegistrationPlan(LinkRegistrationFate Fate, string? Com
     /// there is no key.
     /// </summary>
     /// <param name="read">The registration as it stands.</param>
-    /// <param name="command">The command this installation's toast host writes, compared exactly as the host compares it.</param>
-    public static LinkRegistrationPlan? Of(LinkRegistrationRead? read, string command)
+    /// <param name="command">
+    /// The command this installation's toast host writes, compared as the host compares it, without regard to case; null
+    /// for an installation whose path no command can hold, which writes no link.
+    /// </param>
+    public static LinkRegistrationPlan? Of(LinkRegistrationRead? read, string? command)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(command);
         if (read is null)
         {
             return null;
@@ -44,7 +46,7 @@ public sealed record LinkRegistrationPlan(LinkRegistrationFate Fate, string? Com
             return new LinkRegistrationPlan(LinkRegistrationFate.Untouched, null);
         }
 
-        return read.Command is null || string.Equals(read.Command, command, StringComparison.Ordinal)
+        return read.Command is null || (command is not null && LinkRegistration.SameCommand(read.Command, command))
             ? new LinkRegistrationPlan(LinkRegistrationFate.Removed, read.Command)
             : new LinkRegistrationPlan(LinkRegistrationFate.Kept, read.Command);
     }

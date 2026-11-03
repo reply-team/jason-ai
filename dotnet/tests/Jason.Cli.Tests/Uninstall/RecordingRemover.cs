@@ -199,7 +199,7 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     public bool LinkUnreadable { get; init; }
 
     /// <summary>The command each removal of the link registration was asked to remove it for.</summary>
-    public List<string> LinkRemovedFor { get; } = [];
+    public List<string?> LinkRemovedFor { get; } = [];
 
     private int _linkReads;
 
@@ -218,7 +218,7 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         return Link;
     }
 
-    public void RemoveLinkRegistration(string command)
+    public void RemoveLinkRegistration(string? command)
     {
         Record("link.remove", Jason.Contracts.Notifications.LinkRegistration.Key);
         LinkRemovedFor.Add(command);

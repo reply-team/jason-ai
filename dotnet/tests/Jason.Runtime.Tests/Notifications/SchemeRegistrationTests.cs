@@ -114,6 +114,70 @@ public sealed class SchemeRegistrationTests
         Assert.Empty(registry.Writes);
     }
 
+    /// <summary>
+    /// A program the person chose for <c>jason:</c> links routes them past any class key, so a choice that is not Jason's
+    /// own class is foreign, whether or not the key carries our marker.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_protocol_choice_of_another_program_is_foreign(bool marked)
+    {
+        var registry = new FakeUserRegistry();
+        if (marked)
+        {
+            Ours(registry);
+        }
+
+        registry.Values[(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\jason\UserChoice", "ProgId")] = "Some.Other.App";
+
+        Assert.Equal(("foreign", (string?)null), SchemeRegistration.Ensure(registry, Self));
+        Assert.Empty(registry.Writes);
+    }
+
+    [Fact]
+    public void A_protocol_choice_of_jason_s_own_class_is_ours()
+    {
+        var registry = new FakeUserRegistry();
+        registry.Values[(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\jason\UserChoice", "ProgId")] = "jason";
+
+        Assert.Equal("written", SchemeRegistration.Ensure(registry, Self).State);
+    }
+
+    /// <summary>Windows paths ignore case, so a command that differs from ours only in case names this executable.</summary>
+    [Fact]
+    public void A_key_of_ours_whose_command_differs_only_in_case_is_left_alone()
+    {
+        var registry = new FakeUserRegistry();
+        Ours(registry, SelfCommand.ToUpperInvariant());
+
+        Assert.Equal(("present", (string?)null), SchemeRegistration.Ensure(registry, Self));
+        Assert.Empty(registry.Writes);
+    }
+
+    /// <summary>
+    /// The shell substitutes its <c>%</c> tokens anywhere in a command, so a path holding one is a command Jason will not
+    /// write: the registration fails, and the toast is shown without a link.
+    /// </summary>
+    [Fact]
+    public void A_percent_in_the_executable_s_path_is_refused_and_nothing_is_written()
+    {
+        var registry = new FakeUserRegistry();
+
+        Assert.Equal(("failed", "0x80070057"), SchemeRegistration.Ensure(registry, [@"C:\Users\Ann%1x\AppData\Local\Programs\Jason\jason.exe"]));
+        Assert.Empty(registry.Writes);
+    }
+
+    /// <summary>A command that cannot be composed is a failed registration, never an exception that would fail the toast.</summary>
+    [Fact]
+    public void A_command_that_cannot_be_composed_is_an_answer_not_an_exception()
+    {
+        var registry = new FakeUserRegistry();
+
+        Assert.Equal(("failed", "0x80070057"), SchemeRegistration.Ensure(registry, ["C:\\a\"b\\jason.exe"]));
+        Assert.Empty(registry.Writes);
+    }
+
     [Fact]
     public void A_write_the_account_refuses_is_an_answer_with_its_hresult()
     {

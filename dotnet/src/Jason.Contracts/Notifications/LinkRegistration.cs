@@ -31,6 +31,15 @@ public static class LinkRegistration
     /// <summary>The command in that merged view.</summary>
     public const string ClassesCommandKey = ClassesKey + @"\shell\open\command";
 
+    /// <summary>
+    /// The program this account chose for <c>jason:</c> links, which Windows routes a link to past any class key: its
+    /// <see cref="ProgIdValue"/> names the class, and Jason's own is <see cref="AttentionLinks.Scheme"/>.
+    /// </summary>
+    public const string UserChoiceKey = @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\" + AttentionLinks.Scheme + @"\UserChoice";
+
+    /// <summary>The value of <see cref="UserChoiceKey"/> that names the chosen class.</summary>
+    public const string ProgIdValue = "ProgId";
+
     /// <summary>A key's default value.</summary>
     public const string DefaultValue = "";
 
@@ -40,6 +49,12 @@ public static class LinkRegistration
     /// <summary>The value, empty, that makes the class a URI scheme.</summary>
     public const string ProtocolValue = "URL Protocol";
 
+    /// <summary>
+    /// Whether two commands name the same executable: compared without regard to case, as Windows compares paths, and
+    /// otherwise exactly; the key exists on Windows only.
+    /// </summary>
+    public static bool SameCommand(string? left, string? right) => string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The value that says the key is Jason's.</summary>
     public const string MarkerValue = "AppUserModelID";
 
@@ -48,14 +63,15 @@ public static class LinkRegistration
 
     /// <summary>
     /// The command for an executable started as <paramref name="self"/>: each element quoted, then the link as
-    /// <c>"%1"</c>.
+    /// <c>"%1"</c>. A path holding a quote or a <c>%</c> is refused: the shell substitutes its <c>%</c> tokens anywhere
+    /// in the command, so such a path would start something other than this executable.
     /// </summary>
     public static string Command(IReadOnlyList<string> self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        if (self.Count == 0 || self.Any(string.IsNullOrWhiteSpace) || self.Any(part => part.Contains('"', StringComparison.Ordinal)))
+        if (self.Count == 0 || self.Any(string.IsNullOrWhiteSpace) || self.Any(part => part.AsSpan().IndexOfAny('"', '%') >= 0))
         {
-            throw new ArgumentException("An executable's command is one or more paths, none holding a quote.", nameof(self));
+            throw new ArgumentException("An executable's command is one or more paths, none holding a quote or a percent sign.", nameof(self));
         }
 
         return string.Join(' ', self.Select(part => $"\"{part}\"")) + " \"%1\"";

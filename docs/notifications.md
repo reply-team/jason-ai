@@ -259,7 +259,12 @@ jason journal list --kind notification_sent
   command that starts the executable with the link and nothing else — no data directory, so a click finds the runtime
   the way a `jason` typed in a terminal does. A `jason` class without that marker, this account's or the machine's, is
   another program's: it is never written over or shadowed, and the toast is shown without a click target, as it is when
-  the key cannot be written; delivery never fails for it. The link follows the executable that last showed a toast: a
+  the key cannot be written; delivery never fails for it. The check reads the class key, the merged view Windows
+  resolves a class through, and the program this account chose for `jason:` links
+  (`HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\jason\UserChoice`, `ProgId`), which Windows sends
+  a link to whatever the class key says: a choice other than Jason's own class is another program's too, even where the
+  key is Jason's. A machine-wide `jason` another program installs after Jason's per-user key is shadowed by it, which is
+  Windows' own rule for a class both hold. The link follows the executable that last showed a toast: a
   development runtime that shows one re-points it to its own executable until the installed one shows the next, as the
   AppUserModelID's display name already follows whichever showed the last. The executable is a console program: on
   Windows 11 24H2 and later a click opens no window, and on earlier Windows a console window shows while the link is

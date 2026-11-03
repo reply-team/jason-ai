@@ -384,7 +384,7 @@ public class RoundTripTests
 
         public LinkRegistrationRead? ReadLinkRegistration() => null;
 
-        public void RemoveLinkRegistration(string command) =>
+        public void RemoveLinkRegistration(string? command) =>
             throw new InvalidOperationException("this round trip removes nothing from the registry of whoever ran it.");
 
         // The test host is no single-file build, so the machine's answer is null; asked anyway, so that a

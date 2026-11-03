@@ -159,7 +159,7 @@ public interface IInstallationRemover
     /// this may delete there: read again first, and refused unless it still carries Jason's marker and
     /// <paramref name="command"/> or no command at all (<see cref="LinkRegistrationPlan.Of"/>).
     /// </summary>
-    void RemoveLinkRegistration(string command);
+    void RemoveLinkRegistration(string? command);
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -559,9 +559,8 @@ public static class InstallationRemovers
                 command?.GetValue(Jason.Contracts.Notifications.LinkRegistration.DefaultValue) as string);
         }
 
-        public void RemoveLinkRegistration(string command)
+        public void RemoveLinkRegistration(string? command)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(command);
             if (LinkRegistrationPlan.Of(ReadLinkRegistration(), command) is not { Fate: LinkRegistrationFate.Removed })
             {
                 throw new RemovalRefused(CliErrors.UninstallRefused, "The jason: link registration no longer carries Jason's marker and this installation's command, so it is not this verb's to remove.");
