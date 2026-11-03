@@ -43,6 +43,10 @@ internal static class ReviewedLogProperties
         // is a DurationMs, above.
         "Finished", "Unfinished",
 
+        // The import-file sweep at start: how many recorded folders it checked and skipped, and the public id of one it skipped
+        // (ImportFilesSweep; Level above is a closed word, root, project or campaign).
+        "Folders", "Skipped", "EntityId",
+
         // The port the settings asked for and the one the API listens on, both numbers (RuntimeHost).
         "ConfiguredPort", "Port",
 
