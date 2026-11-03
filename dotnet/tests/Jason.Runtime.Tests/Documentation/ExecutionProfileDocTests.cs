@@ -539,6 +539,7 @@ public partial class ExecutionProfileDocTests
         // (e) what is denied, said as it is.
         Assert.Contains("The file-writing tools are denied and not offered; the shell is held to the command word by the allow rule.", section, StringComparison.Ordinal);
         Assert.DoesNotContain("any writing is denied", section, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("own environment trusts the folder", section, StringComparison.Ordinal);
 
         // (f) what has not been measured, as the list stands.
         var measured = section[section.IndexOf("**Not measured.**", StringComparison.Ordinal)..];

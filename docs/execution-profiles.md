@@ -683,7 +683,6 @@ documents that such a run loads no hooks, workspace servers, repository plugin s
 - whether `taskbarPresence`, a Windows setting, does anything in a run with no desktop;
 - whether version 1.0.105 accepts every flag above: the host's changelog does not say when `--disallow-temp-dir` and
   `--sync-session` appeared, so a launch is composed from the reference and not from a run.
-own environment trusts the folder and allows everything except what the deny list names; Jason does not read or clear it.
 
 **Not signed in.** An end without a report whose exit is not zero and whose stderr names `copilot login`, the command the
 host's startup errors recommend, is final and says `host_not_available` with one sentence of Jason's own, never the
