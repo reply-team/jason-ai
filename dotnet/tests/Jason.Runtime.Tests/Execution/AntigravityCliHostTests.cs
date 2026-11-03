@@ -121,6 +121,9 @@ public class AntigravityCliHostTests
 
         Assert.Null(Host.ArgsProblem(["--model=made-up", "--effort=low"]));
 
+        // A long flag takes its value, if any, joined by an equals sign: a switch with no value is one too.
+        Assert.Null(Host.ArgsProblem(["--disable-slash-commands"]));
+
         var reservedShort = Host.ReservedFlags.Where(flag => flag.Length == 2 && flag[0] == '-' && flag[1] != '-').ToList();
         Assert.NotEmpty(reservedShort);
         Assert.All(reservedShort, flag =>

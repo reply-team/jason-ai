@@ -151,14 +151,14 @@ public sealed class AntigravityCliHost : IAgentHost
 
     /// <summary>
     /// A bare word is read by the host as a prompt in some forms, and how that sits beside a stream of lines is not
-    /// documented; so an argument is a long flag with its value joined by an equals sign, and no double dash is taken.
+    /// documented; so an argument is a long flag, its value, if any, joined by an equals sign, and no double dash is taken.
     /// A short flag glued to another or to a value, and the bare dash, are refused too: the reserved list is matched by
     /// whole word, and a parser expands a cluster into the flags it holds. The host's parser could not be read, so this
     /// holds whatever it does with a cluster.
     /// </summary>
     public string? ArgsProblem(IReadOnlyList<string> args) =>
         args.FirstOrDefault(arg => !arg.StartsWith("--", StringComparison.Ordinal) || arg == "--") is { } refused
-            ? $"'{refused}' is not a long flag with its value joined by an equals sign; the host may read a bare word as a prompt and a short flag may be a cluster, so write each option as --name=value."
+            ? $"'{refused}' is not a long flag, its value, if any, joined by an equals sign; the host may read a bare word as a prompt and a short flag may be a cluster, so write each option as --name or --name=value."
             : null;
 
     /// <summary>

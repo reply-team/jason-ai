@@ -556,7 +556,7 @@ host's own print timeout would end a run with a success and partial output, and 
 Jason turns it off and the attempt's limit is the only limit. The host mints its own conversation id and takes none, so
 the attempt records no session. Nothing is written into the work directory, nothing of the person's own configuration is
 touched, and no flag that acts without asking, widens the workspace, takes another project or resumes a conversation is
-composed or allowed in a profile. An argument is a long flag with its value joined by an equals sign (`--model=<name>`):
+composed or allowed in a profile. An argument is a long flag, its value, if any, joined by an equals sign (`--name` or `--model=<name>`):
 a bare word may be read by the host as a prompt, a double dash is refused, and so is every word of one dash and more than
 one character, such as a short flag glued to another or to a value, and the bare dash. The host's parser could not be read
 for this, since no copy of it was available to inspect: the reserved list is the flags its reference table names, with the
