@@ -32,6 +32,11 @@ the window in which a follow-up can be lost.
 line named, the `read` queued for you, and the thread's `moves`, each a line of the chronicle and its moment —
 identifiers and moments only, never a word anybody wrote.
 
+A brief without `inbound_reply` is a manager's hand-made item: take `thread` and `read` from its context as given, and
+the same branches on `read` apply. The `plugin` and `channel` come from the read's result, and the person from the
+item's contact or from the read. Such a run's verdict is not authentic for a standing approval, so every draft it makes
+is asked.
+
 **This build reads a reply only through the provider.** A `provider_op` item naming `conversation.list` or
 `conversation.get` does it, and its result carries the threads; no verb of Jason's reads a mailbox. So the reply
 you are asked about is in such an item's result, or nowhere, and you never imagine one. When the brief names a

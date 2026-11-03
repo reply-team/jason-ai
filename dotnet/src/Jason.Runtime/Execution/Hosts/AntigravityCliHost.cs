@@ -53,8 +53,6 @@ public sealed class AntigravityCliHost : IAgentHost
     /// </summary>
     private static readonly string[] SignInWords = ["authentication required", "authentication expired"];
 
-    private static readonly string[] Levels = ["client", "project", "campaign"];
-
     /// <summary>
     /// Everything this host reads that would change the shape composed below, plus everything that would undo it. A profile
     /// says which program and what to add; it does not say that the run is interactive, takes a prompt on its command line,
@@ -99,7 +97,7 @@ public sealed class AntigravityCliHost : IAgentHost
         // memory file as a file, and a tool the person granted. What it may not: a tool the profile does not grant. The
         // capability token and the envelope are in none of it.
         var allow = new List<string> { $"command({ProgramResolver.CliCommandFor(revision.CliCommand)})" };
-        allow.AddRange(new[] { memoryFiles.Client, memoryFiles.Project, memoryFiles.Campaign }.OfType<string>().Select(file => $"{ReadPrefix}{file})"));
+        allow.AddRange(memoryFiles.NamedLevels().Select(level => $"{ReadPrefix}{level.Path})"));
         allow.AddRange(revision.Tools.Select(ToolRule).OfType<string>());
         string[] deny = [.. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule).OfType<string>()];
 

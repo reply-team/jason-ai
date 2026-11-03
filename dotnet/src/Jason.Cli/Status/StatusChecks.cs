@@ -147,6 +147,12 @@ internal static class StatusChecks
         public const string UpdateSkills = "jason skills update";
 
         /// <summary>
+        /// The repair for a profile whose current revision this build's rules for its host refuse: read what is refused. The
+        /// act is <c>jason profile update</c>, said in the fact.
+        /// </summary>
+        public static string ReadProfile(string profile) => $"jason profile get {profile}";
+
+        /// <summary>
         /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has, with
         /// that host's own program. The runtime refuses a move that keeps the program written for another host, and a
         /// profile made as the README says carries one. A bundle's report names no profile, so there it is
@@ -1370,10 +1376,26 @@ internal static class StatusChecks
                 .Select(group => string.Create(CultureInfo.InvariantCulture, $"{group.Key} {group.Count()}") + (Why(group.Key) is { } why ? ", " + why : string.Empty))) + ".";
         }
 
+        // A profile whose current revision this build's rules for its host refuse: the runtime says so on the profile, and
+        // work that runs under it ends before a child exists. The repair reads what to change; the act is the update.
+        var refused = profiles.Where(profile => profile.Refused).ToList();
+        if (refused.Count > 0)
+        {
+            said += names
+                ? " The current revision of " + string.Join(", ", refused.Select(profile => profile.Name)) + " is refused by this build's rules for its host; 'jason profile update' changes it."
+                : string.Create(CultureInfo.InvariantCulture, $" {refused.Count} of them have a current revision this build's rules for its host refuse; 'jason profile update' changes one.");
+        }
+
         var astray = profiles.FirstOrDefault(profile => !Here(profile.Host));
         if (astray is null)
         {
-            return new StatusCheck(Name, false, CheckState.Ok, hosts + " " + said, null);
+            if (refused.Count == 0)
+            {
+                return new StatusCheck(Name, false, CheckState.Ok, hosts + " " + said, null);
+            }
+
+            var toRead = names ? refused[0].Name : "<name>";
+            return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, Repair.ReadProfile(toRead));
         }
 
         // The repair moves the profile to a host that is here; with none here there is no command to give, since installing
@@ -1430,7 +1452,10 @@ internal static class StatusChecks
                         return (null, "a profile names its host by something that is not a host word");
                     }
 
-                    profiles.Add(new ProfileHost(name, host));
+                    // A runtime that predates the field sends none, which is no problem; one that sends something this cannot
+                    // read as a list is not guessed at.
+                    var refused = item?["problems"] is JsonArray problems && problems.Count > 0;
+                    profiles.Add(new ProfileHost(name, host, refused));
                 }
 
                 cursor = Text(answer["next_cursor"]);
@@ -1627,4 +1652,4 @@ internal static class StatusChecks
 }
 
 /// <summary>One enabled profile as the <c>agent_hosts</c> check reads it: its name, and its host as the runtime wrote it.</summary>
-internal sealed record ProfileHost(string Name, string Host);
+internal sealed record ProfileHost(string Name, string Host, bool Refused = false);

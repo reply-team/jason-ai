@@ -16,6 +16,7 @@ public partial class ExecutionProfileDocTests
         AttemptErrors.LineageResolutionUnsupported,
         AttemptErrors.ProfileNotFound,
         AttemptErrors.ProfileDisabled,
+        AttemptErrors.ProfileRevisionRefused,
         AttemptErrors.HostNotAvailable,
         AttemptErrors.RoleSkillInvalid,
         AttemptErrors.RoleSkillUnreadable,

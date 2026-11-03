@@ -121,7 +121,7 @@ moves when a person decides, and a session must not decide for them. Presenting 
 ### 4. Missing configuration
 
 **How you recognise it.** The error code is one of `no_route`, `profile_not_found`, `profile_disabled`,
-`host_not_available` or `role_skill_invalid`. To see where one operation would go for one campaign, and why
+`profile_revision_refused`, `host_not_available` or `role_skill_invalid`. To see where one operation would go for one campaign, and why
 it goes nowhere:
 
 ```
@@ -133,7 +133,9 @@ write a route, enable a profile, make an agent host available, correct a role's 
 operator's deliberate act. Nothing was started and nothing was spent — except where `host_not_available`
 says the host ran and answered that it is not signed in: the child started and stopped there, and the repair
 is the person's own, signing in to that host on this machine under their own plan. Name what is missing and
-hand it over; setting it up is `operating-the-installation`.
+hand it over; setting it up is `operating-the-installation`. For `profile_revision_refused` the profile exists but its
+current revision holds a word this build refuses: read the profile's `problems` with `jason profile get <name>`, then
+change it with `jason profile update`.
 
 Not this state, but a repair of the same kind, the person's own: on `antigravity_cli`, `executor_exited` after the host exited 0
 means the role was denied the call that reports. Each run carries a workspace hook that approves it (the first route, built

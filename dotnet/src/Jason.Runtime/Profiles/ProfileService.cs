@@ -123,7 +123,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             throw DomainErrors.ProfileExists(name);
         }
 
-        return ProfileMapper.ToDto(profile, revision);
+        return Dto(profile, revision);
     }
 
     /// <summary>
@@ -151,7 +151,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         {
             // A patch that names nothing asked for nothing. Appending a revision for it would move a number that
             // attempts record, to say that somebody called the verb.
-            return ProfileMapper.ToDto(profile, current);
+            return Dto(profile, current);
         }
 
         var now = clock.GetUtcNow().UtcDateTime;
@@ -170,7 +170,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         // was revised when it was not is worse than no line at all.
         if (named.Count == 1 && request.Description.IsSet && !described)
         {
-            return ProfileMapper.ToDto(profile, current);
+            return Dto(profile, current);
         }
 
         if (named.Count == 1 && request.Description.IsSet)
@@ -186,7 +186,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
                 updated: new JsonObject { ["revision"] = current.Number, ["fields"] = new JsonArray(JsonValue.Create("description")) },
                 reason: Text(request.Reason));
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return ProfileMapper.ToDto(profile, current);
+            return Dto(profile, current);
         }
         var next = new ExecutionProfileRevision
         {
@@ -233,7 +233,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             throw DomainErrors.ConcurrentUpdate();
         }
 
-        return ProfileMapper.ToDto(profile, next);
+        return Dto(profile, next);
     }
 
     /// <summary>
@@ -262,6 +262,10 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         ProfileValidation.ValidateForHost(revision, host, errors, toolsNamed, denyNamed, argsNamed, programNamed, hostMoved);
         errors.ThrowIfAny();
     }
+
+    /// <summary>The profile as the API answers with it, with what this build's rules for its host refuse in the revision shown.</summary>
+    private ExecutionProfileDto Dto(ExecutionProfile profile, ExecutionProfileRevision revision) =>
+        ProfileMapper.ToDto(profile, revision, ProfileValidation.StoredProblems(revision, HostOf(revision.Host)));
 
     /// <summary>
     /// The flags the host of this profile composes for itself, which the profile therefore may not carry. An
@@ -305,7 +309,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
 
         var profile = await Loaded(request.Name!.Trim(), cancellationToken).ConfigureAwait(false);
         var revision = await RevisionAsync(profile, request.Revision ?? profile.CurrentRevision, cancellationToken).ConfigureAwait(false);
-        return ProfileMapper.ToDto(profile, revision);
+        return Dto(profile, revision);
     }
 
     /// <summary>
@@ -331,7 +335,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
 
         var fetched = await query.OrderBy(p => p.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
         var revisions = await CurrentRevisionsAsync(fetched, cancellationToken).ConfigureAwait(false);
-        return Paging.ToPage(fetched, limit, p => p.PublicId, profile => ProfileMapper.ToDto(profile, revisions[profile.Id]));
+        return Paging.ToPage(fetched, limit, p => p.PublicId, profile => Dto(profile, revisions[profile.Id]));
     }
 
     /// <summary>Out of service. The revisions stay exactly where they are; what changes is whether new work resolves to them.</summary>
@@ -360,7 +364,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         var revision = await RevisionAsync(profile, profile.CurrentRevision, cancellationToken).ConfigureAwait(false);
         if (profile.DisabledAt is not null == disable)
         {
-            return ProfileMapper.ToDto(profile, revision);
+            return Dto(profile, revision);
         }
 
         var now = clock.GetUtcNow().UtcDateTime;
@@ -374,7 +378,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             key: name,
             reason: Text(request.Reason));
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return ProfileMapper.ToDto(profile, revision);
+        return Dto(profile, revision);
     }
 
     /// <summary>
