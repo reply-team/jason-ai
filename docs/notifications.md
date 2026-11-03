@@ -148,10 +148,13 @@ such a unit exists only while the person is signed in.
 - **A click** on the banner, or on its entry in the notification center, opens your UI on Windows: on the one approval
   or question when exactly one waits, on the list of what waits otherwise, paired as `jason ui open` pairs (§7). On
   macOS and Linux a click opens nothing of Jason's; `jason ui open` reaches the same page.
+- **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows nothing: it puts on the clipboard
+  the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt` prints, for you to
+  paste into your agent host. The list's toast has no button, and neither has a toast whose link is not Jason's (§7).
 - **A page you visit can open a `jason:` link too**, after your browser's own confirmation, and it can do nothing a
-  click cannot: your own UI opens on the list, or on an item whose id the page could have typed, for an id the runtime
-  answers. Nothing is decided by it, and the link's text is never logged, never repeated in an error and never handed on
-  to another program.
+  click cannot: your own UI opens on the list, or on an item whose id the page could have typed, or Jason's own prompt
+  for such an item replaces what was on your clipboard, for an id the runtime answers. Nothing is decided by it, and the
+  link's text is never logged, never repeated in an error and never handed on to another program.
 
 A notification plugin reaches wherever its service does — a phone following an ntfy topic, say — whatever session the
 runtime runs in.

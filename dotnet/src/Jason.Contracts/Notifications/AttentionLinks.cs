@@ -10,6 +10,12 @@ public enum AttentionAct
 
     /// <summary>Open the UI on one item, as <c>jason ui open --approval</c> or <c>--question</c> does.</summary>
     Open,
+
+    /// <summary>
+    /// Put one item's prompt on the clipboard, the text <c>approval get --prompt</c> or <c>decision get --prompt</c>
+    /// prints, and open nothing.
+    /// </summary>
+    Prompt,
 }
 
 /// <summary>Which kind of item a link names.</summary>
@@ -69,10 +75,18 @@ public static class AttentionLinks
     [
         new(AttentionKind.Approval, "approvals", ApprovalPrefix, null, AttentionAct.Open),
         new(AttentionKind.Question, "questions", QuestionPrefix, null, AttentionAct.Open),
+        new(AttentionKind.Approval, "approvals", ApprovalPrefix, "prompt", AttentionAct.Prompt),
+        new(AttentionKind.Question, "questions", QuestionPrefix, "prompt", AttentionAct.Prompt),
     ];
 
     /// <summary>The link that opens one item, or null for anything but a well-formed approval or question id.</summary>
     public static string? Item(string? id) => Link(id, AttentionAct.Open);
+
+    /// <summary>
+    /// The link that copies one item's prompt, a toast's Copy prompt button, or null for anything but a well-formed
+    /// approval or question id.
+    /// </summary>
+    public static string? Prompt(string? id) => Link(id, AttentionAct.Prompt);
 
     /// <summary>The link of an act on an item, from the row that holds both, or null where no row does.</summary>
     private static string? Link(string? id, AttentionAct act)

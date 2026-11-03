@@ -1,8 +1,11 @@
+using System.Net;
 using Jason.Cli;
 using Jason.Cli.Link;
 using Jason.Cli.Process;
 using Jason.Cli.Tests.Commands;
+using Jason.Cli.Tests.Human;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Tests.Link;
 
@@ -88,6 +91,159 @@ public sealed class LinkHandlerTests
         using var cli = new CliRun(descriptor: false);
 
         Assert.Equal(ExitCodes.RuntimeUnavailable, await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval], cli.Environment, Ct));
+    }
+
+    /// <summary>
+    /// A Copy prompt link puts on the clipboard exactly what <c>--prompt</c> prints for the same exchanges, the published
+    /// text, and prints nothing: the item is read by its kind's own get, and no page is opened.
+    /// </summary>
+    [Theory]
+    [InlineData("jason://attention/approvals/" + Approval + "/prompt", "approval.get", "pending-with-preview", "approval.txt", "{\"approval_id\":\"" + Approval + "\"}")]
+    [InlineData("jason://attention/questions/" + Question + "/prompt", "decision.get", "pending-with-options", "question.txt", "{\"decision_id\":\"" + Question + "\"}")]
+    public async Task A_prompt_link_copies_the_published_prompt_and_prints_nothing(string link, string operation, string fixture, string published, string body)
+    {
+        var run = new PromptRuntime(CopyPromptTests.Fixture(operation, fixture), CopyPromptTests.Fixture("campaign.get", "in-project-with-folder"));
+        var clipboard = new RecordingClipboard();
+
+        var exit = await LinkHandler.RunAsync([link], run.Environment(clipboard), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([operation, "campaign.get"], run.Asked);
+        Assert.Equal(body, run.Bodies[0]);
+        var text = File.ReadAllText(Path.Combine(CopyPromptTests.RepositoryRoot(), "docs", "prompts", published)).Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Equal([text.TrimEnd('\n')], clipboard.Texts.Select(copied => copied.TrimEnd('\n')));
+        Assert.Empty(run.Output.ToString());
+        Assert.Empty(run.Opener.Urls);
+    }
+
+    /// <summary>Where nothing can write the clipboard, nothing is asked and nothing is copied.</summary>
+    [Fact]
+    public async Task A_prompt_link_with_no_clipboard_asks_nothing_and_exits_1()
+    {
+        var run = new PromptRuntime(CopyPromptTests.Fixture("approval.get", "pending-with-preview"));
+
+        var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard: null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(run.Asked);
+        Assert.Single(run.Error.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        Assert.Empty(run.Output.ToString());
+    }
+
+    [Fact]
+    public async Task A_clipboard_that_refuses_exits_1_and_says_why()
+    {
+        var run = new PromptRuntime(CopyPromptTests.Fixture("approval.get", "pending-with-preview"), CopyPromptTests.Fixture("campaign.get", "in-project-with-folder"));
+        var clipboard = new RecordingClipboard { Refusal = "clipboard_busy" };
+
+        var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains("clipboard_busy", run.Error.ToString(), StringComparison.Ordinal);
+        Assert.Empty(run.Output.ToString());
+    }
+
+    /// <summary>An item the runtime does not know is its refusal, and the clipboard keeps what it held.</summary>
+    [Fact]
+    public async Task An_item_the_runtime_refuses_copies_nothing_and_exits_1()
+    {
+        var run = new PromptRuntime(item: null);
+        var clipboard = new RecordingClipboard();
+
+        var exit = await LinkHandler.RunAsync(["jason://attention/questions/" + Question + "/prompt"], run.Environment(clipboard), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(["decision.get"], run.Asked);
+        Assert.Empty(clipboard.Texts);
+        Assert.Empty(run.Output.ToString());
+    }
+
+    /// <summary>An answer that names no item to compose a prompt for copies nothing.</summary>
+    [Fact]
+    public async Task An_answer_the_prompt_cannot_read_copies_nothing_and_exits_1()
+    {
+        var run = new PromptRuntime(item: "{}");
+        var clipboard = new RecordingClipboard();
+
+        var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(clipboard.Texts);
+    }
+
+    [Fact]
+    public async Task A_prompt_link_with_no_runtime_exits_3()
+    {
+        var run = new PromptRuntime(item: null, descriptor: false);
+        var clipboard = new RecordingClipboard();
+
+        var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard), Ct);
+
+        Assert.Equal(ExitCodes.RuntimeUnavailable, exit);
+        Assert.Empty(clipboard.Texts);
+    }
+
+    /// <summary>A runtime that answers the item's get and the campaign's, and refuses every other read.</summary>
+    private sealed class PromptRuntime(string? item, string? campaign = null, bool descriptor = true) : IDisposable
+    {
+        private static readonly RuntimeDescriptor Live = new("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
+
+        private readonly TempPaths _dir = new();
+
+        public List<string> Asked { get; } = [];
+
+        public List<string> Bodies { get; } = [];
+
+        public StringWriter Output { get; } = new();
+
+        public StringWriter Error { get; } = new();
+
+        public RecordingOpener Opener { get; } = new();
+
+        public CliEnvironment Environment(IClipboard? clipboard)
+        {
+            if (descriptor)
+            {
+                _dir.WriteDescriptor(Live);
+            }
+
+            var handler = new FakeHandler(request =>
+            {
+                var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
+                Asked.Add(operation);
+                Bodies.Add(request.Content?.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult() ?? string.Empty);
+                var answer = operation switch
+                {
+                    "approval.get" or "decision.get" => item,
+                    "campaign.get" => campaign,
+                    _ => null,
+                };
+                return answer is null
+                    ? new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{\"error\":{\"code\":\"not_found\",\"message\":\"Not found.\",\"retryable\":false}}") }
+                    : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(answer, System.Text.Encoding.UTF8, "application/json") };
+            });
+            return new CliEnvironment(Output, Error, _dir.Paths, handler, Opener: Opener, Clipboard: clipboard);
+        }
+
+        public void Dispose() => _dir.Dispose();
+    }
+
+    private sealed class RecordingClipboard : IClipboard
+    {
+        public List<string> Texts { get; } = [];
+
+        public string? Refusal { get; init; }
+
+        public bool TrySetText(string text, out string? problem)
+        {
+            problem = Refusal;
+            if (Refusal is null)
+            {
+                Texts.Add(text);
+            }
+
+            return Refusal is null;
+        }
     }
 
     private sealed class RecordingOpener : IUrlOpener

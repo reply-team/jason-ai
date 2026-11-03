@@ -132,8 +132,9 @@ public static class ToastHost
     /// </summary>
     /// <remarks>
     /// The link never fails a toast. Present or written, a click launches the one item's link, or the list's when the
-    /// payload names no item; another program's or refused, the toast is the one shown before there was a link, so a
-    /// click can hand nothing to a program that is not Jason.
+    /// payload names no item, and one item's toast has the Copy prompt button, which launches that item's prompt link;
+    /// another program's or refused, the toast is the one shown before there was a link, with no button, so a click can
+    /// hand nothing to a program that is not Jason.
     /// </remarks>
     /// <param name="self">How this executable is started, which the link's command names.</param>
     [SupportedOSPlatform("windows")]
@@ -146,10 +147,10 @@ public static class ToastHost
         }
 
         var (scheme, schemeHr) = SchemeRegistration.Ensure(registry, self);
-        var launch = scheme is SchemeRegistration.Present or SchemeRegistration.Written
-            ? AttentionLinks.Item(payload.Item) ?? AttentionLinks.List
-            : null;
-        using var prepared = prepare(payload.Aumid, ToastXml.Compose(payload.Title, payload.Lines, launch));
+        var linked = scheme is SchemeRegistration.Present or SchemeRegistration.Written;
+        var launch = linked ? AttentionLinks.Item(payload.Item) ?? AttentionLinks.List : null;
+        var copyPrompt = linked ? AttentionLinks.Prompt(payload.Item) : null;
+        using var prepared = prepare(payload.Aumid, ToastXml.Compose(payload.Title, payload.Lines, launch, copyPrompt));
         var calls = prepared.Calls.Select(call => new ToastHostCall(call.Step, WindowsToast.Hr(call.Hr))).ToList();
         if (prepared.FailedStep is { } failed)
         {

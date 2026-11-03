@@ -36,6 +36,21 @@ public sealed class ToastXmlTests
             ToastXml.Compose("Jason", Lines, AttentionLinks.Item(Question)),
             StringComparison.Ordinal);
 
+    /// <summary>One item's toast has one button, which copies that item's prompt by its own link.</summary>
+    [Fact]
+    public void One_approval_s_toast_has_a_copy_prompt_button() =>
+        Assert.Equal(
+            $"<toast activationType=\"protocol\" launch=\"jason://attention/approvals/{Approval}\">" + Visual
+                + $"<actions><action content=\"Copy prompt\" activationType=\"protocol\" arguments=\"jason://attention/approvals/{Approval}/prompt\"/></actions></toast>",
+            ToastXml.Compose("Jason", Lines, AttentionLinks.Item(Approval), AttentionLinks.Prompt(Approval)));
+
+    [Fact]
+    public void One_question_s_toast_has_a_copy_prompt_button() =>
+        Assert.EndsWith(
+            $"<actions><action content=\"Copy prompt\" activationType=\"protocol\" arguments=\"jason://attention/questions/{Question}/prompt\"/></actions></toast>",
+            ToastXml.Compose("Jason", Lines, AttentionLinks.Item(Question), AttentionLinks.Prompt(Question)),
+            StringComparison.Ordinal);
+
     [Fact]
     public void Any_other_toast_launches_the_list() =>
         Assert.Equal(

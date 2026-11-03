@@ -179,6 +179,8 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/notifications.md", "with `DisplayName` `Jason` — written the first time, only read after that — from an ordinary prompt.")]
     [InlineData("docs/notifications.md", "opens your UI on Windows: on the one approval or question when exactly one waits, on the list of what waits otherwise, paired as `jason ui open` pairs (§7). On macOS and Linux a click opens nothing of Jason's")]
     [InlineData("docs/notifications.md", "after your browser's own confirmation, and it can do nothing a click cannot")]
+    [InlineData("docs/notifications.md", "or Jason's own prompt for such an item replaces what was on your clipboard")]
+    [InlineData("docs/notifications.md", "A toast for one item also has a **Copy prompt** button. It shows nothing: it puts on the clipboard the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt` prints, for you to paste into your agent host.")]
     [InlineData("docs/notifications.md", "At the same moment the host ensures `HKCU\\" + LinkRegistration.Key + "`")]
     [InlineData("docs/notifications.md", "the value `" + LinkRegistration.MarkerValue + "` `" + LinkRegistration.Marker + "` that says the key is Jason's")]
     [InlineData("docs/notifications.md", "a development runtime that shows one re-points it to its own executable until the installed one shows the next")]

@@ -128,6 +128,7 @@ public sealed class ToastHostTests
         ToastHost.Show(Shown(Approval), registry, Self, made.Prepare(registry, new OrderedToast()));
 
         Assert.StartsWith($"<toast activationType=\"protocol\" launch=\"jason://attention/approvals/{Approval}\">", made.Xml, StringComparison.Ordinal);
+        Assert.Contains($"arguments=\"jason://attention/approvals/{Approval}/prompt\"", made.Xml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -139,6 +140,7 @@ public sealed class ToastHostTests
         ToastHost.Show(Shown(), registry, Self, made.Prepare(registry, new OrderedToast()));
 
         Assert.StartsWith("<toast activationType=\"protocol\" launch=\"jason://attention\">", made.Xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<actions>", made.Xml, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -173,6 +175,7 @@ public sealed class ToastHostTests
 
         Assert.Equal(("written", "failed", "0x80070005"), (outcome.Registration, outcome.Scheme, outcome.SchemeHr));
         Assert.DoesNotContain("launch=", made.Xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<actions>", made.Xml, StringComparison.Ordinal);
         Assert.Equal(["show", "setting"], toast.Order);
     }
 

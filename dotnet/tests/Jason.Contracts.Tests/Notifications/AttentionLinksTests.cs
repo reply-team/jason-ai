@@ -50,6 +50,31 @@ public sealed class AttentionLinksTests
     }
 
     [Fact]
+    public void An_approval_s_prompt_link_copies_its_prompt()
+    {
+        Assert.Equal("jason://attention/approvals/" + Approval + "/prompt", AttentionLinks.Prompt(Approval));
+        Assert.Equal(new AttentionTarget(AttentionAct.Prompt, AttentionKind.Approval, Approval), AttentionLinks.Parse(AttentionLinks.Prompt(Approval)!));
+    }
+
+    [Fact]
+    public void A_question_s_prompt_link_copies_its_prompt()
+    {
+        Assert.Equal("jason://attention/questions/" + Question + "/prompt", AttentionLinks.Prompt(Question));
+        Assert.Equal(new AttentionTarget(AttentionAct.Prompt, AttentionKind.Question, Question), AttentionLinks.Parse(AttentionLinks.Prompt(Question)!));
+    }
+
+    [Fact]
+    public void One_trailing_slash_after_a_prompt_link_is_taken() =>
+        Assert.Equal(AttentionAct.Prompt, AttentionLinks.Parse($"jason://attention/questions/{Question}/prompt/")?.Act);
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("cmp_01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
+    [InlineData("apr_01JBZ3X7Q9K2M4N6P8R0S2T4V")]
+    public void Nothing_but_an_approval_or_a_question_id_gets_a_prompt_link(string? id) =>
+        Assert.Null(AttentionLinks.Prompt(id));
+
+    [Fact]
     public void One_trailing_slash_after_an_item_is_taken() =>
         Assert.Equal(Approval, AttentionLinks.Parse($"jason://attention/approvals/{Approval}/")?.Id);
 
@@ -86,6 +111,11 @@ public sealed class AttentionLinksTests
     [InlineData("jason://attention/approvals/" + Approval + "//")]
     [InlineData("jason://attention/approvals/" + Approval + "/approve")]
     [InlineData("jason://attention/approvals/" + Approval + "/x/y")]
+    [InlineData("jason://attention/approvals/" + Approval + "/PROMPT")]
+    [InlineData("jason://attention/approvals/" + Approval + "/prompt/x")]
+    [InlineData("jason://attention/approvals/" + Approval + "/prompt//")]
+    [InlineData("jason://attention/questions/" + Approval + "/prompt")]
+    [InlineData("jason://attention/approvals/prompt")]
     [InlineData("jason://attention/approvals//" + Approval)]
     [InlineData("jason://attention/approvals/apr%5F01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
     [InlineData("jason://attention/approvals/" + Approval + "?x=1")]

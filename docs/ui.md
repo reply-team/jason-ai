@@ -18,6 +18,8 @@ after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` kee
 On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
 waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
 `jason ui open` does, and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7).
+`jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
+put that item's prompt on the clipboard and open nothing: the text of [Copy prompt](#copy-prompt) below.
 
 If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 

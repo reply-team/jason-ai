@@ -1,4 +1,7 @@
+using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
+using Jason.Cli.Human;
+using Jason.Contracts.Api;
 using Jason.Contracts.Notifications;
 
 namespace Jason.Cli.Link;
@@ -7,18 +10,20 @@ namespace Jason.Cli.Link;
 /// What a click on a <c>jason:</c> link does: the shell starts this executable with the link as its one argument, and
 /// it is read against <see cref="AttentionLinks"/>, the table the toast's links are written from. A mode of the
 /// executable, like <c>toast-host</c>, and never a verb: nothing is typed, and the runtime is asked only what
-/// <c>jason ui open</c> asks.
+/// <c>jason ui open</c> asks, or for a prompt link what <c>approval get --prompt</c> and <c>decision get --prompt</c> ask.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Any web page can navigate to a <c>jason:</c> link after the browser's own confirmation. So every act is local and
-/// leaves nothing decided: it opens the person's own UI on an id they could have typed. The link's text reaches no log
+/// leaves nothing decided: it opens the person's own UI on an id they could have typed, or puts on the clipboard the
+/// prompt <c>--prompt</c> prints for that id, which replaces what the clipboard held. The link's text reaches no log
 /// and no child: what is sent is re-made from the parsed, checked id, and a link the table does not know is refused
 /// without being repeated.
 /// </para>
 /// <para>
-/// Exit codes are the CLI's: 0 done, 1 refused by the runtime, 2 a link the table does not know, 3 no runtime to ask.
-/// Started by the shell, nobody reads what it prints; the person sees the browser open, or nothing.
+/// Exit codes are the CLI's: 0 done, 1 refused by the runtime or the clipboard, 2 a link the table does not know, 3 no
+/// runtime to ask. Started by the shell, nobody reads what it prints; the person sees the browser open, or a prompt to
+/// paste, or nothing. A prompt link prints nothing on stdout when it succeeds.
 /// </para>
 /// </remarks>
 public static class LinkHandler
@@ -41,6 +46,49 @@ public static class LinkHandler
             body = body.Set(target.Kind == AttentionKind.Approval ? "approval_id" : "decision_id", id);
         }
 
-        return UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken);
+        return target.Act == AttentionAct.Prompt
+            ? CopyPromptAsync(env, target.Kind == AttentionKind.Approval, body, cancellationToken)
+            : UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// The toast's Copy prompt button: the item read by its kind's own get, the prompt composed as <c>--prompt</c>
+    /// composes it, and put on the clipboard. Where nothing can write the clipboard nothing is asked; a refusal, of the
+    /// runtime or the clipboard, copies nothing.
+    /// </summary>
+    private static async Task<int> CopyPromptAsync(CliEnvironment env, bool approval, JsonObject body, CancellationToken cancellationToken)
+    {
+        if (env.Clipboard is not { } clipboard)
+        {
+            env.Error.WriteLine("Copy prompt: nothing on this machine can write the clipboard; jason approval get --prompt or jason decision get --prompt prints the same text.");
+            return ExitCodes.ApiError;
+        }
+
+        var (exit, response) = await OperationRunner.SendAsync(env, approval ? Operations.ApprovalGet : Operations.DecisionGet, body, cancellationToken).ConfigureAwait(false);
+        if (response is null)
+        {
+            return exit;
+        }
+
+        if (!response.IsSuccess)
+        {
+            env.Error.WriteLine(OperationRunner.ErrorText(response));
+            return ExitCodes.ApiError;
+        }
+
+        var render = approval ? PromptRenderers.Approval(env) : PromptRenderers.Question(env);
+        if (await render(response.Body, cancellationToken).ConfigureAwait(false) is not { } prompt)
+        {
+            env.Error.WriteLine("Copy prompt: the runtime's answer names no item to compose a prompt for; nothing was copied.");
+            return ExitCodes.ApiError;
+        }
+
+        if (!clipboard.TrySetText(prompt, out var problem))
+        {
+            env.Error.WriteLine($"Copy prompt: the clipboard refused the text ({problem}); nothing was copied.");
+            return ExitCodes.ApiError;
+        }
+
+        return ExitCodes.Success;
     }
 }
