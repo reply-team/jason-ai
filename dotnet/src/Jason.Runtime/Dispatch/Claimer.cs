@@ -62,7 +62,7 @@ public sealed class Claimer(
     private static readonly Action<ILogger, string, string, string, Exception?> MemoryFileUnreadable = LoggerMessage.Define<string, string, string>(
         LogLevel.Warning,
         new EventId(3, nameof(MemoryFileUnreadable)),
-        "Attempt {AttemptId} of work item {WorkItemId}: the {Level} memory file's path cannot be written as a read rule, so the role cannot read it");
+        "Attempt {AttemptId} of work item {WorkItemId}: the {Level} memory file's path cannot be written as a read rule");
 
     /// <summary>
     /// A memory file the claim named and the host could not write as a rule for one file, by the ids a person can type
