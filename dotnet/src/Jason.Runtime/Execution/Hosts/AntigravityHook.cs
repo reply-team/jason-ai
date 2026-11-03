@@ -304,7 +304,10 @@ public static class AntigravityHook
 
         try
         {
-            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes.GetBuffer(), 0, (int)bytes.Length);
+            // One leading byte-order mark is dropped: a host that wrote one would otherwise have every call refused.
+            var buffer3 = bytes.GetBuffer();
+            var skip = bytes.Length >= 3 && buffer3[0] == 0xEF && buffer3[1] == 0xBB && buffer3[2] == 0xBF ? 3 : 0;
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(buffer3, skip, (int)bytes.Length - skip);
         }
         catch (DecoderFallbackException)
         {

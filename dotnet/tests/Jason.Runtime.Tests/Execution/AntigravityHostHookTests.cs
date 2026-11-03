@@ -503,6 +503,20 @@ public sealed class AntigravityHostHookTests
         Assert.Null(AntigravityHookRules.Decode(RulesOf(json)));
 
     [Fact]
+    [Critical(Family.S6, "a byte-order mark before the call does not make it unreadable")]
+    public async Task A_byte_order_mark_before_the_call_is_dropped_and_the_call_is_decided()
+    {
+        var body = System.Text.Encoding.UTF8.GetBytes(Command("jason workitem get wi_01"));
+        var withMark = new MemoryStream([0xEF, 0xBB, 0xBF, .. body]);
+        var stdout = new StringWriter();
+
+        await AntigravityHook.RunAsync(["antigravity-cli", Rules()], withMark, stdout, new StringWriter(), TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(stdout.ToString());
+        Assert.Equal("auto_approve", document.RootElement.GetProperty("decision").GetString());
+    }
+
+    [Fact]
     [Critical(Family.S6, "the call is read as UTF-8 bytes, whatever the console code page is")]
     public async Task A_path_with_letters_outside_ascii_is_matched_as_the_host_wrote_it()
     {
