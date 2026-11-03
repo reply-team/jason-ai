@@ -536,6 +536,12 @@ public partial class ExecutionProfileDocTests
         Assert.All(piped, line => Assert.Contains("get.jasonharness.ai", line, StringComparison.Ordinal));
         Assert.Contains("](https://cursor.com/docs/cli/installation.md)", text, StringComparison.Ordinal);
         Assert.Contains("](https://github.com/google-gemini/gemini-cli)", text, StringComparison.Ordinal);
+        Assert.Contains("](https://github.com/openai/codex)", text, StringComparison.Ordinal);
+        Assert.Contains("](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)", text, StringComparison.Ordinal);
+        Assert.Contains("codex login", text, StringComparison.Ordinal);
+        Assert.Contains("copilot login", text, StringComparison.Ordinal);
+        Assert.Contains("--host codex --program codex", text, StringComparison.Ordinal);
+        Assert.Contains("--host copilot_cli --program copilot", text, StringComparison.Ordinal);
     }
 
     /// <summary>

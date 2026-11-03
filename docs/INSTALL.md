@@ -23,6 +23,12 @@ as yourself; Jason holds no key. For Cursor CLI, install it from
 [its installation page](https://cursor.com/docs/cli/installation.md), run `agent login` and
 `jason profile create <name> --host cursor_cli --program agent`. On Windows, where `agent` is not found by the runtime's
 search path, name the launcher by its full path: `--program <full path of agent.cmd>`.
+For Codex CLI, install it from [its own page](https://github.com/openai/codex), run `codex login` and
+`jason profile create <name> --host codex --program codex`. On Windows, Codex needs a one-time setup by an
+administrator first, which [the Codex section](execution-profiles.md#codex-cli) describes.
+For GitHub Copilot CLI, install it from
+[GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli),
+run `copilot login` and `jason profile create <name> --host copilot_cli --program copilot`.
 For Gemini CLI, install it from [its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself and
 run `jason profile create <name> --host gemini_cli --program gemini`.
 
