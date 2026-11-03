@@ -96,6 +96,9 @@ against a stand-in program.
   other hosts' skill folders.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
   as they were.
+- **Harness folders:** the root gains a missing import file, `GEMINI.md`, at the next project or campaign create, over no file
+  that is there. A project's or a campaign's folder made before 0.26.0 keeps its `CLAUDE.md` alone unless you add a
+  `GEMINI.md` holding `@AGENTS.md`. Jason writes no word of a memory file.
 - **The Reply plugin** is unchanged.
 - **From 0.24.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build

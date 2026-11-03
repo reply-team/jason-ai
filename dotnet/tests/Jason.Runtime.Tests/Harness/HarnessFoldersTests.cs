@@ -141,6 +141,28 @@ public sealed class HarnessFoldersTests : IDisposable
         Assert.Equal(string.Empty, Text(Root, "AGENTS.md"));
     }
 
+    /// <summary>
+    /// A root made before a host's import file existed has its marker and the files it had. The next create that reaches it
+    /// gives it the import file it lacks, holding the table's line, and writes over nothing: the file it already had is
+    /// byte for byte what it was, and a memory file the person removed stays removed.
+    /// </summary>
+    [Fact]
+    public void A_root_that_has_its_marker_gains_a_missing_import_file_at_the_next_create_and_nothing_else()
+    {
+        var folders = TestHarness.Folders(Home);
+        folders.MakeProjectFolder(Project, "acme");
+        File.WriteAllText(Path.Combine(Root, "CLAUDE.md"), "Read the notes first.\n");
+        File.Delete(Path.Combine(Root, "GEMINI.md"));
+        File.Delete(Path.Combine(Root, "AGENTS.md"));
+        var claude = File.ReadAllBytes(Path.Combine(Root, "CLAUDE.md"));
+
+        folders.MakeProjectFolder(Other, "other");
+
+        Assert.Equal("@AGENTS.md", Text(Root, "GEMINI.md"));
+        Assert.Equal(claude, File.ReadAllBytes(Path.Combine(Root, "CLAUDE.md")));
+        Assert.False(File.Exists(Path.Combine(Root, "AGENTS.md")), "a memory file the person removed from the root was written again.");
+    }
+
     /// <summary>A root that has its marker is used as it is: nothing at the root is written again.</summary>
     [Fact]
     public void A_root_that_has_its_marker_is_not_written_again()
