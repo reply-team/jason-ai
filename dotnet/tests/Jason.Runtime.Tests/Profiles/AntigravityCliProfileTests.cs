@@ -131,6 +131,23 @@ public class AntigravityCliProfileTests
         Assert.Equal(1, read.Revision.Number);
     }
 
+    /// <summary>A value with a control character is refused where the profile is written, for the same reason as any other word.</summary>
+    [Fact]
+    public async Task An_option_value_with_a_control_character_is_refused_on_create()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "control", host = "antigravity_cli", program = "agy", args = new[] { "--model=a\u0000b" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains(ParserNotRead, detail.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>The two options the person owns are kept on create and on a patch, with no value of theirs checked.</summary>
     [Fact]
     public async Task The_model_and_the_effort_are_kept_on_create_and_on_a_patch()

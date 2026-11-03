@@ -151,6 +151,27 @@ public class AntigravityCliHostTests
     }
 
     /// <summary>
+    /// A value that holds a control character, a line break or a NUL, is never a model or an effort name, and a NUL ends a
+    /// command line early on Windows. It is refused with the allowlist's sentence; a space is allowed, as a name may hold one.
+    /// </summary>
+    [Theory]
+    [InlineData("--model=a\nb")]
+    [InlineData("--model=a\u0000b")]
+    [InlineData("--effort=low\tmax")]
+    [InlineData("--model=a\u007fb")]
+    public void A_value_with_a_control_character_is_refused_for_the_reason_the_parser_is_not_read(string word)
+    {
+        var problem = Host.ArgsProblem([word]);
+
+        Assert.NotNull(problem);
+        Assert.Contains(
+            "the host's parser is not read, so only the documented options the person owns are taken",
+            problem,
+            StringComparison.Ordinal);
+        Assert.Null(Host.ArgsProblem(["--model=a b"]));
+    }
+
+    /// <summary>
     /// A flag the runtime composes or the host's tables call dangerous keeps its own refusal, the reserved one, which the
     /// profile rules give; the allowlist does not speak for it a second time.
     /// </summary>

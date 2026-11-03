@@ -153,7 +153,8 @@ public sealed class AntigravityCliHost : IAgentHost
     /// The options of the host's documentation that a person owns, each in long form with its value joined by an equals
     /// sign: the model and the reasoning effort (read from the host's command-line reference and headless pages at version
     /// 1.4.10). Nothing that changes the launch, the permissions, the workspace, the conversation, the output or where the
-    /// prompt comes from is here. The effort's range is not checked, because the host's two pages disagree on it.
+    /// prompt comes from is here. The effort's range is not checked, because the host's two pages disagree on it, and a value
+    /// that holds a control character is refused, since no model or effort is named so and a NUL ends a Windows command line.
     /// </summary>
     private static readonly string[] OwnedOptions = ["--model", "--effort"];
 
@@ -182,7 +183,8 @@ public sealed class AntigravityCliHost : IAgentHost
                 continue;
             }
 
-            if (separator < 0 || separator == arg.Length - 1 || !OwnedOptions.Contains(name, StringComparer.Ordinal))
+            if (separator < 0 || separator == arg.Length - 1 || !OwnedOptions.Contains(name, StringComparer.Ordinal)
+                || arg.Skip(separator + 1).Any(char.IsControl))
             {
                 return Refused(arg, "it is not one of the options the person owns");
             }
