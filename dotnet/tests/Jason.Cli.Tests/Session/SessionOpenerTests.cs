@@ -392,6 +392,26 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("jason approval get apr_1 --prompt", said[1], StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// An id in the runtime's answer that no script may be named from ends the verb with one line and exit 1, never a
+    /// stack trace, and nothing is written or started.
+    /// </summary>
+    [Fact]
+    public async Task A_malformed_id_in_the_answer_is_refused_in_one_line()
+    {
+        _run.Terminals.Platform = TerminalPlatform.MacOs;
+        _run.Programs.AddProgram("claude");
+        _run.Item = CopyPromptTests.Fixture("approval.get", "pending-with-preview").Replace("\"id\":\"apr_1\"", "\"id\":\"apr_1;x\"", StringComparison.Ordinal);
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Empty(_run.Output.ToString());
+        var said = _run.Error.ToString().TrimEnd();
+        Assert.Equal("The runtime's answer names the approval by an id no script may be named from, so nothing was started.", said);
+    }
+
     /// <summary>Where nothing is set up to start a terminal, which is every environment but the real one, nothing is started.</summary>
     [Fact]
     public async Task No_terminal_starter_starts_nothing_and_exits_1()

@@ -112,7 +112,18 @@ public static class SessionOpener
             return ExitCodes.ApiError;
         }
 
-        var launch = TerminalPlan.Compose(terminals.Platform, terminal, where, [.. program, .. AgentHosts.InteractiveArguments(host, prompt)], item.Id);
+        TerminalLaunch launch;
+        try
+        {
+            launch = TerminalPlan.Compose(terminals.Platform, terminal, where, [.. program, .. AgentHosts.InteractiveArguments(host, prompt)], item.Id);
+        }
+        catch (ArgumentException)
+        {
+            // macOS's script is named from the id, and only a well-formed one names a file.
+            env.Error.WriteLine($"The runtime's answer names the {noun} by an id no script may be named from, so nothing was started.");
+            return ExitCodes.ApiError;
+        }
+
         if (!dryRun && !terminals.Start(launch, out var problem))
         {
             env.Error.WriteLine($"The terminal {launch.Terminal} did not start ({problem}). {byHand}");
