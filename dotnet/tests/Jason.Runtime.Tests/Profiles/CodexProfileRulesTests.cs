@@ -109,6 +109,49 @@ public class CodexProfileRulesTests
         Assert.Contains($"'{flag}'", detail.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("--yolo")]
+    [InlineData("--not-so-yolo")]
+    [InlineData("--experimental-json")]
+    public async Task A_second_name_of_a_flag_codex_composes_is_refused_at_an_update_and_writes_nothing(string flag)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "aliased", host = "codex", program = "codex" }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "aliased", args = new[] { flag } }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args[0]", "reserved"), (detail.Field, detail.Code));
+        Assert.Contains($"'{flag}'", detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "aliased" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+        Assert.Empty(read.Revision.Args);
+    }
+
+    [Theory]
+    [InlineData("--yolo")]
+    [InlineData("--not-so-yolo")]
+    [InlineData("--experimental-json")]
+    public async Task A_move_to_codex_whose_stored_arguments_carry_a_second_name_is_refused_and_writes_nothing(string flag)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "moving", host = "claude_code", program = "claude", args = new[] { flag } }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "moving", host = "codex" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args[0]", "reserved"), (detail.Field, detail.Code));
+        Assert.Contains(flag, detail.Message, StringComparison.Ordinal);
+        Assert.Contains("codex", detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "moving" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+        Assert.Equal(AgentHostKind.ClaudeCode, read.Revision.Host);
+    }
+
     /// <summary>
     /// The host's parser reads one dash and a letter followed by more as that letter's flag with its value glued on, or
     /// as several letters' flags run together, so <c>-sdanger-full-access</c> and <c>-sp</c> both set <c>-s</c>. A word

@@ -195,7 +195,9 @@ public class CodexHostTests
 
     /// <summary>
     /// Every flag that would change the shape above or undo the sandbox is the runtime's; a model is the person's. The
-    /// list was read from <c>codex exec --help</c> of 0.166.0-alpha.5.1.
+    /// list is read from the parser's declarations at the measured tag, every long name, short name, alias and visible
+    /// alias, never from its help, which prints no alias: <c>--yolo</c> is a second name for
+    /// <c>--dangerously-bypass-approvals-and-sandbox</c> that the help never shows.
     /// </summary>
     [Theory]
     [InlineData("exec")]
@@ -208,7 +210,9 @@ public class CodexHostTests
     [InlineData("-a")]
     [InlineData("--ask-for-approval")]
     [InlineData("--approve-for-me")]
+    [InlineData("--not-so-yolo")]
     [InlineData("--dangerously-bypass-approvals-and-sandbox")]
+    [InlineData("--yolo")]
     [InlineData("--dangerously-bypass-hook-trust")]
     [InlineData("-C")]
     [InlineData("--cd")]
@@ -218,6 +222,7 @@ public class CodexHostTests
     [InlineData("--ignore-rules")]
     [InlineData("--strict-config")]
     [InlineData("--json")]
+    [InlineData("--experimental-json")]
     [InlineData("-o")]
     [InlineData("--output-last-message")]
     [InlineData("--output-schema")]

@@ -69,10 +69,16 @@ public sealed class CodexHost(
             : Path.Combine(Path.GetTempPath(), ".net");
 
     /// <summary>
-    /// Everything that would change the shape composed below or undo the sandbox it rests on, read from
-    /// <c>codex exec --help</c> of 0.166.0-alpha.5.1, with the second names the parser of 0.166.0 takes and its help
-    /// never prints. <c>-c</c> is reserved whole: one more setting after the runtime's could replace any of them. A model
-    /// is the person's to choose.
+    /// Everything that would change the shape composed below or undo the sandbox it rests on. <c>-c</c> is reserved whole:
+    /// one more setting after the runtime's could replace any of them. A model is the person's to choose.
+    /// <para>
+    /// Read from the parser's own declarations at the tag this host is built from, <c>rust-v0.166.0</c>: every
+    /// <c>long</c>, <c>short</c>, <c>alias</c> and <c>visible_alias</c> of the arguments <c>codex exec</c> parses, in
+    /// <c>exec/src/cli.rs</c> and <c>utils/cli/src/shared_options.rs</c>, and the root's global ones in
+    /// <c>cli/src/main.rs</c> and <c>utils/cli/src/config_override.rs</c>. Never from <c>--help</c>, which prints no
+    /// alias: <c>--yolo</c>, a second name for <c>--dangerously-bypass-approvals-and-sandbox</c>, is in no help text.
+    /// The parser infers no long flag from a prefix of one, so a whole name is the only name.
+    /// </para>
     /// </summary>
     public IReadOnlySet<string> ReservedFlags { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
