@@ -315,7 +315,8 @@ thread the reply answers in — or, for a message, about the same person. Anythi
 approval row of its own is covered when, in this order: its operation is one a standing approval can cover; the
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
-(its `inbound_reply`), or by a person who gave their name, or carries a person's answer — a verdict whose
+(its `inbound_reply`; a responder a manager queued by hand carries none, so its verdicts fail `verdict_not_authentic`
+and its drafts are asked), or by a person who gave their name, or carries a person's answer — a verdict whose
 `reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
 covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
 whoever drafted it; the draft's context was not changed after it was created; the

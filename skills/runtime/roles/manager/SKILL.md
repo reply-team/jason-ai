@@ -83,8 +83,8 @@ make sure.
 
 **Asking after one send.** A `message.status` item names the send's work item under `args.send` and reads that send by
 the reference the provider gave it; you never write the reference, the runtime takes it from the send's own attempt. A
-`message.cancel` item, named the same way, takes back a send the provider still holds, and one that went, that the
-provider is sending or that failed ends `send_not_pending`, final, its details saying which. Either ends
+`message.cancel` item, named the same way, takes back a send the provider still holds, and one that went or that
+failed ends `send_not_pending`, final, its details saying which. Either ends
 `send_unknown`, `send_reference_absent` or `send_route_mismatch`, final, where the send is not this campaign's, kept no
 reference, or was made through another plugin or account than the item is routed to: a corrected item names another
 send, never the same one again. A `message.status` item answers one of five words: `queued`, `sent`, `cancelled`,
@@ -280,6 +280,9 @@ Where the line's `contact_id` is null, nobody is pinned to the thread: create th
 `--contact`, and the responder finds the person through the read. Where it finds none, or more than one, it drafts no
 reply and says who wrote, and you raise one question at your next review. The same holds where the read does not show
 the thread's latest message: the responder drafts no reply and says so, and the question is yours.
+
+A responder you create this way carries no `inbound_reply`, so the runtime cannot take its verdict as its own: every
+draft it makes is asked, whatever standing approvals stand.
 
 Neither wakes you when it ends: a read that succeeded is not a trigger. Say in your note that you are watching both,
 and decide at your next review, when what they found is there to read. A thread the line names can have moved for a
