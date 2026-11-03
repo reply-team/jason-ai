@@ -28,7 +28,7 @@ A launched role no longer has to run on Claude Code. Each host below is a progra
 yourself, under your own plan: Jason holds no key for any of them. `jason skills install --host <host>` deploys the
 skills into that host's folder, and Codex CLI, GitHub Copilot CLI, Cursor CLI and Gemini CLI all read `~/.agents/skills`, so
 they share one deployment; Antigravity CLI keeps its own folder, `~/.gemini/antigravity-cli/skills`. `jason status` says which hosts it found on the machine and whether every enabled profile names
-one. Every host added in this release is built from the host's own documentation, and from its source or installed files
+one, and the file `jason doctor` writes carries that check too, its profiles counted by host and never named. Every host added in this release is built from the host's own documentation, and from its source or installed files
 where there are any, for the version [the host matrix](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#12-the-hosts)
 names; none has yet been run on a signed-in account. The tests prove the command Jason composes and the launch around it
 against a stand-in program.
