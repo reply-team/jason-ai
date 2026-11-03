@@ -23,6 +23,24 @@ public sealed class ToastCommandsTests
             launch.Stdin);
     }
 
+    /// <summary>
+    /// The one item that waits travels by its opaque id, and nothing else of it; a toast with no item is the payload it
+    /// was before there was one, byte for byte.
+    /// </summary>
+    [Fact]
+    public void Windows_carries_the_one_item_by_its_id_alone()
+    {
+        const string Approval = "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6";
+        var one = NotificationComposer.Compose(1, 0, item: Approval);
+
+        var launch = ToastCommands.Windows(["C:\\jason\\jason.exe"], one);
+
+        Assert.Equal(
+            """{"protocol_version":1,"aumid":"ai.jason.runtime","display_name":"Jason","title":"Jason","lines":["1 approval is waiting in Jason.","Ask your agent what Jason is waiting for, or run jason approval list and jason decision list."],"item":"apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6"}""",
+            launch.Stdin);
+        Assert.DoesNotContain("\"item\"", ToastCommands.Windows(["C:\\jason\\jason.exe"], Message).Stdin, StringComparison.Ordinal);
+    }
+
     /// <summary>The same executable may be a dll run by dotnet, as it is under test: the mode follows whatever starts it.</summary>
     [Fact]
     public void Windows_follows_the_command_that_starts_this_executable() =>

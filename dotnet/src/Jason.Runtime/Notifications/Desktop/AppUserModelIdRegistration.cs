@@ -14,12 +14,19 @@ public interface IUserRegistry
 
     /// <summary>Writes a string value, creating the key if needed.</summary>
     void WriteString(string key, string name, string value);
+
+    /// <summary>
+    /// A string value under <c>HKEY_CLASSES_ROOT</c>, the merged view Windows resolves a class through, where a
+    /// machine-wide key shows beside this account's own; null where the key or the value is absent. Read only.
+    /// </summary>
+    string? ReadClassesString(string key, string name);
 }
 
 /// <summary>
 /// The per-user key a toast is shown under: <c>HKCU\Software\Classes\AppUserModelId\ai.jason.runtime</c> with
 /// <c>DisplayName</c> = <c>Jason</c>, which is all an unpackaged program's toast needs to appear. Written only where it
-/// is absent or says something else, and never with an icon or an activator: a pointer opens nothing.
+/// is absent or says something else, and never with an icon or an activator; a click launches the <c>jason:</c> link
+/// (<see cref="SchemeRegistration"/>).
 /// </summary>
 public static class AppUserModelIdRegistration
 {
@@ -67,5 +74,11 @@ public sealed class RegistryUserRegistry : IUserRegistry
     {
         using var created = Registry.CurrentUser.CreateSubKey(key, writable: true);
         created.SetValue(name, value, RegistryValueKind.String);
+    }
+
+    public string? ReadClassesString(string key, string name)
+    {
+        using var opened = Registry.ClassesRoot.OpenSubKey(key, writable: false);
+        return opened?.GetValue(name) as string;
     }
 }

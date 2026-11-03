@@ -74,6 +74,12 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// entry that reaches it are the manager's, so none of them is in this plan to remove — the fields above that would name
 /// them are empty — and this names them instead, with the command that takes them off.
 /// </param>
+/// <param name="Link">
+/// The <c>jason:</c> link registration and what becomes of it, or null where this account has none: removed where it
+/// carries Jason's marker and this installation's command, kept where another installation's, untouched where another
+/// program's.
+/// </param>
+/// <param name="LinkUnreadable">Why the link registration could not be read, never taken for an account without one.</param>
 public sealed record UninstallPlan(
     bool AutostartRegistered,
     string? AutostartArtifact,
@@ -93,7 +99,9 @@ public sealed record UninstallPlan(
     IReadOnlyList<string>? Notices = null,
     PackageOwner? LeftTo = null,
     IReadOnlyList<string>? OtherExtractedLibraries = null,
-    string? OtherExtractedLibrariesLeft = null)
+    string? OtherExtractedLibrariesLeft = null,
+    LinkRegistrationPlan? Link = null,
+    string? LinkUnreadable = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

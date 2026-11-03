@@ -1,4 +1,7 @@
 using System.Globalization;
+using Jason.Contracts.Ids;
+using Jason.Runtime.Approvals;
+using Jason.Runtime.Decisions;
 
 namespace Jason.Runtime.Notifications;
 
@@ -43,10 +46,14 @@ public static class NotificationComposer
     /// <summary>The command that shows the provider blocks, the work each holds and where a person clears it.</summary>
     public const string LookAtBlocksCommand = "jason block list";
 
+    /// <param name="item">
+    /// The public id of the one approval or question that waits, read beside the counts; carried only when it is the
+    /// one thing that waits for a person, and only by the Windows toast.
+    /// </param>
     /// <param name="eventGaps">How many accounts have a span of events nobody will read, said since the last pointer that reached anybody.</param>
     /// <param name="blocks">The provider blocks opened since the last pointer that reached anybody and open still, and the work items they hold.</param>
     /// <exception cref="ArgumentOutOfRangeException">A count is negative, or every count is zero: nothing to say is never composed.</exception>
-    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null, int eventGaps = 0, HeldByBlocks? blocks = null)
+    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null, int eventGaps = 0, HeldByBlocks? blocks = null, string? item = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(approvals);
         ArgumentOutOfRangeException.ThrowIfNegative(decisions);
@@ -104,8 +111,20 @@ public static class NotificationComposer
             : failures == 0 ? Look
             : waiting ? LookAtBoth
             : LookAtFailures;
-        return new NotificationMessage(Title, string.Join(" ", sentences), look, approvals, decisions, failures, eventGaps, blocked);
+        return new NotificationMessage(Title, string.Join(" ", sentences), look, approvals, decisions, failures, eventGaps, blocked, One(approvals, decisions, item));
     }
+
+    /// <summary>
+    /// The one item that waits, by its opaque public id: only when exactly one approval or one question waits, and only
+    /// an id of that kind's prefix. Anything else is no item, never an error: a click then opens the list.
+    /// </summary>
+    private static string? One(int approvals, int decisions, string? item) =>
+        (approvals, decisions) switch
+        {
+            (1, 0) when PublicId.IsWellFormed(ApprovalGate.IdPrefix, item) => item,
+            (0, 1) when PublicId.IsWellFormed(DecisionService.IdPrefix, item) => item,
+            _ => null,
+        };
 
     /// <summary>
     /// Where to look when a provider block holds work or an account's events were not read: alone, the agent and the one
@@ -175,7 +194,7 @@ public static class NotificationComposer
 /// One pointer: a title, a summary of the counts, and where to look. A toast shows the title, then the summary and
 /// where to look as two lines; a channel that carries one line sends <see cref="Text"/>.
 /// </summary>
-public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0, int EventGaps = 0, int Blocks = 0)
+public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0, int EventGaps = 0, int Blocks = 0, string? Item = null)
 {
     public string Text => $"{Summary} {Look}";
 }

@@ -189,6 +189,45 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         }
     }
 
+    /// <summary>The <c>jason:</c> link registration this fake says is there; none unless a test says so.</summary>
+    public LinkRegistrationRead? Link { get; set; }
+
+    /// <summary>The registration a last toast writes after the first read: what a runtime still running when the plan was read leaves.</summary>
+    public LinkRegistrationRead? LinkWrittenAfterTheFirstRead { get; init; }
+
+    /// <summary>Whether reading the link registration fails, as classes this account cannot read would.</summary>
+    public bool LinkUnreadable { get; init; }
+
+    /// <summary>The command each removal of the link registration was asked to remove it for.</summary>
+    public List<string?> LinkRemovedFor { get; } = [];
+
+    private int _linkReads;
+
+    public LinkRegistrationRead? ReadLinkRegistration()
+    {
+        if (LinkUnreadable)
+        {
+            throw new IOException("the classes refused to be read");
+        }
+
+        if (++_linkReads == 2 && LinkWrittenAfterTheFirstRead is { } written)
+        {
+            Link = written;
+        }
+
+        return Link;
+    }
+
+    public void RemoveLinkRegistration(string? command)
+    {
+        Record("link.remove", Jason.Contracts.Notifications.LinkRegistration.Key);
+        LinkRemovedFor.Add(command);
+        if (ReallyRemoves)
+        {
+            Link = null;
+        }
+    }
+
     /// <summary>Where this pretend build unpacked its native libraries. A test that cares sets it.</summary>
     public string? ExtractedLibraries { get; set; }
 

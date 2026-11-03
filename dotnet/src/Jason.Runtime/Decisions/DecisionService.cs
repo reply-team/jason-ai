@@ -24,6 +24,9 @@ namespace Jason.Runtime.Decisions;
 /// </remarks>
 public sealed class DecisionService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
 {
+    /// <summary>The prefix of a question's public id.</summary>
+    public const string IdPrefix = "dec";
+
     public async Task<DecisionDto> RaiseAsync(DecisionRaiseRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -52,7 +55,7 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
 
         var decision = new Decision
         {
-            PublicId = PublicId.New("dec"),
+            PublicId = PublicId.New(IdPrefix),
             CampaignId = item.CampaignId,
             WorkItemId = item.Id,
             AttemptId = attempt.Id,

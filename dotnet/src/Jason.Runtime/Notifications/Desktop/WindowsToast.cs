@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Security;
 
 namespace Jason.Runtime.Notifications.Desktop;
 
@@ -55,17 +54,6 @@ public static unsafe partial class WindowsToast
     private const string ClassToastNotificationManager = "Windows.UI.Notifications.ToastNotificationManager";
 
     private const int RoInitMultithreaded = 1;
-
-    /// <summary>A toast of a title and lines of text, each escaped as XML text.</summary>
-    public static string Xml(string title, IReadOnlyList<string> lines)
-    {
-        ArgumentNullException.ThrowIfNull(title);
-        ArgumentNullException.ThrowIfNull(lines);
-        var texts = string.Concat(lines.Select(line => $"<text>{SecurityElement.Escape(line)}</text>"));
-        return "<toast><visual><binding template=\"ToastGeneric\">"
-            + $"<text>{SecurityElement.Escape(title)}</text>{texts}"
-            + "</binding></visual></toast>";
-    }
 
     /// <summary>An HRESULT as it is written down: <c>0x80070490</c>.</summary>
     public static string Hr(int hr) => "0x" + hr.ToString("X8", CultureInfo.InvariantCulture);

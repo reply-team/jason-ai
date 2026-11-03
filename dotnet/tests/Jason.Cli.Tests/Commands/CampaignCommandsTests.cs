@@ -788,6 +788,9 @@ internal sealed class CliRun : IDisposable
 
     public Task<int> RunAsync(params string[] args) => CliApp.RunAsync(args, _environment, TestContext.Current.CancellationToken);
 
+    /// <summary>The environment this run hands a verb, for a code path that is reached other than through <see cref="CliApp"/>.</summary>
+    public CliEnvironment Environment => _environment;
+
     /// <summary>The verb reached the right operation with the right body; property order is not part of the contract.</summary>
     public void AssertPosted(string operation, string expectedBody)
     {

@@ -522,8 +522,13 @@ dispatcher. It waits, with a record of exactly what would be done, until somebod
 ```sh
 jason approval list --human
 jason approval get <approval-id> --human
+jason approval get <approval-id> --prompt
 jason approval approve <approval-id> --actor human:you@example.com --reason "checked the list"
 ```
+
+`--prompt` prints, in place of the item, the text that briefs an agent session on it: what waits, the campaign and its
+folder, the skill to use and what to bring back, and that the session decides nothing. It holds nothing of the item
+itself, and it is the text the UI's Copy prompt button copies (`docs/ui.md`).
 
 A launched role that cannot decide something for itself asks a person instead, and the answer wakes the
 review that carries the work on:
@@ -531,6 +536,7 @@ review that carries the work on:
 ```sh
 jason decision list --human
 jason decision get <decision-id> --human
+jason decision get <decision-id> --prompt
 jason decision answer <decision-id> --answer "pause it" --actor human:you@example.com
 ```
 

@@ -23,6 +23,9 @@ public class ModeRouterTests
     // The agent host's hook is a mode of its own, chosen by its first word alone.
     [InlineData(new[] { "host-hook", "antigravity-cli", "e30" }, Mode.HostHook)]
     [InlineData(new[] { "host-hook" }, Mode.HostHook)]
+    [InlineData(new[] { "host-hook", "jason:open" }, Mode.HostHook)]
+    // A jason: link as the first argument is still the link mode, whatever else is on the line.
+    [InlineData(new[] { "jason:session/open" }, Mode.Link)]
     [InlineData(new[] { "runtime", "host-hook" }, Mode.Cli)]
     [InlineData(new[] { "runtime", "toast-host" }, Mode.Cli)]
     [InlineData(new[] { "runtime", "status" }, Mode.Cli)]

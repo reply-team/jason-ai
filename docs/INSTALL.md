@@ -166,14 +166,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://get.jasonharness.ai/releases/download/v0.26.0/install.sh | sh -s -- --version 0.26.0
+curl -fsSL https://get.jasonharness.ai/releases/download/v0.27.0/install.sh | sh -s -- --version 0.27.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.26.0/install.ps1))) -Version 0.26.0
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.27.0/install.ps1))) -Version 0.27.0
 ```
 
-These install 0.26.0 with 0.26.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.27.0 with 0.27.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -516,8 +516,9 @@ receipt, so it is removed by nobody — including this. The rest of the installa
 order: this account's logon registration first — on Windows including the task `\Jason` an earlier version
 registered for it — so a logon part-way through cannot start what is going; then the runtime, and if it will not
 stop — or is running and does not answer — nothing after that is removed; then, on Windows, the notification
-registration — the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the
-first toast — after the runtime, so its next toast cannot write them back; then the recorded skills; then the
+registration — the AppUserModelID key the toast was shown under, the two entries Windows made for it at the
+first toast, and the `jason:` link where its command names this executable — after the runtime, so its next toast
+cannot write them back; then the recorded skills; then the
 PATH entry, only where the installer wrote it; then the executable, its two notice files, its install directory,
 and the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
 `~/.net` on macOS and Linux. On Windows what every other build of Jason unpacked beside them goes too: the versions
@@ -552,8 +553,8 @@ runtime stopped first.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
 registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
-source beside a release, a copy — takes the registrations and the harness skills the first one made as well. Look
-at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
+source beside a release, a copy — takes the registrations and the harness skills the first one made as well. The
+`jason:` link goes only where its command names this executable. Look at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason
 wrote and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway:
