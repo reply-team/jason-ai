@@ -760,6 +760,23 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("a signed-out run ends with exit 41, which the notes read as \"could not authenticate\"", Flattened(row), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// What moves a host's own traffic is the person's environment's, for every host, and the general part of section 12
+    /// says it once, ahead of every host's section, so no host's section has to say it again or is read as the only one.
+    /// </summary>
+    [Fact]
+    public void The_general_part_of_the_hosts_section_says_the_flags_that_move_a_hosts_traffic_are_the_persons()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var hosts = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
+        var general = Flattened(hosts[..hosts.IndexOf("\n### ", StringComparison.Ordinal)]);
+
+        Assert.Contains(
+            "Flags and variables that move a host's own traffic, such as Gemini CLI's `--proxy` or a proxy variable, are the person's environment's to set: Jason sets none of them and reserves none of them",
+            general,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 

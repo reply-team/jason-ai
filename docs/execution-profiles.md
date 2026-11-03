@@ -518,6 +518,11 @@ deny rules — the command word that calls the runtime back and the memory files
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
 
+Flags and variables that move a host's own traffic, such as Gemini CLI's `--proxy` or a proxy variable, are the person's
+environment's to set: Jason sets none of them and reserves none of them. A variable the runtime's own environment holds
+reaches a launched child like any other, and a host whose arguments are an allowlist takes no flag outside it, as its
+section says.
+
 ### Codex CLI
 
 Install the CLI (`npm install -g @openai/codex`), sign in to it yourself with `codex login`, then name it in a profile:
