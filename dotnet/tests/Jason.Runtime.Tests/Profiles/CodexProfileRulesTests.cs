@@ -207,6 +207,27 @@ public class CodexProfileRulesTests
         Assert.Equal(AgentHostKind.ClaudeCode, read.Revision.Host);
     }
 
+    /// <summary>
+    /// A deny of a tool Codex does not have holds already and is the person's word, so a profile that carries one moves
+    /// to Codex with it kept, as written.
+    /// </summary>
+    [Fact]
+    public async Task A_profile_denying_a_tool_codex_does_not_have_moves_to_codex_with_the_deny_kept()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "moving", host = "claude_code", program = "claude", deny = new[] { "Glob", "mcp__made_up__send" } },
+            Ct);
+
+        var moved = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "moving", host = "codex", program = "codex" }, Ct);
+
+        Assert.Equal(2, moved.Revision.Number);
+        Assert.Equal(AgentHostKind.Codex, moved.Revision.Host);
+        Assert.Equal(["Glob", "mcp__made_up__send"], moved.Revision.Deny);
+    }
+
     [Fact]
     public async Task A_search_granted_and_denied_at_once_is_refused()
     {

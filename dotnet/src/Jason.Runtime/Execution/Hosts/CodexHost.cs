@@ -129,8 +129,9 @@ public sealed class CodexHost(
         }
 
         var (entries, unreadable) = FileSystem(revision, memoryFiles);
-        // A search is live only where the revision grants it and does not deny it: the host's deny wins over the grant.
-        var search = revision.Tools.Contains(AgentTool.WebSearch) && !revision.Deny.Contains("WebSearch") ? "live" : "disabled";
+        // A search is live only where the revision grants it and denies none of it: the host's deny wins over the grant,
+        // and a deny of some searches is one it can hold only whole.
+        var search = revision.Tools.Contains(AgentTool.WebSearch) && !revision.Deny.Any(DeniesSearch) ? "live" : "disabled";
 
         return new HostLaunch(
             [
@@ -194,13 +195,10 @@ public sealed class CodexHost(
     public string? Unavailable(int exitCode, string? stderrTail) => null;
 
     /// <summary>
-    /// The deny words this sandbox holds without an entry of its own: no write root is granted, a search is switched off,
-    /// and the host has no tool that fetches a page while the network reaches loopback alone.
+    /// The names a deny of a command is written under. The host runs commands and confines each by its sandbox, whatever
+    /// its name, so no such deny can be held.
     /// </summary>
-    private static readonly HashSet<string> HeldDenies = new(StringComparer.Ordinal)
-    {
-        "Write", "Edit", "MultiEdit", "NotebookEdit", "WebSearch", "WebFetch",
-    };
+    private static readonly string[] CommandTools = ["Bash", "PowerShell", "Shell"];
 
     /// <summary>The host mints the id of every run it starts and has no flag that names one, so a launch names none.</summary>
     public bool TakesSessionId => false;
@@ -228,24 +226,32 @@ public sealed class CodexHost(
     }
 
     /// <summary>
-    /// Why this sandbox cannot hold a deny: a command runs inside the sandbox whatever its name, and the host has no
-    /// tool by such a name to take away. A read is denied by a path the sandbox can name, from the root, a drive on
-    /// Windows, or the home.
+    /// The two denies this sandbox cannot hold: a command by its name, since every command runs inside the sandbox
+    /// whatever its name, and a read of a path the sandbox cannot name, which is one from the root, a drive on Windows,
+    /// or the home. Every other deny holds: no write root is granted, a search is switched off, and a tool the host does
+    /// not have, a fetch or an MCP tool among them, is the person's word, kept as written.
     /// </summary>
     public string? DenyProblem(string word)
     {
         ArgumentNullException.ThrowIfNull(word);
-        if (HeldDenies.Contains(word) || DeniedPath(word) is not null)
+        if (Array.Exists(CommandTools, tool => word == tool || word.StartsWith($"{tool}(", StringComparison.Ordinal)))
         {
-            return null;
+            return "codex confines every command a role runs by its sandbox, not by its name, so a command cannot be denied by name; it runs inside the sandbox whatever it is called.";
         }
 
-        return word.StartsWith("Read(", StringComparison.Ordinal)
-            ? windows
+        if ((word == "Read" || word.StartsWith("Read(", StringComparison.Ordinal)) && DeniedPath(word) is null)
+        {
+            return windows
                 ? "a read is denied on codex by a path from a drive (Read(//d/...)) or the home (Read(~/...))."
-                : "a read is denied on codex by a path from the root (Read(//...)) or the home (Read(~/...))."
-            : "codex confines a run by its sandbox, not by a list of tools or commands, so it has no rule by this name; a command runs inside the sandbox whatever its name.";
+                : "a read is denied on codex by a path from the root (Read(//...)) or the home (Read(~/...)).";
+        }
+
+        return null;
     }
+
+    /// <summary>Whether a deny word takes a search away, whole or in part.</summary>
+    private static bool DeniesSearch(string word) =>
+        word == "WebSearch" || word.StartsWith("WebSearch(", StringComparison.Ordinal);
 
     /// <summary>
     /// A search is the one tool of the vocabulary this host has, and a profile takes it away by the deny word written for

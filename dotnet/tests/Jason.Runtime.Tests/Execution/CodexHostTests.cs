@@ -311,6 +311,7 @@ public class CodexHostTests
     [InlineData("Edit")]
     [InlineData("MultiEdit")]
     [InlineData("NotebookEdit")]
+    [InlineData("Write(//srv/**)")]
     [InlineData("WebSearch")]
     [InlineData("WebFetch")]
     [InlineData("Read(//srv/secrets/**)")]
@@ -321,23 +322,47 @@ public class CodexHostTests
     }
 
     /// <summary>
-    /// The sandbox confines every command a role runs whatever its name, and the host has no tool by these names to take
-    /// away, so a deny of one could only be dropped at a launch; it is refused where the profile is written instead.
+    /// A deny of a tool this host does not have is the person's word and is kept, as on every host: it holds already,
+    /// and the profile stays one the person may move to a host that has the tool.
     /// </summary>
     [Theory]
-    [InlineData("Bash(curl *)")]
-    [InlineData("PowerShell(Invoke-WebRequest *)")]
     [InlineData("Glob")]
     [InlineData("Grep")]
     [InlineData("Task")]
     [InlineData("mcp__made_up__send")]
-    [InlineData("Read")]
-    [InlineData("Read(notes/**)")]
-    [InlineData("Read(./notes.md)")]
+    [InlineData("WebFetch(domain:example.com)")]
     [InlineData("web_search")]
-    public void A_deny_the_sandbox_cannot_hold_is_refused_with_its_reason(string word)
+    public void A_deny_of_a_tool_the_host_does_not_have_is_kept(string word)
     {
-        Assert.False(string.IsNullOrWhiteSpace(Host().DenyProblem(word)));
+        Assert.Null(Host().DenyProblem(word));
+    }
+
+    /// <summary>
+    /// The host runs commands and confines every one of them by its sandbox whatever its name, so a deny of a command by
+    /// its name could only be dropped at a launch; it is refused where the profile is written instead, naming why. A read
+    /// is denied by a path the sandbox can name, and a word that names none is refused with the forms that do.
+    /// </summary>
+    [Theory]
+    [InlineData("Bash", "by its sandbox")]
+    [InlineData("Bash(curl *)", "by its sandbox")]
+    [InlineData("PowerShell(Invoke-WebRequest *)", "by its sandbox")]
+    [InlineData("Shell(rm *)", "by its sandbox")]
+    [InlineData("Read", "Read(//")]
+    [InlineData("Read(notes/**)", "Read(//")]
+    [InlineData("Read(./notes.md)", "Read(//")]
+    public void A_deny_of_a_command_or_a_read_the_sandbox_cannot_name_is_refused_with_its_reason(string word, string reason)
+    {
+        Assert.Contains(reason, Host().DenyProblem(word) ?? "", StringComparison.Ordinal);
+    }
+
+    /// <summary>A deny of some searches is a deny the host can hold only whole, so it switches the search off.</summary>
+    [Fact]
+    public void A_deny_of_some_searches_switches_the_search_off()
+    {
+        var command = Host().Compose(Revision(deny: ["WebSearch(competitors)"], tools: [AgentTool.WebSearch]), ["codex"], NoFiles).Command;
+
+        Assert.Null(Host().DenyProblem("WebSearch(competitors)"));
+        Assert.Contains("web_search=\"disabled\"", command);
     }
 
     [Fact]
