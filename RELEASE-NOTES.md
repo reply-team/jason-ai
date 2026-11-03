@@ -48,7 +48,7 @@ against a stand-in program.
   says what it reads and what was not measured.
 - **GitHub Copilot CLI.** Install it from [GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), sign in with
   `copilot login`, then `jason profile create copilot --host copilot_cli --program copilot`. A role is confined by the
-  tool set and the allow and deny rules Jason composes on the host's command line, with nothing written into the work
+  tool set and the allow and deny rules Jason composes on the host's command line, with no configuration written into the work
   directory, and a profile's own arguments are limited to the few documented options a person owns, such as `--model=`.
   [The Copilot section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#github-copilot-cli)
   lists them.

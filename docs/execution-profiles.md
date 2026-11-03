@@ -159,7 +159,7 @@ For Claude Code, the runtime writes, before the child starts:
   `"claudeMdExcludes": ["**/CLAUDE.md", "**/.claude/rules/**", "**/AGENTS.md"]` (§7), and nothing else;
 - `.claude/skills/<role>/` copied from `<data>/skills/roles/<role>/`, files only, no link followed.
 
-**Only one half of a policy can travel there.** A directory the runtime creates is not a workspace
+**On Claude Code, only one half of a policy can travel there.** A directory the runtime creates is not a workspace
 the host trusts, and an allow rule in an untrusted directory is ignored without being reported — so
 what the agent *may* do goes on the command line, where it is read, and what it *may not* do goes in
 the directory, where a deny rule is honoured either way. Verified against Claude Code 2.1.275.
@@ -615,7 +615,7 @@ keeps and never parses: the outcome comes back through the CLI), `--no-ask-user`
 close what the person's own settings would otherwise decide — `--disallow-temp-dir` (the system temporary folder is not
 opened to the role), `--sync-session=off` (the host's history of the run is not synced), `--mode=interactive` (a setting
 cannot make the run autopilot) and `--no-bash-env` (no startup file named by `BASH_ENV` is read by the shell) — and then
-three lists — `--available-tools`, `--allow-tool` and `--deny-tool` — and last the profile's own arguments. Nothing is
+three lists — `--available-tools`, `--allow-tool` and `--deny-tool` — and last the profile's own arguments. No configuration is
 written into the work directory and nothing of the person's own configuration is touched. No flag that trusts the folder
 or allows every tool, path or address is composed, and a profile may not carry one: every flag above is reserved, with the
 other documented flags that load, reach or say more. The host's parser is closed and was not read
@@ -868,7 +868,7 @@ command line, which the launch never does. The command is `--input-format stream
 `step_update` and `result` events, which the runtime keeps and never parses: the outcome comes back through the CLI. The
 host's own print timeout would end a run with a success and partial output (so [the host's changelog](https://antigravity.google/docs/changelog/) says of its
 expiry), and its pages disagree on the default, so Jason turns it off and the attempt's limit is the only limit. The host mints its own conversation id and takes none, so
-the attempt records no session. Nothing is written into the work directory, nothing of the person's own configuration is
+the attempt records no session. No configuration is written into the work directory, nothing of the person's own configuration is
 touched, and no flag that acts without asking, widens the workspace, takes another project or resumes a conversation is
 composed or allowed in a profile. **The host's parser is not read**, because it is closed source and no copy of it was
 available to inspect, so no argument is taken on the strength of what a parser might do with it. A profile's arguments are
