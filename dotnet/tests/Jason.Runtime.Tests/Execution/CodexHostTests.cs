@@ -363,6 +363,7 @@ public class CodexHostTests
     }
 
     [Fact]
+    [Critical(Family.S3, "no file in the work directory, so no token in one")]
     public void The_work_directory_is_left_as_the_runtime_made_it()
     {
         var workDir = Directory.CreateTempSubdirectory("jason-codex-").FullName;
