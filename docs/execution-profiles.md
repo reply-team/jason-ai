@@ -494,7 +494,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
-| GitHub Copilot CLI | `copilot_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.0.105; parser not read, so a profile's arguments are only the options that documentation names for the person: `--model=`, `--effort=` (or `--reasoning-effort=`), `--log-level=`, `--max-ai-credits=`, `--no-color` and `--disable-client-telemetry`, and an undocumented option is refused here even when it would be harmless; not yet run on an account | `web_fetch` as `url`; the host documents no search tool, so a grant of `web_search` is refused and a deny of it is kept | one `read(<absolute path>)` rule per file in its `--allow-tool` list, on its command line (documented for version 1.0.105; not yet measured to reach outside the work directory) | as its prompt, on standard input, with no `-p`; nothing of the envelope on its command line |
+| GitHub Copilot CLI | `copilot_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.0.105, the version the allowlist was read at; parser not read, so a profile's arguments are only the documented options the person owns: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, `--no-color` and `--disable-client-telemetry`. No undocumented flag, however harmless, is taken this release. Not yet run on an account | `web_fetch` as `url`; the host documents no search tool, so a grant of `web_search` is refused and a deny of it is kept | one `read(<absolute path>)` rule per file in its `--allow-tool` list, on its command line (documented for version 1.0.105; not yet measured to reach outside the work directory) | as its prompt, on standard input, with no `-p`; nothing of the envelope on its command line |
 | Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 
 A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there, and only
@@ -548,8 +548,9 @@ the work directory and nothing of the person's own configuration is touched. No 
 every tool, path or address is composed, and a profile may not carry one. The host's parser is closed and was not read
 (the reserved list is from its documentation), so a hidden alias of a composed flag, a cluster of short options or a value
 glued to one cannot be ruled out; a profile's arguments are therefore an allowlist of the documented options a person
-owns, each as one argument: `--model=`, `--effort=` (or `--reasoning-effort=`), `--log-level=`, `--max-ai-credits=`, and the
+owns, each as one argument: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, and the
 bare `--no-color` and `--disable-client-telemetry`. Anything else is refused, harmless or not: the cost of a closed parser.
+The log level and the log directory are not among them: they change what the host writes outside the work directory.
 
 | Tool the host offers a role | Why |
 |---|---|

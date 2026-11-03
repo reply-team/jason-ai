@@ -320,7 +320,6 @@ public class CopilotCliHostTests
     [Theory]
     [InlineData("--model")]
     [InlineData("--effort")]
-    [InlineData("--log-level")]
     [InlineData("--no-color")]
     public void A_profile_may_still_carry_the_flags_that_do_not_change_the_reach(string flag)
     {
@@ -437,7 +436,8 @@ public class CopilotCliHostTests
     [InlineData("--model=made-up-model", false)]
     [InlineData("--effort=high", false)]
     [InlineData("--reasoning-effort=low", false)]
-    [InlineData("--log-level=debug", false)]
+    [InlineData("--log-level=debug", true)]
+    [InlineData("--log-dir=made-up-folder", true)]
     [InlineData("--max-ai-credits=5", false)]
     [InlineData("--no-color", false)]
     [InlineData("--disable-client-telemetry", false)]

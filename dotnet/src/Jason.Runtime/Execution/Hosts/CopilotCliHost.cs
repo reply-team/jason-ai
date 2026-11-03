@@ -224,10 +224,11 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
 
     /// <summary>
     /// The options a profile may carry that take a value, each documented for the host and each the person's own: which
-    /// model, how hard it reasons, how much it logs, and a soft limit on credits. None changes what the role may touch,
-    /// how the host is told to run or where the brief goes.
+    /// model, how hard it reasons, and a soft limit on credits. None changes what the role may touch, how the host is told
+    /// to run or where the brief goes. The log level and the log directory are left out: they change what the host writes
+    /// outside the work directory, where at a high level the brief and the tool output land in the person's own logs.
     /// </summary>
-    private static readonly string[] ValueOptions = ["--model", "--effort", "--reasoning-effort", "--log-level", "--max-ai-credits"];
+    private static readonly string[] ValueOptions = ["--model", "--effort", "--reasoning-effort", "--max-ai-credits"];
 
     /// <summary>The documented options a profile may carry that take no value.</summary>
     private static readonly string[] FlagOptions = ["--no-color", "--disable-client-telemetry"];

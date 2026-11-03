@@ -84,6 +84,7 @@ public class CopilotCliProfileTests
     [InlineData("-pi")]
     [InlineData("-pfoo")]
     [InlineData("-Cfolder")]
+    [InlineData("--log-level=debug")]
     public async Task A_word_outside_the_allowlist_is_refused_at_create_and_at_update_naming_the_host_and_the_reason(string word)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
@@ -125,7 +126,7 @@ public class CopilotCliProfileTests
     public async Task The_documented_options_a_person_owns_are_accepted_at_create_and_at_update()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
-        string[] owned = ["--model=made-up-model", "--effort=high", "--reasoning-effort=low", "--log-level=debug", "--max-ai-credits=5", "--no-color", "--disable-client-telemetry"];
+        string[] owned = ["--model=made-up-model", "--effort=high", "--reasoning-effort=low", "--max-ai-credits=5", "--no-color", "--disable-client-telemetry"];
 
         var created = await api.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileCreate, new { name = "owned", host = "copilot_cli", program = "copilot", args = new[] { "--model=made-up-model" } }, Ct);
