@@ -525,7 +525,8 @@ section says.
 
 ### Codex CLI
 
-Install the CLI (`npm install -g @openai/codex`), sign in to it yourself with `codex login`, then name it in a profile:
+Install it from [its own page](https://github.com/openai/codex), where its commands are kept current, sign in to it yourself
+with `codex login`, then name it in a profile:
 `jason profile create local-codex --host codex --program codex`. Jason never signs in for you, and never looks for the
 copy of the CLI the Codex app carries.
 
@@ -590,8 +591,8 @@ about a missing sign-in.
 `copilot_cli` is built from the host's documentation for version 1.0.105 and **has not yet been run on an account**:
 every form below is the documented one, the tests prove the command Jason composes and the launch around it against a
 stand-in under the host's command word, and a sentence that says "not measured" is one the documentation leaves open.
-The host is installed by a person — `npm install -g @github/copilot`, `winget install GitHub.Copilot`,
-`brew install copilot-cli` or the install script the host's page gives — and signed in by them with `copilot login`;
+The host is installed by a person from [GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli),
+where its commands are kept current, and signed in by them with `copilot login`;
 Jason holds no key for it, and a token the person's own environment carries (`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`,
 `GITHUB_TOKEN`) is theirs and is not read or set. Then:
 
@@ -701,7 +702,8 @@ reported nothing.
 
 The row above was built from Cursor's documentation and from the bundle of the installed version, 2026.10.22-27dcf5f,
 read as text. It has not been run on an account: Jason holds no key, and the sign-in is the person's own, made as
-themselves with `agent login`. Each note says what a person relying on this host should know, and the first is the one
+themselves with `agent login`. Install it from [Cursor's installation page](https://cursor.com/docs/cli/installation.md), where its
+commands are kept current. Each note says what a person relying on this host should know, and the first is the one
 thing that decides whether the host works at all.
 
 1. **Not yet measured: whether an allowed callback runs unattended.** A launch writes `Shell(<cli word>)` into the

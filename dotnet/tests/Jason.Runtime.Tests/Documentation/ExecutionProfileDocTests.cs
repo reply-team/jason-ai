@@ -509,13 +509,14 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
-    /// A host's install is told one way in the README and the install page: a link to the host's own installation page,
-    /// where its commands are kept current, and never a command copied here. The only line either page pipes to a shell is
-    /// Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
+    /// A host's install is told one way in the README, the install page and the hosts' page: a link to the host's own
+    /// installation page, where its commands are kept current, and never a command copied here. The only line any of them
+    /// pipes to a shell is Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
     /// </summary>
     [Theory]
     [InlineData("README.md")]
     [InlineData("docs/INSTALL.md")]
+    [InlineData("docs/execution-profiles.md")]
     public void A_host_s_install_is_a_link_to_its_own_page_and_no_command_copied_from_it(string file)
     {
         var text = File.ReadAllText(Path.Combine(RepositoryTree.Root(), file.Replace('/', Path.DirectorySeparatorChar))).ReplaceLineEndings("\n");
@@ -532,6 +533,9 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("--host codex --program codex", text, StringComparison.Ordinal);
         Assert.Contains("--host copilot_cli --program copilot", text, StringComparison.Ordinal);
         Assert.Contains("--host antigravity_cli --program agy", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("npm install -g", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("winget install GitHub.Copilot", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install copilot-cli", text, StringComparison.Ordinal);
     }
 
     /// <summary>
