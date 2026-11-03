@@ -148,6 +148,66 @@ public class AntigravityCliProfileTests
         Assert.Contains(ParserNotRead, detail.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A profile moved onto this host by a patch that names the host and the program, and none of its lists, is held to
+    /// the host as it is stored: a grant, a deny and a bare-word argument written under another host are each refused,
+    /// speaking of the profile's own list, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task A_move_onto_the_host_is_refused_for_each_stored_word_it_cannot_keep_and_writes_nothing()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new
+            {
+                name = "moving",
+                host = "claude_code",
+                program = "claude",
+                tools = new[] { "web_fetch" },
+                deny = new[] { "Bash(rm:*)" },
+                args = new[] { "--model", "sonnet" },
+            },
+            Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "moving", host = "antigravity_cli", program = "agy" },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal(3, error.Details!.Count);
+        Assert.Equal(["args", "deny[0]", "tools[0]"], error.Details.Select(detail => detail.Field).Order(StringComparer.Ordinal));
+        Assert.All(error.Details, detail =>
+        {
+            Assert.Equal("invalid", detail.Code);
+            Assert.Contains("antigravity_cli", detail.Message, StringComparison.Ordinal);
+            Assert.Contains("the profile's", detail.Message, StringComparison.Ordinal);
+        });
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "moving" }, Ct);
+        Assert.Equal((1, AgentHostKind.ClaudeCode), (read.CurrentRevision, read.Revision.Host));
+    }
+
+    /// <summary>A profile that asks of this host nothing it cannot do moves onto it, keeping what it says.</summary>
+    [Fact]
+    public async Task A_plain_profile_moves_onto_the_host_and_keeps_its_owned_option()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "plain-move", host = "claude_code", program = "claude", args = new[] { "--model=made-up" } },
+            Ct);
+
+        var moved = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate,
+            new { name = "plain-move", host = "antigravity_cli", program = "agy" },
+            Ct);
+
+        Assert.Equal(AgentHostKind.AntigravityCli, moved.Revision.Host);
+        Assert.Equal("agy", moved.Revision.Program);
+        Assert.Equal(["--model=made-up"], moved.Revision.Args);
+    }
+
     /// <summary>The two options the person owns are kept on create and on a patch, with no value of theirs checked.</summary>
     [Fact]
     public async Task The_model_and_the_effort_are_kept_on_create_and_on_a_patch()
