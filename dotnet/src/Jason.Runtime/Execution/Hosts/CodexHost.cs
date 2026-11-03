@@ -63,6 +63,30 @@ public sealed class CodexHost(
     public AgentHostKind Kind => AgentHostKind.Codex;
 
     /// <summary>
+    /// A path this installation runs from that holds a pattern character: the sandbox would read it as a pattern, and a
+    /// pattern may only deny, so a run could not read it and could not call the runtime back. Held to the same check as
+    /// the memory files, but a memory file left out costs the run one file, and these cost it the runtime.
+    /// </summary>
+    public string? LaunchProblem()
+    {
+        foreach (var (path, what) in new[]
+                 {
+                     (runDirectory, "the folder of the data directory that tells a run how to reach the runtime"),
+                     (executable, "the Jason executable a run calls the runtime back with"),
+                     (extractionDirectory, "the folder that executable unpacks its libraries into"),
+                 })
+        {
+            if (path is not null && path.IndexOfAny(PatternCharacters) is var at and >= 0)
+            {
+                return $"codex cannot be given '{path}', {what}, because it holds '{path[at]}', which codex reads in a "
+                    + "path as a pattern rather than a name. Run Jason from a path that holds none of * ? [ ] { }.";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The host as this process registers it: the descriptor's folder of the data directory this runtime keeps, and what
     /// calling home reads of this very build (<see cref="CallHomeReads"/>).
     /// </summary>
