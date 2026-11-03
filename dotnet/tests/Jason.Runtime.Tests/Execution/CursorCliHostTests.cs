@@ -250,8 +250,12 @@ public class CursorCliHostTests : IDisposable
     {
         var host = new CursorCliHost();
 
-        Assert.Equal(["Write(**)", "WebFetch(*)"], host.Compose(Revision(), ["agent"], NoFiles).Deny);
-        Assert.Equal(["Write(**)"], host.Compose(Revision(AgentTool.WebFetch), ["agent"], NoFiles).Deny);
+        Assert.Equal(["WebFetch(*)"], host.Compose(Revision(), ["agent"], NoFiles).Deny);
+        Assert.Empty(host.Compose(Revision(AgentTool.WebFetch), ["agent"], NoFiles).Deny);
+
+        host.WriteWorkDirectory(_directory, [], ["WebFetch(*)"]);
+        var deny = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(_directory, ".cursor", "cli.json")))!["permissions"]!["deny"]!.AsArray().Select(rule => (string)rule!);
+        Assert.Equal(["Write(**)", "WebFetch(*)"], deny);
     }
 
     [Fact]
@@ -414,7 +418,7 @@ public class CursorCliHostTests : IDisposable
     [Critical(Family.S6, "the permission file is the rules and nothing else")]
     public void The_work_directory_carries_the_allow_and_deny_rules_in_the_hosts_project_permission_file()
     {
-        new CursorCliHost().WriteWorkDirectory(_directory, ["Shell(jason)", "Read(C:/Jason/AGENTS.md)"], ["Write(**)", "WebFetch(*)", "Shell(rm)"]);
+        new CursorCliHost().WriteWorkDirectory(_directory, ["Shell(jason)", "Read(C:/Jason/AGENTS.md)"], ["WebFetch(*)", "Shell(rm)", "Write(**)"]);
 
         var written = File.ReadAllText(Path.Combine(_directory, ".cursor", "cli.json"));
         var document = System.Text.Json.Nodes.JsonNode.Parse(written)!.AsObject();

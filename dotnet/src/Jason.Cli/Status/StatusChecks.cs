@@ -103,6 +103,12 @@ internal static class StatusChecks
         public const string InstallRoles = "jason skills install --roles-only";
 
         /// <summary>
+        /// <see cref="Install"/> into the one root a host reads: printed in a fact, not as a repair, for a detected root no
+        /// deployment was made in, which <see cref="UpdateSkills"/> does not carry.
+        /// </summary>
+        public static string InstallForHost(string host) => $"{Install} --host {host}";
+
+        /// <summary>
         /// The release's UI, placed as the default build: the repair where none is installed, and where the default one is
         /// another release's. A build of the person's own in <c>ui/custom</c> is never one this names.
         /// </summary>
@@ -141,10 +147,13 @@ internal static class StatusChecks
         public const string UpdateSkills = "jason skills update";
 
         /// <summary>
-        /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has. A
-        /// bundle's report names no profile, so there it is <c>&lt;name&gt;</c>.
+        /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has, with
+        /// that host's own program. The runtime refuses a move that keeps the program written for another host, and a
+        /// profile made as the README says carries one. A bundle's report names no profile, so there it is
+        /// <c>&lt;name&gt;</c>.
         /// </summary>
-        public static string MoveProfile(string profile, string host) => $"jason profile update {profile} --host {host}";
+        public static string MoveProfile(string profile, AgentHostKind host) =>
+            $"jason profile update {profile} --host {AgentHosts.Word(host)} --program {AgentHosts.Of(host).CommandWord}";
 
         /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
@@ -1225,6 +1234,7 @@ internal static class StatusChecks
         var deployed = new List<string>();
         var gone = new List<string>();
         var behind = new List<string>();
+        var empty = new List<string>();
         var pinned = new List<string>();
         foreach (var root in roots.Select(root => root.Directory).Distinct(HarnessLocators.SamePath))
         {
@@ -1255,6 +1265,10 @@ internal static class StatusChecks
                         .Where(pack => pack.RefOverridden)
                         .Select(pack => $"{pack.Pack} in {root} is from {pack.Ref}; this build is {own}. `{Repair.InstallPackFrom(pack.Pack, pack.Source)}` moves it to {own}."));
                 }
+                else
+                {
+                    empty.Add(root);
+                }
             }
             catch (SkillsRecordUnreadable unreadable)
             {
@@ -1268,12 +1282,24 @@ internal static class StatusChecks
             return new StatusCheck("harness_skills", false, CheckState.Absent, $"Nothing is deployed into {string.Join(", ", roots.Select(root => root.Directory))}.", Repair.Install);
         }
 
+        // A detected root no record names is one `skills update` never carries, since it carries only the roots a record
+        // names: a person who installed another host after the first deployment sees nothing reach it. The check stays
+        // as it is and says so, with the line that fills the root.
+        var unfilled = empty.Select(root =>
+            HostWords(root) is { Count: > 0 } hosts
+                ? $"Nothing is deployed into {root}, which {string.Join(", ", hosts)} read: `{Repair.InstallForHost(hosts[0])}` fills it."
+                : $"Nothing is deployed into {root}.").ToList();
+
         // A pack with files gone is written again by an update, which writes what is missing and keeps an edited file, from
         // the source and at the ref its record names and into the roots it names; and it moves a pack that is behind. An
         // install would move a pack from another source, or pinned, to this build's default, and deploy into every harness.
         return gone.Count > 0 || behind.Count > 0
-            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned)), Repair.UpdateSkills)
-            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Select(note => " " + note)), null);
+            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned).Concat(unfilled)), Repair.UpdateSkills)
+            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Concat(unfilled).Select(note => " " + note)), null);
+
+        // The hosts that read a folder, by their words.
+        List<string> HostWords(string root) =>
+            [.. roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().Select(AgentHosts.Word)];
 
         // The hosts that read a folder, by their words, after it; a folder named with --root and no host says none.
         string ReadBy(string root) =>
@@ -1305,7 +1331,7 @@ internal static class StatusChecks
         var detected = AgentHosts.All
             .Select(host => (host.Kind, Root: roots.FirstOrDefault(root => root.Hosts.Contains(host.Kind))))
             .Where(found => found.Root is not null)
-            .Select(found => (Word: AgentHosts.Word(found.Kind), found.Root!.Directory))
+            .Select(found => (found.Kind, Word: AgentHosts.Word(found.Kind), found.Root!.Directory))
             .ToList();
         var hosts = detected.Count == 0
             ? "No agent host was detected on this machine."
@@ -1358,7 +1384,7 @@ internal static class StatusChecks
         }
 
         var profile = names ? astray.Name : "<name>";
-        var host = detected[0].Word;
+        var host = detected[0].Kind;
         return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, Repair.MoveProfile(profile, host));
     }
 

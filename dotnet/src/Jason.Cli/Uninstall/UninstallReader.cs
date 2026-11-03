@@ -250,8 +250,9 @@ public static class UninstallReader
     }
 
     /// <summary>
-    /// Every root a deployment writes into: the harnesses a person chose, and the runtime's own, two of them one root by
-    /// the comparer detection and the status check read roots by.
+    /// Every root a deployment writes into: the harnesses a person chose, every folder the table of agent hosts keeps skills in
+    /// under the home whether or not its host is still there, and the runtime's own, two of them one root by the comparer
+    /// detection and the status check read roots by. Removal stays by receipt, so a folder no record names loses nothing.
     /// </summary>
     /// <remarks>
     /// The role skills root lives inside the data directory and is read anyway, because it holds a deployment
@@ -259,7 +260,7 @@ public static class UninstallReader
     /// settings beside it are. So it goes by receipt even when the data directory is kept.
     /// </remarks>
     private static IEnumerable<string> Roots(CliEnvironment env) =>
-        (env.Harnesses?.Detect().Select(root => root.Directory) ?? [])
+        (env.Harnesses is { } locator ? locator.Detect().Concat(locator.Recorded()).Select(root => root.Directory) : [])
             .Append(env.Paths.RoleSkillsDirectory)
             .Distinct(HarnessLocators.SamePath);
 

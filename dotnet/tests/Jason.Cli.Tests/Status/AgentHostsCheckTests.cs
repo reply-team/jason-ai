@@ -69,7 +69,7 @@ public sealed class AgentHostsCheckTests
 
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal($"Detected: claude_code ({ClaudeSkills}). Profiles: local-claude names claude_code; later names future_host, a host this build of the CLI does not know.", check.Fact);
-        Assert.Equal("jason profile update later --host claude_code", check.Fix);
+        Assert.Equal("jason profile update later --host claude_code --program claude", check.Fix);
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class AgentHostsCheckTests
 
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal($"Detected: claude_code ({ClaudeSkills}). Profiles by host: claude_code 2; future_host 1, a host this build of the CLI does not know.", check.Fact);
-        Assert.Equal("jason profile update <name> --host claude_code", check.Fix);
+        Assert.Equal("jason profile update <name> --host claude_code --program claude", check.Fix);
         Assert.DoesNotContain("sentinel", check.Fact + check.Fix, StringComparison.Ordinal);
     }
 
@@ -265,6 +265,32 @@ public sealed class AgentHostsCheckTests
         Assert.Contains($"in {lower} (claude_code)", check.Fact, StringComparison.Ordinal);
         Assert.Contains($"in {upper}", check.Fact, StringComparison.Ordinal);
         Assert.DoesNotContain($"in {upper} (", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A detected root with no deployment while another one has one is said, with the hosts that read it and the line that
+    /// fills it: <c>skills update</c> carries only the roots a record names, so a person who installed another host after
+    /// the first deployment would otherwise see <c>ok</c> and nothing reaching that host. The check stays <c>ok</c>.
+    /// </summary>
+    [Fact]
+    public async Task The_harness_skills_fact_names_a_detected_folder_with_no_deployment_beside_one_that_has_one()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir);
+        var deployed = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "deployed")).FullName;
+        var empty = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "empty")).FullName;
+        StatusCommandTests.Deploy(deployed);
+        var locator = new Roots([new([AgentHostKind.ClaudeCode], deployed), new([AgentHostKind.Codex, AgentHostKind.GeminiCli], empty)]);
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, harnesses: locator), Ct);
+
+        var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains($"in {deployed} (claude_code)", check.Fact, StringComparison.Ordinal);
+        Assert.Contains($"Nothing is deployed into {empty}, which codex, gemini_cli read: `jason skills install --host codex` fills it.", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain($"Nothing is deployed into {deployed}", check.Fact, StringComparison.Ordinal);
     }
 
     private sealed class Roots(IReadOnlyList<HarnessRoot> roots) : IHarnessLocator

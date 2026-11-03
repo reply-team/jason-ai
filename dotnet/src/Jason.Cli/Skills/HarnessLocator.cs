@@ -24,6 +24,13 @@ public interface IHarnessLocator
 {
     /// <summary>The roots that are on this machine. A harness that is not installed is not a root.</summary>
     IReadOnlyList<HarnessRoot> Detect();
+
+    /// <summary>
+    /// Every folder a deployment may have been recorded in, whether or not a host that reads it is still on this machine:
+    /// what uninstall reads, since several hosts read a folder outside their own marker and a person may have removed
+    /// every one of them before Jason. Where the locator is not made from a home, none.
+    /// </summary>
+    IReadOnlyList<HarnessRoot> Recorded() => [];
 }
 
 /// <summary>The locators this build knows how to make.</summary>
@@ -82,19 +89,36 @@ public static class HarnessLocators
                     continue;
                 }
 
-                var skills = AgentHosts.Under(home, facts.HomeSkills);
-                var index = roots.FindIndex(root => SamePath.Equals(root.Directory, skills));
-                if (index < 0)
-                {
-                    roots.Add((skills, [facts.Kind]));
-                }
-                else
-                {
-                    roots[index].Hosts.Add(facts.Kind);
-                }
+                Add(roots, facts);
             }
 
             return [.. roots.Select(root => new HarnessRoot(root.Hosts, root.Directory))];
+        }
+
+        public IReadOnlyList<HarnessRoot> Recorded()
+        {
+            // Every skills folder of the table, its host's marker there or not, one root where hosts share a folder.
+            var roots = new List<(string Directory, List<AgentHostKind> Hosts)>();
+            foreach (var facts in hosts)
+            {
+                Add(roots, facts);
+            }
+
+            return [.. roots.Select(root => new HarnessRoot(root.Hosts, root.Directory))];
+        }
+
+        private void Add(List<(string Directory, List<AgentHostKind> Hosts)> roots, AgentHostFacts facts)
+        {
+            var skills = AgentHosts.Under(home, facts.HomeSkills);
+            var index = roots.FindIndex(root => SamePath.Equals(root.Directory, skills));
+            if (index < 0)
+            {
+                roots.Add((skills, [facts.Kind]));
+            }
+            else
+            {
+                roots[index].Hosts.Add(facts.Kind);
+            }
         }
     }
 

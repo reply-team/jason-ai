@@ -374,12 +374,11 @@ public partial class ExecutionProfileDocTests
     /// <summary>
     /// The host matrix has one home, §12, and it is held to the table the CLI and the runtime both read: every host this
     /// build knows has a row that says yes, with the skills root, the work directory's folder and the import file the
-    /// table names; and a row for a host this build does not know yet says so, in the words a profile naming it meets.
+    /// table names.
     /// </summary>
     [Fact]
     public void The_host_matrix_has_a_row_for_every_host_this_build_knows_with_the_tables_folders()
     {
-        const string NotYet = "not in this build yet: a profile naming it is refused";
         var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
         var at = page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal);
         Assert.True(at > 0, "execution-profiles.md has no section '12. The hosts'.");
@@ -404,16 +403,11 @@ public partial class ExecutionProfileDocTests
             Assert.Equal(facts.Instructions is { } file ? $"`{file.FileName}` (`{file.ImportLine}`)" : "—", row[4]);
             Assert.Equal("yes", row[5]);
         }
-
-        Assert.All(
-            rows.Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is null),
-            row => Assert.Equal(NotYet, row[5]));
     }
 
     /// <summary>
     /// The matrix carries each host's tool table, so a person can read why a grant or a deny was refused: for every host
-    /// this build registers, each tool the host has a rule for is named with that rule, in the host's own word; a row for
-    /// a host this build does not know yet has none.
+    /// this build registers, each tool the host has a rule for is named with that rule, in the host's own word.
     /// </summary>
     [Fact]
     public void The_host_matrix_names_each_registered_hosts_rule_for_every_tool_it_has()
@@ -441,16 +435,12 @@ public partial class ExecutionProfileDocTests
                 }
             }
         }
-
-        Assert.All(
-            rows.Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is null),
-            row => Assert.Equal("—", row[7]));
     }
 
     /// <summary>
     /// What holds for every host is said once, in the work-execution contract, and each host's own form of it in its
     /// row of the matrix: how a launched role is let read a memory file, and how the brief on standard input reaches the
-    /// host. A row of a host this build registers names both; a row of a host it does not know yet names neither; and
+    /// host. A row of a host this build registers names both; and
     /// the contract states each rule for every host, with Claude Code's form as its example.
     /// </summary>
     [Fact]
@@ -470,11 +460,7 @@ public partial class ExecutionProfileDocTests
             .TakeWhile(line => line.StartsWith('|'))
             .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
             .ToList();
-        Assert.All(rows, row =>
-        {
-            var known = Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is not null;
-            Assert.All(row[8..], cell => Assert.Equal(!known, cell == "—"));
-        });
+        Assert.All(rows, row => Assert.All(row[8..], column => Assert.NotEqual("—", column)));
 
         // A host that frames the envelope says so in its own row, where it takes the brief.
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
@@ -494,8 +480,8 @@ public partial class ExecutionProfileDocTests
     /// <summary>
     /// The launch envelope's page states what holds of every host where it says how a role reads the memory files and how
     /// it is given the brief, and keeps one host's form for that host's section: the rule is a read for each path that is
-    /// not null, a rule for the file on every host of the matrix but Gemini CLI, which is given the folder of each level;
-    /// and the brief is on standard input on every host. Both halves are held to the matrix's own cells, so a host added
+    /// not null, a rule for the file on every host of the matrix but Gemini CLI, which is given the folder of each level,
+    /// and Antigravity CLI, which is given none; and the brief is on standard input on every host. Both halves are held to the matrix's own cells, so a host added
     /// that takes either differently is red until the page says so.
     /// </summary>
     [Fact]
@@ -514,20 +500,23 @@ public partial class ExecutionProfileDocTests
         Assert.Equal(["gemini_cli"], rows.Where(row => row[8].Contains("--include-directories", StringComparison.Ordinal)).Select(row => row[1].Trim('`')));
 
         var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
-        Assert.Contains("A profile is composed with a read for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI, which is given the folder of each level and reads it whole", contract, StringComparison.Ordinal);
+        Assert.Contains("A profile is composed with a read for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI and Antigravity CLI. Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given none", contract, StringComparison.Ordinal);
+        Assert.Contains("What Jason composes is a read of the files `memory_files` names and nothing wider outside its work directory, where the host's form can hold it", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("The rules let a launched role read exactly the files", contract, StringComparison.Ordinal);
         Assert.Contains("On a host that reads its prompt from standard input — every host of that matrix does, and its `Takes the brief` column says how — that standard input is the prompt", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("On the `claude_code` host a profile is composed with one read rule per path", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("`claude_code`, which runs in print mode, and each host", contract, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A host's install is told one way in the README and the install page: a link to the host's own installation page,
-    /// where its commands are kept current, and never a command copied here. The only line either page pipes to a shell is
-    /// Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
+    /// A host's install is told one way in the README, the install page and the hosts' page: a link to the host's own
+    /// installation page, where its commands are kept current, and never a command copied here. The only line any of them
+    /// pipes to a shell is Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
     /// </summary>
     [Theory]
     [InlineData("README.md")]
     [InlineData("docs/INSTALL.md")]
+    [InlineData("docs/execution-profiles.md")]
     public void A_host_s_install_is_a_link_to_its_own_page_and_no_command_copied_from_it(string file)
     {
         var text = File.ReadAllText(Path.Combine(RepositoryTree.Root(), file.Replace('/', Path.DirectorySeparatorChar))).ReplaceLineEndings("\n");
@@ -538,10 +527,15 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("](https://github.com/google-gemini/gemini-cli)", text, StringComparison.Ordinal);
         Assert.Contains("](https://github.com/openai/codex)", text, StringComparison.Ordinal);
         Assert.Contains("](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)", text, StringComparison.Ordinal);
+        Assert.Contains("](https://antigravity.google/docs/getting-started?tab=cli)", text, StringComparison.Ordinal);
         Assert.Contains("codex login", text, StringComparison.Ordinal);
         Assert.Contains("copilot login", text, StringComparison.Ordinal);
         Assert.Contains("--host codex --program codex", text, StringComparison.Ordinal);
         Assert.Contains("--host copilot_cli --program copilot", text, StringComparison.Ordinal);
+        Assert.Contains("--host antigravity_cli --program agy", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("npm install -g", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("winget install GitHub.Copilot", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install copilot-cli", text, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -767,15 +761,15 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
-    /// What the launcher writes into a work directory is said once for every host, by the host's row of section 12, and
-    /// Claude Code's files are its example rather than the rule.
+    /// What the launcher writes into a work directory is said once for every host, by the host's row of section 12 and its
+    /// section, and Claude Code's files are its example rather than the rule.
     /// </summary>
     [Fact]
     public void The_work_directory_holds_the_files_the_host_s_row_names()
     {
         var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
 
-        Assert.Contains("the files the host's row of section 12 names", contract, StringComparison.Ordinal);
+        Assert.Contains("the files the host's row of section 12 and its section name", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("The launcher puts two things in that directory", contract, StringComparison.Ordinal);
     }
 
@@ -864,20 +858,25 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
-    /// What moves a host's own traffic is the person's environment's, for every host, and the general part of section 12
-    /// says it once, ahead of every host's section, so no host's section has to say it again or is read as the only one.
+    /// A proxy is the person's environment's, for every host, and the general part of section 12 says it once, ahead of
+    /// every host's section, with the narrower claim beside it: a flag that names a host's own server, its credentials or its
+    /// certificate check is reserved where the host has one, and an allowlist host takes no flag outside it.
     /// </summary>
     [Fact]
-    public void The_general_part_of_the_hosts_section_says_the_flags_that_move_a_hosts_traffic_are_the_persons()
+    public void The_general_part_of_the_hosts_section_says_a_proxy_is_the_persons_and_what_is_reserved()
     {
         var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
         var hosts = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
         var general = Flattened(hosts[..hosts.IndexOf("\n### ", StringComparison.Ordinal)]);
 
         Assert.Contains(
-            "Flags and variables that move a host's own traffic, such as Gemini CLI's `--proxy` or a proxy variable, are the person's environment's to set: Jason sets none of them and reserves none of them",
+            "A proxy flag or a proxy variable, such as Gemini CLI's `--proxy`, is the person's environment's to set: Jason sets none of them and reserves none of them. A flag that names the host's own server, its credentials or its certificate check is reserved where the host has one, as Cursor CLI's section says, and a host whose arguments are an allowlist takes no flag outside it",
             general,
             StringComparison.Ordinal);
+
+        var cursor = Flattened(hosts[hosts.IndexOf("\n### Cursor CLI\n", StringComparison.Ordinal)..hosts.IndexOf("\n### Gemini CLI\n", StringComparison.Ordinal)]);
+        Assert.Contains("A flag that names the host's own server, its credentials or its certificate check (`--endpoint`, `--base-url`, `--header`, `--api-key` and `--insecure` among them) is reserved", cursor, StringComparison.Ordinal);
+        Assert.DoesNotContain("a short flag stands alone, as `-f`", cursor, StringComparison.Ordinal);
     }
 
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>

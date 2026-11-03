@@ -251,7 +251,7 @@ What a person tells Jason about their business in their own words is kept in pla
 memory file, `AGENTS.md`, for the client, for each project and for each campaign, each in a folder of its own, nested in
 that order under the harness root. Each level carries, beside its `AGENTS.md`, a one-line import file for every host
 that reads a file of another name — `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI (the [host matrix](execution-profiles.md#12-the-hosts)
-lists them). Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
+lists them). A folder made before a host's import file existed has the files it had: the root gains a missing import file at the next project or campaign create, and a project's or a campaign's folder keeps what it has until the person adds the file. Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
 print mode it drops, without asking, an import of a file outside the folder it started in, so a session started in a
 campaign's folder is given the
 campaign's file and neither the project's nor the client's (measured with Claude Code 2.1.309; its documentation says

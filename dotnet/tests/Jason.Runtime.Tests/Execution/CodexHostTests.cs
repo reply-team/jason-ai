@@ -127,11 +127,12 @@ public class CodexHostTests
     }
 
     /// <summary>
-    /// A path is a TOML string: a backslash, a quote and a control character are escaped, so a Windows path and a folder
-    /// named with a quote stay the one path they are rather than ending the value early.
+    /// A path is a TOML string: a backslash, a quote and a control character are escaped, so a folder named with a quote
+    /// stays the one path it is rather than ending the value early. On Windows each path is written as a drive and
+    /// forward slashes, the form a deny's is, so no backslash is left to escape.
     /// </summary>
     [Fact]
-    public void A_windows_path_and_a_quote_in_a_folder_name_are_escaped_as_toml()
+    public void A_windows_path_is_written_with_forward_slashes_and_a_quote_in_a_folder_name_is_escaped_as_toml()
     {
         var host = new CodexHost(@"C:\Users\someone\.jason\run", @"C:\Program Files\Jason", @"C:\Users\someone\AppData\Local\Temp\.net", windows: true);
         var files = new MemoryFileLocations(@"C:\Users\someone\Jason\The ""Big"" One\AGENTS.md", null, null);
@@ -139,7 +140,7 @@ public class CodexHostTests
         var command = host.Compose(Revision(), ["codex"], files).Command;
 
         Assert.Contains(
-            "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"C:\\\\Program Files\\\\Jason\"=\"read\", \"C:\\\\Users\\\\someone\\\\AppData\\\\Local\\\\Temp\\\\.net\"=\"read\", \"C:\\\\Users\\\\someone\\\\.jason\\\\run\"=\"read\", \"C:\\\\Users\\\\someone\\\\Jason\\\\The \\\"Big\\\" One\\\\AGENTS.md\"=\"read\"}",
+            "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"C:/Program Files/Jason\"=\"read\", \"C:/Users/someone/AppData/Local/Temp/.net\"=\"read\", \"C:/Users/someone/.jason/run\"=\"read\", \"C:/Users/someone/Jason/The \\\"Big\\\" One/AGENTS.md\"=\"read\"}",
             command);
     }
 
@@ -192,6 +193,30 @@ public class CodexHostTests
         Assert.Contains($"\"{path}\"=\"deny\"", filesystem, StringComparison.Ordinal);
         Assert.DoesNotContain($"\"{path}\"=\"read\"", filesystem, StringComparison.Ordinal);
         Assert.Equal(1, filesystem.Split($"\"{path}\"=").Length - 1);
+    }
+
+    /// <summary>
+    /// The same replacement on Windows, where the platform spells a path with backslashes, and a drive in either case,
+    /// while a deny is written as an upper-case drive and forward slashes: both are written in the deny's one form, so
+    /// they are one key and the deny takes the read's place rather than being listed beside it.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\someone\Jason\AGENTS.md", "Read(~/Jason/AGENTS.md)", "C:/Users/someone/Jason/AGENTS.md")]
+    [InlineData(@"c:\Users\someone\Jason\AGENTS.md", "Read(~/Jason/AGENTS.md)", "C:/Users/someone/Jason/AGENTS.md")]
+    [InlineData(@"C:\Users\someone\Jason\AGENTS.md", "Read(//c/Users/someone/Jason/AGENTS.md)", "C:/Users/someone/Jason/AGENTS.md")]
+    [InlineData(@"C:\Users\someone\Jason\AGENTS.md", "Read(//C/Users/someone/Jason/AGENTS.md)", "C:/Users/someone/Jason/AGENTS.md")]
+    public void On_windows_a_deny_of_a_path_the_run_would_read_takes_the_reads_place(string memoryFile, string word, string path)
+    {
+        var files = new MemoryFileLocations(memoryFile, null, null);
+
+        var command = new CodexHost(@"C:\j", @"C:\x", @"C:\t", windows: true, home: @"C:\Users\someone")
+            .Compose(Revision(deny: [word]), ["codex"], files).Command;
+
+        var filesystem = Assert.Single(command, item => item.StartsWith("permissions.jason.filesystem=", StringComparison.Ordinal));
+        Assert.Contains($"\"{path}\"=\"deny\"", filesystem, StringComparison.Ordinal);
+        Assert.DoesNotContain($"\"{path}\"=\"read\"", filesystem, StringComparison.Ordinal);
+        Assert.Equal(1, filesystem.Split($"\"{path}\"=").Length - 1);
+        Assert.DoesNotContain("Users\\\\someone", filesystem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -294,8 +319,20 @@ public class CodexHostTests
         }
     }
 
-    /// <summary>A path as the host's TOML string carries it: each backslash doubled, between quotes.</summary>
-    private static string Toml(string path) => "\"" + path.Replace("\\", "\\\\", StringComparison.Ordinal) + "\"";
+    /// <summary>
+    /// A path as the host's TOML string carries it, between quotes: on Windows in the form every filesystem entry is written
+    /// in, forward slashes and an upper-case drive, and elsewhere as it is.
+    /// </summary>
+    private static string Toml(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            path = path.Replace('\\', '/');
+            path = path.Length >= 2 && path[1] == ':' ? char.ToUpperInvariant(path[0]) + path[1..] : path;
+        }
+
+        return "\"" + path + "\"";
+    }
 
     [Fact]
     public void The_profiles_arguments_come_last()
@@ -363,6 +400,7 @@ public class CodexHostTests
     }
 
     [Fact]
+    [Critical(Family.S3, "no file in the work directory, so no token in one")]
     public void The_work_directory_is_left_as_the_runtime_made_it()
     {
         var workDir = Directory.CreateTempSubdirectory("jason-codex-").FullName;

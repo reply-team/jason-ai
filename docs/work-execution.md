@@ -505,7 +505,7 @@ existed. It is the same rule the twenty provider checks follow.
 | 1 | `lineage_resolution_unsupported` | a run created this work and no profile can be inherited from it. Name one on the item, its campaign or its role |
 | 2 | `profile_not_found` | the profile a level named does not exist. The message says which level named it |
 | 3 | `profile_disabled` | it exists and is out of service. Enable it, or name another |
-| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret. Install it, or point the profile at the program itself. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
+| 4 | `host_not_available` | the profile's program is not on this machine, or is a script a shell would have to interpret; or the host refuses to start here by its own check of the machine (a folder its sandbox needs, a policy folder it would read), or names a host this build does not register, or has an installation that could not be read. Install it, or point the profile at the program itself, or follow what the sentence names. The same code ends an attempt whose host ran and answered that it is not signed in: the person signs in to it on this machine |
 | 5 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
 | 5 | `role_skill_unreadable` | the role's skill was being replaced by a deployment and could not be read consistently while this launch waited |
 | 6 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |
@@ -526,7 +526,7 @@ of file regardless — a pipe nobody empties blocks the child writing into it. A
 changes an outcome: the runtime reads no result from standard output, only from `workitem.set_result`
 and `workitem.complete`.
 
-The launcher puts in that directory, before the child starts, the files the host's row of section 12 names
+The launcher puts in that directory, before the child starts, the files the host's row of section 12 and its section name
 ([execution-profiles.md](execution-profiles.md#12-the-hosts)), and nothing else: the host's settings for the attempt,
 where the host reads them from its work directory rather than its command line, and the role's skill.
 
@@ -647,13 +647,17 @@ lives in the runtime's store at all — is in the role-notes section of
 `memory_files` are the paths of the person's three memory files — the `AGENTS.md` of the client at the
 harness root, of the campaign's project and of the campaign ([projects.md](projects.md) says where they
 are kept) — and never their words, for the reason `role_memory` is an address. The host reads them by
-path; the runtime never reads one. **The rules let a launched role read exactly the files `memory_files`
-names, and nothing else outside its work directory**: each host holds this rule in its own form
-([execution-profiles.md](execution-profiles.md) §12 and the host's own section). A profile is composed with a read
-for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI, which is given the
-folder of each level and reads it whole (§12 gives each host's form, and each host's section the paths that get no rule
-because the host would read them as a pattern or split them at a comma or a parenthesis; the envelope still names such a
-path, and the role's read of it is refused). Which paths are given
+path; the runtime never reads one. **What Jason composes is a read of the files `memory_files` names and nothing wider outside its work directory, where
+the host's form can hold it**: each host holds this rule in its own form
+([execution-profiles.md](execution-profiles.md) §12 and the host's own section), and on some the session's read is wider
+than the list, as the sections of those hosts say: Jason confines nothing Cursor CLI reads, Codex on Windows runs in a
+sandbox that may let a role read more, and the two hosts below compose no file rule. A profile is composed with a read
+for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI and Antigravity CLI.
+Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given none, because its permissions
+are the person's own rules, which Jason cannot write: the launch names every level unreadable, and the person's own
+`read_file(<harness folder>)` rule decides what a role reads (§12 gives each host's form, and each host's section the paths
+that get no rule because the host would read them as a pattern or split them at a comma or a parenthesis; the envelope
+still names such a path, and the role's read of it is refused). Which paths are given
 follows one rule: a path is given when Jason knows the folder is its own — the recorded `folder_path` for a
 project and a campaign, the root marker for the root, which no record holds; no existence check on a recorded
 path, a stale one is the host's to find and `project link` re-records it; the object itself is never null at 4; additive over 3; the

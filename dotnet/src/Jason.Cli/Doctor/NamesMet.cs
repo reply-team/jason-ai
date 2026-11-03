@@ -127,7 +127,7 @@ internal sealed partial class NamesMet
     /// </summary>
     public void ReadPacks(IEnumerable<string> roots)
     {
-        foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var root in roots.Distinct(HarnessLocators.SamePath))
         {
             try
             {

@@ -40,15 +40,18 @@ public interface IAgentHost
 
     /// <summary>
     /// The host's own name for a tool: the allow rule a launch adds for a tool the person granted, and the deny it
-    /// writes for one the revision does not grant. Null where the host does not have the tool: a grant of it is refused
-    /// where a profile is written, naming the host and the tool, and a deny of it is kept as the person's word, since it
-    /// holds anyway. A profile that grants a tool and denies it by this name is refused where it is written.
+    /// writes for one the revision does not grant. Null where Jason can write no rule for the tool, whether because the host
+    /// does not have it or because the host has it and documents no rule for it (<see cref="GrantProblem"/> and
+    /// <see cref="DenyProblem"/> say which and why): a grant of it is refused where a profile is written, naming the host
+    /// and the tool, and a deny of it is kept as the person's word unless the host has it and cannot take it away. A
+    /// profile that grants a tool and denies it by this name is refused where it is written.
     /// </summary>
     string? ToolRule(AgentTool tool);
 
     /// <summary>
-    /// Why a grant of a tool this host has is one Jason cannot make true on it — the host decides it from a setting of
-    /// the person's own, say — or null where a grant is what it says. A grant this answers for is refused where a profile
+    /// Why a grant of a tool is one Jason cannot make true on this host — the host decides it from a setting of the
+    /// person's own, or documents no rule Jason could write for it, say — or null where a grant is what it says. It is
+    /// asked of a tool whether the host has it or not, so it is where a host that has a tool and no rule for it says so. A grant this answers for is refused where a profile
     /// is written, naming the host and the tool.
     /// </summary>
     string? GrantProblem(AgentTool tool) => null;
@@ -96,9 +99,11 @@ public interface IAgentHost
     /// than discovered by failing to start one.
     /// </param>
     /// <param name="memoryFiles">
-    /// The person's memory files this launch names, which the session may read and nothing else outside its work
-    /// directory. A level that is null is not readable; a host that cannot write a path as one file leaves it unreadable
-    /// rather than guess at a wider rule.
+    /// The person's memory files this launch names, which the session is let read and nothing wider outside its work
+    /// directory, where the host's form can hold it. A host writes the narrowest rule its form has: a file where it can,
+    /// the folder of the level where the host reads folders only, and none where the person's own rules decide. A level
+    /// that is null is not readable, and so is one the host cannot write as a rule at all. Where the session's read is wider
+    /// than the files, the host's section of the execution-profiles page says so.
     /// </param>
     HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles);
 
@@ -111,8 +116,9 @@ public interface IAgentHost
     /// <param name="workDir">The attempt's own directory, which exists; nothing is written outside it.</param>
     /// <param name="allow">
     /// What the launched agent may do, for a host that reads its allow rules from the work directory rather than its
-    /// command line: the command word that calls the runtime back and the memory files' paths, never the capability token
-    /// or the envelope. Empty for a host whose allow rules travel on the command line.
+    /// command line: the command word that calls the runtime back, the memory files' paths, and a granted tool's rule where it
+    /// travels through the work directory, never the capability token or the envelope. Empty for a host whose allow rules
+    /// travel on the command line.
     /// </param>
     /// <param name="deny">What the launched agent may not do, in this host's own vocabulary.</param>
     void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny);

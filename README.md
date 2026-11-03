@@ -444,7 +444,7 @@ Gemini CLI is named the same way, on a Code Assist Standard or Enterprise sign-i
 [its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself, then
 `jason profile create local-gemini --host gemini_cli --program gemini`.
 
-Antigravity CLI (`agy`) can run the background roles on an individual Google plan. Install it from the CLI tab of
+Antigravity CLI (`agy`) is the host individual Google plans run. Install it from the CLI tab of
 Google's quickstart ([antigravity.google/docs/getting-started?tab=cli](https://antigravity.google/docs/getting-started?tab=cli)),
 run `agy` once and sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)),
 then name it:

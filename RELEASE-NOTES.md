@@ -28,7 +28,7 @@ A launched role no longer has to run on Claude Code. Each host below is a progra
 yourself, under your own plan: Jason holds no key for any of them. `jason skills install --host <host>` deploys the
 skills into that host's folder, and Codex CLI, GitHub Copilot CLI, Cursor CLI and Gemini CLI all read `~/.agents/skills`, so
 they share one deployment; Antigravity CLI keeps its own folder, `~/.gemini/antigravity-cli/skills`. `jason status` says which hosts it found on the machine and whether every enabled profile names
-one. Every host added in this release is built from the host's own documentation, and from its source or installed files
+one, and the file `jason doctor` writes carries that check too, its profiles counted by host and never named. Every host added in this release is built from the host's own documentation, and from its source or installed files
 where there are any, for the version [the host matrix](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#12-the-hosts)
 names; none has yet been run on a signed-in account. The tests prove the command Jason composes and the launch around it
 against a stand-in program.
@@ -41,14 +41,14 @@ against a stand-in program.
   and what it cannot hold.
 - **Cursor CLI.** Install it from [Cursor's installation page](https://cursor.com/docs/cli/installation.md), sign in with
   `agent login`, then `jason profile create local-cursor --host cursor_cli --program agent`. A role is confined by
-  permission rules Jason writes to `.cursor/cli.json` in the attempt's work directory: the runtime's own command is the
-  one shell command allowed, the memory files are the reads, and every write is denied. On Windows, Jason starts the
-  host's `agent.cmd` launcher itself, and a profile names it by its full path where the runtime's search path does not
-  find `agent`. [The Cursor section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#cursor-cli)
+  permission rules Jason writes to `.cursor/cli.json` in the attempt's work directory: the one shell command Jason allows
+  is the runtime's own, the memory files are the reads, and every write is denied. On Windows, Jason starts what the
+  host's `agent.cmd` launcher would start, without a shell, and a profile names the launcher by its full path where the
+  runtime's search path does not find `agent`. [The Cursor section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#cursor-cli)
   says what it reads and what was not measured.
 - **GitHub Copilot CLI.** Install it from [GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), sign in with
   `copilot login`, then `jason profile create copilot --host copilot_cli --program copilot`. A role is confined by the
-  tool set and the allow and deny rules Jason composes on the host's command line, with nothing written into the work
+  tool set and the allow and deny rules Jason composes on the host's command line, with no configuration written into the work
   directory, and a profile's own arguments are limited to the few documented options a person owns, such as `--model=`.
   [The Copilot section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#github-copilot-cli)
   lists them.
@@ -96,33 +96,46 @@ against a stand-in program.
   other hosts' skill folders.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
   as they were.
+- **Harness folders:** the root gains a missing import file, `GEMINI.md`, at the next project or campaign create, over no file
+  that is there. A project's or a campaign's folder made before 0.26.0 keeps its `CLAUDE.md` alone unless you add a
+  `GEMINI.md` holding `@AGENTS.md`. Jason writes no word of a memory file.
+- **`--host` on the skills verbs:** `jason skills install --host` and `jason skills update --host` take the host's own word
+  only, such as `claude_code`; `ClaudeCode` and `claudecode`, which 0.25.0 took, are refused. Without `--root`, a host that is
+  not detected on the machine is refused with exit 1.
 - **The Reply plugin** is unchanged.
 - **From 0.24.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
-  older than 0.18.0, the first of the two can stop at `started`, as the first known issue below says.
+  older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
 ## Known issues
 
 Codex CLI on Windows needs its elevated sandbox set up once by an administrator before a role can run a command; until
-then every command a role runs is refused and the attempt fails by the role's report, and Jason does not check for the
+then every command a role runs is refused, so the role cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal; Jason does not check for the
 setup when the attempt starts.
 
 Whether `jason` reaches the runtime from inside Codex's sandbox has not been checked on Linux, macOS or Windows, and on
 Windows it is not yet checked whether the elevated sandbox reads only the list Jason names. Codex also reads its own global
 `AGENTS.md` and offers every role the skills in `~/.agents/skills`, whatever the profile says, so those two reach every
-Codex role.
+Codex role. Holding Codex's network to loopback rests on its network proxy, an experimental feature in 0.166.0.
 
 Whether Cursor CLI runs the allow-listed `jason` command without asking, in print mode, has not been seen on a signed-in
-run. If it does not, a role cannot call the runtime back and ends by its own report. Cursor CLI also reads more than the
-memory files Jason names, since it takes the union of every configuration layer it finds, yours included, and each attempt
-leaves one trust marker under `~/.cursor` that Jason does not remove.
+run. If it does not, a role cannot call the runtime back, so it cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal. Cursor CLI also reads more than the
+memory files Jason names, since it takes the union of every configuration layer it finds, yours included: your own allow
+rules of any kind, a shell command or a write among them, stand beside Jason's. Each attempt leaves one trust marker under
+`~/.cursor` that Jason does not remove.
 
 Gemini CLI reads the whole folder of each level a role's memory files are in, and the client level's folder is the harness
 root, so a role reads every memory file under it. A role on Gemini CLI is also refused when the host's system policy folder
 holds a `.toml` file, since the host would then ignore the policy Jason gives it.
+Gemini CLI's `--session-id` and `--admin-policy`, which Jason passes, are in the 0.66.0 source and not in its options table.
+Gemini CLI also reads your own `~/.gemini/GEMINI.md`, `includeDirectories` and skills for every role.
 
 GitHub Copilot CLI's reads outside the work directory, which a role needs for its memory files, are documented but have not
 been seen to reach there.
+Whether Copilot CLI 1.0.105 accepts every flag Jason composes is not said by its changelog, so its launch is composed from the
+reference and not from a run.
+A role on Copilot CLI runs under your own user-level hooks, and a `COPILOT_ALLOW_ALL` in your environment reaches it as the
+host's own allow-all, minus what the deny list names.
 
 A role on Antigravity CLI works only once you have added the two rules to your own settings, `command(jason)` and
 `read_file(<your harness folder>)`; per-run permissions for that host are not built in this release. Without the
@@ -131,8 +144,9 @@ attempt is retried against the same denial. Whether the host runs an allowed com
 `command(jason)` covers the report on Windows, has not been seen on a signed-in run. The host also reads your own global
 `AGENTS.md` and `GEMINI.md` under `~/.gemini` for every role.
 
-Flags and variables that move a host's own traffic, a proxy among them, are yours to set: Jason sets none of them and
-reserves none of them.
+A proxy flag or a proxy variable is yours to set: Jason sets none of them and reserves none of them. A flag that names a
+host's own server, its credentials or its certificate check is reserved where the host has one, as the Cursor CLI section
+says, and a host whose arguments are an allowlist takes no flag outside it.
 
 A profile is held to its host's rules when it is written, not when a run starts, so a profile stored under one release is
 not read again by a later release whose rules for its host are stricter.

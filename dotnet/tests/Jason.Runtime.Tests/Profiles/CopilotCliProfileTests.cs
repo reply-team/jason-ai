@@ -151,6 +151,32 @@ public class CopilotCliProfileTests
     }
 
     /// <summary>
+    /// Arguments written under another host are held to this one where a patch moves the profile here and leaves them
+    /// alone: a value given as a separate argument is no option this host's allowlist takes, so the move is refused,
+    /// speaking of the profile's own list, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task A_move_to_copilot_whose_stored_arguments_the_host_does_not_take_is_refused_and_writes_nothing()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "moving", host = "claude_code", program = "claude", args = new[] { "--model", "sonnet" } },
+            Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "moving", host = "copilot_cli", program = "copilot" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("args", "invalid"), (detail.Field, detail.Code));
+        Assert.StartsWith("the profile's args are refused on copilot_cli", detail.Message, StringComparison.Ordinal);
+        Assert.Contains(Reason, detail.Message, StringComparison.Ordinal);
+        var read = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "moving" }, Ct);
+        Assert.Equal(1, read.Revision.Number);
+        Assert.Equal(AgentHostKind.ClaudeCode, read.Revision.Host);
+    }
+
+    /// <summary>
     /// A deny the host reads as an MCP server's name, and so as nothing the role is offered, is refused where a profile is
     /// written: at create, at update, and where a patch moves a stored profile to this host and leaves its deny alone.
     /// A grant of the fetch tool beside a deny of it by its own name is the case that matters: the fetch the person meant
