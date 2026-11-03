@@ -755,6 +755,9 @@ thing that decides whether the host works at all.
 
 ### Gemini CLI
 
+Install it from [the host's own page](https://github.com/google-gemini/gemini-cli), where its commands are kept
+current, sign in to it yourself, then name it: `jason profile create <name> --host gemini_cli --program gemini`.
+
 `gemini_cli` is written from Gemini CLI's documentation and source at version 0.66.0. No run on an account backs it:
 Jason holds no key and the sign-in is the person's own, so the row says so and a profile may record the version it was
 proven against in `host_version_verified`. Google has moved individual plans to Antigravity CLI; `gemini_cli` runs on a

@@ -52,8 +52,9 @@ against a stand-in program.
   directory, and a profile's own arguments are limited to the few documented options a person owns, such as `--model=`.
   [The Copilot section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#github-copilot-cli)
   lists them.
-- **Gemini CLI.** Install it, sign in as yourself, then `jason profile create <name> --host gemini_cli --program gemini`.
-  It runs on a Code Assist Standard or Enterprise sign-in. A role is confined by a policy file,
+- **Gemini CLI.** Install it from [its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself, then
+  `jason profile create <name> --host gemini_cli --program gemini`. It runs on a Code Assist Standard or Enterprise
+  sign-in. A role is confined by a policy file,
   `.jason-policy/jason.toml` in the work directory, which the host reads above the person's own rules: everything is
   denied first, then the reads, the runtime's own command and the tools the profile grants are allowed, and writing is
   denied above every allow. The host reads a memory file through a `GEMINI.md` that imports `AGENTS.md`. [The Gemini

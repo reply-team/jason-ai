@@ -422,6 +422,10 @@ jason profile create local-cursor --host cursor_cli --program agent
 The [host matrix](docs/execution-profiles.md#12-the-hosts) says what was built from documentation and what has not yet
 been run on an account.
 
+Gemini CLI is named the same way, on a Code Assist Standard or Enterprise sign-in: install it from
+[its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself, then
+`jason profile create local-gemini --host gemini_cli --program gemini`.
+
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
 and a cadence does it anyway when nothing has happened at all. Replies are found by reading each live

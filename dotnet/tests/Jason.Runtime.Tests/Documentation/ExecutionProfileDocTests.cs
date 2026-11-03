@@ -525,6 +525,20 @@ public partial class ExecutionProfileDocTests
         var piped = text.Split('\n').Where(line => System.Text.RegularExpressions.Regex.IsMatch(line, @"\|\s*(?:sh|bash|iex)\b"));
         Assert.All(piped, line => Assert.Contains("get.jasonharness.ai", line, StringComparison.Ordinal));
         Assert.Contains("](https://cursor.com/docs/cli/installation.md)", text, StringComparison.Ordinal);
+        Assert.Contains("](https://github.com/google-gemini/gemini-cli)", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Gemini CLI's section says where the host is installed from, as a link to the host's own page and no command copied
+    /// from it, so that the README, the install page and the release's notes have a source to follow.
+    /// </summary>
+    [Fact]
+    public void The_gemini_section_links_the_host_s_own_installation_page()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var section = contract[contract.IndexOf("### Gemini CLI", StringComparison.Ordinal)..];
+
+        Assert.Contains("](https://github.com/google-gemini/gemini-cli)", section, StringComparison.Ordinal);
     }
 
     /// <summary>
