@@ -75,6 +75,7 @@ public static class ApiFixtures
         "campaign.get/details",
         "campaign.get/gone",
         "campaign.get/gone-here",
+        "campaign.get/in-project-with-folder",
         "campaign.get/many",
         "campaign.get/one",
         "campaign.get/summer",
