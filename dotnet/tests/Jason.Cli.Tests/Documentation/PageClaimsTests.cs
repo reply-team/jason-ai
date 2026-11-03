@@ -200,6 +200,39 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The agent <c>jason session open</c> starts runs in the person's own host, where the CLI's approve and answer verbs
+    /// are as reachable as anywhere else. So no page or help states as a fact that it never approves, rejects or answers:
+    /// each says what Jason's brief asks and whose settings decide what the agent may run.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide")]
+    [InlineData("docs/ui.md", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.")]
+    [InlineData("dotnet/src/Jason.Cli/Session/SessionOpener.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
+    [InlineData("dotnet/src/Jason.Cli/Link/LinkHandler.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
+    [InlineData("ui/src/screens/attention/session-link.tsx", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.")]
+    public void No_page_says_the_agent_a_session_starts_cannot_decide(string page, string said)
+    {
+        var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
+
+        Assert.DoesNotContain("proposes and never decides", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("reads and proposes and decides nothing", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("the person still decides", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("approving, rejecting and answering stay with you", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("and the agent it starts proposes.", text, StringComparison.Ordinal);
+        Assert.Contains(said, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The help says what the brief asks of the agent, never what the agent cannot do.</summary>
+    [Fact]
+    public void The_session_help_says_what_the_brief_asks_and_who_decides_what_runs()
+    {
+        var help = Jason.Cli.Session.SessionCommands.OpenDescription;
+
+        Assert.DoesNotContain("it never approves, rejects or answers", help, StringComparison.Ordinal);
+        Assert.Contains("Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.", help, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The register of accepted decisions records what a diagnostic bundle is, in the row beside the notification
     /// one, word for word as it was accepted: the row is what a later change to the bundle has to be measured against.
     /// </summary>

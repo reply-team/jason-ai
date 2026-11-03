@@ -18,13 +18,14 @@ namespace Jason.Cli.Link;
 /// Any web page can navigate to a <c>jason:</c> link after the browser's own confirmation. So every act is local and
 /// leaves nothing decided: it opens the person's own UI on an id they could have typed, or puts on the clipboard the
 /// prompt <c>--prompt</c> prints for that id, which replaces what the clipboard held, or starts the person's own agent
-/// host on that id in a new terminal, where it reads and proposes and decides nothing. The link's text reaches no log
-/// and no child: what is sent is re-made from the parsed, checked id, and a link the table does not know is refused
-/// without being repeated.
+/// host on that id in a new terminal, in the host's own permission mode at the campaign's folder. Jason's brief asks the
+/// agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to
+/// decide. The link's text reaches no log and no child: what is sent is re-made from the parsed, checked id, and a link
+/// the table does not know is refused without being repeated.
 /// </para>
 /// <para>
-/// Exit codes are the CLI's: 0 done, 1 refused by the runtime or the clipboard, 2 a link the table does not know, 3 no
-/// runtime to ask. Started by the shell, nobody reads what it prints; the person sees the browser open, a prompt to
+/// Exit codes are the CLI's: 0 done, 1 refused by the runtime or the clipboard, or nothing to start, 2 a link the table
+/// does not know, 3 no runtime to ask. Started by the shell, nobody reads what it prints; the person sees the browser open, a prompt to
 /// paste, a terminal window, or nothing. A prompt link prints nothing on stdout when it succeeds; a session link prints
 /// what <c>jason session open</c> prints.
 /// </para>

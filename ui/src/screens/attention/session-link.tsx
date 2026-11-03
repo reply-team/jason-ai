@@ -12,7 +12,8 @@ function onWindows(): boolean {
 /**
  * Starts the person's own agent host on this one item, in a new terminal at its campaign's folder. On Windows a link the
  * executable answers, once a Windows toast has registered it; on every system the command that does the same, to run by
- * hand. The session reads and proposes; the person still decides. The runtime is told nothing of the machine.
+ * hand. Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your
+ * host's own permission settings' to decide. The runtime is told nothing of the machine.
  */
 export function SessionLink({ kind, itemId }: Props) {
     const collection = kind === 'approval' ? 'approvals' : 'questions';

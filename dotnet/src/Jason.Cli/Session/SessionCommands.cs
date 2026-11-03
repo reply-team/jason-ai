@@ -14,8 +14,9 @@ public static class SessionCommands
     public const string OpenDescription =
         "Start your own agent host on one approval or question: a new terminal window at the campaign's folder (else its "
         + "project's, else the harness root, else your home folder), running the host the preference agent.interactive_host "
-        + "names (default claude_code), with the brief `approval get --prompt` prints as its first message. The agent reads "
-        + "and proposes; it never approves, rejects or answers, and nothing is decided by opening it. Of the runtime this asks "
+        + "names (default claude_code), with the brief `approval get --prompt` or, for a question, `decision get --prompt` "
+        + "prints as its first message. Opening it decides nothing. Jason's brief asks the agent to propose only and not to "
+        + "approve, reject or answer; what it may run is your host's own permission settings' to decide. Of the runtime this asks "
         + "only the item, its campaign's folder and the preference. It starts no runtime, writes no file of Jason's, and on "
         + "macOS writes one script to the temporary folder that removes itself when Terminal runs it.";
 

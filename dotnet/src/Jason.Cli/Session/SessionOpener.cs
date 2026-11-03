@@ -12,8 +12,9 @@ namespace Jason.Cli.Session;
 /// The act behind <c>jason session open</c> and the <c>…/session</c> links: one approval or question read by its kind's own
 /// get, its folder resolved as <c>--prompt</c> resolves it, the host the named preference <c>agent.interactive_host</c>
 /// names found on the search path, and one terminal started at the folder with that host and the item's brief as its
-/// first input. Of the runtime it asks only those reads and <c>preference.list</c>; it never approves, rejects or answers,
-/// and the agent it starts proposes.
+/// first input. Of the runtime it asks only those reads and <c>preference.list</c>, and it changes nothing there itself.
+/// Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own
+/// permission settings' to decide.
 /// </summary>
 /// <remarks>
 /// Exit codes are the CLI's: 0 the terminal started (or, for a dry run, would be), 1 refused — by the runtime, or because

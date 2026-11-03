@@ -143,10 +143,11 @@ Beside Copy prompt, the panel shows the command that starts your own agent host 
 `jason session open --approval <approval-id>` or `jason session open --question <decision-id>` — to run in a terminal,
 and on Windows an **Open an AI session** link that does the same when clicked. Either opens a new terminal window at the
 folder Copy prompt names (your home folder when none is recorded), running the host the named preference
-`agent.interactive_host` names (`claude_code` when it is unset), with the Copy prompt text as its first message. The
-session reads the item and proposes; approving, rejecting and answering stay with you, and nothing is decided by opening
-it. An item that no longer waits starts nothing, and a host that is not on the search path is named, never replaced by
-another.
+`agent.interactive_host` names (`claude_code` when it is unset), with the Copy prompt text as its first message.
+Opening it decides nothing. Jason's brief asks the agent to propose only and not to approve, reject or answer; what it
+may run is your host's own permission settings' to decide. An item that no longer waits starts nothing, and a host that
+is not on the search path is named, never replaced by another. When a click opens nothing, the command beside it says
+why: run it in a terminal and it prints the refusal and how to do the same by hand.
 
 - **Windows** starts the console host, `conhost.exe` from the system folder, which hands the window to Windows Terminal
   where that is your default terminal; where your default terminal is the console host itself, you get a plain console

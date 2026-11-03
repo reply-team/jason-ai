@@ -180,7 +180,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   person's own agent host — the one the named preference `agent.interactive_host` names — in a new terminal window at
   the campaign's folder with the item's brief as its first input, a terminal being no runtime's to start or know about,
   so the runtime is asked only what `approval get --prompt` and `decision get --prompt` ask and `preference.list`, and
-  the agent it starts proposes and never decides (the verb-map tests hold the `session` noun to `open` alone); and
+  Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own
+  permission settings' to decide (the verb-map tests hold the `session` noun to `open` alone); and
   `jason doctor` collects one installation into one file, half of which is not the
   runtime's to know — of the runtime it asks only what the runtime says about itself, its roles,
   profiles and routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
