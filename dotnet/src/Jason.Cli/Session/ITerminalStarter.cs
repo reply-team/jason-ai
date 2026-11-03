@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Jason.Cli.Files;
 using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Session;
@@ -106,7 +107,7 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
     {
         try
         {
-            Directory.Delete(folder, recursive: true);
+            DirectoryTrees.Delete(folder);
         }
         catch (Exception kept) when (kept is IOException or UnauthorizedAccessException)
         {
