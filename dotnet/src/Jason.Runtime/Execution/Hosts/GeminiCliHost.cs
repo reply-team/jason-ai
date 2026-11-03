@@ -378,13 +378,8 @@ public sealed class GeminiCliHost(string? systemPoliciesDirectory = null) : IAge
     {
         var folders = new List<string>();
         var unreadable = new List<string>();
-        foreach (var (level, path) in new[] { ("client", memoryFiles.Client), ("project", memoryFiles.Project), ("campaign", memoryFiles.Campaign) })
+        foreach (var (level, path) in memoryFiles.NamedLevels())
         {
-            if (path is null)
-            {
-                continue;
-            }
-
             // The host takes a list as one flag split on commas, or as one flag each; one flag each, so only a comma in
             // the name itself is a problem, and a control character would not survive a command line. The host also trims
             // each entry, so a name with a space at either end would name another folder; and a path that is not fully
@@ -450,42 +445,13 @@ public sealed class GeminiCliHost(string? systemPoliciesDirectory = null) : IAge
     private static void Rule(StringBuilder text, string tool, string? commandPrefix, string decision, int priority)
     {
         text.Append("\n[[rule]]\n");
-        text.Append("toolName = ").Append(Quoted(tool)).Append('\n');
+        text.Append("toolName = ").Append(TomlText.BasicString(tool)).Append('\n');
         if (commandPrefix is not null)
         {
-            text.Append("commandPrefix = ").Append(Quoted(commandPrefix)).Append('\n');
+            text.Append("commandPrefix = ").Append(TomlText.BasicString(commandPrefix)).Append('\n');
         }
 
-        text.Append("decision = ").Append(Quoted(decision)).Append('\n');
+        text.Append("decision = ").Append(TomlText.BasicString(decision)).Append('\n');
         text.Append("priority = ").Append(priority.ToString(CultureInfo.InvariantCulture)).Append('\n');
-    }
-
-    /// <summary>
-    /// A TOML basic string: the quote and the backslash escaped, so a word cannot end the string it is in, and every
-    /// control character written as its escape, since a basic string may not hold one raw.
-    /// </summary>
-    private static string Quoted(string value)
-    {
-        var text = new StringBuilder("\"");
-        foreach (var character in value)
-        {
-            switch (character)
-            {
-                case '"':
-                    text.Append("\\\"");
-                    break;
-                case '\\':
-                    text.Append("\\\\");
-                    break;
-                case < ' ' or '\u007F':
-                    text.Append("\\u").Append(((int)character).ToString("X4", CultureInfo.InvariantCulture));
-                    break;
-                default:
-                    text.Append(character);
-                    break;
-            }
-        }
-
-        return text.Append('"').ToString();
     }
 }

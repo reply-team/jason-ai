@@ -47,8 +47,6 @@ public sealed class AntigravityCliHost : IAgentHost
     /// </summary>
     private static readonly string[] SignInWords = ["authentication required", "authentication expired"];
 
-    private static readonly string[] Levels = ["client", "project", "campaign"];
-
     /// <summary>
     /// Everything this host reads that would change the shape composed below, plus everything that would undo it. A profile
     /// says which program and what to add; it does not say that the run is interactive, takes a prompt on its command line,
@@ -91,7 +89,7 @@ public sealed class AntigravityCliHost : IAgentHost
 
         // A file outside the work directory is read only where the person's own rule allows it, which this cannot write.
         string[] unreadable =
-            [.. Levels.Zip([memoryFiles.Client, memoryFiles.Project, memoryFiles.Campaign]).Where(level => level.Second is not null).Select(level => level.First)];
+            [.. memoryFiles.NamedLevels().Select(level => level.Level)];
 
         return new HostLaunch(
             [

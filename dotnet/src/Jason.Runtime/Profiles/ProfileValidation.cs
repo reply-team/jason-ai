@@ -307,6 +307,25 @@ internal static partial class ProfileValidation
     }
 
     /// <summary>
+    /// What this build's rules for the revision's host refuse in a revision already stored: the checks a write runs on the
+    /// profile's own words (reserved flags, the host's reading of its arguments, tools and deny), each as the field and the
+    /// code a write would have been refused with. The program is not held again here: whether it can be started is a fact of
+    /// the machine, which a launch decides on its own. A host this build does not register has no rules to hold it to.
+    /// </summary>
+    public static IReadOnlyList<ProfileProblemDto> StoredProblems(ExecutionProfileRevision revision, IAgentHost? host)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        if (host is null)
+        {
+            return [];
+        }
+
+        var errors = new ValidationErrors();
+        ValidateForHost(revision, host, errors, toolsNamed: false, denyNamed: false, argsNamed: false, programNamed: true, hostMoved: false);
+        return [.. errors.Details.Select(detail => new ProfileProblemDto(detail.Field, detail.Code))];
+    }
+
+    /// <summary>
     /// What the revision's host says of its words, once the host is parsed, held to the revision as it would be launched.
     /// One rule for every host: a grant of a tool the host does not have is refused, naming the host and the tool; a deny
     /// of such a tool is kept as the person's word, since it holds anyway; a deny of a tool the host has and cannot take

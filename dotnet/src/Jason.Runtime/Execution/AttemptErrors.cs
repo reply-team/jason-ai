@@ -35,6 +35,14 @@ public static class AttemptErrors
     public const string ProfileDisabled = "profile_disabled";
 
     /// <summary>
+    /// The resolved profile's current revision is refused by this build's rules for its host: a word a write would have
+    /// been refused today (a flag the runtime composes, an argument, a tool or a deny the host does not take), kept from
+    /// an older build whose rules were wider. Decided before a child exists and never retried: the repair is a
+    /// <c>profile update</c>, not another scan.
+    /// </summary>
+    public const string ProfileRevisionRefused = "profile_revision_refused";
+
+    /// <summary>
     /// The resolved profile's program is not on this machine, or is a script only a shell could start, so no host can be
     /// started; or the host refuses to start here by its own check of the machine, the profile names a host this build
     /// does not register, or the host's installation could not be read.

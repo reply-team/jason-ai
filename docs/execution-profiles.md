@@ -71,6 +71,16 @@ every revision is a whole statement rather than a delta. A patch that names only
 moves the profile and appends no revision — a revision number says which statement of the launch an
 attempt ran under, not how many times somebody edited the sentence describing it.
 
+**A stored revision is held to the host's rules as they are now.** A host's rules are code, so they change only
+with the executable, and a revision written under an older build's rules may be one this build refuses after an
+update: an argument that host now reserves, say. Nothing is rewritten, because a revision is never changed. The
+fact is on the profile: `profile get` and `profile list` carry `problems`, a list of the field and a code for each
+word the revision the answer carries is refused for (`args[2]`, `reserved`), computed on each read and empty where
+that revision is clean. Work that would run under such a revision ends at once, before a child exists, with the attempt kept and
+the code `profile_revision_refused` (§9); the runtime's start log counts those profiles and names none, and
+`jason status` names them under `agent_hosts` with `jason profile get <name>` to read what is refused. The repair is
+`jason profile update`, which appends a revision under the rules as they stand.
+
 **There is no delete.** An attempt names its revision for ever, so a profile is disabled rather than
 removed. **There is no rename** either: work items, campaigns, roles and the settings all point at a
 profile by name, and a rename would quietly break every one of them.
@@ -432,8 +442,8 @@ launch envelope's section of [work-execution.md](work-execution.md).
 Every one of these is decided before a child process exists, except `host_not_available` where a host that ran
 answered that it is not signed in: that ends the attempt after the child ran, with the host's fixed sentence and no
 byte of what the host wrote, where the host's row in §12 names the signal Jason reads. Each keeps its attempt so the
-refusal can be read, and is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
-the profile, and the attempt records how far the choice got; the last two are about the role rather than the
+refusal can be read, and is **not retried** — nothing about the work changes between two scans. The first five name the level that chose
+the profile, and the attempt records how far the choice got; the last three are about the role rather than the
 profile, so there is no level to name.
 
 | Code | Meaning |
@@ -441,6 +451,7 @@ profile, so there is no level to name.
 | `lineage_resolution_unsupported` | a run caused this work and no profile can be inherited (§4) |
 | `profile_not_found` | the profile named does not exist |
 | `profile_disabled` | it exists and is out of service |
+| `profile_revision_refused` | the profile's current revision holds a word this build's rules for its host refuse (§2) |
 | `host_not_available` | its program is not on this machine, or is a script a shell would have to interpret; or the host ran and answered that it is not signed in (§12) |
 | `role_skill_invalid` | the role's skill could not be given to it |
 | `role_skill_unreadable` | the role's skill was being replaced while this launch tried to read it |
