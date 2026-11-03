@@ -55,14 +55,14 @@ public static class DispatcherModule
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
 
-        // Gemini CLI reads policies an organisation sets for every user from a folder of its own, and a file there makes it
-        // ignore the one a run is given, so the host is told which folder this platform keeps them in.
-        services.AddSingleton<IAgentHost>(_ => new GeminiCliHost(GeminiCliHost.PlatformSystemPoliciesDirectory()));
-
-
         // Codex's sandbox lists what a run may read, and calling home reads the descriptor in the data directory, the
         // executable and what it unpacks when it starts. A composition with no data directory of its own names none.
         services.AddSingleton<IAgentHost>(provider => CodexHost.ForThisProcess(provider.GetService<JasonPaths>()));
+        services.AddSingleton<IAgentHost, CursorCliHost>();
+
+        // Gemini CLI reads policies an organisation sets for every user from a folder of its own, and a file there makes it
+        // ignore the one a run is given, so the host is told which folder this platform keeps them in.
+        services.AddSingleton<IAgentHost>(_ => new GeminiCliHost(GeminiCliHost.PlatformSystemPoliciesDirectory()));
 
         // The plugin module registers the same seam for its own executable checks, and whichever module is added
         // first is the one that answers. Named here too because this module now needs it: a registration a
