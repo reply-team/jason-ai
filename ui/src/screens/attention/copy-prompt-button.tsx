@@ -1,0 +1,34 @@
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { useApi } from '../../api/context';
+import { composePrompt, resolveFolder, type PromptKind } from './copy-prompt';
+
+type Props = { kind: PromptKind; itemId: string; campaignId: string; workItemId: string };
+
+/**
+ * Puts on the clipboard the text that briefs an agent session on this one item. It holds nothing of the item; the
+ * session reads it live, and the person still decides.
+ */
+export function CopyPromptButton({ kind, itemId, campaignId, workItemId }: Props) {
+    const api = useApi();
+    const [state, setState] = useState<'idle' | 'working' | 'copied' | 'failed'>('idle');
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+
+    const copy = async () => {
+        setState('working');
+        try {
+            const folder = await resolveFolder(api, campaignId);
+            await navigator.clipboard.writeText(composePrompt(kind, itemId, campaignId, workItemId, folder));
+            setState('copied');
+        } catch {
+            setState('failed');
+        }
+        timer.current = setTimeout(() => setState('idle'), 2500);
+    };
+
+    return (
+        <button class="btn" type="button" disabled={state === 'working'} onClick={() => void copy()}>
+            {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy prompt'}
+        </button>
+    );
+}

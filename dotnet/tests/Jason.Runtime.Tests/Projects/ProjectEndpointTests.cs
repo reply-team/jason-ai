@@ -57,6 +57,10 @@ public class ProjectEndpointTests
         var leads = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads", project_id = acme.Id }, Ct);
         await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Elsewhere" }, Ct);
 
+        // A campaign made with its folder under the harness root: what a consumer reads to know where to stand.
+        var inFolder = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "in-project-with-folder", new { campaign_id = leads.Id }, Ct);
+        Assert.False(string.IsNullOrEmpty(inFolder.FolderPath));
+
         var page = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "by-project", new { project_id = acme.Id, limit = 10 }, Ct);
 
         var listed = Assert.Single(page.Items);

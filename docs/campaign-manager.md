@@ -229,6 +229,7 @@ role rather than by an id, and both are in hand wherever a question is read.
 ```
 jason decision list --campaign <campaign-id> --human
 jason decision get <decision-id> --human
+jason decision get <decision-id> --prompt
 jason decision raise <work-item-id> --attempt <attempt-id> --question "pause the sequence or continue at half volume?" --option pause --option "continue at half volume" --reference work_item:<work-item-id> --reason "three bounces in a day"
 jason decision answer <decision-id> --answer "pause it" --option pause --actor human:you@example.com
 ```

@@ -16,6 +16,14 @@ namespace Jason.Cli;
 public sealed record RunOptions(bool Human, Func<string, string?>? RenderHuman = null)
 {
     public Func<string, CancellationToken, Task<string?>>? RenderHumanAsync { get; init; }
+
+    /// <summary>
+    /// With <c>--prompt</c>, the text that briefs an agent session on the item the answer describes, in place of the
+    /// answer. It is a rendering like <c>--human</c>: the answer is unchanged, and a body it cannot read prints as it came.
+    /// </summary>
+    public Func<string, CancellationToken, Task<string?>>? RenderPromptAsync { get; init; }
+
+    public bool Prompt { get; init; }
 }
 
 /// <summary>
@@ -47,7 +55,11 @@ public static class OperationRunner
         }
 
         string? rendered = null;
-        if (options.Human && options.RenderHumanAsync is not null)
+        if (options.Prompt && options.RenderPromptAsync is not null)
+        {
+            rendered = await options.RenderPromptAsync(response.Body, cancellationToken).ConfigureAwait(false);
+        }
+        else if (options.Human && options.RenderHumanAsync is not null)
         {
             rendered = await options.RenderHumanAsync(response.Body, cancellationToken).ConfigureAwait(false);
         }

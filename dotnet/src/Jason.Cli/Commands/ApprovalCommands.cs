@@ -67,16 +67,27 @@ public static class ApprovalCommands
         var command = new Command("get", "One decision: what it would do, to whom, through which account.");
         var id = new Argument<string>("approval-id") { Description = "The approval, as approval list shows it." };
         var human = VerbOptions.Human();
+        var prompt = VerbOptions.Prompt();
         command.Arguments.Add(id);
         command.Options.Add(human);
+        command.Options.Add(prompt);
 
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor));
+            VerbOptions.OneRendering(parseResult.GetValue(human), parseResult.GetValue(prompt));
             var body = RequestBody.Empty().Set("approval_id", parseResult.GetValue(id));
 
             return OperationRunner.RunAsync(
-                env, Operations.ApprovalGet, body, new RunOptions(parseResult.GetValue(human), ApprovalRenderers.Approval), cancellationToken);
+                env,
+                Operations.ApprovalGet,
+                body,
+                new RunOptions(parseResult.GetValue(human), ApprovalRenderers.Approval)
+                {
+                    Prompt = parseResult.GetValue(prompt),
+                    RenderPromptAsync = PromptRenderers.Approval(env),
+                },
+                cancellationToken);
         });
 
         return command;

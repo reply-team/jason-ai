@@ -11,6 +11,7 @@ import type {
     DecisionSummary,
     ErrorEnvelope,
     Page,
+    Project,
     Routes,
     SystemInfo,
     UiRevoke,
@@ -90,6 +91,7 @@ import campaignGetArchived from '../../../docs/api/fixtures/campaign.get/archive
 import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.json';
 import campaignGetGone from '../../../docs/api/fixtures/campaign.get/gone.json';
 import campaignGetGoneHere from '../../../docs/api/fixtures/campaign.get/gone-here.json';
+import campaignGetInProjectWithFolder from '../../../docs/api/fixtures/campaign.get/in-project-with-folder.json';
 import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
@@ -195,6 +197,8 @@ import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.js
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
+import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
+import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
 import systemInfoWithUi from '../../../docs/api/fixtures/system.info/with-ui.json';
 import systemInfoWithoutUi from '../../../docs/api/fixtures/system.info/without-ui.json';
 import uiRevokeNeverUsed from '../../../docs/api/fixtures/ui.revoke/never-used.json';
@@ -393,6 +397,10 @@ export const fixtures = {
     'campaign.get/details': campaignGetDetails satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/gone': campaignGetGone satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/gone-here': campaignGetGoneHere satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
+    'campaign.get/in-project-with-folder': campaignGetInProjectWithFolder satisfies Exchange<
+        { campaign_id: string },
+        Campaign
+    >,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
@@ -636,6 +644,8 @@ export const fixtures = {
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,
+    'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
+    'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,
     'system.info/without-ui': systemInfoWithoutUi satisfies Exchange<object, SystemInfo>,
     'ui.revoke/never-used': uiRevokeNeverUsed satisfies Exchange<UiRevokeRequest, UiRevoke>,

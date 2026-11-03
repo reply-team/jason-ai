@@ -4,6 +4,7 @@ import { clock, relative } from '../../time/format';
 import { DecideDialog } from './decide-dialog';
 import { reasonLabel, title } from './labels';
 import { ActionsRow } from '../../layout/actions-row';
+import { CopyPromptButton } from './copy-prompt-button';
 import { PanelHeader } from '../../layout/panel-header';
 
 type Props = {
@@ -59,6 +60,12 @@ export function ApprovalPanel({
                         <button class="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
                             Reject
                         </button>
+                        <CopyPromptButton
+                            kind="approval"
+                            itemId={approval.id}
+                            campaignId={approval.campaign_id}
+                            workItemId={approval.work_item_id}
+                        />
                     </>
                 )}
             </ActionsRow>
