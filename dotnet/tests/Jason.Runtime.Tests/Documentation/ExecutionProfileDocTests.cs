@@ -577,6 +577,10 @@ public partial class ExecutionProfileDocTests
 
         Assert.Contains("a short flag stands alone", row, StringComparison.Ordinal);
         Assert.Contains("a short flag with more letters or a value after it, a lone dash and a double dash are refused", row, StringComparison.Ordinal);
+
+        // Every host this build registers refuses them, so the row names no host as the ones that do.
+        Assert.Contains("naming the host, on every host", row, StringComparison.Ordinal);
+        Assert.DoesNotContain("under Claude Code and under Cursor CLI", row, StringComparison.Ordinal);
     }
 
     /// <summary>
