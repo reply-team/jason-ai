@@ -14,8 +14,9 @@ namespace Jason.Runtime.Execution.Hosts;
 /// </param>
 /// <param name="Unreadable">
 /// The levels — <c>client</c>, <c>project</c>, <c>campaign</c>, as the envelope names them — whose memory file the launch
-/// named and the host could not write as a rule for one file, so the session cannot read it. A level that was null is
-/// not here: nothing was named.
+/// named and the host could not write as a rule at all, so the session cannot read it: a host writes the narrowest rule its
+/// form has, a file where it can and the folder of the level where it reads folders only, and none where the person's own
+/// rules decide. A level that was null is not here: nothing was named.
 /// </param>
 /// <param name="Deny">
 /// What the host denies on the revision's account, beside the profile's own deny rules and in the same place: each tool

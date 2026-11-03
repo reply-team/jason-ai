@@ -96,9 +96,11 @@ public interface IAgentHost
     /// than discovered by failing to start one.
     /// </param>
     /// <param name="memoryFiles">
-    /// The person's memory files this launch names, which the session may read and nothing else outside its work
-    /// directory. A level that is null is not readable; a host that cannot write a path as one file leaves it unreadable
-    /// rather than guess at a wider rule.
+    /// The person's memory files this launch names, which the session is let read and nothing wider outside its work
+    /// directory, where the host's form can hold it. A host writes the narrowest rule its form has: a file where it can,
+    /// the folder of the level where the host reads folders only, and none where the person's own rules decide. A level
+    /// that is null is not readable, and so is one the host cannot write as a rule at all. Where the session's read is wider
+    /// than the files, the host's section of the execution-profiles page says so.
     /// </param>
     HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch, MemoryFileLocations memoryFiles);
 

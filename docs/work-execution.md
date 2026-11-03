@@ -647,13 +647,17 @@ lives in the runtime's store at all — is in the role-notes section of
 `memory_files` are the paths of the person's three memory files — the `AGENTS.md` of the client at the
 harness root, of the campaign's project and of the campaign ([projects.md](projects.md) says where they
 are kept) — and never their words, for the reason `role_memory` is an address. The host reads them by
-path; the runtime never reads one. **The rules let a launched role read exactly the files `memory_files`
-names, and nothing else outside its work directory**: each host holds this rule in its own form
-([execution-profiles.md](execution-profiles.md) §12 and the host's own section). A profile is composed with a read
-for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI, which is given the
-folder of each level and reads it whole (§12 gives each host's form, and each host's section the paths that get no rule
-because the host would read them as a pattern or split them at a comma or a parenthesis; the envelope still names such a
-path, and the role's read of it is refused). Which paths are given
+path; the runtime never reads one. **What Jason composes is a read of the files `memory_files` names and nothing wider outside its work directory, where
+the host's form can hold it**: each host holds this rule in its own form
+([execution-profiles.md](execution-profiles.md) §12 and the host's own section), and on some the session's read is wider
+than the list, as the sections of those hosts say: Cursor CLI confines nothing it reads, Codex on Windows runs in a
+sandbox that may let a role read more, and the two hosts below compose no file rule. A profile is composed with a read
+for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI and Antigravity CLI.
+Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given none, because its permissions
+are the person's own rules, which Jason cannot write: the launch names every level unreadable, and the person's own
+`read_file(<harness folder>)` rule decides what a role reads (§12 gives each host's form, and each host's section the paths
+that get no rule because the host would read them as a pattern or split them at a comma or a parenthesis; the envelope
+still names such a path, and the role's read of it is refused). Which paths are given
 follows one rule: a path is given when Jason knows the folder is its own — the recorded `folder_path` for a
 project and a campaign, the root marker for the root, which no record holds; no existence check on a recorded
 path, a stale one is the host's to find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
