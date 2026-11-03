@@ -392,7 +392,10 @@ public sealed class CodexHost(
         var path = word["Read(".Length..^1];
         if (path.StartsWith("~/", StringComparison.Ordinal))
         {
-            return $"{home.TrimEnd('/', '\\')}/{path[2..]}";
+            // On Windows every deny word is a drive and forward slashes, so the home's own backslashes are not carried
+            // into a path whose rest is written with forward slashes.
+            var from = windows ? home.Replace('\\', '/') : home;
+            return $"{from.TrimEnd('/', '\\')}/{path[2..]}";
         }
 
         if (!path.StartsWith("//", StringComparison.Ordinal))

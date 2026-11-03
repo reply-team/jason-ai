@@ -492,6 +492,95 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// The launch envelope's page states what holds of every host where it says how a role reads the memory files and how
+    /// it is given the brief, and keeps one host's form for that host's section: the rule is a read for each path that is
+    /// not null, a rule for the file on every host of the matrix but Gemini CLI, which is given the folder of each level;
+    /// and the brief is on standard input on every host. Both halves are held to the matrix's own cells, so a host added
+    /// that takes either differently is red until the page says so.
+    /// </summary>
+    [Fact]
+    public void The_launch_envelope_states_the_memory_read_and_the_stdin_brief_for_every_host()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var rows = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1..^1])
+            .Where(row => Jason.Contracts.Hosts.AgentHosts.Parse(row[1].Trim('`')) is not null)
+            .ToList();
+        Assert.All(rows, row => Assert.Contains("standard input", row[9], StringComparison.Ordinal));
+        Assert.Equal(["gemini_cli"], rows.Where(row => row[8].Contains("--include-directories", StringComparison.Ordinal)).Select(row => row[1].Trim('`')));
+
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
+        Assert.Contains("A profile is composed with a read for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI, which is given the folder of each level and reads it whole", contract, StringComparison.Ordinal);
+        Assert.Contains("On a host that reads its prompt from standard input — every host of that matrix does, and its `Takes the brief` column says how — that standard input is the prompt", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("On the `claude_code` host a profile is composed with one read rule per path", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("`claude_code`, which runs in print mode, and each host", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A host's install is told one way in the README and the install page: a link to the host's own installation page,
+    /// where its commands are kept current, and never a command copied here. The only line either page pipes to a shell is
+    /// Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("docs/INSTALL.md")]
+    public void A_host_s_install_is_a_link_to_its_own_page_and_no_command_copied_from_it(string file)
+    {
+        var text = File.ReadAllText(Path.Combine(RepositoryTree.Root(), file.Replace('/', Path.DirectorySeparatorChar))).ReplaceLineEndings("\n");
+
+        var piped = text.Split('\n').Where(line => System.Text.RegularExpressions.Regex.IsMatch(line, @"\|\s*(?:sh|bash|iex)\b"));
+        Assert.All(piped, line => Assert.Contains("get.jasonharness.ai", line, StringComparison.Ordinal));
+        Assert.Contains("](https://cursor.com/docs/cli/installation.md)", text, StringComparison.Ordinal);
+        Assert.Contains("](https://github.com/google-gemini/gemini-cli)", text, StringComparison.Ordinal);
+        Assert.Contains("](https://github.com/openai/codex)", text, StringComparison.Ordinal);
+        Assert.Contains("](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)", text, StringComparison.Ordinal);
+        Assert.Contains("codex login", text, StringComparison.Ordinal);
+        Assert.Contains("copilot login", text, StringComparison.Ordinal);
+        Assert.Contains("--host codex --program codex", text, StringComparison.Ordinal);
+        Assert.Contains("--host copilot_cli --program copilot", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The matrix of §12 is the vocabulary of the `host` field as the build knows it: one row for each member of
+    /// <see cref="Jason.Contracts.Api.AgentHostKind"/>, in the word the API writes it, and no row for a word the build does
+    /// not know. A host added to the enum turns this red until the page has its row, and a row left for a host that was
+    /// removed, or one written ahead of its code, does too.
+    /// </summary>
+    [Fact]
+    public void The_matrix_has_one_row_for_each_host_the_build_knows_and_none_besides()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var words = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[2].Trim('`'))
+            .ToList();
+
+        var known = Enum.GetValues<Jason.Contracts.Api.AgentHostKind>().Select(Jason.Contracts.Hosts.AgentHosts.Word).ToList();
+
+        Assert.Equal(known.Order(StringComparer.Ordinal), words.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Gemini CLI's section says where the host is installed from, as a link to the host's own page and no command copied
+    /// from it, so that the README, the install page and the release's notes have a source to follow.
+    /// </summary>
+    [Fact]
+    public void The_gemini_section_links_the_host_s_own_installation_page()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var section = contract[contract.IndexOf("### Gemini CLI", StringComparison.Ordinal)..];
+
+        Assert.Contains("](https://github.com/google-gemini/gemini-cli)", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The GitHub Copilot CLI page holds what the host's host-row and section promise, held by words so that a rewrite
     /// that drops one is red: the matrix row's standing sentences (the version it was read at, the parser not read, the
     /// cost of that), the flags a launch composes to close what the person's settings would leave open, each thing the
@@ -587,6 +676,10 @@ public partial class ExecutionProfileDocTests
 
         Assert.Contains("a short flag stands alone", row, StringComparison.Ordinal);
         Assert.Contains("a short flag with more letters or a value after it, a lone dash and a double dash are refused", row, StringComparison.Ordinal);
+
+        // Every host this build registers refuses them, so the row names no host as the ones that do.
+        Assert.Contains("naming the host, on every host", row, StringComparison.Ordinal);
+        Assert.DoesNotContain("under Claude Code and under Cursor CLI", row, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -768,6 +861,23 @@ public partial class ExecutionProfileDocTests
         var row = text.Split('\n').Single(line => line.Contains("| `gemini_cli` |", StringComparison.Ordinal));
 
         Assert.Contains("a signed-out run ends with exit 41, which the notes read as \"could not authenticate\"", Flattened(row), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What moves a host's own traffic is the person's environment's, for every host, and the general part of section 12
+    /// says it once, ahead of every host's section, so no host's section has to say it again or is read as the only one.
+    /// </summary>
+    [Fact]
+    public void The_general_part_of_the_hosts_section_says_the_flags_that_move_a_hosts_traffic_are_the_persons()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var hosts = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
+        var general = Flattened(hosts[..hosts.IndexOf("\n### ", StringComparison.Ordinal)]);
+
+        Assert.Contains(
+            "Flags and variables that move a host's own traffic, such as Gemini CLI's `--proxy` or a proxy variable, are the person's environment's to set: Jason sets none of them and reserves none of them",
+            general,
+            StringComparison.Ordinal);
     }
 
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>

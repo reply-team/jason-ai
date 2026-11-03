@@ -57,6 +57,9 @@ public sealed class RepositoryHygieneTests : IDisposable
     [InlineData("See https://github.com/reply-team/jason-" + "internal/blob/main/README.md.", "another repository of ours", "reply-team/jason-" + "internal")]
     [InlineData("git clone https://github.com/reply-team/jason-" + "secret.git", "another repository of ours", "reply-team/jason-" + "secret")]
     [InlineData("cd jason-" + "internal", "the private repository by name", "jason-" + "internal")]
+    [InlineData("As the critic" + " finding says, fix it.", "a review label", "critic" + " finding")]
+    [InlineData("A CRITIC" + " Findings list.", "a review label", "CRITIC" + " Finding")]
+    [InlineData("The critic" + "\t" + "finding is long.", "a review label", "critic" + "\t" + "finding")]
     public void A_pointer_planted_in_a_file_is_named(string text, string kind, string matched)
     {
         Write("src/Thing.cs", "// a comment\n// " + text + "\n");
@@ -71,6 +74,7 @@ public sealed class RepositoryHygieneTests : IDisposable
     [InlineData("reply-team/jason-ai, jason-linux-x64.tar.gz and jason-" + "internals-of-a-plugin name nothing private.")]
     [InlineData("Atlassian makes a tracker, and a Co-Authored" + "-By line is what the hygiene rule strips.")]
     [InlineData("claude.ai is an address; generated with care.")]
+    [InlineData("The critic role reads a draft, and a finding of a campaign is another matter.")]
     public void What_only_resembles_a_pointer_is_not_named(string text)
     {
         Write("src/Thing.cs", text + "\n");

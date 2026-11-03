@@ -649,10 +649,11 @@ harness root, of the campaign's project and of the campaign ([projects.md](proje
 are kept) — and never their words, for the reason `role_memory` is an address. The host reads them by
 path; the runtime never reads one. **The rules let a launched role read exactly the files `memory_files`
 names, and nothing else outside its work directory**: each host holds this rule in its own form
-([execution-profiles.md](execution-profiles.md) §12 and the host's own section). On the `claude_code` host a
-profile is composed with one read rule per path that is not null, naming that file and never its folder (§7 there
-gives the form, and the paths that get no rule because the host would read them as a pattern or split them at a
-parenthesis; the envelope still names such a path, and the role's read of it is refused). Which paths are given
+([execution-profiles.md](execution-profiles.md) §12 and the host's own section). A profile is composed with a read
+for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI, which is given the
+folder of each level and reads it whole (§12 gives each host's form, and each host's section the paths that get no rule
+because the host would read them as a pattern or split them at a comma or a parenthesis; the envelope still names such a
+path, and the role's read of it is refused). Which paths are given
 follows one rule: a path is given when Jason knows the folder is its own — the recorded `folder_path` for a
 project and a campaign, the root marker for the root, which no record holds; no existence check on a recorded
 path, a stale one is the host's to find and `project link` re-records it; the object itself is never null at 4; additive over 3; the
@@ -687,7 +688,7 @@ it is told the same, because the wait it follows is still the last one.
 A role reads `resumption` the way it reads the rest of the envelope, because it is part of it: no new
 channel, no second message. The command that runs `ai_role` work writes the whole envelope to the
 child's standard input and composes no prompt from its parts, on every host. On a host that reads its
-prompt from standard input — `claude_code`, which runs in print mode, and each host §12 marks so — that
+prompt from standard input — every host of that matrix does, and its `Takes the brief` column says how — that
 standard input is the prompt, so the role's first input says whether it was woken and why. On every host
 `resumption` reaches the role inside that envelope, beside every other field, never in a prompt Jason composed. A
 host that reads a stream of lines rather than plain text is given the same envelope as the content of one line of

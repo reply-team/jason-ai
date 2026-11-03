@@ -410,18 +410,39 @@ jason workitem create <campaign-id> --kind ai_role --role researcher --execution
 jason rolenote get --role researcher --campaign <campaign-id>
 ```
 
-Cursor CLI can run the background roles too. Install it with the commands Cursor itself documents
-([cursor.com/docs/cli/installation](https://cursor.com/docs/cli/installation.md)), then sign in as yourself and name it:
+Cursor CLI can run the background roles too. Install it from
+[Cursor's installation page](https://cursor.com/docs/cli/installation.md), where its commands are kept current, sign in as
+yourself, then name it:
 
 ```sh
-irm 'https://cursor.com/install?win32=true' | iex     # Windows, PowerShell
-curl https://cursor.com/install -fsS | bash           # macOS and Linux
 agent login
 jason profile create local-cursor --host cursor_cli --program agent
 ```
 
-Cursor's own pages are where the install lines are kept current. The [host matrix](docs/execution-profiles.md#12-the-hosts)
-says what was built from documentation and what has not yet been run on an account.
+The [host matrix](docs/execution-profiles.md#12-the-hosts) says what was built from documentation and what has not yet
+been run on an account.
+
+Codex CLI is named the same way: install it from [its own page](https://github.com/openai/codex), sign in with
+`codex login`, then name it. On Windows, Codex needs a one-time setup by an administrator first, which
+[the Codex section](docs/execution-profiles.md#codex-cli) describes.
+
+```sh
+codex login
+jason profile create local-codex --host codex --program codex
+```
+
+GitHub Copilot CLI too: install it from
+[GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli),
+sign in with `copilot login`, then name it:
+
+```sh
+copilot login
+jason profile create copilot --host copilot_cli --program copilot
+```
+
+Gemini CLI is named the same way, on a Code Assist Standard or Enterprise sign-in: install it from
+[its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself, then
+`jason profile create local-gemini --host gemini_cli --program gemini`.
 
 Antigravity CLI (`agy`) can run the background roles on an individual Google plan. Install it from the CLI tab of
 Google's quickstart ([antigravity.google/docs/getting-started?tab=cli](https://antigravity.google/docs/getting-started?tab=cli)),

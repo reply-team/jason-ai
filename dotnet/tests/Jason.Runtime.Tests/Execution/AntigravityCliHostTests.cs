@@ -43,6 +43,7 @@ public class AntigravityCliHostTests
     /// only one and a run is never cut short with an exit that looks like a success.
     /// </summary>
     [Fact]
+    [Critical(Family.W7, "the brief goes on stdin and no word of it on the command line")]
     public void The_session_reads_a_stream_of_lines_answers_in_one_and_is_limited_by_the_attempt_alone()
     {
         var launch = Host.Compose(Revision(), ["agy"], NoFiles);
@@ -66,6 +67,7 @@ public class AntigravityCliHostTests
     /// project, resume a conversation, or write a log elsewhere. None is composed and none may be added.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "no flag that widens the launched session is composed, and every such flag is reserved")]
     public void Nothing_that_widens_the_session_is_composed_and_every_such_flag_is_reserved()
     {
         var composed = Host.Compose(Revision(), ["agy"], NoFiles).Command;
@@ -235,6 +237,7 @@ public class AntigravityCliHostTests
     /// launch, and the work directory is left as it was.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "the launch allows nothing and writes nothing into the work directory")]
     public void No_rule_is_allowed_or_denied_through_the_launch_or_written_into_the_work_directory()
     {
         var launch = Host.Compose(Revision(tools: [AgentTool.WebFetch]), ["agy"], new("/h/AGENTS.md", "/p/AGENTS.md", "/c/AGENTS.md"));
@@ -323,6 +326,7 @@ public class AntigravityCliHostTests
 
     /// <summary>The sentence is Jason's own: not a byte of the host's words, an address or an id of the person's among them.</summary>
     [Fact]
+    [Critical(Family.S3, "the not-signed-in sentence carries nothing of what the host wrote")]
     public void The_sentence_carries_nothing_the_tail_said()
     {
         var one = Host.Unavailable(1, "authentication required for person@example.test (plan 7f3a9c-made-up)");

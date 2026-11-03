@@ -46,6 +46,7 @@ public class CursorCliHostTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.S6, "the composed command, exactly")]
     public void The_session_is_headless_streams_what_it_does_is_trusted_and_has_a_session_of_its_own()
     {
         var launch = new CursorCliHost().Compose(Revision("--model", "made-up-model"), ["agent"], NoFiles);
@@ -73,6 +74,7 @@ public class CursorCliHostTests : IDisposable
     /// no composed command may carry is a bare word that is not the value of a flag.
     /// </summary>
     [Fact]
+    [Critical(Family.W7, "the brief goes on stdin and no word of it on the command line")]
     public void No_word_of_the_composed_command_after_the_launch_is_a_prompt()
     {
         string[] launch = ["/opt/agent/node", "/opt/agent/index.js"];
@@ -112,7 +114,8 @@ public class CursorCliHostTests : IDisposable
     [InlineData("--stream-partial-output")]
     [InlineData("-f")]
     [InlineData("--force")]
-    [InlineData("--yolo")]
+    // Critical: a profile cannot allow every command.
+    [InlineData("--yolo", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.S6)])]
     [InlineData("--auto-review")]
     [InlineData("--trust")]
     [InlineData("--sandbox")]
@@ -187,6 +190,7 @@ public class CursorCliHostTests : IDisposable
     [Theory]
     [InlineData("not signed in", "Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.")]
     [InlineData("a stored sign-in the server refused", "Your stored authentication is invalid. Please log in again.")]
+    [Critical(Family.S3, "the not-signed-in sentence is fixed and carries none of the host's words")]
     public void An_end_that_says_the_account_is_not_signed_in_is_a_fixed_sentence(string why, string said)
     {
         Assert.NotNull(why);
@@ -212,6 +216,7 @@ public class CursorCliHostTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.S3, "nothing of the host's tail reaches the sentence")]
     public void An_address_in_the_tail_is_never_carried_into_the_sentence()
     {
         var sentence = new CursorCliHost().Unavailable(
@@ -240,6 +245,7 @@ public class CursorCliHostTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.S6, "writing is denied wholly, and a fetch unless granted")]
     public void Writing_is_denied_wholly_and_a_fetch_is_denied_unless_the_revision_grants_it()
     {
         var host = new CursorCliHost();
@@ -249,6 +255,7 @@ public class CursorCliHostTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.S6, "the launched session's allow list, exactly")]
     public void The_callback_the_memory_files_and_a_granted_fetch_are_allowed_and_nothing_else()
     {
         var files = new MemoryFileLocations("C:\\Jason\\AGENTS.md", null, "C:\\Jason\\campaigns\\acme\\AGENTS.md");
@@ -404,6 +411,7 @@ public class CursorCliHostTests : IDisposable
     /// and never replaces it. The file is the whole of what is written: the permissions, the file's version key and the editor mode set off, nothing else.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, "the permission file is the rules and nothing else")]
     public void The_work_directory_carries_the_allow_and_deny_rules_in_the_hosts_project_permission_file()
     {
         new CursorCliHost().WriteWorkDirectory(_directory, ["Shell(jason)", "Read(C:/Jason/AGENTS.md)"], ["Write(**)", "WebFetch(*)", "Shell(rm)"]);

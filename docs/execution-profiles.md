@@ -32,7 +32,7 @@ A revision holds:
 |---|---|
 | `host` | which host this describes. A closed vocabulary — the `host` column of [§12](#12-the-hosts). An unknown value is refused when the profile is written, never discovered at launch |
 | `program` | what to start: an absolute path, or a name resolved on `PATH`. A `.cmd`, `.bat` or `.ps1`, in any case, is a script a shell would have to interpret and is refused when the profile is written with `shell_script`: Jason starts programs, never shells. The path is read as the operating system reads it, so a name Windows trims back to a script, such as `claude.cmd.`, is refused too. A profile stored before the rule keeps its program, and the claim refuses such a program with `host_not_available` before a child exists. A bare name without the extension is looked up on the search path (on Windows as an `.exe`, a `.com` or npm's own shim) |
-| `args` | what this profile adds after the arguments the runtime composes. A host's parser reads a short flag with more letters or a value after it as several flags, or as a flag and its value, and a lone dash as the prompt, so a short flag stands alone: a short flag with more letters or a value after it, a lone dash and a double dash are refused when the profile is written, naming the host, under Claude Code and under Cursor CLI |
+| `args` | what this profile adds after the arguments the runtime composes. A host's parser reads a short flag with more letters or a value after it as several flags, or as a flag and its value, and a lone dash as the prompt, so a short flag stands alone: a short flag with more letters or a value after it, a lone dash and a double dash are refused when the profile is written, naming the host, on every host |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
 | `tools` | the tools the person grants the launched agent, by name: `web_search`, `web_fetch`, each at most once. A closed vocabulary — any other word is refused when the profile is written, and so is a word named twice, or one the revision's `deny` takes away by the host's name for it. Empty unless somebody names one (§7) |
 | `cli_command` | the bare command word the agent calls home with, of letters, digits, dots, dashes and underscores and starting with a letter or a digit; defaults to the runtime's own executable name |
@@ -518,6 +518,11 @@ deny rules — the command word that calls the runtime back and the memory files
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
 
+Flags and variables that move a host's own traffic, such as Gemini CLI's `--proxy` or a proxy variable, are the person's
+environment's to set: Jason sets none of them and reserves none of them. A variable the runtime's own environment holds
+reaches a launched child like any other, and a host whose arguments are an allowlist takes no flag outside it, as its
+section says.
+
 ### Codex CLI
 
 Install the CLI (`npm install -g @openai/codex`), sign in to it yourself with `codex login`, then name it in a profile:
@@ -749,6 +754,9 @@ thing that decides whether the host works at all.
    dash as the prompt, so a profile's arguments carry no such word either; a short flag stands alone, as `-f`.
 
 ### Gemini CLI
+
+Install it from [the host's own page](https://github.com/google-gemini/gemini-cli), where its commands are kept
+current, sign in to it yourself, then name it: `jason profile create <name> --host gemini_cli --program gemini`.
 
 `gemini_cli` is written from Gemini CLI's documentation and source at version 0.66.0. No run on an account backs it:
 Jason holds no key and the sign-in is the person's own, so the row says so and a profile may record the version it was
