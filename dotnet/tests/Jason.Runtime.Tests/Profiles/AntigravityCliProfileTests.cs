@@ -6,52 +6,84 @@ namespace Jason.Runtime.Tests.Profiles;
 
 /// <summary>
 /// What a profile naming <c>antigravity_cli</c> is held to where it is written. The host takes its permission rules from
-/// the person's own settings files and from nowhere a run could carry them, so a grant of a tool and a deny of any word are
-/// refused naming the host, and an argument that is a bare word is refused; a profile that asks of the host nothing it
-/// cannot do is accepted as it is.
+/// the person's own settings files, which Jason never writes; what a run is given goes through a workspace hook, so a grant
+/// of either web tool is kept, a deny is the host's own tool name and nothing else, and an argument that is a bare word is
+/// refused; a profile that asks of the host nothing it cannot do is accepted as it is.
 /// </summary>
 public class AntigravityCliProfileTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>The hook approves a tool the profile grants, so a grant of either web tool is kept as it is written.</summary>
     [Theory]
     [InlineData("web_fetch")]
     [InlineData("web_search")]
-    public async Task A_grant_of_either_tool_is_refused_naming_the_host_and_the_tool(string tool)
+    public async Task A_grant_of_either_tool_is_kept(string tool)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
 
-        var error = await api.PostErrorAsync(
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileCreate,
             new { name = "granting", host = "antigravity_cli", program = "agy", tools = new[] { tool } },
-            HttpStatusCode.BadRequest,
             Ct);
 
-        var detail = Assert.Single(error.Details!);
-        Assert.Equal(("tools[0]", "invalid"), (detail.Field, detail.Code));
-        Assert.Contains("antigravity_cli", detail.Message, StringComparison.Ordinal);
-        Assert.Contains(tool, detail.Message, StringComparison.Ordinal);
-
-        // A search has no rule in the host's table, so the refusal says what Jason cannot do on the host and claims nothing
-        // about whether the host has the tool.
-        Assert.Contains($"grants {tool}, which Jason cannot make true on antigravity_cli: ", detail.Message, StringComparison.Ordinal);
+        Assert.Equal(AgentHostKind.AntigravityCli, created.Revision.Host);
+        Assert.Equal(tool, Assert.Single(created.Revision.Tools) is AgentTool.WebFetch ? "web_fetch" : "web_search");
     }
 
+    /// <summary>A deny is one of the host's own tool names; the hook refuses a call of it.</summary>
     [Fact]
-    public async Task A_deny_of_any_word_is_refused_naming_the_host_and_the_word()
+    public async Task A_deny_of_a_tool_name_of_the_host_is_kept()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "denying-a-tool", host = "antigravity_cli", program = "agy", deny = new[] { "list_dir", "grep_search" } },
+            Ct);
+
+        Assert.Equal(["list_dir", "grep_search"], created.Revision.Deny);
+    }
+
+    /// <summary>A rule of the host's own form is not read, and the refusal names the host and the word.</summary>
+    [Theory]
+    [InlineData("web_fetch")]
+    [InlineData("command(rm)")]
+    [InlineData("read_file(.env)")]
+    public async Task A_deny_that_is_not_a_tool_name_is_refused_naming_the_host_and_the_word(string word)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
 
         var error = await api.PostErrorAsync(
             Operations.ProfileCreate,
-            new { name = "denying", host = "antigravity_cli", program = "agy", deny = new[] { "web_fetch" } },
+            new { name = "denying", host = "antigravity_cli", program = "agy", deny = new[] { word } },
             HttpStatusCode.BadRequest,
             Ct);
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("deny[0]", "invalid"), (detail.Field, detail.Code));
         Assert.Contains("antigravity_cli", detail.Message, StringComparison.Ordinal);
-        Assert.Contains("web_fetch", detail.Message, StringComparison.Ordinal);
+        Assert.Contains(word, detail.Message, StringComparison.Ordinal);
+        Assert.Contains("tool name", detail.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The callback and the memory files go through two tools, which a profile cannot take away.</summary>
+    [Theory]
+    [InlineData("run_command")]
+    [InlineData("view_file")]
+    public async Task A_deny_of_the_tool_the_callback_or_the_memory_files_go_through_is_refused(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "denying-essential", host = "antigravity_cli", program = "agy", deny = new[] { word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("deny[0]", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("callback", detail.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -154,8 +186,8 @@ public class AntigravityCliProfileTests
 
     /// <summary>
     /// A profile moved onto this host by a patch that names the host and the program, and none of its lists, is held to
-    /// the host as it is stored: a grant, a deny and a bare-word argument written under another host are each refused,
-    /// speaking of the profile's own list, and nothing is written.
+    /// the host as it is stored: a deny that is not a tool name and a bare-word argument written under another host are each
+    /// refused, speaking of the profile's own list, and nothing is written; its grant of a web tool is kept.
     /// </summary>
     [Fact]
     public async Task A_move_onto_the_host_is_refused_for_each_stored_word_it_cannot_keep_and_writes_nothing()
@@ -180,8 +212,8 @@ public class AntigravityCliProfileTests
             HttpStatusCode.BadRequest,
             Ct);
 
-        Assert.Equal(3, error.Details!.Count);
-        Assert.Equal(["args", "deny[0]", "tools[0]"], error.Details.Select(detail => detail.Field).Order(StringComparer.Ordinal));
+        Assert.Equal(2, error.Details!.Count);
+        Assert.Equal(["args", "deny[0]"], error.Details.Select(detail => detail.Field).Order(StringComparer.Ordinal));
         Assert.All(error.Details, detail =>
         {
             Assert.Equal("invalid", detail.Code);

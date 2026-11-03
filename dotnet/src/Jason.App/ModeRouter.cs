@@ -4,6 +4,7 @@ using Jason.Contracts;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
 using Jason.PluginHost;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Notifications.Desktop;
 
@@ -15,6 +16,7 @@ public enum Mode
     RuntimeService,
     PluginHost,
     ToastHost,
+    HostHook,
     Cli,
 }
 
@@ -33,6 +35,7 @@ public static class ModeRouter
             ["runtime", "run", ..] => Mode.RuntimeService,
             ["plugin-host", ..] => Mode.PluginHost,
             ["toast-host", ..] => Mode.ToastHost,
+            ["host-hook", ..] => Mode.HostHook,
             _ => Mode.Cli,
         };
     }
@@ -43,6 +46,7 @@ public static class ModeRouter
         Mode.RuntimeService => RunRuntimeService(args, cancellationToken),
         Mode.PluginHost => RunPluginHost(args, cancellationToken),
         Mode.ToastHost => RunToastHost(args, cancellationToken),
+        Mode.HostHook => RunHostHook(args, cancellationToken),
         _ => RunCli(args, cancellationToken),
     };
 
@@ -133,6 +137,14 @@ public static class ModeRouter
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunToastHost(string[] args, CancellationToken cancellationToken) =>
         ToastHost.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
+
+    /// <summary>
+    /// The short-lived child an agent host starts to ask whether one tool call is allowed: the call on stdin, one answer
+    /// line on stdout, no runtime, no child, no file and no environment read.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Task<int> RunHostHook(string[] args, CancellationToken cancellationToken) =>
+        AntigravityHook.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunCli(string[] args, CancellationToken cancellationToken) =>
