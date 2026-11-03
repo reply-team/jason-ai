@@ -761,15 +761,15 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
-    /// What the launcher writes into a work directory is said once for every host, by the host's row of section 12, and
-    /// Claude Code's files are its example rather than the rule.
+    /// What the launcher writes into a work directory is said once for every host, by the host's row of section 12 and its
+    /// section, and Claude Code's files are its example rather than the rule.
     /// </summary>
     [Fact]
     public void The_work_directory_holds_the_files_the_host_s_row_names()
     {
         var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
 
-        Assert.Contains("the files the host's row of section 12 names", contract, StringComparison.Ordinal);
+        Assert.Contains("the files the host's row of section 12 and its section name", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("The launcher puts two things in that directory", contract, StringComparison.Ordinal);
     }
 

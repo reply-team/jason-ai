@@ -526,7 +526,7 @@ of file regardless — a pipe nobody empties blocks the child writing into it. A
 changes an outcome: the runtime reads no result from standard output, only from `workitem.set_result`
 and `workitem.complete`.
 
-The launcher puts in that directory, before the child starts, the files the host's row of section 12 names
+The launcher puts in that directory, before the child starts, the files the host's row of section 12 and its section name
 ([execution-profiles.md](execution-profiles.md#12-the-hosts)), and nothing else: the host's settings for the attempt,
 where the host reads them from its work directory rather than its command line, and the role's skill.
 
