@@ -52,6 +52,11 @@ recorded by the runtime's own tests, so a screen can only render what the runtim
 flow would test the runtime twice, through the CLI and through the page; the smoke tests the seams a browser alone
 can prove.
 
+**A second input of the screen layer.** The two published texts under `docs/prompts/` (`approval.txt`, `question.txt`)
+are what the Copy prompt button must put on the clipboard; the screen tests read them as raw text (`?raw`), and
+`vite.config.ts` widens the allow list of the server to that one folder, `../docs/prompts`, and nothing more. The runtime's
+own test writes the files, so the button and `jason approval get --prompt` cannot drift.
+
 **Recording a fixture.** A screen needs an exchange the runtime has not recorded: add the case to `ApiFixtures.Cases`
 in the runtime's test suite, write (or find) the runtime test that produces it and make it
 post through `RecordAsync("<operation>", "<case>", body)`, then run that test with `JASON_UPDATE_FIXTURES=1` and commit
