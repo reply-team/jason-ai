@@ -116,7 +116,7 @@ setup when the attempt starts.
 Whether `jason` reaches the runtime from inside Codex's sandbox has not been checked on Linux, macOS or Windows, and on
 Windows it is not yet checked whether the elevated sandbox reads only the list Jason names. Codex also reads its own global
 `AGENTS.md` and offers every role the skills in `~/.agents/skills`, whatever the profile says, so those two reach every
-Codex role.
+Codex role. Holding Codex's network to loopback rests on its network proxy, an experimental feature in 0.166.0.
 
 Whether Cursor CLI runs the allow-listed `jason` command without asking, in print mode, has not been seen on a signed-in
 run. If it does not, a role cannot call the runtime back, so it cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal. Cursor CLI also reads more than the
