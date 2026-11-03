@@ -493,7 +493,7 @@ status` says which of these hosts it detected on this machine and whether every 
 | Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) | one `Read(//…/AGENTS.md)` rule per file, on its command line (§7) | as its prompt, on standard input, in print mode (`-p`) |
 | Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
-| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | `~/.gemini/antigravity-cli/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.4.10 (2026-10-29); not yet run on an account | `web_fetch` as `read_url(*)`, a rule Jason can neither grant nor deny: a grant of either tool and every deny word are refused, and the person's own settings decide what a session may do, and per-run permissions are not built yet; the host documents no rule for a search | the person's own `read_file(<harness folder>)` rule in their settings, which Jason cannot write; without it the role reports the refusal | as one stream-json user line on standard input |
+| Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | `~/.gemini/antigravity-cli/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.4.10 (2026-10-29); not yet run on an account; the host's parser is not read, so a profile's arguments are only `--model=<name>` and `--effort=<level>`, the options its pages name for the person, read at 1.4.10, and the effort's range is not checked because its two pages disagree on it; no undocumented flag is taken in this release, harmless or not | `web_fetch` as `read_url(*)`, a rule Jason can neither grant nor deny: a grant of either tool and every deny word are refused, and the person's own settings decide what a session may do, and per-run permissions are not built yet; the host documents no rule for a search | the person's own `read_file(<harness folder>)` rule in their settings, which Jason cannot write; without it the role reports the refusal | as one stream-json user line on standard input |
 | GitHub Copilot CLI | `copilot_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 
@@ -556,12 +556,18 @@ host's own print timeout would end a run with a success and partial output, and 
 Jason turns it off and the attempt's limit is the only limit. The host mints its own conversation id and takes none, so
 the attempt records no session. Nothing is written into the work directory, nothing of the person's own configuration is
 touched, and no flag that acts without asking, widens the workspace, takes another project or resumes a conversation is
-composed or allowed in a profile. An argument is a long flag, its value, if any, joined by an equals sign (`--name` or `--model=<name>`):
-a bare word may be read by the host as a prompt, a double dash is refused, and so is every word of one dash and more than
-one character, such as a short flag glued to another or to a value, and the bare dash. The host's parser could not be read
-for this, since no copy of it was available to inspect: the reserved list is the flags its reference table names, with the
-one its mode page says it accepts for another host's sake (`--permission-mode`, read as its own `--mode`), and a flag it
-accepts that no page names is not on it.
+composed or allowed in a profile. **The host's parser is not read**, because it is closed source and no copy of it was
+available to inspect, so no argument is taken on the strength of what a parser might do with it. A profile's arguments are
+the documented options the person owns, in long form with the value joined by an equals sign: `--model=<name>` and
+`--effort=<level>`, read from the host's command-line reference and headless pages at version 1.4.10. The effort's range is
+not checked, since the two pages disagree on it (low through max, and low, medium or high); a value must be there. Every
+other word is refused where the profile is written, naming the host and the reason: an option the host documents that is
+not the person's (such as `--disable-slash-commands`), one it does not document, a word shaped like a switch that skips
+permissions (`--yolo`), a bare word, a double dash, a short flag, a cluster (`-pf`), a glued value (`-phello`) and the bare
+dash. The cost is that no harmless undocumented flag is taken in this release. A flag the runtime composes, or one the
+host's tables call dangerous, is also on the reserved list, which keeps its own refusal under the allowlist: the list is the
+flags the reference table names, with the one its mode page says the host accepts for another host's sake
+(`--permission-mode`, read as its own `--mode`).
 
 **What a session may do is the person's to say.** The host takes its permission rules, of the form `action(target)`
 (`command`, `read_file`, `write_file`, `read_url` and others), from the person's own settings files under `~/.gemini` and
