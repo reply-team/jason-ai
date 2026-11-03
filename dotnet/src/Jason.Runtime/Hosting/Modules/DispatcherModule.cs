@@ -58,6 +58,7 @@ public static class DispatcherModule
         // Codex's sandbox lists what a run may read, and calling home reads the descriptor in the data directory, the
         // executable and what it unpacks when it starts. A composition with no data directory of its own names none.
         services.AddSingleton<IAgentHost>(provider => CodexHost.ForThisProcess(provider.GetService<JasonPaths>()));
+        services.AddSingleton<IAgentHost, CopilotCliHost>();
         services.AddSingleton<IAgentHost, CursorCliHost>();
 
         // Gemini CLI reads policies an organisation sets for every user from a folder of its own, and a file there makes it

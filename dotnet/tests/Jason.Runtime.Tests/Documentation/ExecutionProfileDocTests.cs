@@ -481,6 +481,92 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("composes no prompt from its parts, on every host. On a host that reads its prompt from standard input", contract, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The GitHub Copilot CLI page holds what the host's host-row and section promise, held by words so that a rewrite
+    /// that drops one is red: the matrix row's standing sentences (the version it was read at, the parser not read, the
+    /// cost of that), the flags a launch composes to close what the person's settings would leave open, each thing the
+    /// person's own setup can still do, what the skill tool reaches, what is and is not denied, what a call no rule
+    /// allows becomes, and what has not been measured.
+    /// </summary>
+    [Fact]
+    public void The_copilot_page_says_what_a_launch_closes_what_it_cannot_and_what_is_not_measured()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        var start = contract.IndexOf("| GitHub Copilot CLI | `copilot_cli` |", StringComparison.Ordinal);
+        Assert.True(start >= 0, "the matrix has no row for the host");
+        var row = contract[start..contract.IndexOf(" |", contract.IndexOf("built from the host's documentation", start, StringComparison.Ordinal), StringComparison.Ordinal)];
+        var section = contract[contract.IndexOf("### GitHub Copilot CLI", StringComparison.Ordinal)..];
+
+        // (a) the row's standing sentences.
+        foreach (var sentence in new[]
+        {
+            "built from the host's documentation for version 1.0.105, the version the allowlist was read at",
+            "parser not read, so a profile's arguments are only the documented options the person owns",
+            "No undocumented flag, however harmless, is taken this release.",
+            "Not signed in is a non-zero exit whose stderr names `copilot login`.",
+            "Not yet run on an account",
+        })
+        {
+            Assert.Contains(sentence, row, StringComparison.Ordinal);
+        }
+
+        // (b) the flags a launch composes, each named.
+        foreach (var flag in new[] { "`--disallow-temp-dir`", "`--sync-session=off`", "`--mode=interactive`", "`--no-bash-env`" })
+        {
+            Assert.Contains(flag, section, StringComparison.Ordinal);
+        }
+
+        // (c) what the person's own setup can still do, one entry each.
+        foreach (var entry in new[]
+        {
+            "user-level hooks",
+            "MCP servers of their own",
+            "`COPILOT_ASSISTED_APPROVAL=true`",
+            "`defaultPermissionMode` set to `\"allow-all\"`",
+            "`skillDirectories`",
+            "`COPILOT_SKILLS_DIRS`",
+            "keyed by the git root of the folder the run is in",
+            "`COPILOT_ALLOW_ALL` is equal to `--allow-all`",
+            "only the exact value `true` also trusts the folder",
+        })
+        {
+            Assert.Contains(entry, section, StringComparison.Ordinal);
+        }
+
+        // (d) what the skill tool reaches, and the person's remedies.
+        Assert.Contains("every skill the host discovers, the person's and plugins' included, not the role's own alone", section, StringComparison.Ordinal);
+        Assert.Contains("`ignoredSkillsLocations`", section, StringComparison.Ordinal);
+        Assert.Contains("`disabledSkills`", section, StringComparison.Ordinal);
+
+        // (e) what is denied, said as it is.
+        Assert.Contains("The file-writing tools are denied and not offered; the shell is held to the command word by the allow rule.", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("any writing is denied", section, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("own environment trusts the folder", section, StringComparison.Ordinal);
+
+        // (f) what has not been measured, as the list stands.
+        var measured = section[section.IndexOf("**Not measured.**", StringComparison.Ordinal)..];
+        foreach (var item in new[]
+        {
+            "whether a rule naming one file lets the role read it outside the work directory",
+            "whether a run in a folder the host does not trust stops to ask",
+            "whether the work directory's skills load there",
+            "whether shell redirection by the callback can write a file the deny list names",
+            "whether `taskbarPresence`",
+            "whether version 1.0.105 accepts every flag above",
+        })
+        {
+            Assert.Contains(item, measured, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("refused, or waits", measured, StringComparison.Ordinal);
+
+        // (g) what a call no rule allows becomes.
+        Assert.Contains(
+            "a call no rule allows is denied, and the reason goes back to the role; the reference says so, no run has shown it",
+            section,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The profile's fields say what an argument may not be, for the host that ships as for the others: a short flag stands alone.</summary>
     [Fact]
     public void The_args_field_says_a_short_flag_stands_alone_and_a_lone_or_double_dash_is_refused()

@@ -59,6 +59,7 @@ public static class AgentHosts
         // Codex keeps its sign-in and settings in ~/.codex and reads skills from ~/.agents/skills and from the
         // .agents/skills folder of the directory it runs in; it reads AGENTS.md itself, so it needs no import file.
         new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory),
+        new(AgentHostKind.CopilotCli, "copilot", ".copilot/config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File),
         new(AgentHostKind.CursorCli, "agent", ".cursor/cli-config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File),
 
         // Gemini CLI, from its documentation and source at 0.66.0. The marker is the settings file the host keeps in its own
