@@ -162,6 +162,28 @@ public class CodexHostTests
             command);
     }
 
+    /// <summary>
+    /// A deny wins over a read, and a path is listed once: where the profile denies a path the run would otherwise read —
+    /// a memory file the launch names, by the home or from the root, or the executable calling home starts — the deny
+    /// takes the read's place rather than being dropped beside it.
+    /// </summary>
+    [Theory]
+    [InlineData("Read(~/Jason/AGENTS.md)", "/home/someone/Jason/AGENTS.md")]
+    [InlineData("Read(//home/someone/Jason/AGENTS.md)", "/home/someone/Jason/AGENTS.md")]
+    [InlineData("Read(//opt/jason)", "/opt/jason")]
+    public void A_deny_of_a_path_the_run_would_read_takes_the_reads_place(string word, string path)
+    {
+        var files = new MemoryFileLocations("/home/someone/Jason/AGENTS.md", null, null);
+
+        var command = new CodexHost(Data, Executable, Extraction, windows: false, home: "/home/someone")
+            .Compose(Revision(deny: [word]), ["codex"], files).Command;
+
+        var filesystem = Assert.Single(command, item => item.StartsWith("permissions.jason.filesystem=", StringComparison.Ordinal));
+        Assert.Contains($"\"{path}\"=\"deny\"", filesystem, StringComparison.Ordinal);
+        Assert.DoesNotContain($"\"{path}\"=\"read\"", filesystem, StringComparison.Ordinal);
+        Assert.Equal(1, filesystem.Split($"\"{path}\"=").Length - 1);
+    }
+
     [Fact]
     public void A_windows_path_in_the_profiles_deny_names_its_drive()
     {

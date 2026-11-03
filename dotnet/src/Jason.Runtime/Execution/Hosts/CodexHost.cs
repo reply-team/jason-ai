@@ -267,7 +267,8 @@ public sealed class CodexHost(
     /// <summary>
     /// The sandbox's filesystem entries, in order and each path once: what the host itself needs to start, the work
     /// directory, what calling home reads, each memory file the launch names, and last each path the profile denies
-    /// reading. A deny beats a read in this sandbox, so a denied path stays denied whatever is listed before it.
+    /// reading. A deny wins over a read: a denied path the run would otherwise read is denied in the read's place, never
+    /// dropped beside it.
     /// </summary>
     private (List<(string Path, string Access)> Entries, List<string> Unreadable) FileSystem(
         ExecutionProfileRevision revision, MemoryFileLocations memoryFiles)
@@ -275,9 +276,19 @@ public sealed class CodexHost(
         var entries = new List<(string Path, string Access)>();
         void Add(string? path, string access)
         {
-            if (path is not null && !entries.Exists(entry => string.Equals(entry.Path, path, StringComparison.Ordinal)))
+            if (path is null)
+            {
+                return;
+            }
+
+            var at = entries.FindIndex(entry => string.Equals(entry.Path, path, StringComparison.Ordinal));
+            if (at < 0)
             {
                 entries.Add((path, access));
+            }
+            else if (access == "deny")
+            {
+                entries[at] = (path, access);
             }
         }
 
