@@ -249,6 +249,82 @@ public class ProfileCursorCliTests
         Assert.Equal(Launcher, updated.Revision.Program);
     }
 
+    /// <summary>
+    /// A patch that names only the host moves the profile's stored program to a host it was not written for. The program is
+    /// kept where it is its new host's own word, or that host's own launcher; anything else is refused and the person is
+    /// told to name the program, since a program of another host would be started with this host's arguments.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_that_names_only_the_host_is_refused_when_the_stored_program_is_another_hosts_word()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "wordy", host = "claude_code", program = "claude" }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "wordy", host = "cursor_cli" }, HttpStatusCode.BadRequest, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("name the program", detail.Message, StringComparison.Ordinal);
+        Assert.Contains("cursor_cli", detail.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("agent")]
+    [InlineData("agent.exe")]
+    [InlineData("/opt/cursor/agent")]
+    public async Task A_patch_that_names_only_the_host_is_taken_when_the_stored_program_is_the_new_hosts_word(string program)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "fitting", host = "claude_code", program }, Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "fitting", host = "cursor_cli" }, Ct);
+
+        Assert.Equal(program, updated.Revision.Program);
+    }
+
+    /// <summary>The rule is for a patch that moves the host; one that leaves it alone keeps a program the person wrote for it, wrapper or not.</summary>
+    [Fact]
+    public async Task A_patch_that_leaves_the_host_alone_keeps_a_program_that_is_not_the_hosts_word()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "wrapped", host = "claude_code", program = "my-wrapper" }, Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate, new { name = "wrapped", description = "a wrapper of the host" }, Ct);
+
+        Assert.Equal("my-wrapper", updated.Revision.Program);
+    }
+
+    public static TheoryData<AgentHostKind> OtherKinds() =>
+        [.. Enum.GetValues<AgentHostKind>().Where(kind => kind != AgentHostKind.ClaudeCode)];
+
+    /// <summary>The same rule for every host the build registers: a program of the shipped host is refused under each of them, and each one's own word is taken.</summary>
+    [Theory]
+    [MemberData(nameof(OtherKinds))]
+    public async Task A_patch_that_names_only_the_host_is_held_to_each_registered_hosts_word(AgentHostKind kind)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var host = api.Resolve<IEnumerable<Jason.Runtime.Execution.Hosts.IAgentHost>>().LastOrDefault(candidate => candidate.Kind == kind);
+        Assert.SkipWhen(host is null, "The host is not registered in this build.");
+        var word = Jason.Contracts.Hosts.AgentHosts.Word(kind);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, new { name = "shipped", host = "claude_code", program = "claude" }, Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, new { name = "own", host = "claude_code", program = host!.Facts.CommandWord }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.ProfileUpdate, new { name = "shipped", host = word }, HttpStatusCode.BadRequest, Ct);
+        var taken = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileUpdate, new { name = "own", host = word }, Ct);
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("program", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("name the program", detail.Message, StringComparison.Ordinal);
+        Assert.Equal(host.Facts.CommandWord, taken.Revision.Program);
+    }
+
     /// <summary>A profile as a build before the rule would have stored it, so a patch meets what is already there.</summary>
     private static async Task StoreAsync(RuntimeApiFixture api, string name, string program, string idEnd)
     {

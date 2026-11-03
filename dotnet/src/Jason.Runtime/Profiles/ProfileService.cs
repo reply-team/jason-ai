@@ -204,7 +204,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             CreatedAt = now,
         };
 
-        RefuseWhatTheHostRefuses(next, request.Tools.IsSet, request.Deny.IsSet, request.Args.IsSet, request.Program.IsSet);
+        RefuseWhatTheHostRefuses(next, request.Tools.IsSet, request.Deny.IsSet, request.Args.IsSet, request.Program.IsSet, next.Host != current.Host);
 
         db.ExecutionProfileRevisions.Add(next);
         profile.CurrentRevision = next.Number;
@@ -251,7 +251,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
     /// words count — a patch that moves a profile to another host is held to that host's, the flags it composes included,
     /// which the stored arguments may not carry.
     /// </summary>
-    private void RefuseWhatTheHostRefuses(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true, bool argsNamed = true, bool programNamed = true)
+    private void RefuseWhatTheHostRefuses(ExecutionProfileRevision revision, bool toolsNamed = true, bool denyNamed = true, bool argsNamed = true, bool programNamed = true, bool hostMoved = false)
     {
         if (hosts.LastOrDefault(candidate => candidate.Kind == revision.Host) is not { } host)
         {
@@ -259,7 +259,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         }
 
         var errors = new ValidationErrors();
-        ProfileValidation.ValidateForHost(revision, host, errors, toolsNamed, denyNamed, argsNamed, programNamed);
+        ProfileValidation.ValidateForHost(revision, host, errors, toolsNamed, denyNamed, argsNamed, programNamed, hostMoved);
         errors.ThrowIfAny();
     }
 

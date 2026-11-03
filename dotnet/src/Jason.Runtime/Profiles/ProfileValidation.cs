@@ -224,6 +224,18 @@ internal static partial class ProfileValidation
             && host.NamesItsLauncher(Path.GetFileName(path));
     }
 
+    /// <summary>
+    /// Whether a stored program is one this host starts: its file name, without the extension, is the host's command word,
+    /// or the host itself takes it, as it takes its own launcher named by its full path.
+    /// </summary>
+    private static bool IsTheHostsProgram(string program, IAgentHost host)
+    {
+        var path = program.Trim();
+        var name = path[(path.LastIndexOfAny(['/', '\\']) + 1)..];
+        return string.Equals(Path.GetFileNameWithoutExtension(name), host.Facts.CommandWord, StringComparison.OrdinalIgnoreCase)
+            || NamesTheHostsLauncher(path, host);
+    }
+
     /// <summary>The list as it will be stored, once it is known to be one. Blank entries never reach here.</summary>
     public static List<string> Strings(IReadOnlyList<JsonNode?>? values) =>
         values is null ? [] : [.. values.Select(value => value!.GetValue<string>().Trim())];
@@ -278,7 +290,7 @@ internal static partial class ProfileValidation
     /// of such a tool is kept as the person's word, since it holds anyway; a deny of a tool the host has and cannot take
     /// away, or of a word it does not read as a rule, is refused naming the host; and so is a grant of a tool the host
     /// has but Jason cannot make true, and arguments the host's own reading refuses. Each is <c>invalid</c>; stored
-    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>, and a stored program it leaves alone to the host's rule for a script, <c>shell_script</c>. Every message
+    /// arguments a patch leaves alone are also held to the host's reserved flags, each <c>reserved</c>, and a stored program it leaves alone to the host's rule for a script, <c>shell_script</c>, and, where the patch moves the host, to the new host's own word or launcher, <c>invalid</c>. Every message
     /// names the host and the word; then the grant is held beside the deny. Where a patch did not name a list,
     /// the message says it is the profile's.
     /// </summary>
@@ -289,7 +301,8 @@ internal static partial class ProfileValidation
         bool toolsNamed = true,
         bool denyNamed = true,
         bool argsNamed = true,
-        bool programNamed = true)
+        bool programNamed = true,
+        bool hostMoved = false)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentNullException.ThrowIfNull(host);
@@ -303,6 +316,14 @@ internal static partial class ProfileValidation
         if (!programNamed && ProgramResolver.NamesShellScript(revision.Program) && !NamesTheHostsLauncher(revision.Program, host))
         {
             errors.Add("program", "shell_script", ShellScriptMessage("the profile's program"));
+        }
+        else if (!programNamed && hostMoved && !IsTheHostsProgram(revision.Program, host))
+        {
+            // A program written for one host is not started under another with that host's arguments: the person says which.
+            errors.Add(
+                "program",
+                "invalid",
+                $"the profile's program is not {word}'s: a patch that moves the profile to {word} without naming the program must keep one that is {host.Facts.CommandWord} (or, where the host is installed as one, its launcher); name the program.");
         }
 
         // Arguments a request names were held to this host's flags where they were read. Arguments it leaves alone are
