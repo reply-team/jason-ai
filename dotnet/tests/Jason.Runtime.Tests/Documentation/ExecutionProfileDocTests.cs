@@ -539,6 +539,29 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// The matrix of §12 is the vocabulary of the `host` field as the build knows it: one row for each member of
+    /// <see cref="Jason.Contracts.Api.AgentHostKind"/>, in the word the API writes it, and no row for a word the build does
+    /// not know. A host added to the enum turns this red until the page has its row, and a row left for a host that was
+    /// removed, or one written ahead of its code, does too.
+    /// </summary>
+    [Fact]
+    public void The_matrix_has_one_row_for_each_host_the_build_knows_and_none_besides()
+    {
+        var page = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var words = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[2].Trim('`'))
+            .ToList();
+
+        var known = Enum.GetValues<Jason.Contracts.Api.AgentHostKind>().Select(Jason.Contracts.Hosts.AgentHosts.Word).ToList();
+
+        Assert.Equal(known.Order(StringComparer.Ordinal), words.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// Gemini CLI's section says where the host is installed from, as a link to the host's own page and no command copied
     /// from it, so that the README, the install page and the release's notes have a source to follow.
     /// </summary>
