@@ -106,6 +106,63 @@ public class AntigravityCliHostTests
     }
 
     /// <summary>
+    /// The host's parser could not be read, so an argument is taken only if it is one of the documented options the person
+    /// owns, in long form with its value joined by an equals sign: the model and the effort. The effort's range is not
+    /// checked, since the host's own pages disagree on it, only that a value is there.
+    /// </summary>
+    [Theory]
+    [InlineData("--model=made-up")]
+    [InlineData("--effort=low")]
+    [InlineData("--effort=max")]
+    [InlineData("--effort=whatever-the-host-calls-it")]
+    public void An_option_the_person_owns_in_its_documented_long_form_is_taken(string word)
+    {
+        Assert.Null(Host.ArgsProblem([word]));
+    }
+
+    /// <summary>
+    /// Every other word is refused with one sentence that names the reason: an option the host documents but the person
+    /// does not own, one it does not document, one shaped like a switch that skips permissions, a cluster, a glued value,
+    /// and the allowed option without its value.
+    /// </summary>
+    [Theory]
+    [InlineData("--disable-slash-commands")]
+    [InlineData("--yolo")]
+    [InlineData("--dangerously-bypass-approvals-and-sandbox")]
+    [InlineData("--force")]
+    [InlineData("-pf")]
+    [InlineData("-phello")]
+    [InlineData("--model")]
+    [InlineData("--model=")]
+    [InlineData("--effort")]
+    [InlineData("--effort=")]
+    [InlineData("--Model=made-up")]
+    [InlineData("--model-fast=made-up")]
+    public void Any_other_word_is_refused_for_the_reason_that_the_parser_is_not_read(string word)
+    {
+        var problem = Host.ArgsProblem(["--model=made-up", word]);
+
+        Assert.NotNull(problem);
+        Assert.Contains(word, problem, StringComparison.Ordinal);
+        Assert.Contains(
+            "the host's parser is not read, so only the documented options the person owns are taken",
+            problem,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A flag the runtime composes or the host's tables call dangerous keeps its own refusal, the reserved one, which the
+    /// profile rules give; the allowlist does not speak for it a second time.
+    /// </summary>
+    [Fact]
+    public void A_reserved_long_flag_is_left_to_the_reserved_refusal_and_not_refused_twice()
+    {
+        Assert.Contains("--print-timeout", Host.ReservedFlags);
+        Assert.Null(Host.ArgsProblem(["--print-timeout=5m"]));
+        Assert.Null(Host.ArgsProblem(["--dangerously-skip-permissions"]));
+    }
+
+    /// <summary>
     /// A short flag glued to a value or to another short flag is read by a parser as the flags it expands to, which the
     /// reserved list, matched by whole word, cannot see. So every word of one dash and more than one character, and the
     /// bare dash, is refused, whatever the letters; and for each short flag the host reserves, the words that glue a
@@ -120,9 +177,6 @@ public class AntigravityCliHostTests
         }
 
         Assert.Null(Host.ArgsProblem(["--model=made-up", "--effort=low"]));
-
-        // A long flag takes its value, if any, joined by an equals sign: a switch with no value is one too.
-        Assert.Null(Host.ArgsProblem(["--disable-slash-commands"]));
 
         var reservedShort = Host.ReservedFlags.Where(flag => flag.Length == 2 && flag[0] == '-' && flag[1] != '-').ToList();
         Assert.NotEmpty(reservedShort);

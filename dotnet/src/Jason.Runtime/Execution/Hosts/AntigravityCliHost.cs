@@ -150,16 +150,50 @@ public sealed class AntigravityCliHost : IAgentHost
         "the host reads its permission rules from the person's own settings files and from nowhere a run can carry them, so a deny is a rule the person adds there; see the host's section of the execution-profiles document.";
 
     /// <summary>
-    /// A bare word is read by the host as a prompt in some forms, and how that sits beside a stream of lines is not
-    /// documented; so an argument is a long flag, its value, if any, joined by an equals sign, and no double dash is taken.
-    /// A short flag glued to another or to a value, and the bare dash, are refused too: the reserved list is matched by
-    /// whole word, and a parser expands a cluster into the flags it holds. The host's parser could not be read, so this
-    /// holds whatever it does with a cluster.
+    /// The options of the host's documentation that a person owns, each in long form with its value joined by an equals
+    /// sign: the model and the reasoning effort (read from the host's command-line reference and headless pages at version
+    /// 1.4.10). Nothing that changes the launch, the permissions, the workspace, the conversation, the output or where the
+    /// prompt comes from is here. The effort's range is not checked, because the host's two pages disagree on it.
     /// </summary>
-    public string? ArgsProblem(IReadOnlyList<string> args) =>
-        args.FirstOrDefault(arg => !arg.StartsWith("--", StringComparison.Ordinal) || arg == "--") is { } refused
-            ? $"'{refused}' is not a long flag, its value, if any, joined by an equals sign; the host may read a bare word as a prompt and a short flag may be a cluster, so write each option as --name or --name=value."
-            : null;
+    private static readonly string[] OwnedOptions = ["--model", "--effort"];
+
+    /// <summary>
+    /// The host's parser could not be read: it is closed source and no copy was available to inspect. So no word is taken
+    /// on the strength of what a parser might do with it. An argument is one of <see cref="OwnedOptions"/> in the form
+    /// <c>--name=value</c> with a value, and every other word is refused, an undocumented flag, a switch shaped like one that
+    /// skips permissions, a bare word, the double dash, a short flag, a cluster or a glued value alike. A long flag in
+    /// <see cref="ReservedFlags"/> is left out here, since the profile rules refuse it by its own code, and the reserved list
+    /// stays as the record of what the documentation calls dangerous, under the allowlist. A later release that reads the
+    /// parser may turn this into a denylist.
+    /// </summary>
+    public string? ArgsProblem(IReadOnlyList<string> args)
+    {
+        foreach (var arg in args)
+        {
+            if (!arg.StartsWith("--", StringComparison.Ordinal) || arg == "--")
+            {
+                return Refused(arg, "it is not a long flag, its value, if any, joined by an equals sign");
+            }
+
+            var separator = arg.IndexOf('=', StringComparison.Ordinal);
+            var name = separator < 0 ? arg : arg[..separator];
+            if (ReservedFlags.Contains(name))
+            {
+                continue;
+            }
+
+            if (separator < 0 || separator == arg.Length - 1 || !OwnedOptions.Contains(name, StringComparer.Ordinal))
+            {
+                return Refused(arg, "it is not one of the options the person owns");
+            }
+        }
+
+        return null;
+    }
+
+    private static string Refused(string word, string why) =>
+        $"'{word}' is refused: {why}; the host's parser is not read, so only the documented options the person owns are taken: " +
+        string.Join(", ", OwnedOptions.Select(option => $"{option}=<value>")) + ".";
 
     /// <summary>
     /// One user event of the stream and the line feed that ends the line: the envelope is its content as the serializer
