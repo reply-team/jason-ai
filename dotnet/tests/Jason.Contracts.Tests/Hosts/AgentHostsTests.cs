@@ -101,6 +101,25 @@ public class AgentHostsTests
         Assert.Null(facts.Instructions);
     }
 
+    /// <summary>
+    /// Gemini CLI keeps a settings file of its own under its folder, which Antigravity does not write, so the marker is
+    /// that file and never the folder both keep; the skills are the shared <c>.agents/skills</c>; and the instruction file
+    /// it reads is <c>GEMINI.md</c>, which imports the memory file by the host's documented <c>@file</c> form.
+    /// </summary>
+    [Fact]
+    public void Gemini_cli_is_detected_by_its_own_settings_file_and_imports_the_memory_file_through_gemini_md()
+    {
+        var facts = AgentHosts.Of(AgentHostKind.GeminiCli);
+
+        Assert.Equal("gemini_cli", AgentHosts.Word(AgentHostKind.GeminiCli));
+        Assert.Equal("gemini", facts.CommandWord);
+        Assert.Equal(".gemini/settings.json", facts.HomeMarker);
+        Assert.Equal(HomeMarkerKind.File, facts.MarkerKind);
+        Assert.Equal(".agents/skills", facts.HomeSkills);
+        Assert.Equal(".agents/skills", facts.WorkSkills);
+        Assert.Equal(new HostInstructionFile("GEMINI.md", "@AGENTS.md"), facts.Instructions);
+    }
+
     [Fact]
     public void The_import_files_are_each_file_once_and_never_the_memory_file_itself()
     {

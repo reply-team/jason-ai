@@ -70,6 +70,14 @@ public interface IAgentHost
     bool TakesSessionId => true;
 
     /// <summary>
+    /// The constants this host's child runs with beside the runtime's own four: a fact of the host class that a launch
+    /// cannot change, since no revision, memory file, setting or person is an input of it. Never a secret, never the
+    /// token, and never a name of the runtime's own or one that starts with its prefix; <see cref="LaunchEnvironment"/>
+    /// refuses such a name. The default adds nothing.
+    /// </summary>
+    IReadOnlyDictionary<string, string> Environment => EmptyEnvironment.Value;
+
+    /// <summary>
     /// Why this host cannot start a run from where this installation stands, or null where it can: a fact about the
     /// machine, not the profile, which the claim decides before a child exists and records as the attempt's error. A
     /// sentence of the host's own that names the path it cannot use, never the host's own message about it.
@@ -133,4 +141,10 @@ public interface IAgentHost
     /// The file system is the only thing read, and nothing is remembered between calls.
     /// </summary>
     IReadOnlyList<string>? ProgramLayout(string shimFile) => null;
+}
+
+/// <summary>The environment of a host that declares no constants.</summary>
+internal static class EmptyEnvironment
+{
+    public static IReadOnlyDictionary<string, string> Value { get; } = new Dictionary<string, string>();
 }

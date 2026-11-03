@@ -676,6 +676,90 @@ public partial class ExecutionProfileDocTests
         Assert.DoesNotContain("The launcher puts two things in that directory", contract, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A launched child's environment is the runtime's four and the constants a host's row declares, and the two pages that
+    /// state it say so in the same words; every constant a registered host declares is named in that host's row, as
+    /// <c>NAME=value</c>, so a person can read what the host's child is given beyond the four.
+    /// </summary>
+    [Fact]
+    public void The_environment_is_the_runtimes_four_and_the_constants_a_hosts_row_declares_and_each_constant_is_in_its_row()
+    {
+        const string Sentence = "the runtime's four and the constants a host's row of";
+        foreach (var page in new[] { "execution-profiles.md", "work-execution.md" })
+        {
+            var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), page)));
+            Assert.Contains(Sentence, contract, StringComparison.Ordinal);
+            Assert.Contains("never a secret and never a value taken from a person", contract, StringComparison.Ordinal);
+            Assert.DoesNotContain("four values and not one more", contract, StringComparison.Ordinal);
+
+            // A count of the hosts that declare one goes stale with the next host; the page points at each host's row instead.
+            Assert.DoesNotContain("Today one host declares", contract, StringComparison.Ordinal);
+        }
+
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        var notes = text[text.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..];
+        foreach (var host in Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<Jason.Runtime.Execution.Hosts.IAgentHost>(provider))
+        {
+            foreach (var (name, value) in host.Environment)
+            {
+                Assert.Contains($"`{name}={value}`", notes, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What the Gemini CLI notes say a person cannot see in the host's row: which names a profile's arguments may not use,
+    /// what the exit of a failed authentication also means, that the client level is the harness root and so every
+    /// project's and campaign's memory file under it is readable, what the person's own setup adds to every role, and what
+    /// detection does not read.
+    /// </summary>
+    [Fact]
+    public void The_gemini_cli_notes_state_the_facts_a_person_cannot_see_in_the_row()
+    {
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var notes = Flattened(text[text.IndexOf("\n### Gemini CLI\n", StringComparison.Ordinal)..]);
+
+        string[] fragments =
+        [
+            "a long flag's name is letters and digits with single dashes between them",
+            "`GEMINI_CLI_IDE_WORKSPACE_PATH=`",
+            "A value may hold a space and no control character",
+            "declares no telemetry flag",
+            "`GEMINI_TELEMETRY_ENABLED=false`",
+            "A role's run sends no telemetry whatever the person's own setting says",
+            "runs the host themselves; making it a profile's choice is for a later release",
+            "also an enforced sign-in type that does not match",
+            "\"could not authenticate\"",
+            "the client level is the harness root, so a role reads every project's and campaign's memory file under it",
+            "the person's own skills in `~/.gemini/skills` and `~/.agents/skills`",
+            "`GEMINI_CLI_HOME`",
+            "turns a bare `@AGENTS.md` into a pointer to the file without inlining it",
+            "a short option's letter written with two dashes, `--y` being `-y`",
+            "holds any entry whose name ends in `.toml`",
+            "the attempt is refused before a child exists, as `host_not_available`, with a sentence that names the folder",
+            "`/Library/Application Support/GeminiCli/policies`",
+        ];
+        foreach (var fragment in fragments)
+        {
+            Assert.Contains(fragment, notes, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("which this runtime does not hold back", notes, StringComparison.Ordinal);
+    }
+
+    /// <summary>The row of the host table names the sign-in signal in one clause, so a person reading only the table knows what a signed-out run looks like.</summary>
+    [Fact]
+    public void The_gemini_cli_row_names_the_exit_of_a_failed_sign_in()
+    {
+        var text = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")).ReplaceLineEndings("\n");
+        var row = text.Split('\n').Single(line => line.Contains("| `gemini_cli` |", StringComparison.Ordinal));
+
+        Assert.Contains("a signed-out run ends with exit 41, which the notes read as \"could not authenticate\"", Flattened(row), StringComparison.Ordinal);
+    }
+
     /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
     private static string Flattened(string text) => Whitespace().Replace(text, " ");
 

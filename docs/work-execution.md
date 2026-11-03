@@ -558,13 +558,19 @@ where the host reads them from its work directory rather than its command line, 
   launches normally; nothing was configured, so nothing is missing, and its brief travels in the
   envelope either way.
 
-Its environment is the runtime's own plus four values and not one more:
+Its environment is the runtime's own plus the runtime's four and the constants a host's row of the host table declares, never a secret and never a value taken from a person. The four:
 
 - `JASON_DATA_DIR`, pointing at the data directory;
 - `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so
   that an agent reporting through the CLI is its attempt without having to say so;
 - the directory this build of Jason runs from, at the front of `PATH`, so the bare command word in
   `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
+
+A host's constants are added after the four and are the same for every attempt of that host. None is named as one of
+the four or starts with `JASON_`, and a host that declares such a name is refused when the child is made. A host
+that declares constants names each one in its row of the host table in
+[execution-profiles.md](execution-profiles.md#12-the-hosts); Gemini CLI's, for one, keep a signed-out run from waiting
+for a person.
 
 One value is taken away: `JASON_UPDATE_LAUNCH`, the mark an update puts on its own start of the runtime
 ([release-and-update.md](release-and-update.md#when-it-stops-halfway)). The runtime drops it from its own

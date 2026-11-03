@@ -65,6 +65,7 @@ public enum AgentHostKind
     Codex,
     CopilotCli,
     CursorCli,
+    GeminiCli,
 }
 
 /// <summary>

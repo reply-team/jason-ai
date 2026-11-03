@@ -250,7 +250,7 @@ with its value from the answer it already has.
 What a person tells Jason about their business in their own words is kept in plain files they can read and edit: a
 memory file, `AGENTS.md`, for the client, for each project and for each campaign, each in a folder of its own, nested in
 that order under the harness root. Each level carries, beside its `AGENTS.md`, a one-line import file for every host
-that reads a file of another name — `CLAUDE.md` for Claude Code (the [host matrix](execution-profiles.md#12-the-hosts)
+that reads a file of another name — `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI (the [host matrix](execution-profiles.md#12-the-hosts)
 lists them). Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
 print mode it drops, without asking, an import of a file outside the folder it started in, so a session started in a
 campaign's folder is given the
@@ -264,16 +264,19 @@ records, the record wins.
 ~/Jason/                                  the root: the client's level, Harness:Root
   AGENTS.md                               the client's memory file
   CLAUDE.md                               @AGENTS.md
+  GEMINI.md                               @AGENTS.md
   .jason/marker.json                      {"marker_version":1,"kind":"root"}
   projects/
     acme-corp/                            a project's folder, named by its slug
       AGENTS.md
       CLAUDE.md
+      GEMINI.md
       .jason/marker.json                  {"marker_version":1,"kind":"project","id":"prj_…"}
       campaigns/
         q3-marketing-leads/               a campaign's folder, named from its name
           AGENTS.md
           CLAUDE.md
+          GEMINI.md
           .jason/marker.json              {"marker_version":1,"kind":"campaign","id":"cmp_…"}
 ```
 
