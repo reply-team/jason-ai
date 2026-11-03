@@ -1352,16 +1352,18 @@ are the operations' own examples; §7 says how to drive one through the host by 
   named:
   - the file is at most 8 KiB and matches npm's current `:find_dp0` template exactly, so an older
     template is refused;
-  - the package is one directory under `node_modules`, and that directory reads as a package name
-    before any path is built from it — so a **scoped package** (`node_modules\@scope\name\…`) is
-    refused and says so, and so is a segment that is not a name at all, such as `..` or a drive letter;
+  - the package is one directory under `node_modules`, or two for a **scoped package**
+    (`node_modules\@scope\name\…`), and each of them reads as a name before any path is built from it —
+    the scope as `@` and a package name, the package as a package name — so a segment that is not a
+    name at all, such as `..`, a drive letter, a bare `@` or a scope under a scope, is refused with its
+    rule;
   - that package's own `package.json` maps **this declared name** to **this same entry**, either as a
     `bin` object keyed by the name or as a bare `bin` string on a package whose own `name` is the
-    declared name — no other shape is read;
+    declared name, or `@scope/` and the declared name for a scoped package — no other shape is read;
   - the entry lies inside the package directory as the disk really holds it, followed link by link
     from that directory down — so a `..` in the entry path is refused, and so is a junction or a
-    symbolic link that leaves the package, at `node_modules`, at the package itself, at any directory
-    inside it, or at the entry file;
+    symbolic link that leaves the package, at `node_modules`, at the scope, at the package itself, at
+    any directory inside it, or at the entry file;
   - `node.exe` is found beside the shim or on the same search path, and recorded as an absolute path.
 
   What the name resolved to is visible in `plugin list` and in the envelope as `launch`, and every
