@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using Jason.Contracts.Api;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Programs;
 using Jason.Runtime.Profiles;
 
@@ -151,7 +152,7 @@ public class ProfileHostileInputTests
     /// vocabulary is closed: the alternative is discovering it when work is claimed and a child is due to start.
     /// </summary>
     [Theory]
-    [InlineData("codex")]
+    [InlineData("made_up_host")]
     [InlineData("ClaudeCode")]
     [InlineData("claude-code")]
     [InlineData("")]
@@ -166,15 +167,19 @@ public class ProfileHostileInputTests
         Assert.Equal("host", Assert.Single(error.Details!).Field);
     }
 
-    [Fact]
-    public async Task A_host_the_vocabulary_does_know_is_the_one_that_is_accepted()
+    public static TheoryData<AgentHostKind> Kinds() => [.. Enum.GetValues<AgentHostKind>()];
+
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public async Task A_host_the_vocabulary_does_know_is_the_one_that_is_accepted(AgentHostKind kind)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var facts = AgentHosts.Of(kind);
 
         var created = await api.PostOkAsync<ExecutionProfileDto>(
-            Operations.ProfileCreate, new { name = "known-host", host = "claude_code", program = "claude" }, Ct);
+            Operations.ProfileCreate, new { name = "known-host", host = AgentHosts.Word(kind), program = facts.CommandWord }, Ct);
 
-        Assert.Equal(AgentHostKind.ClaudeCode, created.Revision.Host);
+        Assert.Equal(kind, created.Revision.Host);
     }
 
     /// <summary>An edit is held to the same rules as a creation; a patch is not a way around them.</summary>
@@ -185,7 +190,7 @@ public class ProfileHostileInputTests
         await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, ProfileRevisionTests.Minimal("patched"), Ct);
 
         var host = await api.PostErrorAsync(
-            Operations.ProfileUpdate, new { name = "patched", host = "codex" }, HttpStatusCode.BadRequest, Ct);
+            Operations.ProfileUpdate, new { name = "patched", host = "made_up_host" }, HttpStatusCode.BadRequest, Ct);
         Assert.Equal("host", Assert.Single(host.Details!).Field);
 
         var cleared = await api.PostErrorAsync(

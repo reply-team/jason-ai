@@ -211,10 +211,10 @@ public class ProfileCommandsTests
             "{\"error\":{\"code\":\"validation_failed\",\"message\":\"Validation failed: host: invalid.\",\"retryable\":false}}",
             status: System.Net.HttpStatusCode.BadRequest);
 
-        var exit = await cli.RunAsync("profile", "create", "someday", "--host", "codex", "--program", "codex");
+        var exit = await cli.RunAsync("profile", "create", "someday", "--host", "made_up_host", "--program", "made-up");
 
         Assert.Equal(ExitCodes.ApiError, exit);
-        cli.AssertPosted(Operations.ProfileCreate, "{\"name\":\"someday\",\"host\":\"codex\",\"program\":\"codex\"}");
+        cli.AssertPosted(Operations.ProfileCreate, "{\"name\":\"someday\",\"host\":\"made_up_host\",\"program\":\"made-up\"}");
 
         // The API's own answer, verbatim on stdout: stderr is diagnostics, and the envelope is the answer.
         Assert.Contains("host: invalid", cli.Text, StringComparison.Ordinal);

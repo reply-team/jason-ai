@@ -32,7 +32,7 @@ A revision holds:
 |---|---|
 | `host` | which host this describes. A closed vocabulary — the `host` column of [§12](#12-the-hosts). An unknown value is refused when the profile is written, never discovered at launch |
 | `program` | what to start: an absolute path, or a name resolved on `PATH`. A `.cmd`, `.bat` or `.ps1`, in any case, is a script a shell would have to interpret and is refused when the profile is written with `shell_script`: Jason starts programs, never shells. The path is read as the operating system reads it, so a name Windows trims back to a script, such as `claude.cmd.`, is refused too. A profile stored before the rule keeps its program, and the claim refuses such a program with `host_not_available` before a child exists. A bare name without the extension is looked up on the search path (on Windows as an `.exe`, a `.com` or npm's own shim) |
-| `args` | what this profile adds after the arguments the runtime composes |
+| `args` | what this profile adds after the arguments the runtime composes. A host's parser reads a short flag with more letters or a value after it as several flags, or as a flag and its value, and a lone dash as the prompt, so a short flag stands alone: a short flag with more letters or a value after it, a lone dash and a double dash are refused when the profile is written, naming the host, under Claude Code and under Cursor CLI |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
 | `tools` | the tools the person grants the launched agent, by name: `web_search`, `web_fetch`, each at most once. A closed vocabulary — any other word is refused when the profile is written, and so is a word named twice, or one the revision's `deny` takes away by the host's name for it. Empty unless somebody names one (§7) |
 | `cli_command` | the bare command word the agent calls home with, of letters, digits, dots, dashes and underscores and starting with a letter or a digit; defaults to the runtime's own executable name |
@@ -491,11 +491,11 @@ status` says which of these hosts it detected on this machine and whether every 
 | Host | `host` | Skills root `jason skills install` deploys to | Role's skill in the work directory | Reads in place of `AGENTS.md` | Background roles in this build | Checked against | Tools | Reads a memory file by | Takes the brief |
 |---|---|---|---|---|---|---|---|---|---|
 | Claude Code | `claude_code` | `~/.claude/skills` | `.claude/skills/<role>/` | `CLAUDE.md` (`@AGENTS.md`) | yes | measured on 2.1.309 and 2.1.310 on Windows (§7) | `web_search` as `WebSearch`, `web_fetch` as `WebFetch`: each granted and denied by that word (§7) | one `Read(//…/AGENTS.md)` rule per file, on its command line (§7) | as its prompt, on standard input, in print mode (`-p`) |
-| Codex CLI | `codex` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| Codex CLI | `codex` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | On Windows, first: Codex's elevated sandbox must be set up once by an administrator ([setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a role runs is refused and the attempt fails by the role's report. Commands are not confined by name: any program a role can read runs, inside the sandbox. Holding the network to loopback rests on Codex's network proxy, an experimental feature in 0.166.0. On Windows, the elevated sandbox may let a role read more than the list. The person's global `AGENTS.md` and their skills reach every Codex role. Whether `jason` reaches the runtime from inside the sandbox is not yet checked on Linux, macOS or Windows. Built from the host's documentation and source for 0.166.0, npm's current release; measured on Windows with the CLI the Codex app bundles, 0.166.0-alpha.5.1; not yet run on an account ([Codex CLI](#codex-cli)) | `web_search` as `WebSearch`: granted as a live search, denied by that word; `web_fetch`: not on this host, so a grant is refused and a deny holds anyway | one `"<path>"="read"` entry per file in the permissions profile on its command line (`-c permissions.jason.filesystem=…`), 0.166.0 | as its prompt, on standard input, with no prompt word on the command line (`codex exec`: instructions are read from stdin when none is given, 0.166.0) |
 | Gemini CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `gemini_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | Antigravity CLI: `gemini_cli` runs on a Code Assist Standard or Enterprise sign-in; individual Google plans run `antigravity_cli` ([Google's notice](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)) | `antigravity_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
 | GitHub Copilot CLI | `copilot_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation for version 1.0.105, the version the allowlist was read at; parser not read, so a profile's arguments are only the documented options the person owns: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, `--no-color` and `--disable-client-telemetry`. No undocumented flag, however harmless, is taken this release. Not yet run on an account | `web_fetch` as `url`; the host documents no search tool, so a grant of `web_search` is refused and a deny of it is kept | one `read(<absolute path>)` rule per file in its `--allow-tool` list, on its command line (documented for version 1.0.105; not yet measured to reach outside the work directory) | as its prompt, on standard input, with no `-p`; nothing of the envelope on its command line |
-| Cursor CLI | `cursor_cli` | — | — | — | not in this build yet: a profile naming it is refused | — | — | — | — |
+| Cursor CLI | `cursor_cli` | `~/.agents/skills` | `.agents/skills/<role>/` | — | yes | built from the host's documentation and the installed bundle for version 2026.10.22-27dcf5f; not yet run on an account | `web_fetch` as `WebFetch(*)`, granted and denied by that rule; `web_search` has no rule, and is neither granted nor denied (the person's own `autoAcceptWebSearch` setting decides it) | one `Read(<absolute path>)` rule per file, in `.cursor/cli.json` in the work directory and never on its command line (version 2026.10.22-27dcf5f, from the bundle; not yet run on an account) | as its prompt, on standard input, in print mode (`-p`), when no word for a prompt stands on its command line (version 2026.10.22-27dcf5f, from the bundle; not yet run on an account) |
 
 A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there, and only
 a path of that kind detects it — and `jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
@@ -516,6 +516,68 @@ A host that reads its allow rules from the work directory rather than its comman
 deny rules — the command word that calls the runtime back and the memory files' paths, never the capability token or
 the envelope — and the attempt's launch records them beside the deny. A host that mints its own session id is told
 none, and the attempt records none.
+
+### Codex CLI
+
+Install the CLI (`npm install -g @openai/codex`), sign in to it yourself with `codex login`, then name it in a profile:
+`jason profile create local-codex --host codex --program codex`. Jason never signs in for you, and never looks for the
+copy of the CLI the Codex app carries.
+
+A launched role runs `codex exec` and reads its brief on stdin. None of the person's own configuration reaches it
+(`--ignore-user-config`), nor their command rules (`--ignore-rules`), hooks, plugins, apps, memories or MCP servers, and
+a setting the host does not know fails the start (`--strict-config`). Codex confines a role by a sandbox rather than by
+a list of commands: the runtime names a permissions profile of its own on the command line, and every command the role
+runs is held by it, whatever its name.
+
+**On Windows, first:** Codex's elevated sandbox must be set up once by an administrator
+([Codex's Windows sandbox setup](https://learn.chatgpt.com/docs/windows/windows-sandbox)); until then every command a
+role runs is refused and the attempt fails by the role's report. Every Windows run names that sandbox
+(`windows.sandbox="elevated"`) rather than leaving it to the person's configuration: `--ignore-user-config` drops the
+person's own choice, and with none named Codex runs a command with no sandbox at all. Measured with 0.166.0-alpha.5.1,
+the sandbox that needs no administrator refused every command of this profile, since it reads the whole disk or nothing
+and cannot hold the network to loopback.
+
+**What a role may read.** The platform's libraries, the work directory, the `jason` executable — the one file a
+single-file build is, as a release is, or the folder of any other build — the folder that build unpacked its libraries
+into (where it names none, the base a build unpacks under: `.net` in the home, and on Windows in the temporary folder),
+`<data>/run`, where the CLI finds the runtime, and each memory file the launch names. A memory file whose path holds a
+character the sandbox reads as a pattern (`* ? [ ] { }`) is left unreadable. Where `<data>/run`, the executable or its
+unpack folder holds one, a role could not call the runtime back, so the claim refuses the work with
+`host_not_available`, naming the path, before a child exists. A path the profile denies reading is denied, even one
+this list names: a deny wins over a read. On Windows, whether the elevated
+sandbox reads only this list is not yet checked; Codex documents the paths it denies there rather than a list of the
+paths it reads, so a role may read more than this list. What no flag reaches: Codex reads its own global `AGENTS.md`
+(in `~/.codex`, or `$CODEX_HOME`) for every run, so that file reaches every Codex role and should carry nothing a role
+must not read. Codex offers every role the skills in `~/.agents/skills`, in `$CODEX_HOME/skills` and in its own system
+cache too, beside the role's own, even with `--ignore-user-config`: `jason skills install` deploys the runtime and
+business skills to `~/.agents/skills`, so every Codex role is offered those and any skill the person keeps there.
+
+**Calling home.** The role runs `jason` in its shell, and the CLI reaches the runtime on loopback. The sandbox's network
+is on with loopback allowed, and every other address is kept out by Codex's network proxy, an experimental feature in
+0.166.0. On Linux, whether `jason` reaches the runtime from inside the sandbox is not yet checked; the sandbox may route
+loopback through its proxy, which the CLI does not use. On macOS, whether `jason` reaches the runtime from inside the
+sandbox is not yet checked. On Windows, whether `jason` reaches the runtime from inside the elevated sandbox is not yet
+checked.
+
+**What a deny means.** Nothing is writable, so `Write`, `Edit`, `MultiEdit` and `NotebookEdit` hold already. `WebSearch`
+turns the search off, even where `tools` grants it. `Read(//…)`, `Read(//d/…)` on Windows and `Read(~/…)` deny that
+path in the sandbox; a `Read` of any other form names no path the sandbox can hold, and is refused. `WebFetch` holds
+already, since Codex has no tool that fetches a page and the network reaches loopback alone, and is kept as written.
+Codex reads no rule by any other word: it confines a run by its sandbox, not by a list of tools. So a deny of a command
+by its name (`Bash(…)`, `PowerShell(…)`, `Shell(…)`), of a tool Codex does not have (`Glob`, `Grep`, `Task`), of an MCP
+tool or of a fetch of one domain (`WebFetch(domain:…)`) is refused when the profile is written or moved to Codex, naming
+the host and the word, rather than dropped at a launch. Commands are not confined by name either: any program the role
+can read runs, inside the same sandbox. A grant of `web_fetch` is refused because Codex has no tool that fetches a page.
+
+**Arguments.** A profile's `args` are flags, each value joined to its flag by `=` (`--model=<name>`): Codex reads a bare
+word as the prompt, which would replace the brief, or as a subcommand, and takes a short flag one letter at a time, so
+letters run together or a value glued on without `=` (`-ms`, `-mo3`) are refused. `-c` is the runtime's alone, since one
+setting after the runtime's could replace any of them; the model is the person's. A flag the runtime composes is
+refused by every name Codex's parser gives it, including the ones its help never prints, such as `--yolo`.
+
+**What an attempt records.** Codex mints the id of its own run and takes none, so the attempt records none; the id Codex
+printed is in the attempt's `stdout.log`. An end without a report is read as any other end: Codex says nothing stable
+about a missing sign-in.
 
 ### GitHub Copilot CLI
 
@@ -628,3 +690,59 @@ host's startup errors recommend, is final and says `host_not_available` with one
 host's words. That signal is the documented recommendation and **not a measured text**: the host's pages state no exit code
 and no message for a signed-out run, so a signed-out host that says it differently ends as an ordinary attempt that
 reported nothing.
+
+### Cursor CLI
+
+The row above was built from Cursor's documentation and from the bundle of the installed version, 2026.10.22-27dcf5f,
+read as text. It has not been run on an account: Jason holds no key, and the sign-in is the person's own, made as
+themselves with `agent login`. Each note says what a person relying on this host should know, and the first is the one
+thing that decides whether the host works at all.
+
+1. **Not yet measured: whether an allowed callback runs unattended.** A launch writes `Shell(<cli word>)` into the
+   allow list, which is the command that calls the runtime back. Whether the host runs a command that is allow-listed
+   without asking, in print mode and without `--force`, has not been seen on a signed-in run. Jason passes none of
+   `--force`, `--yolo`, `--auto-review`, `--sandbox` or `--approve-mcps`, and none of them is the answer if the callback
+   is not run: a profile's arguments may not carry them, and a session that cannot call back ends by its own report.
+2. **Reads are the widest of the hosts of the matrix.** Cursor takes the union of the allow and deny lists of every
+   configuration layer it finds, the person's user level and the work directory's own, a deny winning over an allow, and
+   it reads user-level skills. Note that the union holds for every kind of allow rule, not for reads only: what the person's own
+   configuration allows, a shell command or a write among it, stands beside what Jason writes. The person's own
+   `approvalMode` at the user level (an allowlist, auto-review, or unrestricted "Run Everything") is theirs too, and
+   Jason does not set it. Jason confines nothing it reads: the `Read(<file>)` rules a launch writes
+   name the memory files the session may read, and do not narrow what else the signed-in person's account can read. Of
+   the hosts a profile can name, this is the widest read form of the matrix, so a profile for it belongs on an account
+   whose files a role may see.
+3. **The three forms.** Reads: as in the note above. Call-home: the one shell command Jason allows, the runtime's own,
+   as in the first note; the person's own user-level configuration may allow more, and Jason cannot narrow it, so
+   `Write(**)` does not stop a shell command that writes. Deny: `Write(**)` always, and `WebFetch(*)` unless the revision
+   grants a fetch, then the profile's own deny words, written to `.cursor/cli.json` in the attempt's work directory, a
+   file that carries permissions, the file's version key and the editor mode off, nothing else. A deny word is one of
+   `Shell(...)`, `Read(...)`, `Write(...)`, `WebFetch(...)` or `Mcp(...)`, written as given; whether a head without
+   parentheses, such as `Write`, is read as a rule has not been seen.
+4. **Web search is neither granted nor denied.** The host has no rule for it in either list, and whether it runs is the
+   person's own `autoAcceptWebSearch` setting, so a profile that grants `web_search` or denies it, in either spelling, is
+   refused when it is written, naming the host.
+5. **The trust marker.** The host reads a project's permission file only in a directory it trusts, and `--trust` makes
+   an attempt's work directory one. It leaves one marker for each attempt under the person's own `~/.cursor`, which
+   Jason does not remove.
+6. **On Windows the program is a launcher script.** `agent.cmd` and `cursor-agent.cmd` start a PowerShell script, which
+   starts the newest version's `node.exe` with its `index.js`; a script is never started through a shell, so Jason starts
+   those two itself, choosing the version directory as that script does: a flat installation root is read first, where a
+   `node.exe` and an `index.js` stand beside the launcher, and otherwise the newest date wins, and within one day Jason
+   breaks a tie by name, which the script leaves unordered. Jason never runs the staging script beside them, and the
+   person's own run of the launcher promotes a staged update, so the version Jason starts can change after one.
+   `--program agent` is looked up on the search path, and an autostarted runtime's search
+   path can differ from a terminal's, so where it is not found the profile names the launcher by its full path:
+   `jason profile create <name> --host cursor_cli --program C:\Users\<you>\AppData\Local\cursor-agent\agent.cmd`.
+   This holds for those two file names under this host, and for no other script under any host.
+7. **One sentence when the host is not signed in.** The signal Jason reads is an exit that is not zero whose last
+   words of standard error hold `agent login`, `cursor agent login` or `agent-local login` (no sign-in) or
+   `stored authentication is invalid` (one the server refused), all read from the bundle. Such an attempt ends with
+   `host_not_available` and a fixed sentence: run `agent login` as yourself. Nothing of what the host wrote is carried.
+8. **A session id is told to the host.** `--new-session-id` is not in the host's help text; the bundle validates it as a
+   version-4 UUID, and the attempt records the one Jason minted. A profile may not name it, nor `--resume`.
+9. **The brief goes on stdin.** In print mode the host takes its prompt from the whole of stdin when no word for one is
+   on its command line, and ignores stdin when one is, so no composed argument is a bare word and a profile's arguments
+   take a value joined to its flag by an equals sign (`--model=name`), never a bare word and never a double dash. The
+   host reads a short flag with more letters or a value after it as other flags or as a flag with a value, and a lone
+   dash as the prompt, so a profile's arguments carry no such word either; a short flag stands alone, as `-f`.

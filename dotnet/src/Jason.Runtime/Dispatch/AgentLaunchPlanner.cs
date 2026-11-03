@@ -124,29 +124,53 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
     {
         var revision = launch.Revision;
 
-        // A machine fact, decided here rather than by a child that fails to start: the profile names a program,
-        // and either this machine has it or the work cannot run and says which program was missing.
-        // A script is the other way to have no program: a profile stored before the rule keeps its program, and the
-        // refusal names what it is rather than calling it missing.
-        if (programs.Resolve(revision.Program) is not { Count: > 0 } startedAs)
-        {
-            return new AgentLaunchDecision.Refused(
-                AttemptErrors.HostNotAvailable,
-                ProgramResolver.NamesShellScript(revision.Program)
-                    ? $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', {ProgramLookup.ShellScript}: {ProgramLookup.ProgramsNotShells}. "
-                      + "Name the program itself in the profile, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim)."
-                    : $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', which is not on this machine.",
-                Chosen(launch));
-        }
-
         // One implementation per host, and no fallback: a profile written against a host this build does not
-        // know is not something to guess about.
+        // know is not something to guess about. It is decided first, because the program is resolved for the host:
+        // a host that is installed as a launcher script says what that script starts.
         var host = hosts.LastOrDefault(candidate => candidate.Kind == revision.Host);
         if (host is null)
         {
             return new AgentLaunchDecision.Refused(
                 AttemptErrors.HostNotAvailable,
                 $"The execution profile '{launch.Profile.Name}' names a host this build cannot start.",
+                Chosen(launch));
+        }
+
+        // A machine fact, decided here rather than by a child that fails to start: the profile names a program,
+        // and either this machine has it or the work cannot run and says which program was missing.
+        // A script is the other way to have no program: a profile stored before the rule keeps its program, and the
+        // refusal names what it is rather than calling it missing.
+        // A host answers what its own install starts, and its code is not the claim's: nothing it throws leaves the
+        // claim. It ends this item as a program that cannot be started does, in a sentence that carries no word of the
+        // exception, and the scan goes on to the next candidate.
+        IReadOnlyList<string>? resolved;
+        try
+        {
+            resolved = programs.Resolve(revision.Program, host);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new AgentLaunchDecision.Refused(
+                AttemptErrors.HostNotAvailable,
+                $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', whose installation could not be read on this machine.",
+                Chosen(launch));
+        }
+
+        if (resolved is not { Count: > 0 } startedAs)
+        {
+            return new AgentLaunchDecision.Refused(
+                AttemptErrors.HostNotAvailable,
+                NotStartable(launch.Profile.Name, revision.Program, host),
+                Chosen(launch));
+        }
+
+        // Where this installation stands is a machine fact too: a host that could not name its own folders to its
+        // sandbox refuses here, saying which folder, rather than through a child that cannot call the runtime back.
+        if (host.LaunchProblem() is { } problem)
+        {
+            return new AgentLaunchDecision.Refused(
+                AttemptErrors.HostNotAvailable,
+                $"The execution profile '{launch.Profile.Name}' cannot start here: {problem}",
                 Chosen(launch));
         }
 
@@ -183,6 +207,35 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             composed.Unreadable,
             projectPublicId,
             revision.Host));
+    }
+
+    /// <summary>
+    /// Why a profile's program cannot be started: the script it names, the launcher script whose interpreter was not
+    /// found, or nothing at all by that name. A host installed as a launcher script is told how to point at it.
+    /// </summary>
+    private static string NotStartable(string profile, string program, IAgentHost host)
+    {
+        var launcher = host.Facts.CommandWord + ".cmd";
+        var named = $"The execution profile '{profile}' runs '{program}'";
+
+        // The launcher sentence is for a program that is the launcher: its bare word, or a path to one of its files. A script
+        // that is something else is a script a shell would run, whichever host it is under.
+        var isTheLauncher = host.NamesItsLauncher(launcher)
+            && (host.NamesItsLauncher(Path.GetFileName(program.Trim()))
+                || (!program.Contains('/', StringComparison.Ordinal) && !program.Contains('\\', StringComparison.Ordinal)
+                    && host.NamesItsLauncher(program.Trim() + ".cmd")));
+        if (isTheLauncher)
+        {
+            return $"{named}, which this machine cannot start: it is not installed, or nothing was found to start. "
+                + "This host is installed as a launcher script, and Jason starts what that script starts, a node.exe and an index.js in its newest version directory, never the script itself. "
+                + $"If it is installed, name the launcher by its full path in the profile: --program <full path of {launcher}>, "
+                + "which also starts an installation the search path of this runtime does not reach.";
+        }
+
+        return ProgramResolver.NamesShellScript(program)
+            ? $"{named}, {ProgramLookup.ShellScript}: {ProgramLookup.ProgramsNotShells}. "
+              + "Name the program itself in the profile, or a bare name without its extension, which Jason looks up on the search path (on Windows as an .exe, a .com or npm's own shim)."
+            : $"{named}, which is not on this machine.";
     }
 
     /// <summary>What the pre-flight had decided when it refused: the level and the profile, and no more.</summary>

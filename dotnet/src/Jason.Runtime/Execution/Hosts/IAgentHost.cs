@@ -70,6 +70,13 @@ public interface IAgentHost
     bool TakesSessionId => true;
 
     /// <summary>
+    /// Why this host cannot start a run from where this installation stands, or null where it can: a fact about the
+    /// machine, not the profile, which the claim decides before a child exists and records as the attempt's error. A
+    /// sentence of the host's own that names the path it cannot use, never the host's own message about it.
+    /// </summary>
+    string? LaunchProblem() => null;
+
+    /// <summary>
     /// The command one attempt of <paramref name="revision"/> is started with. Called once per attempt: the
     /// session it names is minted here and belongs to that attempt alone.
     /// </summary>
@@ -110,4 +117,20 @@ public interface IAgentHost
     /// bundle carry. An attempt ended this way is final, since a repeat would meet the same machine.
     /// </summary>
     string? Unavailable(int exitCode, string? stderrTail);
+
+    /// <summary>
+    /// Whether a file name is the launcher script this host's own installer writes, which a profile may name by its
+    /// full path although it is a script: some hosts are installed as a script that starts an interpreter, and the host
+    /// knows both which names those are and what they start. A name only, answered before it is known whether the file
+    /// exists. No host has one by default, and a script is then refused as it always was.
+    /// </summary>
+    bool NamesItsLauncher(string fileName) => false;
+
+    /// <summary>
+    /// What this host's launcher script starts, as a command, when <paramref name="shimFile"/> is that script: the
+    /// interpreter and the entry script it would run, found by the rule the script itself uses. Null where the file is
+    /// not this host's launcher, where this is not a platform that has one, or where nothing is installed to start.
+    /// The file system is the only thing read, and nothing is remembered between calls.
+    /// </summary>
+    IReadOnlyList<string>? ProgramLayout(string shimFile) => null;
 }
