@@ -240,7 +240,7 @@ public sealed class CopilotCliHost(bool windows) : IAgentHost
     /// </summary>
     public string? ArgsProblem(IReadOnlyList<string> args) =>
         args.FirstOrDefault(arg => !IsOwnedOption(arg)) is { } refused
-            ? $"'{refused}' is not one of the options a profile may carry on this host, whose parser was not read: {string.Join(", ", ValueOptions.Select(option => option + "="))} (each with a value in the same argument), {string.Join(", ", FlagOptions)}."
+            ? $"'{refused}' is refused: the host's parser is not read, so only the documented options the person owns are taken: {string.Join(", ", ValueOptions.Select(option => option + "=<value>"))}, {string.Join(", ", FlagOptions)}, each as one argument."
             : null;
 
     private static bool IsOwnedOption(string arg)

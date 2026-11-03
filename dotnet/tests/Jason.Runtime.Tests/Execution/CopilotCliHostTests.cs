@@ -466,7 +466,8 @@ public class CopilotCliHostTests
         Assert.Equal(refused, problem is not null);
         if (refused)
         {
-            Assert.Contains("--model=", problem, StringComparison.Ordinal);
+            Assert.Contains("the host's parser is not read, so only the documented options the person owns are taken", problem, StringComparison.Ordinal);
+            Assert.Contains("--model=<value>", problem, StringComparison.Ordinal);
         }
     }
 

@@ -67,4 +67,71 @@ public class CopilotCliProfileTests
         Assert.Equal(("args", "invalid"), (args.Field, args.Code));
         Assert.Contains("copilot_cli", args.Message, StringComparison.Ordinal);
     }
+
+    private const string Reason = "the host's parser is not read, so only the documented options the person owns are taken";
+
+    /// <summary>
+    /// The host's parser is closed, so a profile's arguments are an allowlist of the documented options a person owns: an
+    /// undocumented long flag, a word shaped like the flags that allow everything, a cluster of short options and a short
+    /// option glued to its value are all refused, at create and at update alike, naming the host and the reason.
+    /// </summary>
+    [Theory]
+    [InlineData("--made-up-flag")]
+    [InlineData("--made-up-flag=1")]
+    [InlineData("--yolo")]
+    [InlineData("--allow-all-tools")]
+    [InlineData("--auto-approve-everything")]
+    [InlineData("-pi")]
+    [InlineData("-pfoo")]
+    [InlineData("-Cfolder")]
+    public async Task A_word_outside_the_allowlist_is_refused_at_create_and_at_update_naming_the_host_and_the_reason(string word)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var created = await api.PostErrorAsync(
+            Operations.ProfileCreate,
+            new { name = "refused-at-create", host = "copilot_cli", program = "copilot", args = new[] { "--model=made-up-model", word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new { name = "refused-at-update", host = "copilot_cli", program = "copilot", args = new[] { "--model=made-up-model" } },
+            Ct);
+        var updated = await api.PostErrorAsync(
+            Operations.ProfileUpdate,
+            new { name = "refused-at-update", args = new[] { "--model=made-up-model", word } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        foreach (var error in new[] { created, updated })
+        {
+            if (word is "--yolo" or "--allow-all-tools")
+            {
+                // A flag the runtime composes or reserves is refused as that, before the allowlist is asked.
+                var reserved = Assert.Single(error.Details!);
+                Assert.Equal(("args[1]", "reserved"), (reserved.Field, reserved.Code));
+                Assert.Contains(word, reserved.Message, StringComparison.Ordinal);
+                continue;
+            }
+
+            var refusal = Assert.Single(error.Details!, detail => detail.Field == "args" && detail.Code == "invalid");
+            Assert.Contains("copilot_cli", refusal.Message, StringComparison.Ordinal);
+            Assert.Contains(Reason, refusal.Message, StringComparison.Ordinal);
+            Assert.Contains(word, refusal.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task The_documented_options_a_person_owns_are_accepted_at_create_and_at_update()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        string[] owned = ["--model=made-up-model", "--effort=high", "--reasoning-effort=low", "--log-level=debug", "--max-ai-credits=5", "--no-color", "--disable-client-telemetry"];
+
+        var created = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "owned", host = "copilot_cli", program = "copilot", args = new[] { "--model=made-up-model" } }, Ct);
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileUpdate, new { name = "owned", args = owned }, Ct);
+
+        Assert.Equal(["--model=made-up-model"], created.Revision.Args);
+        Assert.Equal(owned, updated.Revision.Args);
+    }
 }
