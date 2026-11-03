@@ -85,7 +85,8 @@ public class GeminiCliProfileTests
     /// <summary>
     /// Critic finding S1, held on the host that gives it a place to happen: a profile stored on Claude Code with an argument
     /// that is a flag only Gemini CLI composes is moved onto Gemini CLI by a patch naming nothing but the host. The stored
-    /// argument would be launched after the composed approval mode and win, so the move is refused naming the host.
+    /// argument would be launched after the composed approval mode and win, so the move is refused naming the host. The patch
+    /// names the program too, since a move that leaves the stored program of another host is refused for that alone.
     /// </summary>
     [Fact]
     public async Task A_patch_moving_a_profile_to_the_host_is_held_to_the_flags_the_host_composes()
@@ -98,7 +99,7 @@ public class GeminiCliProfileTests
 
         var error = await api.PostErrorAsync(
             Operations.ProfileUpdate,
-            new { name = "moving", host = "gemini_cli" },
+            new { name = "moving", host = "gemini_cli", program = "gemini" },
             HttpStatusCode.BadRequest,
             Ct);
 
@@ -122,7 +123,7 @@ public class GeminiCliProfileTests
 
         var error = await api.PostErrorAsync(
             Operations.ProfileUpdate,
-            new { name = "moving-bare", host = "gemini_cli" },
+            new { name = "moving-bare", host = "gemini_cli", program = "gemini" },
             HttpStatusCode.BadRequest,
             Ct);
 
