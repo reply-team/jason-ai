@@ -134,12 +134,15 @@ public sealed class GeminiCliHost(string? systemPoliciesDirectory = null) : IAge
     /// browser; this variable, which the host reads and has no flag for, makes it fail with its authentication exit at
     /// once instead. The other is the variable an editor's companion sets to name the folders of its workspace, which the
     /// host adds to the run's own; an empty value is read as none, so a value in the person's environment adds no folder
-    /// the launch never named.
+    /// the launch never named. The third turns the host's telemetry off: the host starts its exporters from the person's own
+    /// settings and variables and logs prompts by default, so a role's run would send the brief wherever the person points
+    /// it; the variable outranks the setting, and a value other than true or 1 is read as off.
     /// </summary>
     public IReadOnlyDictionary<string, string> Environment { get; } = new Dictionary<string, string>
     {
         ["NO_BROWSER"] = "true",
         ["GEMINI_CLI_IDE_WORKSPACE_PATH"] = string.Empty,
+        ["GEMINI_TELEMETRY_ENABLED"] = "false",
     };
 
     /// <summary>

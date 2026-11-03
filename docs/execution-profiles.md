@@ -770,10 +770,11 @@ build does, and what it has not measured.
   `--prompt-=x` would be a reserved option in a spelling no list holds. A value may hold a space and no control
   character, which would not reach the host as written.
   The host's parser declares no telemetry flag at 0.66.0 and refuses an unknown one before the run starts, so a profile
-  has none to name; telemetry is the person's own setting, in `~/.gemini/settings.json` or in `GEMINI_TELEMETRY_ENABLED` and
-  the variables beside it, and where they turn it on the host logs prompts by default, so the brief goes wherever the
-  person sends it, which this runtime does not hold back.
-- **Environment.** The constants this host declares are `NO_BROWSER=true` and `GEMINI_CLI_IDE_WORKSPACE_PATH=`. Without
+  has none to name. A role's run sends no telemetry whatever the person's own setting says, since the host would log
+  prompts by default and the brief would go wherever the person points it: the constant below turns it off. A person who
+  wants a role's run traced runs the host themselves; making it a profile's choice is for a later release.
+- **Environment.** The constants this host declares are `NO_BROWSER=true`, `GEMINI_CLI_IDE_WORKSPACE_PATH=` and
+  `GEMINI_TELEMETRY_ENABLED=false`, the last of which outranks the person's own telemetry setting. Without
   the first a signed-out run opens a browser or waits for a line on standard input, and with it the run fails at once
   with the host's authentication exit. That exit, 41, ends the attempt as `host_not_available` with Jason's own
   sentence, which says the host "could not authenticate" and no more: the exit is also an enforced sign-in type that

@@ -772,7 +772,23 @@ public class GeminiCliHostTests
     public void The_host_is_given_no_editor_workspace_by_an_empty_constant_so_an_inherited_one_adds_no_folder()
     {
         Assert.Equal(string.Empty, _host.Environment["GEMINI_CLI_IDE_WORKSPACE_PATH"]);
-        Assert.Equal(["GEMINI_CLI_IDE_WORKSPACE_PATH", "NO_BROWSER"], _host.Environment.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["GEMINI_CLI_IDE_WORKSPACE_PATH", "GEMINI_TELEMETRY_ENABLED", "NO_BROWSER"], _host.Environment.Keys.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The host starts its telemetry exporters from the person's own settings and variables, and logs prompts by default, so a
+    /// run would send the brief wherever they point it. The variable outranks the setting, and anything but true or 1 is read as
+    /// off, so a constant of false holds whatever the person's environment says.
+    /// </summary>
+    [Fact]
+    public void A_role_run_sends_no_telemetry_whatever_the_persons_own_environment_says()
+    {
+        Assert.Equal("false", _host.Environment["GEMINI_TELEMETRY_ENABLED"]);
+
+        var child = new Dictionary<string, string?> { ["GEMINI_TELEMETRY_ENABLED"] = "true", ["GEMINI_TELEMETRY_LOG_PROMPTS"] = "true" };
+        LaunchEnvironment.Apply(child, "/data", "att_1", "wi_1", null, _host.Environment);
+
+        Assert.Equal("false", child["GEMINI_TELEMETRY_ENABLED"]);
     }
 
     private sealed class TempDirectory : IDisposable

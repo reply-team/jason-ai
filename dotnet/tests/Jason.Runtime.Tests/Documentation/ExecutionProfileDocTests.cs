@@ -728,7 +728,9 @@ public partial class ExecutionProfileDocTests
             "`GEMINI_CLI_IDE_WORKSPACE_PATH=`",
             "A value may hold a space and no control character",
             "declares no telemetry flag",
-            "`GEMINI_TELEMETRY_ENABLED`",
+            "`GEMINI_TELEMETRY_ENABLED=false`",
+            "A role's run sends no telemetry whatever the person's own setting says",
+            "runs the host themselves; making it a profile's choice is for a later release",
             "also an enforced sign-in type that does not match",
             "\"could not authenticate\"",
             "the client level is the harness root, so a role reads every project's and campaign's memory file under it",
@@ -744,6 +746,8 @@ public partial class ExecutionProfileDocTests
         {
             Assert.Contains(fragment, notes, StringComparison.Ordinal);
         }
+
+        Assert.DoesNotContain("which this runtime does not hold back", notes, StringComparison.Ordinal);
     }
 
     /// <summary>The row of the host table names the sign-in signal in one clause, so a person reading only the table knows what a signed-out run looks like.</summary>
