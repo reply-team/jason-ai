@@ -18,15 +18,18 @@ namespace Jason.Runtime.Execution.Hosts;
 /// flag and no word of the brief. Everything that confines the run travels on the command line, in the host's own
 /// options: nothing is written into the work directory, and nothing of the person's own configuration is touched. The
 /// tool set is the confinement. A tool the host is not offered is unavailable even where a rule allows it, so the role is
-/// offered what reads, runs the callback and loads its skill, and none of the tools that write, patch, ask a person or
-/// start another agent. The permission rules say what the role may then do: run the callback by its command word, read
-/// the memory files the launch names, and use the web fetch tool where the person granted it. A deny wins over an allow
-/// in the host, even over an allow-everything, so the web tool not granted and any writing are denied as well.
+/// offered what reads, runs the callback and loads a skill (any the host discovers, not the role's own alone), and none
+/// of the tools that write, patch, ask a person or start another agent. The permission rules say what the role may then
+/// do: run the callback by its command word, read the memory files the launch names, and use the web fetch tool where
+/// the person granted it. A deny wins over an allow in the host, even over an allow-everything, so the web tool not
+/// granted and every write are denied as well; the shell is held to the callback's command word by the allow rule alone.
 /// </para>
 /// <para>
 /// Not measured, because the host's pages do not say: whether a rule naming one file lets the role read it outside the
 /// work directory, whether a run in a folder the host does not trust stops to ask, whether the work directory's skills
-/// load there, and which exit code and text a run that is not signed in ends with.
+/// load there, whether a tool call no rule allows is refused or waits in a run with no terminal, what shell redirection by
+/// the callback can write, whether version 1.0.105 accepts every flag composed here, and which exit code and text a run
+/// that is not signed in ends with.
 /// </para>
 /// </summary>
 /// <param name="windows">

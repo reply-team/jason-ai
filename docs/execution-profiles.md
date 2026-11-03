@@ -528,7 +528,7 @@ Jason holds no key for it, and a token the person's own environment carries (`CO
 `GITHUB_TOKEN`) is theirs and is not read or set. Then:
 
 ```
-jason profile create copilot --host copilot_cli --program copilot --host-version-verified 1.0.105
+jason profile create copilot --host copilot_cli --program copilot
 ```
 
 `jason skills install --host copilot_cli` deploys into `~/.agents/skills`, which the host reads as personal skills; a
@@ -542,10 +542,14 @@ load the person's own instruction files (`--no-custom-instructions`), reading th
 **What a launch is.** The brief goes to the host on stdin, which it reads when it is given no prompt of its own, so the
 command carries no print flag and nothing of the envelope. It is `--output-format json` (a transcript, which the runtime
 keeps and never parses: the outcome comes back through the CLI), `--no-ask-user`, `--no-auto-update`,
-`--no-custom-instructions`, `--disable-builtin-mcps`, a fresh `--session-id` minted for the attempt, and then three lists
-— `--available-tools`, `--allow-tool` and `--deny-tool` — and last the profile's own arguments. Nothing is written into
-the work directory and nothing of the person's own configuration is touched. No flag that trusts the folder or allows
-every tool, path or address is composed, and a profile may not carry one. The host's parser is closed and was not read
+`--no-custom-instructions`, `--disable-builtin-mcps`, a fresh `--session-id` minted for the attempt, four flags that
+close what the person's own settings would otherwise decide — `--disallow-temp-dir` (the system temporary folder is not
+opened to the role), `--sync-session=off` (the host's history of the run is not synced), `--mode=interactive` (a setting
+cannot make the run autopilot) and `--no-bash-env` (no startup file named by `BASH_ENV` is read by the shell) — and then
+three lists — `--available-tools`, `--allow-tool` and `--deny-tool` — and last the profile's own arguments. Nothing is
+written into the work directory and nothing of the person's own configuration is touched. No flag that trusts the folder
+or allows every tool, path or address is composed, and a profile may not carry one: every flag above is reserved, with the
+other documented flags that load, reach or say more. The host's parser is closed and was not read
 (the reserved list is from its documentation), so a hidden alias of a composed flag, a cluster of short options or a value
 glued to one cannot be ruled out; a profile's arguments are therefore an allowlist of the documented options a person
 owns, each as one argument: `--model=`, `--effort=` (or `--reasoning-effort=`), `--max-ai-credits=`, and the
@@ -555,7 +559,7 @@ The log level and the log directory are not among them: they change what the hos
 | Tool the host offers a role | Why |
 |---|---|
 | `view`, `glob`, `grep` | reading, inside the work directory |
-| `skill` | the role's own skill |
+| `skill` | loading a skill: every skill the host discovers, the person's and plugins' included, not the role's own alone |
 | `bash` and its `read_`, `list_`, `stop_` companions; on Windows `powershell` and its three | the callback to the runtime, and reading a long one back |
 | `web_fetch` | only where the profile grants `web_fetch` |
 
@@ -567,20 +571,52 @@ list is the confinement and the rules below are what the role may then do.
 
 - **What a role may read:** `read(<absolute path>)` for each memory file the launch names, in the order client, project,
   campaign, once for a file named twice, forward slashes on Windows. A path holding a comma, a parenthesis or a pattern
-  character gets no rule, because the list is comma-separated and only the shell and url kinds take wildcards; the
+  character gets no rule, because the list is comma-separated and the host documents no pattern rule for `read`; the
   level is reported as unreadable and the role reports the refusal. **Not measured:** whether a rule for one file lets the
   role read it outside the work directory, which the host's pages do not say.
 - **How it calls back:** `shell(jason:*)`, the runtime's command word followed by anything, which the host reads as every
   subcommand of it; one rule of the `shell` kind covers both shell tools. The bare word with no argument is not matched.
 - **What deny means:** a deny wins over an allow in the host, even over an allow-everything, so a web fetch not granted is
   denied (`url`) and left out of the tool set, and every `write` is denied beside the profile's own `deny` words, which are
-  the host's `kind(argument)` rules as the person wrote them, one per entry. A deny of `web_search` is kept as the person's
-  word and holds anyway, since the host has no such tool.
+  the host's `kind(argument)` rules as the person wrote them, one per entry. The host reads a rule's head as one of
+  `memory`, `read`, `shell`, `url` or `write`, in that case, with or without a part in parentheses, and any other head as an
+  MCP server's name, which denies nothing the role is offered; so a deny with another head is refused when the profile is
+  written, naming the host, and so is a deny by the name of the fetch tool (`web_fetch`), whose word is `url`. A deny of
+  `web_search` is kept as the person's word and holds anyway, since the host has no such tool.
+**What is not confined.** Jason composes what a flag can close, and a flag cannot close the person's own setup. The
+history of the run stays under the person's `~/.copilot` only because the launch turns the host's session sync off; the
+host keeps it there whatever the work directory says. Beyond that, the host's own documentation puts these outside any
+flag, and each is the person's, not Jason's, to change:
 
-**What is not confined.** The host keeps its own history of the run, and of the sessions it started, under the person's
-`~/.copilot`, whatever the work directory says. The run is in a folder the host does not trust: the host documents that
-such a run loads no hooks, workspace servers, repository plugin settings or project extensions, and **not measured** are
-whether it stops to ask, and whether the work directory's skills load there. A person who sets `COPILOT_ALLOW_ALL` in their
+| What the person's setup can do | Where it lives |
+|---|---|
+| Run user-level hooks: the run loads no repository hooks, but the person's own apply to every session | `~/.copilot/hooks/` and the `hooks` key of `~/.copilot/settings.json` |
+| Start MCP servers of their own, which the tool set keeps out of the role's reach but which still start; the host has a flag to disable one server by name and none to disable all | the person's MCP configuration |
+| Turn on assisted approval for a run with no terminal | `COPILOT_ASSISTED_APPROVAL=true` in the environment |
+| Make allow-all the default permission mode | `defaultPermissionMode` set to `"allow-all"` in the user settings |
+| Add skill folders, which the role can then load | `skillDirectories` in the user settings and `COPILOT_SKILLS_DIRS` in the environment |
+| Have a saved approval apply, keyed by the git root of the folder the run is in; a deny still wins over it | `~/.copilot/permissions-config.json` |
+| Allow everything: `COPILOT_ALLOW_ALL` is equal to `--allow-all`, which is every tool, every path and every URL, minus what the deny list names; only the exact value `true` also trusts the folder | the environment |
+
+Jason does not read or clear any of these. A person who wants the `skill` tool to reach less than every skill the host
+discovers, the person's and plugins' included, excludes folders with `ignoredSkillsLocations` or turns a skill off with
+`disabledSkills`, both in the user settings; a skill's own `allowed-tools` can open the shell to every command with `"*"`,
+and the allow rule that holds the shell to the runtime's command word does not stop a skill that names it.
+
+The file-writing tools are denied and not offered; the shell is held to the command word by the allow rule. What shell
+redirection by the callback can write is not measured. The run is in a folder the host does not trust, and the host
+documents that such a run loads no hooks, workspace servers, repository plugin settings or project extensions.
+
+**Not measured.** The documentation leaves these open, and no run has answered them:
+
+- whether a rule naming one file lets the role read it outside the work directory;
+- whether a run in a folder the host does not trust stops to ask;
+- whether the work directory's skills load there;
+- whether a tool call that no rule allows is refused, or waits, in a run with no terminal;
+- whether shell redirection by the callback can write a file the deny list names;
+- whether `taskbarPresence`, a Windows setting, does anything in a run with no desktop;
+- whether version 1.0.105 accepts every flag above: the host's changelog does not say when `--disallow-temp-dir` and
+  `--sync-session` appeared, so a launch is composed from the reference and not from a run.
 own environment trusts the folder and allows everything except what the deny list names; Jason does not read or clear it.
 
 **Not signed in.** An end without a report whose exit is not zero and whose stderr names `copilot login`, the command the
