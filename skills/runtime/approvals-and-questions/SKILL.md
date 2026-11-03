@@ -67,8 +67,9 @@ decision, and `troubleshooting-jason` is where it is read. The notification itse
 and the counts may already be smaller: something may have been answered since it was sent.
 
 A person may instead arrive with a prompt that names one item — an approval id or a question id — from the UI's Copy
-prompt button or from `jason approval get <approval-id> --prompt`. Read that one first, as this skill says, and present
-it with what you found; the lists still show the rest, and arriving with a prompt decides nothing either.
+prompt button or from `jason approval get <approval-id> --prompt`, or the prompt may be the first message of a session
+`jason session open` or the UI's Open an AI session started for them. Read that one first, as this skill says, and
+present it with what you found; the lists still show the rest, and arriving with a prompt decides nothing either.
 
 Nothing is approved by reacting to a notification: an approval is a person's decision, recorded as theirs. Dismissing
 a toast, or reading the message, decides nothing; what decides is the person's word on that item, once they have read

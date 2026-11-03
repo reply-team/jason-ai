@@ -153,8 +153,11 @@ such a unit exists only while the person is signed in.
   paste into your agent host. The list's toast has no button, and neither has a toast whose link is not Jason's (§7).
 - **A page you visit can open a `jason:` link too**, after your browser's own confirmation, and it can do nothing a
   click cannot: your own UI opens on the list, or on an item whose id the page could have typed, or Jason's own prompt
-  for such an item replaces what was on your clipboard, for an id the runtime answers. Nothing is decided by it, and the
-  link's text is never logged, never repeated in an error and never handed on to another program.
+  for such an item replaces what was on your clipboard, for an id the runtime answers, or a new terminal opens running
+  your own agent host on Jason's brief for such an item that still waits, under your own permissions for that host
+  (`jason session open`, in [ui.md](ui.md)). Nothing is decided by it, and the link's text is never logged, never
+  repeated in an error and never handed on to another program. A toast has no button for a session: the link is the
+  UI's.
 
 A notification plugin reaches wherever its service does — a phone following an ntfy topic, say — whatever session the
 runtime runs in.

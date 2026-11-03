@@ -29,11 +29,12 @@ public class VerbMapTests
     private static readonly string[] DeclaredExceptions = ["status", "uninstall", "logs", "doctor"];
 
     /// <summary>
-    /// The nouns with no API operation behind them. Both change this installation rather than asking the
-    /// runtime about anything, so nothing in <c>Operations</c> stands behind either — which is why the map's
-    /// own doc comment no longer claims one-to-one with a single exception.
+    /// The nouns with no API operation behind them. Two change this installation rather than asking the
+    /// runtime about anything, and the third starts the person's own agent host in a terminal, which the runtime
+    /// never starts or knows about, so nothing in <c>Operations</c> stands behind any of them — which is why the
+    /// map's own doc comment no longer claims one-to-one with a single exception.
     /// </summary>
-    private static readonly string[] WithoutAnOperation = ["skills", "update"];
+    private static readonly string[] WithoutAnOperation = ["session", "skills", "update"];
 
     /// <summary>
     /// Exact, and exact at every commit. A noun arrives here in the same commit that adds it to the program,
@@ -42,7 +43,7 @@ public class VerbMapTests
     private static readonly string[] Nouns =
     [
         "approval", "block", "campaign", "contact", "decision", "events", "journal", "plugin", "preference", "profile", "project", "reply", "report",
-        "role", "rolenote", "route", "runtime", "skills", "suppression", "ui", "update", "workitem",
+        "role", "rolenote", "route", "runtime", "session", "skills", "suppression", "ui", "update", "workitem",
     ];
 
     [Fact]
@@ -102,7 +103,7 @@ public class VerbMapTests
     /// without one is the map drifting from the rule its own doc comment states.
     /// </summary>
     [Fact]
-    [Critical(Family.R2, "the eight declared exceptions")]
+    [Critical(Family.R2, "the nine declared exceptions")]
     public void Exactly_the_declared_names_have_no_api_operation_behind_them()
     {
         var operations = typeof(Contracts.Api.Operations)
@@ -118,7 +119,7 @@ public class VerbMapTests
 
         // And the verbs stand for none either. Each says it never will, and nothing held that: an
         // `uninstall.*`, `status.*`, `logs.*` or `doctor.*` operation arriving in the contracts would have kept
-        // this test green while the eight declared exceptions quietly became seven.
+        // this test green while the nine declared exceptions quietly became eight.
         Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
     }
 
@@ -165,6 +166,23 @@ public class VerbMapTests
         Assert.Equal(["install", "list", "reload"], verbs);
         Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
         Assert.DoesNotContain("install", operations);
+    }
+
+    /// <summary>
+    /// The <c>session</c> noun is one verb, <c>open</c>, and no operation: it starts the person's own agent host in a
+    /// terminal of this machine, which the runtime never starts or knows about. The ninth exception, made here in the
+    /// open; a second verb under it is a decision of its own.
+    /// </summary>
+    [Fact]
+    public void The_session_noun_is_open_alone()
+    {
+        using var paths = new TempPaths();
+        var group = Jason.Cli.Session.SessionCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
+
+        Assert.Equal(["open"], group.Subcommands.Select(command => command.Name));
+        Assert.DoesNotContain(
+            typeof(Contracts.Api.Operations).GetFields().Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue()!),
+            name => name.StartsWith("session.", StringComparison.Ordinal));
     }
 
     /// <summary>

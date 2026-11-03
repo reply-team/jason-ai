@@ -183,6 +183,33 @@ public class AgentHostsTests
             files.Select(file => file.FileName));
     }
 
+    /// <summary>
+    /// How each host starts an interactive session with a first prompt, as its own reference documents it: Copilot CLI,
+    /// Gemini CLI and Antigravity CLI take the prompt after <c>-i</c>, the other three as their one positional word.
+    /// </summary>
+    [Theory]
+    [InlineData(AgentHostKind.ClaudeCode, null)]
+    [InlineData(AgentHostKind.Codex, null)]
+    [InlineData(AgentHostKind.CopilotCli, "-i")]
+    [InlineData(AgentHostKind.CursorCli, null)]
+    [InlineData(AgentHostKind.GeminiCli, "-i")]
+    [InlineData(AgentHostKind.AntigravityCli, "-i")]
+    public void Each_host_takes_a_first_prompt_for_an_interactive_session_by_its_own_form(AgentHostKind kind, string? flag)
+    {
+        Assert.Equal(flag, AgentHosts.Of(kind).InteractivePromptFlag);
+        const string Prompt = "Brief.\nLine two.";
+        Assert.Equal(flag is null ? [Prompt] : [flag, Prompt], AgentHosts.InteractiveArguments(kind, Prompt));
+    }
+
+    /// <summary>The prompt is one argument, whole: nothing is split on a space, a quote or a line break.</summary>
+    [Fact]
+    public void The_prompt_is_one_argument_whatever_it_holds()
+    {
+        const string Prompt = "Jason is waiting; read \"this\" and 'that'.\n\n1. Step <host>";
+
+        Assert.All(Enum.GetValues<AgentHostKind>(), kind => Assert.Equal(Prompt, AgentHosts.InteractiveArguments(kind, Prompt)[^1]));
+    }
+
     [Fact]
     public void Resolving_a_relative_path_under_a_folder_uses_the_platforms_separator()
     {

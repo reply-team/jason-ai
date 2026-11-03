@@ -3,6 +3,7 @@ import type { Decision } from '../../api/types';
 import { relative } from '../../time/format';
 import { ActionsRow } from '../../layout/actions-row';
 import { CopyPromptButton } from './copy-prompt-button';
+import { SessionLink } from './session-link';
 import { PanelHeader } from '../../layout/panel-header';
 
 type Props = {
@@ -130,6 +131,7 @@ export function QuestionPanel({
                                 campaignId={decision.campaign_id}
                                 workItemId={decision.work_item_id}
                             />
+                            <SessionLink kind="question" itemId={decision.id} />
                         </>
                     )}
                 </ActionsRow>

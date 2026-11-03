@@ -1,0 +1,7 @@
+{
+  "key": "agent.interactive_host",
+  "version": 1,
+  "case": "an object that names no host",
+  "value": {},
+  "expect": { "invalid": [{ "pointer": "/host", "reason": "required" }] }
+}

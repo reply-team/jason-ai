@@ -445,10 +445,11 @@ public class PreferenceServiceTests
 
         var page = await service.ListAsync(new PreferenceListRequest(null, null), Ct);
 
-        Assert.Equal(2, page.Items.Count);
-        Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), page.Items[0]);
-        Assert.Equal(tone with { Value = null }, page.Items[1] with { Value = null });
-        Assert.True(JsonNode.DeepEquals(tone.Value, page.Items[1].Value), $"The listed value is {page.Items[1].Value?.ToJsonString()}.");
+        Assert.Equal(3, page.Items.Count);
+        Assert.Equal(new PreferenceDto("agent.interactive_host", null, null, null, null, null, null), page.Items[0]);
+        Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), page.Items[1]);
+        Assert.Equal(tone with { Value = null }, page.Items[2] with { Value = null });
+        Assert.True(JsonNode.DeepEquals(tone.Value, page.Items[2].Value), $"The listed value is {page.Items[2].Value?.ToJsonString()}.");
         Assert.Null(page.NextCursor);
     }
 
@@ -459,10 +460,10 @@ public class PreferenceServiceTests
         using var db = database.Open();
         var service = NewService(db);
 
-        var first = await service.ListAsync(new PreferenceListRequest(1, null), Ct);
-        var second = await service.ListAsync(new PreferenceListRequest(1, first.NextCursor), Ct);
+        var first = await service.ListAsync(new PreferenceListRequest(2, null), Ct);
+        var second = await service.ListAsync(new PreferenceListRequest(2, first.NextCursor), Ct);
 
-        Assert.Equal(["sender.identity"], first.Items.Select(item => item.Key));
+        Assert.Equal(["agent.interactive_host", "sender.identity"], first.Items.Select(item => item.Key));
         Assert.NotNull(first.NextCursor);
         Assert.Equal(["tone_of_voice"], second.Items.Select(item => item.Key));
         Assert.Null(second.NextCursor);
