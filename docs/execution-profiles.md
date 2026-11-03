@@ -556,8 +556,12 @@ host's own print timeout would end a run with a success and partial output, and 
 Jason turns it off and the attempt's limit is the only limit. The host mints its own conversation id and takes none, so
 the attempt records no session. Nothing is written into the work directory, nothing of the person's own configuration is
 touched, and no flag that acts without asking, widens the workspace, takes another project or resumes a conversation is
-composed or allowed in a profile. An argument is a flag with its value joined by an equals sign (`--model=<name>`): a
-bare word may be read by the host as a prompt, and a double dash is refused.
+composed or allowed in a profile. An argument is a long flag with its value joined by an equals sign (`--model=<name>`):
+a bare word may be read by the host as a prompt, a double dash is refused, and so is every word of one dash and more than
+one character, such as a short flag glued to another or to a value, and the bare dash. The host's parser could not be read
+for this, since no copy of it was available to inspect: the reserved list is the flags its reference table names, with the
+one its mode page says it accepts for another host's sake (`--permission-mode`, read as its own `--mode`), and a flag it
+accepts that no page names is not on it.
 
 **What a session may do is the person's to say.** The host takes its permission rules, of the form `action(target)`
 (`command`, `read_file`, `write_file`, `read_url` and others), from the person's own settings files under `~/.gemini` and

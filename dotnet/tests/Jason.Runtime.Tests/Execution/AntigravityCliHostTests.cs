@@ -105,6 +105,44 @@ public class AntigravityCliHostTests
         Assert.NotNull(Host.ArgsProblem(["--"]));
     }
 
+    /// <summary>
+    /// A short flag glued to a value or to another short flag is read by a parser as the flags it expands to, which the
+    /// reserved list, matched by whole word, cannot see. So every word of one dash and more than one character, and the
+    /// bare dash, is refused, whatever the letters; and for each short flag the host reserves, the words that glue a
+    /// letter or a value to it are among them.
+    /// </summary>
+    [Fact]
+    public void A_short_flag_glued_to_another_or_to_a_value_and_the_bare_dash_are_refused()
+    {
+        foreach (var word in new[] { "-pfoo", "-cp", "-ic", "-xy", "-", "-m=made-up", "-1" })
+        {
+            Assert.NotNull(Host.ArgsProblem([word]));
+        }
+
+        Assert.Null(Host.ArgsProblem(["--model=made-up", "--effort=low"]));
+
+        var reservedShort = Host.ReservedFlags.Where(flag => flag.Length == 2 && flag[0] == '-' && flag[1] != '-').ToList();
+        Assert.NotEmpty(reservedShort);
+        Assert.All(reservedShort, flag =>
+        {
+            Assert.NotNull(Host.ArgsProblem([flag + "y"]));
+            Assert.NotNull(Host.ArgsProblem(["-y" + flag[1]]));
+            Assert.NotNull(Host.ArgsProblem([flag + "value"]));
+        });
+    }
+
+    /// <summary>
+    /// The host's parser could not be read: no copy of it was available to inspect, so the reserved list is the flags its
+    /// reference table names plus the one its mode page says it accepts for another host's sake, which the host reads as
+    /// its own mode flag.
+    /// </summary>
+    [Fact]
+    public void The_permission_mode_flag_the_host_accepts_for_compatibility_is_reserved_beside_its_own()
+    {
+        Assert.Contains("--permission-mode", Host.ReservedFlags);
+        Assert.Contains("--mode", Host.ReservedFlags);
+    }
+
     /// <summary>The host mints the conversation's id itself, so the runtime names no session and none is recorded.</summary>
     [Fact]
     public void The_host_mints_its_own_conversation_so_no_session_is_given_or_recorded()
