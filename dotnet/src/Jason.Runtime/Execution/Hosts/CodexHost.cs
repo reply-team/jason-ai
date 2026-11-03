@@ -24,7 +24,10 @@ namespace Jason.Runtime.Execution.Hosts;
 /// </para>
 /// <para>
 /// What no flag reaches: Codex reads the person's global <c>AGENTS.md</c> in its own home for every run, so a role reads
-/// it whatever the runtime composes.
+/// it whatever the runtime composes; and it offers every role the skills in <c>~/.agents/skills</c>, in
+/// <c>$CODEX_HOME/skills</c> and in its system cache, even with <c>--ignore-user-config</c>, since that flag still builds
+/// an empty user layer and each user layer names those roots. Both are the host's facts, said where a person reads the
+/// host's row, and not composed away: the switch for skills is a feature still under development in 0.166.0.
 /// </para>
 /// <para>
 /// Measured with the CLI bundled in the Codex app, 0.166.0-alpha.5.1, on Windows: the sandbox that needs no administrator
@@ -214,8 +217,9 @@ public sealed class CodexHost(
                 .. WindowsSandbox,
                 "-c", $"web_search={Toml(search)}",
 
-                // No instruction file of a folder above the work directory, and nothing the person installed into the
-                // host reaches the role: no hook, plugin, app, memory or MCP server.
+                // No instruction file of a folder above the work directory, and no hook, plugin, app, memory or MCP
+                // server the person installed into the host. Their skills still reach the role, and their global
+                // AGENTS.md: no flag of this version takes either away (the class comment says why).
                 "-c", "project_root_markers=[]",
                 "-c", "features.hooks=false",
                 "-c", "features.plugins=false",
