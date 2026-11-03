@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 using Jason.Runtime.Persistence;
 
@@ -31,11 +32,14 @@ namespace Jason.Runtime.Execution.Hosts;
 /// loopback. So a Windows run names the elevated sandbox, which an administrator sets up once.
 /// </para>
 /// </summary>
-/// <param name="dataDirectory">
-/// The runtime's data directory, whose <c>run</c> folder holds the descriptor the CLI reads to find the runtime; null
-/// where the runtime has none of its own, and then no such folder is named.
+/// <param name="runDirectory">
+/// The data directory's <c>run</c> folder, which holds the descriptor the CLI reads to find the runtime; null where the
+/// runtime has no data directory of its own, and then no such folder is named.
 /// </param>
-/// <param name="executableDirectory">The folder of the executable the role calls home with; null where it is unknown.</param>
+/// <param name="executable">
+/// What of the executable the role calls home with must be readable for it to start: the one file a single-file build
+/// is, or the folder of a build of many files; null where it is unknown.
+/// </param>
 /// <param name="extractionDirectory">
 /// The folder that executable unpacks its native libraries into when it starts, which it reads again on every start;
 /// null where it is unknown.
@@ -43,7 +47,7 @@ namespace Jason.Runtime.Execution.Hosts;
 /// <param name="windows">Whether the paths this host is given are Windows paths.</param>
 /// <param name="home">The person's home, for a deny written from it; the current user's unless a test says otherwise.</param>
 public sealed class CodexHost(
-    string? dataDirectory, string? executableDirectory, string? extractionDirectory, bool windows, string? home = null) : IAgentHost
+    string? runDirectory, string? executable, string? extractionDirectory, bool windows, string? home = null) : IAgentHost
 {
     /// <summary>The name of the permissions profile composed for every run.</summary>
     private const string Profile = "jason";
@@ -59,14 +63,37 @@ public sealed class CodexHost(
     public AgentHostKind Kind => AgentHostKind.Codex;
 
     /// <summary>
-    /// Where this executable unpacks its native libraries when it starts: the folder the .NET host is told to use, or
-    /// <c>.net</c> in the temporary folder, which is where it unpacks them otherwise. Every start of the CLI reads them
-    /// there again, so a role that calls home must be able to read that folder.
+    /// The host as this process registers it: the descriptor's folder of the data directory this runtime keeps, and what
+    /// calling home reads of this very build (<see cref="CallHomeReads"/>).
     /// </summary>
-    public static string ExtractionDirectory() =>
-        Environment.GetEnvironmentVariable("DOTNET_BUNDLE_EXTRACT_BASE_DIR") is { Length: > 0 } configured
-            ? configured
-            : Path.Combine(Path.GetTempPath(), ".net");
+    public static CodexHost ForThisProcess(JasonPaths? paths)
+    {
+        var windows = OperatingSystem.IsWindows();
+        var (executable, extraction) = CallHomeReads(
+            SelfExecutable.InstalledImage,
+            ProgramResolver.ExecutableDirectory,
+            ExtractedLibraries.OfThisProcess(),
+            ExtractedLibraries.DefaultBase(
+                Environment.GetEnvironmentVariable(ExtractedLibraries.BaseVariable),
+                windows,
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                Path.GetTempPath()));
+        return new CodexHost(paths?.RunDirectory, executable, extraction, windows);
+    }
+
+    /// <summary>
+    /// What a role that calls home must read of the build it calls, beside the descriptor. A single-file build is one
+    /// file, which unpacks its native libraries into a folder of its own and reads them there again on every start: that
+    /// file and that folder, and nothing else in either place. Any other build is a folder of many files, read whole, and
+    /// where it would unpack is the base a build unpacks under by rule.
+    /// </summary>
+    /// <param name="image">The one file this build is installed as, or null where it is no single-file build.</param>
+    /// <param name="executableDirectory">The folder of the file that carries this build.</param>
+    /// <param name="extracted">The folder this running build unpacked into, as its host names it; null where none is named.</param>
+    /// <param name="defaultExtraction">The base a build unpacks under where nothing names its own folder.</param>
+    public static (string? Executable, string Extraction) CallHomeReads(
+        string? image, string? executableDirectory, string? extracted, string defaultExtraction) =>
+        image is not null && extracted is not null ? (image, extracted) : (executableDirectory, defaultExtraction);
 
     /// <summary>
     /// Everything that would change the shape composed below or undo the sandbox it rests on. <c>-c</c> is reserved whole:
@@ -294,9 +321,9 @@ public sealed class CodexHost(
 
         Add(":minimal", "read");
         Add(":workspace_roots", "read");
-        Add(executableDirectory, "read");
+        Add(executable, "read");
         Add(extractionDirectory, "read");
-        Add(dataDirectory is null ? null : $"{dataDirectory.TrimEnd('/', '\\')}{(windows ? '\\' : '/')}run", "read");
+        Add(runDirectory, "read");
 
         var unreadable = new List<string>();
         foreach (var (level, path) in new[] { ("client", memoryFiles.Client), ("project", memoryFiles.Project), ("campaign", memoryFiles.Campaign) })

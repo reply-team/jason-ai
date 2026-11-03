@@ -1,7 +1,10 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 using Jason.Runtime.Execution.Hosts;
+using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Execution;
 
@@ -14,15 +17,15 @@ namespace Jason.Runtime.Tests.Execution;
 /// </summary>
 public class CodexHostTests
 {
-    private const string Data = "/home/someone/.jason";
+    private const string Run = "/home/someone/.jason/run";
 
-    private const string Executable = "/opt/jason";
+    private const string Executable = "/home/someone/.local/bin/jason";
 
-    private const string Extraction = "/tmp/.net";
+    private const string Extraction = "/home/someone/.net/jason/a1b2c3";
 
     private static readonly MemoryFileLocations NoFiles = new(null, null, null);
 
-    private static CodexHost Host(bool windows = false) => new(Data, Executable, Extraction, windows);
+    private static CodexHost Host(bool windows = false) => new(Run, Executable, Extraction, windows);
 
     [Fact]
     public void The_run_is_headless_reports_as_it_goes_and_reads_none_of_the_persons_own_configuration()
@@ -41,7 +44,7 @@ public class CodexHostTests
                 "--strict-config",
                 "-c", "approval_policy=\"never\"",
                 "-c", "default_permissions=\"jason\"",
-                "-c", "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"/opt/jason\"=\"read\", \"/tmp/.net\"=\"read\", \"/home/someone/.jason/run\"=\"read\"}",
+                "-c", "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"/home/someone/.local/bin/jason\"=\"read\", \"/home/someone/.net/jason/a1b2c3\"=\"read\", \"/home/someone/.jason/run\"=\"read\"}",
                 "-c", "permissions.jason.network={enabled=true, allow_local_binding=true}",
                 "-c", "features.network_proxy=true",
                 "-c", "web_search=\"disabled\"",
@@ -113,7 +116,7 @@ public class CodexHostTests
         var launch = Host().Compose(Revision(), ["codex"], files);
 
         Assert.Contains(
-            "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"/opt/jason\"=\"read\", \"/tmp/.net\"=\"read\", \"/home/someone/.jason/run\"=\"read\", \"/home/someone/Jason/AGENTS.md\"=\"read\", \"/home/someone/Jason/acme/AGENTS.md\"=\"read\"}",
+            "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"/home/someone/.local/bin/jason\"=\"read\", \"/home/someone/.net/jason/a1b2c3\"=\"read\", \"/home/someone/.jason/run\"=\"read\", \"/home/someone/Jason/AGENTS.md\"=\"read\", \"/home/someone/Jason/acme/AGENTS.md\"=\"read\"}",
             launch.Command);
         Assert.Empty(launch.Unreadable);
     }
@@ -125,7 +128,7 @@ public class CodexHostTests
     [Fact]
     public void A_windows_path_and_a_quote_in_a_folder_name_are_escaped_as_toml()
     {
-        var host = new CodexHost(@"C:\Users\someone\.jason", @"C:\Program Files\Jason", @"C:\Users\someone\AppData\Local\Temp\.net", windows: true);
+        var host = new CodexHost(@"C:\Users\someone\.jason\run", @"C:\Program Files\Jason", @"C:\Users\someone\AppData\Local\Temp\.net", windows: true);
         var files = new MemoryFileLocations(@"C:\Users\someone\Jason\The ""Big"" One\AGENTS.md", null, null);
 
         var command = host.Compose(Revision(), ["codex"], files).Command;
@@ -155,10 +158,10 @@ public class CodexHostTests
     {
         var revision = Revision(deny: ["Read(//srv/secrets/**)", "Read(~/private/notes.md)", "Write", "WebFetch"]);
 
-        var command = new CodexHost(Data, Executable, Extraction, windows: false, home: "/home/someone").Compose(revision, ["codex"], NoFiles).Command;
+        var command = new CodexHost(Run, Executable, Extraction, windows: false, home: "/home/someone").Compose(revision, ["codex"], NoFiles).Command;
 
         Assert.Contains(
-            "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"/opt/jason\"=\"read\", \"/tmp/.net\"=\"read\", \"/home/someone/.jason/run\"=\"read\", \"/srv/secrets/**\"=\"deny\", \"/home/someone/private/notes.md\"=\"deny\"}",
+            "permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\", \"/home/someone/.local/bin/jason\"=\"read\", \"/home/someone/.net/jason/a1b2c3\"=\"read\", \"/home/someone/.jason/run\"=\"read\", \"/srv/secrets/**\"=\"deny\", \"/home/someone/private/notes.md\"=\"deny\"}",
             command);
     }
 
@@ -170,12 +173,12 @@ public class CodexHostTests
     [Theory]
     [InlineData("Read(~/Jason/AGENTS.md)", "/home/someone/Jason/AGENTS.md")]
     [InlineData("Read(//home/someone/Jason/AGENTS.md)", "/home/someone/Jason/AGENTS.md")]
-    [InlineData("Read(//opt/jason)", "/opt/jason")]
+    [InlineData("Read(//home/someone/.local/bin/jason)", "/home/someone/.local/bin/jason")]
     public void A_deny_of_a_path_the_run_would_read_takes_the_reads_place(string word, string path)
     {
         var files = new MemoryFileLocations("/home/someone/Jason/AGENTS.md", null, null);
 
-        var command = new CodexHost(Data, Executable, Extraction, windows: false, home: "/home/someone")
+        var command = new CodexHost(Run, Executable, Extraction, windows: false, home: "/home/someone")
             .Compose(Revision(deny: [word]), ["codex"], files).Command;
 
         var filesystem = Assert.Single(command, item => item.StartsWith("permissions.jason.filesystem=", StringComparison.Ordinal));
@@ -205,6 +208,67 @@ public class CodexHostTests
 
         Assert.Contains("permissions.jason.filesystem={\":minimal\"=\"read\", \":workspace_roots\"=\"read\"}", command);
     }
+
+    /// <summary>
+    /// A single-file build is one file that unpacks into a folder of its own, so calling home reads that file and that
+    /// folder and nothing else beside them: not the folder the file is in, which may be a shared one such as
+    /// <c>~/.local/bin</c>, and not every other bundle under <c>.net</c>.
+    /// </summary>
+    [Fact]
+    public void Calling_home_from_a_single_file_build_reads_its_file_and_the_folder_it_unpacked_into()
+    {
+        var reads = CodexHost.CallHomeReads(
+            "/home/someone/.local/bin/jason", "/home/someone/.local/bin", "/home/someone/.net/jason/a1b2c3", "/home/someone/.net");
+
+        Assert.Equal(("/home/someone/.local/bin/jason", "/home/someone/.net/jason/a1b2c3"), reads);
+    }
+
+    /// <summary>Any other build is a folder of many files, read whole, beside the base a build unpacks under by rule.</summary>
+    [Fact]
+    public void Calling_home_from_a_build_of_many_files_reads_its_folder_and_the_base_by_rule()
+    {
+        Assert.Equal(("/src/bin/Debug", "/home/someone/.net"), CodexHost.CallHomeReads(null, "/src/bin/Debug", null, "/home/someone/.net"));
+        Assert.Equal(
+            ("/home/someone/.local/bin", "/home/someone/.net"),
+            CodexHost.CallHomeReads("/home/someone/.local/bin/jason", "/home/someone/.local/bin", null, "/home/someone/.net"));
+    }
+
+    /// <summary>
+    /// The host the runtime registers names the descriptor's folder of the data directory it keeps, by the one rule that
+    /// names it, and what calling home reads of the build running the suite: no single-file build, so its folder, and the
+    /// base a build unpacks under by rule, which outside Windows is under the home and never the temporary folder.
+    /// </summary>
+    [Fact]
+    public void The_registered_host_reads_the_descriptors_folder_and_this_build_as_it_is()
+    {
+        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), "jason-codex-registration"));
+        var services = new ServiceCollection();
+        services.AddSingleton(paths);
+        services.AddDispatcherModule();
+        using var provider = services.BuildServiceProvider();
+        var host = provider.GetServices<IAgentHost>().Single(candidate => candidate.Kind == AgentHostKind.Codex);
+
+        var filesystem = Assert.Single(
+            host.Compose(Revision(), ["codex"], NoFiles).Command,
+            word => word.StartsWith("permissions.jason.filesystem=", StringComparison.Ordinal));
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var unpackBase = Environment.GetEnvironmentVariable(ExtractedLibraries.BaseVariable) is { Length: > 0 } configured
+            ? configured
+            : OperatingSystem.IsWindows()
+                ? Path.GetTempPath().TrimEnd('\\') + "\\.net"
+                : home.TrimEnd('/') + "/.net";
+        Assert.Contains(Toml(paths.RunDirectory) + "=\"read\"", filesystem, StringComparison.Ordinal);
+        Assert.Contains(Toml(ProgramResolver.ExecutableDirectory!) + "=\"read\"", filesystem, StringComparison.Ordinal);
+        Assert.Contains(Toml(unpackBase) + "=\"read\"", filesystem, StringComparison.Ordinal);
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.DoesNotContain(Toml(Path.Combine(Path.GetTempPath(), ".net")), filesystem, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>A path as the host's TOML string carries it: each backslash doubled, between quotes.</summary>
+    private static string Toml(string path) => "\"" + path.Replace("\\", "\\\\", StringComparison.Ordinal) + "\"";
 
     [Fact]
     public void The_profiles_arguments_come_last()

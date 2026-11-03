@@ -57,11 +57,7 @@ public static class DispatcherModule
 
         // Codex's sandbox lists what a run may read, and calling home reads the descriptor in the data directory, the
         // executable and what it unpacks when it starts. A composition with no data directory of its own names none.
-        services.AddSingleton<IAgentHost>(provider => new CodexHost(
-            provider.GetService<JasonPaths>()?.Root,
-            ProgramResolver.ExecutableDirectory,
-            CodexHost.ExtractionDirectory(),
-            OperatingSystem.IsWindows()));
+        services.AddSingleton<IAgentHost>(provider => CodexHost.ForThisProcess(provider.GetService<JasonPaths>()));
 
         // The plugin module registers the same seam for its own executable checks, and whichever module is added
         // first is the one that answers. Named here too because this module now needs it: a registration a
