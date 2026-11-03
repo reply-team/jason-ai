@@ -34,9 +34,10 @@ run `jason profile create <name> --host gemini_cli --program gemini`.
 
 For Antigravity CLI, install `agy` from the CLI tab of [Google's quickstart](https://antigravity.google/docs/getting-started?tab=cli),
 run `agy` once to sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)), and
-`jason profile create <name> --host antigravity_cli --program agy`. It reads its permission rules from your own
-`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array, so add `command(jason)` (on Windows shells,
-`command(regex:jason .*)`) and `read_file(<harness folder>)` there; the
+`jason profile create <name> --host antigravity_cli --program agy`. Each run is given its permissions by a workspace hook the launch
+writes (built from the host's hooks page, not yet run on an account). If a role is refused on `antigravity_cli`, add two
+rules to your own `~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array: `command(jason)` (on Windows
+shells, `command(regex:jason .*)`) and `read_file(<harness folder>)`; the
 [host matrix](execution-profiles.md#12-the-hosts) has the two lines of JSON and the details.
 
 ### If an agent installs it

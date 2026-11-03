@@ -481,7 +481,7 @@ public partial class ExecutionProfileDocTests
     /// The launch envelope's page states what holds of every host where it says how a role reads the memory files and how
     /// it is given the brief, and keeps one host's form for that host's section: the rule is a read for each path that is
     /// not null, a rule for the file on every host of the matrix but Gemini CLI, which is given the folder of each level,
-    /// and Antigravity CLI, which is given none; and the brief is on standard input on every host. Both halves are held to the matrix's own cells, so a host added
+    /// and Antigravity CLI's is a file rule through a hook; and the brief is on standard input on every host. Both halves are held to the matrix's own cells, so a host added
     /// that takes either differently is red until the page says so.
     /// </summary>
     [Fact]
@@ -500,7 +500,7 @@ public partial class ExecutionProfileDocTests
         Assert.Equal(["gemini_cli"], rows.Where(row => row[8].Contains("--include-directories", StringComparison.Ordinal)).Select(row => row[1].Trim('`')));
 
         var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
-        Assert.Contains("A profile is composed with a read for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI and Antigravity CLI. Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given none", contract, StringComparison.Ordinal);
+        Assert.Contains("A profile is composed with a read for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI. Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given its rule as a file rule too", contract, StringComparison.Ordinal);
         Assert.Contains("What Jason composes is a read of the files `memory_files` names and nothing wider outside its work directory, where the host's form can hold it", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("The rules let a launched role read exactly the files", contract, StringComparison.Ordinal);
         Assert.Contains("On a host that reads its prompt from standard input — every host of that matrix does, and its `Takes the brief` column says how — that standard input is the prompt", contract, StringComparison.Ordinal);

@@ -651,13 +651,12 @@ path; the runtime never reads one. **What Jason composes is a read of the files 
 the host's form can hold it**: each host holds this rule in its own form
 ([execution-profiles.md](execution-profiles.md) §12 and the host's own section), and on some the session's read is wider
 than the list, as the sections of those hosts say: Jason confines nothing Cursor CLI reads, Codex on Windows runs in a
-sandbox that may let a role read more, and the two hosts below compose no file rule. A profile is composed with a read
-for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI and Antigravity CLI.
-Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given none, because its permissions
-are the person's own rules, which Jason cannot write: the launch names every level unreadable, and the person's own
-`read_file(<harness folder>)` rule decides what a role reads (§12 gives each host's form, and each host's section the paths
-that get no rule because the host would read them as a pattern or split them at a comma or a parenthesis; the envelope
-still names such a path, and the role's read of it is refused). Which paths are given
+sandbox that may let a role read more, and Gemini CLI, below, is given a folder. A profile is composed with a read
+for each path that is not null: a rule for the file, never its folder, on every host but Gemini CLI.
+Gemini CLI is given the folder of each level and reads it whole. Antigravity CLI is given its rule as a file rule too, but
+through a workspace hook the launch writes rather than a permission rule: the hook approves a view of exactly the files
+named (§12 gives each host's form, and each host's section the paths that get no rule because the host would read them as
+a pattern or split them at a comma or a parenthesis; the envelope still names such a path, and the role's read of it is refused). Which paths are given
 follows one rule: a path is given when Jason knows the folder is its own — the recorded `folder_path` for a
 project and a campaign, the root marker for the root, which no record holds; no existence check on a recorded
 path, a stale one is the host's to find and `project link` re-records it; the object itself is never null at 4; additive over 3; the

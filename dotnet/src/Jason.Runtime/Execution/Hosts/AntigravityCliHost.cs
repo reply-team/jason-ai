@@ -129,7 +129,7 @@ public sealed class AntigravityCliHost : IAgentHost
     private const string CommandPrefix = "command(";
 
     /// <summary>The tools whose call the hook always decides about, whether or not a profile names them.</summary>
-    private static readonly string[] GatedTools =
+    private static readonly string[] HookedTools =
     [
         "run_command", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "ask_question",
         "read_url_content", "search_web",
@@ -151,7 +151,7 @@ public sealed class AntigravityCliHost : IAgentHost
 
     /// <summary>
     /// The workspace hook: <c>.agents/hooks.json</c> in the directory the host works in, one pre-tool-use handler whose
-    /// matcher is the gated tools and the ones the profile denies, and whose command is this executable's hook mode with the
+    /// matcher is the hooked tools and the ones the profile denies, and whose command is this executable's hook mode with the
     /// attempt's rules as one base64url word. Nothing else is written, and nothing under the person's home. The command
     /// word and the rules are bare words in every shell, so no path or quote of a person's reaches one.
     /// </summary>
@@ -170,7 +170,7 @@ public sealed class AntigravityCliHost : IAgentHost
             [.. deny.Where(rule => HostTools.Contains(rule, StringComparer.Ordinal)).Distinct(StringComparer.Ordinal)],
             Path.Combine(Path.GetFullPath(workDir), "result.json"));
 
-        var names = GatedTools.Concat(rules.Deny).Distinct(StringComparer.Ordinal).Select(Regex.Escape).Append("browser_.*");
+        var names = HookedTools.Concat(rules.Deny).Distinct(StringComparer.Ordinal).Select(Regex.Escape).Append("browser_.*");
         var document = new JsonObject
         {
             ["jason-attempt"] = new JsonObject

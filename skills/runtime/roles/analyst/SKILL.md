@@ -160,6 +160,8 @@ fix the shape, and complete again.
 jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --result '{"summary":"what you did"}'
 ```
 
+Where your host cannot pass the JSON on a command line, write it to `result.json` in the work directory and pass `--result-file result.json` instead.
+
 If you cannot do the work, say so as a failure rather than inventing an answer. A failed completion carries an
 error with a `code` in lowercase snake_case and a `message` a person can act on, and it is never judged against
 `result_format` — a failure has a reason to report and no result to measure:

@@ -281,7 +281,7 @@ public class AntigravityCliHostTests
     }
 
     /// <summary>
-    /// The one file written is the workspace hook: a pre-tool-use hook whose matcher is the gated set and whose command is
+    /// The one file written is the workspace hook: a pre-tool-use hook whose matcher is the hooked set and whose command is
     /// the command word's own hook mode with the rules in base64url, so no path or quote reaches a shell. Nothing is
     /// written anywhere else, and nothing of the launch envelope or the capability token is in it.
     /// </summary>
@@ -331,12 +331,12 @@ public class AntigravityCliHostTests
         var matcher = document.RootElement.EnumerateObject().Single().Value.GetProperty("PreToolUse")[0].GetProperty("matcher").GetString()!;
         var pattern = new System.Text.RegularExpressions.Regex(matcher);
 
-        string[] gated =
+        string[] hooked =
         [
             "run_command", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "ask_question",
             "read_url_content", "search_web", "browser_navigate", "browser_click", "list_dir",
         ];
-        Assert.All(gated, tool => Assert.Matches(pattern, tool));
+        Assert.All(hooked, tool => Assert.Matches(pattern, tool));
         string[] left = ["find_by_name", "grep_search", "invoke_subagent", "run_commands", "xrun_command", "my_browser_x", "browser"];
         Assert.All(left, tool => Assert.DoesNotMatch(pattern, tool));
     }
