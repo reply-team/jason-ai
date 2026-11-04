@@ -248,8 +248,9 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | the running runtime is the build this CLI is | a provider plugin is installed |
 | migrations are applied | each plugin package this release publishes is the one installed |
 | the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
-| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a route is configured |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
+| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a route is configured |
+| | a binding names an account |
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
 | | every enabled profile names an agent host detected on this machine |
