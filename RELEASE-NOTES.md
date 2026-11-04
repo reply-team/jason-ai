@@ -107,8 +107,7 @@ Two installations on one account, a build of a checkout and the installed one, t
 each toast, since the registration rewrites a key that is Jason's and names another executable. Uninstall leaves a key
 that names another installation alone, so nothing is lost.
 
-On Linux, kitty, foot, gnome-terminal and wezterm are started in the form each takes; any other terminal program is
-given the host after `-e`, which it may not take.
+On Linux, a terminal outside the table is given the host after `-e` as separate arguments.
 
 Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, which is why the
 example above reads the value from a file.
