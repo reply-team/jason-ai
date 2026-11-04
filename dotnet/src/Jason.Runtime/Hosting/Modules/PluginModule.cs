@@ -5,6 +5,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Plugins.Subscriptions;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -44,6 +45,9 @@ public static class PluginModule
         services.AddScoped<ExternalIdStore>();
         services.AddScoped<PluginLoader>();
         services.AddScoped<PluginService>();
+
+        // Holds nothing of its own: the order is read from the settings at the moment a load asks for it.
+        services.AddSingleton<SubscriptionOrderSource>();
 
         return services.AddHostedService<PluginStartupLoader>();
     }

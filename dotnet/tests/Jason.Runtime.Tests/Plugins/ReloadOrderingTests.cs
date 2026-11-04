@@ -3,6 +3,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -53,6 +54,7 @@ public class ReloadOrderingTests
             loader,
             routes,
             new RouteActivator(db, new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()), routes, TimeProvider.System),
+            new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionOrderOptions>(new SubscriptionOrderOptions())),
             new ReloadGate(),
             new SettingsFile(new ConfigurationBuilder().Build()),
             NullLogger<PluginService>.Instance);
@@ -98,6 +100,7 @@ public class ReloadOrderingTests
             new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()),
             routes,
             TimeProvider.System));
+        services.AddSingleton(new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionOrderOptions>(new SubscriptionOrderOptions())));
         await using var provider = services.BuildServiceProvider();
 
         var startup = new PluginStartupLoader(

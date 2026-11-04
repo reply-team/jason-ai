@@ -7,6 +7,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Routing;
 using Microsoft.Extensions.Logging;
 
@@ -24,6 +25,7 @@ public sealed class PluginService(
     PluginLoader loader,
     RouteRegistry routes,
     RouteActivator activator,
+    SubscriptionOrderSource subscriptions,
     ReloadGate gate,
     SettingsFile settingsFile,
     ILogger<PluginService> logger)
@@ -77,28 +79,32 @@ public sealed class PluginService(
                 throw Reject(load.Report);
             }
 
-            // Every route is checked against the candidate plugin set before either registry is touched, so a
-            // route naming a plugin this load does not have keeps both snapshots exactly where they were.
+            // Every route and the order of every kind's subscribers are checked against the candidate plugin set
+            // before either registry is touched, so a route or an order naming a plugin this load does not have keeps
+            // both snapshots exactly where they were. Both are asked before the answer, which names whatever is wrong.
             var candidate = await activator.BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken).ConfigureAwait(false);
-            if (candidate.Snapshot is null)
+            var chains = subscriptions.Build(load.Snapshot);
+            if (candidate.Snapshot is null || chains.Chains is null)
             {
                 // A route whose binding no pattern could finish measuring is unanswered rather than wrong: alone, nothing
                 // is activated or recorded as rejected and the reload is answered as one to send again; beside a real
                 // problem it is left out of the refusal, which names only what is wrong.
-                throw candidate.Unmeasured
+                throw candidate.Unmeasured && chains.Problems.Count == 0
                     ? DomainErrors.ValidationTimedOut(candidate.Problems)
-                    : Reject(load.Report with { Activated = false, Routes = candidate.Refusals });
+                    : Reject(load.Report with { Activated = false, Routes = candidate.Refusals, Subscriptions = chains.Problems });
             }
+
+            var snapshot = load.Snapshot with { Subscriptions = chains.Chains };
 
             // The record first, the swap second: the swap is in memory and cannot fail, the save can. A reload that
             // could not be written down leaves the previous snapshot active and is simply repeated, instead of a new
             // snapshot running with no trace of when it began.
-            JournalActivation(journal, db, actor, load.Snapshot, candidate.Snapshot, reason);
+            JournalActivation(journal, db, actor, snapshot, candidate.Snapshot, reason);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            registry.Replace(load.Snapshot, load.Report);
+            registry.Replace(snapshot, load.Report);
             activator.Activate(candidate.Snapshot);
-            Activated(logger, load.Snapshot.Id, load.Snapshot.Plugins.Count, null);
-            return PluginMapper.ToDto(load.Snapshot, candidate.Snapshot.Id, load.Report, activated: true);
+            Activated(logger, snapshot.Id, snapshot.Plugins.Count, null);
+            return PluginMapper.ToDto(snapshot, candidate.Snapshot.Id, load.Report, activated: true);
         }
         finally
         {
