@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_paused",
+  "version": 1,
+  "case": "a draft is never paused: it is started or archived",
+  "body": { "key": "status", "old": "draft", "new": "paused" },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "const" }] }
+}

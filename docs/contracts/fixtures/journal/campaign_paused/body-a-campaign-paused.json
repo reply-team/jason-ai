@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_paused",
+  "version": 1,
+  "case": "an active campaign paused",
+  "body": { "key": "status", "old": "active", "new": "paused" },
+  "expect": "valid"
+}
