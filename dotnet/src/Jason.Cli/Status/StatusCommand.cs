@@ -41,13 +41,14 @@ public static class StatusCommand
                                         PATH, in this shell or in every shell started from now on
         Optional — absent never fails:  no update is waiting to be resumed | a provider plugin is installed |
                                         each plugin package this release publishes is the one installed |
-                                        every plugin installed is available | a route is configured | a
-                                        binding names an account | a provider CLI you name answers | the skill
-                                        packs are deployed to an agent harness, and the files their record
-                                        names are there | every enabled profile names an agent host detected
-                                        on this machine | autostart is registered | notifications reach you |
-                                        a UI is installed, and the default one is this release's | the harness
-                                        root can take the first project or campaign
+                                        every plugin installed is available | a plugin is granted a journal
+                                        kind | a route is configured | a binding names an account | a provider
+                                        CLI you name answers | the skill packs are deployed to an agent
+                                        harness, and the files their record names are there | every enabled
+                                        profile names an agent host detected on this machine | autostart is
+                                        registered | notifications reach you | a UI is installed, and the
+                                        default one is this release's | the harness root can take the first
+                                        project or campaign
 
         The path check is ok in two cases. 'jason' resolves in this shell; or it does not, and this account
         keeps its directory for shells not yet started — its Path value on Windows, on macOS and Linux the one
@@ -94,6 +95,11 @@ public static class StatusCommand
         notification plugin delivers nothing; nothing else stops, so the check never decides readiness.
         'jason plugin list' says what each problem is, and 'jason plugin reload' reads the plugins again once
         it is repaired.
+
+        The subscriptions check names each plugin the settings grant journal kinds to, with those kinds and
+        never more than their names; none granted is absent. A kind no plugin handles is an ordinary
+        installation, so the check never decides readiness. 'jason plugin list' says which kinds each plugin
+        declares and which it is granted.
 
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. The name is found the way Jason finds every

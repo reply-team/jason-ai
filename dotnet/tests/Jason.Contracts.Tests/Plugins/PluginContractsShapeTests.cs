@@ -223,6 +223,35 @@ public class PluginContractsShapeTests
 
         // The schema travels verbatim: its keywords are JSON Schema's own spelling, not Jason's snake_case.
         Assert.Contains("\"binding_schema\":{\"type\":\"object\"}", json, StringComparison.Ordinal);
+
+        // A plugin that declares no journal kinds says so with a null, as an undeclared capability does, and a load
+        // that refused no order says so with an empty list beside its routes.
+        Assert.Contains("\"env\":null,\"subscriptions\":null}", json, StringComparison.Ordinal);
+        Assert.Contains("\"routes\":[],\"subscriptions\":[]}", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Subscriptions_travel_as_requested_against_granted_and_a_refused_order_names_its_setting()
+    {
+        var capabilities = new PluginCapabilitiesDto(null, null, null)
+        {
+            Subscriptions = new ListCapabilityDto(["workitem_failed", "campaign_paused"], ["workitem_failed"]),
+        };
+        var report = new ReloadReportDto(DateTimeOffset.UnixEpoch, SnapshotSource.Reload, false, [], [])
+        {
+            Subscriptions = [new SubscriptionProblemDto("Subscriptions:Order:workitem_failed[0]", "subscription_order_ungranted", "m")],
+        };
+
+        Assert.Equal(
+            """{"exec":null,"http":null,"env":null,"subscriptions":{"requested":["workitem_failed","campaign_paused"],"granted":["workitem_failed"]}}""",
+            JsonSerializer.Serialize(capabilities, JasonJson.Options));
+        Assert.Contains(
+            ""","routes":[],"subscriptions":[{"setting":"Subscriptions:Order:workitem_failed[0]","code":"subscription_order_ungranted","message":"m"}]}""",
+            JsonSerializer.Serialize(report, JasonJson.Options),
+            StringComparison.Ordinal);
+
+        var read = JsonSerializer.Deserialize<ReloadReportDto>(JsonSerializer.Serialize(report, JasonJson.Options), JasonJson.Options)!;
+        Assert.Equal("Subscriptions:Order:workitem_failed[0]", Assert.Single(read.Subscriptions).Setting);
     }
 
     [Fact]

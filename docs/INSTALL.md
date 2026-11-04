@@ -438,6 +438,11 @@ a plugin fails at the claim, and a notification plugin delivers nothing; nothing
 `ready`. `jason plugin list` says what each problem is, and once it is repaired `jason plugin reload` reads the plugins
 again.
 
+`plugin_subscriptions` names each plugin the settings grant journal kinds to, with those kinds —
+`forwarder handles workitem_failed, campaign_created.` — and is absent when no plugin is granted one. It quotes a
+plugin's id and its kinds and nothing else, and it never decides `ready`: a kind no plugin handles is an ordinary
+installation. `jason plugin list` says which kinds each plugin declares and which it is granted.
+
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 
 ```sh
