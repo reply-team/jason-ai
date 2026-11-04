@@ -252,10 +252,7 @@ public sealed class AntigravityHostHookTests
         Assert.Equal("deny", WriteOfTheResult(tree, result => Directory.CreateDirectory(result)));
     }
 
-    /// <summary>
-    /// A symbolic link at the result path would carry the host's write to wherever it points, so it is denied, whether its
-    /// target is there or not.
-    /// </summary>
+    /// <summary>A symbolic link at the result path would carry the host's write to wherever it points, so it is denied.</summary>
     [Fact]
     [Critical(Family.S6, "a link at the result path is never written through")]
     public void A_symbolic_link_at_the_result_path_is_denied()
@@ -264,25 +261,44 @@ public sealed class AntigravityHostHookTests
         var elsewhere = Path.Combine(tree.NewDirectory("elsewhere"), "settings.json");
         File.WriteAllText(elsewhere, "{}");
 
-        bool Linked(string result, string target)
-        {
-            try
-            {
-                File.CreateSymbolicLink(result, target);
-                return true;
-            }
-            catch (IOException refused) when (OperatingSystem.IsWindows() && refused.HResult == PrivilegeNotHeld)
-            {
-                return false;
-            }
-        }
+        var linked = true;
+        var decision = WriteOfTheResult(tree, result => linked = TryLink(result, elsewhere));
+        Assert.SkipUnless(linked, NoLinkPrivilege);
+
+        Assert.Equal("deny", decision);
+    }
+
+    /// <summary>
+    /// A symbolic link whose target is not there is a link all the same: the host's write would make the file it points
+    /// to, so the link is refused before anything else about the entry is read.
+    /// </summary>
+    [Fact]
+    public void A_dangling_symbolic_link_at_the_result_path_is_denied()
+    {
+        using var tree = new TempTree();
+        var missing = Path.Combine(tree.NewDirectory("elsewhere"), "missing.json");
 
         var linked = true;
-        var toAFile = WriteOfTheResult(tree, result => linked = Linked(result, elsewhere));
-        Assert.SkipUnless(linked, "A file symbolic link needs a privilege this account does not hold (ERROR_PRIVILEGE_NOT_HELD).");
+        var decision = WriteOfTheResult(tree, result => linked = TryLink(result, missing));
+        Assert.SkipUnless(linked, NoLinkPrivilege);
 
-        Assert.Equal("deny", toAFile);
-        Assert.Equal("deny", WriteOfTheResult(tree, result => Linked(result, Path.Combine(Path.GetDirectoryName(elsewhere)!, "missing.json"))));
+        Assert.Equal("deny", decision);
+    }
+
+    private const string NoLinkPrivilege = "A file symbolic link needs a privilege this account does not hold (ERROR_PRIVILEGE_NOT_HELD).";
+
+    /// <summary>Makes a file symbolic link, or answers false where this Windows account may not make one, and only there.</summary>
+    private static bool TryLink(string link, string target)
+    {
+        try
+        {
+            File.CreateSymbolicLink(link, target);
+            return true;
+        }
+        catch (IOException refused) when (OperatingSystem.IsWindows() && refused.HResult == PrivilegeNotHeld)
+        {
+            return false;
+        }
     }
 
     /// <summary>A directory junction at the result path is a link too, and the one Windows makes without a privilege.</summary>

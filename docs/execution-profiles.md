@@ -932,10 +932,11 @@ it. The hook answers:
 - **a write** is approved for `result.json` in the work directory, a relative path being read against the work directory:
   the one result file, written as often as the role needs, and only where nothing or a plain file stands at its path. A
   link or a directory there is refused, and nothing else is written. An edit of a file, a question to the person, a
-  sub-agent, a message, a schedule, a task, a permission request and an image are refused. One reach is left: a command
-  that plants a link between the hook's look and the host's write. Under the host's proceed-in-sandbox mode that is a
-  matter for the person's sandbox, and under auto mode it is a command that could write anywhere already. "Never
-  writable" holds for the host's write tools.
+  sub-agent, a message, a schedule, a task, a permission request and an image are refused. Two reaches are left: a
+  command that plants a link between the hook's look and the host's write, and a hard link to a file the account owns,
+  which the look sees as a plain file. Under the host's proceed-in-sandbox mode both are a matter for the person's
+  sandbox, which decides whether a command may link a file outside the work directory; under auto mode either is made by
+  a command that could write anywhere already. "Never writable" holds for the host's write tools.
 - **a fetch of a page or a search** is approved where the profile grants `web_fetch` or `web_search` and refused where it
   does not; the browser tools are refused unless the fetch is granted.
 - **a tool the profile denies by name** is refused. A deny is one of the host's own tool names, as its hooks page lists

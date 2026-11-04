@@ -281,11 +281,17 @@ public static class AntigravityHook
 
     /// <summary>
     /// The hook's one look at the file system: whether nothing, or a plain file, stands at the result path. A link of any
-    /// kind and a directory are not the result file. Only the entry's own attributes are read, never its content, and a
-    /// look that throws reaches the caller, which refuses the call.
+    /// kind and a directory are not the result file. The link is asked first, since a link whose target is not there is a
+    /// link whatever the attributes say, and then the entry's own attributes; never its content. A look that throws
+    /// reaches the caller, which refuses the call.
     /// </summary>
     private static bool NothingOrAPlainFileAt(string path)
     {
+        if (new FileInfo(path).LinkTarget is not null)
+        {
+            return false;
+        }
+
         FileAttributes attributes;
         try
         {
@@ -296,7 +302,7 @@ public static class AntigravityHook
             return true;
         }
 
-        return (attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) == 0 && new FileInfo(path).LinkTarget is null;
+        return (attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) == 0;
     }
 
     /// <summary>Two full paths are one file when they are the same after normalising; case counts except on Windows. A path that is not full is no file.</summary>
