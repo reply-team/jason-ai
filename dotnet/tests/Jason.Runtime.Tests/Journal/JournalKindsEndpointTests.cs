@@ -70,6 +70,7 @@ public class JournalKindsEndpointTests
     /// the body's schema travels as the document spells it.
     /// </summary>
     [Fact]
+    [Critical(Family.R3, "a kind's document is what the runtime answers")]
     public async Task Each_kind_is_its_published_document_with_every_place_a_list()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
