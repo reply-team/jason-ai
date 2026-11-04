@@ -70,7 +70,10 @@ public class OperationFamiliesTests
         Assert.True(OperationFamilies.IsRead("journal.kinds"));
     }
 
-    /// <summary>A person's own decisions, the installation's settings and an executor's fenced verbs are never a plugin's.</summary>
+    /// <summary>
+    /// A person's own decisions, the installation's settings and an executor's fenced verbs are never a plugin's. Lifting
+    /// a do-not-contact entry is a decision about a person, so a plugin may add to the register and never take from it.
+    /// </summary>
     [Fact]
     [Critical(Family.R2, "a person's doors stay closed to a plugin")]
     public void A_door_never_opens_these()
@@ -79,7 +82,7 @@ public class OperationFamiliesTests
         [
             "approval.approve", "approval.reject", "approval.set_standing", "approval.unset_standing", "block.clear",
             "decision.answer", "preference.set", "preference.unset", "workitem.resume", "workitem.complete",
-            "workitem.heartbeat", "plugin.reload", "route.set", "system.shutdown", "ui.open",
+            "workitem.heartbeat", "plugin.reload", "route.set", "system.shutdown", "ui.open", "suppression.remove",
         ];
         var everything = OperationFamilies.OperationsOf(OperationFamilies.All);
 
@@ -100,7 +103,7 @@ public class OperationFamiliesTests
         Assert.Equal(["journal.append"], OperationFamilies.Writes["journal.append"]);
         Assert.Equal(["report.submit"], OperationFamilies.Writes["report"]);
         Assert.Equal(["workitem.create", "workitem.update", "workitem.cancel"], OperationFamilies.Writes["workitem"]);
-        Assert.Equal(["suppression.add", "suppression.remove"], OperationFamilies.Writes["suppression"]);
+        Assert.Equal(["suppression.add"], OperationFamilies.Writes["suppression"]);
         Assert.Equal(["contact.create", "contact.update", "contact.archive"], OperationFamilies.Writes["contact"]);
         Assert.Equal(
             ["campaign.create", "campaign.update", "campaign.start", "campaign.pause", "campaign.archive", "campaign.update_context", "campaign.add_contacts", "campaign.remove_contacts"],

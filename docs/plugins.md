@@ -1217,7 +1217,7 @@ family, or in none:
 | `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts` |
 | `contact` | `contact.create`, `contact.update`, `contact.archive` |
 | `workitem` | `workitem.create`, `workitem.update`, `workitem.cancel` |
-| `suppression` | `suppression.add`, `suppression.remove` |
+| `suppression` | `suppression.add` |
 | `report` | `report.submit` |
 | `journal.append` | `journal.append` |
 
@@ -1225,7 +1225,8 @@ No grant opens the rest: the installation's and the UI's own doors (every `syste
 `plugin.reload`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
 `preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
 `events.signal`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
-`approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`), an
+`approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
+`suppression.remove`), an
 executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
 conversation reads `contact.threads` and `contact.thread`, which are no read here because answering one spends a
 provider call. An operation the API adds later is in none until it is classified, which a test holds. A family the

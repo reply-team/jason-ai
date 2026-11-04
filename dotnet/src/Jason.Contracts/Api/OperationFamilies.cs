@@ -51,12 +51,15 @@ public static class OperationFamilies
         ],
         [Contact] = [Operations.ContactCreate, Operations.ContactUpdate, Operations.ContactArchive],
         [WorkItem] = [Operations.WorkItemCreate, Operations.WorkItemUpdate, Operations.WorkItemCancel],
-        [Suppression] = [Operations.SuppressionAdd, Operations.SuppressionRemove],
+        [Suppression] = [Operations.SuppressionAdd],
         [Report] = [Operations.ReportSubmit],
         [JournalAppend] = [Operations.JournalAppend],
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    /// <summary>The operations no grant opens: a person's own doors, the installation's, and an executor's fenced verbs.</summary>
+    /// <summary>
+    /// The operations no grant opens: a person's own doors, the installation's, and an executor's fenced verbs. Lifting a
+    /// do-not-contact entry is a decision about a person, so a plugin may add to the register and never take from it.
+    /// </summary>
     public static IReadOnlySet<string> Never { get; } = new[]
     {
         Operations.SystemInfo, Operations.SystemShutdown, Operations.SystemDrain, Operations.SystemResume,
@@ -70,6 +73,7 @@ public static class OperationFamilies
         Operations.BlockClear,
         Operations.DecisionRaise, Operations.DecisionAnswer,
         Operations.ReplyRecord,
+        Operations.SuppressionRemove,
         Operations.RoleAdd, Operations.RoleSetProfile, Operations.RoleNoteSet,
         Operations.ProfileCreate, Operations.ProfileUpdate, Operations.ProfileDisable, Operations.ProfileEnable,
         Operations.PluginReload,
