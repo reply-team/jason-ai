@@ -367,9 +367,14 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("codex's program 'codex' is not on this machine's search path", said, StringComparison.Ordinal);
         Assert.Contains("jason approval get apr_1 --prompt", said, StringComparison.Ordinal);
 
-        // A preference is a person's own word, so the line names the person, as the verb requires.
-        Assert.Contains("jason preference set agent.interactive_host --value '{\"host\":\"<host>\"}' --actor human:<your-name>", said, StringComparison.Ordinal);
-        Assert.Contains("jason preference unset agent.interactive_host --actor human:<your-name>", said, StringComparison.Ordinal);
+        // A preference is a person's own word, so the line names the person, as the verb requires. The value goes in a
+        // file, the one form every shell passes whole: Windows PowerShell 5.1 and cmd.exe break the inline JSON's quotes.
+        Assert.Contains(
+            "put {\"host\":\"<host>\"} in a file, host.json say, and run `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`; "
+            + "or go back to claude_code with `jason preference unset agent.interactive_host --actor human:<your-name>`.",
+            said,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("--value '", said, StringComparison.Ordinal);
     }
 
     /// <summary>A host whose shim names an executable the disk does not hold is named by its shim, not as a name nothing answers for.</summary>

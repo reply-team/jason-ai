@@ -136,9 +136,13 @@ public static class SessionOpener
         return ExitCodes.Success;
     }
 
+    /// <summary>
+    /// How to name another host, in the form every shell passes whole: the value in a file, since Windows PowerShell 5.1
+    /// and cmd.exe break an inline JSON value's quotes.
+    /// </summary>
     private const string ChooseAnother =
-        "Choose another host with jason preference set agent.interactive_host --value '{\"host\":\"<host>\"}' --actor human:<your-name>, "
-        + "or go back to claude_code with jason preference unset agent.interactive_host --actor human:<your-name>.";
+        "To choose another host, put {\"host\":\"<host>\"} in a file, host.json say, and run `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`; "
+        + "or go back to claude_code with `jason preference unset agent.interactive_host --actor human:<your-name>`.";
 
     private sealed record Item(string Id, string CampaignId, string WorkItemId, string? DecidedState);
 
