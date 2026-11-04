@@ -74,7 +74,7 @@ public static class TerminalPlan
             case TerminalPlatform.Windows:
                 return new TerminalLaunch(terminal.Name, [terminal.Program, "--", .. host], folder, null, null);
             case TerminalPlatform.Linux:
-                return new TerminalLaunch(terminal.Name, [terminal.Program, .. LinuxForm(terminal.Program), .. host], folder, null, null);
+                return new TerminalLaunch(terminal.Name, [terminal.Program, .. LinuxForm(terminal.Program, folder), .. host], folder, null, null);
             case TerminalPlatform.MacOs:
                 var name = ScriptNameFor(itemId);
                 return new TerminalLaunch(terminal.Name, [terminal.Program, "-a", "Terminal", name], folder, Script(folder, host), name);
@@ -87,20 +87,23 @@ public static class TerminalPlan
     /// What a Linux terminal is given before the program it runs, by the program's file name, in the form each vendor
     /// documents: kitty and foot take the host's words after the program; gnome-terminal after <c>--</c>; xfce4-terminal
     /// and mate-terminal after <c>-x</c>, which executes the remainder of the command line; wezterm after
-    /// <c>start --</c>; every other name, <c>x-terminal-emulator</c> included, after <c>-e</c> as separate arguments
+    /// <c>start --cwd &lt;folder&gt; --</c>, since wezterm takes the program's folder from <c>--cwd</c> (else its
+    /// <c>default_cwd</c>, else the home folder) and never from the folder it is started in; every other name,
+    /// <c>x-terminal-emulator</c> included, after <c>-e</c> as separate arguments
     /// (Debian Policy 11.8.3). An emulator whose <c>-e</c> takes one string and that documents no remainder form, tilix
     /// among them, is outside the table: it is given <c>-e</c> too, and is used through <c>x-terminal-emulator</c>.
     /// </summary>
-    public static IReadOnlyList<string> LinuxForm(string program)
+    public static IReadOnlyList<string> LinuxForm(string program, string folder)
     {
         ArgumentException.ThrowIfNullOrEmpty(program);
+        ArgumentException.ThrowIfNullOrEmpty(folder);
         // Either separator: the plan's Linux rows run on Windows too, where a stand-in's path is written with backslashes.
         return program[(program.AsSpan().LastIndexOfAny('/', '\\') + 1)..] switch
         {
             "kitty" or "foot" => [],
             "gnome-terminal" => ["--"],
             "xfce4-terminal" or "mate-terminal" => ["-x"],
-            "wezterm" => ["start", "--"],
+            "wezterm" => ["start", "--cwd", folder, "--"],
             _ => ["-e"],
         };
     }

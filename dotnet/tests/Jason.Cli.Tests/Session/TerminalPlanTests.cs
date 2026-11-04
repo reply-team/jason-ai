@@ -138,8 +138,9 @@ public sealed class TerminalPlanTests : IDisposable
     /// <summary>
     /// Each terminal is given the host in the form its vendor documents, by the program's file name: kitty and foot take
     /// the host's words after the program, gnome-terminal after <c>--</c>, xfce4-terminal and mate-terminal after
-    /// <c>-x</c>, wezterm after <c>start --</c>, and every other name, Debian's <c>x-terminal-emulator</c> included, after
-    /// <c>-e</c> as separate arguments (Debian Policy 11.8.3).
+    /// <c>-x</c>, wezterm after <c>start --cwd &lt;folder&gt; --</c> (it takes the program's folder from <c>--cwd</c>, never
+    /// from its own), and every other name, Debian's <c>x-terminal-emulator</c> included, after <c>-e</c> as separate
+    /// arguments (Debian Policy 11.8.3). A <c>&lt;folder&gt;</c> in a row is the campaign's folder, one argument.
     /// </summary>
     [Theory]
     [InlineData("kitty", new string[0])]
@@ -147,15 +148,17 @@ public sealed class TerminalPlanTests : IDisposable
     [InlineData("gnome-terminal", new[] { "--" })]
     [InlineData("xfce4-terminal", new[] { "-x" })]
     [InlineData("mate-terminal", new[] { "-x" })]
-    [InlineData("wezterm", new[] { "start", "--" })]
+    [InlineData("wezterm", new[] { "start", "--cwd", "<folder>", "--" })]
     [InlineData("x-terminal-emulator", new[] { "-e" })]
     public void Linux_gives_each_terminal_the_host_in_the_form_it_takes(string name, string[] before)
     {
         var program = "/usr/bin/" + name;
+        const string Campaign = "/home/marta/Jason/projects/acme corp";
 
-        var launch = TerminalPlan.Compose(TerminalPlatform.Linux, new TerminalFound(name, program), "/home/marta/Jason", ["/usr/local/bin/codex", Prompt], Item);
+        var launch = TerminalPlan.Compose(TerminalPlatform.Linux, new TerminalFound(name, program), Campaign, ["/usr/local/bin/codex", Prompt], Item);
 
-        Assert.Equal([program, .. before, "/usr/local/bin/codex", Prompt], launch.Argv);
+        Assert.Equal([program, .. before.Select(word => word == "<folder>" ? Campaign : word), "/usr/local/bin/codex", Prompt], launch.Argv);
+        Assert.Equal(Campaign, launch.WorkingDirectory);
     }
 
     /// <summary>The form is chosen by the program's file name, wherever the program is and whatever the variable called it.</summary>
@@ -164,7 +167,7 @@ public sealed class TerminalPlanTests : IDisposable
     {
         var launch = TerminalPlan.Compose(TerminalPlatform.Linux, new TerminalFound("term", "/opt/wezterm/bin/wezterm"), "/home/marta/Jason", ["/usr/local/bin/codex"], Item);
 
-        Assert.Equal(["/opt/wezterm/bin/wezterm", "start", "--", "/usr/local/bin/codex"], launch.Argv);
+        Assert.Equal(["/opt/wezterm/bin/wezterm", "start", "--cwd", "/home/marta/Jason", "--", "/usr/local/bin/codex"], launch.Argv);
     }
 
     [Fact]
