@@ -280,7 +280,7 @@ public class PluginContractsShapeTests
 
         // A plugin that declares no journal kinds says so with a null, as an undeclared capability does, and a load
         // that refused no order says so with an empty list beside its routes.
-        Assert.Contains("\"env\":null,\"subscriptions\":null}", json, StringComparison.Ordinal);
+        Assert.Contains("\"env\":null,\"api\":null,\"subscriptions\":null}", json, StringComparison.Ordinal);
         Assert.Contains("\"routes\":[],\"subscriptions\":[]}", json, StringComparison.Ordinal);
     }
 
@@ -297,7 +297,7 @@ public class PluginContractsShapeTests
         };
 
         Assert.Equal(
-            """{"exec":null,"http":null,"env":null,"subscriptions":{"requested":["workitem_failed","campaign_paused"],"granted":["workitem_failed"]}}""",
+            """{"exec":null,"http":null,"env":null,"api":null,"subscriptions":{"requested":["workitem_failed","campaign_paused"],"granted":["workitem_failed"]}}""",
             JsonSerializer.Serialize(capabilities, JasonJson.Options));
         Assert.Contains(
             ""","routes":[],"subscriptions":[{"setting":"Subscriptions:Order:workitem_failed[0]","code":"subscription_order_ungranted","message":"m"}]}""",
